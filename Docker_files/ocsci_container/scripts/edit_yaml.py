@@ -2,6 +2,7 @@ import subprocess
 import yaml
 import sys
 import os
+import shlex
 
 from pathlib import Path
 
@@ -9,7 +10,9 @@ cli_args = sys.argv[1:]
 
 
 def send_cmd(cmd=None, out_yaml_format=False):
-    output = subprocess.check_output(cmd, shell=True, universal_newlines=True)
+    if isinstance(cmd, str):
+        cmd = shlex.split(cmd)
+    output = subprocess.check_output(cmd, shell=False, universal_newlines=True)
     if out_yaml_format:
         return yaml.safe_load(output)
     else:
