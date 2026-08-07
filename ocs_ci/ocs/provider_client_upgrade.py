@@ -150,7 +150,13 @@ class OperatorUpgrade(ProviderUpgrade):
         )
 
         if not cluster_names:
-            cluster_names = list(config.ENV_DATA.get("clusters").keys())
+            cluster_names = list((config.ENV_DATA.get("clusters") or {}).keys())
+        if not cluster_names:
+            from ocs_ci.deployment.helpers.hypershift_base import (
+                get_hosted_cluster_names,
+            )
+
+            cluster_names = get_hosted_cluster_names()
 
         for cluster_name in cluster_names:
             log.info(
