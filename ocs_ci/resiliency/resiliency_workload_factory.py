@@ -97,15 +97,29 @@ class ResiliencyWorkloadOps:
         try:
             from ocs_ci.krkn_chaos.background_cluster_operations import (
                 BackgroundClusterOperations,
+            )
+            from ocs_ci.krkn_chaos.background_cluster_validator import (
                 BackgroundClusterValidator,
             )
 
-            self.background_cluster_ops = BackgroundClusterOperations()
-            self.background_cluster_ops.start_operations()
+            config = ResiliencyWorkloadConfig()
+            bg_ops_config = config.get_background_operations_config()
+            enabled_operations = bg_ops_config.get("enabled_operations")
+            operation_interval = bg_ops_config.get("operation_interval", 60)
+            max_concurrent = bg_ops_config.get("max_concurrent_operations", 3)
 
             self.background_cluster_validator = BackgroundClusterValidator(
-                self.background_cluster_ops
+                self.namespace
             )
+            self.background_cluster_validator.pre_operation_validation()
+
+            self.background_cluster_ops = BackgroundClusterOperations(
+                workload_ops=self,
+                enabled_operations=enabled_operations if enabled_operations else None,
+                operation_interval=operation_interval,
+                max_concurrent_operations=max_concurrent,
+            )
+            self.background_cluster_ops.start()
 
             log.info("Background cluster operations started successfully")
         except Exception as e:
@@ -167,12 +181,12 @@ class ResiliencyWorkloadOps:
         if self.background_cluster_ops:
             log.info("Stopping background cluster operations")
             try:
-                self.background_cluster_ops.stop_operations()
+                self.background_cluster_ops.stop()
 
                 # Validate background operations
                 if self.background_cluster_validator:
-                    validation_result = (
-                        self.background_cluster_validator.validate_all_operations()
+                    validation_result, _ = (
+                        self.background_cluster_validator.post_operation_validation()
                     )
                     if not validation_result:
                         validation_errors.append(
@@ -413,12 +427,18 @@ class ResiliencyWorkloadFactory:
             }
 
         # Get PVC configuration from config
-        num_pvcs_per_interface = self.config.get_num_pvcs_per_interface()
+        num_rbd_pvcs = self.config.get_num_rbd_pvcs()
+        num_cephfs_pvcs = self.config.get_num_cephfs_pvcs()
+        num_pvcs_by_interface = {
+            constants.CEPHBLOCKPOOL: num_rbd_pvcs,
+            constants.CEPHFILESYSTEM: num_cephfs_pvcs,
+        }
         pvc_size = self.config.get_pvc_size()
         use_encrypted = self.config.use_encrypted_pvc()
 
         log.info(
-            f"Creating {num_pvcs_per_interface} PVCs per storage interface with size {pvc_size}Gi"
+            f"Creating {num_rbd_pvcs} RBD PVCs and {num_cephfs_pvcs} CephFS PVCs "
+            f"with size {pvc_size}Gi"
         )
         if use_encrypted:
             log.info(
@@ -459,7 +479,8 @@ class ResiliencyWorkloadFactory:
 
         # Create workloads for each interface
         for interface, config_data in interface_configs.items():
-            log.info(f"Creating workloads for interface: {interface}")
+            num_pvcs = num_pvcs_by_interface[interface]
+            log.info(f"Creating {num_pvcs} workloads for interface: {interface}")
 
             # Use encrypted storage class if available and encryption is enabled
             storageclass = None
@@ -474,7 +495,7 @@ class ResiliencyWorkloadFactory:
                 storageclass=storageclass,  # Pass encrypted SC if available
                 access_modes=config_data["access_modes"],
                 size=pvc_size,
-                num_of_pvc=num_pvcs_per_interface,
+                num_of_pvc=num_pvcs,
                 timeout=180,  # Increased timeout to 180 seconds for PVC bound state
             )
 
