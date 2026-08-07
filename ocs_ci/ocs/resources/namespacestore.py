@@ -5,10 +5,12 @@ from ocs_ci.helpers.helpers import (
     create_resource,
     create_unique_resource_name,
     storagecluster_independent_check,
+    wait_for_resource_state,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, get_attr_chain
 
@@ -28,12 +30,14 @@ class NamespaceStore:
         uls_name=None,
         secret_name=None,
         mcg_obj=None,
+        pvc_obj=None,
     ):
         self.name = name
         self.method = method
         self.uls_name = uls_name
         self.secret_name = secret_name
         self.mcg_obj = mcg_obj
+        self.pvc_obj = pvc_obj
 
     def delete(self, retry=True):
         """
@@ -457,7 +461,6 @@ def namespace_store_factory(
     cld_mgr,
     mcg_obj_session,
     cloud_uls_factory_session,
-    pvc_factory_session,
     cluster_context=config.RunWithProviderConfigContextIfAvailable,
 ):
     """
@@ -505,6 +508,7 @@ def namespace_store_factory(
             for platform, nss_lst in nss_dict.items():
                 for nss_tup in nss_lst:
                     for _ in range(nss_tup[0] if isinstance(nss_tup[0], int) else 1):
+                        pvc_obj = None
                         if platform.lower() == "nsfs":
                             # Use nss_tup[0] as PVC name only if it's a string
                             # If it's an int (amount) or None, generate a unique name
@@ -514,8 +518,10 @@ def namespace_store_factory(
                                 uls_name = create_unique_resource_name(
                                     constants.PVC.lower(), platform
                                 )
-                            pvc_factory_session(
-                                custom_data=template_pvc(uls_name, size=nss_tup[1])
+                            pvc_obj = PVC(**template_pvc(uls_name, size=nss_tup[1]))
+                            pvc_obj.create(do_reload=False)
+                            wait_for_resource_state(
+                                pvc_obj, constants.STATUS_BOUND, timeout=90
                             )
                         else:
                             uls_name = list(
@@ -540,6 +546,7 @@ def namespace_store_factory(
                             method=method.lower(),
                             mcg_obj=mcg_obj_session,
                             uls_name=uls_name,
+                            pvc_obj=pvc_obj,
                         )
                         created_nss.append(nss_obj)
                         current_call_created_nss.append(nss_obj)
@@ -547,9 +554,49 @@ def namespace_store_factory(
         return current_call_created_nss
 
     def nss_cleanup():
+        """
+        Delete the created namespacestores along with any NSFS PVCs.
+
+        An NSFS PVC is deleted only after its namespacestore was deleted
+        successfully. The noobaa-endpoint deployment mounts NSFS PVCs for
+        as long as their namespacestore exists, so deleting the PVC of a
+        lingering namespacestore leaves the deployment referencing a
+        non-existent PVC, which makes new endpoint pods unschedulable and
+        breaks NooBaa for the remainder of the run.
+
+        """
         with cluster_context():
+            cleanup_errors = []
             for nss in created_nss:
-                nss.delete()
+                try:
+                    nss.delete()
+                except Exception as e:
+                    cleanup_errors.append(
+                        f"Failed to delete namespacestore {nss.name}: {e}"
+                    )
+                    if nss.pvc_obj:
+                        log.error(
+                            f"Skipping the deletion of PVC {nss.pvc_obj.name} since the "
+                            f"deletion of namespacestore {nss.name} failed; deleting it "
+                            "would break the noobaa-endpoint deployment"
+                        )
+                    continue
+                if nss.pvc_obj and not nss.pvc_obj.is_deleted:
+                    try:
+                        pv_obj = nss.pvc_obj.backed_pv_obj
+                        nss.pvc_obj.delete()
+                        nss.pvc_obj.ocp.wait_for_delete(nss.pvc_obj.name, timeout=180)
+                        pv_obj.ocp.wait_for_delete(
+                            resource_name=pv_obj.name, timeout=180
+                        )
+                    except Exception as e:
+                        cleanup_errors.append(
+                            f"Failed to delete PVC {nss.pvc_obj.name} of "
+                            f"namespacestore {nss.name}: {e}"
+                        )
+            assert (
+                not cleanup_errors
+            ), "Errors during namespacestore cleanup:\n" + "\n".join(cleanup_errors)
 
     request.addfinalizer(nss_cleanup)
 
