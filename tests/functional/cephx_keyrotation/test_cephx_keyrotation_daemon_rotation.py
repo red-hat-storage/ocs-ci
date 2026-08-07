@@ -44,6 +44,7 @@ POST_ROTATION_PVC_SIZE = 5
 @skipif_ocs_version("<4.19")
 @green_squad
 class TestCephXKeyRotation:
+    @pytest.mark.polarion_id("OCS-8128")
     @tier1
     def test_cephx_key_rotation_all_rook_daemons(self, cephx_keyrotation_setup):
         """
@@ -174,6 +175,7 @@ class TestCephXKeyRotation:
 
         log.info("CephX key rotation for MON/MGR/OSD/MDS completed successfully")
 
+    @pytest.mark.polarion_id("OCS-8129")
     @tier1
     def test_cephx_key_rotation_consecutive_rotations(self, cephx_keyrotation_setup):
         """
@@ -271,6 +273,7 @@ class TestCephXKeyRotation:
             "rotations for MON/MGR/OSD/MDS successfully"
         )
 
+    @pytest.mark.polarion_id("OCS-8130")
     @tier1
     def test_cephx_key_rotation_osd_init_container(self, cephx_keyrotation_setup):
         """
@@ -388,6 +391,7 @@ class TestCephXKeyRotation:
 @skipif_ocs_version("<4.19")
 @green_squad
 class TestCephXKeyRotationIdempotency:
+    @pytest.mark.polarion_id("OCS-8131")
     @tier1
     def test_cephx_key_rotation_rereconcile_idempotent(self, cephx_keyrotation_setup):
         """
@@ -462,6 +466,7 @@ class TestCephXKeyRotationIdempotency:
 @skipif_ocs_version("<4.19")
 @green_squad
 class TestCephXKeyRotationIOContinuity:
+    @pytest.mark.polarion_id("OCS-8132")
     @tier1
     def test_cephx_key_rotation_io_continuity(
         self, cephx_keyrotation_setup, deployment_pod_factory

@@ -52,6 +52,7 @@ class TestCephXKeyRotationNodeCordon:
 
         request.addfinalizer(finalizer)
 
+    @pytest.mark.polarion_id("OCS-8160")
     @tier2
     def test_cephx_key_rotation_with_node_cordon_and_uncordon(
         self, cephx_keyrotation_setup

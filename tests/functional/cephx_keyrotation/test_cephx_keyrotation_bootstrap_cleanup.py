@@ -37,6 +37,7 @@ pytestmark = pytest.mark.skip(
 @green_squad
 @pytest.mark.order("last")
 class TestCephXBootstrapKeyCleanup:
+    @pytest.mark.polarion_id("OCS-8161")
     @tier1
     def test_cephx_bootstrap_key_cleanup(self, cephx_bootstrap_setup):
         """

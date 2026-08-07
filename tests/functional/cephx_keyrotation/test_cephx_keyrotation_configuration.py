@@ -31,6 +31,7 @@ EXPECTED_INITIAL_GENERATION = 2
 @green_squad
 @pytest.mark.order("first")
 class TestCephXKeyRotationPolicyDisabled:
+    @pytest.mark.polarion_id("OCS-8133")
     @tier1
     def test_cephx_key_rotation_policy_disabled_no_rotation(
         self, cephx_rotation_disabled_setup
@@ -147,6 +148,7 @@ class TestCephXAllowedCiphers:
 
         request.addfinalizer(fin)
 
+    @pytest.mark.polarion_id("OCS-8134")
     @tier1
     def test_cephx_allowed_ciphers_configuration(self, cephx_bootstrap_setup, request):
         """

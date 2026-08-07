@@ -54,6 +54,7 @@ CSI_POST_ROTATION_PVC_SIZE = 5
 @green_squad
 @ignore_leftovers
 class TestCephXKeyRotationNegative:
+    @pytest.mark.polarion_id("OCS-8149")
     @tier2
     def test_cephx_operator_crash_during_mon_rotation(self, cephx_keyrotation_setup):
         """
@@ -92,6 +93,7 @@ class TestCephXKeyRotationNegative:
             "daemon keys rotated"
         )
 
+    @pytest.mark.polarion_id("OCS-8150")
     @tier2
     def test_cephx_mon_rotation_without_quorum(self, cephx_keyrotation_setup):
         """
@@ -155,6 +157,7 @@ class TestCephXKeyRotationNegative:
         ceph_health_check(namespace=namespace)
         log.info("Mon key rotation blocked without quorum and succeeded after restore")
 
+    @pytest.mark.polarion_id("OCS-8151")
     @tier2
     def test_cephx_osd_rotation_blocked_by_unhealthy_pgs(self, cephx_keyrotation_setup):
         """
@@ -210,6 +213,7 @@ class TestCephXKeyRotationNegative:
         ceph_health_check(namespace=namespace)
         log.info("OSD key rotation deferred until PGs healed, then succeeded")
 
+    @pytest.mark.polarion_id("OCS-8152")
     @tier2
     def test_cephx_osd_rotation_failure_fails_reconcile(self, cephx_keyrotation_setup):
         """
@@ -308,6 +312,7 @@ class TestCephXKeyRotationNegative:
             f"(failed_entity={failed_entity})"
         )
 
+    @pytest.mark.polarion_id("OCS-8157")
     @tier2
     @skipif_ocs_version("<4.22")
     def test_cephx_daemon_key_generation_decrease_rejected(
@@ -391,6 +396,7 @@ class TestCephXKeyRotationNegative:
             lower_generation,
         )
 
+    @pytest.mark.polarion_id("OCS-8162")
     @tier2
     @pytest.mark.skip(
         reason="Bootstrap CephX key cleanup is not covered while only daemon "
@@ -420,6 +426,7 @@ class TestCephXKeyRotationNegative:
 @green_squad
 @ignore_leftovers
 class TestCephXKeyRotationNegativeOSD:
+    @pytest.mark.polarion_id("OCS-8153")
     @tier2
     def test_cephx_brownfield_osd_empty_cephx_status(
         self, cephx_keyrotation_setup, request
@@ -494,6 +501,7 @@ class TestCephXKeyRotationNegativeOSD:
             "completed successfully"
         )
 
+    @pytest.mark.polarion_id("OCS-8154")
     @tier2
     def test_cephx_operator_restart_during_partial_osd_rotation(
         self, cephx_keyrotation_setup
@@ -567,6 +575,7 @@ class TestCephXKeyRotationNegativeOSD:
 @green_squad
 @ignore_leftovers
 class TestCephXKeyRotationNegativeEncryptedCSI:
+    @pytest.mark.polarion_id("OCS-8155")
     @tier2
     @encryption_at_rest_required
     def test_cephx_lockbox_rotation_failure_preserves_key(
@@ -627,6 +636,7 @@ class TestCephXKeyRotationNegativeEncryptedCSI:
         ceph_health_check(namespace=namespace)
         log.info("Lockbox keys preserved through rotation failure and recovered")
 
+    @pytest.mark.polarion_id("OCS-8156")
     @tier2
     @encryption_at_rest_required
     def test_cephx_disk_encrypted_osd_label_and_lockbox_rotation(
@@ -687,6 +697,7 @@ class TestCephXKeyRotationNegativeEncryptedCSI:
         ceph_health_check(namespace=namespace)
         log.info("Disk-based encrypted OSD label and lockbox rotation verified")
 
+    @pytest.mark.polarion_id("OCS-8163")
     @tier2
     @pytest.mark.skip(
         reason="CSI CephX key rotation is not supported; only daemon key "

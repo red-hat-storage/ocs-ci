@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version(["<4.19", ">=4.21"])
 @green_squad
 class TestCephXMetricsExporterRotation:
+    @pytest.mark.polarion_id("OCS-8136")
     @tier1
     def test_cephx_metrics_exporter_key_rotation(self, cephx_keyrotation_setup):
         """

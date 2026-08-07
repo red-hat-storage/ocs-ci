@@ -30,6 +30,7 @@ MIN_ENCRYPTED_OSD_COUNT = 1
 @skipif_ocs_version("<4.19")
 @green_squad
 class TestCephXKeyRotationOSDLockbox:
+    @pytest.mark.polarion_id("OCS-8135")
     @tier1
     def test_cephx_key_rotation_osd_lockbox_encrypted(self, cephx_keyrotation_setup):
         """

@@ -318,6 +318,7 @@ def _induce_daemon_key_mismatch(rotator, namespace):
 class TestCephXKeyRotationMismatchMetric:
     """TC1–TC2: mismatch metric emission and in-sync (value 0) state."""
 
+    @pytest.mark.polarion_id("OCS-8137")
     @tier1
     def test_cephx_mismatch_metric_emitted_for_all_daemons(self, threading_lock):
         """
@@ -350,6 +351,7 @@ class TestCephXKeyRotationMismatchMetric:
                 _metric_value(by_daemon[daemon]),
             )
 
+    @pytest.mark.polarion_id("OCS-8138")
     @tier1
     def test_cephx_mismatch_metric_zero_when_in_sync(
         self, cephx_keyrotation_setup, threading_lock
@@ -400,6 +402,7 @@ class TestCephXKeyRotationMismatchAlertLifecycle:
 
         request.addfinalizer(finalizer)
 
+    @pytest.mark.polarion_id("OCS-8139")
     @tier1
     def test_cephx_mismatch_metric_alert_and_recovery(
         self, cephx_keyrotation_setup, threading_lock
@@ -558,6 +561,7 @@ class TestCephXKeyRotationMismatchAlertLifecycle:
 class TestCephXKeyRotationMismatchNoFilesystem:
     """TC7: MDS mismatch metric is 0 when no CephFilesystem exists."""
 
+    @pytest.mark.polarion_id("OCS-8140")
     @tier2
     def test_cephx_mds_mismatch_zero_without_filesystem(self, threading_lock):
         """
@@ -587,6 +591,7 @@ class TestCephXKeyRotationMismatchNoFilesystem:
 class TestCephXCephClusterReconciliation:
     """TC8–TC13: CephCluster annotations and daemon keyGeneration reconciliation."""
 
+    @pytest.mark.polarion_id("OCS-8141")
     @tier1
     def test_cephx_greenfield_annotations_present(self, cephx_bootstrap_setup):
         """
@@ -613,6 +618,7 @@ class TestCephXCephClusterReconciliation:
             "TC8: greenfield annotations present created-at-df-version=%s", created_at
         )
 
+    @pytest.mark.polarion_id("OCS-8142")
     @tier1
     def test_cephx_greenfield_security_spec(self, cephx_bootstrap_setup):
         """
@@ -659,6 +665,7 @@ class TestCephXCephClusterReconciliation:
             assert rbd_spec["keyType"] == "aes"
         log.info("TC9: greenfield cephx security defaults verified")
 
+    @pytest.mark.polarion_id("OCS-8143")
     @tier2
     def test_cephx_brownfield_no_created_with_annotation(self, cephx_bootstrap_setup):
         """
@@ -675,6 +682,7 @@ class TestCephXCephClusterReconciliation:
             )
         log.info("TC10: brownfield cluster correctly lacks created-with-cephx-features")
 
+    @pytest.mark.polarion_id("OCS-8144")
     @tier2
     def test_cephx_brownfield_daemon_key_rotation_config(self, cephx_bootstrap_setup):
         """
@@ -703,6 +711,7 @@ class TestCephXCephClusterReconciliation:
         ), f"TC11: daemon.keyGeneration should be >= env default, got {daemon}"
         log.info("TC11: brownfield daemon key rotation config verified: %s", daemon)
 
+    @pytest.mark.polarion_id("OCS-8146")
     @tier2
     def test_storagecluster_keygeneration_zero_falls_back_to_env(
         self, cephx_bootstrap_setup
@@ -780,6 +789,7 @@ class TestCephXCephClusterReconciliation:
             f"got {daemon}"
         )
 
+    @pytest.mark.polarion_id("OCS-8145")
     @tier1
     def test_storagecluster_keygeneration_overrides_env(
         self, cephx_keyrotation_setup, request
@@ -858,6 +868,7 @@ class TestCephXCephClusterReconciliation:
 class TestCephXCephClientAnnotations:
     """TC14–TC15: CephClient created-with-cephx-features and keyType."""
 
+    @pytest.mark.polarion_id("OCS-8147")
     @tier1
     def test_cephclients_have_cephx_annotation_and_aes_keytype(
         self, cephx_bootstrap_setup
@@ -905,6 +916,7 @@ class TestCephXCephClientAnnotations:
             ), f"TC14: CephClient {name} keyType={key_type!r}, expected 'aes'"
             log.info("TC14: CephClient %s has annotation + keyType=aes", name)
 
+    @pytest.mark.polarion_id("OCS-8148")
     @tier2
     def test_existing_cephclients_no_annotation_on_upgrade(self, cephx_bootstrap_setup):
         """
@@ -987,6 +999,7 @@ class TestCephXDesiredKeyGenNegative:
         self._original_env = original
         self._env_existed = existed
 
+    @pytest.mark.polarion_id("OCS-8159")
     @tier2
     def test_desired_cephx_key_gen_missing_errors(self, cephx_bootstrap_setup):
         """
@@ -1024,6 +1037,7 @@ class TestCephXDesiredKeyGenNegative:
         ), "TC16: expected clear error/panic about missing env var in operator logs"
         log.info("TC16: operator reported missing DESIRED_CEPHX_KEY_GEN")
 
+    @pytest.mark.polarion_id("OCS-8158")
     @tier2
     @pytest.mark.parametrize(
         "invalid_value, expected_json_type",
