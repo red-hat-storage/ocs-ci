@@ -51,9 +51,9 @@ class TestVmAddCapacity(E2ETest):
         """
         self.file_paths = ["/source_file.txt", "/new_file.txt"]
 
-        logger.info("Setting up csi-kms-connection-details configmap")
+        logger.test_step("Set up KMS, StorageClass, and project")
         kms = pv_encryption_kms_setup_factory(kv_version="v2")
-        logger.info("csi-kms-connection-details setup successful")
+        logger.info("KMS setup successful")
 
         sc_obj_def = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
@@ -70,6 +70,7 @@ class TestVmAddCapacity(E2ETest):
         pvk_obj = PVKeyrotation(sc_obj_def)
         pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
 
+        logger.test_step("Create VMs and write initial test data")
         self.vm_list = []
         self.source_csum = {}
         self.final_csum = {}
@@ -83,13 +84,15 @@ class TestVmAddCapacity(E2ETest):
             self.source_csum[vm_obj.name] = run_dd_io(
                 vm_obj=vm_obj, file_path=self.file_paths[0], verify=True
             )
+        logger.info(f"Created {len(self.vm_list)} VMs with initial checksums")
 
-        logger.info(f"Stopping VM: {self.vm_list[0].name}")
+        logger.test_step("Set VMs to different states")
         self.vm_stopped = self.vm_list[0]
+        logger.info(f"Stopping VM '{self.vm_stopped.name}'")
         self.vm_stopped.stop()
 
-        logger.info(f"Pausing VM: {self.vm_list[1].name}")
         self.vm_paused = self.vm_list[1]
+        logger.info(f"Pausing VM '{self.vm_paused.name}'")
         self.vm_paused.pause()
 
     def test_vm_add_capacity(self, setup):
@@ -105,12 +108,14 @@ class TestVmAddCapacity(E2ETest):
         initial_vm_states = {
             vm_obj.name: vm_obj.printableStatus() for vm_obj in self.vm_list
         }
-        logger.info("Adding storage capacity...")
+        logger.info(f"Initial VM states: {initial_vm_states}")
+
+        logger.test_step("Add storage capacity")
         add_capacity_test()
-        logger.info("Added storage capacity!")
+        logger.info("Storage capacity added successfully")
 
         logger.info(
-            f"Waiting for pods in {constants.OPENSHIFT_STORAGE_NAMESPACE} to be running"
+            f"Waiting for pods in '{constants.OPENSHIFT_STORAGE_NAMESPACE}' to be running"
         )
         sample = TimeoutSampler(
             timeout=600,
@@ -118,33 +123,53 @@ class TestVmAddCapacity(E2ETest):
             func=wait_for_pods_to_be_running,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
+        logger.assertion(
+            f"Pods running in '{constants.OPENSHIFT_STORAGE_NAMESPACE}' after capacity addition"
+        )
         assert sample.wait_for_func_status(result=True), (
             "Not all pods are running after capacity "
             f"addition in {constants.OPENSHIFT_STORAGE_NAMESPACE}"
         )
 
+        logger.test_step("Verify VM state preservation after capacity addition")
         final_vm_states = {
             vm_obj.name: vm_obj.printableStatus() for vm_obj in self.vm_list
         }
-        logger.info(f"Final VM states: {final_vm_states}")
         for vm_name in initial_vm_states:
+            logger.assertion(
+                f"VM state: name='{vm_name}', "
+                f"expected='{initial_vm_states[vm_name]}', "
+                f"actual='{final_vm_states[vm_name]}'"
+            )
             assert initial_vm_states[vm_name] == final_vm_states[vm_name], (
                 f"VM state mismatch for {vm_name}: "
                 f"initial state was {initial_vm_states[vm_name]}, "
                 f"but final state is {final_vm_states[vm_name]}"
             )
 
+        logger.info(
+            f"Resuming VMs: starting '{self.vm_stopped.name}', "
+            f"unpausing '{self.vm_paused.name}'"
+        )
         self.vm_stopped.start()
         self.vm_paused.unpause()
 
-        logger.info("Verifying data integrity for VMs")
+        logger.test_step("Verify data integrity and run I/O on all VMs")
         for vm_obj in self.vm_list:
-            logger.info(f"Calculating checksum for VM {vm_obj.name}")
-            assert self.source_csum[vm_obj.name] == cal_md5sum_vm(
-                vm_obj=vm_obj, file_path=self.file_paths[0]
-            ), f"Data integrity failed for VM {vm_obj.name}: checksum mismatch"
+            new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=self.file_paths[0])
+            logger.assertion(
+                f"Data integrity: vm='{vm_obj.name}', "
+                f"expected='{self.source_csum[vm_obj.name]}', "
+                f"actual='{new_csum}', "
+                f"match={self.source_csum[vm_obj.name] == new_csum}"
+            )
+            assert (
+                self.source_csum[vm_obj.name] == new_csum
+            ), f"Data integrity failed for VM '{vm_obj.name}': checksum mismatch"
             run_dd_io(vm_obj=vm_obj, file_path=self.file_paths[1])
+        logger.info("All VMs passed data integrity check")
 
+        logger.test_step("Stop all VMs")
         for vm_obj in self.vm_list:
-            logger.info(f"Stopping VM: {vm_obj.name}")
+            logger.info(f"Stopping VM '{vm_obj.name}'")
             vm_obj.stop()
