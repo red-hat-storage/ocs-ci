@@ -8,7 +8,7 @@ from ocs_ci.ocs.ocp import switch_to_project
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass, get_all_pvcs
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
-from ocs_ci.utility import rosa
+from ocs_ci.utility import rosa, version
 from ocs_ci.utility.localstorage import check_local_volume_local_volume_set
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -185,17 +185,34 @@ def uninstall_ocs():
     except CommandFailed:
         log.info("No cluster logging found")
 
-    log.info("Deleting OCS PVCs")
-    for pvc in pvc_to_delete:
-        log.info(f"Deleting PVC: {pvc.name}")
-        pvc.delete()
-
     ns_name = config.ENV_DATA["cluster_namespace"]
     storage_cluster = ocp.OCP(
         kind=constants.STORAGECLUSTER,
         resource_name=constants.DEFAULT_CLUSTERNAME,
         namespace=ns_name,
     )
+
+    if version.get_semantic_ocp_version_from_config() >= version.VERSION_5_0:
+        log.info("Annotating storageCluster to confirm deletion")
+        confirm_annotation = (
+            '[{"op": "add", "path": "/metadata/annotations/'
+            'uninstall.ocs.openshift.io~1confirm-deletion", "value": "true"}]'
+        )
+        result = storage_cluster.patch(
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            params=confirm_annotation,
+            format_type="json",
+        )
+        if not result:
+            raise CommandFailed(
+                f"StorageCluster '{constants.DEFAULT_CLUSTERNAME}' "
+                "confirm-deletion annotation failed; aborting uninstall"
+            )
+
+    log.info("Deleting OCS PVCs")
+    for pvc in pvc_to_delete:
+        log.info(f"Deleting PVC: {pvc.name}")
+        pvc.delete()
 
     log.info("Checking for local storage")
     lso_sc = None
