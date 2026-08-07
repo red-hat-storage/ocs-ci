@@ -7,6 +7,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     ignore_leftover_label,
+    skipif_disconnected_cluster,
     skipif_external_mode,
     skipif_fips_enabled,
     skipif_managed_service,
@@ -49,6 +50,7 @@ def require_tlsprofile_crd():
 @brown_squad
 @tier3
 @skipif_ocs_version("<4.22")
+@skipif_disconnected_cluster
 @skipif_fips_enabled
 @skipif_external_mode
 @skipif_managed_service
