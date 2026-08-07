@@ -6793,6 +6793,54 @@ def get_azure_sts_creds_from_sub():
     return creds
 
 
+def get_gcp_sts_creds_from_sub():
+    """
+    Get GCP WIF/STS credentials from the ODF Subscription.
+
+    GCP equivalent of ``get_azure_sts_creds_from_sub``.
+
+    Returns:
+        dict: Keys are ``project_number``, ``pool_id``,
+            ``provider_id``, and ``service_account_email``.
+
+    Raises:
+        ClusterNotInSTSModeException: If cluster is not in STS
+            mode or if any required env vars are missing
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    if not config.DEPLOYMENT.get("sts_enabled"):
+        raise ClusterNotInSTSModeException
+
+    # Maps ODF Subscription env var names to the dict keys returned.
+    # These env vars are injected by subscribe_ocs() during GCP STS
+    # deployment - see Deployment.subscribe_ocs() in deployment.py.
+    env_key_map = {
+        "PROJECT_NUMBER": "project_number",
+        "POOL_ID": "pool_id",
+        "PROVIDER_ID": "provider_id",
+        "SERVICE_ACCOUNT_EMAIL": "service_account_email",
+    }
+    odf_sub = OCP(
+        kind=constants.SUBSCRIPTION,
+        resource_name=constants.ODF_SUBSCRIPTION,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    creds = {}
+    env_items = odf_sub.get().get("spec", {}).get("config", {}).get("env", [])
+    for item in env_items:
+        if item["name"] in env_key_map:
+            creds[env_key_map[item["name"]]] = item["value"]
+
+    # All four values are required for GCP WIF to function
+    required = {"project_number", "pool_id", "provider_id", "service_account_email"}
+    if not required.issubset(creds):
+        raise ClusterNotInSTSModeException
+
+    return creds
+
+
 def get_glibc_version():
     """
     Gets the GLIBC version.
