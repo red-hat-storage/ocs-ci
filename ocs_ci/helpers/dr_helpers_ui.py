@@ -874,6 +874,11 @@ def verify_pending_cleanup_alert_firing(
     """
     Verify that ApplicationCleanupPending alert is firing on DR Dashboard.
 
+    First tries the UI-based check on the ACM DR Overview page.  If the alert
+    element is not found in the UI (e.g. the MCO status-card panel was removed
+    or restructured in a newer ODF/OCP release), falls back to verifying the
+    alert is in the ``firing`` state via the hub-cluster Prometheus API.
+
     Args:
         acm_obj (AcmAddClusters): ACM Page Navigator Class
         operation (str): DR operation name for logging (Failover/Relocate)
@@ -881,7 +886,7 @@ def verify_pending_cleanup_alert_firing(
         namespace (str): Namespace of DRPC (optional, defaults to DR_OPS_NAMESPACE)
 
     Raises:
-        UnexpectedBehaviour: If alert is not found on DR Dashboard
+        UnexpectedBehaviour: If alert is not found on DR Dashboard or in Prometheus
 
     """
     acm_loc = locators_for_current_ocp_version()["acm_page"]
@@ -902,7 +907,9 @@ def verify_pending_cleanup_alert_firing(
         enable_screenshot=True,
         timeout=60,
     )
+    acm_obj.page_has_loaded()
     acm_obj.take_screenshot()
+    acm_obj.copy_dom()
 
     # Expand Critical alerts section (best-effort)
     try:
@@ -949,16 +956,58 @@ def verify_pending_cleanup_alert_firing(
             + (f" for DRPC '{drpc_name}'" if drpc_name else "")
         )
         acm_obj.take_screenshot()
+        return
+
+    log.warning(
+        f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+        f"NOT found on DR Dashboard UI after {operation}"
+        + (f" for DRPC '{drpc_name}'" if drpc_name else "")
+        + ". Falling back to Prometheus API verification on hub cluster."
+    )
+    acm_obj.take_screenshot()
+
+    # Prometheus fallback: verify the alert is firing on the hub cluster.
+    # The ApplicationCleanupPending alert is a hub-level PrometheusRule so we
+    # query the hub (ACM) cluster's Prometheus endpoint.
+    import threading
+
+    from ocs_ci.framework import config as fwk_config
+    from ocs_ci.utility.prometheus import PrometheusAPI
+
+    restore_index = fwk_config.cur_index
+    try:
+        fwk_config.switch_acm_ctx()
+        threading_lock = threading.RLock()
+        # Use RunWithAcmConfigContext so PrometheusAPI targets the hub cluster
+        # even if the active config index changes during the call.
+        prometheus_api = PrometheusAPI(
+            threading_lock=threading_lock,
+            cluster_context=fwk_config.RunWithAcmConfigContext,  # type: ignore[arg-type]
+        )
+        hub_alerts = prometheus_api.wait_for_alert(
+            name=constants.ALERT_APPLICATION_CLEANUP_PENDING,
+            state="firing",
+            timeout=60,
+            sleep=10,
+        )
+    finally:
+        fwk_config.cur_index = restore_index
+
+    if hub_alerts:
+        log.info(
+            f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' confirmed "
+            f"firing in hub Prometheus after {operation}"
+            + (f" for DRPC '{drpc_name}'" if drpc_name else "")
+        )
     else:
         log.error(
             f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
-            f"NOT found on DR Dashboard after {operation}"
+            f"NOT found in hub Prometheus after {operation}"
             + (f" for DRPC '{drpc_name}'" if drpc_name else "")
         )
-        acm_obj.take_screenshot()
         raise UnexpectedBehaviour(
             f"{constants.ALERT_APPLICATION_CLEANUP_PENDING} alert "
-            f"did not appear on DR Dashboard after {operation}"
+            f"did not appear on DR Dashboard or in hub Prometheus after {operation}"
             + (f" for DRPC '{drpc_name}'" if drpc_name else "")
         )
 
@@ -998,6 +1047,7 @@ def verify_pending_cleanup_alert_resolved(
         timeout=60,
     )
     acm_obj.take_screenshot()
+    acm_obj.copy_dom()
 
     # Try to expand Critical alerts section if it exists
     try:

@@ -198,10 +198,18 @@ class AcmPageNavigator(BaseUI):
         )
         if find_element:
             log.info("Data Services page found")
-            element = self.driver.find_element(
-                By.XPATH, "//button[normalize-space()='Data Services']"
-            )
-            if element.get_attribute("aria-expanded") == "false":
+            try:
+                element = self.driver.find_element(
+                    By.XPATH, "//button[normalize-space()='Data Services']"
+                )
+                expanded = element.get_attribute("aria-expanded")
+            except StaleElementReferenceException:
+                # Page re-rendered between find and get_attribute; re-fetch.
+                element = self.driver.find_element(
+                    By.XPATH, "//button[normalize-space()='Data Services']"
+                )
+                expanded = element.get_attribute("aria-expanded")
+            if expanded == "false":
                 self.do_click(
                     locator=self.acm_page_nav["data-services"],
                     avoid_stale=True,
@@ -246,6 +254,11 @@ class AcmPageNavigator(BaseUI):
         if locator == "click-local-cluster":
             log.info("Select All Clusters view")
             self.do_click(self.acm_page_nav["all-clusters-view"])
+        elif locator == "click-fleet-management":
+            # OCP 4.22: clicked the perspective toggle (now showing "Core platform" label),
+            # which opens the perspective switcher dropdown. Now select "Fleet management".
+            log.info("Select Fleet management (ACM) perspective")
+            self.do_click(self.acm_page_nav["fleet-management-item"])
         else:
             log.info("Select Fleet Management view")
             self.do_click(self.acm_page_nav["fleet-management-view"])

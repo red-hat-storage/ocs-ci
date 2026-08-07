@@ -1867,16 +1867,39 @@ acm_configuration_4_21 = {
 }
 
 acm_configuration_4_22 = {
+    # ODF 4.22 uses PF6 — the MCO status-card alert panel no longer renders on the
+    # DR Overview page.  Use a broader element search so the locator works whether
+    # the text is inside a <span>, <p>, <div> or any other container.
+    "pending-cleanup-alert-drpc-message": (
+        "//*[contains(text(), \"DRPC '{}' in namespace '{}' requires manual cleanup\")]",
+        By.XPATH,
+    ),
     "all-clusters_dropdown": (
         "//button[@data-test-id='perspective-switcher-toggle']",
         By.XPATH,
     ),
     "local-cluster_dropdown_item": (
-        "//button[@data-test-id='perspective-switcher-toggle']//*[normalize-space()='local-cluster']",
+        "//li[@data-test-id='perspective-switcher-menu-option']"
+        "//button[@role='option' and .//h2[normalize-space()='Core platform']] | "
+        "//h2[normalize-space()='Administrator']",
         By.XPATH,
     ),
     "local-cluster_dropdown": (
-        "//h2[normalize-space()='Administrator']",
+        "//button[@data-test-id='perspective-switcher-toggle']"
+        "//*[normalize-space()='Core platform'] | "
+        "//h2[text()='local-cluster']",
+        By.XPATH,
+    ),
+    "click-fleet-management": (
+        "//button[@data-test-id='perspective-switcher-toggle']"
+        "//*[normalize-space()='Core platform'] | "
+        "//button[@data-test-id='cluster-dropdown-toggle']//*[text()='local-cluster']",
+        By.XPATH,
+    ),
+    "fleet-management-item": (
+        "//li[@data-test-id='perspective-switcher-menu-option']"
+        "//button[@role='option' and .//h2[normalize-space()='Fleet management']] | "
+        "(//h2[normalize-space()='Fleet Management'])[1]",
         By.XPATH,
     ),
     "click-local-cluster": (
