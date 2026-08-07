@@ -7,6 +7,12 @@ spec:
   displayName: isf-catalog
   publisher: IBM
   sourceType: grpc
+  grpcPodConfig:
+    extractContent:
+      cacheDir: /tmp/cache
+      catalogDir: /configs
+    memoryTarget: 512Mi
+    securityContextConfig: restricted
   image: docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/sds-{{ sds_version }}/isf-operator-software-catalog:{{ image_tag }}
   updateStrategy:
     registryPoll:
