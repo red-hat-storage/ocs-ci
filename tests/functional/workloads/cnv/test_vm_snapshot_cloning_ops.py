@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from ocs_ci.framework import config, config_safe_thread_pool_task
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -92,56 +92,61 @@ class TestVmSnapshotClone(E2ETest):
         8. Delete all the clones created as part of this test
         """
 
+        logger.test_step("Create project and deploy VMs for clone testing")
         proj_obj = project_factory()
         file_paths = ["/source_file.txt", "/new_file.txt"]
         vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
             namespace=proj_obj.namespace
         )
         vm_list = vm_objs_def + vm_objs_aggr
-        log.info(f"Total VMs to process: {len(vm_list)}")
+        logger.info(f"Created {len(vm_list)} VMs for clone testing")
+
+        logger.test_step(
+            "Clone each VM, verify data integrity, and write additional data"
+        )
         failed_vms = []
         for vm_obj in vm_list:
-            # Expand PVC if `pvc_expand_before_clone` is True
             if pvc_expand_before_clone:
                 new_size = 50
                 try:
                     expand_pvc_and_verify(vm_obj, new_size)
-                except ValueError as e:
-                    log.error(
-                        f"Error for VM {vm_obj}: {e}. Continuing with the next VM."
-                    )
+                except ValueError:
+                    logger.exception(f"PVC expansion failed for VM '{vm_obj.name}'")
                     failed_vms.append(vm_obj.name)
                     continue
-            log.info(
-                f"Starting I/O operation on VM {vm_obj.name} using "
-                f"{file_paths[0]}..."
-            )
+            logger.info(f"Running I/O on VM '{vm_obj.name}' at '{file_paths[0]}'")
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
-            log.info(f"Source checksum for {vm_obj.name}: {source_csum}")
+            logger.debug(f"Source checksum for VM '{vm_obj.name}': {source_csum}")
 
-            log.info(f"Cloning VM {vm_obj.name}...")
+            logger.info(f"Cloning VM '{vm_obj.name}'")
             cloned_vm = vm_clone_fixture(vm_obj, admin_client)
 
             new_csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
+            logger.assertion(
+                f"Clone data integrity: source='{vm_obj.name}', clone='{cloned_vm.name}', "
+                f"expected='{source_csum}', actual='{new_csum}', "
+                f"match={source_csum == new_csum}"
+            )
             assert source_csum == new_csum, (
-                f"Failed: MD5 comparison between source {vm_obj.name} "
-                f"and cloned {cloned_vm.name} VMs"
+                f"MD5 mismatch between source VM '{vm_obj.name}' "
+                f"and cloned VM '{cloned_vm.name}'"
             )
 
-            # Expand PVC if `pvc_expand_after_restore` is True
+            # Expand PVC if `pvc_expand_after_clone` is True
             if pvc_expand_after_clone:
                 new_size = 50
                 try:
-                    # Update self.pvc_name from vm yaml same as 11071 PR
-                    expand_pvc_and_verify(vm_obj, new_size)
-                except ValueError as e:
-                    log.error(
-                        f"Error for VM {cloned_vm}: {e}. Continuing with the next VM."
+                    expand_pvc_and_verify(cloned_vm, new_size)
+                except ValueError:
+                    logger.exception(
+                        f"PVC expansion failed for cloned VM '{cloned_vm.name}'"
                     )
                     failed_vms.append(cloned_vm.name)
                     continue
             run_dd_io(vm_obj=cloned_vm, file_path=file_paths[1])
-            log.info(f"Data written to {file_paths[1]} on cloned VM {cloned_vm.name}")
+            logger.info(
+                f"Data written to '{file_paths[1]}' on cloned VM '{cloned_vm.name}'"
+            )
         if failed_vms:
             assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
 
@@ -203,22 +208,25 @@ class TestVmSnapshotClone(E2ETest):
         6. Repeat the above procedure for all the VMs in the system
         7. Stop all the VMs created as part of this test.
         """
+        logger.test_step("Create project and deploy VMs for snapshot testing")
         proj_obj = project_factory()
         file_paths = ["/file.txt", "/new_file.txt"]
         vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
             namespace=proj_obj.namespace
         )
         vm_list = vm_objs_def + vm_objs_aggr
+        logger.info(f"Created {len(vm_list)} VMs for snapshot testing")
+
+        logger.test_step("Snapshot, restore, and verify data integrity per VM")
         failed_vms = []
         for vm_obj in vm_list:
-            # Expand PVC if `pvc_expand_before_snapshot` is True
             new_size = 50
             if pvc_expand_before_snapshot:
                 try:
                     expand_pvc_and_verify(vm_obj, new_size)
-                except ValueError as e:
-                    log.error(
-                        f"Error for VM {vm_obj.name}: {e}. Continuing with the next VM."
+                except ValueError:
+                    logger.exception(
+                        f"PVC expansion before snapshot failed for VM '{vm_obj.name}'"
                     )
                     failed_vms.append(
                         f"{vm_obj.name} (Config: {vm_obj.pvc_access_mode}-{vm_obj.volume_interface}, "
@@ -226,25 +234,24 @@ class TestVmSnapshotClone(E2ETest):
                     )
                     continue
 
-            # Writing IO on source VM
+            logger.info(f"Writing I/O on source VM '{vm_obj.name}'")
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
 
+            logger.info(f"Creating snapshot and restoring VM '{vm_obj.name}'")
             restored_vm = vm_snapshot_restore_fixture(vm_obj, admin_client)
 
-            # Verify file written after snapshot is not present.
             command = f"test -f {file_paths[1]} && echo 'File exists' || echo 'File not found'"
             output = vm_obj.run_ssh_cmd(
                 command=command,
             )
 
-            # Check if file is not present
             if "File exists" in output:
                 raise FileExistsError(
-                    (
-                        f"ERROR: File '{file_paths[1]}' still exists after snapshot restore!"
-                    )
+                    f"File '{file_paths[1]}' still exists on VM '{vm_obj.name}' after snapshot restore"
                 )
-            log.info(f"File '{file_paths[1]}' is NOT present (expected).")
+            logger.info(
+                f"Verified file '{file_paths[1]}' absent after snapshot restore on VM '{vm_obj.name}'"
+            )
 
             # Expand PVC if `pvc_expand_after_restore` is True
             if pvc_expand_after_restore:
@@ -270,9 +277,9 @@ class TestVmSnapshotClone(E2ETest):
                             .get("claimName")
                         )
                     expand_pvc_and_verify(vm_obj, new_size)
-                except ValueError as e:
-                    log.error(
-                        f"Error for VM {vm_obj.name}: {e}. Continuing with the next VM."
+                except ValueError:
+                    logger.exception(
+                        f"PVC expansion after restore failed for VM '{vm_obj.name}'"
                     )
                     failed_vms.append(
                         f"{vm_obj.name} (Config: {vm_obj.pvc_access_mode}-{vm_obj.volume_interface}, "
@@ -280,13 +287,16 @@ class TestVmSnapshotClone(E2ETest):
                     )
                     continue
 
-            # Validate data integrity of file written before taking snapshot
             res_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
+            logger.assertion(
+                f"Snapshot restore data integrity: vm='{vm_obj.name}', "
+                f"expected='{source_csum}', actual='{res_csum}', "
+                f"match={source_csum == res_csum}"
+            )
             assert (
                 source_csum == res_csum
-            ), f"Failed: MD5 comparison between source {vm_obj.name} and restored {restored_vm.name} VMs"
+            ), f"MD5 mismatch between source VM '{vm_obj.name}' and restored VM '{restored_vm.name}'"
 
-            # Write new file to VM
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1], verify=True)
 
         if failed_vms:
@@ -316,46 +326,61 @@ class TestVmSnapshotClone(E2ETest):
         """
         try:
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
-            log.info(f"{vm_obj.name} Source checksum: {source_csum}")
+            logger.debug(f"Source checksum for VM '{vm_obj.name}': {source_csum}")
 
             if not flag:
-                log.info(f"Creating clone of VM [{vm_obj.name}]")
+                logger.info(f"Creating clone of VM '{vm_obj.name}'")
                 cloned_vm = vm_clone_fixture(vm_obj, admin_client)
                 run_dd_io(vm_obj=cloned_vm, file_path=file_paths[1])
 
-                log.info(f"Creating snapshot of cloned VM [{cloned_vm.name}]")
+                logger.info(f"Creating snapshot of cloned VM '{cloned_vm.name}'")
                 restored_vm = vm_snapshot_restore_fixture(cloned_vm, admin_client)
                 restore_csum = cal_md5sum_vm(
                     vm_obj=restored_vm, file_path=file_paths[0]
                 )
+                logger.assertion(
+                    f"Snapshot of clone data integrity: source='{vm_obj.name}', "
+                    f"restored='{restored_vm.name}', expected='{source_csum}', "
+                    f"actual='{restore_csum}', match={source_csum == restore_csum}"
+                )
                 assert source_csum == restore_csum, (
-                    f"[{vm_obj.name}] Failed: MD5 mismatch between source {vm_obj.name} "
-                    f"and restored {restored_vm.name} cloned from '{vm_obj.name}'"
+                    f"MD5 mismatch between source VM '{vm_obj.name}' "
+                    f"and restored VM '{restored_vm.name}'"
                 )
                 run_dd_io(vm_obj=restored_vm, file_path=file_paths[1])
-                log.info(f"[{vm_obj.name}] VM processing completed successfully.")
+                logger.info(f"VM '{vm_obj.name}' clone-snapshot processing completed")
             else:
-                log.info(f"Creating snapshot and restore VM [{vm_obj.name}]")
+                logger.info(f"Creating snapshot and restoring VM '{vm_obj.name}'")
                 restored_vm = vm_snapshot_restore_fixture(vm_obj, admin_client)
                 restore_csum = cal_md5sum_vm(
                     vm_obj=restored_vm, file_path=file_paths[0]
                 )
+                logger.assertion(
+                    f"Restore data integrity: source='{vm_obj.name}', "
+                    f"restored='{restored_vm.name}', expected='{source_csum}', "
+                    f"actual='{restore_csum}', match={source_csum == restore_csum}"
+                )
                 assert source_csum == restore_csum, (
-                    f"[{vm_obj.name}] Failed: MD5 mismatch between source {vm_obj.name} "
-                    f"and restored {restored_vm.name} cloned from '{vm_obj.name}'"
+                    f"MD5 mismatch between source VM '{vm_obj.name}' "
+                    f"and restored VM '{restored_vm.name}'"
                 )
 
-                log.info(f"Creating clone of restored VM [{restored_vm.name}]")
+                logger.info(f"Creating clone of restored VM '{restored_vm.name}'")
                 cloned_vm = vm_clone_fixture(restored_vm, admin_client)
                 run_dd_io(vm_obj=restored_vm, file_path=file_paths[1])
                 clone_csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
+                logger.assertion(
+                    f"Clone of restore data integrity: source='{vm_obj.name}', "
+                    f"clone='{cloned_vm.name}', expected='{source_csum}', "
+                    f"actual='{clone_csum}', match={source_csum == clone_csum}"
+                )
                 assert source_csum == clone_csum, (
-                    f"[{vm_obj.name}] Failed: MD5 mismatch between source {vm_obj.name} "
-                    f"and clone VM  {cloned_vm.name} restored from '{restored_vm.name}'"
+                    f"MD5 mismatch between source VM '{vm_obj.name}' "
+                    f"and clone VM '{cloned_vm.name}'"
                 )
 
-        except Exception as e:
-            log.error(f"[{vm_obj.name}] Error during VM processing: {e}", exc_info=True)
+        except Exception:
+            logger.exception(f"VM processing failed for '{vm_obj.name}'")
             raise
 
     def run_parallel_vm_clone_restore(
@@ -399,10 +424,8 @@ class TestVmSnapshotClone(E2ETest):
                 vm_name = futures[future]
                 try:
                     future.result()
-                except Exception as e:
-                    log.error(
-                        f"[{vm_name}] Exception occurred during test execution: {e}"
-                    )
+                except Exception:
+                    logger.exception(f"Parallel VM processing failed for '{vm_name}'")
                     raise
 
     @workloads
@@ -429,12 +452,18 @@ class TestVmSnapshotClone(E2ETest):
         7. Delete all the clones and restored VM created as part of this test
         """
 
+        logger.test_step("Create project and deploy VMs")
         proj_obj = project_factory()
         file_paths = ["/source_file.txt", "/new_file.txt"]
         vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
             namespace=proj_obj.namespace
         )
         vm_list = vm_objs_def + vm_objs_aggr
+        logger.info(f"Created {len(vm_list)} VMs for snapshot-of-clone testing")
+
+        logger.test_step(
+            "Clone VMs, snapshot clones, and verify data integrity in parallel"
+        )
         self.run_parallel_vm_clone_restore(
             vm_list,
             file_paths,
@@ -466,12 +495,18 @@ class TestVmSnapshotClone(E2ETest):
         7. Write additional data to the cloned VM.
         """
 
+        logger.test_step("Create project and deploy VMs")
         proj_obj = project_factory()
         file_paths = ["/source_file.txt", "/new_file.txt"]
         vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
             namespace=proj_obj.namespace
         )
         vm_list = vm_objs_def + vm_objs_aggr
+        logger.info(f"Created {len(vm_list)} VMs for clone-of-restored testing")
+
+        logger.test_step(
+            "Restore VMs from snapshots, clone restored VMs, and verify data integrity in parallel"
+        )
         self.run_parallel_vm_clone_restore(
             vm_list,
             file_paths,

@@ -35,8 +35,10 @@ class TestCnvDeviceReplace(E2ETest):
         Setting up VMs for tests
 
         """
+        self.vm_for_stop = None
+        self.vm_for_snap = None
 
-        # Create a project
+        logger.test_step("Create project and deploy CNV workload VMs")
         proj_obj = project_factory()
         (
             self.vm_objs_def,
@@ -44,7 +46,8 @@ class TestCnvDeviceReplace(E2ETest):
             self.sc_obj_def_compr,
             self.sc_obj_aggressive,
         ) = multi_cnv_workload(namespace=proj_obj.namespace)
-        logger.info("All vms created successfully")
+        all_vms = self.vm_objs_def + self.vm_objs_aggr
+        logger.info(f"Created {len(all_vms)} VMs successfully")
 
         # Register the teardown
         request.addfinalizer(self.teardown)
@@ -53,17 +56,23 @@ class TestCnvDeviceReplace(E2ETest):
         """
         Teardown operations for the test case.
         """
-        logger.info("Performing teardown operations...")
+        logger.info("Performing teardown operations")
 
         # Start the stopped VM if it is in stopped state
-        if self.vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED:
+        if (
+            self.vm_for_stop
+            and self.vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED
+        ):
             self.vm_for_stop.start()
-            logger.info(f"VM {self.vm_for_stop.name} started.")
+            logger.info(f"VM '{self.vm_for_stop.name}' started")
 
         # Unpause the paused VM if it is in paused state
-        if self.vm_for_snap.printableStatus() == constants.VM_PAUSED:
+        if (
+            self.vm_for_snap
+            and self.vm_for_snap.printableStatus() == constants.VM_PAUSED
+        ):
             self.vm_for_snap.unpause()
-            logger.info(f"VM {self.vm_for_snap.name} unpaused.")
+            logger.info(f"VM '{self.vm_for_snap.name}' unpaused")
 
     def test_vms_with_device_replacement(
         self,
@@ -92,61 +101,85 @@ class TestCnvDeviceReplace(E2ETest):
         6. Check for data Integrity
         """
 
+        logger.test_step("Write initial data and create clone/snapshot VMs")
         all_vms = self.vm_objs_def + self.vm_objs_aggr
         file_paths = ["/source_file.txt", "/new_file.txt"]
-        # Initialize checksums
         source_csums = {
             vm.name: run_dd_io(vm, file_paths[0], verify=True) for vm in all_vms
         }
 
-        # Randomly select VMs for operations
         self.vm_for_clone, self.vm_for_stop, self.vm_for_snap = random.sample(
             all_vms, 3
         )
+        logger.info(
+            f"Selected VMs: clone='{self.vm_for_clone.name}', "
+            f"stop='{self.vm_for_stop.name}', snapshot='{self.vm_for_snap.name}'"
+        )
 
-        # Create clone and snapshot, update checksums
         for vm in [self.vm_for_clone, self.vm_for_snap]:
+            op = "clone" if vm == self.vm_for_clone else "snapshot"
+            logger.info(f"Creating {op} of VM '{vm.name}'")
             vm_obj = (
                 vm_clone_fixture(vm, admin_client)
                 if vm == self.vm_for_clone
                 else vm_snapshot_restore_fixture(vm, admin_client)
             )
 
-            # Use cal_md5sum_vm here
             source_csums[vm_obj.name] = cal_md5sum_vm(vm_obj, file_paths[0])
             if vm == self.vm_for_clone:
                 all_vms.append(vm_obj)
 
-        # Keep vms in different states (power on, paused, stoped)
+        logger.test_step("Set VMs to different states and perform device replacement")
+        logger.info(
+            f"Stopping VM '{self.vm_for_stop.name}' and pausing VM '{self.vm_for_snap.name}'"
+        )
         self.vm_for_stop.stop()
         self.vm_for_snap.pause()
 
-        # Perform device replacement
+        logger.info("Performing OSD device replacement")
         osd_operations.osd_device_replacement(nodes)
 
-        logger.info("Verify osd encryption")
+        logger.info("Verifying OSD encryption")
         if config.ENV_DATA.get("encryption_at_rest"):
             osd_encryption_verification()
 
-        # Check VMs status post-replacement
+        logger.test_step("Verify VM state preservation after device replacement")
+        stop_status = self.vm_for_stop.printableStatus()
+        logger.assertion(
+            f"Stopped VM state: vm='{self.vm_for_stop.name}', "
+            f"expected='{constants.CNV_VM_STOPPED}', actual='{stop_status}', "
+            f"match={stop_status == constants.CNV_VM_STOPPED}"
+        )
         assert (
-            self.vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED
-        ), "Stopped VM state not preserved."
-        logger.info("After device replacement, stopped VM preserved state.")
+            stop_status == constants.CNV_VM_STOPPED
+        ), f"VM '{self.vm_for_stop.name}' stopped state not preserved after device replacement"
 
+        pause_status = self.vm_for_snap.printableStatus()
+        logger.assertion(
+            f"Paused VM state: vm='{self.vm_for_snap.name}', "
+            f"expected='{constants.VM_PAUSED}', actual='{pause_status}', "
+            f"match={pause_status == constants.VM_PAUSED}"
+        )
         assert (
-            self.vm_for_snap.printableStatus() == constants.VM_PAUSED
-        ), "Paused VM state not preserved."
-        logger.info("After device replacement, paused VM preserved state.")
+            pause_status == constants.VM_PAUSED
+        ), f"VM '{self.vm_for_snap.name}' paused state not preserved after device replacement"
 
-        logger.info("Starting vms")
+        logger.info(
+            f"Starting VM '{self.vm_for_stop.name}' and unpausing VM '{self.vm_for_snap.name}'"
+        )
         self.vm_for_stop.start()
         self.vm_for_snap.unpause()
 
-        # Combined IO operations and data integrity check
+        logger.test_step("Verify data integrity and run I/O on all VMs")
         for vm_obj in all_vms:
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1], verify=True)
             new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
+            logger.assertion(
+                f"Data integrity: vm='{vm_obj.name}', "
+                f"expected='{source_csums[vm_obj.name]}', actual='{new_csum}', "
+                f"match={source_csums[vm_obj.name] == new_csum}"
+            )
             assert (
                 source_csums[vm_obj.name] == new_csum
-            ), f"Data integrity failed for VM '{vm_obj.name}'."
+            ), f"MD5 mismatch for VM '{vm_obj.name}' after device replacement"
+        logger.info("Data integrity verified and I/O completed on all VMs")
