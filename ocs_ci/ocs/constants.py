@@ -241,6 +241,8 @@ PROXY = "Proxy"
 MACHINECONFIGPOOL = "MachineConfigPool"
 VOLUMESNAPSHOTCLASS = "VolumeSnapshotClass"
 VOLUMEGROUPSNAPSHOTCLASS = "VolumeGroupSnapshotClass"
+VOLUMEGROUPSNAPSHOT = "VolumeGroupSnapshot"
+VOLUMEGROUPSNAPSHOTCONTENT = "VolumeGroupSnapshotContent"
 HPA = "horizontalpodautoscaler"
 VOLUMESNAPSHOTCONTENT = "VolumeSnapshotContent"
 POD_DISRUPTION_BUDGET = "PodDisruptionBudget"
@@ -661,6 +663,9 @@ DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 DEFAULT_VOLUMEGROUPSNAPSHOTCLASS = "ocs-storagecluster-cephfs-groupsnapclass"
+DEFAULT_VOLUMEGROUPSNAPSHOTCLASS_CEPHFS = DEFAULT_VOLUMEGROUPSNAPSHOTCLASS
+DEFAULT_VOLUMEGROUPSNAPSHOTCLASS_RBD = "ocs-storagecluster-rbd-groupsnapclass"
+DEFAULT_VOLUMEGROUPSNAPSHOTCLASS_NFS = "ocs-storagecluster-nfs-groupsnapclass"
 
 # CephFS subvolume metrics UI (RHSTOR-7679)
 CEPHFS_SUBVOLUME_METRICS_CARD_TITLE = "Current top 10 subvolumes on all clusters"
@@ -998,6 +1003,8 @@ CSI_RBD_PVC_RESTORE_YAML = os.path.join(TEMPLATE_CSI_RBD_DIR, "pvc-restore.yaml"
 CSI_RBD_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_RBD_DIR, "snapshot.yaml")
 
 CSI_RBD_SNAPSHOTCLASS_YAML = os.path.join(TEMPLATE_CSI_RBD_DIR, "snapshotclass.yaml")
+
+CSI_VOLUMEGROUPSNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_DIR, "volumegroupsnapshot.yaml")
 
 CONFIGURE_PVC_ON_MONITORING_POD = os.path.join(
     TEMPLATE_CONFIGURE_PVC_MONITORING_POD, "configuring_pvc.yaml"
