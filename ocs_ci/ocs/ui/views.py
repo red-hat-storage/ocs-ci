@@ -1173,11 +1173,12 @@ FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS = {
         " | //button[contains(normalize-space(),'Create file system claim')]",
         By.XPATH,
     ),
-    # File system claim name input field — the <div> wrapping the <input>
-    # inside form id="file-system-claim-create-form"
+    # File system claim name input — targeted by placeholder text which is
+    # stable across UI versions and does not rely on a form id attribute.
     "file_system_claim_name_input": (
-        "//*[@id='file-system-claim-create-form']//input[@type='text']"
-        " | //*[@id='file-system-claim-create-form']/div[1]//input",
+        "//input[@placeholder='file-system-1' or @id='fileSystemClaimName'"
+        " or contains(@id,'file-system-claim')]"
+        " | //input[@type='text' and contains(@class,'pf-v6-c-form-control')]",
         By.XPATH,
     ),
     # First LUN row checkbox in the "Select LUNs" table
