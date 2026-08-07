@@ -1634,6 +1634,16 @@ def navigate_to_local_cluster(**kwargs):
     else:
         timeout = 30
 
+    try:
+        wait_for_element_to_be_visible(acm_page_loc["single-perspective"], 3)
+        logger.info(
+            "Single perspective detected (no multicluster hub). "
+            "Already on local cluster — skipping cluster navigation."
+        )
+        return
+    except TimeoutException:
+        pass
+
     all_clusters_dropdown = acm_page_loc["all-clusters_dropdown"]
     try:
         logger.info("Navigate to Local Cluster page. Click all clusters dropdown")
