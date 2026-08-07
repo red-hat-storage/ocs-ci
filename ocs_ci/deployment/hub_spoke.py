@@ -2251,7 +2251,7 @@ class HypershiftHostedOCP(
             log_step("Approve agents for Agent hosted cluster")
             self.agent_workflow.approve_agents()
 
-            return self.create_agent_ocp_cluster(
+            cluster_name = self.create_agent_ocp_cluster(
                 name=self.name,
                 nodepool_replicas=nodepool_replicas,
                 ocp_version=ocp_version,
@@ -2262,7 +2262,7 @@ class HypershiftHostedOCP(
                 hcp_image=hcp_image,
             )
         else:
-            return self.create_kubevirt_ocp_cluster(
+            cluster_name = self.create_kubevirt_ocp_cluster(
                 name=self.name,
                 nodepool_replicas=nodepool_replicas,
                 cpu_cores=cpu_cores_per_hosted_cluster,
@@ -2275,6 +2275,33 @@ class HypershiftHostedOCP(
                 auto_repair=auto_repair,
                 hcp_image=hcp_image,
             )
+
+        # Download kubeadmin password for the deployed cluster
+        if cluster_name:
+            log_step(f"Downloading kubeadmin password for cluster '{cluster_name}'")
+            cluster_path = (
+                config.ENV_DATA.get("clusters", {})
+                .get(cluster_name, {})
+                .get("hosted_cluster_path")
+            )
+            try:
+                password_path = self.download_hosted_cluster_kubeadmin_password(
+                    cluster_name, cluster_path
+                )
+                if password_path:
+                    logger.info(
+                        f"Successfully downloaded kubeadmin password to {password_path}"
+                    )
+                else:
+                    logger.warning(
+                        f"Failed to download kubeadmin password for cluster '{cluster_name}'"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"Exception while downloading kubeadmin password for cluster '{cluster_name}': {e}"
+                )
+
+        return cluster_name
 
     def deploy_dependencies(
         self,
