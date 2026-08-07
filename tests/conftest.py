@@ -422,25 +422,37 @@ def pytest_generate_tests(metafunc):
     """
     # For now we are only dealing with multicluster scenarios in this hook
     if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
-        if (
-            ocsci_config.ENV_DATA.get("platform", "").lower()
-            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        if ocsci_config.ENV_DATA.get(
+            "platform", ""
+        ).lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS and not (
+            ocsci_config.MULTICLUSTER.get("multicluster_mode", "") == "rdr-provider"
         ):
             # Skipping multicluster upgrade parametrization for Hosted Control Plane platforms
             # Sequence and handling of OCP and ODF upgrades are different for Hosted Control Plane multicluster upgrade
             return
-        upgrade_parametrizer = get_multicluster_upgrade_parametrizer()
-        # for various roles which are applicable to current test wrt multicluster, for ex: ACM, primary, secondary etc
-        roles = None
-        roles = upgrade_parametrizer.get_roles(metafunc)
-        if roles:
-            upgrade_parametrizer.config_init()
-            params = upgrade_parametrizer.generate_pytest_parameters(metafunc, roles)
-            log.debug(f"upgrade params = {params}")
-            for marker in metafunc.definition.iter_markers():
-                if marker.name in upgrade_parametrizer.MULTICLUSTER_UPGRADE_MARKERS:
-                    log.debug(f"Parametrizing the test: {metafunc.function.__name__}")
-                    metafunc.parametrize("zone_rank, role_rank, config_index", params)
+        if any(
+            dr_scenario in ocsci_config.MULTICLUSTER.get("multicluster_mode")
+            for dr_scenario in ["regional-dr", "metro-dr", "rdr-provider"]
+        ):
+            upgrade_parametrizer = get_multicluster_upgrade_parametrizer()
+            # for various roles which are applicable to current test wrt multicluster,
+            # for ex: ACM, primary, secondary etc
+            roles = None
+            roles = upgrade_parametrizer.get_roles(metafunc)
+            if roles:
+                upgrade_parametrizer.config_init()
+                params = upgrade_parametrizer.generate_pytest_parameters(
+                    metafunc, roles
+                )
+                log.debug(f"upgrade params = {params}")
+                for marker in metafunc.definition.iter_markers():
+                    if marker.name in upgrade_parametrizer.MULTICLUSTER_UPGRADE_MARKERS:
+                        log.debug(
+                            f"Parametrizing the test: {metafunc.function.__name__}"
+                        )
+                        metafunc.parametrize(
+                            "zone_rank, role_rank, config_index", params
+                        )
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -595,10 +607,10 @@ def pytest_collection_modifyitems(session, config, items):
                         # determines the order in which tests need to be executed
                         # Lower the sum, higher the rank hence it gets prioritized early
                         # in the test execution sequence
-                        if (
-                            ocsci_config.MULTICLUSTER.get("multicluster_mode", "")
-                            == "regional-dr"
-                        ):
+                        if ocsci_config.MULTICLUSTER.get("multicluster_mode", "") in [
+                            "regional-dr",
+                            "rdr-provider",
+                        ]:
                             upgrade_parametrizer = (
                                 get_multicluster_upgrade_parametrizer()
                             )
