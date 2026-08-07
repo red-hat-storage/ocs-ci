@@ -3861,6 +3861,13 @@ ISF_OPERATOR_IDMS_YAML = "image-digest-mirror-set.yaml.j2"
 FDF_IMAGE_DIGEST_MIRROR_SET_FILENAME = "idms.yaml"
 FDF_SERVICE_NAME = "odfmanager"
 
+# Standalone FDF deployment (RHSTOR-8840)
+# CatalogSource name matches the example YAML from the RHSTOR-8840 analysis doc.
+FDF_STANDALONE_CATALOG_SOURCE_NAME = "ibm-operators"
+FDF_STANDALONE_CATSRC_YAML = os.path.join(
+    FDF_TEMPLATE_DIR, "fdf_standalone_catsrc.yaml"
+)
+
 CREATE = "create"
 EDIT = "edit"
 DELETE = "delete"

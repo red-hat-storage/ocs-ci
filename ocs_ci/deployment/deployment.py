@@ -1341,7 +1341,17 @@ class Deployment(object):
         rosa_hcp_non_ga = platform == constants.ROSA_HCP_PLATFORM and bool(
             config.DEPLOYMENT.get("ocs_registry_image")
         )
-        if config.DEPLOYMENT.get("live_deployment") and not rosa_hcp_non_ga:
+        if config.DEPLOYMENT.get("fdf_standalone_deployment", False):
+            # Standalone FDF (RHSTOR-8840): resolve odf-operator from the IBM
+            # catalog source created by StandaloneFDFCatalogSource, not redhat-operators.
+            subscription_yaml_data["spec"][
+                "source"
+            ] = constants.FDF_STANDALONE_CATALOG_SOURCE_NAME
+            logger.info(
+                "FDF standalone: subscription source set to '%s'",
+                constants.FDF_STANDALONE_CATALOG_SOURCE_NAME,
+            )
+        elif config.DEPLOYMENT.get("live_deployment") and not rosa_hcp_non_ga:
             subscription_yaml_data["spec"]["source"] = config.DEPLOYMENT.get(
                 "live_content_source", defaults.LIVE_CONTENT_SOURCE
             )
@@ -1517,7 +1527,20 @@ class Deployment(object):
         upgrade = config.UPGRADE.get("upgrade", False)
         rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
         rosa_hcp_non_ga = rosa_hcp and bool(config.DEPLOYMENT.get("ocs_registry_image"))
-        if (not live_deployment or rosa_hcp_non_ga) and not (
+        # Standalone FDF (RHSTOR-8840): create the IBM catalog source so that
+        # the odf-operator package becomes visible in OperatorHub. After this
+        # the rest of the ODF deployment path runs unchanged.
+        fdf_standalone = config.DEPLOYMENT.get("fdf_standalone_deployment", False)
+        if fdf_standalone:
+            from ocs_ci.deployment.fdf_standalone import (
+                create_fdf_standalone_catalog_source,
+            )
+
+            logger.test_step(
+                "Create FDF standalone CatalogSource (ibm-operators) and wait READY"
+            )
+            create_fdf_standalone_catalog_source()
+        elif (not live_deployment or rosa_hcp_non_ga) and not (
             stage_testing and konflux_build and not rosa_hcp
         ):
             log_step("Create catalog source and wait it to be READY")
