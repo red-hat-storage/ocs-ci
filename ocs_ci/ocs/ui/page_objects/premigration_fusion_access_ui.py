@@ -194,26 +194,24 @@ class PreMigrationFusionAccessUI(PageNavigator, BaseUI):
             timeout=30,
             enable_screenshot=True,
         )
+        # The button navigates to a new page (e.g. /fusion-access/file-system-claims/create).
+        # Wait for the new page to fully load before interacting with the form.
+        self.page_has_loaded(retries=15)
         self.take_screenshot("create_file_system_claim_page")
         logger.info("'Create file system claim' page opened successfully")
 
         # Step 7 — Enter a unique file system claim name.
-        # The input already has a placeholder ("file-system-1"); clear it first
-        # so we can supply a deterministic, unique name for traceability.
+        # The input already has a pre-filled value ("file-system-1"); use
+        # Ctrl+A then Delete to clear it — .clear() does not trigger React's
+        # onChange, leaving the field visually empty but still holding the
+        # original value internally.
         fs_claim_name = create_unique_resource_name("fs-claim", "fusion")
         logger.info(f"Step 7: Entering file system claim name: '{fs_claim_name}'")
-        self.do_clear(
-            locator=FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS[
-                "file_system_claim_name_input"
-            ],
-            timeout=30,
-        )
-        self.do_send_keys(
-            locator=FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS[
-                "file_system_claim_name_input"
-            ],
-            text=fs_claim_name,
-        )
+        name_locator = FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS[
+            "file_system_claim_name_input"
+        ]
+        self.clear_with_ctrl_a_del(locator=name_locator, timeout=30)
+        self.do_send_keys(locator=name_locator, text=fs_claim_name)
         self.take_screenshot("file_system_claim_name_entered")
 
         # Step 8 — Select the first LUN from the "Select LUNs" table and submit.
