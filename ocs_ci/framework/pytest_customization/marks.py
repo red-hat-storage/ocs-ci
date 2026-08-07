@@ -300,7 +300,7 @@ skipif_less_than_five_workers = pytest.mark.skipif(
 )
 
 skipif_ec_pools_disabled = pytest.mark.skipif(
-    config.DEPLOYMENT.get("ec_default_pools") is not True,
+    not any(c.DEPLOYMENT.get("ec_default_pools") for c in config.clusters),
     reason="Test runs only on EC pools",
 )
 
