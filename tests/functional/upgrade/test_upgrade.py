@@ -156,7 +156,7 @@ def test_dr_hub_upgrade(zone_rank, role_rank, config_index):
 
 @purple_squad
 @dr_cluster_operator_upgrade
-@multicluster_roles(["mdr-all-odf", "rdr-all-odf"])
+@multicluster_roles(["mdr-all-odf", "rdr-provider-all-providers"])
 def test_dr_cluster_upgrade(zone_rank, role_rank, config_index):
     """
     Test upgrade procedure for DR cluster operator
