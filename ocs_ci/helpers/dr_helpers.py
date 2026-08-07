@@ -3300,17 +3300,26 @@ def wait_for_vrg_state(vrg_state, vrg_namespace, resource_name, timeout=900):
     )
 
 
-def get_vrg_annotation(vrg_name, vrg_namespace, annotation_key):
+def get_vrg_annotation(
+    vrg_name, vrg_namespace, annotation_key, expected_value=None, timeout=120
+):
     """
-    Fetch the value of a specific annotation from a VolumeReplicationGroup.
+    Fetch (or poll for) the value of a specific annotation on a VolumeReplicationGroup.
 
     The caller is responsible for switching to the correct cluster context
     before invoking this function.
+
+    When expected_value is given the function polls via TimeoutSampler until
+    the annotation equals that value, handling a missing VRG gracefully during
+    the propagation window.  When expected_value is None a single read is done.
 
     Args:
         vrg_name (str): Name of the VRG resource
         vrg_namespace (str): Namespace of the VRG resource
         annotation_key (str): The full annotation key to read
+        expected_value (str | None): When set, poll until the annotation equals
+            this value (default: None — single read)
+        timeout (int): Seconds to poll when expected_value is set (default: 120)
 
     Returns:
         str | None: The annotation value, or None if the annotation is absent
@@ -3320,8 +3329,25 @@ def get_vrg_annotation(vrg_name, vrg_namespace, annotation_key):
         namespace=vrg_namespace,
         resource_name=vrg_name,
     )
-    annotations = vrg_obj.get().get("metadata", {}).get("annotations", {}) or {}
-    return annotations.get(annotation_key)
+
+    def _read():
+        try:
+            annotations = vrg_obj.get().get("metadata", {}).get("annotations", {}) or {}
+            return annotations.get(annotation_key)
+        except Exception:
+            return None
+
+    if expected_value is not None:
+        for value in TimeoutSampler(timeout=timeout, sleep=5, func=_read):
+            if value == expected_value:
+                logger.info(f"VRG {vrg_name} annotation {annotation_key!r} = {value!r}")
+                return value
+            logger.info(
+                f"VRG {vrg_name} annotation {annotation_key!r} = {value!r}, "
+                f"waiting for {expected_value!r}"
+            )
+
+    return _read()
 
 
 def verify_dryrun_snapshots(namespace, vrg_name, expected_count, timeout=900):
