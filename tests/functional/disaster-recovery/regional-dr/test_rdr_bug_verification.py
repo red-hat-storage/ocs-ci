@@ -129,18 +129,24 @@ class TestRDRBugVerification:
         )
         workload = rdr_workload[0]
 
+        drpc_resource_name = f"{workload.appset_placement_name}-drpc"
         drpc_obj = DRPC(
             namespace=constants.GITOPS_CLUSTER_NAMESPACE,
-            resource_name=f"{workload.appset_placement_name}-drpc",
+            resource_name=drpc_resource_name,
         )
-
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             workload.workload_namespace,
             workload.workload_type,
+            resource_name=drpc_resource_name,
         )
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             workload.workload_namespace,
             workload.workload_type,
+            resource_name=drpc_resource_name,
+        )
+        logger.info(
+            f"DRPC: {drpc_resource_name} | primary: {primary_cluster_name}"
+            f" | secondary: {secondary_cluster_name}"
         )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
@@ -148,20 +154,21 @@ class TestRDRBugVerification:
             workload.workload_type,
         )
         wait_time = 2 * scheduling_interval  # minutes
-
-        # --- Step 1: Wait for initial sync ---
-        logger.info(
-            f"Waiting {wait_time} minutes for initial sync before adding annotations"
+        pre_annotation_wait = (
+            scheduling_interval  # 1x interval is enough for initial sync
         )
-        sleep(wait_time * 60)
+
+        logger.test_step(
+            f"Wait {pre_annotation_wait} minutes for initial sync before adding annotations"
+        )
+        sleep(pre_annotation_wait * 60)
         dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
 
-        # --- Step 2: Add custom annotations to all PVCs on the primary cluster ---
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        logger.info(
-            f"Adding test annotations to PVCs in {workload.workload_namespace} "
-            f"on primary cluster {primary_cluster_name}"
+        logger.test_step(
+            f"Add custom annotations to all PVCs on primary cluster "
+            f"{primary_cluster_name}"
         )
+        config.switch_to_cluster_by_name(primary_cluster_name)
         ocp_pvc = ocp.OCP(kind=constants.PVC, namespace=workload.workload_namespace)
         pvc_objs = get_all_pvc_objs(namespace=workload.workload_namespace)
         assert pvc_objs, (
@@ -175,20 +182,18 @@ class TestRDRBugVerification:
             for key, value in self._DFBUGS_5285_ANNOTATIONS.items():
                 ocp_pvc.annotate(annotation=f"{key}={value}", resource_name=pvc_name)
         logger.info(
-            f"Added annotations {list(self._DFBUGS_5285_ANNOTATIONS.keys())} "
-            f"to PVCs: {pvc_names}"
+            f"Added annotations {list(self._DFBUGS_5285_ANNOTATIONS.keys())}"
+            f" to PVCs: {pvc_names}"
         )
 
-        # --- Step 3: Wait for sync to replicate updated PVC annotations ---
-        logger.info(
-            f"Waiting {wait_time} minutes for sync to capture annotated PVC metadata"
+        logger.test_step(
+            f"Wait {wait_time} minutes for sync to replicate annotated PVC metadata"
         )
         sleep(wait_time * 60)
         dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
 
-        # --- Step 4: Failover to secondary cluster ---
-        logger.info(
-            f"Initiating failover to secondary cluster: {secondary_cluster_name}"
+        logger.test_step(
+            f"Initiate failover to secondary cluster: {secondary_cluster_name}"
         )
         dr_helpers.failover(
             failover_cluster=secondary_cluster_name,
@@ -204,9 +209,8 @@ class TestRDRBugVerification:
             workload.workload_namespace,
         )
 
-        # --- Step 5: Verify PVC annotations on secondary cluster after failover ---
-        logger.info(
-            f"Verifying PVC annotations on secondary cluster "
+        logger.test_step(
+            f"Verify PVC annotations on secondary cluster "
             f"{secondary_cluster_name} after failover"
         )
         self._verify_annotations(
@@ -218,9 +222,8 @@ class TestRDRBugVerification:
             operation="failover",
         )
 
-        # --- Step 6: Relocate back to primary cluster ---
-        logger.info(
-            f"Initiating relocate back to primary cluster: {primary_cluster_name}"
+        logger.test_step(
+            f"Initiate relocate back to primary cluster: {primary_cluster_name}"
         )
         dr_helpers.relocate(
             preferred_cluster=primary_cluster_name,
@@ -236,9 +239,8 @@ class TestRDRBugVerification:
             workload.workload_namespace,
         )
 
-        # --- Step 7: Verify PVC annotations on primary cluster after relocate ---
-        logger.info(
-            f"Verifying PVC annotations on primary cluster "
+        logger.test_step(
+            f"Verify PVC annotations on primary cluster "
             f"{primary_cluster_name} after relocate"
         )
         self._verify_annotations(
@@ -250,14 +252,12 @@ class TestRDRBugVerification:
             operation="relocate",
         )
 
-        # --- Step 8: Verify annotations in VRG on secondary cluster ---
+        logger.test_step(
+            f"Verify VRG spec.volSync.rdSpec[*].protectedPVC.annotations "
+            f"on secondary cluster {secondary_cluster_name} after relocate"
+        )
         config.switch_to_cluster_by_name(secondary_cluster_name)
         vrg_name = f"{workload.appset_placement_name}-drpc"
-        logger.info(
-            f"Verifying VRG '{vrg_name}' spec.volSync.rdSpec[*].protectedPVC"
-            f".annotations on secondary cluster {secondary_cluster_name} "
-            f"after relocate"
-        )
         self._verify_annotations(
             resource_type=constants.VOLUME_REPLICATION_GROUP,
             namespace=workload.workload_namespace,
@@ -311,12 +311,8 @@ class TestRDRBugVerification:
                 successfully, confirming DR replication is functional after
                 the token update.
         """
-        # --- Step 1: Verify peer secrets exist on the hub cluster ---
+        logger.test_step("Verify peer secrets exist on the hub cluster")
         config.switch_acm_ctx()
-        logger.info(
-            f"Verifying peer secret of type {_PEER_SECRET_TYPE} exists in "
-            f"each managed cluster namespace on the hub"
-        )
         for cluster_config in get_non_acm_cluster_config():
             cluster_name = cluster_config.ENV_DATA["cluster_name"]
             secret_ocp_hub = ocp.OCP(
@@ -336,7 +332,7 @@ class TestRDRBugVerification:
                 f"{_PEER_SECRET_TYPE} in namespace {cluster_name} on hub"
             )
 
-        # --- Step 2: Record secret state on primary cluster before failover ---
+        logger.test_step("Record secret state on primary cluster before failover")
         primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
         config.switch_to_cluster_by_name(primary_cluster_name)
 
@@ -357,7 +353,7 @@ class TestRDRBugVerification:
         initial_mon_ips = self._extract_mon_ips_from_token(initial_token)
         logger.info(f"Mon IPs from token before failover: {initial_mon_ips}")
 
-        # --- Step 3: Verify token mon IPs match ceph mon dump ---
+        logger.test_step("Verify token mon IPs match ceph mon dump")
         dump_mon_ips_before = self._get_mon_ips_from_dump()
         logger.info(
             f"Mon IPs from ceph mon dump before failover: {dump_mon_ips_before}"
@@ -368,7 +364,7 @@ class TestRDRBugVerification:
         )
         logger.info("Mon IPs in token match ceph mon dump before failover")
 
-        # --- Step 4: Scale down one mon to simulate a mon failure ---
+        logger.test_step("Scale down one mon to simulate a mon failure")
         mon_deployments = get_deployments_having_label(
             constants.MON_APP_LABEL,
             config.ENV_DATA["cluster_namespace"],
@@ -389,21 +385,22 @@ class TestRDRBugVerification:
             namespace=config.ENV_DATA["cluster_namespace"],
         )
 
-        # --- Step 5: Wait for the mon to leave quorum ---
+        logger.test_step("Wait for the mon to leave quorum")
         wait_for_mon_status(
             mon_id=mon_id, status=constants.MON_STATUS_DOWN, timeout=300
         )
         logger.info(f"Mon {mon_id} has left the quorum")
 
-        # --- Step 6: Wait for rook to bring up a replacement mon ---
-        # Rook typically takes ~10 minutes to spin up a replacement mon after
-        # detecting the mon is unreachable; allow 15 minutes to be safe.
-        wait_for_mons_in_quorum(expected_mon_count=initial_mon_count, timeout=900)
+        logger.test_step("Wait for rook to bring up a replacement mon")
+        # Rook waits ~900s internally before declaring a mon failed and starting
+        # the replacement. Allow an additional 300s for the new mon to schedule,
+        # join quorum, and update the peer token secret.
+        wait_for_mons_in_quorum(
+            expected_mon_count=initial_mon_count, timeout=1200, sleep=60
+        )
         logger.info("Rook brought up a replacement mon, quorum restored")
 
-        # --- Step 7: Wait for rook to update the secret after the new mon joins ---
-        # The peer token secret is updated asynchronously after quorum is
-        # restored; poll until the rook managedField timestamp advances.
+        logger.test_step("Wait for rook to update the peer token secret")
         initial_dt = datetime.fromisoformat(initial_rook_time.replace("Z", "+00:00"))
         updated_secret_data = None
         updated_rook_time = None
@@ -437,7 +434,7 @@ class TestRDRBugVerification:
             f"from {initial_rook_time} to {updated_rook_time}"
         )
 
-        # --- Step 8: Verify updated token mon IPs match new ceph mon dump ---
+        logger.test_step("Verify updated token mon IPs match new ceph mon dump")
         updated_token = self._decode_peer_token(updated_secret_data)
         updated_mon_ips = self._extract_mon_ips_from_token(updated_token)
         logger.info(f"Mon IPs from token after failover: {updated_mon_ips}")
@@ -456,7 +453,7 @@ class TestRDRBugVerification:
             f"Updated token mon IPs {updated_mon_ips} match ceph mon dump after failover"
         )
 
-        # --- Step 9: Verify CephBlockPool is in Ready status ---
+        logger.test_step("Verify CephBlockPool is in Ready status")
         cbp_ocp = ocp.OCP(
             kind=constants.CEPHBLOCKPOOL,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
@@ -470,8 +467,9 @@ class TestRDRBugVerification:
         )
         logger.info("CephBlockPool is in Ready status")
 
-        # --- Step 10: Verify the updated token exists in the secret created by
-        #              token-exchange-agent on the peer cluster ---
+        logger.test_step(
+            "Verify the updated token is propagated to the " "peer cluster by MCO"
+        )
         secondary_cluster_config = next(
             c
             for c in get_non_acm_cluster_config()
@@ -496,8 +494,8 @@ class TestRDRBugVerification:
         peer_mon_ips = None
         try:
             for _ in TimeoutSampler(
-                timeout=600,
-                sleep=30,
+                timeout=3600,
+                sleep=60,
                 func=lambda: None,
             ):
                 if ocs_version >= version.VERSION_4_19:
@@ -538,7 +536,7 @@ class TestRDRBugVerification:
                 f"Mon IPs {peer_mon_ips} in secret {peer_secret_name!r} on "
                 f"secondary cluster {secondary_cluster_name!r} did not match "
                 f"the updated mon IPs {updated_mon_ips} from the primary "
-                f"cluster within 600s"
+                f"cluster within 3600s"
             )
         logger.info(
             f"token-exchange-agent propagated updated mon IPs {peer_mon_ips} "
@@ -546,7 +544,7 @@ class TestRDRBugVerification:
         )
         config.switch_to_cluster_by_name(primary_cluster_name)
 
-        # --- Step 11: Verify MirrorPeer and deploy RBD workload with DR ---
+        logger.test_step("Verify MirrorPeer and deploy RBD workload with DR")
         config.switch_acm_ctx()
         mirror_peer_ocp = ocp.OCP(kind="MirrorPeer")
         mirror_peers = mirror_peer_ocp.get(all_namespaces=True).get("items", [])
@@ -613,7 +611,7 @@ class TestRDRBugVerification:
         if resource_type == constants.PVC:
             pvc_objs = get_all_pvc_objs(namespace=namespace)
             logger.info(
-                f"PVCs on {cluster_name} {context}: " f"{[p.name for p in pvc_objs]}"
+                f"PVCs on {cluster_name} {context}: {[p.name for p in pvc_objs]}"
             )
             annotations_by_pvc = {
                 pvc.name: pvc.get().get("metadata", {}).get("annotations", {})
@@ -657,6 +655,11 @@ class TestRDRBugVerification:
                         f"{key}={value!r} (found: {actual.get(key)!r})"
                     )
 
+        logger.assertion(
+            f"{resource_label} on cluster '{cluster_name}' {context}:"
+            f" expected={list(expected_annotations.keys())},"
+            f" missing={missing or 'none'}"
+        )
         assert not missing, (
             f"{resource_label} missing on cluster {cluster_name!r} {context}:\n"
             + "\n".join(
@@ -664,7 +667,7 @@ class TestRDRBugVerification:
             )
         )
         logger.info(
-            f"All expected {resource_label} verified on " f"{cluster_name} {context}"
+            f"All expected {resource_label} verified on {cluster_name} {context}"
         )
 
     def _get_rook_managed_field_time(self, secret_data):
