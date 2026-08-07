@@ -12333,6 +12333,7 @@ def fill_job_factory(request):
         pvc_name=None,
         sc_name=constants.DEFAULT_STORAGECLASS_RBD,
         storage="50Gi",
+        direct_io=False,
     ):
         """
         Create a Job that fills up the cluster storage by writing data to a PVC.
@@ -12349,6 +12350,8 @@ def fill_job_factory(request):
             pvc_name (str): Name of the PVC to create and attach to the Pod.
             sc_name (str): StorageClass name for the PVC.
             storage (str): Storage size for the PVC.
+            direct_io (bool): If True, add oflag=direct to the dd command to
+                bypass the page cache.
 
         Returns:
             FillPoolJob: The created FillPoolJob object.
@@ -12369,6 +12372,7 @@ def fill_job_factory(request):
             pvc_name=pvc_name,
             sc_name=sc_name,
             storage=storage,
+            direct_io=direct_io,
         )
 
         return fill_pool_job_obj
