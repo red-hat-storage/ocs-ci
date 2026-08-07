@@ -2,10 +2,17 @@ import logging
 import boto3
 import pytest
 import time
+import itertools
+import copy
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from subprocess import TimeoutExpired
 
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.resources.pvc import flatten_image
+from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.helpers import helpers
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
@@ -22,6 +29,8 @@ from ocs_ci.helpers.e2e_helpers import (
     validate_mcg_nsfs_feature,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs import ocp
+from ocs_ci.utility import templating
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.bucket_utils import (
     compare_object_checksums_between_bucket_and_local,
@@ -57,7 +66,6 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.ocp import OCP, get_all_resource_of_kind_containing_string
 from ocs_ci.utility.utils import (
     clone_notify,
-    TimeoutSampler,
 )
 
 from ocs_ci.resiliency.resiliency_workload import workload_object
@@ -2965,3 +2973,409 @@ def vdbench_mixed_workload_config():
         return cfg
 
     return _factory
+
+
+@pytest.fixture(scope="function")
+def create_multiple_storage_pvcs_pods(
+    pvc_factory,
+    deployment_pod_factory,
+    request,
+):
+    """
+    Fixture factory to create multiple PVCs and deployment pods across different storage types.
+    Returns:
+        function: Factory function that accepts parameters and returns created resources
+    """
+    # Track all NFS resources created across all factory calls
+    all_nfs_resources = {"pods": [], "pvcs": []}
+
+    def teardown():
+        """
+        Teardown to restore Ceph full ratio and clean up NFS resources.
+        """
+
+        # clean up all NFS resources
+        if all_nfs_resources["pods"]:
+            logger.info("Cleaning up all NFS pod resources")
+            for nfs_pod_obj in all_nfs_resources["pods"]:
+                try:
+                    pod.delete_deployment_pods(nfs_pod_obj)
+                except Exception as e:
+                    logger.warning(f"Failed to delete NFS pod {nfs_pod_obj.name}: {e}")
+
+        if all_nfs_resources["pvcs"]:
+            logger.info("Cleaning up all NFS PVC resources")
+            for nfs_pvc_obj in all_nfs_resources["pvcs"]:
+                try:
+                    nfs_pvc_obj.delete()
+                    nfs_pvc_obj.ocp.wait_for_delete(
+                        resource_name=nfs_pvc_obj.name, timeout=180
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to delete NFS PVC {nfs_pvc_obj.name}: {e}")
+
+    request.addfinalizer(teardown)
+
+    def factory(
+        proj_obj, sc_obj, skip_storage_types=None, total_pvcs=10, pvc_name_prefix=""
+    ):
+        """
+        Args:
+            proj_obj: Project object for namespace
+            sc_obj: Encrypted storage class object (for encrypted RBD)
+            skip_storage_types (list): List of storage types to skip.
+            total_pvcs (int): Total number of encrypted PVCs to create (default: 10)
+            pvc_name_prefix (str): Prefix to add to PVC names to avoid conflicts (default: "")
+        """
+
+        if skip_storage_types is None:
+            skip_storage_types = []
+
+        valid_storage_types = ["encrypted_rbd", "non_encrypted_rbd", "cephfs", "nfs"]
+        if not isinstance(skip_storage_types, list):
+            raise ValueError(
+                f"skip_storage_types must be a list. Valid values: {valid_storage_types}"
+            )
+
+        pvc_objs, pod_objs = [], []
+        non_enc_pvc_objs, non_enc_pod_objs, non_enc_combinations = [], [], []
+        cephfs_pvc_objs, cephfs_pod_objs = [], []
+        nfs_pvc_objs, nfs_pod_objs = [], []
+
+        # Create encrypted RBD PVCs and pods
+        if "encrypted_rbd" not in skip_storage_types:
+            logger.info(
+                f"Step 1: Creating {total_pvcs} encrypted RBD PVCs and deployment pods"
+            )
+            enc_base_combinations = [
+                (constants.VOLUME_MODE_FILESYSTEM, constants.ACCESS_MODE_RWO),
+                (constants.VOLUME_MODE_BLOCK, constants.ACCESS_MODE_RWO),
+                (constants.VOLUME_MODE_BLOCK, constants.ACCESS_MODE_RWX),
+            ]
+            pvc_combinations = [
+                {"volume_mode": vm, "access_mode": am, "size": 1}
+                for vm, am in itertools.islice(
+                    itertools.cycle(enc_base_combinations), total_pvcs
+                )
+            ]
+
+            for idx, pvc_config in enumerate(pvc_combinations, start=1):
+                pvc_obj = pvc_factory(
+                    interface=constants.CEPHBLOCKPOOL,
+                    project=proj_obj,
+                    storageclass=sc_obj,
+                    size=pvc_config["size"],
+                    access_mode=pvc_config["access_mode"],
+                    volume_mode=pvc_config["volume_mode"],
+                    status=constants.STATUS_BOUND,
+                )
+                pvc_objs.append(pvc_obj)
+
+                # Create deployment pod
+                is_block_volume = (
+                    pvc_config["volume_mode"] == constants.VOLUME_MODE_BLOCK
+                )
+                pod_obj = deployment_pod_factory(
+                    interface=constants.CEPHBLOCKPOOL,
+                    pvc=pvc_obj,
+                    raw_block_pv=is_block_volume,
+                )
+                pod_objs.append(pod_obj)
+
+            logger.info(
+                f" All {len(pod_objs)} encrypted RBD deployments created and running"
+            )
+
+        # Create non encrypted RBD PVCs and pods
+        if "non_encrypted_rbd" not in skip_storage_types:
+            logger.info(" Creating non-encrypted RBD PVCs and deployment pods")
+
+            non_enc_sc_obj = helpers.default_storage_class(
+                interface_type=constants.CEPHBLOCKPOOL
+            )
+            non_enc_volume_modes = [
+                constants.VOLUME_MODE_FILESYSTEM,
+                constants.VOLUME_MODE_FILESYSTEM,
+                constants.VOLUME_MODE_BLOCK,
+                constants.VOLUME_MODE_BLOCK,
+                constants.VOLUME_MODE_BLOCK,
+            ]
+            non_enc_access_modes = [
+                constants.ACCESS_MODE_RWO,
+                constants.ACCESS_MODE_RWOP,
+                constants.ACCESS_MODE_RWO,
+                constants.ACCESS_MODE_RWX,
+                constants.ACCESS_MODE_RWOP,
+            ]
+            non_enc_combinations = [
+                {"volume_mode": vm, "access_mode": am, "size": 1}
+                for vm, am in itertools.islice(
+                    itertools.cycle(zip(non_enc_volume_modes, non_enc_access_modes)),
+                    total_pvcs,
+                )
+            ]
+            for idx, pvc_config in enumerate(non_enc_combinations, start=1):
+                non_enc_pvc_obj = pvc_factory(
+                    interface=constants.CEPHBLOCKPOOL,
+                    project=proj_obj,
+                    storageclass=non_enc_sc_obj,
+                    size=pvc_config["size"],
+                    access_mode=pvc_config["access_mode"],
+                    volume_mode=pvc_config["volume_mode"],
+                    status=constants.STATUS_BOUND,
+                )
+                non_enc_pvc_objs.append(non_enc_pvc_obj)
+
+                is_block = pvc_config["volume_mode"] == constants.VOLUME_MODE_BLOCK
+                non_enc_pod_obj = deployment_pod_factory(
+                    interface=constants.CEPHBLOCKPOOL,
+                    pvc=non_enc_pvc_obj,
+                    raw_block_pv=is_block,
+                )
+                non_enc_pod_objs.append(non_enc_pod_obj)
+            logger.info(
+                f" All {len(non_enc_pod_objs)} non-encrypted deployments created and running"
+            )
+
+        # Create cephfs PVCs and pods
+        if "cephfs" not in skip_storage_types:
+            logger.info("Creating CephFS PVCs and deployment pods")
+
+            cephfs_access_modes = [
+                constants.ACCESS_MODE_RWO,
+                constants.ACCESS_MODE_RWX,
+                constants.ACCESS_MODE_RWOP,
+            ]
+            cephfs_sc_obj = helpers.default_storage_class(
+                interface_type=constants.CEPHFILESYSTEM
+            )
+            for idx in range(1, total_pvcs + 1):
+                access_mode = cephfs_access_modes[(idx - 1) % len(cephfs_access_modes)]
+                cephfs_pvc_obj = pvc_factory(
+                    interface=constants.CEPHFILESYSTEM,
+                    project=proj_obj,
+                    storageclass=cephfs_sc_obj,
+                    size=1,
+                    access_mode=access_mode,
+                    volume_mode=constants.VOLUME_MODE_FILESYSTEM,
+                    status=constants.STATUS_BOUND,
+                )
+                cephfs_pvc_objs.append(cephfs_pvc_obj)
+
+                cephfs_pod_obj = deployment_pod_factory(
+                    interface=constants.CEPHFILESYSTEM,
+                    pvc=cephfs_pvc_obj,
+                    raw_block_pv=False,
+                )
+                cephfs_pod_objs.append(cephfs_pod_obj)
+
+            logger.info(
+                f" All {len(cephfs_pod_objs)} CephFS deployments created and running"
+            )
+
+        # Create nfs PVCs and pods
+        if "nfs" not in skip_storage_types:
+            logger.info(" Creating NFS in-cluster PVCs and deployment pods")
+
+            nfs_access_modes = [constants.ACCESS_MODE_RWO, constants.ACCESS_MODE_RWX]
+            nfs_sc_name = constants.NFS_STORAGECLASS_NAME
+            nfs_pvc_objs, nfs_pod_objs = [], []
+
+            for idx in range(1, total_pvcs + 1):
+                access_mode = nfs_access_modes[(idx - 1) % len(nfs_access_modes)]
+                nfs_pvc_obj = helpers.create_pvc(
+                    sc_name=nfs_sc_name,
+                    namespace=proj_obj.namespace,
+                    pvc_name=f"{pvc_name_prefix}nfs-pvc-{idx}",
+                    size="1Gi",
+                    do_reload=True,
+                    access_mode=access_mode,
+                    volume_mode=constants.VOLUME_MODE_FILESYSTEM,
+                )
+                nfs_pvc_objs.append(nfs_pvc_obj)
+
+                deployment_name = f"{pvc_name_prefix}nfs-test-pod-{idx}"
+                deployment_template = templating.load_yaml(constants.NFS_APP_POD_YAML)
+                deployment_data = copy.deepcopy(deployment_template)
+
+                deployment_data["metadata"]["name"] = deployment_name
+                deployment_data["metadata"]["namespace"] = proj_obj.namespace
+                deployment_data["metadata"]["labels"]["app"] = deployment_name
+                deployment_data["spec"]["selector"]["matchLabels"][
+                    "name"
+                ] = deployment_name
+                deployment_data["spec"]["template"]["metadata"]["labels"][
+                    "name"
+                ] = deployment_name
+                deployment_data["spec"]["template"]["spec"]["volumes"][0][
+                    "persistentVolumeClaim"
+                ]["claimName"] = nfs_pvc_obj.name
+
+                helpers.create_resource(**deployment_data)
+
+                pod_obj_ocp = ocp.OCP(kind=constants.POD, namespace=proj_obj.namespace)
+                assert pod_obj_ocp.wait_for_resource(
+                    resource_count=1,
+                    condition=constants.STATUS_RUNNING,
+                    selector=f"name={deployment_name}",
+                    dont_allow_other_resources=True,
+                    timeout=120,
+                ), f"NFS deployment pod {deployment_name} did not reach Running state"
+
+                nfs_pod_list = pod.get_all_pods(
+                    namespace=proj_obj.namespace,
+                    selector=[deployment_name],
+                    selector_label="name",
+                )
+                nfs_pod_obj = nfs_pod_list[0]
+                nfs_pod_objs.append(nfs_pod_obj)
+                # Track NFS resources for cleanup in teardown
+                all_nfs_resources["pods"].append(nfs_pod_obj)
+
+            # Track NFS PVCs for cleanup in teardown
+            all_nfs_resources["pvcs"].extend(nfs_pvc_objs)
+
+            logger.info(
+                f" All {len(nfs_pod_objs)} NFS deployment pods created and running"
+            )
+
+        # Return resources in a nested structure for better organization
+        resources = {
+            "encrypted_rbd": {
+                "pvcs": pvc_objs,
+                "pods": pod_objs,
+                "combinations": pvc_combinations,
+            },
+            "non_encrypted_rbd": {
+                "pvcs": non_enc_pvc_objs,
+                "pods": non_enc_pod_objs,
+                "combinations": non_enc_combinations,
+            },
+            "cephfs": {
+                "pvcs": cephfs_pvc_objs,
+                "pods": cephfs_pod_objs,
+            },
+            "nfs": {
+                "pvcs": nfs_pvc_objs,
+                "pods": nfs_pod_objs,
+            },
+            "all_pvcs": pvc_objs + non_enc_pvc_objs + cephfs_pvc_objs + nfs_pvc_objs,
+            "all_pods": pod_objs + non_enc_pod_objs + cephfs_pod_objs + nfs_pod_objs,
+        }
+
+        return resources
+
+    return factory
+
+
+@pytest.fixture(scope="function")
+def create_clones_until_cluster_full(pvc_clone_factory, threading_lock):
+    """
+    Fixture to create PVC clones until cluster reaches specified full ratio and alerts are triggered.
+
+    Args:
+        pvc_clone_factory: Factory fixture to create PVC clones
+        threading_lock: Threading lock for Prometheus API
+
+    Returns:
+        function: Factory function that creates clones until cluster is full
+    """
+
+    def factory(
+        pvcs_to_clone,
+        clone_batch_size=10,
+        max_attempts=12,
+        expected_alerts=None,
+        flatten_rbd_clones=True,
+        min_pending_clones=0,
+    ):
+
+        if expected_alerts is None:
+            expected_alerts = ["CephOSDCriticallyFull"]
+
+        logger.info(
+            f"Starting clone creation to fill cluster until alerts {expected_alerts} are detected"
+        )
+
+        all_clones = []
+        attempt = 0
+
+        while attempt < max_attempts:
+            for i in range(clone_batch_size):
+                pvc_to_clone = pvcs_to_clone[len(all_clones) % len(pvcs_to_clone)]
+
+                try:
+                    logger.info(f"Start creation of clone number {len(all_clones)}.")
+                    clone_obj = pvc_clone_factory(
+                        pvc_obj=pvc_to_clone,
+                        storageclass=pvc_to_clone.backed_sc,
+                        timeout=900,
+                    )
+                    clone_obj.reload()
+
+                    # Flatten RBD clones if requested
+                    if (
+                        flatten_rbd_clones
+                        and "rbd.csi.ceph.com" in pvc_to_clone.provisioner
+                    ):
+                        flatten_image(clone_obj)
+                        logger.info(
+                            f"Clone with name {clone_obj.name} was created and flattened."
+                        )
+                        clone_obj.reload()
+                    else:
+                        logger.info(f"Clone with name {clone_obj.name} was created.")
+
+                    all_clones.append(clone_obj)
+
+                except Exception as e:
+                    logger.warning(
+                        f"Clone creation failed (expected when cluster is full): {e}"
+                    )
+                    break
+
+            # Check if we've reached the target alerts
+            logger.info(f"Checking for expected alerts: {expected_alerts}")
+            prometheus = PrometheusAPI(threading_lock=threading_lock)
+
+            sample = TimeoutSampler(
+                timeout=180,
+                sleep=10,
+                func=prometheus.verify_alerts_via_prometheus,
+                expected_alerts=expected_alerts,
+                threading_lock=threading_lock,
+            )
+
+            if sample.wait_for_func_status(result=True):
+                logger.info(
+                    f"Cluster has reached target capacity - Expected alerts {expected_alerts} detected"
+                )
+                break
+            else:
+                logger.info(
+                    f"Alerts not detected yet. Created {len(all_clones)} clones so far. Continuing..."
+                )
+                attempt += 1
+
+        if attempt == max_attempts:
+            logger.error("Maximum attempts reached. Expected alerts were not detected.")
+            raise TimeoutExpiredError(
+                f"Failed to reach target cluster capacity - alerts {expected_alerts} not triggered"
+            )
+
+        # Count pending clones if minimum is specified
+        if min_pending_clones > 0:
+            pending_clones = 0
+            for clone in all_clones[-15:]:  # Check last 15 clones
+                try:
+                    if clone.status != constants.STATUS_BOUND:
+                        pending_clones += 1
+                except Exception:
+                    pending_clones += 1
+
+            logger.info(f"Pending clones (approximate): {pending_clones}")
+
+        logger.info(f"Clone creation complete. Total clones created: {len(all_clones)}")
+        return all_clones
+
+    return factory
