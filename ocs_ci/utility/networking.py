@@ -244,7 +244,11 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
 
     This function retrieves the private IP and network information from
     a worker node using the 'ip addr' command and configures the storage
-    cluster's public network address range accordingly.
+    cluster's network address ranges accordingly.
+
+    Supports two modes:
+    - Public network: requires NAD, MachineConfig, and mon-ip annotations
+    - Cluster network: only requires CIDR in StorageCluster spec
 
     Args:
         cluster_data (dict): storage cluster YAML data
@@ -252,33 +256,46 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
     Returns:
         dict: updated storage storage cluster yaml
     """
-    if config.DEPLOYMENT.get("enable_data_replication_separation"):
-        worker_nodes = get_worker_nodes()
-        if not worker_nodes:
-            raise UnavailableResourceException("No worker node found!")
+    public_enabled = config.DEPLOYMENT.get("enable_data_replication_separation_public")
+    cluster_enabled = config.DEPLOYMENT.get(
+        "enable_data_replication_separation_cluster"
+    )
 
-        # Get private IP and prefix from the first worker node using ip addr command
-        interface, private_ip, prefix_length = get_node_private_ip(worker_nodes[0])
+    if not (public_enabled or cluster_enabled):
+        return cluster_data
 
-        ip_network = ipaddress.IPv4Network(
-            f"{private_ip}/{prefix_length}",
-            strict=False,
-        )
-        str_network = f"{ip_network.network_address}/{ip_network.prefixlen}"
+    worker_nodes = get_worker_nodes()
+    if not worker_nodes:
+        raise UnavailableResourceException("No worker node found!")
 
+    # Get private IP and prefix from the first worker node using ip addr command
+    interface, private_ip, prefix_length = get_node_private_ip(worker_nodes[0])
+
+    ip_network = ipaddress.IPv4Network(
+        f"{private_ip}/{prefix_length}",
+        strict=False,
+    )
+    str_network = f"{ip_network.network_address}/{ip_network.prefixlen}"
+
+    if "network" not in cluster_data["spec"]:
+        cluster_data["spec"]["network"] = {}
+    if "addressRanges" not in cluster_data["spec"]["network"]:
+        cluster_data["spec"]["network"]["addressRanges"] = {}
+
+    if public_enabled:
         logger.info(
-            f"Configuring data replication separation for the storage cluster "
-            f"with network range: {str_network} (interface: {interface})"
+            f"Configuring data replication separation with public network: "
+            f"{str_network} (interface: {interface})"
         )
-
-        if "network" not in cluster_data["spec"]:
-            cluster_data["spec"]["network"] = {}
-        if "addressRanges" not in cluster_data["spec"]["network"]:
-            cluster_data["spec"]["network"]["addressRanges"] = {}
-        if "public" not in cluster_data["spec"]["network"]["addressRanges"]:
-            cluster_data["spec"]["network"]["addressRanges"]["public"] = []
-
         cluster_data["spec"]["network"]["addressRanges"]["public"] = [str_network]
+
+    if cluster_enabled:
+        logger.info(
+            f"Configuring data replication separation with cluster network: "
+            f"{str_network} (interface: {interface})"
+        )
+        cluster_data["spec"]["network"]["addressRanges"]["cluster"] = [str_network]
+
     return cluster_data
 
 
