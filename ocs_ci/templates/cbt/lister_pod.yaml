@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cbt-lister
+  namespace: default
+spec:
+  serviceAccountName: cbt-client
+  restartPolicy: Never
+  containers:
+    - name: tools
+      image: golang:1.26
+      env:
+        - name: GOPATH
+          value: /tmp/go
+        - name: GOCACHE
+          value: /tmp/go-cache
+        - name: HOME
+          value: /tmp
+      command:
+        - /bin/sh
+        - -c
+        - "sleep infinity"
+      resources:
+        requests:
+          cpu: 500m
+          memory: 1Gi
+        limits:
+          cpu: "2"
+          memory: 2Gi
+      volumeMounts:
+        - name: ca-cert
+          mountPath: /certs
+          readOnly: true
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
+  volumes:
+    - name: ca-cert
+      configMap:
+        name: cbt-ca-cert
