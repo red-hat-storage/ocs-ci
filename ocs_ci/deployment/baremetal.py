@@ -1000,7 +1000,11 @@ class BAREMETALAI(BAREMETALBASE):
             self.ai_cluster = assisted_installer.AssistedInstallerCluster(
                 name=self.cluster_name,
                 cluster_path=self.cluster_path,
-                openshift_version=str(version.get_semantic_ocp_version_from_config()),
+                openshift_version=str(
+                    version.get_semantic_version(
+                        config.DEPLOYMENT["installer_version"], False
+                    )
+                ),
                 base_dns_domain=config.ENV_DATA["base_domain"],
                 api_vip=self.api_vip,
                 ingress_vip=self.ingress_vip,
