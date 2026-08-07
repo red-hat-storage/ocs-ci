@@ -1618,6 +1618,38 @@ def proceed_to_login_console():
             raise
 
 
+def accept_s3_endpoint_certificate(endpoint):
+    """
+    Navigate to the S3 endpoint to accept its self-signed certificate.
+
+    The object browser UI makes cross-origin requests to the NooBaa S3
+    endpoint. Chrome blocks these if the endpoint's certificate hasn't
+    been trusted in this session. Navigating to the endpoint and bypassing
+    the Chrome certificate interstitial establishes trust for the session.
+
+    Args:
+        endpoint (str): S3 endpoint hostname (e.g. "s3-openshift-storage.apps.example.com")
+
+    """
+    driver = SeleniumDriver()
+    current_url = driver.current_url
+    endpoint_url = (
+        endpoint if endpoint.startswith("https://") else f"https://{endpoint}"
+    )
+    logger.info("Accepting certificate for S3 endpoint: %s", endpoint_url)
+    driver.get(endpoint_url)
+    try:
+        body = driver.find_element(By.TAG_NAME, "body")
+        body.send_keys("thisisunsafe")
+    except WebDriverException as e:
+        logger.warning(
+            "Could not bypass certificate interstitial — endpoint may already be trusted: %s",
+            e,
+        )
+    driver.get(current_url)
+    logger.info("Returned to console after certificate acceptance")
+
+
 def navigate_to_local_cluster(**kwargs):
     """
     Navigate to Local Cluster page, if not already there
