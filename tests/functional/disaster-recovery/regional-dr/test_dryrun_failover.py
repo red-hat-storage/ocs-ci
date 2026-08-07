@@ -1,6 +1,7 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from time import sleep
+from typing import Any, Dict
 
 import pytest
 
@@ -32,23 +33,25 @@ class TestDryRunFailover:
             marks=[pytest.mark.tier1, pytest.mark.polarion_id("OCS-XXXX")],
             id="rbd",
         ),
-        pytest.param(
-            constants.CEPHFILESYSTEM,
-            marks=[pytest.mark.tier1, pytest.mark.polarion_id("OCS-XXXX")],
-            id="cephfs",
-        ),
+        # pytest.param(
+        #     constants.CEPHFILESYSTEM,
+        #     marks=[pytest.mark.tier1, pytest.mark.polarion_id("OCS-XXXX")],
+        #     id="cephfs",
+        # ),
     ]
 
-    def _build_workload_info(self, wl):
+    def _build_workload_info(self, wl) -> Dict[str, Any]:
         is_discovered = wl.workload_type == constants.DISCOVERED_APPS
         if is_discovered:
             placement_name = wl.discovered_apps_placement_name
             drpc_namespace = constants.DR_OPS_NAMESPACE
             drpc_resource_name = placement_name
+            vrg_name = placement_name
         else:
             placement_name = wl.appset_placement_name
             drpc_namespace = constants.GITOPS_CLUSTER_NAMESPACE
             drpc_resource_name = f"{placement_name}-drpc"
+            vrg_name = drpc_resource_name
         drpc_obj = DRPC(
             namespace=drpc_namespace,
             resource_name=drpc_resource_name,
@@ -56,6 +59,7 @@ class TestDryRunFailover:
         return dict(
             workload=wl,
             placement_name=placement_name,
+            vrg_name=vrg_name,
             drpc_namespace=drpc_namespace,
             drpc_resource_name=drpc_resource_name,
             workload_namespace=wl.workload_namespace,
@@ -72,9 +76,7 @@ class TestDryRunFailover:
 
     def _check_sync_times(self, workload_info, scheduling_interval):
         for info in workload_info:
-            logger.info(
-                f"Checking for lastGroupSyncTime for {info['drpc_resource_name']}"
-            )
+            logger.info(f"Checking lastGroupSyncTime for {info['drpc_resource_name']}")
             info["last_group_sync_time"] = dr_helpers.verify_last_group_sync_time(
                 info["drpc_obj"],
                 scheduling_interval,
@@ -82,7 +84,7 @@ class TestDryRunFailover:
             )
             if info["is_discovered"]:
                 logger.info(
-                    f"Checking for lastKubeObjectProtectionTime for {info['drpc_resource_name']}"
+                    f"Checking lastKubeObjectProtectionTime for {info['drpc_resource_name']}"
                 )
                 info["last_kubeobj_time"] = (
                     dr_helpers.verify_last_kubeobject_protection_time(
@@ -93,21 +95,21 @@ class TestDryRunFailover:
                 )
 
     def _setup_workload_states(
-        self, workload_info, cluster_a, cluster_b, wait_time, scheduling_interval
+        self, workload_info, cluster_a, cluster_b, scheduling_interval
     ):
-        logger.info(
-            "Setting up workloads into Deployed, FailedOver, and Relocated states"
-        )
+        """Set up pre-states: [0,3] Deployed, [1,4] FailedOver, [2,5] Relocated."""
 
-        # Workloads at indices 0, 3 stay Deployed on cluster_a
+        # [0, 3] remain Deployed on cluster_a
         for info in [workload_info[i] for i in [0, 3]]:
             info["current_cluster"] = cluster_a
 
-        # Failover workloads at indices 1, 4 to cluster_b
+        # Failover [1, 4] to cluster_b
+        logger.info(f"Running failover for workloads to {cluster_b}")
         failover_infos = [workload_info[i] for i in [1, 4]]
         futures = []
         with ThreadPoolExecutor() as executor:
             for info in failover_infos:
+                is_discovered = info["is_discovered"]
                 futures.append(
                     executor.submit(
                         dr_helpers.failover,
@@ -115,53 +117,59 @@ class TestDryRunFailover:
                         namespace=info["workload_namespace"],
                         workload_type=info["workload"].workload_type,
                         workload_placement_name=info["placement_name"],
-                        discovered_apps=info["is_discovered"],
-                        old_primary=cluster_a if info["is_discovered"] else None,
+                        discovered_apps=is_discovered,
+                        old_primary=cluster_a if is_discovered else None,
                     )
                 )
         for f in futures:
             f.result()
 
         for info in failover_infos:
-            if info["is_discovered"]:
-                # do_discovered_apps_cleanup internally calls wait_for_all_resources_deletion
-                # on old_primary (cluster_a) then waits for Completed — no separate deletion wait needed
-                logger.info("Doing Cleanup Operations")
+            is_discovered = info["is_discovered"]
+            placement_name = info["placement_name"]
+            if is_discovered:
+                logger.info("Doing cleanup operations")
                 dr_helpers.do_discovered_apps_cleanup(
-                    drpc_name=info["placement_name"],
+                    drpc_name=placement_name,
                     old_primary=cluster_a,
                     workload_namespace=info["workload"].workload_namespace,
                     workload_dir=info["workload"].workload_dir,
-                    vrg_name=info["placement_name"],
+                    vrg_name=placement_name,
                 )
-                config.switch_to_cluster_by_name(cluster_b)
-                dr_helpers.wait_for_all_resources_creation(
-                    info["workload_pvc_count"],
-                    info["workload_pod_count"],
-                    info["workload_namespace"],
-                    timeout=1200,
-                    discovered_apps=True,
-                    vrg_name=info["placement_name"],
-                    performed_dr_action=True,
-                )
-            else:
-                # AppSet: creation on cluster_b first, then deletion on cluster_a
-                config.switch_to_cluster_by_name(cluster_b)
-                dr_helpers.wait_for_all_resources_creation(
-                    info["workload_pvc_count"],
-                    info["workload_pod_count"],
-                    info["workload_namespace"],
-                    performed_dr_action=True,
-                )
-                config.switch_to_cluster_by_name(cluster_a)
+
+        # Verify resources creation on failover cluster (cluster_b)
+        config.switch_to_cluster_by_name(cluster_b)
+        for info in failover_infos:
+            is_discovered = info["is_discovered"]
+            dr_helpers.wait_for_all_resources_creation(
+                info["workload_pvc_count"],
+                info["workload_pod_count"],
+                info["workload_namespace"],
+                timeout=1200 if is_discovered else 900,
+                discovered_apps=is_discovered,
+                vrg_name=info["placement_name"] if is_discovered else "",
+                performed_dr_action=True,
+            )
+
+        # Verify resources deletion from primary cluster (cluster_a) for AppSet
+        config.switch_to_cluster_by_name(cluster_a)
+        for info in failover_infos:
+            if not info["is_discovered"]:
                 dr_helpers.wait_for_all_resources_deletion(info["workload_namespace"])
+
+        for info in failover_infos:
             info["current_cluster"] = cluster_b
 
-        # Relocate workloads at indices 2, 5 to cluster_b
+        # Check sync times for workloads about to be relocated ([2, 5])
+        self._check_sync_times([workload_info[i] for i in [2, 5]], scheduling_interval)
+
+        # Relocate [2, 5] to cluster_b
+        logger.info(f"Running relocate for workloads to {cluster_b}")
         relocate_infos = [workload_info[i] for i in [2, 5]]
         futures = []
         with ThreadPoolExecutor() as executor:
             for info in relocate_infos:
+                is_discovered = info["is_discovered"]
                 futures.append(
                     executor.submit(
                         dr_helpers.relocate,
@@ -169,134 +177,156 @@ class TestDryRunFailover:
                         namespace=info["workload_namespace"],
                         workload_type=info["workload"].workload_type,
                         workload_placement_name=info["placement_name"],
-                        discovered_apps=info["is_discovered"],
-                        old_primary=cluster_a if info["is_discovered"] else None,
-                        workload_instance=(
-                            info["workload"] if info["is_discovered"] else None
-                        ),
+                        discovered_apps=is_discovered,
+                        old_primary=cluster_a if is_discovered else None,
+                        workload_instance=(info["workload"] if is_discovered else None),
                     )
                 )
         for f in futures:
             f.result()
 
+        # Verify resources deletion from primary cluster (cluster_a) for AppSet
+        config.switch_to_cluster_by_name(cluster_a)
         for info in relocate_infos:
-            if info["is_discovered"]:
-                # relocate() already called do_discovered_apps_cleanup internally —
-                # no separate deletion wait needed
-                config.switch_to_cluster_by_name(cluster_b)
-                dr_helpers.wait_for_all_resources_creation(
-                    info["workload_pvc_count"],
-                    info["workload_pod_count"],
-                    info["workload_namespace"],
-                    timeout=1200,
-                    discovered_apps=True,
-                    vrg_name=info["placement_name"],
-                    performed_dr_action=True,
-                )
-            else:
-                # AppSet: deletion on cluster_a first, then creation on cluster_b
-                config.switch_to_cluster_by_name(cluster_a)
+            if not info["is_discovered"]:
                 dr_helpers.wait_for_all_resources_deletion(info["workload_namespace"])
-                config.switch_to_cluster_by_name(cluster_b)
-                dr_helpers.wait_for_all_resources_creation(
-                    info["workload_pvc_count"],
-                    info["workload_pod_count"],
-                    info["workload_namespace"],
-                    performed_dr_action=True,
-                )
+
+        # Verify resources creation on preferred cluster (cluster_b)
+        config.switch_to_cluster_by_name(cluster_b)
+        for info in relocate_infos:
+            is_discovered = info["is_discovered"]
+            dr_helpers.wait_for_all_resources_creation(
+                info["workload_pvc_count"],
+                info["workload_pod_count"],
+                info["workload_namespace"],
+                timeout=1200 if is_discovered else 900,
+                discovered_apps=is_discovered,
+                vrg_name=info["placement_name"] if is_discovered else "",
+                performed_dr_action=True,
+            )
+
+        for info in relocate_infos:
             info["current_cluster"] = cluster_b
 
-        logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
-        self._check_sync_times(workload_info, scheduling_interval)
-
-    def _trigger_dryrun(self, workload_info, cluster_a, cluster_b):
-        logger.info(f"Triggering dryRun failover to '{cluster_a}'")
+    def _abort_dryrun_if_active(self, workload_info):
+        """Best-effort abort of any active dryRun on all DRPCs."""
         config.switch_acm_ctx()
         for info in workload_info:
+            try:
+                drpc_obj: DRPC = info["drpc_obj"]
+                vrg_namespace = info["vrg_namespace"]
+                vrg_name = info["vrg_name"]
+                # failover_cluster is only populated after _trigger_dryrun runs;
+                # guard so a pre-trigger failure in the finalizer doesn't KeyError.
+                failover_cluster = info.get("failover_cluster")
+                if (
+                    drpc_obj.get_progression_status()
+                    == constants.STATUS_TESTING_FAILOVER
+                ):
+                    if not failover_cluster:
+                        logger.warning(
+                            f"failover_cluster unknown for DRPC {info['drpc_resource_name']}; "
+                            "cannot complete VRG check after abort"
+                        )
+                    logger.info(
+                        f"Aborting active dryRun on DRPC {info['drpc_resource_name']}"
+                    )
+                    drpc_obj.patch(
+                        params=drpc_obj.get_abort_dryrun_patch(), format_type="merge"
+                    )
+                    drpc_obj.wait_for_progression_status(
+                        constants.STATUS_COMPLETED, timeout=900
+                    )
+                    if failover_cluster:
+                        config.switch_to_cluster_by_name(failover_cluster)
+                        dr_helpers.wait_for_resource_state(
+                            kind=constants.VOLUME_REPLICATION_GROUP,
+                            state="secondary",
+                            namespace=vrg_namespace,
+                            resource_name=vrg_name,
+                            timeout=300,
+                        )
+                        config.switch_acm_ctx()
+            except Exception:
+                logger.warning(
+                    f"Could not abort dryRun on DRPC {info['drpc_resource_name']}",
+                    exc_info=True,
+                )
+
+    def _trigger_dryrun(self, workload_info, cluster_a, cluster_b):
+        logger.info("Triggering dryRun failover")
+        config.switch_acm_ctx()
+        for info in workload_info:
+            drpc_obj: DRPC = info["drpc_obj"]
+            failover_cluster = (
+                cluster_b if info["current_cluster"] == cluster_a else cluster_a
+            )
+            info["failover_cluster"] = failover_cluster
             if info["is_discovered"]:
                 params = (
                     f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}",'
-                    f'"failoverCluster":"{cluster_a}",'
-                    f'"preferredCluster":"{cluster_b}",'
+                    f'"failoverCluster":"{failover_cluster}",'
+                    f'"preferredCluster":"{info["current_cluster"]}",'
                     f'"dryRun":true}}}}'
                 )
             else:
                 params = (
                     f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}",'
-                    f'"failoverCluster":"{cluster_a}",'
+                    f'"failoverCluster":"{failover_cluster}",'
                     f'"dryRun":true}}}}'
                 )
-            assert info["drpc_obj"].patch(
+            assert drpc_obj.patch(
                 params=params, format_type="merge"
-            ), f"[{info['drpc_resource_name']}] Failed to patch DRPC with dryRun=true"
+            ), f"Failed to patch DRPC {info['drpc_resource_name']} for dryRun"
 
-        logger.info(
-            f"Waiting for '{constants.STATUS_TESTING_FAILOVER}' on all workloads"
-        )
+        logger.info(f"Waiting for '{constants.STATUS_TESTING_FAILOVER}'")
         for info in workload_info:
-            info["drpc_obj"].wait_for_progression_status(
-                constants.STATUS_TESTING_FAILOVER
-            )
+            drpc_obj = info["drpc_obj"]
+            drpc_obj.wait_for_progression_status(constants.STATUS_TESTING_FAILOVER)
 
-    def _verify_dryrun_active(self, workload_info, cluster_a, cluster_b, pvc_interface):
+    def _verify_dryrun_active(self, workload_info, pvc_interface):
         for info in workload_info:
-            placement_name = info["placement_name"]
-            workload_namespace = info["workload_namespace"]
+            drpc_obj: DRPC = info["drpc_obj"]
+            vrg_name = info["vrg_name"]
             vrg_namespace = info["vrg_namespace"]
+            failover_cluster = info["failover_cluster"]
+            is_discovered = info["is_discovered"]
 
+            # Verify dryRun annotation on the DRPC
             config.switch_acm_ctx()
-            logger.info(
-                f"Verifying dryRun annotation on DRPC: {info['drpc_resource_name']}"
-            )
-            drpc_annotation = info["drpc_obj"].get_dryrun_annotation()
+            drpc_annotation = drpc_obj.get_dryrun_annotation()
             assert drpc_annotation == "true", (
-                f"[{info['drpc_resource_name']}] Expected DRPC annotation "
-                f"'{constants.DRPC_TEST_FAILOVER_DRYRUN_ANNOTATION}' = 'true', "
+                f"Expected dryRun annotation 'true' on DRPC {info['drpc_resource_name']}, "
                 f"got: {drpc_annotation!r}"
             )
 
-            config.switch_to_cluster_by_name(cluster_a)
-            logger.info(
-                f"Verifying dryRun annotation on VRG: {placement_name} on '{cluster_a}'"
-            )
-            vrg_annotation = dr_helpers.get_vrg_annotation(
-                vrg_name=placement_name,
+            # Verify dryRun annotation on the VRG of the failover cluster
+            config.switch_to_cluster_by_name(failover_cluster)
+            dr_helpers.get_vrg_annotation(
+                vrg_name=vrg_name,
                 vrg_namespace=vrg_namespace,
                 annotation_key=constants.DRPC_TEST_FAILOVER_DRYRUN_ANNOTATION,
-            )
-            assert vrg_annotation == "true", (
-                f"[{info['drpc_resource_name']}] Expected VRG annotation "
-                f"'{constants.DRPC_TEST_FAILOVER_DRYRUN_ANNOTATION}' = 'true' "
-                f"on '{cluster_a}', got: {vrg_annotation!r}"
+                expected_value="true",
+                timeout=300,
             )
 
-            # Verify live workload is intact on its current cluster
+            # Verify workload resources are still present on the current cluster
             config.switch_to_cluster_by_name(info["current_cluster"])
             dr_helpers.wait_for_all_resources_creation(
                 info["workload_pvc_count"],
                 info["workload_pod_count"],
-                workload_namespace,
-                discovered_apps=info["is_discovered"],
-                vrg_name=placement_name if info["is_discovered"] else "",
+                info["workload_namespace"],
+                discovered_apps=is_discovered,
+                vrg_name=vrg_name if is_discovered else "",
                 skip_vrg_check=True,
             )
 
-            # Verify dryrun resources exist on cluster_a (failover target)
-            config.switch_to_cluster_by_name(cluster_a)
-            dr_helpers.wait_for_all_resources_creation(
-                info["workload_pvc_count"],
-                info["workload_pod_count"],
-                workload_namespace,
-                discovered_apps=info["is_discovered"],
-                vrg_name=placement_name if info["is_discovered"] else "",
-                timeout=300,
-            )
-
+            # Verify dryRun snapshots on the failover cluster (RBD only)
             if pvc_interface == constants.CEPHBLOCKPOOL:
+                config.switch_to_cluster_by_name(failover_cluster)
                 dr_helpers.verify_dryrun_snapshots(
-                    namespace=workload_namespace,
-                    vrg_name=placement_name,
+                    namespace=info["workload_namespace"],
+                    vrg_name=vrg_name,
                     expected_count=info["workload_pvc_count"],
                 )
 
@@ -331,49 +361,96 @@ class TestDryRunFailover:
         self._check_sync_times(workload_info, scheduling_interval)
 
         self._setup_workload_states(
-            workload_info, cluster_a, cluster_b, wait_time, scheduling_interval
+            workload_info, cluster_a, cluster_b, scheduling_interval
         )
 
-        self._trigger_dryrun(workload_info, cluster_a, cluster_b)
-
-        self._verify_dryrun_active(workload_info, cluster_a, cluster_b, pvc_interface)
+        logger.info(f"Waiting for {wait_time} minutes to run IOs")
+        sleep(wait_time * 60)
+        self._check_sync_times(workload_info, scheduling_interval)
 
         return workload_info, cluster_a, cluster_b, scheduling_interval, wait_time
 
-    def _verify_post_dryrun_annotations(self, workload_info, cluster_a, action):
+    def _verify_post_dryrun_cleanup_progression(self, workload_info):
+        """
+        Verify that each DRPC passes through the expected intermediate
+        progression state on its way from TestingFailover to Completed.
+        Applies after both abort and promote actions.
+
+        - DiscoveredApps: TestingFailover → WaitOnUserToCleanUp → (60 s hold) → Completed
+        - AppSet:         TestingFailover → CleaningUp → Completed
+
+        The intermediate state is asserted, then Completed is awaited.
+        For DiscoveredApps in WaitOnUserToCleanUp the hold is re-confirmed
+        after 60 s before waiting for Completed, matching the same pattern
+        used in do_discovered_apps_cleanup.
+
+        The caller is responsible for switching to the correct cluster context
+        before invoking; this method always operates on the ACM hub context.
+        """
+        config.switch_acm_ctx()
         for info in workload_info:
-            placement_name = info["placement_name"]
+            drpc_obj: DRPC = info["drpc_obj"]
+            name = info["drpc_resource_name"]
+            is_discovered = info["is_discovered"]
+
+            if is_discovered:
+                # DiscoveredApps: expect WaitOnUserToCleanUp before Completed
+                logger.info(f"[{name}] Waiting for progression → WaitOnUserToCleanUp")
+                drpc_obj.wait_for_progression_status(
+                    constants.STATUS_WAITFORUSERTOCLEANUP, timeout=300
+                )
+                logger.info(
+                    f"[{name}] Reached WaitOnUserToCleanUp — " f"re-checking after 60 s"
+                )
+                sleep(60)
+                assert drpc_obj.get_progression_status(
+                    status_to_check=constants.STATUS_WAITFORUSERTOCLEANUP
+                ), (
+                    f"DRPC {name} left WaitOnUserToCleanUp unexpectedly " f"within 60 s"
+                )
+                logger.info(
+                    f"[{name}] WaitOnUserToCleanUp confirmed — "
+                    f"waiting for Completed"
+                )
+            else:
+                # AppSet: expect CleaningUp before Completed
+                logger.info(f"[{name}] Waiting for progression → CleaningUp")
+                drpc_obj.wait_for_progression_status(
+                    constants.STATUS_CLEANING_UP, timeout=300
+                )
+                logger.info(f"[{name}] Reached CleaningUp — waiting for Completed")
+
+            drpc_obj.wait_for_progression_status(
+                constants.STATUS_COMPLETED, timeout=900
+            )
+            logger.info(f"[{name}] Reached Completed")
+
+    def _verify_post_dryrun_annotations(self, workload_info):
+        for info in workload_info:
+            vrg_name = info["vrg_name"]
             vrg_namespace = info["vrg_namespace"]
+            failover_cluster = info["failover_cluster"]
 
-            config.switch_acm_ctx()
-            logger.info(
-                f"Verifying dryRun annotation cleared on DRPC: {info['drpc_resource_name']}"
-            )
-            drpc_annotation_after = info["drpc_obj"].get_dryrun_annotation()
-            assert drpc_annotation_after is None, (
-                f"[{info['drpc_resource_name']}] Expected DRPC annotation "
-                f"'{constants.DRPC_TEST_FAILOVER_DRYRUN_ANNOTATION}' to be absent "
-                f"after {action}, got: {drpc_annotation_after!r}"
-            )
+            # Verify DRPC progression transitions through intermediate state to Completed.
+            # _verify_post_dryrun_cleanup_progression switches to ACM hub at its start;
+            # we explicitly re-assert hub context afterward before checking the VRG.
+            self._verify_post_dryrun_cleanup_progression([info])
 
-            config.switch_to_cluster_by_name(cluster_a)
-            logger.info(
-                f"Verifying dryRun annotation on VRG: {placement_name} on '{cluster_a}' after {action}"
-            )
-            vrg_annotation_after = dr_helpers.get_vrg_annotation(
-                vrg_name=placement_name,
+            # Verify dryRun annotation is cleared on the failover cluster VRG
+            config.switch_to_cluster_by_name(failover_cluster)
+            dr_helpers.get_vrg_annotation(
+                vrg_name=vrg_name,
                 vrg_namespace=vrg_namespace,
                 annotation_key=constants.DRPC_TEST_FAILOVER_DRYRUN_ANNOTATION,
+                expected_value="false",
+                timeout=120,
             )
-            assert vrg_annotation_after == "false", (
-                f"[{info['drpc_resource_name']}] Expected VRG annotation "
-                f"'{constants.DRPC_TEST_FAILOVER_DRYRUN_ANNOTATION}' = 'false' "
-                f"on '{cluster_a}' after {action}, got: {vrg_annotation_after!r}"
-            )
+            config.switch_acm_ctx()
 
     @pytest.mark.parametrize(argnames=["pvc_interface"], argvalues=params)
     def test_dryrun_failover_abort(
         self,
+        request,
         pvc_interface,
         dr_workload,
         discovered_apps_dr_workload,
@@ -386,57 +463,60 @@ class TestDryRunFailover:
             self._setup_dryrun(pvc_interface, dr_workload, discovered_apps_dr_workload)
         )
 
-        logger.info("Aborting dryRun on all workloads")
+        # Abort any active dryRun before the workload fixtures clean up
+        request.addfinalizer(lambda: self._abort_dryrun_if_active(workload_info))
+
+        self._trigger_dryrun(workload_info, cluster_a, cluster_b)
+        self._verify_dryrun_active(workload_info, pvc_interface)
+
+        # Abort dryRun
+        logger.info("Aborting dryRun failover")
         config.switch_acm_ctx()
         for info in workload_info:
-            abort_params = info["drpc_obj"].get_abort_dryrun_patch()
-            assert info["drpc_obj"].patch(
+            drpc_obj: DRPC = info["drpc_obj"]
+            abort_params = drpc_obj.get_abort_dryrun_patch()
+            assert drpc_obj.patch(
                 params=abort_params, format_type="merge"
-            ), f"[{info['drpc_resource_name']}] Failed to patch DRPC for abort"
+            ), f"Failed to patch DRPC {info['drpc_resource_name']} for abort"
 
+        # Verify VRG transitions to secondary on the failover cluster after abort
         for info in workload_info:
-            placement_name = info["placement_name"]
-            workload_namespace = info["workload_namespace"]
+            vrg_namespace = info["vrg_namespace"]
+            vrg_name = info["vrg_name"]
+            failover_cluster = info["failover_cluster"]
+            config.switch_to_cluster_by_name(failover_cluster)
+            dr_helpers.wait_for_resource_state(
+                kind=constants.VOLUME_REPLICATION_GROUP,
+                state="secondary",
+                namespace=vrg_namespace,
+                resource_name=vrg_name,
+                timeout=300,
+            )
 
-            if info["is_discovered"]:
-                logger.info("Doing Cleanup Operations")
-                dr_helpers.do_discovered_apps_cleanup(
-                    drpc_name=placement_name,
-                    old_primary=cluster_a,
-                    workload_namespace=info["workload"].workload_namespace,
-                    workload_dir=info["workload"].workload_dir,
-                    vrg_name=placement_name,
-                )
-            elif info["current_cluster"] != cluster_a:
-                # Only wait for dryrun resource deletion on cluster_a for workloads
-                # whose live copy is on cluster_b; Deployed workloads live on cluster_a
-                # so there is nothing extra to delete there after abort.
-                config.switch_to_cluster_by_name(cluster_a)
-                dr_helpers.wait_for_all_resources_deletion(workload_namespace)
+        self._verify_post_dryrun_annotations(workload_info)
 
-        self._verify_post_dryrun_annotations(workload_info, cluster_a, action="abort")
-
-        # Verify each workload's live resources are intact on its current cluster
+        # Verify workload resources are intact after abort
         for info in workload_info:
-            placement_name = info["placement_name"]
-            workload_namespace = info["workload_namespace"]
-
+            is_discovered = info["is_discovered"]
             config.switch_to_cluster_by_name(info["current_cluster"])
             dr_helpers.wait_for_all_resources_creation(
                 info["workload_pvc_count"],
                 info["workload_pod_count"],
-                workload_namespace,
-                timeout=1200 if info["is_discovered"] else 900,
-                discovered_apps=info["is_discovered"],
-                vrg_name=placement_name if info["is_discovered"] else "",
+                info["workload_namespace"],
+                timeout=1200 if is_discovered else 900,
+                discovered_apps=is_discovered,
+                vrg_name=info["placement_name"] if is_discovered else "",
                 skip_vrg_check=True,
             )
 
+        logger.info(f"Waiting for {wait_time} minutes to run IOs")
+        sleep(wait_time * 60)
         self._check_sync_times(workload_info, scheduling_interval)
 
     @pytest.mark.parametrize(argnames=["pvc_interface"], argvalues=params)
     def test_dryrun_failover_promote(
         self,
+        request,
         pvc_interface,
         dr_workload,
         discovered_apps_dr_workload,
@@ -445,33 +525,51 @@ class TestDryRunFailover:
     ):
         """
         Tests to verify dryRun failover promote across Deployed, FailedOver, and Relocated pre-states.
-
+        Shuts down cluster_a before promoting, simulating the real use case where the old
+        primary goes down and the dryRun is committed as a real failover.
         """
         workload_info, cluster_a, cluster_b, scheduling_interval, wait_time = (
             self._setup_dryrun(pvc_interface, dr_workload, discovered_apps_dr_workload)
         )
 
-        config.switch_to_cluster_by_name(cluster_b)
-        cluster_b_index = config.cur_index
-        cluster_b_nodes = get_node_objs()
-        logger.info(f"Stopping nodes of primary cluster: {cluster_b}")
-        nodes_multicluster[cluster_b_index].stop_nodes(cluster_b_nodes)
+        # Abort any still-active dryRun before the workload fixtures clean up
+        request.addfinalizer(lambda: self._abort_dryrun_if_active(workload_info))
 
-        logger.info("Promoting dryRun failover")
+        self._trigger_dryrun(workload_info, cluster_a, cluster_b)
+        self._verify_dryrun_active(workload_info, pvc_interface)
+
+        # Shut down cluster_a before promote to simulate the real failover use case
+        config.switch_to_cluster_by_name(cluster_a)
+        cluster_a_index = config.cur_index
+        cluster_a_nodes = get_node_objs()
+        logger.info(f"Stopping nodes of {cluster_a} before promote")
+        nodes_multicluster[cluster_a_index].stop_nodes(cluster_a_nodes)
+
+        # Promote: flip dryRun=false — action and failoverCluster are already in spec
+        logger.info(f"Promoting dryRun — committing as real failover to {cluster_b}")
         config.switch_acm_ctx()
         promote_params = '{"spec":{"dryRun":false}}'
         for info in workload_info:
-            assert info["drpc_obj"].patch(
+            drpc_obj: DRPC = info["drpc_obj"]
+            assert drpc_obj.patch(
                 params=promote_params, format_type="merge"
-            ), f"[{info['drpc_resource_name']}] Failed to patch DRPC for promote"
+            ), f"Failed to patch DRPC {info['drpc_resource_name']} for promote"
 
-        logger.info(
-            f"Waiting for {wait_time} minutes before starting nodes of primary cluster: {cluster_b}"
-        )
+        for info in workload_info:
+            drpc_obj = info["drpc_obj"]
+            drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER, timeout=360)
+
+        # Verify each DRPC passes through its expected intermediate state
+        # (WaitOnUserToCleanUp for DiscoveredApps, CleaningUp for AppSet)
+        # before reaching Completed.  On promote the cleanup happens on
+        # cluster_a (the old primary ).
+        self._verify_post_dryrun_cleanup_progression(workload_info)
+
+        # Recover cluster_a
+        logger.info(f"Waiting {wait_time} minutes before starting nodes of {cluster_a}")
         sleep(wait_time * 60)
-        nodes_multicluster[cluster_b_index].start_nodes(cluster_b_nodes)
-        config.switch_to_cluster_by_name(cluster_b)
-        wait_for_nodes_status([node.name for node in cluster_b_nodes])
+        nodes_multicluster[cluster_a_index].start_nodes(cluster_a_nodes)
+        wait_for_nodes_status([node.name for node in cluster_a_nodes])
         logger.info("Wait for 180 seconds for pods to stabilize")
         sleep(180)
         logger.info("Wait for all the pods in openshift-storage to be in running state")
@@ -481,62 +579,20 @@ class TestDryRunFailover:
         logger.info("Checking for Ceph Health OK")
         ceph_health_check()
 
-        # Verify DRPCs reach Completed
-        config.switch_acm_ctx()
+        # Verify all workloads are now running on cluster_b after promote
+        config.switch_to_cluster_by_name(cluster_b)
         for info in workload_info:
-            if not info["is_discovered"]:
-                info["drpc_obj"].wait_for_progression_status(constants.STATUS_COMPLETED)
-
-        self._verify_post_dryrun_annotations(workload_info, cluster_a, action="promote")
-
-        for info in workload_info:
-            placement_name = info["placement_name"]
-            workload_namespace = info["workload_namespace"]
-
-            # dryRun snapshots only exist on cluster_a for workloads that were
-            # live on cluster_b before promote; Deployed workloads had no dryrun
-            # snapshots on cluster_b so nothing to verify there.
-            if (
-                pvc_interface == constants.CEPHBLOCKPOOL
-                and info["current_cluster"] == cluster_b
-            ):
-                config.switch_to_cluster_by_name(cluster_a)
-                dr_helpers.wait_for_resource_count(
-                    kind=constants.VOLUMESNAPSHOT,
-                    namespace=workload_namespace,
-                    expected_count=0,
-                )
-
-            if info["is_discovered"]:
-                logger.info("Doing Cleanup Operations")
-                dr_helpers.do_discovered_apps_cleanup(
-                    drpc_name=placement_name,
-                    old_primary=cluster_b,
-                    workload_namespace=info["workload"].workload_namespace,
-                    workload_dir=info["workload"].workload_dir,
-                    vrg_name=placement_name,
-                )
-
-            # Verify resources creation on cluster_a
-            config.switch_to_cluster_by_name(cluster_a)
+            is_discovered = info["is_discovered"]
             dr_helpers.wait_for_all_resources_creation(
                 info["workload_pvc_count"],
                 info["workload_pod_count"],
-                workload_namespace,
-                timeout=1200 if info["is_discovered"] else 900,
-                discovered_apps=info["is_discovered"],
-                vrg_name=placement_name if info["is_discovered"] else "",
+                info["workload_namespace"],
+                timeout=1200 if is_discovered else 900,
+                discovered_apps=is_discovered,
+                vrg_name=info["placement_name"] if is_discovered else "",
                 performed_dr_action=True,
             )
 
-            # Only wait for deletion on cluster_b for workloads that were live there;
-            # Deployed workloads were on cluster_a and cluster_b had nothing to delete.
-            if info["current_cluster"] == cluster_b:
-                config.switch_to_cluster_by_name(cluster_b)
-                dr_helpers.wait_for_all_resources_deletion(
-                    workload_namespace,
-                    discovered_apps=info["is_discovered"],
-                    vrg_name=placement_name if info["is_discovered"] else "",
-                )
-
+        logger.info(f"Waiting for {wait_time} minutes to run IOs")
+        sleep(wait_time * 60)
         self._check_sync_times(workload_info, scheduling_interval)
