@@ -38,11 +38,11 @@ class TestDryRunFailover:
             marks=[pytest.mark.tier1, pytest.mark.polarion_id("OCS-XXXX")],
             id="rbd",
         ),
-        # pytest.param(
-        #     constants.CEPHFILESYSTEM,
-        #     marks=[pytest.mark.tier1, pytest.mark.polarion_id("OCS-XXXX")],
-        #     id="cephfs",
-        # ),
+        pytest.param(
+            constants.CEPHFILESYSTEM,
+            marks=[pytest.mark.tier1, pytest.mark.polarion_id("OCS-XXXX")],
+            id="cephfs",
+        ),
     ]
 
     def _build_workload_info(self, wl) -> Dict[str, Any]:
@@ -244,18 +244,12 @@ class TestDryRunFailover:
                 drpc_obj: DRPC = info["drpc_obj"]
                 vrg_namespace = info["vrg_namespace"]
                 vrg_name = info["vrg_name"]
-                # failover_cluster is only populated after _trigger_dryrun runs;
-                # guard so a pre-trigger failure in the finalizer doesn't KeyError.
+                # Use .get() so a pre-trigger failure in the finalizer doesn't KeyError.
                 failover_cluster = info.get("failover_cluster")
                 if (
                     drpc_obj.get_progression_status()
                     == constants.STATUS_TESTING_FAILOVER
                 ):
-                    if not failover_cluster:
-                        logger.warning(
-                            f"failover_cluster unknown for DRPC {info['drpc_resource_name']}; "
-                            "cannot complete VRG check after abort"
-                        )
                     logger.info(
                         f"Aborting active dryRun on DRPC {info['drpc_resource_name']}"
                     )
@@ -277,7 +271,7 @@ class TestDryRunFailover:
                         config.switch_acm_ctx()
             except Exception:
                 logger.warning(
-                    f"Could not abort dryRun on DRPC {info['drpc_resource_name']}",
+                    f"Could not abort dryRun on DRPC {info['drpc_resource_name']} during finalizer run",
                     exc_info=True,
                 )
 
@@ -553,17 +547,27 @@ class TestDryRunFailover:
     ):
         """
         Verify dryRun failover abort across Deployed, FailedOver, and Relocated pre-states
-        for both AppSet and DiscoveredApps workloads.
+        for both AppSet and DiscoveredApps workloads. Runs in two stages.
+        No node shutdown in either stage — abort never requires a cluster to be down.
 
-        Steps:
-          1. Set up pre-states and verify initial sync
-          2. Trigger dryRun failover on all 6 workloads
-          3. Verify dryRun active on both current and failover clusters
-          4. Abort: patch each DRPC back to its pre-dryRun state
-          5. Verify cleanup on old primary (failover_cluster): workload deletion,
-             VRG secondary, VRG annotation "false", DRPC Completed
-          6. Verify workloads intact on current_cluster (VRG primary)
-          7. Final sync and backup check
+        Stage 1 — Abort Deployed pre-state ([0] AppSet / [3] DiscoveredApps, on cluster_a):
+          1. dryRun [0, 3] (running on cluster_a) → cluster_b
+          2. Verify dryRun active on both cluster_a (current) and cluster_b (failover)
+          3. Abort: roll back [0, 3] to Deployed state — action:null, failoverCluster:null
+          4. Verify cleanup on cluster_b (dryRun copy): workload deletion, VRG secondary,
+             VRG annotation "false", DRPC Completed
+          5. Verify [0, 3] intact on cluster_a (unchanged — abort never moves workloads)
+          6. Sync check for [0, 3]
+
+        Stage 2 — Abort FailedOver + Relocated pre-states ([1, 2, 4, 5], on cluster_b):
+          1. dryRun [1, 2, 4, 5] (running on cluster_b) → cluster_a
+          2. Verify dryRun active on both cluster_b (current) and cluster_a (failover)
+          3. Abort: roll back each DRPC to its pre-dryRun state —
+             [1][4] FailedOver: action:Failover · [2][5] Relocated: action:Relocate
+          4. Verify cleanup on cluster_a (dryRun copy): workload deletion, VRG secondary,
+             VRG annotation "false", DRPC Completed
+          5. Verify [1, 2, 4, 5] intact on cluster_b (unchanged)
+          6. Final sync check for all 6
         """
         workload_info, cluster_a, cluster_b, scheduling_interval, wait_time = (
             self._setup_dryrun(pvc_interface, dr_workload, discovered_apps_dr_workload)
@@ -572,28 +576,87 @@ class TestDryRunFailover:
         # Abort any active dryRun before the workload fixtures clean up
         request.addfinalizer(lambda: self._abort_dryrun_if_active(workload_info))
 
-        self._trigger_dryrun(workload_info, cluster_a, cluster_b)
-        self._verify_dryrun_active(workload_info, pvc_interface)
+        # ── Stage 1: dryRun [0, 3] (Deployed on cluster_a) → cluster_b, abort ──────────
 
-        # Abort dryRun — patch all DRPCs back to their pre-dryRun state
-        logger.info(f"Aborting dryRun failover on {len(workload_info)} DRPCs")
+        stage1_infos = [workload_info[i] for i in [0, 3]]
+        logger.info(
+            f"Stage 1: triggering dryRun failover for "
+            f"[{stage1_infos[0]['drpc_resource_name']}, "
+            f"{stage1_infos[1]['drpc_resource_name']}] to {cluster_b}"
+        )
+        self._trigger_dryrun(stage1_infos, cluster_a, cluster_b)
+        self._verify_dryrun_active(stage1_infos, pvc_interface)
+
+        # Abort [0, 3] — Deployed pre-state: clear action and failoverCluster entirely
+        logger.info(
+            f"Stage 1: aborting dryRun for [0, 3] — "
+            f"rolling back to Deployed state on {cluster_a}"
+        )
         config.switch_acm_ctx()
-        for info in workload_info:
+        for info in stage1_infos:
             drpc_obj: DRPC = info["drpc_obj"]
             abort_params = drpc_obj.get_abort_dryrun_patch()
             logger.info(
-                f"Patching DRPC {info['drpc_resource_name']} for abort: {abort_params}"
+                f"Patching DRPC {info['drpc_resource_name']} for stage 1 abort: {abort_params}"
             )
             assert drpc_obj.patch(
                 params=abort_params, format_type="merge"
-            ), f"Failed to patch DRPC {info['drpc_resource_name']} for abort"
+            ), f"Failed to patch DRPC {info['drpc_resource_name']} for stage 1 abort"
 
-        self._verify_cleanup_after_dryrun_abort_or_promote(workload_info)
+        # Verify cleanup on cluster_b — the dryRun copy side for [0, 3]
+        self._verify_cleanup_after_dryrun_abort_or_promote(stage1_infos)
 
-        # Verify workload resources are intact after abort, VRG back to primary
-        for info in workload_info:
+        # Verify [0, 3] still intact on cluster_a — abort never moves workloads
+        config.switch_to_cluster_by_name(cluster_a)
+        for info in stage1_infos:
             is_discovered = info["is_discovered"]
-            config.switch_to_cluster_by_name(info["current_cluster"])
+            dr_helpers.wait_for_all_resources_creation(
+                info["workload_pvc_count"],
+                info["workload_pod_count"],
+                info["workload_namespace"],
+                timeout=1200 if is_discovered else 900,
+                discovered_apps=is_discovered,
+                vrg_name=info["placement_name"] if is_discovered else "",
+                performed_dr_action=True,
+            )
+
+        logger.info(f"Waiting for {wait_time} minutes to run IOs after stage 1 abort")
+        sleep(wait_time * 60)
+        self._check_sync_times(stage1_infos, scheduling_interval)
+
+        # ── Stage 2: dryRun [1, 2, 4, 5] (FailedOver + Relocated on cluster_b) → cluster_a ──
+
+        stage2_infos = [workload_info[i] for i in [1, 2, 4, 5]]
+        logger.info(
+            f"Stage 2: triggering dryRun failover for "
+            f"[{', '.join(i['drpc_resource_name'] for i in stage2_infos)}] to {cluster_a}"
+        )
+        self._trigger_dryrun(stage2_infos, cluster_a, cluster_b)
+        self._verify_dryrun_active(stage2_infos, pvc_interface)
+
+        # Abort [1, 2, 4, 5] — FailedOver gets action:Failover, Relocated gets action:Relocate
+        logger.info(
+            "Stage 2: aborting dryRun for [1, 2, 4, 5] — "
+            "rolling back to pre-dryRun state"
+        )
+        config.switch_acm_ctx()
+        for info in stage2_infos:
+            drpc_obj: DRPC = info["drpc_obj"]
+            abort_params = drpc_obj.get_abort_dryrun_patch()
+            logger.info(
+                f"Patching DRPC {info['drpc_resource_name']} for stage 2 abort: {abort_params}"
+            )
+            assert drpc_obj.patch(
+                params=abort_params, format_type="merge"
+            ), f"Failed to patch DRPC {info['drpc_resource_name']} for stage 2 abort"
+
+        # Verify cleanup on cluster_a — the dryRun copy side for [1, 2, 4, 5]
+        self._verify_cleanup_after_dryrun_abort_or_promote(stage2_infos)
+
+        # Verify [1, 2, 4, 5] still intact on cluster_b — abort never moves workloads
+        config.switch_to_cluster_by_name(cluster_b)
+        for info in stage2_infos:
+            is_discovered = info["is_discovered"]
             dr_helpers.wait_for_all_resources_creation(
                 info["workload_pvc_count"],
                 info["workload_pod_count"],
