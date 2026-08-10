@@ -1518,9 +1518,13 @@ def get_mclock_max_capacity_iops_config_key(osd_id=0):
             constants.MCLOCK_MAX_CAPACITY_IOPS_SSD,
             constants.MCLOCK_MAX_CAPACITY_IOPS_SSD_DEFAULT,
         )
-    return (
-        constants.MCLOCK_MAX_CAPACITY_IOPS_HDD,
-        constants.MCLOCK_MAX_CAPACITY_IOPS_HDD_DEFAULT,
+    if bdev_type == "hdd":
+        return (
+            constants.MCLOCK_MAX_CAPACITY_IOPS_HDD,
+            constants.MCLOCK_MAX_CAPACITY_IOPS_HDD_DEFAULT,
+        )
+    raise ValueError(
+        f"Unsupported bluestore_bdev_type '{bdev_type}' " f"for osd.{osd_id}"
     )
 
 

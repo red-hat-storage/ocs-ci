@@ -53,12 +53,38 @@ class TestMclockIopsOverride(ManageTest):
         self.osd_ids = sorted([pod.get_osd_pod_id(p) for p in osd_pods])
         log.info("Discovered OSD IDs: %s", self.osd_ids)
 
+        self.original_values = {}
+        for osd_id in self.osd_ids:
+            entity = f"osd.{osd_id}"
+            self.original_values[entity] = self.odf_cli.run_ceph_config_get(
+                entity, self.config_key
+            )
+        self.original_values["global"] = self.odf_cli.run_ceph_config_get(
+            "global", self.config_key
+        )
+        log.info(
+            "Saved original IOPS values: %s",
+            self.original_values,
+        )
+
         def finalizer():
             log.info("Cleaning up mclock IOPS overrides")
             safe_rm = catch_exceptions(CommandFailed)(self.odf_cli.run_ceph_config_rm)
+            safe_set = catch_exceptions(CommandFailed)(self.odf_cli.run_ceph_config_set)
             for osd_id in self.osd_ids:
                 safe_rm(f"osd.{osd_id}", self.config_key)
             safe_rm("global", self.config_key)
+            for entity, orig in self.original_values.items():
+                value = self.odf_cli.run_ceph_config_get(entity, self.config_key)
+                if float(value) != float(orig):
+                    log.warning(
+                        "%s value %s differs from original %s," " restoring",
+                        entity,
+                        value,
+                        orig,
+                    )
+                    safe_set(entity, self.config_key, orig)
+            log.info("All OSDs reverted to original values")
 
         request.addfinalizer(finalizer)
 
@@ -249,7 +275,11 @@ class TestMclockIopsOverride(ManageTest):
         self.odf_cli.run_ceph_config_rm(f"osd.{target_osd}", self.config_key)
         log.info("Removed override for osd.%s", target_osd)
 
-        value_after = self.odf_cli.run_ceph_config_get("osd", self.config_key)
+        value_after = self.odf_cli.wait_for_ceph_config_value(
+            f"osd.{target_osd}",
+            self.config_key,
+            str(self.default_value),
+        )
         assert float(value_after) == self.default_value, (
             f"After removal expected {self.default_value}, " f"got {value_after}"
         )
