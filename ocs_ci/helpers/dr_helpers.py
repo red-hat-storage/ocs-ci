@@ -633,6 +633,11 @@ def wait_for_mirroring_status_ok(
         TimeoutExpiredError: In case of unexpected mirroring status
 
     """
+    if config.ENV_DATA.get("skip_mirroring_status_check"):
+        logger.warning(
+            "Skipping mirroring status check (skip_mirroring_status_check is set)"
+        )
+        return True
     restore_index = config.cur_index
     dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
     if dr_cluster_relations:
