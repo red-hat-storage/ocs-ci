@@ -20,6 +20,13 @@ from botocore.exceptions import BotoCoreError, ClientError, EndpointConnectionEr
 
 from ocs_ci.deployment.helpers import storage_class
 from ocs_ci.utility.azure_utils import AZURE as AzureUtil
+from ocs_ci.utility.gcp import (
+    build_noobaa_sa_name,
+    create_noobaa_gcp_service_account,
+    get_wif_params_from_cluster,
+    load_service_account_key_dict,
+    SERVICE_ACCOUNT_KEY_FILEPATH,
+)
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
@@ -204,6 +211,7 @@ from ocs_ci.utility.utils import (
     ceph_health_check_multi_storagecluster_external,
     get_acm_version,
     get_acm_mce_build_tag,
+    get_infra_id,
     apply_oadp_workaround,
     mute_mon_netsplit,
 )
@@ -258,6 +266,8 @@ class Deployment(object):
     def __init__(self):
         self.sts_role_arn = None
         self.azure_noobaa_mi_client_id = None
+        self.gcp_noobaa_sa_email = None
+        self.gcp_wif_params = None
         storage_class.set_custom_storage_class_path()
         logger.info(
             f"Deployment platform {self.platform} initiated with storage class: {self.storage_class}"
@@ -1301,6 +1311,9 @@ class Deployment(object):
             config.DEPLOYMENT.get("sts_enabled")
             and platform == constants.AZURE_PLATFORM
         )
+        gcp_sts_deployment = (
+            config.DEPLOYMENT.get("sts_enabled") and platform == constants.GCP_PLATFORM
+        )
         managed_ibmcloud = (
             platform == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
@@ -1380,6 +1393,34 @@ class Deployment(object):
                 subscription_yaml_data["spec"]["config"]["env"] = azure_sub_data
             else:
                 subscription_yaml_data["spec"]["config"]["env"].extend(azure_sub_data)
+        elif gcp_sts_deployment:
+            if not self.gcp_wif_params or not self.gcp_noobaa_sa_email:
+                raise ValueError(
+                    "GCP WIF parameters or NooBaa SA email not initialized. "
+                    "Ensure deploy_ocs_via_operator() ran the GCP STS block "
+                    "before subscribe_ocs()."
+                )
+            if "config" not in subscription_yaml_data["spec"]:
+                subscription_yaml_data["spec"]["config"] = {}
+            gcp_sub_data = [
+                {
+                    "name": "PROJECT_NUMBER",
+                    "value": self.gcp_wif_params["project_number"],
+                },
+                {"name": "POOL_ID", "value": self.gcp_wif_params["pool_id"]},
+                {
+                    "name": "PROVIDER_ID",
+                    "value": self.gcp_wif_params["provider_id"],
+                },
+                {
+                    "name": "SERVICE_ACCOUNT_EMAIL",
+                    "value": self.gcp_noobaa_sa_email,
+                },
+            ]
+            if "env" not in subscription_yaml_data["spec"]["config"]:
+                subscription_yaml_data["spec"]["config"]["env"] = gcp_sub_data
+            else:
+                subscription_yaml_data["spec"]["config"]["env"].extend(gcp_sub_data)
 
         subscription_yaml_data["metadata"]["namespace"] = self.namespace
         subscription_manifest = tempfile.NamedTemporaryFile(
@@ -1511,6 +1552,26 @@ class Deployment(object):
                 cluster_name=config.ENV_DATA["cluster_name"],
                 resource_group=config.ENV_DATA["cluster_name"],
                 subscription_id=config.AUTH["azure_auth"]["subscription_id"],
+            )
+        gcp_sts_deployment = (
+            config.DEPLOYMENT.get("sts_enabled") and platform == constants.GCP_PLATFORM
+        )
+        if gcp_sts_deployment:
+            logger.test_step("Create GCP service account for NooBaa WIF")
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = SERVICE_ACCOUNT_KEY_FILEPATH
+            sa_dict = load_service_account_key_dict()
+            gcp_project_id = (
+                config.ENV_DATA.get("gcp_project_id") or sa_dict["project_id"]
+            )
+            self.gcp_wif_params = get_wif_params_from_cluster()
+            cluster_path = config.ENV_DATA["cluster_path"]
+            infra_id = get_infra_id(cluster_path)
+            sa_name = build_noobaa_sa_name(infra_id)
+            self.gcp_noobaa_sa_email = create_noobaa_gcp_service_account(
+                gcp_project_id=gcp_project_id,
+                project_number=self.gcp_wif_params["project_number"],
+                pool_id=self.gcp_wif_params["pool_id"],
+                sa_name=sa_name,
             )
         stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
         konflux_build = config.DEPLOYMENT.get("konflux_build")

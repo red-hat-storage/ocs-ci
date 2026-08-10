@@ -17,6 +17,8 @@ from ocs_ci.utility import cco
 from ocs_ci.utility.deployment import get_ocp_release_image_from_installer
 from ocs_ci.utility.gcp import (
     GoogleCloudUtil,
+    build_noobaa_sa_name,
+    delete_noobaa_gcp_service_account,
     load_service_account_key_dict,
     SERVICE_ACCOUNT_KEY_FILEPATH,
 )
@@ -117,6 +119,11 @@ class GCPIPI(GCPBase):
         """
         cluster_path = config.ENV_DATA["cluster_path"]
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        if "installer_path" not in config.ENV_DATA:
+            bin_dir = os.path.abspath(os.path.expanduser(config.RUN.get("bin_dir", "")))
+            config.ENV_DATA["installer_path"] = os.path.join(
+                bin_dir, "openshift-install"
+            )
         release_image = get_ocp_release_image_from_installer()
         cco_image = cco.get_cco_container_image(release_image, pull_secret_path)
         cco.extract_ccoctl_binary(cco_image, pull_secret_path)
@@ -207,19 +214,27 @@ class GCPIPI(GCPBase):
 
         """
         if config.DEPLOYMENT.get("sts_enabled"):
-            try:
-                # 1. Set GCP authentication
-                gcp_project = self._get_gcp_project()
+            gcp_project = self._get_gcp_project()
+            cluster_path = config.ENV_DATA["cluster_path"]
+            infra_id = get_infra_id_from_openshift_install_state(cluster_path)
 
-                # 2. Ensure ccoctl binary and CredentialsRequest manifests
-                # are available (may be missing if teardown runs on a
-                # different agent than the one that deployed)
-                cluster_path = config.ENV_DATA["cluster_path"]
+            # 1. Delete NooBaa GCP service account (uses Google API
+            # directly, no ccoctl dependency)
+            sa_name = build_noobaa_sa_name(infra_id)
+            sa_email = f"{sa_name}@{gcp_project}.iam.gserviceaccount.com"
+            try:
+                delete_noobaa_gcp_service_account(gcp_project, sa_email)
+            except Exception:
+                logger.warning(
+                    "Failed to delete NooBaa GCP service account. "
+                    "Proceeding with WIF resource cleanup.",
+                    exc_info=True,
+                )
+
+            # 2. Delete WIF resources via ccoctl
+            try:
                 credentials_requests_dir = os.path.join(cluster_path, "creds_reqs")
                 self._ensure_ccoctl_and_credentials_requests(credentials_requests_dir)
-
-                # 3. Run ccoctl gcp delete to remove WIF resources
-                infra_id = get_infra_id_from_openshift_install_state(cluster_path)
                 cco.delete_gcp_sts_resources(
                     infra_id,
                     gcp_project,
@@ -227,7 +242,7 @@ class GCPIPI(GCPBase):
                 )
             except Exception:
                 logger.warning(
-                    "Failed to delete GCP STS resources. "
+                    "Failed to delete GCP WIF resources via ccoctl. "
                     "Proceeding with cluster destroy.",
                     exc_info=True,
                 )
