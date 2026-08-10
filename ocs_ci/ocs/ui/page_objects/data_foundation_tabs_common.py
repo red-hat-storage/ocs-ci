@@ -545,11 +545,18 @@ class CreateResourceForm(PageNavigator):
 
         logger.info("Select secret")
         switch_to_secret = self.mcg_stores.get("store_switch_to_secret")
-        if switch_to_secret and self.check_element_presence(
-            (switch_to_secret[1], switch_to_secret[0]), timeout=3, use_fallback=False
-        ):
-            logger.info("Clicking 'Switch to Secret' to reveal the secret dropdown")
-            self.do_click(switch_to_secret)
+        if switch_to_secret:
+            try:
+                WebDriverWait(self.driver, 3).until(
+                    expected_conditions.presence_of_element_located(
+                        (switch_to_secret[1], switch_to_secret[0])
+                    )
+                )
+            except TimeoutException:
+                pass
+            else:
+                logger.info("Clicking 'Switch to Secret' to reveal the secret dropdown")
+                self.do_click(switch_to_secret)
         self.do_click(self.mcg_stores["store_secret_dropdown"])
         self.do_click(format_locator(self.mcg_stores["store_secret_option"], secret))
 
