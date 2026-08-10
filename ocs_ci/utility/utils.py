@@ -4151,7 +4151,7 @@ def get_terraform(version=None, bin_dir=None):
     previous_dir = os.getcwd()
     os.chdir(bin_dir)
     url = f"https://releases.hashicorp.com/terraform/{version}/" f"{terraform_zip_file}"
-    download_file(url, terraform_zip_file)
+    download_with_retries(url, terraform_zip_file)
     run_cmd(f"unzip -o {terraform_zip_file}")
     delete_file(terraform_zip_file)
     # return to the previous working directory
@@ -4187,7 +4187,7 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
     )
 
     # Download and untar
-    download_file(url, terraform_ignition_provider_zip_file)
+    download_with_retries(url, terraform_ignition_provider_zip_file)
     run_cmd(f"unzip -o {terraform_ignition_provider_zip_file}")
 
     # move the ignition provider binary to plugins path
