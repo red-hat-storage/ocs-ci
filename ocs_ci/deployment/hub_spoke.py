@@ -3785,6 +3785,8 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         Returns:
             str: Cluster name if successful, empty string if failed
         """
+        # timeout is stretched due to AWS EC2 capacity/provisioning delays
+        nodes_creation_timeout = 100 * 60
 
         logger.info(
             f"Creating AWS HCP cluster '{self.name}' with release image: {release_image}"
@@ -3915,7 +3917,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
             logger.info(f"Verifying HostedCluster '{self.name}' was created...")
             for sample in TimeoutSampler(
-                timeout=300, sleep=10, func=get_hosted_cluster_names
+                timeout=nodes_creation_timeout, sleep=30, func=get_hosted_cluster_names
             ):
                 if self.name in sample:
                     logger.info(f"HostedCluster '{self.name}' created successfully")
