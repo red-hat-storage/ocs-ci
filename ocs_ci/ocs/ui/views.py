@@ -661,8 +661,8 @@ mcg_stores = {
         By.XPATH,
     ),
     "store_secret_dropdown": (
-        "//label[normalize-space()='Secret Key']/../following-sibling::*//button[contains(@class, 'menu-toggle')] | "
-        "//span[normalize-space()='Select Secret']/ancestor::button[contains(@class, 'menu-toggle')]",
+        "//label[normalize-space()='Secret Key']/../following-sibling::*//button[contains(@class, 'c-menu-toggle')] | "
+        "//span[normalize-space()='Select Secret']/ancestor::button[contains(@class, 'c-menu-toggle')]",
         By.XPATH,
     ),
     "store_target_bucket_input": ("//input[@aria-label='Target Bucket']", By.XPATH),
