@@ -1475,7 +1475,7 @@ def verify_storage_cluster_extended():
             .get("connections")
             .get("encryption")
             .get("enabled")
-            == "true"
+            is True
         ):
             timeout = 1200
         else:
