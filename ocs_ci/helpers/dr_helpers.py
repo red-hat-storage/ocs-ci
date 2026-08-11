@@ -4526,10 +4526,13 @@ def validate_application_odf_cli(
 
     Returns:
         str or None: The stdout output from the command,
-            or None if gather failed
+            or None if any cluster in the multicluster config is a hosted
+            cluster, or if gather failed.
 
     Note:
-        Skips the test on validation failure.
+        Returns None immediately (without running any command) when any
+        cluster in ``config.clusters`` has ``is_hosted=True``.  Skips
+        the test on validation failure.
 
     """
     for cluster in config.clusters:
