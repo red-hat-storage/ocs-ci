@@ -224,7 +224,8 @@ deployment_4_9 = {
         By.CSS_SELECTOR,
     ),
     "storage_system_tab": (
-        'a[data-test-id="horizontal-link-Storage System"]',
+        'a[data-test-id="horizontal-link-Storage System"],'
+        'a[data-test-id="horizontal-link-Storage cluster"]',
         By.CSS_SELECTOR,
     ),
     "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
@@ -1985,7 +1986,8 @@ add_capacity = {
         By.CSS_SELECTOR,
     ),
     "storage_system_tab": (
-        'a[data-test-id="horizontal-link-Storage System"]',
+        'a[data-test-id="horizontal-link-Storage System"],'
+        'a[data-test-id="horizontal-link-Storage cluster"]',
         By.CSS_SELECTOR,
     ),
     "kebab_storage_cluster": ("//button[@data-test-id='kebab-button']", By.XPATH),
