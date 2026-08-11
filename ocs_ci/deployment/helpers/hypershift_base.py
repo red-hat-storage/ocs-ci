@@ -19,7 +19,6 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
     ClusterNotFoundException,
-    ResourceNotFoundError,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
@@ -70,7 +69,7 @@ def get_hosted_cluster_names():
 
 def get_hosted_cluster_namespace(cluster_name=None):
     """
-    Resolve the namespace that contains the HostedCluster CR.
+    Resolve the namespace that contains the HostedCluster CR. Default value is constants.CLUSTERS_NAMESPACE
 
     Args:
         cluster_name (str): Name of the hosted cluster.
@@ -96,6 +95,8 @@ def get_hosted_cluster_namespace(cluster_name=None):
             return hc_namespace
 
         # Dynamic discovery — find from the list of HostedClusters across all namespaces
+        # If not available, return the default value constants.CLUSTERS_NAMESPACE because there are usages to identify
+        # if a cluster is hostedcluster or not.
         try:
             all_hc = OCP(kind=constants.HOSTED_CLUSTERS).get(all_namespaces=True)
             for item in all_hc.get("items", []):
@@ -107,14 +108,11 @@ def get_hosted_cluster_namespace(cluster_name=None):
                     break
         except CommandFailed as exc:
             logger.warning(
-                f"Could not list HostedClusters to resolve namespace for '{cluster_name}': {exc}"
+                f"Could not list HostedClusters to resolve namespace for '{cluster_name}': {exc}. "
+                f"Use the default value {constants.CLUSTERS_NAMESPACE}"
             )
-    if not hc_namespace:
-        raise ResourceNotFoundError(
-            f"No hostedcluster namespace found for '{cluster_name}'"
-        )
 
-    return hc_namespace
+    return hc_namespace or constants.CLUSTERS_NAMESPACE
 
 
 @catch_exceptions((CommandFailed, TimeoutExpiredError))
