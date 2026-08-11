@@ -1255,6 +1255,7 @@ def wait_for_replication_resources_deletion(
                 kind=constants.VOLUME_GROUP_REPLICATION,
                 namespace=namespace,
                 timeout=timeout,
+                resource_name=vrg_name,
                 should_exist=False,
             )
 
@@ -3243,6 +3244,9 @@ def wait_for_vrg_state(vrg_state, vrg_namespace, resource_name, timeout=900):
         vrg_namespace (str): VRG resource namespace
         resource_name (str): VRG resource name
         timeout (int): Timeout for wait
+
+    Raises:
+        TimeoutExpiredError: With VRG specific context to make failures actionable
 
     """
     wait_for_resource_state(
