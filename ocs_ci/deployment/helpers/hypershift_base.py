@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
     ClusterNotFoundException,
+    ResourceNotFoundError,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
@@ -61,12 +62,59 @@ def get_hosted_cluster_names():
     """
 
     logger.info("Getting HyperShift hosted cluster names")
-    hosted_clusters_obj = OCP(
-        kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
-    ).get()
+    hosted_clusters_obj = OCP(kind=constants.HOSTED_CLUSTERS).get(all_namespaces=True)
     return [
         cluster.get("metadata").get("name") for cluster in hosted_clusters_obj["items"]
     ]
+
+
+def get_hosted_cluster_namespace(cluster_name=None):
+    """
+    Resolve the namespace that contains the HostedCluster CR.
+
+    Args:
+        cluster_name (str): Name of the hosted cluster.
+
+    Returns:
+        str: Namespace on the management cluster that owns the HostedCluster CR.
+    """
+    cluster_name = cluster_name or config.ENV_DATA.get("cluster_name")
+
+    # Get the hostedcluster namespace if available in config
+    hc_namespace = config.ENV_DATA.get("hostedcluster_namespace")
+    with config.RunWithProviderConfigContextIfAvailable():
+        # Explicit per-cluster config override
+        hc_namespace = (
+            config.ENV_DATA.get("clusters", {})
+            .get(cluster_name, {})
+            .get("hostedcluster_namespace", hc_namespace)
+        )
+        if hc_namespace:
+            logger.debug(
+                f"Using configured hostedcluster_namespace '{hc_namespace}' for '{cluster_name}'"
+            )
+            return hc_namespace
+
+        # Dynamic discovery — find from the list of HostedClusters across all namespaces
+        try:
+            all_hc = OCP(kind=constants.HOSTED_CLUSTERS).get(all_namespaces=True)
+            for item in all_hc.get("items", []):
+                if item.get("metadata", {}).get("name") == cluster_name:
+                    hc_namespace = item["metadata"]["namespace"]
+                    logger.debug(
+                        f"Discovered hostedcluster_namespace '{hc_namespace}' for '{cluster_name}'"
+                    )
+                    break
+        except CommandFailed as exc:
+            logger.warning(
+                f"Could not list HostedClusters to resolve namespace for '{cluster_name}': {exc}"
+            )
+    if not hc_namespace:
+        raise ResourceNotFoundError(
+            f"No hostedcluster namespace found for '{cluster_name}'"
+        )
+
+    return hc_namespace
 
 
 @catch_exceptions((CommandFailed, TimeoutExpiredError))
@@ -249,7 +297,8 @@ def is_hosted_cluster(cluster_name=None):
     except ClusterNotFoundException:
         return False
     ocp_obj = OCP(
-        kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
+        kind=constants.HOSTED_CLUSTERS,
+        namespace=get_hosted_cluster_namespace(cluster_name),
     )
     return ocp_obj.is_exist(resource_name=cluster_name)
 
@@ -272,7 +321,7 @@ def get_hosted_cluster_type(cluster_name=None):
     config.switch_to_provider()
     ocp_hosted_cluster_obj = OCP(
         kind=constants.HOSTED_CLUSTERS,
-        namespace=constants.CLUSTERS_NAMESPACE,
+        namespace=get_hosted_cluster_namespace(cluster_name),
         resource_name=cluster_name,
     )
     return ocp_hosted_cluster_obj.get()["spec"]["platform"]["type"].lower()
@@ -293,7 +342,7 @@ def get_current_nodepool_size(name):
 
     logger.info(f"Getting existing nodepool of HyperShift hosted cluster {name}")
     with config.RunWithProviderConfigContextIfAvailable():
-        nodepools = OCP(kind="nodepools", namespace=constants.CLUSTERS_NAMESPACE).get()
+        nodepools = OCP(kind="nodepools").get(all_namespaces=True)
     total = sum(
         item.get("status", {}).get("replicas", 0)
         for item in nodepools.get("items", [])
@@ -316,7 +365,7 @@ def get_desired_nodepool_size(name: str):
 
     logger.info(f"Getting desired nodepool of HyperShift hosted cluster {name}")
     with config.RunWithProviderConfigContextIfAvailable():
-        nodepools = OCP(kind="nodepools", namespace=constants.CLUSTERS_NAMESPACE).get()
+        nodepools = OCP(kind="nodepools").get(all_namespaces=True)
     total = sum(
         item.get("spec", {}).get("replicas", 0)
         for item in nodepools.get("items", [])
@@ -384,7 +433,7 @@ def get_hosted_cluster_kubeconfig_name(name: str):
     with config.RunWithProviderConfigContextIfAvailable():
         data = OCP(
             kind=constants.HOSTED_CLUSTERS,
-            namespace=constants.CLUSTERS_NAMESPACE,
+            namespace=get_hosted_cluster_namespace(name),
             resource_name=name,
         ).get()
     return data.get("status", {}).get("kubeconfig", {}).get("name", "")
@@ -1195,7 +1244,7 @@ class HyperShiftBase:
             with config.RunWithProviderConfigContextIfAvailable():
                 data = OCP(
                     kind=constants.HOSTED_CLUSTERS,
-                    namespace=constants.CLUSTERS_NAMESPACE,
+                    namespace=get_hosted_cluster_namespace(name),
                     resource_name=name,
                 ).get()
             history = data.get("status", {}).get("version", {}).get("history", [])
@@ -1270,7 +1319,7 @@ class HyperShiftBase:
                     return True
                 ocp_hc = OCP(
                     kind=constants.HOSTED_CLUSTERS,
-                    namespace=constants.CLUSTERS_NAMESPACE,
+                    namespace=get_hosted_cluster_namespace(name),
                 )
                 hosted = ocp_hc.get(name)
                 existing = hosted.get("spec", {}).get("imageContentSources") or []
@@ -1673,7 +1722,8 @@ def get_hosted_cluster_condition_status(cluster_name, condition_type="Available"
 
     try:
         ocp_hc = OCP(
-            kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
+            kind=constants.HOSTED_CLUSTERS,
+            namespace=get_hosted_cluster_namespace(cluster_name),
         )
         jsonpath = f'{{.status.conditions[?(@.type=="{condition_type}")].status}}'
 

@@ -55,6 +55,7 @@ from ocs_ci.utility.csr import (
     get_nodes_csr,
     wait_for_all_nodes_csr_and_approve,
 )
+from ocs_ci.deployment.helpers.hypershift_base import get_hosted_cluster_namespace
 from ocs_ci.utility.utils import (
     get_cluster_name,
     get_infra_id,
@@ -3766,11 +3767,8 @@ class HypershiftAWSNode(AWSNodes):
             list: List of NodePool dicts from the API response.
         """
         with config.RunWithProviderConfigContextIfAvailable():
-            nodepool_ocp = ocp.OCP(
-                kind="NodePool",
-                namespace=constants.CLUSTERS_NAMESPACE,
-            )
-            nodepools = nodepool_ocp.get().get("items", [])
+            nodepool_ocp = ocp.OCP(kind="NodePool")
+            nodepools = nodepool_ocp.get(all_namespaces=True).get("items", [])
 
         cluster_nodepools = [
             np
@@ -3835,7 +3833,9 @@ class HypershiftAWSNode(AWSNodes):
         with config.RunWithProviderConfigContextIfAvailable():
             nodepool_ocp = ocp.OCP(
                 kind="NodePool",
-                namespace=constants.CLUSTERS_NAMESPACE,
+                namespace=get_hosted_cluster_namespace(
+                    config.ENV_DATA.get("cluster_name")
+                ),
                 resource_name=np_name,
             )
             np_data = nodepool_ocp.get()
@@ -3878,7 +3878,7 @@ class HypershiftAWSNode(AWSNodes):
         with config.RunWithProviderConfigContextIfAvailable():
             nodepool_ocp = ocp.OCP(
                 kind="NodePool",
-                namespace=constants.CLUSTERS_NAMESPACE,
+                namespace=get_hosted_cluster_namespace(cluster_name),
                 resource_name=np_name,
             )
             patch = {"spec": {"replicas": new_replicas}}

@@ -21,6 +21,7 @@ from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.helpers.hypershift_base import (
     HyperShiftBase,
     get_hosted_cluster_names,
+    get_hosted_cluster_namespace,
     kubeconfig_exists_decorator,
     get_current_nodepool_size,
     get_available_hosted_clusters_to_ocp_ver_dict,
@@ -2079,7 +2080,7 @@ def get_hosted_cluster_version_history(cluster_name: str):
     with config.RunWithProviderConfigContextIfAvailable():
         ocp_hc = OCP(
             kind=constants.HOSTED_CLUSTERS,
-            namespace=constants.CLUSTERS_NAMESPACE,
+            namespace=get_hosted_cluster_namespace(cluster_name),
         )
         hosted = ocp_hc.get(cluster_name)
         history = hosted.get("status", {}).get("version", {}).get("history") or []
@@ -2388,7 +2389,7 @@ class HypershiftHostedOCP(
             with config.RunWithProviderConfigContextIfAvailable():
                 ocp_hc = OCP(
                     kind=constants.HOSTED_CLUSTERS,
-                    namespace=constants.CLUSTERS_NAMESPACE,
+                    namespace=get_hosted_cluster_namespace(self.name),
                 )
                 patch_body = json.dumps({"spec": {"release": {"image": image}}})
                 logger.info(
@@ -2423,7 +2424,7 @@ class HypershiftHostedOCP(
             with config.RunWithProviderConfigContextIfAvailable():
                 ocp_np = OCP(
                     kind="nodepools",
-                    namespace=constants.CLUSTERS_NAMESPACE,
+                    namespace=get_hosted_cluster_namespace(self.name),
                 )
                 patch_body = json.dumps({"spec": {"release": {"image": image}}})
                 logger.info(
@@ -2460,7 +2461,10 @@ class HypershiftHostedOCP(
 
         try:
             with config.RunWithProviderConfigContextIfAvailable():
-                ocp_np = OCP(kind="nodepools", namespace=constants.CLUSTERS_NAMESPACE)
+                ocp_np = OCP(
+                    kind="nodepools",
+                    namespace=get_hosted_cluster_namespace(self.name),
+                )
                 jsonpath = '{.status.conditions[?(@.type=="UpdatingVersion")].status}'
 
                 def _sample():
@@ -5534,7 +5538,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         hc_ocp = OCP(
             kind=constants.HOSTED_CLUSTERS,
-            namespace=constants.CLUSTERS_NAMESPACE,
+            namespace=get_hosted_cluster_namespace(self.name),
         )
         if hc_ocp.is_exist(resource_name=self.name):
             logger.warning(
@@ -5566,7 +5570,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         np_ocp = OCP(
             kind="nodepools",
-            namespace=constants.CLUSTERS_NAMESPACE,
+            namespace=get_hosted_cluster_namespace(self.name),
         )
         try:
             nodepools = np_ocp.get()
