@@ -972,9 +972,8 @@ page_nav = {
         By.XPATH,
     ),
     "operators_olmv0_tab": (
-        "//a[contains(text(),'Operators') and contains(text(),'OLMv0')]"
-        " | //button[contains(text(),'Operators') and contains(text(),'OLMv0')]",
-        By.XPATH,
+        'a[data-test="horizontal-link-Operators (OLMv0)"]',
+        By.CSS_SELECTOR,
     ),
     "Storage": ("//button[text()='Storage']", By.XPATH),
     "persistentvolumes_page": ("PersistentVolumes", By.LINK_TEXT),
