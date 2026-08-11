@@ -303,6 +303,55 @@ def _tls_scan_run_oc(args, kubeconfig=None, timeout=60):
     return completed.stdout.decode()
 
 
+def _find_fallback_ports(selector, component, pod):
+    fallback_ports = selector.get("fallback_ports", [])
+    if fallback_ports or component != "all":
+        return fallback_ports
+    pod_labels = pod.get("metadata", {}).get("labels", {})
+    for comp_sel in TLS_SCAN_COMPONENT_SELECTORS.values():
+        comp_label = comp_sel.get("label", "")
+        comp_fb = comp_sel.get("fallback_ports", [])
+        if comp_fb and "=" in comp_label:
+            key, val = comp_label.split("=", 1)
+            if pod_labels.get(key) == val:
+                return comp_fb
+    return []
+
+
+def _build_container_endpoints(container, pod_name, pod_ns, pod_ip, fallback_ports):
+    c_name = container["name"]
+    cmd_parts = container.get("command", []) + container.get("args", [])
+    process = ""
+    if cmd_parts:
+        process = cmd_parts[0].rsplit("/", 1)[-1][:15]
+    if not process:
+        process = container.get("image", "").split("/")[-1].split(":")[0][:15]
+    declared_ports = container.get("ports", [])
+    port_numbers = [
+        p.get("containerPort") for p in declared_ports if p.get("containerPort")
+    ]
+    if not port_numbers and fallback_ports:
+        log.info(
+            "TLS scan: pod %s container %s has no declared ports, "
+            "using fallback ports %s",
+            pod_name,
+            c_name,
+            fallback_ports,
+        )
+        port_numbers = fallback_ports
+    return [
+        {
+            "pod_namespace": pod_ns,
+            "pod_name": pod_name,
+            "pod_ip": pod_ip,
+            "container_name": c_name,
+            "port": str(port),
+            "process": process,
+        }
+        for port in port_numbers
+    ]
+
+
 def _tls_scan_discover_endpoints(kubeconfig, namespaces, component="all"):
     selector = TLS_SCAN_COMPONENT_SELECTORS.get(component, {})
     label = selector.get("label")
@@ -334,53 +383,13 @@ def _tls_scan_discover_endpoints(kubeconfig, namespaces, component="all"):
                 continue
             if name_filter and name_filter not in pod_name:
                 continue
-            fallback_ports = selector.get("fallback_ports", [])
-            if not fallback_ports and component == "all":
-                pod_labels = pod.get("metadata", {}).get("labels", {})
-                for comp_sel in TLS_SCAN_COMPONENT_SELECTORS.values():
-                    comp_label = comp_sel.get("label", "")
-                    comp_fb = comp_sel.get("fallback_ports", [])
-                    if comp_fb and "=" in comp_label:
-                        key, val = comp_label.split("=", 1)
-                        if pod_labels.get(key) == val:
-                            fallback_ports = comp_fb
-                            break
+            fallback_ports = _find_fallback_ports(selector, component, pod)
             for container in pod["spec"]["containers"]:
-                c_name = container["name"]
-                cmd_parts = container.get("command", []) + container.get("args", [])
-                process = ""
-                if cmd_parts:
-                    process = cmd_parts[0].rsplit("/", 1)[-1][:15]
-                if not process:
-                    process = (
-                        container.get("image", "").split("/")[-1].split(":")[0][:15]
+                endpoints.extend(
+                    _build_container_endpoints(
+                        container, pod_name, pod_ns, pod_ip, fallback_ports
                     )
-                declared_ports = container.get("ports", [])
-                port_numbers = [
-                    p.get("containerPort")
-                    for p in declared_ports
-                    if p.get("containerPort")
-                ]
-                if not port_numbers and fallback_ports:
-                    log.info(
-                        "TLS scan: pod %s container %s has no declared ports, "
-                        "using fallback ports %s",
-                        pod_name,
-                        c_name,
-                        fallback_ports,
-                    )
-                    port_numbers = fallback_ports
-                for port in port_numbers:
-                    endpoints.append(
-                        {
-                            "pod_namespace": pod_ns,
-                            "pod_name": pod_name,
-                            "pod_ip": pod_ip,
-                            "container_name": c_name,
-                            "port": str(port),
-                            "process": process,
-                        }
-                    )
+                )
 
     log.info(
         "TLS scan: discovered %d endpoints for component %r in %d namespace(s)",
