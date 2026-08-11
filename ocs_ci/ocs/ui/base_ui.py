@@ -1604,12 +1604,16 @@ def proceed_to_login_console():
     """
     driver = SeleniumDriver()
     login_loc = locators_for_current_ocp_version()["login"]
-    if login_loc["pre_login_page_title"].lower() in driver.title.lower():
-        proceed_btn = driver.find_element(
-            by=login_loc["proceed_to_login_btn"][1],
-            value=login_loc["proceed_to_login_btn"][0],
-        )
-        proceed_btn.click()
+    if driver.title == login_loc["pre_login_page_title"]:
+        try:
+            proceed_btn = wait_for_element_to_be_clickable(
+                login_loc["proceed_to_login_btn"], 60
+            )
+            proceed_btn.click()
+        except WebDriverException:
+            take_screenshot("proceed_to_login_console_click")
+            copy_dom("proceed_to_login_console_click")
+            raise
         try:
             WebDriverWait(driver, 60).until(ec.title_is(login_loc["login_page_title"]))
         except TimeoutException:
