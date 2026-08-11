@@ -264,6 +264,9 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
     if not (public_enabled or cluster_enabled):
         return cluster_data
 
+    if "spec" not in cluster_data or not isinstance(cluster_data["spec"], dict):
+        raise ValueError("cluster_data missing or invalid 'spec' field")
+
     worker_nodes = get_worker_nodes()
     if not worker_nodes:
         raise UnavailableResourceException("No worker node found!")
@@ -277,8 +280,6 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
     )
     str_network = f"{ip_network.network_address}/{ip_network.prefixlen}"
 
-    if "spec" not in cluster_data or not isinstance(cluster_data["spec"], dict):
-        raise ValueError("cluster_data missing or invalid 'spec' field")
     if "network" not in cluster_data["spec"]:
         cluster_data["spec"]["network"] = {}
     if "addressRanges" not in cluster_data["spec"]["network"]:
@@ -292,11 +293,14 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
         cluster_data["spec"]["network"]["addressRanges"]["public"] = [str_network]
 
     if cluster_enabled:
+        cluster_cidr = config.ENV_DATA.get(
+            "multus_cluster_net_ip_range"
+        ) or config.ENV_DATA.get("multus_cluster_net_range")
         logger.info(
             f"Configuring data replication separation with cluster network: "
-            f"{str_network} (interface: {interface})"
+            f"{cluster_cidr} (interface: {interface})"
         )
-        cluster_data["spec"]["network"]["addressRanges"]["cluster"] = [str_network]
+        cluster_data["spec"]["network"]["addressRanges"]["cluster"] = [cluster_cidr]
 
     return cluster_data
 
