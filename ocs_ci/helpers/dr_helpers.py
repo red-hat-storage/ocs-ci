@@ -88,7 +88,6 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.odf_cli import ODFCliRunner
-from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 
 logger = logging.getLogger(__name__)
 
@@ -4533,13 +4532,16 @@ def validate_application_odf_cli(
         Skips the test on validation failure.
 
     """
-    cluster_name = config.ENV_DATA.get("cluster_name")
-    if is_hosted_cluster(cluster_name):
-        logger.info(
-            f"Skipping ODF CLI DR {action} for DRPC '{drpc_name}': "
-            f"cluster '{cluster_name}' is a hosted cluster"
-        )
-        return None
+    for cluster in config.clusters:
+        if cluster.MULTICLUSTER.get("is_hosted", False):
+            cluster_name = cluster.MULTICLUSTER.get(
+                "name", cluster.ENV_DATA.get("cluster_name", "unknown")
+            )
+            logger.info(
+                f"Skipping ODF CLI DR {action} for DRPC '{drpc_name}': "
+                f"cluster '{cluster_name}' is a hosted cluster"
+            )
+            return None
 
     dir_label = dr_action or f"{action}-app"
     output_dir = os.path.join(
