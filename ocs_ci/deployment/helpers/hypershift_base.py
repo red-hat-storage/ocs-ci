@@ -11,7 +11,7 @@ from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import defaults
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
@@ -22,7 +22,7 @@ from ocs_ci.utility.utils import (
     get_latest_release_version,
     get_random_letters,
 )
-from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from ocs_ci.utility.decorators import catch_exceptions, switch_to_orig_index_at_last
 from ocs_ci.ocs.utils import get_namespce_name_by_pattern
 
 """
@@ -46,8 +46,93 @@ def get_hosted_cluster_names():
         list: the list of hosted cluster names
     """
     logger.info("Getting HyperShift hosted cluster names")
-    cmd = "oc get --namespace clusters hostedclusters -o custom-columns=NAME:.metadata.name --no-headers"
-    return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip().split()
+    hosted_clusters_obj = OCP(kind=constants.HOSTED_CLUSTERS).get(all_namespaces=True)
+    return [
+        cluster.get("metadata").get("name") for cluster in hosted_clusters_obj["items"]
+    ]
+
+
+def get_hosted_cluster_namespace(cluster_name=None):
+    """
+    Resolve the namespace that contains the HostedCluster CR. Default value is constants.CLUSTERS_NAMESPACE
+
+    Args:
+        cluster_name (str): Name of the hosted cluster.
+
+    Returns:
+        str: Namespace on the management cluster that owns the HostedCluster CR.
+    """
+    cluster_name = cluster_name or config.ENV_DATA.get("cluster_name")
+
+    # Get the hostedcluster namespace if available in config
+    hc_namespace = config.ENV_DATA.get("hostedcluster_namespace")
+    with config.RunWithProviderConfigContextIfAvailable():
+        # Explicit per-cluster config override
+        hc_namespace = (
+            config.ENV_DATA.get("clusters", {})
+            .get(cluster_name, {})
+            .get("hostedcluster_namespace", hc_namespace)
+        )
+        if hc_namespace:
+            logger.debug(
+                f"Using configured hostedcluster_namespace '{hc_namespace}' for '{cluster_name}'"
+            )
+            return hc_namespace
+
+        # Dynamic discovery — find from the list of HostedClusters across all namespaces
+        # If not available, return the default value constants.CLUSTERS_NAMESPACE because there are usages to identify
+        # if a cluster is hostedcluster or not.
+        try:
+            all_hc = OCP(kind=constants.HOSTED_CLUSTERS).get(all_namespaces=True)
+            for item in all_hc.get("items", []):
+                if item.get("metadata", {}).get("name") == cluster_name:
+                    hc_namespace = item["metadata"]["namespace"]
+                    logger.debug(
+                        f"Discovered hostedcluster_namespace '{hc_namespace}' for '{cluster_name}'"
+                    )
+                    break
+        except CommandFailed as exc:
+            logger.warning(
+                f"Could not list HostedClusters to resolve namespace for '{cluster_name}': {exc}. "
+                f"Use the default value {constants.CLUSTERS_NAMESPACE}"
+            )
+
+    return hc_namespace or constants.CLUSTERS_NAMESPACE
+
+
+@catch_exceptions((CommandFailed, TimeoutExpiredError))
+def get_available_hosted_clusters_to_ocp_ver_dict():
+    """
+    Get available HyperShift hosted clusters with their versions
+
+    Returns:
+        dict: hosted clusters available with their versions. Example: {'cl-418-x': '4.18.7', 'cl-418-c': '4.19.0'}
+
+    """
+
+    logger.info("Getting HyperShift hosted clusters available")
+    cmd = (
+        "get hostedclusters -n clusters -o json | "
+        "jq -r '.items[] | "
+        'select(.metadata.annotations["hypershift.openshift.io/HasBeenAvailable"] == "true") | '
+        '"\\(.metadata.name)|\\(.status.version.history[0].version)"\''
+    )
+    with config.RunWithProviderConfigContextIfAvailable():
+
+        out = OCP().exec_oc_cmd(
+            command=cmd,
+            cluster_config=config,
+            shell=True,
+            out_yaml_format=False,
+            silent=True,
+        )
+        if not out:
+            return {}
+        return {
+            line.split("|")[0]: line.split("|")[1]
+            for line in out.splitlines()
+            if "|" in line
+        }
 
 
 def kubeconfig_exists_decorator(func):
