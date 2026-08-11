@@ -976,7 +976,15 @@ page_nav = {
     ),
     "operatorhub_page": ("OperatorHub", By.LINK_TEXT),
     "software_catalog": ("Software Catalog", By.LINK_TEXT),
-    "installed_operators_page": ("Installed Operators", By.LINK_TEXT),
+    "installed_operators_page": (
+        "//a[text()='Installed Operators'] | //a[text()='Installed Software']",
+        By.XPATH,
+    ),
+    "operators_olmv0_tab": (
+        "//a[contains(text(),'Operators') and contains(text(),'OLMv0')]"
+        " | //button[contains(text(),'Operators') and contains(text(),'OLMv0')]",
+        By.XPATH,
+    ),
     "Storage": ("//button[text()='Storage']", By.XPATH),
     "persistentvolumes_page": ("PersistentVolumes", By.LINK_TEXT),
     "persistentvolumeclaims_page": ("PersistentVolumeClaims", By.LINK_TEXT),
