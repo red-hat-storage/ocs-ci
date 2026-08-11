@@ -2,6 +2,7 @@
 Helper functions for Two-Node Failover (TNF) cluster deployment
 """
 
+import base64
 import logging
 import tempfile
 
@@ -9,7 +10,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.templating import Templating
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +93,8 @@ def create_local_storage_class():
     """
     logger.info("Creating local block storage class...")
     try:
-        sc_data = Templating.render_template(
+        _templating = Templating()
+        sc_data = _templating.render_template(
             "tnf-deployment/lso-storageclass.yaml.j2",
             {"storage_class_name": constants.TNF_LOCALBLOCK_SC},
         )
@@ -136,7 +138,8 @@ def create_persistent_volumes(device_mappings):
 
     for mapping in device_mappings:
         try:
-            pv_data = Templating.render_template(
+            _templating = Templating()
+            pv_data = _templating.render_template(
                 "tnf-deployment/local-pv.yaml.j2",
                 {
                     "pv_name": mapping["pv_name"],
@@ -171,12 +174,13 @@ def create_persistent_volumes(device_mappings):
 
 def configure_drbd(node_0_info, node_1_info, monitor_disk_node_0, monitor_disk_node_1):
     """
-    Configure DRBD for the floating monitor using ODF operator's script.
+    Configure DRBD for the floating monitor.
 
-    This function follows the Red Hat ODF 4.22 documentation:
-    https://docs.redhat.com/en/documentation/red_hat_openshift_data_foundation/4.22/html-single/deploying_openshift_data_foundation_on_two-node_clusters/index
-
-    The DRBD setup script is provided by the ODF operator in a ConfigMap.
+    Follows ODF 4.22 documentation section 2.2:
+    1. Fetch drbd-setup script from the rook-ceph-drbd-setup-script ConfigMap
+       (created by the ODF operator after installation)
+    2. Run with -d/-d0/-d1 flags for the floating monitor disk
+    3. The script handles KMM, DRBD kmod, resource config, sync, and ConfigMap
 
     Args:
         node_0_info (dict): Node 0 information {'name': str, 'ip': str}
@@ -192,68 +196,330 @@ def configure_drbd(node_0_info, node_1_info, monitor_disk_node_0, monitor_disk_n
     """
     logger.info("Configuring DRBD for floating monitor...")
 
-    # First, ensure openshift-storage namespace exists
+    # Check if DRBD is already configured
     try:
-        exec_cmd(
-            f"oc create namespace {constants.OPENSHIFT_STORAGE_NAMESPACE}", shell=True
+        ocp_cm = OCP(
+            kind=constants.CONFIGMAP,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
-    except CommandFailed as e:
-        if "already exists" in str(e):
-            logger.info("openshift-storage namespace already exists")
-        else:
-            raise
-
-    # Get DRBD setup script from ConfigMap (provided by ODF operator)
-    try:
-        logger.info("Retrieving DRBD setup script from ODF operator ConfigMap...")
-
-        # Extract script from ConfigMap as per ODF documentation
-        script_cmd = (
-            f"oc get configmap {constants.TNF_DRBD_SETUP_SCRIPT_CM} "
-            f"-n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
-            f"-o jsonpath='{{.data.script}}' | base64 -d"
-        )
-        drbd_script = exec_cmd(script_cmd, shell=True)
-
-        # Write script to temporary file
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".sh", delete=False
-        ) as temp_file:
-            temp_file.write(drbd_script)
-            temp_file_path = temp_file.name
-
-        # Make script executable
-        exec_cmd(f"chmod +x {temp_file_path}")
-
-        # Execute DRBD setup script with required parameters
-        logger.info("Executing DRBD setup script...")
-        exec_cmd(
-            f"{temp_file_path} "
-            f"{node_0_info['name']} {node_0_info['ip']} {monitor_disk_node_0} "
-            f"{node_1_info['name']} {node_1_info['ip']} {monitor_disk_node_1}"
-        )
-
-        logger.info("DRBD configuration completed successfully")
+        ocp_cm.get(resource_name=constants.TNF_DRBD_CONFIGURE_CM)
+        logger.info("DRBD already configured (drbd-configure ConfigMap exists)")
         return True
+    except CommandFailed:
+        logger.info("DRBD not yet configured, proceeding with setup...")
 
-    except CommandFailed as e:
+    # Validate monitor disks exist on nodes before running the script
+    _validate_device_on_node(node_0_info["name"], monitor_disk_node_0)
+    _validate_device_on_node(node_1_info["name"], monitor_disk_node_1)
+
+    # Fix virtual disk issues: rotational flag and missing /dev/disk/by-id symlinks
+    for node_name, disk_path in [
+        (node_0_info["name"], monitor_disk_node_0),
+        (node_1_info["name"], monitor_disk_node_1),
+    ]:
+        _fix_rotational_flag_if_virtual(node_name, disk_path)
+        _ensure_disk_by_id_symlink(node_name, disk_path)
+
+    # Fetch the drbd-setup script from the ODF operator ConfigMap
+    script_content = _fetch_drbd_setup_script()
+
+    # Save script to temp file
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".sh", delete=False, prefix="drbd_setup_"
+    ) as f:
+        f.write(script_content)
+        script_path = f.name
+    exec_cmd(f"chmod +x {script_path}")
+    logger.info(f"DRBD setup script saved to {script_path}")
+
+    # Build disk flags: -d for same path on both nodes, -d0/-d1 for different
+    if monitor_disk_node_0 == monitor_disk_node_1:
+        disk_flag = f"-d {monitor_disk_node_0}"
+    else:
+        disk_flag = f"-d0 {monitor_disk_node_0} -d1 {monitor_disk_node_1}"
+
+    logger.info(f"Running DRBD setup script with: {disk_flag}")
+    result = exec_cmd(
+        f"bash {script_path} {disk_flag}",
+        shell=True,
+        timeout=3600,
+        ignore_error=True,
+    )
+    stdout = result.stdout.decode().strip()
+    stderr = result.stderr.decode().strip()
+    if stdout:
+        logger.info(f"DRBD setup script output:\n{stdout}")
+    if result.returncode:
+        error_detail = stderr or stdout or "no output captured"
+        raise CommandFailed(
+            f"DRBD setup script failed (exit code {result.returncode}). "
+            f"Output: {error_detail}"
+        )
+
+    logger.info("DRBD configuration completed successfully")
+    return True
+
+
+def _validate_device_on_node(node_name, device_path):
+    """
+    Validate that a block device exists on the given node.
+
+    Args:
+        node_name (str): Node name
+        device_path (str): Device path (e.g. /dev/vdb)
+
+    Raises:
+        CommandFailed: If device does not exist or node is not accessible
+    """
+    logger.info(f"Validating device {device_path} on node {node_name}...")
+    try:
+        result = exec_cmd(
+            f"oc debug -q node/{node_name} -- chroot /host "
+            f"lsblk -ndo NAME,SIZE,ROTA,TYPE {device_path}",
+            shell=True,
+            timeout=120,
+        )
+        output = result.stdout.decode().strip()
+        if output:
+            logger.info(f"Device {device_path} on {node_name}: {output}")
+        else:
+            raise CommandFailed(
+                f"Device {device_path} not found on node {node_name}. "
+                f"List available devices with: "
+                f"oc debug -q node/{node_name} -- chroot /host "
+                f"lsblk -o NAME,PATH,SIZE,ROTA,TYPE,FSTYPE"
+            )
+    except CommandFailed:
         logger.error(
-            f"Failed to retrieve or execute DRBD setup script. "
-            f"Ensure ODF operator is installed and ConfigMap "
-            f"'{constants.TNF_DRBD_SETUP_SCRIPT_CM}' exists: {e}"
+            f"Device {device_path} not accessible on node {node_name}. "
+            f"Check that the device exists and the node is reachable."
         )
         raise
 
 
+def _fix_rotational_flag_if_virtual(node_name, device_path):
+    """
+    Set rotational flag to 0 on disks that report ROTA=1 in VM environments.
+
+    VM-backed disks (virtio, SCSI-emulated, xen) may falsely report as
+    rotational even when backed by SSD storage. The drbd-setup script
+    requires ROTA=0.
+
+    Args:
+        node_name (str): Node name
+        device_path (str): Device path (e.g. /dev/vda, /dev/sdb)
+    """
+    import os
+
+    dev_name = os.path.basename(device_path)
+    rotational_path = f"/sys/block/{dev_name}/queue/rotational"
+    try:
+        result = exec_cmd(
+            f"oc debug -q node/{node_name} -- chroot /host " f"cat {rotational_path}",
+            shell=True,
+            timeout=60,
+        )
+        current = result.stdout.decode().strip()
+        if current == "0":
+            return
+
+        logger.info(
+            f"Setting {device_path} on {node_name} as non-rotational "
+            f"(ROTA=1, likely virtual disk backed by SSD)"
+        )
+        exec_cmd(
+            f"oc debug -q node/{node_name} -- chroot /host "
+            f"bash -c 'echo 0 > {rotational_path}'",
+            shell=True,
+            timeout=60,
+        )
+    except CommandFailed as e:
+        logger.warning(
+            f"Could not fix rotational flag for {device_path} on {node_name}: {e}"
+        )
+
+
+def _ensure_disk_by_id_symlink(node_name, device_path):
+    """
+    Ensure /dev/disk/by-id/ symlink exists for the device.
+
+    The drbd-setup script resolves device paths to /dev/disk/by-id/ for stable
+    DRBD configuration. Virtual disks (virtio) often lack by-id entries.
+    Creates a virtio-based symlink if none exists.
+
+    Args:
+        node_name (str): Node name
+        device_path (str): Device path (e.g. /dev/vda)
+    """
+    import os
+
+    dev_name = os.path.basename(device_path)
+
+    try:
+        result = exec_cmd(
+            f"oc debug -q node/{node_name} -- chroot /host "
+            f"bash -c 'for id in /dev/disk/by-id/*; do "
+            f'[ -e "$id" ] && [ "$(readlink -f "$id")" = '
+            f'"$(readlink -f {device_path})" ] && echo "$id"; '
+            f"done'",
+            shell=True,
+            timeout=60,
+            ignore_error=True,
+        )
+        existing = result.stdout.decode().strip()
+        if existing:
+            logger.info(
+                f"Device {device_path} on {node_name} has by-id: "
+                f"{existing.split(chr(10))[0]}"
+            )
+            return
+
+        symlink_name = f"/dev/disk/by-id/virtio-{dev_name}"
+        logger.info(
+            f"Creating /dev/disk/by-id symlink for {device_path} "
+            f"on {node_name}: {symlink_name}"
+        )
+        exec_cmd(
+            f"oc debug -q node/{node_name} -- chroot /host "
+            f"bash -c 'mkdir -p /dev/disk/by-id && "
+            f"ln -sf {device_path} {symlink_name}'",
+            shell=True,
+            timeout=60,
+        )
+    except CommandFailed as e:
+        logger.warning(
+            f"Could not ensure by-id symlink for {device_path} " f"on {node_name}: {e}"
+        )
+
+
+def resolve_disk_by_id_path(node_name, device_path):
+    """
+    Resolve a device path to its /dev/disk/by-id/ path on a node.
+
+    Ensures a by-id symlink exists (creating one for virtual disks if needed),
+    then returns the by-id path. Used for PV creation per ODF 4.22 docs which
+    require stable by-id paths.
+
+    Args:
+        node_name (str): Node name
+        device_path (str): Device path (e.g. /dev/vdb)
+
+    Returns:
+        str: The /dev/disk/by-id/ path, or the original path if resolution fails
+    """
+    _fix_rotational_flag_if_virtual(node_name, device_path)
+    _ensure_disk_by_id_symlink(node_name, device_path)
+
+    try:
+        result = exec_cmd(
+            f"oc debug -q node/{node_name} -- chroot /host "
+            f"bash -c 'for id in /dev/disk/by-id/*; do "
+            f'[ -e "$id" ] && [ "$(readlink -f "$id")" = '
+            f'"$(readlink -f {device_path})" ] && echo "$id"; '
+            f"done'",
+            shell=True,
+            timeout=60,
+            ignore_error=True,
+        )
+        by_id = result.stdout.decode().strip()
+        if by_id:
+            by_id_path = by_id.split("\n")[0]
+            logger.info(f"Resolved {device_path} on {node_name} -> {by_id_path}")
+            return by_id_path
+    except CommandFailed as e:
+        logger.warning(
+            f"Could not resolve by-id path for {device_path} on {node_name}: {e}"
+        )
+
+    logger.warning(
+        f"No by-id path found for {device_path} on {node_name}, "
+        f"using raw device path"
+    )
+    return device_path
+
+
+def _fetch_drbd_setup_script():
+    """
+    Fetch the drbd-setup script from the ODF operator ConfigMap.
+
+    The ODF 4.22 operator creates a ConfigMap 'rook-ceph-drbd-setup-script'
+    in openshift-storage namespace with the script in .data.script (base64).
+
+    Returns:
+        str: The decoded script content
+
+    Raises:
+        CommandFailed: If ConfigMap not found after timeout
+    """
+    logger.info(
+        f"Waiting for ConfigMap '{constants.TNF_DRBD_SETUP_SCRIPT_CM}' "
+        f"in {constants.OPENSHIFT_STORAGE_NAMESPACE}..."
+    )
+
+    for sample in TimeoutSampler(
+        timeout=600,
+        sleep=15,
+        func=_try_get_drbd_script,
+    ):
+        if sample:
+            logger.info("DRBD setup script fetched from ODF operator ConfigMap")
+            return sample
+
+
+def _try_get_drbd_script():
+    """Try to fetch and decode the drbd-setup script from ConfigMap."""
+    try:
+        result = exec_cmd(
+            f"oc get configmap {constants.TNF_DRBD_SETUP_SCRIPT_CM} "
+            f"-n {constants.OPENSHIFT_STORAGE_NAMESPACE} "
+            f"-o jsonpath='{{.data.script}}'",
+            shell=True,
+        )
+        script_b64 = result.stdout.decode().strip().strip("'")
+        if script_b64:
+            return base64.b64decode(script_b64).decode()
+    except CommandFailed:
+        logger.debug(
+            f"ConfigMap '{constants.TNF_DRBD_SETUP_SCRIPT_CM}' not yet available"
+        )
+    return None
+
+
+def _run_drbd_cmd(node_name, drbd_image, drbd_cmd, timeout=300):
+    """
+    Run a DRBD command on a node using the DRBD utils container.
+
+    Args:
+        node_name (str): Node name
+        drbd_image (str): DRBD utils container image
+        drbd_cmd (str): DRBD command to run (e.g. 'drbdadm status r0')
+        timeout (int): Timeout in seconds
+
+    Returns:
+        CompletedProcess: Command result
+    """
+    cmd = (
+        f"oc debug -q node/{node_name} -- chroot /host "
+        f"podman run --rm --privileged "
+        f"--authfile /var/lib/kubelet/config.json "
+        f"-v /dev:/dev "
+        f"-v {constants.TNF_DRBD_CONF_PATH}:{constants.TNF_DRBD_CONF_PATH} "
+        f"-v {constants.TNF_DRBD_DIR_PATH}:{constants.TNF_DRBD_DIR_PATH} "
+        f"--net host --hostname {node_name} "
+        f"{drbd_image} {drbd_cmd}"
+    )
+    return exec_cmd(cmd, shell=True, timeout=timeout)
+
+
 def verify_drbd_configuration():
     """
-    Verify DRBD configuration is correct.
+    Verify DRBD configuration is correct by checking the drbd-configure ConfigMap.
+
+    The ConfigMap is created by the drbd-setup script and contains node IPs,
+    disk paths, DRBD device/resource names, and the DRBD utils image reference.
 
     Returns:
         bool: True if DRBD is configured correctly
-
-    Raises:
-        CommandFailed: If DRBD ConfigMap not found
     """
     logger.info("Verifying DRBD configuration...")
     try:
@@ -266,10 +532,13 @@ def verify_drbd_configuration():
             "DRBD_DEVICE_NAME",
             "DRBD_RESOURCE_NAME",
             "DRBD_PORT",
+            "DRBD_UTILS_IMAGE",
             "NODE_0_NAME",
             "NODE_0_IP",
             "NODE_1_NAME",
             "NODE_1_IP",
+            "BLOCK_DEVICE_PATH_NODE_0",
+            "BLOCK_DEVICE_PATH_NODE_1",
         ]
 
         for key in required_keys:
@@ -289,28 +558,38 @@ def verify_drbd_status(node_name):
     """
     Verify DRBD status on a specific node.
 
+    Uses the DRBD utils image from the drbd-configure ConfigMap (pinned SHA)
+    if available, otherwise falls back to the default image.
+
     Args:
         node_name (str): Name of the node to check
 
     Returns:
         bool: True if DRBD is running correctly on the node
-
-    Raises:
-        CommandFailed: If unable to check DRBD status
     """
     logger.info(f"Checking DRBD status on node {node_name}...")
-    try:
-        cmd = (
-            f"oc debug -q node/{node_name} -- chroot /host podman run --rm --privileged "
-            f"-v /dev:/dev -v {constants.TNF_DRBD_CONF_PATH}:{constants.TNF_DRBD_CONF_PATH} "
-            f"-v {constants.TNF_DRBD_DIR_PATH}:{constants.TNF_DRBD_DIR_PATH} "
-            f"--hostname {node_name} --net host {constants.TNF_DRBD_UTILS_IMAGE} "
-            f"drbdadm -c {constants.TNF_DRBD_CONF_PATH} status {constants.TNF_DRBD_RESOURCE_NAME}"
-        )
 
-        drbd_result = exec_cmd(cmd, shell=True)
-        logger.info(f"DRBD status on {node_name}: {drbd_result.stdout.decode()}")
-        return True
+    drbd_image = constants.TNF_DRBD_UTILS_IMAGE
+    try:
+        ocp_cm = OCP(
+            kind=constants.CONFIGMAP,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        drbd_cm = ocp_cm.get(resource_name=constants.TNF_DRBD_CONFIGURE_CM)
+        drbd_image = drbd_cm.get("data", {}).get("DRBD_UTILS_IMAGE", drbd_image)
+    except CommandFailed:
+        pass
+
+    try:
+        result = _run_drbd_cmd(
+            node_name,
+            drbd_image,
+            f"drbdadm -c {constants.TNF_DRBD_CONF_PATH} "
+            f"status {constants.TNF_DRBD_RESOURCE_NAME}",
+        )
+        status = result.stdout.decode()
+        logger.info(f"DRBD status on {node_name}: {status.strip()}")
+        return "UpToDate" in status
 
     except CommandFailed as e:
         logger.error(f"Failed to check DRBD status on {node_name}: {e}")
@@ -394,3 +673,100 @@ def get_block_devices_on_node(node_name):
     except Exception as e:
         logger.error(f"Failed to list block devices on {node_name}: {e}")
         raise
+
+
+def _parse_size_gb(size_str):
+    """
+    Parse lsblk size string to GB.
+
+    Args:
+        size_str (str): Size string (e.g., "500G", "1T", "20G")
+
+    Returns:
+        float: Size in GB
+    """
+    if not size_str:
+        return 0.0
+    size_str = size_str.strip().upper()
+    multipliers = {"K": 1 / (1024 * 1024), "M": 1 / 1024, "G": 1, "T": 1024}
+    for unit, multiplier in multipliers.items():
+        if unit in size_str:
+            try:
+                return float(size_str.replace(unit, "").strip()) * multiplier
+            except ValueError:
+                return 0.0
+    return 0.0
+
+
+def discover_available_disks(node_info):
+    """
+    Discover available (unused) disks on TNF nodes for monitor and OSD use.
+
+    Filters out:
+    - OS disks (have partitions)
+    - Loop devices, CD-ROM (sr*), and other non-disk types
+    - Disks with existing filesystems
+
+    Args:
+        node_info (list): List of node info dicts [{'name': str, 'ip': str}, ...]
+
+    Returns:
+        dict: Per-node disk info {'node-name': {'all': [device_dicts]}}
+    """
+    logger.info("Discovering available disks on TNF nodes...")
+    result = {}
+
+    for node in node_info:
+        node_name = node["name"]
+
+        # lsblk WITHOUT -d to include partitions for parent disk detection
+        cmd = (
+            f"oc debug -q node/{node_name} -- chroot /host "
+            f"lsblk -no NAME,PATH,SIZE,ROTA,TYPE,FSTYPE"
+        )
+        lsblk_result = exec_cmd(cmd, shell=True)
+        lines = lsblk_result.stdout.decode().strip().split("\n")
+
+        all_entries = []
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 5:
+                name = parts[0].lstrip("│├└─ ").lstrip("|-`- ")
+                all_entries.append(
+                    {
+                        "name": name,
+                        "path": parts[1],
+                        "size": parts[2],
+                        "rota": parts[3],
+                        "type": parts[4],
+                        "fstype": parts[5] if len(parts) > 5 else "",
+                    }
+                )
+
+        # Find parent disks that have partitions (OS/boot disks)
+        partitioned_disks = set()
+        for entry in all_entries:
+            if entry["type"] == "part":
+                parent = entry["name"].rstrip("0123456789")
+                partitioned_disks.add(parent)
+
+        # Filter to only whole, unpartitioned disks without filesystems
+        unused_disks = []
+        for entry in all_entries:
+            if entry["type"] != "disk":
+                continue
+            if entry["name"] in partitioned_disks:
+                continue
+            if entry["fstype"]:
+                continue
+            unused_disks.append(entry)
+
+        result[node_name] = {"all": unused_disks}
+
+        logger.info(f"Node {node_name}: {len(unused_disks)} unused disk(s)")
+        for d in unused_disks:
+            logger.info(
+                f"  {d['path']}: {d['size']} " f"(ROTA={d['rota']}, TYPE={d['type']})"
+            )
+
+    return result

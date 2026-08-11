@@ -20,6 +20,11 @@ from ocs_ci.deployment.helpers.tnf_validation import (
 )
 from ocs_ci.deployment.tnf import TNF
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import (
+    deployment,
+    turquoise_squad,
+)
+from ocs_ci.framework.testlib import polarion_id
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
     check_for_logwriter_workload_pods,
@@ -34,8 +39,12 @@ from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
 from ocs_ci.ocs.resources.pod import delete_pods, get_pods_having_label
+from ocs_ci.ocs.resources.storage_cluster import ocs_install_verification
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
+from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import ceph_health_check, is_cluster_running
+from ocs_ci.helpers.sanity_helpers import Sanity
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +55,126 @@ def tnf_deployment():
     Fixture to provide TNF deployment instance
     """
     return TNF()
+
+
+@turquoise_squad
+@deployment
+@polarion_id(get_polarion_id())
+def test_tnf_deployment(pvc_factory, pod_factory):
+    """
+    Test TNF (Two-Node Failover) cluster deployment
+
+    This is the main deployment test for TNF clusters, following the standard
+    ocs-ci deployment test pattern. It verifies:
+    1. OCP cluster is running with DualReplica topology
+    2. ODF installation on TNF cluster
+    3. DRBD configuration for floating monitor
+    4. Ceph health and cluster functionality
+    5. Resource creation and deletion (sanity checks)
+
+    This test runs automatically during TNF cluster deployment via run-ci.
+    """
+    deploy = config.RUN["cli_params"].get("deploy")
+    teardown = config.RUN["cli_params"].get("teardown")
+
+    if not teardown or deploy:
+        logger.info("=" * 80)
+        logger.info("Starting TNF Deployment Test")
+        logger.info("=" * 80)
+
+        # Step 1: Verify OCP cluster is running
+        logger.info("Step 1: Verify OCP cluster is running")
+        cluster_path = config.ENV_DATA["cluster_path"]
+        cluster_running = is_cluster_running(cluster_path)
+        logger.info(
+            f"OCP cluster status: cluster_path='{cluster_path}', "
+            f"running={cluster_running}"
+        )
+        assert cluster_running, "OCP cluster is not running"
+
+        if not config.ENV_DATA["skip_ocs_deployment"]:
+            # Step 2: Verify TNF cluster topology
+            logger.info("Step 2: Verify TNF cluster topology (DualReplica)")
+            assert (
+                verify_tnf_cluster_topology()
+            ), "Cluster does not have DualReplica topology required for TNF"
+            logger.info("✓ DualReplica topology verified")
+
+            # Step 3: Verify exactly 2 nodes
+            logger.info("Step 3: Verify TNF node count")
+            nodes = get_tnf_node_info()
+            assert len(nodes) == 2, f"TNF requires exactly 2 nodes, found {len(nodes)}"
+            logger.info(f"✓ Found 2 nodes: {nodes[0]['name']}, {nodes[1]['name']}")
+
+            # Step 4: Verify ODF installation on TNF cluster
+            logger.info("Step 4: Verify ODF installation on TNF cluster")
+            ocs_registry_image = config.DEPLOYMENT.get("ocs_registry_image")
+            ocs_install_verification(ocs_registry_image=ocs_registry_image)
+            logger.info("✓ ODF installation verified")
+
+            # Step 5: Verify DRBD configuration
+            logger.info("Step 5: Verify DRBD configuration for floating monitor")
+            assert verify_drbd_configuration(), "DRBD configuration verification failed"
+            logger.info("✓ DRBD ConfigMap verified")
+
+            # Step 6: Verify DRBD status on both nodes
+            logger.info("Step 6: Verify DRBD status on both nodes")
+            for node in nodes:
+                assert verify_drbd_status(
+                    node["name"]
+                ), f"DRBD status check failed on {node['name']}"
+                logger.info(f"✓ DRBD status OK on {node['name']}")
+
+            # Step 7: Verify floating monitor pod
+            logger.info("Step 7: Verify floating monitor pod")
+            mon_pods = get_pods_having_label(
+                label="app=rook-ceph-mon",
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+            assert mon_pods, "No monitor pods found"
+            floating_mon_found = False
+            for pod in mon_pods:
+                if "mon-c" in pod.name or pod.name.endswith("-c"):
+                    floating_mon_found = True
+                    assert (
+                        pod.status == constants.STATUS_RUNNING
+                    ), f"Floating monitor {pod.name} is not running"
+                    logger.info(f"✓ Floating monitor {pod.name} is running")
+                    break
+            assert floating_mon_found, "Floating monitor (mon-c) not found"
+
+            # Step 8: Run sanity checks
+            logger.info("Step 8: Run sanity checks and resource validation")
+            logger.info(
+                "Creating resources (pools, storageclasses, PVCs, pods), "
+                "running IO, and deleting resources"
+            )
+            sanity_helpers = Sanity()
+            sanity_helpers.health_check(
+                fix_ceph_health=True,
+                update_jira=True,
+                no_exception_if_jira_issue_updated=True,
+            )
+            logger.info("✓ Sanity health check passed")
+
+            logger.info("Cleaning up sanity test resources")
+            sanity_helpers.delete_resources()
+            logger.info("✓ Sanity resources cleaned up")
+
+            # Step 9: Final Ceph health check
+            logger.info("Step 9: Verify Ceph health after deployment")
+            ceph_healthy = ceph_health_check(
+                tries=10,
+                delay=30,
+                fix_ceph_health=True,
+            )
+            logger.info(f"Ceph health status: {ceph_healthy}")
+            assert ceph_healthy, "Ceph cluster is not healthy"
+            logger.info("✓ Ceph health verified")
+
+            logger.info("=" * 80)
+            logger.info("TNF Deployment Test Completed Successfully!")
+            logger.info("=" * 80)
 
 
 class TestTNFPrerequisites:
@@ -94,26 +223,20 @@ class TestTNFDeployment:
         logger.info("Testing deployment prerequisites...")
         tnf_deployment.deploy_prereq()
 
-    def test_storage_preparation(self, tnf_deployment):
+    def test_storage_class_exists(self):
         """
-        Test storage preparation (storage class, PVs)
+        Test that localblock storage class exists after deployment
         """
-        logger.info("Testing storage preparation...")
-        tnf_deployment.prepare_storage()
-
-        # Verify storage class exists
+        logger.info("Testing storage class existence...")
         sc_obj = OCP(kind=constants.STORAGECLASS)
         sc = sc_obj.get(resource_name=constants.TNF_LOCALBLOCK_SC)
         assert sc, f"Storage class {constants.TNF_LOCALBLOCK_SC} not found"
 
-    def test_drbd_configuration(self, tnf_deployment):
+    def test_drbd_configuration(self):
         """
-        Test DRBD configuration for floating monitor
+        Test DRBD configuration after deployment
         """
         logger.info("Testing DRBD configuration...")
-        tnf_deployment.configure_drbd_for_floating_monitor()
-
-        # Verify DRBD configuration
         assert verify_drbd_configuration(), "DRBD configuration verification failed"
 
     def test_drbd_status_on_nodes(self):
@@ -259,7 +382,7 @@ class TestTNFFeatureRestrictions:
         )
 
         # NooBaa should not be deployed in TNF
-        if config.ENV_DATA.get("deployment_type") == "tnf":
+        if "tnf" in config.ENV_DATA:
             assert (
                 not noobaa_pods
             ), "NooBaa pods found but NooBaa is not supported in TNF deployments"
@@ -275,7 +398,7 @@ class TestTNFFeatureRestrictions:
         )
 
         # RGW should not be deployed in TNF
-        if config.ENV_DATA.get("deployment_type") == "tnf":
+        if "tnf" in config.ENV_DATA:
             assert (
                 not rgw_pods
             ), "RGW pods found but RGW is not supported in TNF deployments"

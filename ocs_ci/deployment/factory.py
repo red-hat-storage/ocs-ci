@@ -126,6 +126,12 @@ class DeploymentFactory(object):
         if config.ENV_DATA.get("acm_ocp_deployment"):
             logger.info("Deployment will be done through ACM platform")
             return self.cls_map[constants.ACM_OCP_DEPLOYMENT]()
+        if (
+            self.deployment_platform in constants.BAREMETAL_PLATFORMS
+            and "tnf" in config.ENV_DATA
+        ):
+            logger.info("TNF two-node cluster detected, using TNF deployment")
+            return self.cls_map["baremetal_tnf"]()
         deployment_type = config.ENV_DATA["deployment_type"]
         flexy_deployment = config.ENV_DATA["flexy_deployment"]
         deployment_cls_key = (
