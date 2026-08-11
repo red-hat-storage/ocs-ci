@@ -1246,7 +1246,7 @@ class HostedClients(HyperShiftBase):
 
         # stage 3.5: Setup data replication separation network configuration
         # This must be done before ODF deployment to avoid node reboots after ODF is deployed
-        if config.DEPLOYMENT.get("enable_data_replication_separation"):
+        if config.DEPLOYMENT.get("enable_data_replication_separation_public"):
             log_step(
                 "Setup data replication separation (MachineConfig and NetworkAttachmentDefinition)"
             )

@@ -277,6 +277,8 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
     )
     str_network = f"{ip_network.network_address}/{ip_network.prefixlen}"
 
+    if "spec" not in cluster_data or not isinstance(cluster_data["spec"], dict):
+        raise ValueError("cluster_data missing or invalid 'spec' field")
     if "network" not in cluster_data["spec"]:
         cluster_data["spec"]["network"] = {}
     if "addressRanges" not in cluster_data["spec"]["network"]:
