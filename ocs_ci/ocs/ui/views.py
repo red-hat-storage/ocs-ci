@@ -1877,6 +1877,16 @@ acm_configuration_4_22 = {
         "//*[@data-test-id='perspective-switcher-toggle']//h2[normalize-space()='Core platform']",
         By.XPATH,
     ),
+    "click-fleet-management": (
+        "//button[@data-test-id='perspective-switcher-toggle']"
+        "//*[normalize-space()='Core platform']",
+        By.XPATH,
+    ),
+    "fleet-management-item": (
+        "//li[@data-test-id='perspective-switcher-menu-option']"
+        "//button[@role='option' and .//h2[normalize-space()='Fleet management']]",
+        By.XPATH,
+    ),
     "click-local-cluster": (
         '//td[@data-label="Name"]//span[text()="local-cluster"]',
         By.XPATH,
