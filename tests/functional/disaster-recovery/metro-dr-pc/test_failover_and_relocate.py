@@ -60,7 +60,7 @@ class TestFailoverAndRelocate:
         def finalizer():
             if (
                 self.primary_cluster_name
-                and get_fence_state(self.primary_cluster_name) == "Fenced"
+                and get_fence_state(self.primary_cluster_name) == constants.ACTION_FENCE
             ):
                 enable_unfence(self.primary_cluster_name)
                 gracefully_reboot_ocp_nodes(
