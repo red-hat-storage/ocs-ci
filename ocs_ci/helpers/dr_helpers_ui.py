@@ -912,8 +912,8 @@ def verify_pending_cleanup_alert_firing(
         timeout=60,
     )
     acm_obj.page_has_loaded()
-    acm_obj.take_screenshot()
-    acm_obj.copy_dom()
+    acm_obj.take_screenshot(name_suffix="dr-overview-before-alert-check")
+    acm_obj.copy_dom(name_suffix="dr-overview-before-alert-check")
 
     if get_semantic_ocp_running_version() >= VERSION_4_22:
         # On OCP 4.22+ the MCO status-card is gone; alerts are in the OCP
@@ -945,15 +945,15 @@ def verify_pending_cleanup_alert_firing(
                 avoid_stale=True,
             )
             acm_obj.page_has_loaded()
-            acm_obj.take_screenshot()
-            acm_obj.copy_dom()
+            acm_obj.take_screenshot(name_suffix="notification-drawer-open")
+            acm_obj.copy_dom(name_suffix="notification-drawer-open")
             found = acm_obj.wait_until_expected_text_is_found(
                 locator=alert_locator,
                 expected_text=expected_text,
                 timeout=timeout,
                 use_fallback=False,
             )
-            acm_obj.take_screenshot()
+            acm_obj.take_screenshot(name_suffix="notification-drawer-alert-check")
             # Close the drawer regardless of outcome
             acm_obj.do_click(
                 acm_loc["notification-drawer-toggle"],
@@ -981,24 +981,18 @@ def verify_pending_cleanup_alert_firing(
         # Pre-4.22: alert is in the MCO status-card on the DR Overview page
         # Expand Critical alerts section (best-effort)
         try:
-            critical_alert = acm_obj.find_an_element_by_xpath(
-                acm_loc["critical-alert"][0]
-            ).get_attribute("aria-expanded")
-
+            critical_alert = acm_obj.get_element_attribute(
+                acm_loc["critical-alert"], "aria-expanded", safe=True
+            )
             if critical_alert == "false":
-                critical_alert_elem = wait_for_element_to_be_clickable(
-                    acm_loc["critical-alert"]
-                )
-                acm_obj.driver.execute_script(
-                    "arguments[0].click();", critical_alert_elem
-                )
-                acm_obj.take_screenshot()
+                acm_obj.do_click(acm_loc["critical-alert"], avoid_stale=True)
+                acm_obj.take_screenshot(name_suffix="critical-alert-expanded")
         except (NoSuchElementException, StaleElementReferenceException) as e:
             log.warning(
                 f"Could not expand Critical alerts section: {e}. "
                 "Proceeding to verify alert presence directly."
             )
-            acm_obj.take_screenshot()
+            acm_obj.take_screenshot(name_suffix="critical-alert-not-found")
 
         if drpc_name:
             alert_locator = (
@@ -1024,14 +1018,14 @@ def verify_pending_cleanup_alert_firing(
             f"found after {operation}"
             + (f" for DRPC '{drpc_name}'" if drpc_name else "")
         )
-        acm_obj.take_screenshot()
+        acm_obj.take_screenshot(name_suffix="alert-firing-found")
     else:
         log.error(
             f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
             f"NOT found after {operation}"
             + (f" for DRPC '{drpc_name}'" if drpc_name else "")
         )
-        acm_obj.take_screenshot()
+        acm_obj.take_screenshot(name_suffix="alert-firing-not-found")
         raise UnexpectedBehaviour(
             f"{constants.ALERT_APPLICATION_CLEANUP_PENDING} alert "
             f"did not appear after {operation}"
@@ -1073,32 +1067,26 @@ def verify_pending_cleanup_alert_resolved(
         enable_screenshot=True,
         timeout=60,
     )
-    acm_obj.take_screenshot()
+    acm_obj.take_screenshot(name_suffix="dr-overview-before-resolved-check")
 
     # Pre-4.22 only: expand the MCO status-card Critical alerts section.
     # On 4.22+ there is no such element; alerts are in the notification drawer.
     if get_semantic_ocp_running_version() < VERSION_4_22:
         try:
-            critical_alert = acm_obj.find_an_element_by_xpath(
-                acm_loc["critical-alert"][0]
-            ).get_attribute("aria-expanded")
-
+            critical_alert = acm_obj.get_element_attribute(
+                acm_loc["critical-alert"], "aria-expanded", safe=True
+            )
             if critical_alert == "false":
-                critical_alert_elem = wait_for_element_to_be_clickable(
-                    acm_loc["critical-alert"]
-                )
-                acm_obj.driver.execute_script(
-                    "arguments[0].click();", critical_alert_elem
-                )
-                acm_obj.take_screenshot()
+                acm_obj.do_click(acm_loc["critical-alert"], avoid_stale=True)
+                acm_obj.take_screenshot(name_suffix="critical-alert-expanded")
         except (NoSuchElementException, StaleElementReferenceException) as e:
             log.info(
                 f"Critical alerts section not found or not expandable: {e}. "
                 "This may indicate no critical alerts exist (expected)."
             )
-            acm_obj.take_screenshot()
+            acm_obj.take_screenshot(name_suffix="critical-alert-not-found")
         except Exception as e:
-            acm_obj.take_screenshot()
+            acm_obj.take_screenshot(name_suffix="critical-alert-error")
             raise UnexpectedBehaviour(
                 f"Unable to verify DR Dashboard critical-alert section after {operation} cleanup."
             ) from e
@@ -1131,15 +1119,15 @@ def verify_pending_cleanup_alert_resolved(
                 avoid_stale=True,
             )
             acm_obj.page_has_loaded()
-            acm_obj.take_screenshot()
-            acm_obj.copy_dom()
+            acm_obj.take_screenshot(name_suffix="notification-drawer-open-resolved")
+            acm_obj.copy_dom(name_suffix="notification-drawer-open-resolved")
             still_present = acm_obj.wait_until_expected_text_is_found(
                 locator=alert_locator,
                 expected_text=expected_text,
                 timeout=timeout,
                 use_fallback=False,
             )
-            acm_obj.take_screenshot()
+            acm_obj.take_screenshot(name_suffix="notification-drawer-resolved-check")
             acm_obj.do_click(
                 acm_loc["notification-drawer-toggle"],
                 avoid_stale=True,
@@ -1187,7 +1175,7 @@ def verify_pending_cleanup_alert_resolved(
             f"still present on DR Dashboard after {operation} cleanup"
             + (f" for DRPC '{drpc_name}'" if drpc_name else "")
         )
-        acm_obj.take_screenshot()
+        acm_obj.take_screenshot(name_suffix="alert-still-present")
         raise UnexpectedBehaviour(
             f"{constants.ALERT_APPLICATION_CLEANUP_PENDING} alert "
             f"did not clear after {operation} cleanup"
@@ -1199,7 +1187,7 @@ def verify_pending_cleanup_alert_resolved(
             f"successfully cleared from DR Dashboard after {operation}"
             + (f" for DRPC '{drpc_name}'" if drpc_name else "")
         )
-        acm_obj.take_screenshot()
+        acm_obj.take_screenshot(name_suffix="alert-cleared")
 
 
 def failover_relocate_ui(
