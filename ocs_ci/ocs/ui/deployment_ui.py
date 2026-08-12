@@ -23,7 +23,7 @@ from ocs_ci.ocs.node import (
     label_nodes,
 )
 from ocs_ci.utility.operators import LocalStorageOperator
-from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import WebDriverException, TimeoutException
 from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
@@ -122,7 +122,41 @@ class DeploymentUI(PageNavigator):
         if self.operator_name is OCS_OPERATOR:
             self.do_click(self.dep_loc["choose_ocs_version"], enable_screenshot=True)
         elif self.operator_name is ODF_OPERATOR:
-            self.do_click(self.dep_loc["click_odf_operator"], enable_screenshot=True)
+            try:
+                self.do_click(
+                    self.dep_loc["click_odf_operator"], enable_screenshot=True
+                )
+            except (TimeoutException, WebDriverException) as ex:
+                logger.warning(
+                    "ODF operator not found in catalog (%s). "
+                    "Applying dev catalog source and retrying.",
+                    type(ex).__name__,
+                )
+                from ocs_ci.deployment.deployment import create_catalog_source
+
+                create_catalog_source()
+                if isinstance(ex, WebDriverException):
+                    raise
+                self.navigate_operatorhub_page()
+                if self.driver.find_elements(
+                    *self.dep_loc["filter_operator_namespace"][::-1]
+                ):
+                    self.do_send_keys(
+                        self.dep_loc["filter_operator_namespace"],
+                        text="openshift-operators",
+                    )
+                    self.do_click(
+                        self.dep_loc["openshift_operators_namespace"],
+                        enable_screenshot=True,
+                    )
+                self.do_send_keys(
+                    self.dep_loc["search_operators"],
+                    text=self.operator_name,
+                    timeout=60,
+                )
+                self.do_click(
+                    self.dep_loc["click_odf_operator"], enable_screenshot=True
+                )
         logger.info(f"Click Install {self.operator_name}")
         self.do_click(
             self.dep_loc["click_install_ocs"], enable_screenshot=True, timeout=60
