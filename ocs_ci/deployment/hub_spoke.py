@@ -83,7 +83,6 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     wait_for_machineconfigpool_status,
     get_server_version,
-    get_client_type_by_name,
 )
 from ocs_ci.utility.aws import AWS, get_unused_vpc_cidr, get_cluster_region
 from botocore.exceptions import ClientError
@@ -666,10 +665,12 @@ def destroy_aws_hcp_clusters(cluster_names_list=None):
     """
     if not cluster_names_list:
         cluster_names_list = get_hosted_cluster_names()
+    clusters_config = config.ENV_DATA.get("clusters", {})
     aws_hcp_names = [
         name
         for name in cluster_names_list
-        if get_client_type_by_name(name) == constants.AWS_PLATFORM
+        if clusters_config.get(name, {}).get("hosted_cluster_platform")
+        == constants.AWS_PLATFORM
     ]
 
     if not aws_hcp_names:
@@ -801,20 +802,26 @@ def deploy_hosted_ocp_clusters(cluster_names_list=None):
             deploy_hypershift_oidc = False
             create_deployer_iam_role = False
 
-        hosted_ocp_cluster.deploy_dependencies(
-            deploy_acm_hub=deploy_acm_hub,
-            deploy_cnv=deploy_cnv,
-            deploy_metallb=first_ocp_deployment,
-            download_hcp_binary=first_ocp_deployment,
-            deploy_hyperconverged=deploy_hyperconverged,
-            deploy_mce=deploy_mce,
-            deploy_hypershift_oidc=deploy_hypershift_oidc,
-            create_deployer_iam_role=create_deployer_iam_role,
-        )
+        try:
+            hosted_ocp_cluster.deploy_dependencies(
+                deploy_acm_hub=deploy_acm_hub,
+                deploy_cnv=deploy_cnv,
+                deploy_metallb=first_ocp_deployment,
+                download_hcp_binary=first_ocp_deployment,
+                deploy_hyperconverged=deploy_hyperconverged,
+                deploy_mce=deploy_mce,
+                deploy_hypershift_oidc=deploy_hypershift_oidc,
+                create_deployer_iam_role=create_deployer_iam_role,
+            )
 
-        cluster_name = hosted_ocp_cluster.deploy_ocp()
-        if cluster_name:
-            cluster_names.append(cluster_name)
+            cluster_name = hosted_ocp_cluster.deploy_ocp()
+            if cluster_name:
+                cluster_names.append(cluster_name)
+        except (RuntimeError, CommandFailed, ClientError) as e:
+            logger.error(
+                f"Failed to deploy hosted OCP cluster '{cluster_name}': {e}. "
+                "Skipping and continuing with remaining clusters."
+            )
 
     cluster_names_existing = get_hosted_cluster_names()
     cluster_names_desired_left = [
@@ -2021,10 +2028,16 @@ class HypershiftHostedOCP(
         Returns:
             str: Name of the hosted cluster
         """
-        ocp_version = str(config.ENV_DATA["clusters"][self.name].get("ocp_version"))
-        if ocp_version and len(ocp_version.split(".")) == 2:
-            # if ocp_version is provided in form x.y, we need to get the full form x.y.z
-            ocp_version = get_ocp_ga_version(ocp_version)
+        hcp_image = config.ENV_DATA["clusters"].get(self.name).get("hcp_image")
+        ocp_version = None
+
+        # Find image using OCP version if an image is not provided
+        if not hcp_image:
+            ocp_version = str(config.ENV_DATA["clusters"][self.name].get("ocp_version"))
+            if ocp_version and len(ocp_version.split(".")) == 2:
+                # if ocp_version is provided in form x.y, we need to get the full form x.y.z
+                ocp_version = get_ocp_ga_version(ocp_version)
+
         # use default value 6 for cpu_cores_per_hosted_cluster as used in create_kubevirt_ocp_cluster()
         cpu_cores_per_hosted_cluster = (
             config.ENV_DATA["clusters"]
@@ -2787,8 +2800,9 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 else:
                     logger.warning(
                         f"Infrastructure exists but output file not found: {self.output_infra_file}. "
-                        "Infrastructure may have been created outside this tool."
+                        "Reconstructing output file from existing AWS resources."
                     )
+                    self._reconstruct_infra_output(existing_vpcs)
                     return self.output_infra_file
         except ClientError as e:
             logger.error(
@@ -2863,6 +2877,90 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             logger.warning(f"Could not read/parse infra output file: {e}")
 
         return self.output_infra_file
+
+    def _reconstruct_infra_output(self, existing_vpcs):
+        """
+        Reconstruct the infrastructure output JSON file from existing AWS resources.
+
+        Queries Route53 for public/private/local hosted zones by cluster name and
+        base domain, and reads the VPC CIDR from the existing VPC. Writes the
+        reconstructed data to self.output_infra_file and populates instance attributes.
+
+        If Route53 zones are missing the infrastructure is considered incomplete
+        (partial creation from a prior failed run) and a RuntimeError is raised
+        with instructions to clean up before retrying.
+
+        Args:
+            existing_vpcs (list): List of VPC dicts returned by describe_vpcs.
+
+        Raises:
+            RuntimeError: If Route53 zones are missing (partial infra state).
+        """
+        zone_name = f"{self.name}.{self.base_domain}."
+        logger.info(f"Querying Route53 for hosted zones with name '{zone_name}'")
+
+        r53 = self.route53_client
+        paginator = r53.get_paginator("list_hosted_zones")
+        public_zone_id = None
+        private_zone_id = None
+        local_zone_id = None
+
+        for page in paginator.paginate():
+            for zone in page["HostedZones"]:
+                if zone["Name"] != zone_name:
+                    continue
+                zone_id = zone["Id"].split("/")[-1]
+                if zone["Config"]["PrivateZone"]:
+                    tags_resp = r53.list_tags_for_resource(
+                        ResourceType="hostedzone", ResourceId=zone_id
+                    )
+                    tags = {
+                        t["Key"]: t["Value"]
+                        for t in tags_resp["ResourceTagSet"]["Tags"]
+                    }
+                    if tags.get("Name", "").endswith("-local"):
+                        local_zone_id = zone_id
+                    else:
+                        private_zone_id = zone_id
+                else:
+                    public_zone_id = zone_id
+
+        if not public_zone_id or not private_zone_id:
+            vpc_id = (
+                existing_vpcs[0].get("VpcId", "unknown") if existing_vpcs else "unknown"
+            )
+            raise RuntimeError(
+                f"Partial infrastructure detected for cluster '{self.name}': "
+                f"VPC '{vpc_id}' (tag: kubernetes.io/cluster/{self.infra_id}=owned) exists "
+                f"but Route53 hosted zones for '{zone_name}' are missing. "
+                f"This is a leftover from a previous failed run. "
+                f"Delete the VPC and its associated resources, then retry."
+            )
+
+        vpc_cidr = existing_vpcs[0].get("CidrBlock") if existing_vpcs else None
+
+        logger.info(
+            f"Reconstructed infra data: infraID={self.infra_id}, "
+            f"publicZoneID={public_zone_id}, privateZoneID={private_zone_id}, "
+            f"localZoneID={local_zone_id}, machineCIDR={vpc_cidr}"
+        )
+
+        infra_data = {
+            "infraID": self.infra_id,
+            "publicZoneID": public_zone_id,
+            "privateZoneID": private_zone_id,
+            "localZoneID": local_zone_id,
+            "machineCIDR": vpc_cidr,
+        }
+
+        os.makedirs(os.path.dirname(self.output_infra_file), exist_ok=True)
+        with open(self.output_infra_file, "w") as f:
+            json.dump(infra_data, f, indent=2)
+        logger.info(
+            f"Reconstructed infrastructure output written to {self.output_infra_file}"
+        )
+
+        self.read_infra_output()
 
     def get_vpc_from_existing_infra(self, infra_id=None):
         """
@@ -3719,7 +3817,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         Args:
             bucket_name (str, optional): Name of the S3 bucket to create.
-                If not provided, defaults to "{cluster_name}-oidc-{region}".
+                If not provided, defaults to "{cluster_name}-oidc-bucket".
                 To reuse an existing shared bucket across clusters, pass the bucket name.
 
         Returns:
@@ -3734,7 +3832,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 bucket_name = configured_bucket_name
                 logger.info(f"Using configured OIDC bucket name: {bucket_name}")
             else:
-                bucket_name = f"{self.name}-oidc-{self.aws_region}"
+                bucket_name = f"{self.name}-oidc-bucket"
                 logger.info(f"Using default OIDC bucket naming: {bucket_name}")
 
         # Get namespace for the secret from config or use default
@@ -3821,7 +3919,21 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         try:
             existing_buckets = self.list_buckets()
             if any(bucket["Name"] == bucket_name for bucket in existing_buckets):
-                logger.info(f"Bucket '{bucket_name}' already exists, reusing it")
+                # Verify actual bucket region — it may differ from the
+                # requested region if a previous deployment in another
+                # region created it (S3 bucket names are globally unique).
+                location_resp = self.s3_client.get_bucket_location(Bucket=bucket_name)
+                actual_region = location_resp.get("LocationConstraint") or "us-east-1"
+                if actual_region != region:
+                    logger.warning(
+                        f"Bucket '{bucket_name}' exists in '{actual_region}', "
+                        f"not in requested '{region}'. Using actual region."
+                    )
+                    region = actual_region
+                logger.info(
+                    f"Bucket '{bucket_name}' already exists in region "
+                    f"'{region}', reusing it"
+                )
                 bucket_location = f"http://{bucket_name}.s3.amazonaws.com/"
                 bucket_arn = f"arn:aws:s3:::{bucket_name}"
             else:
@@ -5959,6 +6071,40 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         logger.info(f"Instance {instance_id} has security group {sg_id}")
         return sg_id
 
+    def _get_worker_node_sg(self, vpc_id):
+        """
+        Find the worker node security group in a VPC by name pattern.
+
+        OCP IPI clusters create security groups with a ``*-node`` suffix for
+        worker nodes and ``*-controlplane`` for masters. This method finds the
+        worker node SG so that Ceph port rules are applied to the correct group.
+
+        Args:
+            vpc_id (str): VPC ID to search in.
+
+        Returns:
+            str: Security group ID for worker nodes.
+
+        Raises:
+            ValueError: If no matching security group is found.
+        """
+        sgs = self.ec2_client.describe_security_groups(
+            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+        ).get("SecurityGroups", [])
+
+        for sg in sgs:
+            if sg["GroupName"].endswith("-node"):
+                logger.info(
+                    f"Found worker node SG '{sg['GroupId']}' "
+                    f"({sg['GroupName']}) in VPC '{vpc_id}'"
+                )
+                return sg["GroupId"]
+
+        raise ValueError(
+            f"No worker node security group (*-node) found in VPC '{vpc_id}'. "
+            f"Available SGs: {[s['GroupName'] for s in sgs]}"
+        )
+
     def create_vpc_peering_connection(self, client_vpc_id, mgmt_vpc_id):
         """
         Create a VPC peering connection between two VPCs.
@@ -6406,6 +6552,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         client_cluster_name,
         mgmt_cluster_name,
         mgmt_instance_id,
+        client_instance_id=None,
         nodeport=None,
     ):
         """
@@ -6421,6 +6568,9 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             client_cluster_name (str): Name of the client cluster
             mgmt_cluster_name (str): Name of the management cluster
             mgmt_instance_id (str): EC2 instance ID in management cluster (used for SG and routing)
+            client_instance_id (str): Optional EC2 instance ID in client cluster.
+                Used to find the correct (private) subnet route table for routing.
+                If not provided, falls back to the main VPC route table.
             nodeport (int): Optional NodePort to add to security group rules
 
         Returns:
@@ -6436,10 +6586,14 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             client_cluster_name=client_cluster_name,
             mgmt_cluster_name=mgmt_cluster_name,
             mgmt_instance_id=mgmt_instance_id,
+            client_instance_id=client_instance_id,
         )
 
-        # Get security group for management instance
-        mgmt_sg_id = self.get_security_group_id_by_instance_id(mgmt_instance_id)
+        # Get the worker node security group from the management VPC.
+        # Ceph port rules must be on the worker (*-node) SG, not the master
+        # (*-controlplane) SG, because NodePort services are reached via workers.
+        mgmt_vpc_id = peering_result["mgmt_vpc_id"]
+        mgmt_sg_id = self._get_worker_node_sg(mgmt_vpc_id)
 
         # Add Ceph ports to security group
         client_vpc_cidr = peering_result["client_vpc_cidr"]
@@ -6597,10 +6751,35 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         mgmt_instance_id = instances["Reservations"][0]["Instances"][0]["InstanceId"]
 
+        # Get a client worker node instance ID so the route is added to the
+        # correct (private) subnet route table, not the main/public one.
+        client_instance_id = None
+        if self.cluster_kubeconfig:
+            try:
+                ocp_nodes = OCP(kind="node", cluster_kubeconfig=self.cluster_kubeconfig)
+                nodes = ocp_nodes.get(selector="node-role.kubernetes.io/worker")
+                if nodes.get("items"):
+                    provider_id = (
+                        nodes["items"][0].get("spec", {}).get("providerID", "")
+                    )
+                    # providerID format: aws:///us-west-2a/i-0123456789abcdef0
+                    if "/" in provider_id:
+                        client_instance_id = provider_id.rsplit("/", 1)[-1]
+                        logger.info(
+                            f"Client worker instance ID for routing: "
+                            f"{client_instance_id}"
+                        )
+            except (CommandFailed, IndexError, KeyError) as e:
+                logger.warning(
+                    f"Could not get client instance ID, will use main route "
+                    f"table as fallback: {e}"
+                )
+
         network_result = self.setup_network_for_client_cluster(
             client_cluster_name=self.name,
             mgmt_cluster_name=mgmt_cluster_name,
             mgmt_instance_id=mgmt_instance_id,
+            client_instance_id=client_instance_id,
             nodeport=nodeport,
         )
 
