@@ -141,7 +141,7 @@ deploy-fdf = "ocs_ci.framework.fusion_data_foundation.main:main"
 fdf-mirror = "ocs_ci.framework.fdf_mirror.main:main"
 
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
