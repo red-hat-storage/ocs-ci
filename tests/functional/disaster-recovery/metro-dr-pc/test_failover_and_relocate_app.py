@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 @mdr
 @tier1
 @turquoise_squad
-class TestFailoverAndRelocate:
+class TestFailoverAndRelocateApplication:
     """
     Test Failover and Relocate actions for MDR using the same workloads
     (Subscription and ApplicationSet, with RBD or CephFS PVC interface)
@@ -96,7 +96,7 @@ class TestFailoverAndRelocate:
             ),
         ],
     )
-    def test_failover_and_relocate(
+    def test_failover_and_relocate_app(
         self,
         setup_acm_ui,
         primary_cluster_down,
