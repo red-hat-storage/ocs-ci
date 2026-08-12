@@ -920,18 +920,6 @@ def verify_pending_cleanup_alert_firing(
         # notification drawer (bell icon).  Open it to make the alert elements
         # visible in the DOM, then check with the drawer-anchored locator
         # (overridden in acm_configuration_4_22).
-        log.info(
-            "OCP >= 4.22: opening notification drawer to check for "
-            f"'{constants.ALERT_APPLICATION_CLEANUP_PENDING}' alert"
-        )
-        acm_obj.do_click(
-            acm_loc["notification-drawer-toggle"],
-            avoid_stale=True,
-            enable_screenshot=True,
-        )
-        acm_obj.take_screenshot()
-        acm_obj.copy_dom()
-
         if drpc_name:
             alert_locator = (
                 acm_loc["pending-cleanup-alert-drpc-message"][0].format(
@@ -946,17 +934,49 @@ def verify_pending_cleanup_alert_firing(
             alert_locator = acm_loc["notification-drawer-cleanup-alert-title"]
             expected_text = constants.ALERT_APPLICATION_CLEANUP_PENDING
 
-        alert_found = acm_obj.wait_until_expected_text_is_found(
-            locator=alert_locator,
-            expected_text=expected_text,
-            timeout=120,
-            use_fallback=False,
-        )
-        # Close the drawer regardless of outcome
-        acm_obj.do_click(
-            acm_loc["notification-drawer-toggle"],
-            avoid_stale=True,
-        )
+        def _check_drawer(timeout=30):
+            """Open the notification drawer, screenshot, check the alert, close."""
+            log.info(
+                "OCP >= 4.22: opening notification drawer to check for "
+                f"'{constants.ALERT_APPLICATION_CLEANUP_PENDING}' alert"
+            )
+            acm_obj.do_click(
+                acm_loc["notification-drawer-toggle"],
+                avoid_stale=True,
+            )
+            acm_obj.page_has_loaded()
+            acm_obj.take_screenshot()
+            acm_obj.copy_dom()
+            found = acm_obj.wait_until_expected_text_is_found(
+                locator=alert_locator,
+                expected_text=expected_text,
+                timeout=timeout,
+                use_fallback=False,
+            )
+            acm_obj.take_screenshot()
+            # Close the drawer regardless of outcome
+            acm_obj.do_click(
+                acm_loc["notification-drawer-toggle"],
+                avoid_stale=True,
+            )
+            return found
+
+        # Quick first check — if the alert is already present this costs ~5 s.
+        alert_found = _check_drawer(timeout=30)
+        if not alert_found:
+            log.warning(
+                "Alert not found on first attempt — refreshing page and retrying"
+            )
+            acm_obj.refresh_page()
+            acm_obj.navigate_data_services()
+            acm_obj.do_click(
+                acm_loc["disaster-recovery-overview"],
+                avoid_stale=True,
+                timeout=60,
+            )
+            acm_obj.page_has_loaded()
+            # Full budget on the retry
+            alert_found = _check_drawer(timeout=120)
     else:
         # Pre-4.22: alert is in the MCO status-card on the DR Overview page
         # Expand Critical alerts section (best-effort)
