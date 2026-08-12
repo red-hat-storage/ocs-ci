@@ -58,7 +58,7 @@ class TestSTSBucket:
                         "backingstore_dict": {"gcp-sts": [(1, None)]},
                     },
                 ],
-                marks=[tier1, gcp_platform_required, polarion_id("OCS-8120")],
+                marks=[tier1, gcp_platform_required, polarion_id("OCS-8216")],
             ),
             pytest.param(
                 *[

@@ -160,7 +160,7 @@ class TestStoreUserInterface(object):
     @tier2
     @sts_deployment_required
     @gcp_platform_required
-    @polarion_id("OCS-8121")
+    @polarion_id("OCS-8217")
     def test_gcp_sts_backingstore_ui_creation(
         self,
         setup_ui_class_factory,
