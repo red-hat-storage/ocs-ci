@@ -153,11 +153,14 @@ class PlatformNodesFactory:
         if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "ai":
                 platform += "_ai"
-        if (
-            config.ENV_DATA["platform"] == constants.IBM_HCI_PLATFORM
-            and not get_client_type_by_name(cluster_name)
-            == constants.HOSTED_CLUSTER_KUBEVIRT
-        ):
+        if config.ENV_DATA[
+            "platform"
+        ] == constants.IBM_HCI_PLATFORM and get_client_type_by_name(
+            cluster_name
+        ) not in [
+            constants.HOSTED_CLUSTER_KUBEVIRT,
+            constants.HOSTED_CLUSTER_AGENT,
+        ]:
             if config.ENV_DATA["deployment_type"] == "ipi":
                 platform += "_ipi"
 
