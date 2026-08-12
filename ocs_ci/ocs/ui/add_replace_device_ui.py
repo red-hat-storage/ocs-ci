@@ -25,6 +25,7 @@ class AddReplaceDeviceUI(PageNavigator):
         """
         if self.ocp_version_full >= version.VERSION_4_23:
             self.nav_storage_cluster_default_page()
+            kebab_locator = self.attach_storage_loc["storage_cluster_actions"]
         else:
             self.navigate_installed_operators_page()
             if self.operator_name is ODF_OPERATOR:
@@ -33,9 +34,10 @@ class AddReplaceDeviceUI(PageNavigator):
             else:
                 self.do_click(self.add_capacity_ui_loc["ocs_operator"])
                 self.do_click(self.add_capacity_ui_loc["storage_cluster_tab"])
+            kebab_locator = self.add_capacity_ui_loc["kebab_storage_cluster"]
         time.sleep(1)
-        logger.info("Click on kebab menu of Storage Systems")
-        self.do_click(self.add_capacity_ui_loc["kebab_storage_cluster"])
+        logger.info("Click on kebab menu")
+        self.do_click(kebab_locator)
         self.take_screenshot()
         logger.info("Click on Add Capacity button under the kebab menu")
         self.wait_until_expected_text_is_found(
