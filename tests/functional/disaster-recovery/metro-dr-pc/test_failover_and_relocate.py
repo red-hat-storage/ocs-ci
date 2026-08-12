@@ -100,7 +100,7 @@ class TestFailoverAndRelocate:
     )
     def test_failover_and_relocate(
         self,
-        # TODO: setup_acm_ui, awaiting fix PR 15828
+        setup_acm_ui,
         primary_cluster_down,
         pvc_interface,
         nodes_multicluster,
