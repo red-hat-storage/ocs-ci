@@ -182,7 +182,10 @@ class TestFailoverAndRelocate:
         enable_fence(drcluster_name=self.primary_cluster_name)
         assert verify_fence_state(
             drcluster_name=self.primary_cluster_name, state=constants.ACTION_FENCE
-        ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_FENCE} state"
+        ), f"DR cluster {self.primary_cluster_name} didn't reach {constants.ACTION_FENCE} state"
+        logger.info(
+            f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_FENCE} state"
+        )
 
         # Application Failover to secondary managed cluster
         for wl in workloads:
@@ -264,7 +267,10 @@ class TestFailoverAndRelocate:
         enable_unfence(drcluster_name=self.primary_cluster_name)
         assert verify_fence_state(
             drcluster_name=self.primary_cluster_name, state=constants.ACTION_UNFENCE
-        ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_UNFENCE} state"
+        ), f"DR cluster {self.primary_cluster_name} didn't reach {constants.ACTION_UNFENCE} state"
+        logger.info(
+            f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_UNFENCE} state"
+        )
 
         # Reboot the unfenced nodes
         gracefully_reboot_ocp_nodes(self.primary_cluster_name, disable_eviction=True)
