@@ -5,7 +5,6 @@ import time
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     mdr,
-    provider_client_platform_required,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs.acm.acm import AcmAddClusters
@@ -43,7 +42,6 @@ logger = logging.getLogger(__name__)
 @mdr
 @tier1
 @turquoise_squad
-@provider_client_platform_required
 class TestFailoverAndRelocate:
     """
     Test Failover and Relocate actions for MDR using the same workloads
