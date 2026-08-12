@@ -20,3 +20,10 @@ def pytest_collection_modifyitems(items):
                     f"Test {item} is removed from the collected items. Test runs only on MDR clusters"
                 )
                 items.remove(item)
+    else:
+        for item in items.copy():
+            if not config.hci_client_exist():
+                log.debug(
+                    f"Test {item} is removed from the collected items. Test runs only on client MDR clusters"
+                )
+                items.remove(item)
