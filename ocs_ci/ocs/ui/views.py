@@ -1875,23 +1875,28 @@ acm_configuration_4_22 = {
         "//button[@data-quickstart-id='qs-masthead-notifications']",
         By.XPATH,
     ),
-    # Override pending-cleanup-alert-drpc-message to anchor the span search
-    # inside the notification drawer's Critical Alerts section.  Same text
-    # pattern as the pre-4.22 locator, just scoped to the drawer so it doesn't
-    # match stale DOM from a previously rendered page.
-    # Use //* (any element) — the drawer renders the message in a <p>, not <span>.
+    # Override pending-cleanup-alert-drpc-message to anchor the search inside
+    # the notification drawer's Critical Alerts group.
+    # DOM structure (PF v6): section > h1 > button >
+    #   div.pf-v6-c-notification-drawer__group-toggle-title "Critical Alerts"
+    # Alert description is in:
+    #   li > div.pf-v6-c-notification-drawer__list-item-description > span.Linkify
     "pending-cleanup-alert-drpc-message": (
-        "//section[.//h2[normalize-space()='Critical Alerts']]"
-        "//*[contains(text(), \"DRPC '{}' in namespace '{}' requires manual cleanup\")]",
+        "//section["
+        ".//div[contains(@class,'notification-drawer__group-toggle-title')"
+        " and normalize-space()='Critical Alerts']]"
+        "//div[contains(@class,'notification-drawer__list-item-description')]"
+        "//span[contains(text(), \"DRPC '{}' in namespace '{}' requires manual cleanup\")]",
         By.XPATH,
     ),
-    # Alert title span for any ApplicationCleanupPending entry in the drawer
+    # Alert title h2 for any ApplicationCleanupPending entry in the drawer
     # (used when no specific drpc_name is provided).
     "notification-drawer-cleanup-alert-title": (
-        "//section[.//h2[normalize-space()='Critical Alerts']]"
-        "//li//h2[normalize-space()='ApplicationCleanupPending'] | "
-        "//section[.//h2[normalize-space()='Critical Alerts']]"
-        "//li//span[normalize-space()='ApplicationCleanupPending']",
+        "//section["
+        ".//div[contains(@class,'notification-drawer__group-toggle-title')"
+        " and normalize-space()='Critical Alerts']]"
+        "//li//h2[contains(@class,'notification-drawer__list-item-header-title')"
+        " and normalize-space()='ApplicationCleanupPending']",
         By.XPATH,
     ),
     "data-services": (
