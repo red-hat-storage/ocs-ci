@@ -1870,6 +1870,29 @@ acm_configuration_4_22 = {
     # OCP 4.22 Fleet Management perspective: nav entries are sidebar links, not
     # collapsible buttons.  Override both keys so navigate_data_services() uses
     # the correct element type instead of the pre-4.22 <button> XPath.
+    # Notification drawer (bell icon in masthead) — alerts moved here in PF v6.
+    "notification-drawer-toggle": (
+        "//button[@data-quickstart-id='qs-masthead-notifications']",
+        By.XPATH,
+    ),
+    # Override pending-cleanup-alert-drpc-message to anchor the span search
+    # inside the notification drawer's Critical Alerts section.  Same text
+    # pattern as the pre-4.22 locator, just scoped to the drawer so it doesn't
+    # match stale DOM from a previously rendered page.
+    "pending-cleanup-alert-drpc-message": (
+        "//section[.//h2[normalize-space()='Critical Alerts']]"
+        "//li//span[contains(text(), \"DRPC '{}' in namespace '{}' requires manual cleanup\")]",
+        By.XPATH,
+    ),
+    # Alert title span for any ApplicationCleanupPending entry in the drawer
+    # (used when no specific drpc_name is provided).
+    "notification-drawer-cleanup-alert-title": (
+        "//section[.//h2[normalize-space()='Critical Alerts']]"
+        "//li//h2[normalize-space()='ApplicationCleanupPending'] | "
+        "//section[.//h2[normalize-space()='Critical Alerts']]"
+        "//li//span[normalize-space()='ApplicationCleanupPending']",
+        By.XPATH,
+    ),
     "data-services": (
         "//*[@data-test-id='acm-perspective-nav']//*[normalize-space()='Data Services'] | "
         "//nav[contains(@class,'pf-v6-c-nav')]//a[normalize-space()='Data Services']",
