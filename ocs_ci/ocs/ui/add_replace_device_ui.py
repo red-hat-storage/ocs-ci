@@ -3,6 +3,7 @@ import time
 
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.views import ODF_OPERATOR
+from ocs_ci.utility import version
 
 
 logger = logging.getLogger(__name__)
@@ -22,13 +23,16 @@ class AddReplaceDeviceUI(PageNavigator):
         Add Capacity via UI
 
         """
-        self.navigate_installed_operators_page()
-        if self.operator_name is ODF_OPERATOR:
-            self.do_click(self.add_capacity_ui_loc["odf_operator"])
-            self.do_click(self.add_capacity_ui_loc["storage_system_tab"])
+        if self.ocp_version_full >= version.VERSION_4_23:
+            self.nav_storage_cluster_default_page()
         else:
-            self.do_click(self.add_capacity_ui_loc["ocs_operator"])
-            self.do_click(self.add_capacity_ui_loc["storage_cluster_tab"])
+            self.navigate_installed_operators_page()
+            if self.operator_name is ODF_OPERATOR:
+                self.do_click(self.add_capacity_ui_loc["odf_operator"])
+                self.do_click(self.add_capacity_ui_loc["storage_system_tab"])
+            else:
+                self.do_click(self.add_capacity_ui_loc["ocs_operator"])
+                self.do_click(self.add_capacity_ui_loc["storage_cluster_tab"])
         time.sleep(1)
         logger.info("Click on kebab menu of Storage Systems")
         self.do_click(self.add_capacity_ui_loc["kebab_storage_cluster"])
