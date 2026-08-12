@@ -1879,9 +1879,10 @@ acm_configuration_4_22 = {
     # inside the notification drawer's Critical Alerts section.  Same text
     # pattern as the pre-4.22 locator, just scoped to the drawer so it doesn't
     # match stale DOM from a previously rendered page.
+    # Use //* (any element) — the drawer renders the message in a <p>, not <span>.
     "pending-cleanup-alert-drpc-message": (
         "//section[.//h2[normalize-space()='Critical Alerts']]"
-        "//li//span[contains(text(), \"DRPC '{}' in namespace '{}' requires manual cleanup\")]",
+        "//*[contains(text(), \"DRPC '{}' in namespace '{}' requires manual cleanup\")]",
         By.XPATH,
     ),
     # Alert title span for any ApplicationCleanupPending entry in the drawer
