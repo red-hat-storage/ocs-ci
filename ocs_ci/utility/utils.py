@@ -757,6 +757,7 @@ def exec_cmd(
     cluster_config=None,
     lock_timeout=7200,
     output_file=None,
+    cmd_log_level=logging.DEBUG,
     **kwargs,
 ):
     """
@@ -780,6 +781,8 @@ def exec_cmd(
                 will be non-null
         lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
         output_file (str): path where to write output of stderr from command - apply only when silent mode is True
+        cmd_log_level (int): Log level for the "Executing command" message.
+            Defaults to logging.DEBUG. Use logging.INFO, logging.WARNING, etc. to override.
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -839,7 +842,7 @@ def exec_cmd(
             masked_cmd = mask_secrets(cmd, secrets)
         else:
             masked_cmd = shlex.join(mask_secrets(cmd, secrets))
-        log.debug(f"Executing command: {masked_cmd}")
+        log.log(cmd_log_level, f"Executing command: {masked_cmd}")
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
         run_kw = {
