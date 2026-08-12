@@ -198,17 +198,17 @@ class AcmPageNavigator(BaseUI):
         )
         if find_element:
             log.info("Data Services page found")
+            # Use the version-aware locator so we don't hard-code the pre-4.22
+            # <button> XPath on platforms where it is a sidebar nav link.
+            ds_xpath, ds_by = self.acm_page_nav["data-services"]
             try:
-                element = self.driver.find_element(
-                    By.XPATH, "//button[normalize-space()='Data Services']"
-                )
+                element = self.driver.find_element(ds_by, ds_xpath)
                 expanded = element.get_attribute("aria-expanded")
             except StaleElementReferenceException:
                 # Page re-rendered between find and get_attribute; re-fetch.
-                element = self.driver.find_element(
-                    By.XPATH, "//button[normalize-space()='Data Services']"
-                )
+                element = self.driver.find_element(ds_by, ds_xpath)
                 expanded = element.get_attribute("aria-expanded")
+            # Nav links in PF v6 have no aria-expanded; treat None as already open.
             if expanded == "false":
                 self.do_click(
                     locator=self.acm_page_nav["data-services"],
