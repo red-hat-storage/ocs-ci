@@ -114,6 +114,7 @@ class PlatformNodesFactory:
             "ibm_cloud_ipi": IBMCloudIPI,
             "baremetal_ai": IBMCloudBMNodes,
             "ibm_hci_ipi": IBMHCINode,
+            "ibm_hci_agent": IBMHCIAgentNode,
         }
 
     def get_nodes_platform(self):
@@ -131,6 +132,15 @@ class PlatformNodesFactory:
                 platform = "kubevirt_vm"
             elif client_type == constants.AWS_PLATFORM:
                 platform = "aws_hcp"
+            elif (
+                client_type == constants.HOSTED_CLUSTER_AGENT
+                and constants.IBM_HCI_PLATFORM
+                in [
+                    cluster_data.ENV_DATA["platform"]
+                    for cluster_data in config.clusters
+                ]
+            ):
+                platform = "ibm_hci_agent"
 
         if config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "managed_cp":
@@ -4195,6 +4205,507 @@ class IBMHCINode(object):
         except Exception as e:
             logger.error(f"Critical error during teardown: {e}")
             raise
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError("Create nodes functionality not implemented")
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def read_default_config(self, default_config_path):
+        """
+        Commonly used function to read default config
+
+        Args:
+            default_config_path (str): Path to default config file
+
+        Returns:
+            dict: of default config loaded
+
+        """
+        assert os.path.exists(default_config_path), "Config file doesnt exists"
+
+        with open(default_config_path) as f:
+            default_config_dict = yaml.safe_load(f)
+
+        return default_config_dict
+
+    def terminate_nodes(self, nodes, wait=True):
+        raise NotImplementedError("terminate nodes functionality is not implemented")
+
+    def wait_for_nodes_to_stop(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to terminate functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_stop_or_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop or terminate functionality is not implemented"
+        )
+
+    def disable_nodes_network_temporarily(self, nodes, duration=20):
+        raise NotImplementedError(
+            "disable enable node network temporarily functionality is not implemented"
+        )
+
+
+class IBMHCIAgentNode(object):
+    """
+    IBM HCI class for hosted cluster agent nodes related operations.
+
+    Agent-based hostedcluster nodes are physical baremetal servers managed
+    as Agent resources on the host HCI cluster. Power operations (stop, start,
+    restart) are performed via IPMI/Redfish through the host cluster's rack
+    infrastructure. The rack JSON is loaded from the host/provider cluster
+    context, while node status checks run against the hostedcluster context.
+    """
+
+    def __init__(self):
+        from ocs_ci.utility.ibm_hci import IBMHCI
+
+        self.hosted_cluster_name = config.ENV_DATA.get("cluster_name")
+        self.provider_index = config.get_provider_index()
+
+        orig_index = config.cur_index
+        try:
+            config.switch_ctx(self.provider_index)
+            self.ibm_hci = IBMHCI()
+        finally:
+            config.switch_ctx(orig_index)
+
+        self._agent_node_map = self._build_agent_node_map()
+
+    def _build_agent_node_map(self):
+        """
+        Build mapping of hostedcluster node names to their BMC details
+        by querying Agent resources on the host cluster and correlating
+        BMC addresses with the host cluster's rack details.
+
+        Returns:
+            dict: Mapping of node hostname to BMC details dict
+
+        """
+        agent_map = {}
+        orig_index = config.cur_index
+        try:
+            config.switch_ctx(self.provider_index)
+
+            agent_ns = self.hosted_cluster_name
+            agent_ocp = ocp.OCP(kind="Agent", namespace=agent_ns)
+            agents = agent_ocp.get()
+
+            for agent in agents.get("items", []):
+                inventory_str = (
+                    agent.get("metadata", {})
+                    .get("annotations", {})
+                    .get("agent.agent-install.openshift.io/inventory", "{}")
+                )
+                try:
+                    inventory = json.loads(inventory_str)
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f"Failed to parse inventory for agent "
+                        f"{agent.get('metadata', {}).get('name', 'unknown')}"
+                    )
+                    continue
+
+                hostname = inventory.get("hostname", "")
+                bmc_address = inventory.get("bmc_address", "")
+                bmc_v6address = inventory.get("bmc_v6address", "")
+                manufacturer = inventory.get("system_vendor", {}).get(
+                    "manufacturer", ""
+                )
+
+                if not hostname or not bmc_address:
+                    continue
+
+                rack_serial, rack_ip, creds = self._find_rack_for_bmc(bmc_address)
+
+                if not rack_serial:
+                    logger.warning(
+                        f"Could not find rack for agent node {hostname} "
+                        f"with BMC address {bmc_address}"
+                    )
+                    continue
+
+                agent_map[hostname] = {
+                    "bmc_ipv4": bmc_address,
+                    "bmc_ipv6": bmc_v6address,
+                    "manufacturer": manufacturer,
+                    "rack_serial": rack_serial,
+                    "rack_ip": rack_ip,
+                    "username": creds.get("username"),
+                    "password": creds.get("password"),
+                }
+                logger.info(
+                    f"Mapped agent node {hostname} -> rack {rack_serial}, "
+                    f"BMC {bmc_address}, manufacturer {manufacturer}"
+                )
+        finally:
+            config.switch_ctx(orig_index)
+
+        logger.info(f"Built agent node map with {len(agent_map)} node(s)")
+        return agent_map
+
+    def _find_rack_for_bmc(self, bmc_ipv4):
+        """
+        Find the rack matching a BMC IPv4 address. First tries exact IP match
+        against nodes in the rack details, then falls back to subnet (first
+        3 octets) match.
+
+        Args:
+            bmc_ipv4 (str): BMC IPv4 address of the agent node
+
+        Returns:
+            tuple: (rack_serial, rack_ip, credentials_dict)
+
+        """
+        for rack_serial, rack_data in self.ibm_hci.rack_details.items():
+            rack_ip = rack_data.get("rackInfo", {}).get("rackIP")
+            nodes = rack_data.get("nodes", {})
+
+            for _node_name, node_info in nodes.items():
+                if node_info.get("ipv4") == bmc_ipv4:
+                    return (
+                        rack_serial,
+                        rack_ip,
+                        {
+                            "username": node_info.get("username"),
+                            "password": node_info.get("password"),
+                        },
+                    )
+
+        bmc_parts = bmc_ipv4.split(".")
+        if len(bmc_parts) >= 3:
+            bmc_subnet = ".".join(bmc_parts[:3])
+            for rack_serial, rack_data in self.ibm_hci.rack_details.items():
+                rack_ip = rack_data.get("rackInfo", {}).get("rackIP")
+                for _node_name, node_info in rack_data.get("nodes", {}).items():
+                    node_ipv4 = node_info.get("ipv4", "")
+                    if node_ipv4:
+                        node_parts = node_ipv4.split(".")
+                        if (
+                            len(node_parts) >= 3
+                            and ".".join(node_parts[:3]) == bmc_subnet
+                        ):
+                            return (
+                                rack_serial,
+                                rack_ip,
+                                {
+                                    "username": node_info.get("username"),
+                                    "password": node_info.get("password"),
+                                },
+                            )
+
+        return None, None, {}
+
+    def _power_operation(self, node_name, operation, force=False):
+        """
+        Execute power operation on an agent node via IPMI or Redfish.
+
+        Agent nodes do not have BareMetalHost resources, so no detach/attach
+        is needed unlike IBMHCINode.
+
+        Args:
+            node_name (str): Full node name (FQDN)
+            operation (str): Power operation (on, off, cycle, reset, status)
+            force (bool): Force operation (for off/reset)
+
+        Returns:
+            str: Power state for status operation
+            bool: True if successful for other operations
+
+        Raises:
+            RuntimeError: If operation fails on all IP addresses
+
+        """
+        details = self._agent_node_map.get(node_name)
+        if not details:
+            raise RuntimeError(
+                f"No BMC details found for agent node {node_name}. "
+                f"Known nodes: {list(self._agent_node_map.keys())}"
+            )
+
+        manufacturer = details["manufacturer"].lower()
+        rack_ip = details["rack_ip"]
+        username = details["username"]
+        password = details["password"]
+
+        if not all([rack_ip, username, password]):
+            raise RuntimeError(
+                f"Missing rack IP or credentials for agent node {node_name}"
+            )
+
+        ip_addresses = []
+        if details.get("bmc_ipv6"):
+            ip_addresses.append(("IPv6", details["bmc_ipv6"]))
+        if details.get("bmc_ipv4"):
+            ip_addresses.append(("IPv4", details["bmc_ipv4"]))
+
+        last_error = None
+        for ip_type, bmc_ip in ip_addresses:
+            try:
+                logger.info(
+                    f"Attempting {operation} on {node_name} using {ip_type}: {bmc_ip}"
+                )
+
+                if "lenovo" in manufacturer:
+                    result = self.ibm_hci._power_operation_ipmi(
+                        rack_ip, username, password, bmc_ip, operation, force
+                    )
+                elif "dell" in manufacturer:
+                    result = self.ibm_hci._power_operation_redfish(
+                        rack_ip, username, password, bmc_ip, operation, force
+                    )
+                else:
+                    raise RuntimeError(f"Unsupported manufacturer: {manufacturer}")
+
+                if result or (operation == "status" and result is not None):
+                    logger.info(f"{operation} succeeded on {node_name} using {ip_type}")
+                    return result
+                else:
+                    last_error = f"{operation} failed with {ip_type}"
+                    logger.warning(last_error)
+
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(
+                    f"Exception during {operation} with {ip_type} for {node_name}: {e}"
+                )
+                continue
+
+        raise RuntimeError(
+            f"Failed to perform {operation} on agent node {node_name} "
+            f"with all available IP addresses. Last error: {last_error}"
+        )
+
+    def get_data_volumes(self):
+        raise NotImplementedError("Get data volume functionality is not implemented")
+
+    def get_node_by_attached_volume(self, volume):
+        raise NotImplementedError(
+            "Get node by attached volume functionality is not implemented"
+        )
+
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop agent hostedcluster nodes via IPMI/Redfish
+
+        Args:
+            nodes (list): The OCS objects of the nodes to stop
+            force (bool): True for force Node stop, False otherwise
+
+        """
+        logger.info(f"Stopping agent hostedcluster nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self._power_operation(node.name, "off", force=force)
+            logger.info(f"Successfully stopped node: {node.name}")
+
+    def start_nodes(self, nodes):
+        """
+        Start agent hostedcluster nodes via IPMI/Redfish
+
+        Args:
+            nodes (list): The OCS objects of the nodes to start
+
+        """
+        logger.info(f"Starting agent hostedcluster nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self._power_operation(node.name, "on")
+            logger.info(f"Successfully started node: {node.name}")
+
+    def restart_nodes(self, nodes, wait=True):
+        """
+        Restart agent hostedcluster nodes via power reset
+
+        Args:
+            nodes (list): The OCS objects of the nodes to restart
+            wait (bool): Wait for nodes to be ready after restart
+
+        """
+        logger.info(f"Restarting agent hostedcluster nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self._power_operation(node.name, "reset")
+            logger.info(f"Successfully restarted node: {node.name}")
+
+        if wait:
+            wait_for_nodes_status(
+                node_names=[n.name for n in nodes],
+                status=constants.NODE_READY,
+                timeout=300,
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Restart agent hostedcluster nodes by stopping and then starting them
+
+        Args:
+            nodes (list): The OCS objects of the nodes to restart
+            force (bool): Force the restart operation
+
+        """
+        logger.info(
+            f"Restarting agent nodes by stop and start: {[n.name for n in nodes]}"
+        )
+
+        for node in nodes:
+            self._power_operation(node.name, "off", force=force)
+            logger.info(f"Successfully stopped node: {node.name}")
+
+        time.sleep(10)
+
+        for node in nodes:
+            self._power_operation(node.name, "on")
+            logger.info(f"Successfully started node: {node.name}")
+
+        wait_for_nodes_status(
+            node_names=[n.name for n in nodes],
+            status=constants.NODE_READY,
+            timeout=900,
+        )
+
+    def power_on_all_nodes(self):
+        """
+        Power on all agent hostedcluster nodes using the cached agent node map.
+
+        This method works even when the hostedcluster API is unreachable
+        because the BMC details were cached during initialization.
+
+        Returns:
+            list: Names of nodes that were successfully powered on
+
+        """
+        logger.info("Powering on all agent hostedcluster nodes")
+        powered_on_nodes = []
+
+        for hostname in self._agent_node_map:
+            try:
+                logger.info(f"Powering on agent node: {hostname}")
+                self._power_operation(hostname, "on")
+                powered_on_nodes.append(hostname)
+                logger.info(f"Successfully powered on: {hostname}")
+            except Exception as e:
+                logger.warning(f"Failed to power on {hostname}: {e}")
+
+        return powered_on_nodes
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Teardown method to ensure all agent hostedcluster nodes are powered on
+        and the cluster is accessible.
+
+        First checks whether the hostedcluster API is reachable and all nodes
+        are Ready. Only falls back to powering on all nodes via IPMI/Redfish
+        when the API is unreachable.
+
+        """
+        from ocs_ci.helpers.helpers import refresh_oc_login_connection
+
+        logger.info(
+            "Teardown: Ensuring all agent hostedcluster nodes are powered on "
+            "and cluster is accessible"
+        )
+
+        try:
+            try:
+                refresh_oc_login_connection()
+                logger.info("Successfully re-authenticated to hostedcluster")
+            except Exception as login_error:
+                logger.warning(f"Could not re-authenticate: {login_error}")
+
+            try:
+                wait_for_nodes_status(timeout=60, status=constants.NODE_READY)
+                logger.info("All nodes are already Ready - no power-on action needed")
+                return
+            except Exception as check_error:
+                logger.warning(
+                    f"Node status check failed ({check_error}); "
+                    "assuming nodes are down - proceeding with power-on"
+                )
+
+            powered_on_nodes = self.power_on_all_nodes()
+            logger.info(f"Powered on {len(powered_on_nodes)} node(s)")
+
+            logger.info("Waiting 30 seconds for nodes to start booting...")
+            time.sleep(30)
+
+            max_retries = 5
+            for attempt in range(max_retries):
+                logger.info(
+                    f"Attempting to verify node status via API "
+                    f"(attempt {attempt + 1}/{max_retries})..."
+                )
+                try:
+                    try:
+                        refresh_oc_login_connection()
+                        logger.info("Successfully re-authenticated to hostedcluster")
+                    except Exception as login_error:
+                        logger.warning(
+                            f"Could not re-authenticate (attempt {attempt + 1}): "
+                            f"{login_error}"
+                        )
+                        if attempt < max_retries - 1:
+                            logger.info("Waiting 30 seconds before retry...")
+                            time.sleep(30)
+                            continue
+
+                    wait_for_nodes_status(timeout=900, status=constants.NODE_READY)
+                    logger.info("All nodes are ready - hostedcluster is accessible")
+                    return
+
+                except Exception as e:
+                    logger.warning(
+                        f"Could not verify node status (attempt {attempt + 1}): {e}"
+                    )
+                    if attempt < max_retries - 1:
+                        logger.info("Waiting 30 seconds before retry...")
+                        time.sleep(30)
+                    else:
+                        raise RuntimeError(
+                            f"Failed to verify hostedcluster status after "
+                            f"{max_retries} attempts. Nodes are powered on but "
+                            "API verification failed."
+                        )
+
+        except Exception as e:
+            logger.error(f"Critical error during teardown: {e}")
+            raise
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        raise NotImplementedError("Detach volume functionality is not implemented")
+
+    def attach_volume(self, volume, node):
+        raise NotImplementedError("Attach volume functionality is not implemented")
+
+    def create_and_attach_volume(self, node, size, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volume functionality is not implemented"
+        )
+
+    def create_and_attach_volumes(self, node, volume_sizes, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volumes functionality is not implemented"
+        )
+
+    def wait_for_volume_attach(self, volume):
+        raise NotImplementedError(
+            "Wait for volume attach functionality is not implemented"
+        )
 
     def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
         raise NotImplementedError(
