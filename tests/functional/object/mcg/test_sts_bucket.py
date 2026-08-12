@@ -268,3 +268,132 @@ class TestSTSBucket:
                 remaining.get("KeyCount", 0) == 0
             ), f"Bucket {bucketname} still has objects after deletion"
             logger.info(f"IO round-trip verified for bucket {bucketname}")
+
+    @pytest.mark.parametrize(
+        argnames=["sts_platform", "std_platform", "region", "interface"],
+        argvalues=[
+            pytest.param(
+                "aws-sts",
+                "aws",
+                "eu-central-1",
+                "CLI",
+                marks=[tier2, aws_platform_required, polarion_id("OCS-8213")],
+            ),
+            pytest.param(
+                "azure-sts",
+                "azure",
+                None,
+                "CLI",
+                marks=[
+                    tier2,
+                    azure_platform_required,
+                    polarion_id("OCS-8214"),
+                ],
+            ),
+            pytest.param(
+                "gcp-sts",
+                "gcp",
+                None,
+                "OC",
+                marks=[tier2, gcp_platform_required, polarion_id("OCS-8215")],
+            ),
+        ],
+        ids=["AWS", "AZURE", "GCP"],
+    )
+    def test_multiple_sts_and_standard_backingstores(
+        self,
+        backingstore_factory,
+        bucket_factory,
+        awscli_pod_session,
+        test_directory_setup,
+        mcg_obj_session,
+        sts_platform,
+        std_platform,
+        region,
+        interface,
+    ):
+        """
+        Test that multiple STS backingstores and a mixed combination
+        of standard + STS backingstores can coexist on the same cluster.
+
+        1. Create 3 STS backingstores
+        2. Create 1 standard (non-STS) backingstore
+        3. Create a bucketclass and OBC for each backingstore
+        4. Upload, download, and verify data integrity on each bucket
+        """
+
+        # 1. Create 3 STS backingstores
+        logger.test_step(f"Create 3 {sts_platform} backingstores via {interface}")
+        sts_backingstores = backingstore_factory(
+            interface, {sts_platform: [(3, region)]}
+        )
+
+        # 2. Create 1 standard (non-STS) backingstore
+        logger.test_step(
+            f"Create 1 standard {std_platform} backingstore via {interface}"
+        )
+        std_backingstores = backingstore_factory(
+            interface, {std_platform: [(1, region)]}
+        )
+
+        all_backingstores = sts_backingstores + std_backingstores
+
+        # 3. Create a bucketclass and OBC for each backingstore
+        logger.test_step("Create a bucketclass and OBC for each backingstore")
+        bucketclass_dicts = [
+            {"interface": interface, "backingstores": [bs]} for bs in all_backingstores
+        ]
+        bucketnames = [
+            bucket_factory(bucketclass=bc)[0].name for bc in bucketclass_dicts
+        ]
+        logger.info(f"Created buckets: {bucketnames}")
+
+        # 4. Upload, download, and verify data integrity on each bucket
+        logger.test_step("Upload, download, and verify data integrity on each bucket")
+        for bucketname in bucketnames:
+            awscli_pod_session.exec_cmd_on_pod(
+                f"rm -rf '{test_directory_setup.origin_dir}'"
+                f" '{test_directory_setup.result_dir}'"
+            )
+
+            obj_list = write_random_test_objects_to_bucket(
+                io_pod=awscli_pod_session,
+                bucket_to_write=bucketname,
+                file_dir=test_directory_setup.origin_dir,
+                amount=5,
+                pattern="Random-Obj",
+                mcg_obj=mcg_obj_session,
+            )
+
+            sync_object_directory(
+                podobj=awscli_pod_session,
+                src=f"s3://{bucketname}",
+                target=test_directory_setup.result_dir,
+                s3_obj=mcg_obj_session,
+            )
+
+            assert compare_directory(
+                awscli_pod=awscli_pod_session,
+                original_dir=test_directory_setup.origin_dir,
+                result_dir=test_directory_setup.result_dir,
+                amount=5,
+                pattern="Random-Obj",
+            ), f"Data integrity check failed for bucket {bucketname}"
+
+            s3_delete_objects(
+                mcg_obj_session,
+                bucketname=bucketname,
+                object_keys=[{"Key": f"{obj}"} for obj in obj_list],
+            )
+
+            remaining = s3_list_objects_v2(
+                s3_obj=mcg_obj_session, bucketname=bucketname
+            )
+            logger.assertion(
+                f"Bucket emptied after delete: bucket='{bucketname}', "
+                f"remaining_objects={remaining.get('KeyCount', 0)}"
+            )
+            assert (
+                remaining.get("KeyCount", 0) == 0
+            ), f"Bucket {bucketname} still has objects after deletion"
+            logger.info(f"IO round-trip verified for bucket {bucketname}")
