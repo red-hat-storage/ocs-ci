@@ -1867,6 +1867,19 @@ acm_configuration_4_21 = {
 }
 
 acm_configuration_4_22 = {
+    # OCP 4.22 Fleet Management perspective: nav entries are sidebar links, not
+    # collapsible buttons.  Override both keys so navigate_data_services() uses
+    # the correct element type instead of the pre-4.22 <button> XPath.
+    "data-services": (
+        "//*[@data-test-id='acm-perspective-nav']//*[normalize-space()='Data Services'] | "
+        "//nav[contains(@class,'pf-v6-c-nav')]//a[normalize-space()='Data Services']",
+        By.XPATH,
+    ),
+    "disaster-recovery": (
+        "//*[@data-test-id='acm-perspective-nav']//*[normalize-space()='Disaster recovery'] | "
+        "//nav[contains(@class,'pf-v6-c-nav')]//a[normalize-space()='Disaster recovery']",
+        By.XPATH,
+    ),
     "single-perspective": (
         "//*[@id='only-one-perspective']",
         By.XPATH,
