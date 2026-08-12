@@ -1075,50 +1075,111 @@ def verify_pending_cleanup_alert_resolved(
     )
     acm_obj.take_screenshot()
 
-    # Try to expand Critical alerts section if it exists
-    try:
-        critical_alert = acm_obj.find_an_element_by_xpath(
-            acm_loc["critical-alert"][0]
-        ).get_attribute("aria-expanded")
+    # Pre-4.22 only: expand the MCO status-card Critical alerts section.
+    # On 4.22+ there is no such element; alerts are in the notification drawer.
+    if get_semantic_ocp_running_version() < VERSION_4_22:
+        try:
+            critical_alert = acm_obj.find_an_element_by_xpath(
+                acm_loc["critical-alert"][0]
+            ).get_attribute("aria-expanded")
 
-        if critical_alert == "false":
-            critical_alert_elem = wait_for_element_to_be_clickable(
-                acm_loc["critical-alert"]
+            if critical_alert == "false":
+                critical_alert_elem = wait_for_element_to_be_clickable(
+                    acm_loc["critical-alert"]
+                )
+                acm_obj.driver.execute_script(
+                    "arguments[0].click();", critical_alert_elem
+                )
+                acm_obj.take_screenshot()
+        except (NoSuchElementException, StaleElementReferenceException) as e:
+            log.info(
+                f"Critical alerts section not found or not expandable: {e}. "
+                "This may indicate no critical alerts exist (expected)."
             )
-            acm_obj.driver.execute_script("arguments[0].click();", critical_alert_elem)
             acm_obj.take_screenshot()
-    except (NoSuchElementException, StaleElementReferenceException) as e:
-        log.info(
-            f"Critical alerts section not found or not expandable: {e}. "
-            "This may indicate no critical alerts exist (expected)."
-        )
-        acm_obj.take_screenshot()
-    except Exception as e:
-        acm_obj.take_screenshot()
-        raise UnexpectedBehaviour(
-            f"Unable to verify DR Dashboard critical-alert section after {operation} cleanup."
-        ) from e
+        except Exception as e:
+            acm_obj.take_screenshot()
+            raise UnexpectedBehaviour(
+                f"Unable to verify DR Dashboard critical-alert section after {operation} cleanup."
+            ) from e
 
-    # Verify alert is NOT visible - use DRPC-specific locator if drpc_name provided
-    if drpc_name:
-        alert_locator = (
-            acm_loc["pending-cleanup-alert-drpc-message"][0].format(
-                drpc_name, namespace
-            ),
-            acm_loc["pending-cleanup-alert-drpc-message"][1],
-        )
-        expected_text = f"DRPC '{drpc_name}'"
+    if get_semantic_ocp_running_version() >= VERSION_4_22:
+        # On 4.22+ alerts are in the notification drawer — must open it to
+        # check, then close it.  "Resolved" means the alert is NOT found.
+        if drpc_name:
+            alert_locator = (
+                acm_loc["pending-cleanup-alert-drpc-message"][0].format(
+                    drpc_name, namespace
+                ),
+                acm_loc["pending-cleanup-alert-drpc-message"][1],
+            )
+            expected_text = (
+                f"DRPC '{drpc_name}' in namespace '{namespace}' requires manual cleanup"
+            )
+        else:
+            alert_locator = acm_loc["notification-drawer-cleanup-alert-title"]
+            expected_text = constants.ALERT_APPLICATION_CLEANUP_PENDING
+
+        def _check_drawer_resolved(timeout=30):
+            """Open drawer, screenshot+DOM, check alert absent, close drawer."""
+            log.info(
+                "OCP >= 4.22: opening notification drawer to verify "
+                f"'{constants.ALERT_APPLICATION_CLEANUP_PENDING}' alert is cleared"
+            )
+            acm_obj.do_click(
+                acm_loc["notification-drawer-toggle"],
+                avoid_stale=True,
+            )
+            acm_obj.page_has_loaded()
+            acm_obj.take_screenshot()
+            acm_obj.copy_dom()
+            still_present = acm_obj.wait_until_expected_text_is_found(
+                locator=alert_locator,
+                expected_text=expected_text,
+                timeout=timeout,
+                use_fallback=False,
+            )
+            acm_obj.take_screenshot()
+            acm_obj.do_click(
+                acm_loc["notification-drawer-toggle"],
+                avoid_stale=True,
+            )
+            return still_present
+
+        alert_still_present = _check_drawer_resolved(timeout=30)
+        if alert_still_present:
+            log.warning(
+                "Alert still present on first check — refreshing page and retrying"
+            )
+            acm_obj.refresh_page()
+            acm_obj.navigate_data_services()
+            acm_obj.do_click(
+                acm_loc["disaster-recovery-overview"],
+                avoid_stale=True,
+                timeout=60,
+            )
+            acm_obj.page_has_loaded()
+            alert_still_present = _check_drawer_resolved(timeout=60)
     else:
-        alert_locator = acm_loc["pending-cleanup-alert"]
-        expected_text = constants.ALERT_APPLICATION_CLEANUP_PENDING
+        # Pre-4.22: alert is in the MCO status-card; drawer check not needed.
+        if drpc_name:
+            alert_locator = (
+                acm_loc["pending-cleanup-alert-drpc-message"][0].format(
+                    drpc_name, namespace
+                ),
+                acm_loc["pending-cleanup-alert-drpc-message"][1],
+            )
+            expected_text = f"DRPC '{drpc_name}'"
+        else:
+            alert_locator = acm_loc["pending-cleanup-alert"]
+            expected_text = constants.ALERT_APPLICATION_CLEANUP_PENDING
 
-    # use_fallback=False as this is intentional negative check (alert should NOT exist)
-    alert_still_present = acm_obj.wait_until_expected_text_is_found(
-        locator=alert_locator,
-        expected_text=expected_text,
-        timeout=60,
-        use_fallback=False,
-    )
+        alert_still_present = acm_obj.wait_until_expected_text_is_found(
+            locator=alert_locator,
+            expected_text=expected_text,
+            timeout=60,
+            use_fallback=False,
+        )
 
     if alert_still_present:
         log.error(
