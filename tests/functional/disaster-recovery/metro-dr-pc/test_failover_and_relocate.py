@@ -241,13 +241,14 @@ class TestFailoverAndRelocate:
                 f"Waiting for {wait_time} seconds after starting nodes of previous primary cluster"
             )
             time.sleep(wait_time)
-            wait_for_nodes_status([node.name for node in node_objs])
-            logger.info(
-                "Wait for all the pods in openshift-storage to be in running state"
-            )
-            assert wait_for_pods_to_be_running(
-                timeout=720
-            ), "Not all the pods reached running state"
+            with config.RunWithConfigContext(primary_cluster_index):
+                wait_for_nodes_status([node.name for node in node_objs])
+                logger.info(
+                    "Wait for all the pods in openshift-storage to be in running state"
+                )
+                assert wait_for_pods_to_be_running(
+                    timeout=720
+                ), "Not all the pods reached running state"
 
         # Validate data integrity on the new primary (failoverCluster)
         set_current_primary_cluster_context(
