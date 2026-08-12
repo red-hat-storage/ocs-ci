@@ -1875,28 +1875,16 @@ acm_configuration_4_22 = {
         "//button[@data-quickstart-id='qs-masthead-notifications']",
         By.XPATH,
     ),
-    # Override pending-cleanup-alert-drpc-message to anchor the search inside
-    # the notification drawer's Critical Alerts group.
-    # DOM structure (PF v6): section > h1 > button >
-    #   div.pf-v6-c-notification-drawer__group-toggle-title "Critical Alerts"
-    # Alert description is in:
-    #   li > div.pf-v6-c-notification-drawer__list-item-description > span.Linkify
+    # Anchor both locators on the ul with aria-label="Notifications in the
+    # critical alerts group" — stable PF v6 accessibility attribute.
     "pending-cleanup-alert-drpc-message": (
-        "//section["
-        ".//div[contains(@class,'notification-drawer__group-toggle-title')"
-        " and normalize-space()='Critical Alerts']]"
-        "//div[contains(@class,'notification-drawer__list-item-description')]"
+        "//ul[@aria-label='Notifications in the critical alerts group']"
         "//span[contains(text(), \"DRPC '{}' in namespace '{}' requires manual cleanup\")]",
         By.XPATH,
     ),
-    # Alert title h2 for any ApplicationCleanupPending entry in the drawer
-    # (used when no specific drpc_name is provided).
     "notification-drawer-cleanup-alert-title": (
-        "//section["
-        ".//div[contains(@class,'notification-drawer__group-toggle-title')"
-        " and normalize-space()='Critical Alerts']]"
-        "//li//h2[contains(@class,'notification-drawer__list-item-header-title')"
-        " and normalize-space()='ApplicationCleanupPending']",
+        "//ul[@aria-label='Notifications in the critical alerts group']"
+        "//h2[normalize-space()='ApplicationCleanupPending']",
         By.XPATH,
     ),
     "data-services": (
