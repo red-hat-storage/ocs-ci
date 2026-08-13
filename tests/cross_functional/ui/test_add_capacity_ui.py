@@ -19,12 +19,16 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     skipif_hci_provider_or_client,
     skipif_lean_deployment,
+    zstream_4_20_14,
+    zstream_4_20_14_odf_console,
 )
 
 logger = logging.getLogger(__name__)
 
 
 @skipif_lean_deployment
+@zstream_4_20_14
+@zstream_4_20_14_odf_console
 class TestAddCapacityUI(object):
     """
     Test Add Capacity on via UI
