@@ -77,7 +77,7 @@ class TestCnvApplicationMDR:
             ),
         ],
     )
-    def test_app_cnv_failover_relocate(
+    def test_cnv_app_failover_relocate(
         self,
         primary_cluster_down,
         nodes_multicluster,

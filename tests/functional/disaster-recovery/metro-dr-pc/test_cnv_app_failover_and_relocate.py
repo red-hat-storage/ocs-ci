@@ -103,7 +103,7 @@ class TestCnvApplicationMDR:
             ),
         ],
     )
-    def test_cnv_failover_relocate(
+    def test_app_cnv_failover_relocate(
         self,
         vm_type,
         primary_cluster_down,
