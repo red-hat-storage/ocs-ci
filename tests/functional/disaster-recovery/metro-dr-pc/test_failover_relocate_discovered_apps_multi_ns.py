@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 @mdr
 @tier1
 @turquoise_squad
-class TestFailoverAndRelocateWithDiscoveredAppsMultiNs:
+class TestFailoverRelocateDiscoveredAppsMultiNs:
     """
     Test failover and relocate with discovered apps spread across multiple namespaces.
     """
@@ -61,7 +61,7 @@ class TestFailoverAndRelocateWithDiscoveredAppsMultiNs:
             pytest.param(True, constants.CEPHFILESYSTEM, id="primary_down-cephfs"),
         ],
     )
-    def test_failover_and_relocate_discovered_apps_multi_ns(
+    def test_failover_relocate_discovered_apps_multi_ns(
         self,
         primary_cluster_down,
         pvc_interface,
