@@ -247,24 +247,27 @@ def get_csi_addon_pod_on_node(node_name, driver):
     Raises:
         AssertionError: If no matching pod is found.
     """
-    label = (
-        constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420
-        if driver == "cephfs"
-        else constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420
-    )
+    _DRIVER_LABELS = {
+        "cephfs": constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+        "rbd": constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+    }
+    try:
+        label = _DRIVER_LABELS[driver]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported CSI driver: {driver!r}") from exc
+
     namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
     pod_ocp = OCP(kind="pod", namespace=namespace)
     pods = pod_ocp.get(
         selector=label,
-        field_selector=f"spec.nodeName={node_name}",
+        field_selector=f"spec.nodeName={node_name},status.phase=Running",
     )["items"]
-    logger.assertion(
-        f"csi-addons pod with label {label} " f"exists on node {node_name}"
-    )
-    assert pods, f"No csi-addons pod with label {label} " f"found on node {node_name}"
+    pods = [p for p in pods if not p.get("metadata", {}).get("deletionTimestamp")]
+    logger.assertion(f"csi-addons pod with label {label} exists on node {node_name}")
+    assert pods, f"No csi-addons pod with label {label} found on node {node_name}"
     pod_name = pods[0]["metadata"]["name"]
     logger.info(
-        "Found csi-addons pod '%s' on node '%s' " "(driver=%s)",
+        "Found csi-addons pod '%s' on node '%s' (driver=%s)",
         pod_name,
         node_name,
         driver,
