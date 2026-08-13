@@ -756,44 +756,17 @@ class TestCephFSSubvolumeDrillDown(ManageTest):
         )
 
         for metric in metrics[1:]:
-            expected_unit = constants.CEPHFS_SUBVOLUME_METRIC_EXPECTED_UNITS[metric]
             logger.test_step(
                 "Switch to '%s' and verify column header and values",
                 metric,
             )
-            subvolume_metrics_card.switch_cephfs_subvolume_metric(metric)
-            headers = subvolume_metrics_card.get_cephfs_subvolume_column_headers()
-            assert headers[-1] == metric, (
-                f"Expected column header '{metric}', " f"got '{headers[-1]}'"
-            )
-            values = subvolume_metrics_card.get_cephfs_subvolume_all_row_values()
-            assert len(values) > 0, f"No values displayed for metric '{metric}'"
-            for idx, val in enumerate(values):
-                assert expected_unit in val, (
-                    f"Row {idx} value '{val}' does not contain "
-                    f"unit '{expected_unit}' for metric '{metric}'"
-                )
+            subvolume_metrics_card.verify_metric_header_and_values(metric)
 
         logger.test_step(
             "Switch back to '%s' and verify header and unit restored",
             metrics[0],
         )
-        subvolume_metrics_card.switch_cephfs_subvolume_metric(metrics[0])
-        restored_headers = subvolume_metrics_card.get_cephfs_subvolume_column_headers()
-        assert restored_headers[-1] == metrics[0], (
-            f"Expected restored column header '{metrics[0]}', "
-            f"got '{restored_headers[-1]}'"
+        subvolume_metrics_card.verify_metric_header_and_values(
+            metrics[0],
+            expected_count=initial_row_count,
         )
-        restored_unit = constants.CEPHFS_SUBVOLUME_METRIC_EXPECTED_UNITS[metrics[0]]
-        restored_values = subvolume_metrics_card.get_cephfs_subvolume_all_row_values()
-        assert len(restored_values) == initial_row_count, (
-            f"Row count changed after switching back: "
-            f"initial={initial_row_count}, "
-            f"restored={len(restored_values)}"
-        )
-        for idx, val in enumerate(restored_values):
-            assert restored_unit in val, (
-                f"Row {idx} value '{val}' does not contain "
-                f"unit '{restored_unit}' after switching back "
-                f"to '{metrics[0]}'"
-            )

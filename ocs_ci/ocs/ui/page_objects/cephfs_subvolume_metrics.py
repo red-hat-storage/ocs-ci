@@ -501,6 +501,56 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         )
         return value
 
+    def verify_metric_header_and_values(self, metric, expected_count=None):
+        """
+        Switch to ``metric``, verify the column header updates, read
+        all row values, and assert every value carries the expected
+        unit suffix.
+
+        Args:
+            metric (str): Metric label to switch to, e.g.
+                ``constants.CEPHFS_SUBVOLUME_DEFAULT_METRIC``.
+            expected_count (int, optional): If provided, wait for
+                this many rows and assert the returned count matches
+                exactly. When ``None``, only asserts at least one
+                row is present.
+
+        Returns:
+            list[str]: The metric value strings read from the table.
+
+        Raises:
+            AssertionError: If the column header is wrong, no rows
+                are found, the row count doesn't match
+                ``expected_count``, or any value lacks the expected
+                unit suffix.
+        """
+        expected_unit = constants.CEPHFS_SUBVOLUME_METRIC_EXPECTED_UNITS[metric]
+        self.switch_cephfs_subvolume_metric(metric)
+        headers = self.get_cephfs_subvolume_column_headers()
+        assert headers[-1] == metric, (
+            f"Expected column header '{metric}', " f"got '{headers[-1]}'"
+        )
+
+        wait_count = expected_count if expected_count else 1
+        values = self.get_cephfs_subvolume_all_row_values(
+            expected_count=wait_count,
+        )
+
+        if expected_count is not None:
+            assert len(values) == expected_count, (
+                f"Expected {expected_count} rows for metric "
+                f"'{metric}', got {len(values)}"
+            )
+        else:
+            assert len(values) > 0, f"No values displayed for metric '{metric}'"
+
+        for idx, val in enumerate(values):
+            assert expected_unit in val, (
+                f"Row {idx} value '{val}' does not contain "
+                f"unit '{expected_unit}' for metric '{metric}'"
+            )
+        return values
+
     def verify_cephfs_subvolume_view_all_link_visible(self, timeout=10):
         """
         Verify the 'View all' link is present at the bottom of the name popover.
