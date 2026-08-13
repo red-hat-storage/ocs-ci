@@ -8,6 +8,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier4a,
     tier4,
     jira,
+    zstream_4_20_14,
+    zstream_4_20_14_naturalintelligence/fast_xml_parser,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
@@ -27,6 +29,8 @@ logger = logging.getLogger(__name__)
 @stretchcluster_required
 @turquoise_squad
 @jira("DFBUGS-1273")
+@zstream_4_20_14
+@zstream_4_20_14_naturalintelligence/fast_xml_parser
 class TestDeviceReplacementInStretchCluster:
 
     @polarion_id("OCS-5047")

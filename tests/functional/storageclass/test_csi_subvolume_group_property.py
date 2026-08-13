@@ -2,7 +2,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import ManageTest, tier2, skipif_external_mode
-from ocs_ci.framework.pytest_customization.marks import green_squad, jira, polarion_id
+from ocs_ci.framework.pytest_customization.marks import green_squad, jira, polarion_id, zstream_4_20_14, zstream_4_20_14_naturalintelligence/fast_xml_parser
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 
@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 @green_squad
 @skipif_external_mode
 @tier2
+@zstream_4_20_14
+@zstream_4_20_14_naturalintelligence/fast_xml_parser
 class TestCSISubvolumeGroup(ManageTest):
     @jira("DFBUGS-2759")
     @polarion_id("OCS-5740")

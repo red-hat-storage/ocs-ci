@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.framework.pytest_customization.marks import zstream_4_20_14, zstream_4_20_14_naturalintelligence/fast_xml_parser
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,8 @@ def _healthcheck_matches(actual, desired):
 @brown_squad
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-7403")
+@zstream_4_20_14
+@zstream_4_20_14_naturalintelligence/fast_xml_parser
 class TestMonHealthcheckPassthrough(ManageTest):
     """
     Verify StorageCluster.spec.managedResources.cephCluster.healthCheck.daemonHealth.mon

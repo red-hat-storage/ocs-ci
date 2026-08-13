@@ -17,6 +17,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     skipif_rosa_hcp,
     skipif_lean_deployment,
+    zstream_4_20_14,
+    zstream_4_20_14_naturalintelligence/fast_xml_parser,
 )
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -60,6 +62,8 @@ ERRMSG = "Error in command"
 @skip_for_provider_or_client_if_ocs_version("<4.19")
 @skipif_lean_deployment
 @polarion_id("OCS-4270")
+@zstream_4_20_14
+@zstream_4_20_14_naturalintelligence/fast_xml_parser
 class TestDefaultNfsDisabled(ManageTest):
     """
     Test nfs feature enable for ODF 4.11
