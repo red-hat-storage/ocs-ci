@@ -33,6 +33,7 @@ from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.bucket_notifications_manager import BucketNotificationsManager
 from ocs_ci.ocs.resources.mcg_lifecycle_policies import ExpirationRule, LifecyclePolicy
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.framework.pytest_customization.marks import zstream_4_20_14, zstream_4_20_14_mcg
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,8 @@ logger = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_proxy_cluster
 @ignore_leftover_label(constants.CUSTOM_MCG_LABEL)
+@zstream_4_20_14
+@zstream_4_20_14_mcg
 class TestBucketNotifications(MCGTest):
     """
     Test the MCG bucket notifications feature
