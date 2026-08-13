@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
     skipif_external_mode,
+    zstream_4_20_14,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 @skipif_external_mode
+@zstream_4_20_14
 class TestDefaultBackingstoreOverride(MCGTest):
     """
     Test overriding the default noobaa backingstore

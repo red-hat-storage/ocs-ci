@@ -6,7 +6,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import red_squad, mcg
+from ocs_ci.framework.pytest_customization.marks import red_squad, mcg, zstream_4_20_14
 from ocs_ci.framework.testlib import (
     MCGTest,
     skipif_ocs_version,
@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 # Thus, it falsely recognizes leftovers that are deleted in a later stage
 @ignore_leftovers
 @runs_on_provider
+@zstream_4_20_14
 class TestAdmissionWebhooks(MCGTest):
     @pytest.mark.parametrize(
         argnames="spec_dict,err_msg",

@@ -7,7 +7,7 @@ from datetime import datetime
 from semantic_version import Version
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, zstream_4_20_14
 from ocs_ci.framework.testlib import (
     E2ETest,
     tier1,
@@ -58,6 +58,7 @@ def check_kafka_messages(kafkadrop_host, kafka_topic_name):
 @skipif_external_mode
 @skipif_disconnected_cluster
 @pytest.mark.polarion_id("OCS-2514")
+@zstream_4_20_14
 class TestRGWAndKafkaNotifications(E2ETest):
     """
     Test to verify rgw kafka notifications

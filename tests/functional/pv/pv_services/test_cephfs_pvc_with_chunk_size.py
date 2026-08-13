@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_external_mode,
+    zstream_4_20_14,
 )
 from ocs_ci.ocs import constants, cluster
 from ocs_ci.ocs.resources import pod
@@ -26,6 +27,7 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_ocs_version("<4.15")
 @skipif_ocp_version("<4.15")
+@zstream_4_20_14
 class TestCephfsWithChunkIo(E2ETest):
     """
     This class takes care of create Cephfs PVC, create Fedora dc pod and run Chunk IO on fedora pod

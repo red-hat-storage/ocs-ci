@@ -20,6 +20,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     rgw,
     runs_on_provider,
     polarion_id,
+    zstream_4_20_14,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 @runs_on_provider
 @skipif_ocs_version("<4.10")
 @skipif_mcg_only
+@zstream_4_20_14
 class TestOBCQuota:
     """
     Test OBC Quota feature
