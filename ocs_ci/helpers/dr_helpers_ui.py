@@ -22,6 +22,7 @@ from selenium.common.exceptions import (
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.acm.acm import get_acm_url
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
@@ -901,7 +902,13 @@ def verify_pending_cleanup_alert_firing(
         + (f" for DRPC '{drpc_name}'" if drpc_name else "")
     )
 
-    acm_obj.refresh_page()
+    # If the browser is on a blank page (e.g. after session reset between
+    # iterations) refreshing stays blank. Navigate to ACM first.
+    if not acm_obj.driver.current_url.startswith("http"):
+        acm_obj.driver.get(get_acm_url())
+        acm_obj.page_has_loaded()
+    else:
+        acm_obj.refresh_page()
     acm_obj.navigate_data_services()
 
     # Navigate to Disaster Recovery Overview page where alerts are shown
@@ -1059,7 +1066,11 @@ def verify_pending_cleanup_alert_resolved(
     )
 
     # Navigate to DR Dashboard Overview page
-    acm_obj.refresh_page()
+    if not acm_obj.driver.current_url.startswith("http"):
+        acm_obj.driver.get(get_acm_url())
+        acm_obj.page_has_loaded()
+    else:
+        acm_obj.refresh_page()
     acm_obj.navigate_data_services()
     acm_obj.do_click(
         acm_loc["disaster-recovery-overview"],
