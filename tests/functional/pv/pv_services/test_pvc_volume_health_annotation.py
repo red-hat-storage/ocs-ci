@@ -38,11 +38,11 @@ REPORTER_TICK_WAIT = 60
     argvalues=[
         pytest.param(
             constants.CEPHFILESYSTEM,
-            marks=pytest.mark.polarion_id("OCS-XXXX"),
+            marks=pytest.mark.polarion_id("OCS-8219"),
         ),
         pytest.param(
             constants.CEPHBLOCKPOOL,
-            marks=pytest.mark.polarion_id("OCS-XXXX"),
+            marks=pytest.mark.polarion_id("OCS-8220"),
         ),
     ],
 )
