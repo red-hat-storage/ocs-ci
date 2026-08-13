@@ -182,6 +182,21 @@ class PVC(OCS):
         """
         return self.backed_pv_obj.get()["spec"]["csi"]["volumeHandle"]
 
+    def get_volume_health_annotations(self):
+        """
+        Get all volumehealth annotations from this PVC.
+
+        Returns:
+            dict: Annotation key-value pairs whose keys start
+                with VOLUME_HEALTH_ANNOTATION_PREFIX.
+        """
+        annotations = self.get().get("metadata", {}).get("annotations", {})
+        return {
+            k: v
+            for k, v in annotations.items()
+            if k.startswith(constants.VOLUME_HEALTH_ANNOTATION_PREFIX)
+        }
+
     def resize_pvc(self, new_size, verify=False, timeout=240):
         """
         Modify the capacity of PVC

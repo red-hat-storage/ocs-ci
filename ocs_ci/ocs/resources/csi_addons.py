@@ -231,3 +231,42 @@ def get_csi_addons_config_value(key: str, default: str = "") -> str:
             default,
         )
         return default
+
+
+def get_csi_addon_pod_on_node(node_name, driver):
+    """
+    Find the csi-addons sidecar pod running on a specific node.
+
+    Args:
+        node_name (str): Name of the worker node.
+        driver (str): CSI driver type — 'cephfs' or 'rbd'.
+
+    Returns:
+        str: Pod name of the csi-addons sidecar on that node.
+
+    Raises:
+        AssertionError: If no matching pod is found.
+    """
+    label = (
+        constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420
+        if driver == "cephfs"
+        else constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420
+    )
+    namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+    pod_ocp = OCP(kind="pod", namespace=namespace)
+    pods = pod_ocp.get(
+        selector=label,
+        field_selector=f"spec.nodeName={node_name}",
+    )["items"]
+    logger.assertion(
+        f"csi-addons pod with label {label} " f"exists on node {node_name}"
+    )
+    assert pods, f"No csi-addons pod with label {label} " f"found on node {node_name}"
+    pod_name = pods[0]["metadata"]["name"]
+    logger.info(
+        "Found csi-addons pod '%s' on node '%s' " "(driver=%s)",
+        pod_name,
+        node_name,
+        driver,
+    )
+    return pod_name

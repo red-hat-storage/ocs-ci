@@ -330,6 +330,7 @@ ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshif
 ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
 RECLAIMSPACE_SCHEDULE_ANNOTATION = "reclaimspace.csiaddons.openshift.io/schedule"
 KEYROTATION_SCHEDULE_ANNOTATION = "keyrotation.csiaddons.openshift.io/schedule"
+VOLUME_HEALTH_ANNOTATION_PREFIX = "csiaddons.openshift.io/volumehealth."
 DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
 CRD_KIND = "CustomResourceDefinition"
 # ClientProfileSpec defines the desired state of Ceph CSI
