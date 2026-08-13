@@ -93,16 +93,16 @@ class TestMCOOperatorRebrandingUI:
 
         logger.test_step("Validate provider name")
         actual_provider = mco_page.get_operator_provider()
-        if actual_provider:
-            logger.assertion(
-                "Provider: expected='%s', actual='%s'",
-                expected_provider,
-                actual_provider,
-            )
-            assert expected_provider in actual_provider, (
-                f"Expected provider '{expected_provider}', "
-                f"but found '{actual_provider}'"
-            )
+        assert actual_provider, "Provider field is missing on operator details page"
+        logger.assertion(
+            "Provider: expected='%s', actual='%s'",
+            expected_provider,
+            actual_provider,
+        )
+        assert expected_provider in actual_provider, (
+            f"Expected provider '{expected_provider}', "
+            f"but found '{actual_provider}'"
+        )
 
         logger.test_step("Validate operator description is vendor-neutral")
         page_source = mco_page.driver.page_source

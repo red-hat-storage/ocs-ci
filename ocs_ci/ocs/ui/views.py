@@ -434,19 +434,19 @@ deployment_4_22 = {
         By.XPATH,
     ),
     "operator_display_name": (
-        "//*[contains(@class,'co-clusterserviceversion-logo__name__clusterserviceversion')]",
+        "//div[contains(@class,'co-clusterserviceversion-logo')]//h1",
         By.XPATH,
     ),
     "operator_provider": (
-        "//dt[normalize-space(.)='Provider']/following-sibling::dd",
+        "//dt[normalize-space(.)='Provider']/following-sibling::dd[1]",
         By.XPATH,
     ),
     "operator_description": (
-        "//h5[normalize-space()='Description']/following-sibling::p",
+        "//h5[normalize-space()='Description']/following-sibling::p[1]",
         By.XPATH,
     ),
     "operator_installed_status": (
-        "//span[@data-test='status-text']",
+        "//dt[normalize-space(.)='Status']/following-sibling::dd[1]//span[@data-test='status-text']",
         By.XPATH,
     ),
     "ec_scheme_table_rows": (
