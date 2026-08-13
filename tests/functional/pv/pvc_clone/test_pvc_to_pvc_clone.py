@@ -7,6 +7,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     jira,
     provider_mode,
     run_on_all_clients_push_missing_configs,
+    zstream_4_20_14,
+    zstream_4_20_14_ceph_csi,
 )
 from ocs_ci.framework.pytest_customization.marks import skipif_hci_provider_and_client
 from ocs_ci.framework.testlib import (
@@ -28,6 +30,8 @@ logger = logging.getLogger(__name__)
 @green_squad
 @skipif_ocs_version("<4.9")
 @skipif_ocp_version("<4.9")
+@zstream_4_20_14
+@zstream_4_20_14_ceph_csi
 class TestClone(ManageTest):
     """
     Tests to verify PVC to PVC clone feature
