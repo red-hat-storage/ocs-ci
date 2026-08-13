@@ -311,19 +311,34 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         )
         return len(self.get_elements(self.related_pods_header_loc)) > 0
 
-    def get_cephfs_subvolume_related_pod_links(self):
+    def get_cephfs_subvolume_related_pod_links(self, timeout=30):
         """
         Return the text of all pod links listed in the name popover.
+
+        Polls until at least one link has non-empty text, guarding
+        against reading before the popover content has rendered.
 
         Excludes the 'View all' link; pod links sit inside
         c-popover__body > ul.c-list > li > span > a.
 
+        Args:
+            timeout (int): Maximum seconds to wait for pod links
+                to render with non-empty text.
+
         Returns:
             list[str]: Pod link labels, e.g.
-                ['image-registry-55757b755-cfq71', 'image-registry-55757b755-q7g6c'].
+                ``['my-pod-55757b755-cfq71']``.
         """
-        links = self.get_elements(self.related_pods_links_loc)
-        return [link.text.strip() for link in links]
+        for links in TimeoutSampler(
+            timeout=timeout,
+            sleep=2,
+            func=self.get_elements,
+            locator=self.related_pods_links_loc,
+        ):
+            texts = [link.text.strip() for link in links]
+            if texts and all(t for t in texts):
+                return texts
+        return []
 
     def verify_namespace_in_subvolume_table(self, namespace, timeout=60):
         """
