@@ -230,6 +230,8 @@ class AcmPageNavigator(BaseUI):
                     "Successfully navigated to Disaster recovery Overview page under 'Data Services' on ACM console"
                 )
         else:
+            self.take_screenshot(name_suffix="data-services-not-found")
+            self.copy_dom(name_suffix="data-services-not-found")
             log.error(
                 "Couldn't navigate to Disaster recovery Overview page under 'Data Services' on ACM console"
             )

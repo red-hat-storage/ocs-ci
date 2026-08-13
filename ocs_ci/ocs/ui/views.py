@@ -1889,12 +1889,12 @@ acm_configuration_4_22 = {
     ),
     "data-services": (
         "//*[@data-test-id='acm-perspective-nav']//*[normalize-space()='Data Services'] | "
-        "//nav[contains(@class,'pf-c-nav')]//a[normalize-space()='Data Services']",
+        "//nav[contains(@class,'c-nav')]//a[normalize-space()='Data Services']",
         By.XPATH,
     ),
     "disaster-recovery": (
         "//*[@data-test-id='acm-perspective-nav']//*[normalize-space()='Disaster recovery'] | "
-        "//nav[contains(@class,'pf-c-nav')]//a[normalize-space()='Disaster recovery']",
+        "//nav[contains(@class,'c-nav')]//a[normalize-space()='Disaster recovery']",
         By.XPATH,
     ),
     "single-perspective": (
