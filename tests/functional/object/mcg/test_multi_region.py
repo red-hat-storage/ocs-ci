@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     mcg,
     tier2,
+    zstream_4_20_14,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import ocp, constants
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 @skipif_disconnected_cluster
 @skipif_aws_creds_are_missing
 @runs_on_provider
+@zstream_4_20_14
 class TestMultiRegion(MCGTest):
     """
     Test the multi region functionality

@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     red_squad,
     mcg,
+    zstream_4_20_14,
 )
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 @red_squad
 @jira("DFBUGS-1173")
 @polarion_id("OCS-6340")
+@zstream_4_20_14
 def test_obc_quota_update_using_cli(mcg_obj):
     """
     Test OBC quota update using mcg cli

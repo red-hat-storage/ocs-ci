@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     tier1,
     tier3,
+    zstream_4_20_14,
 )
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 @red_squad
 @runs_on_provider
 @skipif_mcg_only
+@zstream_4_20_14
 class TestRGWBucketCreation:
     """
     Test creation of a bucket

@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     rgw,
     skipif_no_lso,
     post_upgrade,
+    zstream_4_20_14,
 )
 from ocs_ci.ocs.resources.pod import get_rgw_pods
 from ocs_ci.ocs.ocp import OCP
@@ -27,6 +28,7 @@ DEFAULT_READ_AFFINITY = "localize"
 @rgw
 @red_squad
 @skipif_no_lso
+@zstream_4_20_14
 class TestRGWReadAffinityMode:
     """
     Test the RGW Read Affinity value in an ODF cluster
