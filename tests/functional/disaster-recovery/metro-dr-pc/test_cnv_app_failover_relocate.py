@@ -160,7 +160,7 @@ class TestCnvApplicationMDR:
         verify_cluster_data_protected_status(
             workload_type=cnv_workloads[0].workload_type,
             namespace=self.wl_namespace,
-            workload_placement_name=cnv_workloads[0].workload_placement_name,
+            workload_placement_name=cnv_workloads[0].cnv_workload_placement_name,
         )
 
         wait_time = 120
@@ -191,7 +191,7 @@ class TestCnvApplicationMDR:
                 failover_cluster=secondary_cluster_name,
                 namespace=cnv_wl.workload_namespace,
                 workload_type=cnv_wl.workload_type,
-                workload_placement_name=cnv_wl.workload_placement_name,
+                workload_placement_name=cnv_wl.cnv_workload_placement_name,
             )
 
         # Verify VM and its resources in secondary managed cluster
@@ -287,7 +287,7 @@ class TestCnvApplicationMDR:
                 preferred_cluster=secondary_cluster_name,
                 namespace=cnv_wl.workload_namespace,
                 workload_type=cnv_wl.workload_type,
-                workload_placement_name=cnv_wl.workload_placement_name,
+                workload_placement_name=cnv_wl.cnv_workload_placement_name,
             )
 
         set_current_secondary_cluster_context(
