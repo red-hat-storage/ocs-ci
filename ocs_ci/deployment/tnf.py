@@ -84,12 +84,31 @@ class TNF(TNFBASE):
                 proxy_config=self.tnf_config.get("proxy"),
             )
             logger.info("TNF hypervisor provisioning enabled (AWS EC2)")
+            self._setup_proxy_env()
         elif not config.ENV_DATA.get("skip_ocp_deployment"):
             raise UnexpectedDeploymentConfiguration(
                 "TNF OCP deployment requires hypervisor configuration "
                 "(tnf.hypervisor in config). For pre-existing clusters, "
                 "set skip_ocp_deployment: true."
             )
+
+    def _setup_proxy_env(self):
+        """
+        Set proxy env vars from existing hypervisor metadata.
+        Needed for skip_ocp_deployment (ODF-only) and teardown flows
+        where _deploy_via_hypervisor() doesn't run.
+        """
+        proxy_config = self.tnf_config.get("proxy", {})
+        if not proxy_config.get("enabled", True):
+            return
+
+        cluster_path = config.ENV_DATA.get("cluster_path", "")
+        if cluster_path and self.hypervisor.load_instance_info(cluster_path):
+            proxy_url = self.hypervisor.get_proxy_url()
+            os.environ["HTTPS_PROXY"] = proxy_url
+            os.environ["HTTP_PROXY"] = proxy_url
+            os.environ["NO_PROXY"] = "localhost,127.0.0.1,.svc,.cluster.local"
+            logger.info(f"Proxy configured from metadata: {proxy_url}")
 
     class OCPDeployment(object):
         """
@@ -149,6 +168,9 @@ class TNF(TNFBASE):
 
                 logger.info("Step 6: Running dev-scripts (45-90 minutes)...")
                 hypervisor.run_dev_scripts()
+
+                logger.info("Step 6b: Attaching monitor disks to VMs...")
+                hypervisor.attach_monitor_disks()
 
                 proxy_config = self.tnf_config.get("proxy", {})
                 if proxy_config.get("enabled", True):

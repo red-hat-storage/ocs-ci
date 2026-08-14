@@ -65,6 +65,7 @@ class TNFHypervisor:
         self.ssh_key, self.ssh_pub_key = self._resolve_ssh_keys()
         self._created_sg_id = None
         self._created_vpc_stack = {}
+        self._monitor_disk_size = None
 
     def _resolve_ssh_keys(self):
         """
@@ -736,8 +737,16 @@ class TNFHypervisor:
         self._ssh_cmd(f"cp {tmp_ps_path} {remote_ps_path}")
 
         extra_disks = self.dev_scripts_config.get("extra_disks", [])
-        disk_names = " ".join([f"vd{chr(98 + i)}" for i in range(len(extra_disks))])
-        max_disk_size = max(d["size"] for d in extra_disks) if extra_disks else 8
+
+        # dev-scripts VM_EXTRADISKS_SIZE applies one size to ALL extra disks.
+        # Separate monitor disk (smallest, for DRBD) from OSD disks (rest).
+        # OSD disks go through VM_EXTRADISKS; monitor disk is attached
+        # separately via qemu-img + virsh after dev-scripts completes.
+        osd_disks = extra_disks
+        if len(extra_disks) >= 2:
+            sorted_disks = sorted(extra_disks, key=lambda d: d["size"])
+            self._monitor_disk_size = sorted_disks[0]["size"]
+            osd_disks = sorted_disks[1:]
 
         config_lines = [
             "export IP_STACK=v4",
@@ -751,12 +760,16 @@ class TNFHypervisor:
             f"export BASE_DOMAIN={self.dev_scripts_config.get('base_domain', 'tnf.testing')}",
         ]
 
-        if extra_disks:
+        if osd_disks:
+            osd_disk_names = " ".join(
+                [f"vd{chr(98 + i)}" for i in range(len(osd_disks))]
+            )
+            osd_disk_size = max(d["size"] for d in osd_disks)
             config_lines.extend(
                 [
                     "export VM_EXTRADISKS=true",
-                    f'export VM_EXTRADISKS_LIST="{disk_names}"',
-                    f"export VM_EXTRADISKS_SIZE={max_disk_size}G",
+                    f'export VM_EXTRADISKS_LIST="{osd_disk_names}"',
+                    f"export VM_EXTRADISKS_SIZE={osd_disk_size}G",
                 ]
             )
 
@@ -846,6 +859,50 @@ class TNFHypervisor:
             return int(stdout.strip())
         return None
 
+    def attach_monitor_disks(self):
+        """
+        Create and attach small monitor disks to each master VM.
+
+        dev-scripts VM_EXTRADISKS_SIZE uses a single size for all disks.
+        To get different-sized disks (small monitor + large OSD), the
+        monitor disk is created separately via qemu-img and attached
+        via virsh after dev-scripts completes.
+        """
+        if not self._monitor_disk_size:
+            logger.info("No separate monitor disks to attach")
+            return
+
+        cluster_name = self.dev_scripts_config.get("cluster_name", "tnf-cluster")
+        num_masters = self.dev_scripts_config.get("num_masters", 2)
+        osd_disks = self.dev_scripts_config.get("extra_disks", [])
+        sorted_disks = sorted(osd_disks, key=lambda d: d["size"])
+        num_osd = len(sorted_disks) - 1
+        target_dev = f"vd{chr(98 + num_osd)}"
+        pool_dir = "/opt/dev-scripts/pool"
+
+        for i in range(num_masters):
+            domain = f"{cluster_name}_master_{i}"
+            img_path = f"{pool_dir}/{domain}_monitor.qcow2"
+
+            logger.info(
+                f"Creating {self._monitor_disk_size}G monitor disk for {domain}"
+            )
+            self._ssh_cmd(
+                f"sudo qemu-img create -f qcow2 {img_path} "
+                f"{self._monitor_disk_size}G"
+            )
+
+            logger.info(f"Attaching monitor disk as {target_dev} to {domain}")
+            self._ssh_cmd(
+                f"sudo virsh attach-disk {domain} {img_path} {target_dev} "
+                f"--persistent --subdriver qcow2"
+            )
+
+        logger.info(
+            f"Attached {self._monitor_disk_size}G monitor disks to "
+            f"{num_masters} master VMs as {target_dev}"
+        )
+
     def setup_proxy(self):
         """
         Set up squid HTTP proxy on the hypervisor for external
@@ -858,6 +915,7 @@ class TNFHypervisor:
             "dnf install -y squid",
             "sed -i 's/http_access deny all/http_access allow all/' /etc/squid/squid.conf",
             f"sed -i 's/^http_port .*/http_port {port}/' /etc/squid/squid.conf",
+            "sed -i '/^acl SSL_ports/a acl SSL_ports port 6443' /etc/squid/squid.conf",
             f"firewall-cmd --permanent --add-port={port}/tcp",
             "firewall-cmd --reload",
             "systemctl enable --now squid",
