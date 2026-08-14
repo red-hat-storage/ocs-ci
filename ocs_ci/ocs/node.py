@@ -3898,3 +3898,47 @@ def check_cluster_resources(ram_gb=65, cpu_cores=6):
             f"Resource capacity check failed due to environment or parsing error: {e}"
         )
         return True
+
+
+def get_host_uid_for_pod(node_name, pod_name):
+    """
+    Get the host-level UID for the container process of a pod.
+
+    Uses ``crictl`` on the node (via ``oc debug``) to find the
+    container PID, then reads ``/proc/<pid>/status`` to extract the
+    real UID as seen by the host kernel.  Useful for verifying user
+    namespace UID remapping (``hostUsers: false``).
+
+    Args:
+        node_name (str): Node where the pod runs
+        pod_name (str): Kubernetes pod name
+
+    Returns:
+        int: Host-level real UID of the container process
+    """
+    oc_cmd = OCP()
+    inspect_cmd = (
+        f"crictl inspect "
+        f"$(crictl ps "
+        f"--pod $(crictl pods --name {pod_name}"
+        f" --state ready -q | head -1) "
+        f"--state running -q | head -1)"
+    )
+    inspect_output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[inspect_cmd])
+    pid_match = re.search(r'"pid"\s*:\s*(\d+)', inspect_output)
+    assert pid_match, (
+        f"Could not find container PID in crictl inspect "
+        f"output for pod {pod_name} on node {node_name}"
+    )
+    pid = pid_match.group(1)
+    log.info(f"Container PID for {pod_name} " f"on {node_name}: {pid}")
+
+    status_cmd = f"cat /proc/{pid}/status"
+    status_output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[status_cmd])
+    uid_match = re.search(r"Uid:\s+(\d+)", status_output)
+    assert uid_match, (
+        f"Could not parse Uid from /proc/{pid}/status " f"on node {node_name}"
+    )
+    host_uid = int(uid_match.group(1))
+    log.info(f"Host UID for {pod_name} " f"on {node_name}: {host_uid}")
+    return host_uid
