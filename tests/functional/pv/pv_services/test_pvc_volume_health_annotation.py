@@ -12,6 +12,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_ocs_version,
+    jira,
 )
 from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.framework import config
@@ -33,6 +34,7 @@ REPORTER_TICK_WAIT = 60
 @tier1
 @green_squad
 @skipif_ocs_version("<4.22")
+@jira("DFBUGS-9421", run=False)
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
