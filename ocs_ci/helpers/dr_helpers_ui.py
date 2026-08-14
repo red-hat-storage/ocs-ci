@@ -903,9 +903,13 @@ def verify_pending_cleanup_alert_firing(
     )
 
     # If the browser is on a blank page (e.g. after session reset between
-    # iterations) refreshing stays blank. Navigate to ACM first.
+    # iterations) refreshing stays blank. Navigate to ACM console directly.
     if not acm_obj.driver.current_url.startswith("http"):
-        acm_obj.driver.get(get_acm_url())
+        restore_index = config.cur_index
+        config.switch_acm_ctx()
+        acm_url = get_acm_url()
+        config.switch_ctx(restore_index)
+        acm_obj.driver.get(acm_url)
         acm_obj.page_has_loaded()
     else:
         acm_obj.refresh_page()
@@ -1067,7 +1071,11 @@ def verify_pending_cleanup_alert_resolved(
 
     # Navigate to DR Dashboard Overview page
     if not acm_obj.driver.current_url.startswith("http"):
-        acm_obj.driver.get(get_acm_url())
+        restore_index = config.cur_index
+        config.switch_acm_ctx()
+        acm_url = get_acm_url()
+        config.switch_ctx(restore_index)
+        acm_obj.driver.get(acm_url)
         acm_obj.page_has_loaded()
     else:
         acm_obj.refresh_page()
