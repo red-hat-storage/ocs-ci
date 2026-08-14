@@ -121,11 +121,7 @@ def get_current_primary_cluster_name(
         namespace = constants.DR_OPS_NAMESPACE
         drpc_data = DRPC(namespace=namespace, resource_name=resource_name).get()
     else:
-        drpc_data = (
-            DRPC(namespace=namespace, resource_name=resource_name).get()
-            if resource_name
-            else DRPC(namespace=namespace).get()
-        )
+        drpc_data = DRPC(namespace=namespace, resource_name=resource_name or "").get()
     if drpc_data.get("spec").get("action") == constants.ACTION_FAILOVER:
         cluster_name = drpc_data["spec"]["failoverCluster"]
     else:
@@ -173,11 +169,9 @@ def get_current_secondary_cluster_name(
             workload_type=workload_type,
             resource_name=resource_name,
         )
-        drpolicy_data = (
-            DRPC(namespace=namespace, resource_name=resource_name).drpolicy_obj.get()
-            if resource_name
-            else DRPC(namespace=namespace).drpolicy_obj.get()
-        )
+        drpolicy_data = DRPC(
+            namespace=namespace, resource_name=resource_name or ""
+        ).drpolicy_obj.get()
     config.switch_ctx(restore_index)
     for cluster_name in drpolicy_data["spec"]["drClusters"]:
         if not cluster_name == primary_cluster_name:

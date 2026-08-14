@@ -468,7 +468,7 @@ class TestRDRBugVerification:
         logger.info("CephBlockPool is in Ready status")
 
         logger.test_step(
-            "Verify the updated token is propagated to the " "peer cluster by MCO"
+            "Verify the updated token is propagated to the peer cluster by MCO"
         )
         secondary_cluster_config = next(
             c
