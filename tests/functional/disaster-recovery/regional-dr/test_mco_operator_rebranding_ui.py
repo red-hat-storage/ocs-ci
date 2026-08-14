@@ -17,7 +17,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
-from ocs_ci.utility import version
 from ocs_ci.ocs.ui.page_objects.mco_operator_page import MCOOperatorPage
 
 logger = logging.getLogger(__name__)
@@ -119,10 +118,3 @@ class TestMCOOperatorRebrandingUI:
 
         logger.test_step("Verify operator installed status")
         mco_page.verify_operator_installed_status()
-
-        logger.test_step("Verify installed version is 4.22 or higher")
-        ocs_ver = version.get_semantic_ocs_version_from_config()
-        logger.assertion("OCS version: expected>=4.22, actual='%s'", ocs_ver)
-        assert (
-            ocs_ver >= version.VERSION_4_22
-        ), f"MCO rebranding requires OCS >= 4.22, but found: {ocs_ver}"
