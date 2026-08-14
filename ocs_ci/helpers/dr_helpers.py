@@ -172,7 +172,10 @@ def get_current_secondary_cluster_name(
 
 
 def set_current_primary_cluster_context(
-    namespace, workload_type=constants.SUBSCRIPTION
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    discovered_apps=False,
+    resource_name=None,
 ):
     """
     Set current primary cluster context based on workload namespace
@@ -180,16 +183,26 @@ def set_current_primary_cluster_context(
     Args:
         namespace (str): Name of the namespace
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        discovered_apps (bool): If true then deployed workload is discovered_apps. Takes precedence over workload_type
+        resource_name (str): DRPC NAME Only Used for discovered apps
 
     """
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
-    cluster_name = get_current_primary_cluster_name(namespace)
+    cluster_name = get_current_primary_cluster_name(
+        namespace=namespace,
+        workload_type=workload_type,
+        discovered_apps=discovered_apps,
+        resource_name=resource_name,
+    )
     config.switch_to_cluster_by_name(cluster_name)
 
 
 def set_current_secondary_cluster_context(
-    namespace, workload_type=constants.SUBSCRIPTION
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    discovered_apps=False,
+    resource_name=None,
 ):
     """
     Set secondary cluster context based on workload namespace
@@ -197,11 +210,18 @@ def set_current_secondary_cluster_context(
     Args:
         namespace (str): Name of the namespace
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        discovered_apps (bool): If true then deployed workload is discovered_apps. Takes precedence over workload_type
+        resource_name (str): DRPC NAME Only Used for discovered apps
 
     """
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
-    cluster_name = get_current_secondary_cluster_name(namespace)
+    cluster_name = get_current_secondary_cluster_name(
+        namespace=namespace,
+        workload_type=workload_type,
+        discovered_apps=discovered_apps,
+        resource_name=resource_name,
+    )
     config.switch_to_cluster_by_name(cluster_name)
 
 
