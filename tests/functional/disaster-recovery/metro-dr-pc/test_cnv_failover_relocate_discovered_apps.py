@@ -141,9 +141,10 @@ class TestCnvDiscoveredAppsMDR:
             )
 
         verify_cluster_data_protected_status(
-            workload_type=cnv_workloads[0].workload_type,
-            namespace=self.wl_namespace,
+            workload_type=constants.DISCOVERED_APPS,
+            namespace=constants.DR_OPS_NAMESPACE,
             workload_placement_name=self.resource_name,
+            drpc_name=cnv_workloads[0].discovered_apps_placement_name,
         )
 
         wait_time = 120
@@ -247,7 +248,7 @@ class TestCnvDiscoveredAppsMDR:
         )
 
         do_discovered_apps_cleanup(
-            drpc_name=self.resource_name,
+            drpc_name=cnv_workloads[0].discovered_apps_placement_name,
             old_primary=self.primary_cluster_name,
             workload_namespace=self.wl_namespace,
             workload_dir=cnv_workloads[0].workload_dir,
