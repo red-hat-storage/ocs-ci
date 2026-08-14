@@ -3496,7 +3496,7 @@ def verify_volsync():
 
 
 def verify_cluster_data_protected_status(
-    workload_type, namespace, workload_placement_name=None
+    workload_type, namespace, workload_placement_name=None, drpc_name=None
 ):
     """
     Verify that the cluster dataProtected is True
@@ -3505,6 +3505,7 @@ def verify_cluster_data_protected_status(
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         namespace (str): the namespace of the drpc resources
         workload_placement_name (str): Placement name
+        drpc_name (str): DRPC resource name for the application
     """
 
     if workload_type == constants.APPLICATION_SET:
@@ -3514,7 +3515,9 @@ def verify_cluster_data_protected_status(
             resource_name=f"{workload_placement_name}-drpc",
         )
     else:
-        drpc_obj = DRPC(namespace=namespace)
+        drpc_obj = DRPC(
+            namespace=namespace, resource_name=drpc_name if drpc_name else ""
+        )
     drpc_obj.wait_for_clusterdataprotected_status()
 
 
