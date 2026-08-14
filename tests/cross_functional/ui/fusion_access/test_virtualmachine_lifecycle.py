@@ -59,6 +59,83 @@ class TestVirtualMachineLifecycle(ManageTest):
         self.base_ui = BaseUI()
         self.vm_ui = VirtualMachineUI()
 
+    @pytest.fixture(autouse=True, scope="class")
+    def teardown_lungroup(self, request):
+        """
+        Class-scoped teardown that runs once after all tests in this class.
+
+        Steps:
+        1. Delete the LUN group via the UI
+        2. Wait 60 s then delete the LocalDisk associated with the LUN group
+           from the CLI.
+        3. Wait 60 s then delete the IBM Spectrum Scale cluster resource.
+        """
+
+        def cleanup():
+
+            logger.info("teardown_lungroup: starting class-level cleanup")
+
+            # Step 1 — Delete LUN group via UI
+            lungroup_name = None
+            try:
+                lungroup_name = self.vm_ui.delete_lungroup_via_ui()
+                logger.info(f"LUN group '{lungroup_name}' deletion initiated via UI")
+            except Exception as e:
+                logger.warning(f"Could not delete LUN group via UI: {e}")
+
+            logger.info("Waiting 60 s after LUN group deletion...")
+            time.sleep(60)
+
+            # Step 2 — Delete LocalDisk from CLI
+            if lungroup_name:
+                try:
+                    ocp = OCP(kind="LocalDisk", namespace="ibm-spectrum-scale")
+                    ld_out = ocp.exec_oc_cmd(
+                        "get localdisks -n ibm-spectrum-scale --no-headers",
+                        out_yaml_format=False,
+                    )
+                    localdisk_name = None
+                    for line in ld_out.splitlines():
+                        if lungroup_name in line:
+                            localdisk_name = line.split()[0]
+                            break
+                    if localdisk_name:
+                        ocp.exec_oc_cmd(
+                            f"delete localdisk {localdisk_name} -n ibm-spectrum-scale",
+                            out_yaml_format=False,
+                        )
+                        logger.info(f"Deleted LocalDisk '{localdisk_name}'")
+                    else:
+                        logger.warning(
+                            f"No LocalDisk found for LUN group '{lungroup_name}'"
+                        )
+                except Exception as e:
+                    logger.warning(f"Could not delete LocalDisk: {e}")
+
+            logger.info("Waiting 60 s before deleting IBM Spectrum Scale cluster...")
+            time.sleep(60)
+
+            # Step 3 — Delete IBM Spectrum Scale cluster resource
+            try:
+                ocp = OCP(
+                    kind="clusters.scale.spectrum.ibm.com",
+                    namespace="ibm-spectrum-scale",
+                )
+                ocp.exec_oc_cmd(
+                    "delete clusters.scale.spectrum.ibm.com ibm-spectrum-scale "
+                    "-n ibm-spectrum-scale",
+                    out_yaml_format=False,
+                )
+                logger.info("Deleted IBM Spectrum Scale cluster resource")
+            except Exception as e:
+                logger.warning(
+                    f"Could not delete IBM Spectrum Scale cluster resource: {e}"
+                )
+
+            logger.info("teardown_lungroup: complete")
+
+        request.addfinalizer(cleanup)
+
     @pytest.fixture(autouse=True)
     def teardown_vm(self, request):
         """
@@ -108,6 +185,10 @@ class TestVirtualMachineLifecycle(ManageTest):
         """
         Spawn a virtctl console session and log in to the VM.
 
+        Handles two cases:
+        - Fresh session: console shows ``login:`` prompt → send username/password.
+        - Already-logged-in session: console shows shell prompt directly
+
         Args:
             vm_name (str): Name of the VirtualMachine.
             namespace (str): Namespace the VM lives in.
@@ -137,16 +218,21 @@ class TestVirtualMachineLifecycle(ManageTest):
         child.expect(r"Press Ctrl", timeout=60)
         child.sendline("")
 
-        child.expect(r"login:", timeout=60)
-        logger.info("Login prompt detected — sending username")
-        child.sendline(vm_username)
+        # The console may already be at a shell prompt (prior session still
+        # active) or at a login: prompt — handle both.
+        index = child.expect([r"\]\$\s", r"login:"], timeout=60)
+        if index == 0:
+            logger.info("Shell prompt detected directly — already logged in")
+        else:
+            logger.info("Login prompt detected — sending username")
+            child.sendline(vm_username)
 
-        child.expect(r"[Pp]assword:", timeout=60)
-        logger.info("Password prompt detected — sending password")
-        child.sendline(vm_password)
+            child.expect(r"[Pp]assword:", timeout=60)
+            logger.info("Password prompt detected — sending password")
+            child.sendline(vm_password)
 
-        child.expect(r"\]\$\s", timeout=60)
-        logger.info("Shell prompt detected — logged in successfully")
+            child.expect(r"\]\$\s", timeout=60)
+            logger.info("Shell prompt detected — logged in successfully")
 
         return child
 
@@ -275,10 +361,10 @@ class TestVirtualMachineLifecycle(ManageTest):
         3. Open the creation wizard, enter a unique VM name, click Next.
         4. Guest OS: select Other Linux, pick the latest centos.stream* version,
            click Next.
-        5. Boot source: select the latest centos-stream* volume, click Next.
+        5. Boot source: no volumes are present — click 'Add volume'  Wait up to 15 minutes
+           for the 'Clone in progress' badge to disappear, then click the volume row and click Next.
         6. Compute resources: select the small size, click Next.
-        7. Customization: open the Storage tab, edit the rootdisk row's
-           StorageClass to the option ending with -vm, save, click Next.
+        7. Customization: no changes needed — click Next.
         8. Review and create: click Create VirtualMachine.
         9. Wait for the VM status to reach Running.
 
@@ -332,10 +418,22 @@ class TestVirtualMachineLifecycle(ManageTest):
         self.vm_ui.click_next_button()
         self.base_ui.take_screenshot("guest_os_next_clicked")
 
-        logger.info("\nStep 5: Boot source — select latest centos-stream, click Next")
+        logger.info(
+            "\nStep 5: Boot source — Add volume dialog, wait for clone, select volume"
+        )
         logger.info("-" * 80)
+        self.base_ui.take_screenshot("boot_source_page_no_volumes")
+
+        self.vm_ui.add_boot_volume_via_dialog(vm_name)
+        self.base_ui.take_screenshot("add_volume_dialog_saved")
+
+        logger.info("Waiting for boot volume clone to finish ")
+        self.vm_ui.wait_for_clone_in_progress_to_finish(timeout=900)
+        self.base_ui.take_screenshot("clone_finished")
+
+        logger.info("Selecting the newly cloned boot volume row")
         self.vm_ui.select_boot_volume_centos_stream_latest()
-        self.base_ui.take_screenshot("centos_stream_latest_selected")
+        self.base_ui.take_screenshot("boot_volume_selected")
 
         self.vm_ui.click_next_button()
         self.base_ui.take_screenshot("boot_source_next_clicked")
@@ -348,26 +446,9 @@ class TestVirtualMachineLifecycle(ManageTest):
         self.vm_ui.click_next_button()
         self.base_ui.take_screenshot("compute_resources_next_clicked")
 
-        logger.info("\nStep 7: Customization — Storage tab, edit rootdisk StorageClass")
+        logger.info("\nStep 7: Customization — no changes, click Next")
         logger.info("-" * 80)
         self.base_ui.take_screenshot("customization_page")
-
-        self.vm_ui.click_customization_storage_tab()
-        self.base_ui.take_screenshot("customization_storage_tab")
-
-        self.vm_ui.click_rootdisk_kebab_and_edit()
-        self.base_ui.take_screenshot("edit_disk_popup_opened")
-
-        storage_class = self.vm_ui.change_storageclass_to_vm_option()
-        assert storage_class.endswith(
-            "-vm"
-        ), f"Expected StorageClass ending with '-vm', got: {storage_class}"
-        logger.info(f"Changed StorageClass to: {storage_class}")
-        self.base_ui.take_screenshot("storageclass_vm_selected")
-
-        self.vm_ui.click_edit_disk_save()
-        self.base_ui.take_screenshot("edit_disk_saved")
-
         self.vm_ui.click_next_button()
         self.base_ui.take_screenshot("customization_next_clicked")
 
@@ -495,7 +576,165 @@ class TestVirtualMachineLifecycle(ManageTest):
         logger.info(f"VM data md5sum checksum stored: {md5sum}")
         logger.info("VM data write and md5sum checksum: PASS")
 
-    @pytest.mark.polarion_id("OCS-8067")
+    @pytest.mark.polarion_id("OCS-8223")
+    def test_virtualmachine_snapshot_and_restore(self):
+        """
+        Test VM snapshot creation and restore via the UI.
+
+        Test Steps:
+        1. Create a new namespace, run through the full VM creation wizard,
+           and wait for the VM to reach the Running state.
+        2. Fetch VM credentials from the VM YAML.
+        3. Log in to the VM console via virtctl, write a test file with known
+           data, and compute its md5sum.
+        4. Open Actions dropdown, click Take snapshot; a popup opens with the
+           snapshot name auto-filled — click Save.
+        5. Navigate to the Snapshots tab, wait for the snapshot
+           status to reach Succeeded, then sleep 30 s.  Modify existing data on vm
+           by appending to the existing test file via the VM console.
+        6. Power off the VM via Actions > Control > Stop and wait for the VM
+           status to change to Stopped in the overview page.
+        7. Navigate back to the Snapshots tab, click the kebab menu for the
+           snapshot, select 'Restore VirtualMachine from snapshot', then click
+           Restore in the confirmation popup.
+        8. Navigate to the Overview page and wait up to 10 minutes for the VM
+           status to reach Stopped, then start the VM via Actions > Control >
+           Start and wait for Running.
+        9. SSH to the VM and verify the file modification made in step 5 is
+           absent — the file content should match the original md5sum from
+           step 3.
+        """
+        logger.info("=" * 80)
+        logger.info("Starting VirtualMachine Snapshot and Restore Test")
+        logger.info("=" * 80)
+
+        logger.info("\nStep 1: Create VM and wait for Running state")
+        logger.info("-" * 80)
+        vm_name, namespace = self._create_vm_and_wait_for_running()
+        logger.info(f"VM '{vm_name}' in namespace '{namespace}' is Running — PASS")
+
+        logger.info("\nStep 2: Fetch VM credentials from VM YAML")
+        logger.info("-" * 80)
+        vm_username, vm_password = self._fetch_vm_credentials(vm_name, namespace)
+
+        logger.info("\nStep 3: Write test data to VM and compute md5sum")
+        logger.info("-" * 80)
+        test_file = "/home/centos/ocs_test_data.txt"
+        test_data = "OCS CI test data for snapshot restore verification"
+
+        self._wait_for_vmi_agent_connected(vm_name, namespace)
+        child = self._login_to_vm_console(vm_name, namespace, vm_username, vm_password)
+        original_md5sum = self._calculate_vm_file_md5sum(child, test_file, test_data)
+        child.send("\x1d")
+        child.close()
+
+        assert original_md5sum, "md5sum value is empty — data write or checksum failed"
+        logger.info(f"Original VM md5sum: {original_md5sum}")
+        logger.info("VM data write and md5sum checksum calculation is successful")
+
+        logger.info("\nStep 4: Take snapshot of the vm")
+        logger.info("-" * 80)
+        self.vm_ui.click_actions_menu()
+        self.base_ui.take_screenshot("snapshot_test_actions_menu_open")
+
+        self.vm_ui.click_actions_take_snapshot()
+        self.base_ui.take_screenshot("snapshot_test_take_snapshot_popup")
+
+        self.vm_ui.click_take_snapshot_save()
+        self.base_ui.take_screenshot("snapshot_test_snapshot_save_clicked")
+        logger.info("Snapshot creation initiated successfully")
+
+        logger.info(
+            "\nStep 5: Navigate to Snapshots tab, wait for Succeeded, later modify existing data in vm"
+        )
+        logger.info("-" * 80)
+        self.vm_ui.click_vm_detail_snapshots_tab()
+        self.base_ui.take_screenshot("snapshot_test_snapshots_tab")
+
+        self.vm_ui.wait_for_snapshot_succeeded()
+        self.base_ui.take_screenshot("snapshot_test_snapshot_succeeded")
+        logger.info("Snapshot status reached: Succeeded ")
+
+        logger.info("Sleeping 30 s after snapshot succeeded before modifying data...")
+        time.sleep(30)
+
+        logger.info("Modifying VM data — appending to test file via console")
+        child = self._login_to_vm_console(vm_name, namespace, vm_username, vm_password)
+        child.sendline(f'echo "Data modified after snapshot" >> {test_file}')
+        child.expect(r"\]\$\s", timeout=30)
+        logger.info("Data modification appended to test file")
+        child.send("\x1d")
+        child.close()
+
+        logger.info("\nStep 6: Power off VM via Actions > Control > Stop")
+        logger.info("-" * 80)
+        self.vm_ui.click_vm_detail_overview_tab()
+        self.base_ui.take_screenshot("snapshot_test_overview_before_stop")
+        self.vm_ui.click_actions_menu()
+        self.base_ui.take_screenshot("snapshot_test_actions_stop_menu")
+        self.vm_ui.click_actions_control_then_stop()
+        self.base_ui.take_screenshot("snapshot_test_stop_clicked")
+
+        self.vm_ui.wait_for_vm_stopped()
+        self.base_ui.take_screenshot("snapshot_test_vm_stopped")
+        logger.info("VM status reached: Stopped")
+
+        logger.info(
+            "\nStep 7: Snapshots tab > kebab > Restore VirtualMachine from snapshot"
+        )
+        logger.info("-" * 80)
+        self.vm_ui.click_vm_detail_snapshots_tab()
+        self.base_ui.take_screenshot("snapshot_test_snapshots_tab_before_restore")
+
+        self.vm_ui.click_snapshot_kebab_and_restore()
+        self.base_ui.take_screenshot("snapshot_test_restore_popup")
+
+        self.vm_ui.click_restore_snapshot_confirm()
+        self.base_ui.take_screenshot("snapshot_test_restore_confirmed")
+        logger.info("Restore initiated from snapshot")
+
+        logger.info("\nStep 8: Navigate to Overview; wait for Stopped, then Start")
+        logger.info("-" * 80)
+        self.vm_ui.click_vm_detail_overview_tab()
+        self.base_ui.take_screenshot("snapshot_test_overview_after_restore")
+
+        self.vm_ui.wait_for_vm_stopped_long()
+        self.base_ui.take_screenshot("snapshot_test_vm_stopped_after_restore")
+        logger.info("VM status after restore: Stopped — PASS")
+
+        logger.info("Starting VM via Actions > Control > Start")
+        self.vm_ui.click_actions_menu()
+        self.vm_ui.click_actions_control_then_start()
+        self.base_ui.take_screenshot("snapshot_test_start_clicked")
+
+        self.vm_ui.wait_for_vm_running()
+        self.base_ui.take_screenshot("snapshot_test_vm_running_after_restore")
+        logger.info("VM status after restore and start: Running — PASS")
+
+        logger.info("\nStep 9: Validate restore — verify file content matches original")
+        logger.info("-" * 80)
+        self._wait_for_vmi_agent_connected(vm_name, namespace)
+
+        child = self._login_to_vm_console(vm_name, namespace, vm_username, vm_password)
+        restored_md5sum = self._calculate_vm_file_md5sum(child, test_file)
+        child.send("\x1d")
+        child.close()
+
+        logger.info(f"Original md5sum : {original_md5sum}")
+        logger.info(f"Restored md5sum : {restored_md5sum}")
+
+        assert restored_md5sum, "md5sum of restored VM file is empty"
+        assert restored_md5sum == original_md5sum, (
+            f"Snapshot restore data integrity check FAILED: "
+            f"original md5sum={original_md5sum}, "
+            f"restored md5sum={restored_md5sum}. "
+            "The modification made after the snapshot is still present."
+        )
+        logger.info(
+            "Restored md5sum matches original — snapshot restore verified: PASS"
+        )
+
+    @pytest.mark.polarion_id("OCS-8091")
     def test_clone_virtualmachine(self):
         """
         Test cloning a VirtualMachine via the UI and verifying data integrity.
