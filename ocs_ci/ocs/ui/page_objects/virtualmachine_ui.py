@@ -11,6 +11,7 @@ from selenium.common.exceptions import (
 )
 from selenium.webdriver.common.action_chains import ActionChains
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.base_ui import (
     wait_for_element_to_be_clickable,
     wait_for_element_to_be_visible,
@@ -773,13 +774,28 @@ class VirtualMachineUI(PageNavigator):
 
     def delete_lungroup_via_ui(self):
         """
-        Navigate to Storage > External systems, open SAN_Storage, capture the
-        LUN group name, delete it via the kebab menu, type the name to confirm,
-        and click Delete.
+        Fetch the LUN group name from the cluster via CLI, navigate to
+        Storage > External systems > SAN_Storage dashboard, delete the LUN
+        group via the kebab menu, type the name to confirm, and click Delete.
 
         Returns:
             str: The LUN group name that was deleted.
         """
+        logger.info("Fetching LUN group name")
+        ocp = OCP(kind="filesystem", namespace="ibm-spectrum-scale")
+        fs_out = ocp.exec_oc_cmd(
+            "get filesystem -n ibm-spectrum-scale --no-headers",
+            out_yaml_format=False,
+        )
+        lungroup_name = None
+        for line in fs_out.splitlines():
+            line = line.strip()
+            if line:
+                lungroup_name = line.split()[0]
+                break
+        assert lungroup_name, "Could not parse LUN group name"
+        logger.info(f"LUN group name '{lungroup_name}'")
+
         logger.info("Navigating to Storage > External systems")
         self.choose_expanded_mode(mode=True, locator=self.vm_loc["storage_menu"])
         ext_link = self.vm_loc["external_systems_nav_link"]
@@ -795,15 +811,10 @@ class VirtualMachineUI(PageNavigator):
         self.driver.execute_script("arguments[0].click();", el)
         self.page_has_loaded()
         logger.info("On SAN Storage dashboard page")
-
-        lg_link = self.vm_loc["lungroup_row_name_link"]
-        wait_for_element_to_be_visible(locator=lg_link, timeout=30)
-        lg_el = self.driver.find_element(lg_link[1], lg_link[0])
-        lungroup_name = lg_el.text.strip()
-        logger.info(f"Found LUN group: '{lungroup_name}'")
+        self.take_screenshot("delete_lungroup_san_storage_page")
 
         kebab = self.vm_loc["lungroup_kebab_button"]
-        wait_for_element_to_be_visible(locator=kebab, timeout=30)
+        wait_for_element_to_be_visible(locator=kebab, timeout=60)
         kebab_el = self.driver.find_element(kebab[1], kebab[0])
         self.driver.execute_script(
             "arguments[0].scrollIntoView({block:'center'});", kebab_el
