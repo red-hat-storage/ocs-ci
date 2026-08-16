@@ -592,6 +592,7 @@ class VirtualMachineUI(PageNavigator):
         dialog, and save.
 
         Steps performed inside the dialog:
+
         1. Source type: select 'Volume / Use volume already available on the
            cluster'.
         2. Volume project: open dropdown, select and click it.
