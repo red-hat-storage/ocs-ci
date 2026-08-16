@@ -776,7 +776,7 @@ class VirtualMachineUI(PageNavigator):
     def delete_lungroup_via_ui(self):
         """
         Fetch the LUN group name from the cluster via CLI, navigate to
-        Storage > External systems > SAN_Storage dashboard, delete the LUN
+        Storage > External systems > SAN_Storage dashboard, then delete the LUN
         group via the kebab menu, type the name to confirm, and click Delete.
 
         Returns:
