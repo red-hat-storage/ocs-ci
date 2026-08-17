@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ec_pools_disabled,
     skipif_ocs_version,
     brown_squad,
+    polarion_id,
 )
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -383,6 +384,7 @@ class TestCephDefaultValuesCheck(ManageTest):
 @skipif_external_mode
 @skipif_ec_pools_disabled
 @runs_on_provider
+@polarion_id("OCS-8230")
 class TestECPoolOptimizationsCheck(ManageTest):
     """
     Validate EC pool ec_optimizations (FastEC) flags on day-1 EC clusters.
