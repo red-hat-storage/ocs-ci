@@ -20,11 +20,7 @@ from ocs_ci.framework.testlib import (
     tier1,
 )
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.cbt_metadata import (
-    VerifierTool,
-    ensure_sidecar_image,
-    ensure_sms_cr,
-)
+from ocs_ci.helpers.cbt_metadata import VerifierTool
 from ocs_ci.helpers.snapshot_helpers import (
     restore_snapshot_to_block_pvc,
     write_data_to_pvc,
@@ -58,11 +54,8 @@ class TestRbdCBTMetadata(ManageTest):
         """
         Create a project, CBT runner, and store factories.
 
-        Ensures the snapshot-metadata sidecar image and
-        SnapshotMetadataService CR are in place
-        (DFBUGS-9181). PVCs and pods created through
-        factories are cleaned up by their respective
-        factory finalizers.
+        PVCs and pods created through factories are cleaned
+        up by their respective factory finalizers.
         """
 
         def finalizer():
@@ -70,9 +63,6 @@ class TestRbdCBTMetadata(ManageTest):
                 self.cbt_runner.cleanup()
 
         request.addfinalizer(finalizer)
-
-        ensure_sidecar_image()
-        ensure_sms_cr()
 
         self.project = project_factory()
         self.namespace = self.project.namespace
