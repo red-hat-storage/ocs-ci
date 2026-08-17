@@ -46,6 +46,25 @@ UNRELEASED_DEFAULT_MIRROR = (
 )
 
 
+def get_ocp_operator_registry_namespace(ocp_version=None):
+    """
+    Return the registry.redhat.io namespace for unreleased OCP operator images.
+
+    OCP 4.x images live under openshift4/; OCP 5.x under openshift5/.
+
+    Args:
+        ocp_version (semantic_version.base.Version): OCP version. If None,
+            taken from config via get_semantic_ocp_version_from_config().
+
+    Returns:
+        str: Namespace segment such as "openshift4" or "openshift5".
+
+    """
+    if ocp_version is None:
+        ocp_version = get_semantic_ocp_version_from_config()
+    return f"openshift{ocp_version.major}"
+
+
 class Operator:
     # expected to be overridden by child classes
     name: str = None
@@ -439,15 +458,16 @@ class NMStateOperator(Operator):
     def __init__(self, create_catalog: bool = False):
         self.name = constants.NMSTATE_OPERATOR
         ocp_version = get_semantic_ocp_version_from_config()
+        ocp_ns = get_ocp_operator_registry_namespace(ocp_version)
         self.unreleased_catalog_image_tag: str = (
             f"ocp__{ocp_version}__kubernetes-nmstate-rhel9-operator"
         )
         self.unreleased_images = [
-            "registry.redhat.io/openshift4/kubernetes-nmstate-operator-bundle",
-            "registry.redhat.io/openshift4/kubernetes-nmstate-rhel9-operator",
-            "registry.redhat.io/openshift4/nmstate-console-plugin-rhel9",
-            "registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9",
-            "registry.redhat.io/openshift4/ose-kubernetes-nmstate-handler-rhel9",
+            f"registry.redhat.io/{ocp_ns}/kubernetes-nmstate-operator-bundle",
+            f"registry.redhat.io/{ocp_ns}/kubernetes-nmstate-rhel9-operator",
+            f"registry.redhat.io/{ocp_ns}/nmstate-console-plugin-rhel9",
+            f"registry.redhat.io/{ocp_ns}/ose-kube-rbac-proxy-rhel9",
+            f"registry.redhat.io/{ocp_ns}/ose-kubernetes-nmstate-handler-rhel9",
         ]
         self.namespace = constants.NMSTATE_NAMESPACE
         self.disconnected_required_packages = [
@@ -582,15 +602,16 @@ class LocalStorageOperator(Operator):
     def __init__(self, create_catalog: bool = False):
         self.name = constants.LOCAL_STORAGE_OPERATOR_NAME
         ocp_version = get_semantic_ocp_version_from_config()
+        ocp_ns = get_ocp_operator_registry_namespace(ocp_version)
         self.unreleased_catalog_image_tag: str = (
             f"ocp__{ocp_version}__ose-local-storage-rhel9-operator"
         )
         self.unreleased_images = [
-            "registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9",
-            "registry.redhat.io/openshift4/ose-local-storage-diskmaker-rhel9",
-            "registry.redhat.io/openshift4/ose-local-storage-mustgather-rhel9",
-            "registry.redhat.io/openshift4/ose-local-storage-operator-bundle",
-            "registry.redhat.io/openshift4/ose-local-storage-rhel9-operator",
+            f"registry.redhat.io/{ocp_ns}/ose-kube-rbac-proxy-rhel9",
+            f"registry.redhat.io/{ocp_ns}/ose-local-storage-diskmaker-rhel9",
+            f"registry.redhat.io/{ocp_ns}/ose-local-storage-mustgather-rhel9",
+            f"registry.redhat.io/{ocp_ns}/ose-local-storage-operator-bundle",
+            f"registry.redhat.io/{ocp_ns}/ose-local-storage-rhel9-operator",
         ]
         self.disconnected_required_packages = [
             "local-storage-operator",
@@ -625,15 +646,16 @@ class MetalLBOperator(Operator):
     def __init__(self, create_catalog: bool = False):
         self.name = constants.METALLB_OPERATOR_NAME
         ocp_version = get_semantic_ocp_version_from_config()
+        ocp_ns = get_ocp_operator_registry_namespace(ocp_version)
         self.unreleased_catalog_image_tag: str = (
             f"ocp__{ocp_version}__metallb-rhel9-operator"
         )
         self.unreleased_images = [
-            "registry.redhat.io/openshift4/frr-rhel9",
-            "registry.redhat.io/openshift4/metallb-rhel9-operator",
-            "registry.redhat.io/openshift4/metallb-rhel9",
-            "registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9",
-            "registry.redhat.io/openshift4/ose-metallb-operator-bundle",
+            f"registry.redhat.io/{ocp_ns}/frr-rhel9",
+            f"registry.redhat.io/{ocp_ns}/metallb-rhel9-operator",
+            f"registry.redhat.io/{ocp_ns}/metallb-rhel9",
+            f"registry.redhat.io/{ocp_ns}/ose-kube-rbac-proxy-rhel9",
+            f"registry.redhat.io/{ocp_ns}/ose-metallb-operator-bundle",
         ]
         self.disconnected_required_packages = [
             "metallb-operator",
@@ -736,14 +758,15 @@ class IngressNodeFirewallOperator(Operator):
     def __init__(self, create_catalog: bool = False):
         self.name = constants.INGRESS_NODE_FIREWALL_OPERATOR_NAME
         ocp_version = get_semantic_ocp_version_from_config()
+        ocp_ns = get_ocp_operator_registry_namespace(ocp_version)
         self.unreleased_catalog_image_tag: str = (
             f"ocp__{ocp_version}__ingress-node-firewall-rhel9-operator"
         )
         self.unreleased_images = [
-            "registry.redhat.io/openshift4/ingress-node-firewall-operator-bundle",
-            "registry.redhat.io/openshift4/ingress-node-firewall-rhel9-operator",
-            "registry.redhat.io/openshift4/ingress-node-firewall-rhel9",
-            "registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9",
+            f"registry.redhat.io/{ocp_ns}/ingress-node-firewall-operator-bundle",
+            f"registry.redhat.io/{ocp_ns}/ingress-node-firewall-rhel9-operator",
+            f"registry.redhat.io/{ocp_ns}/ingress-node-firewall-rhel9",
+            f"registry.redhat.io/{ocp_ns}/ose-kube-rbac-proxy-rhel9",
         ]
         self.disconnected_required_packages = [
             "ingress-node-firewall",
