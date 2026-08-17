@@ -191,6 +191,26 @@ class HyperConverged:
         HyperConverged.create_hyperconverged_instance(self)
 
 
+def _normalize_ocp_version(ocp_version: str) -> semantic_version.Version:
+    """
+    Parse an OCP version string and normalize OCP 5.x to the 4.x equivalent.
+
+    OCP 5.0 is equivalent to OCP 4.23, so 5.x maps to 4.(23 + x).
+
+    Args:
+        ocp_version: OCP version as a string (e.g., "4.18", "5.0.0-0.nightly-...")
+    Returns:
+        semantic_version.Version normalized to the 4.x series
+    """
+    if not semantic_version.validate(ocp_version):
+        ocp_version += ".0"
+    ocp_semver = semantic_version.Version(ocp_version)
+    if ocp_semver.major >= 5:
+        normalized_minor = 23 + (ocp_semver.major - 5) * 23 + ocp_semver.minor
+        ocp_semver = semantic_version.Version(f"4.{normalized_minor}.0")
+    return ocp_semver
+
+
 def get_hyperconverged_corresponding_version(ocp_version: str) -> str:
     """
     Given an OCP version, return the corresponding Hyperconverged version.
@@ -198,16 +218,14 @@ def get_hyperconverged_corresponding_version(ocp_version: str) -> str:
     Rule:
     - Hyperconverged Major = OCP Major - 3
     - Hyperconverged Minor = OCP Minor - 4
+    - OCP 5.0 is treated as OCP 4.23
 
     Args:
-        ocp_version: OCP version as a string (e.g., "4.18" or "4.18.3")
+        ocp_version: OCP version as a string (e.g., "4.18", "4.18.3", or "5.0")
     Returns:
         Corresponding Hyperconverged version as a string (e.g., "1.14")
     """
-    if not semantic_version.validate(ocp_version):
-        ocp_version += ".0"  # Ensure valid semantic versioning if patch is missing
-
-    ocp_semver = semantic_version.Version(ocp_version)
+    ocp_semver = _normalize_ocp_version(ocp_version)
     hyperconverged_major = ocp_semver.major - 3
     hyperconverged_minor = ocp_semver.minor - 4
 
@@ -221,11 +239,12 @@ def get_ocp_corresponding_version(hyperconverged_version: str) -> str:
     Rule:
     - OCP Major = Hyperconverged Major + 3
     - OCP Minor = Hyperconverged Minor + 4
+    - Returns OCP 5.x when the computed minor >= 23
 
     Args:
         hyperconverged_version: Hyperconverged version as a string (e.g., "1.14")
     Returns:
-        Corresponding OCP version as a string (e.g., "4.18")
+        Corresponding OCP version as a string (e.g., "4.18" or "5.0")
     """
     if not semantic_version.validate(hyperconverged_version):
         hyperconverged_version += (
@@ -235,5 +254,9 @@ def get_ocp_corresponding_version(hyperconverged_version: str) -> str:
     hyperconverged_semver = semantic_version.Version(hyperconverged_version)
     ocp_major = hyperconverged_semver.major + 3
     ocp_minor = hyperconverged_semver.minor + 4
+
+    if ocp_minor >= 23:
+        ocp_major = 5 + (ocp_minor - 23) // 23
+        ocp_minor = (ocp_minor - 23) % 23
 
     return f"{ocp_major}.{ocp_minor}"
