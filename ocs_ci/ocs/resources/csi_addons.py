@@ -246,6 +246,7 @@ def get_csi_addon_pod_on_node(node_name, driver):
 
     Raises:
         AssertionError: If no matching pod is found.
+        ValueError: If `driver` is not "cephfs" or "rbd".
     """
     _DRIVER_LABELS = {
         "cephfs": constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,

@@ -33,7 +33,7 @@ REPORTER_TICK_WAIT = 60
 
 @tier1
 @green_squad
-@skipif_ocs_version("<4.22")
+@skipif_ocs_version("<4.23")
 @jira("DFBUGS-9421", run=False)
 @pytest.mark.parametrize(
     argnames=["interface"],
