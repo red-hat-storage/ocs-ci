@@ -218,12 +218,18 @@ class TestDeepArchive(MCGTest):
 
         # 9. Head the object while restore is in progress - verify ongoing
         logger.test_step("Verify restore is ongoing")
-        head_resp = s3_head_object(obc, obc.bucket_name, archive_key)
-        restore_header = head_resp.get("Restore", "")
-        logger.assertion(f"Restore header: {restore_header!r}")
-        assert (
-            'ongoing-request="true"' in restore_header
-        ), f"Expected ongoing restore, got Restore header: {restore_header!r}"
+        for head_resp in TimeoutSampler(
+            timeout=60,
+            sleep=5,
+            func=s3_head_object,
+            s3_obj=obc,
+            bucketname=obc.bucket_name,
+            object_key=archive_key,
+        ):
+            restore_header = head_resp.get("Restore", "")
+            if 'ongoing-request="true"' in restore_header:
+                logger.assertion(f"Restore header: {restore_header!r}")
+                break
 
         # 10. Simulate restore completion via NSFS xattrs
         logger.test_step("Simulate restore completion via NSFS xattrs")

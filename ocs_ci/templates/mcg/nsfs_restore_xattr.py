@@ -1,3 +1,14 @@
+"""
+Simulate tape recall on an NSFS archive target by manipulating xattrs.
+
+Executed via python3 on a noobaa-endpoint pod by nsfs_simulate_archive_restore().
+Walks $base_path to find the file with user.noobaa.restore.request, removes
+that xattr, and sets user.noobaa.restore.expiry to $expiry - mimicking what
+the tape backend does after a successful recall.
+
+This is a string.Template - $base_path and $expiry are substituted at runtime.
+"""
+
 import os
 
 base = "$base_path"
@@ -11,8 +22,8 @@ for root, dirs, files in os.walk(base):
             all_files.append((path, xattrs))
             if "user.noobaa.restore.request" in xattrs:
                 found.append(path)
-        except Exception:
-            pass
+        except OSError as ex:
+            all_files.append((path, f"<listxattr failed: {ex}>"))
 if not found:
     diag = "Files found under " + base + ":\n"
     for p, xa in all_files:

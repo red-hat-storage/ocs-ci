@@ -319,6 +319,13 @@ def oc_create_namespacestore(
     nss_data["metadata"]["name"] = nss_name
     nss_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
 
+    if platform.lower() == constants.ARCHIVE_PLATFORM:
+        if not nss_tup or len(nss_tup) < 3 or not nss_tup[2]:
+            raise ValueError(
+                f"Archive namespacestore tuple must be "
+                f"(amount, target_bucket, account_name), got: {nss_tup}"
+            )
+
     NSS_MAPPING = {
         constants.AWS_PLATFORM: lambda: {
             "type": "aws-s3",

@@ -134,21 +134,24 @@ def bucket_class_factory(
             vector_policy = None
 
             archive_policy = bucket_class_dict.get("archive_policy")
-            if "archive_nss_dict" in bucket_class_dict:
-                archive_nss = namespace_store_factory(
-                    interface, bucket_class_dict["archive_nss_dict"]
-                )
-                archive_policy = archive_nss[0].name
 
             if "vector_policy" in bucket_class_dict and interface.lower() != "oc":
                 raise RuntimeError(
                     f"vector_policy is supported only with 'oc' interface, got: {interface}"
                 )
 
-            if archive_policy and interface.lower() != "oc":
+            if (
+                archive_policy or "archive_nss_dict" in bucket_class_dict
+            ) and interface.lower() != "oc":
                 raise RuntimeError(
                     f"archive_policy is supported only with 'oc' interface, got: {interface}"
                 )
+
+            if "archive_nss_dict" in bucket_class_dict:
+                archive_nss = namespace_store_factory(
+                    interface, bucket_class_dict["archive_nss_dict"]
+                )
+                archive_policy = archive_nss[0].name
 
             if "vector_policy" in bucket_class_dict:
                 # Vector policy for vector buckets
