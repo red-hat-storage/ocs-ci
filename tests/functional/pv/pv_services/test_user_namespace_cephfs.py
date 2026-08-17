@@ -26,7 +26,7 @@ USERNS_UID_RANGE = "10000/1000"
 
 @tier1
 @green_squad
-@skipif_ocs_version("<4.22")
+@skipif_ocs_version("<4.23")
 class TestUserNamespaceCephFS(ManageTest):
     """
     Verify CephFS I/O under user namespaces (hostUsers=false)
