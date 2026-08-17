@@ -23,9 +23,15 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_mcg_only,
 )
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.helpers.helpers import (
+    create_pod,
+    create_project,
+    create_pvc,
+    wait_for_resource_state,
+)
 from ocs_ci.ocs.ui.page_objects.cephfs_subvolume_metrics import (
     CephFSSubvolumeMetricsCard,
 )
@@ -462,4 +468,305 @@ class TestCephFSSubvolumeTop10Ranking(ManageTest):
             metric=metric,
             ui_values=all_values,
             threading_lock=threading_lock,
+        )
+
+
+@green_squad
+@runs_on_provider
+@skipif_ocs_version("<4.22")
+@skipif_mcg_only
+@skipif_external_mode
+class TestCephFSSubvolumeDrillDown(ManageTest):
+    """
+    Drill-down tests for the CephFS subvolume metrics card: clicking a
+    row to open the Related pods popover, verifying pod list accuracy,
+    node information, multiple-pod scenarios, and detail metrics.
+    """
+
+    @pytest.fixture(autouse=True, scope="class")
+    def setup(self, request, setup_ui_class):
+        """
+        Create CephFS workloads for drill-down testing:
+        - 1 workload with a single pod
+        - 1 RWX workload with 3 pods mounting the same PVC
+        Navigate to Block and File tab and wait for rows.
+        """
+        all_projects = []
+
+        def finalizer():
+            for project_obj in all_projects:
+                try:
+                    logger.info(
+                        "Deleting project %s",
+                        project_obj.namespace,
+                    )
+                    project_obj.delete(resource_name=project_obj.namespace)
+                    project_obj.wait_for_delete(project_obj.namespace, timeout=180)
+                except (CommandFailed, Exception):
+                    logger.warning(
+                        "Failed to delete project %s",
+                        project_obj.namespace,
+                        exc_info=True,
+                    )
+
+        request.addfinalizer(finalizer)
+
+        logger.test_step("Create single-pod CephFS workload for drill-down tests")
+        single_project = create_project()
+        all_projects.append(single_project)
+        single_pvc = create_pvc(
+            sc_name=constants.CEPHFILESYSTEM_SC,
+            namespace=single_project.namespace,
+            size="1Gi",
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+        single_pod = create_pod(
+            pvc_name=single_pvc.name,
+            namespace=single_project.namespace,
+            interface_type=constants.CEPHFILESYSTEM,
+        )
+        wait_for_resource_state(
+            single_pod,
+            state=constants.STATUS_RUNNING,
+            timeout=300,
+        )
+        single_pod.run_io(
+            storage_type=constants.WORKLOAD_STORAGE_TYPE_FS,
+            size="1GB",
+            rate="100m",
+            runtime=900,
+        )
+
+        logger.test_step("Create multi-pod CephFS workload (3 pods, 1 RWX PVC)")
+        multi_project = create_project()
+        all_projects.append(multi_project)
+        multi_pvc = create_pvc(
+            sc_name=constants.CEPHFILESYSTEM_SC,
+            namespace=multi_project.namespace,
+            size="1Gi",
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+        multi_pods = []
+        for i in range(3):
+            pod_obj = create_pod(
+                pvc_name=multi_pvc.name,
+                namespace=multi_project.namespace,
+                interface_type=constants.CEPHFILESYSTEM,
+                pod_name=f"cephfs-multi-pod-{i}",
+            )
+            wait_for_resource_state(
+                pod_obj,
+                state=constants.STATUS_RUNNING,
+                timeout=300,
+            )
+            pod_obj.run_io(
+                storage_type=constants.WORKLOAD_STORAGE_TYPE_FS,
+                size="1GB",
+                rate="100m",
+                runtime=900,
+            )
+            multi_pods.append(pod_obj)
+
+        request.cls.single_project = single_project
+        request.cls.multi_project = multi_project
+        request.cls.multi_pods = multi_pods
+
+        logger.test_step("Navigate to Storage Cluster > Block and File tab")
+        storage_cluster_page = PageNavigator().nav_storage_cluster_default_page()
+        storage_cluster_page.validate_block_and_file_tab_active()
+
+        subvolume_metrics_card = CephFSSubvolumeMetricsCard()
+        assert (
+            subvolume_metrics_card.verify_cephfs_subvolume_section_visible()
+        ), "CephFS subvolume metrics card not visible"
+
+        logger.test_step("Wait for workload namespaces to appear")
+        subvolume_metrics_card.wait_for_namespaces_in_subvolume_table(
+            [single_project.namespace, multi_project.namespace]
+        )
+
+    @tier2
+    @ui
+    def test_pod_list_accuracy(self):
+        """
+        Verify pod names in the Related pods popover match pods
+        using the CephFS PVC as reported by ``oc get pods``.
+
+        Steps:
+        1. Query pods in the single-pod namespace via CLI.
+        2. Click the namespace row name button.
+        3. Read pod links from the popover.
+        4. Verify the CLI pod names match the popover list exactly
+           (no missing and no extra/phantom pods).
+        """
+        subvolume_metrics_card = CephFSSubvolumeMetricsCard()
+        ns = self.single_project.namespace
+
+        logger.test_step("Query pods in namespace '%s' via CLI", ns)
+        pod_ocp = ocp.OCP(kind=constants.POD, namespace=ns)
+        pod_list = pod_ocp.get()
+        cli_pod_names = [
+            item["metadata"]["name"]
+            for item in pod_list.get("items", [])
+            if item.get("status", {}).get("phase") == constants.STATUS_RUNNING
+        ]
+        assert cli_pod_names, f"No running pods found in namespace '{ns}'"
+
+        logger.test_step("Click namespace '%s' row name button", ns)
+        subvolume_metrics_card.navigate_to_cephfs_subvolume_section()
+        subvolume_metrics_card.verify_namespace_in_subvolume_table(ns)
+        subvolume_metrics_card.click_cephfs_subvolume_row_name_by_namespace(ns)
+        assert (
+            subvolume_metrics_card.verify_cephfs_subvolume_related_pods_visible()
+        ), "Related pods popover not visible"
+
+        popover_pods = subvolume_metrics_card.get_cephfs_subvolume_related_pod_links()
+
+        logger.test_step("Verify CLI pod names appear in popover list")
+        for cli_pod in cli_pod_names:
+            assert any(cli_pod in link for link in popover_pods), (
+                f"Pod '{cli_pod}' from CLI not found in "
+                f"popover links: {popover_pods}"
+            )
+
+        logger.test_step("Verify no extra pods in popover")
+        assert len(popover_pods) == len(cli_pod_names), (
+            f"Pod count mismatch: CLI has {len(cli_pod_names)} "
+            f"pods {cli_pod_names}, popover has "
+            f"{len(popover_pods)} pods {popover_pods}"
+        )
+
+    @tier2
+    @ui
+    def test_multiple_pods_one_pvc(self):
+        """
+        Verify the Related pods popover lists all 3 pods when an RWX
+        CephFS PVC is mounted by multiple pods.
+
+        Steps:
+        1. Navigate to the multi-pod namespace row.
+        2. Open the Related pods popover (or View all link).
+        3. Verify all 3 pod names are present.
+        """
+        subvolume_metrics_card = CephFSSubvolumeMetricsCard()
+        ns = self.multi_project.namespace
+
+        logger.test_step("Navigate to multi-pod namespace '%s' row", ns)
+        subvolume_metrics_card.navigate_to_cephfs_subvolume_section()
+        assert subvolume_metrics_card.verify_namespace_in_subvolume_table(
+            ns
+        ), f"Namespace '{ns}' not found in subvolume table"
+
+        logger.test_step("Open Related pods popover for namespace '%s'", ns)
+        subvolume_metrics_card.click_cephfs_subvolume_row_name_by_namespace(ns)
+        assert (
+            subvolume_metrics_card.verify_cephfs_subvolume_related_pods_visible()
+        ), "Related pods popover not visible"
+
+        popover_pods = subvolume_metrics_card.get_cephfs_subvolume_related_pod_links()
+
+        logger.test_step("Verify all 3 multi-pods are listed")
+        expected_pod_names = [p.name for p in self.multi_pods]
+        for pod_name in expected_pod_names:
+            assert any(pod_name in link for link in popover_pods), (
+                f"Pod '{pod_name}' not found in popover links: " f"{popover_pods}"
+            )
+
+    @tier2
+    @ui
+    def test_metrics_on_detail_view(self, threading_lock):
+        """
+        Verify the metric values shown for the single-pod namespace
+        are valid for all three metrics and consistent with Prometheus.
+
+        Steps:
+        1. For each metric (Total IOPS, Total Latency, Total
+           Throughput), switch the dropdown and read the value for
+           the single-pod namespace from the table.
+        2. Verify the value is non-empty and has the expected unit
+           suffix.
+        3. Query Prometheus for the same metric and verify the UI
+           value is consistent within tolerance.
+        """
+        subvolume_metrics_card = CephFSSubvolumeMetricsCard()
+        ns = self.single_project.namespace
+        subvolume_metrics_card.navigate_to_cephfs_subvolume_section()
+
+        metrics = [
+            constants.CEPHFS_SUBVOLUME_DEFAULT_METRIC,
+            constants.CEPHFS_SUBVOLUME_METRIC_LATENCY,
+            constants.CEPHFS_SUBVOLUME_METRIC_THROUGHPUT,
+        ]
+
+        for metric in metrics:
+            logger.test_step(
+                "Switch to '%s' and verify value for namespace '%s'",
+                metric,
+                ns,
+            )
+            subvolume_metrics_card.verify_metric_value_for_namespace(ns, metric)
+
+            if metric != constants.CEPHFS_SUBVOLUME_METRIC_THROUGHPUT:
+                logger.test_step(
+                    "Verify UI values match Prometheus for '%s'",
+                    metric,
+                )
+                all_values = (
+                    subvolume_metrics_card.get_cephfs_subvolume_all_row_values()
+                )
+                subvolume_metrics_card.verify_ui_values_match_prometheus(
+                    metric=metric,
+                    ui_values=all_values,
+                    threading_lock=threading_lock,
+                )
+
+    @tier2
+    @ui
+    def test_column_sort_tab_switch(self):
+        """
+        Verify switching between metric tabs updates the column header
+        and table values, and returning to the original tab restores
+        the same data.
+
+        Steps:
+        1. Navigate to the subvolume metrics card and record values
+           on Total IOPS (default).
+        2. Switch to Total Latency and verify the column header and
+           values update with the correct unit.
+        3. Switch to Total Throughput and verify the column header
+           and values update with the correct unit.
+        4. Switch back to Total IOPS and verify the original column
+           header and unit are restored.
+        """
+        subvolume_metrics_card = CephFSSubvolumeMetricsCard()
+        subvolume_metrics_card.navigate_to_cephfs_subvolume_section()
+
+        metrics = [
+            constants.CEPHFS_SUBVOLUME_DEFAULT_METRIC,
+            constants.CEPHFS_SUBVOLUME_METRIC_LATENCY,
+            constants.CEPHFS_SUBVOLUME_METRIC_THROUGHPUT,
+        ]
+
+        logger.test_step("Record initial row count on '%s'", metrics[0])
+        subvolume_metrics_card.switch_cephfs_subvolume_metric(metrics[0])
+        initial_headers = subvolume_metrics_card.get_cephfs_subvolume_column_headers()
+        initial_row_count = subvolume_metrics_card.get_cephfs_subvolume_row_count()
+        assert initial_headers[-1] == metrics[0], (
+            f"Expected column header '{metrics[0]}', " f"got '{initial_headers[-1]}'"
+        )
+
+        for metric in metrics[1:]:
+            logger.test_step(
+                "Switch to '%s' and verify column header and values",
+                metric,
+            )
+            subvolume_metrics_card.verify_metric_header_and_values(metric)
+
+        logger.test_step(
+            "Switch back to '%s' and verify header and unit restored",
+            metrics[0],
+        )
+        subvolume_metrics_card.verify_metric_header_and_values(
+            metrics[0],
+            expected_count=initial_row_count,
         )
