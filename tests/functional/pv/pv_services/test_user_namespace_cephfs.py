@@ -33,7 +33,7 @@ class TestUserNamespaceCephFS(ManageTest):
     with UID remapping and data persistence.
     """
 
-    @polarion_id("OCS-XXXX")
+    @polarion_id("OCS-8224")
     def test_user_namespace_shared_io_and_uid_remapping(
         self,
         teardown_project_factory,
@@ -146,7 +146,7 @@ class TestUserNamespaceCephFS(ManageTest):
         )
         logger.info("User namespace shared I/O and UID remapping " "test passed")
 
-    @polarion_id("OCS-XXXX")
+    @polarion_id("OCS-8225")
     def test_user_namespace_rwo_ownership_and_persistence(
         self,
         teardown_project_factory,
