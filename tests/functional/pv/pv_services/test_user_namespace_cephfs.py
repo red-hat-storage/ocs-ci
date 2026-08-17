@@ -104,7 +104,7 @@ class TestUserNamespaceCephFS(ManageTest):
         assert f"uid={CONTAINER_UID}" in out, (
             f"Expected uid={CONTAINER_UID} in id output, " f"got: {out}"
         )
-        assert "testing" in out
+        assert "testing" in out, f"Expected 'testing' in output: {out}"
         logger.info("Step 8: Read from pod-2 and write new file")
         out = pod2.exec_sh_cmd_on_pod(
             "cat /mnt/test/a " "&& echo testing_again > /mnt/test/b && sync"

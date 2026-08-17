@@ -3917,13 +3917,21 @@ def get_host_uid_for_pod(node_name, pod_name):
         int: Host-level real UID of the container process
     """
     oc_cmd = OCP()
-    inspect_cmd = (
-        f"crictl inspect "
-        f"$(crictl ps "
-        f"--pod $(crictl pods --name {pod_name}"
-        f" --state ready -q | head -1) "
-        f"--state running -q | head -1)"
+    pod_id_cmd = f"crictl pods --name ^{pod_name}$" f" --state ready -q | head -1"
+    pod_id = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[pod_id_cmd]).strip()
+    assert pod_id, f"crictl found no ready pod matching " f"{pod_name} on {node_name}"
+    log.info(f"crictl pod ID for {pod_name}: {pod_id}")
+
+    container_id_cmd = f"crictl ps --pod {pod_id}" f" --state running -q | head -1"
+    container_id = oc_cmd.exec_oc_debug_cmd(
+        node=node_name, cmd_list=[container_id_cmd]
+    ).strip()
+    assert container_id, (
+        f"No running container found in pod {pod_id} " f"on {node_name}"
     )
+    log.info(f"Container ID: {container_id}")
+
+    inspect_cmd = f"crictl inspect {container_id}"
     inspect_output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[inspect_cmd])
     pid_match = re.search(r'"pid"\s*:\s*(\d+)', inspect_output)
     assert pid_match, (

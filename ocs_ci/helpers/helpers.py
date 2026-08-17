@@ -7793,6 +7793,7 @@ def verify_file_ownership(pod_obj, file_path, expected_uid, expected_gid):
     out = pod_obj.exec_sh_cmd_on_pod(f"ls -ln {file_path}")
     logger.info(f"ls -ln {file_path}: {out}")
     parts = out.split()
+    assert len(parts) >= 4, f"Unexpected ls -ln output for {file_path}: {out}"
     file_uid = int(parts[2])
     file_gid = int(parts[3])
     assert file_uid == expected_uid, (
