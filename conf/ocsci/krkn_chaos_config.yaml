@@ -154,6 +154,18 @@ ENV_DATA:
       # Maximum concurrent background operations
       max_concurrent_operations: 3
 
+      # CephX key rotation during chaos (requires ODF 4.19+, non-external mode)
+      enable_cephx_keyrotation: true
+      # Minimum delay between rotation iterations; a single rotation may take longer.
+      cephx_keyrotation_interval: 180
+      cephx_keys:
+        components:
+          - rook_daemon  # mon, mgr, osd, mds
+          - csi
+          - rbdMirrorPeer
+        rotation_timeout: 1200
+        keep_prior_key_count_max: 1
+
       # Enabled operation types (comment out to disable specific operations)
       enabled_operations:
         - snapshot_lifecycle # PVC snapshot create/restore/delete/verify
@@ -164,4 +176,5 @@ ENV_DATA:
         - rgw_restart # RGW pod restart (ObjectStore)
         - reclaim_space # CSI-Addons ReclaimSpace on RBD volumes
         - longevity_operations # Comprehensive snapshot/restore/expand testing
+        - cephx_keyrotation # CephX rotation (rook_daemon, csi, rbdMirrorPeer)
         # - volume_replication   # CSI-Addons VolumeReplication (requires DR)
