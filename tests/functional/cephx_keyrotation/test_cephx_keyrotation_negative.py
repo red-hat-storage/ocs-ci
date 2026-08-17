@@ -1,0 +1,816 @@
+"""
+CephX Key Rotation — Negative Test Cases
+
+TC-21: Operator crash while Mon CephX key rotation is in progress.
+TC-22: Mon key rotation when Mons are not in quorum.
+TC-23: OSD key rotation blocked when PGs are not clean.
+TC-24: Single OSD rotation failure fails the entire CephCluster reconcile.
+TC-32: Brownfield OSD deployments with empty cephx-status annotations.
+TC-33: Operator restart mid OSD rotation checkpoints remaining OSDs.
+TC-34: Lockbox key preserved when lockbox rotation init container fails.
+TC-NEG-15: Disk-based encrypted OSD deployments carry encrypted=true label.
+TC-36: Bootstrap key deletion is idempotent on already-deleted keys.
+TC-37: CSI key rotation with priorKeyCount 0 and mounted volumes.
+TC-38: Decreasing StorageCluster daemon keyGeneration is rejected.
+"""
+
+import logging
+import time
+
+import pytest
+
+from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import (
+    encryption_at_rest_required,
+    green_squad,
+    ignore_leftovers,
+    skipif_external_mode,
+    skipif_ocs_version,
+    tier2,
+)
+from ocs_ci.helpers.helpers import get_last_log_time_date
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.pod import get_mon_pods
+from ocs_ci.utility.utils import ceph_health_check
+
+log = logging.getLogger(__name__)
+
+MIN_MON_COUNT = 3
+MIN_OSD_COUNT = 3
+MIN_OSD_COUNT_PARTIAL_ROTATION = 5
+MIN_ROTATED_OSDS_BEFORE_OPERATOR_KILL = 3
+MON_QUORUM_BROKEN_MAX = 1
+MIN_ENCRYPTED_OSD_COUNT = 1
+MIN_DISK_ENCRYPTED_OSD_COUNT = 1
+CSI_IO_FILE = "/mnt/rbd/csi_prior_key_test"
+CSI_IO_BS = "4k"
+CSI_IO_COUNT = 10000
+CSI_WORKLOAD_PVC_SIZE = 10
+CSI_POST_ROTATION_PVC_SIZE = 5
+
+
+@skipif_external_mode
+@skipif_ocs_version(["<4.21", ">=4.23"])
+@green_squad
+@ignore_leftovers
+class TestCephXKeyRotationNegative:
+    @pytest.mark.polarion_id("OCS-8149")
+    @tier2
+    def test_cephx_operator_crash_during_mon_rotation(self, cephx_keyrotation_setup):
+        """
+        TC-21: Operator crash while Mon CephX key rotation is in progress.
+
+        Kill rook-ceph-operator while mon rotation is active; verify operator
+        recovery, healthy StorageCluster/CephCluster, and that daemon keys
+        actually rotated.
+        """
+        rotator = cephx_keyrotation_setup
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        if len(rotator.get_mon_deployment_names()) < MIN_MON_COUNT:
+            pytest.skip(f"Need at least {MIN_MON_COUNT} mon deployments for this test")
+        if not rotator.is_mon_key_rotation_supported():
+            pytest.skip("MON CephX key rotation is not supported on this cluster")
+
+        ceph_health_check(namespace=namespace)
+
+        daemon_entities = rotator.flatten_daemon_auth_entities(
+            rotator.discover_rook_daemon_auth_entities()
+        )
+        pre_auth_keys = rotator.capture_auth_keys(
+            daemon_entities,
+            label="before operator crash during mon rotation",
+        )
+
+        target_generation = rotator.kill_operator_during_mon_rotation(timeout=900)
+        rotator.recover_after_operator_crash_during_mon_rotation(timeout=1500)
+        rotator.wait_for_rook_daemon_rotation(target_generation, timeout=1500)
+        rotator.verify_auth_keys_changed(pre_auth_keys, entities=daemon_entities)
+
+        ceph_health_check(namespace=namespace)
+        log.info(
+            "Operator recovered successfully after crash during mon key rotation; "
+            "daemon keys rotated"
+        )
+
+    @pytest.mark.polarion_id("OCS-8150")
+    @tier2
+    def test_cephx_mon_rotation_without_quorum(self, cephx_keyrotation_setup):
+        """
+        TC-22: Mon key rotation is blocked when Mons are not in quorum.
+
+        Scale down two Mons, attempt rotation, verify no key changes, restore
+        quorum, and verify a subsequent rotation succeeds.
+        """
+        rotator = cephx_keyrotation_setup
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        if len(rotator.get_mon_deployment_names()) < MIN_MON_COUNT:
+            pytest.skip(f"Need at least {MIN_MON_COUNT} mon deployments for this test")
+
+        ceph_health_check(namespace=namespace)
+
+        auth_entities = rotator.flatten_daemon_auth_entities(
+            rotator.discover_rook_daemon_auth_entities()
+        )
+        if not auth_entities:
+            pytest.skip("No Ceph auth entities found for rotation verification")
+
+        pre_auth_keys = rotator.capture_auth_keys(
+            auth_entities, label="before quorum break"
+        )
+        # Ceph CLI cannot reach auth store without quorum; snapshot K8s mon secrets.
+        pre_mon_secret_keys = rotator.get_mon_keys_from_secrets()
+        if not pre_mon_secret_keys:
+            pytest.skip("No mon keys found in Kubernetes secrets for verification")
+
+        self._scaled_mon_deployments = rotator.break_mon_quorum(mons_to_stop=2)
+        rotator.wait_for_mon_quorum_count_at_most(MON_QUORUM_BROKEN_MAX, timeout=300)
+        # Snapshot after quorum break so status catch-up during auth capture
+        # does not false-fail the blocked-rotation generation check.
+        baseline_generations = rotator.record_all_cephx_status_generations()
+        operator_log_marker = get_last_log_time_date()
+
+        # Do not wait for Ready — rotation is expected to stay blocked without quorum.
+        rotator.rotate_daemon_keys(wait_for_rotation=False)
+        rotator.trigger_cephcluster_reconcile()
+        rotator.assert_reported_cephx_generations_unchanged(
+            baseline_generations,
+            context="while mon quorum is broken",
+        )
+        # Do not call ceph auth get-key here — RADOS times out without quorum.
+        rotator.assert_mon_secret_keys_unchanged(
+            pre_mon_secret_keys,
+            context="while mon quorum is broken",
+        )
+        # ODF 4.22 does not emit explicit quorum-blocked cephx rotation log lines
+        # after mon scale-down; verify rotation activity is absent instead.
+        rotator.verify_operator_no_key_rotation_logs(since_time=operator_log_marker)
+
+        rotator.restore_mon_deployments(self._scaled_mon_deployments)
+        self._scaled_mon_deployments = []
+
+        target_generation = rotator.rotate_daemon_keys()
+        rotator.wait_for_rook_daemon_rotation(target_generation, timeout=1500)
+        rotator.verify_auth_keys_changed(pre_auth_keys, entities=auth_entities)
+        rotator.verify_pods_no_auth_bad_key(get_mon_pods(namespace=namespace))
+
+        ceph_health_check(namespace=namespace)
+        log.info("Mon key rotation blocked without quorum and succeeded after restore")
+
+    @pytest.mark.polarion_id("OCS-8151")
+    @tier2
+    def test_cephx_osd_rotation_blocked_by_unhealthy_pgs(self, cephx_keyrotation_setup):
+        """
+        TC-23: OSD key rotation is deferred when PGs are not active+clean.
+
+        Mark an OSD out, verify rotation is skipped, restore the OSD, and
+        verify rotation proceeds once PGs heal.
+        """
+        rotator = cephx_keyrotation_setup
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        osd_entities = rotator.discover_osd_auth_entities()
+        if len(osd_entities) < MIN_OSD_COUNT:
+            pytest.skip(f"Need at least {MIN_OSD_COUNT} OSDs for this test")
+
+        ceph_health_check(namespace=namespace)
+        rotator.wait_for_pgs_active_clean()
+
+        pre_osd_generation = rotator.get_status_key_generation("osd")
+        pre_osd_keys = rotator.capture_auth_keys(osd_entities, label="before osd out")
+
+        osd_id = int(osd_entities[0].split(".")[-1])
+        self._osd_marked_out = osd_id
+        rotator.set_osd_out(osd_id)
+        rotator.wait_for_pgs_not_clean(timeout=300)
+        operator_log_marker = get_last_log_time_date()
+
+        # Do not wait for Ready — OSD rotation should be deferred while PGs are unclean.
+        rotator.rotate_daemon_keys(wait_for_rotation=False)
+        rotator.trigger_cephcluster_reconcile()
+        rotator.assert_auth_keys_unchanged(
+            pre_osd_keys,
+            entities=osd_entities,
+            context="while PGs are not clean",
+        )
+        assert (
+            rotator.get_status_key_generation("osd") == pre_osd_generation
+        ), "OSD keyGeneration changed while PGs were not clean"
+        # ODF 4.22 does not emit explicit PG-deferred OSD rotation log lines;
+        # only OSD rotation should be deferred — MDS/MON/admin rotations may proceed.
+        rotator.verify_operator_no_key_rotation_logs(
+            since_time=operator_log_marker,
+            rotation_patterns=constants.CEPHX_OSD_KEY_ROTATION_LOG_PATTERNS,
+        )
+
+        rotator.restore_osd_and_wait_for_recovery(osd_id, timeout=1500)
+        self._osd_marked_out = None
+
+        target_generation = rotator.rotate_daemon_keys()
+        rotator.wait_for_osd_rotation(target_generation, timeout=1500)
+        rotator.verify_auth_keys_changed(pre_osd_keys, entities=osd_entities)
+        assert rotator.get_status_key_generation("osd") > pre_osd_generation
+
+        rotator.wait_for_cluster_fully_recovered(timeout=1500)
+        ceph_health_check(namespace=namespace)
+        log.info("OSD key rotation deferred until PGs healed, then succeeded")
+
+    @pytest.mark.polarion_id("OCS-8152")
+    @tier2
+    def test_cephx_osd_rotation_failure_fails_reconcile(self, cephx_keyrotation_setup):
+        """
+        TC-24: A single OSD rotation failure fails CephCluster reconcile.
+
+        Inject an OSD auth deletion mid-rotation, verify OSD-specific reconcile
+        failure and partial rotation. Rook cannot ``auth rotate`` a missing
+        entity, so restore the deleted auth from the OSD pod keyring (admin
+        remediation), then verify rotation completes on the next reconcile.
+        """
+        rotator = cephx_keyrotation_setup
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        osd_entities = rotator.discover_osd_auth_entities()
+        if len(osd_entities) < MIN_OSD_COUNT:
+            pytest.skip(f"Need at least {MIN_OSD_COUNT} OSDs for this test")
+
+        ceph_health_check(namespace=namespace)
+        rotator.wait_for_pgs_active_clean()
+
+        pre_osd_generation = rotator.get_status_key_generation("osd")
+        pre_osd_keys = rotator.capture_auth_keys(
+            osd_entities, label="before injected osd failure"
+        )
+        pre_cephx_status = rotator.capture_osd_deployment_cephx_status()
+
+        # Trigger async so inject can race a still-pending OSD before Ready.
+        # Record a restore candidate before inject's failure-prone polling/delete.
+        self._deleted_osd_auth_entity = sorted(osd_entities)[-1]
+        target_generation = rotator.rotate_daemon_keys(wait_for_rotation=False)
+        try:
+            failed_entity, operator_log_marker = (
+                rotator.inject_osd_auth_rotation_failure(pre_osd_keys, timeout=900)
+            )
+            self._deleted_osd_auth_entity = failed_entity
+        except Exception:
+            injected = getattr(rotator, "last_deleted_osd_auth_entity", None)
+            if injected:
+                self._deleted_osd_auth_entity = injected
+            raise
+
+        rotator.wait_for_cephcluster_reconcile_failure(
+            timeout=600,
+            message_patterns=constants.CEPHX_OSD_AUTH_ROTATION_FAILURE_PATTERNS,
+            operator_log_since=operator_log_marker,
+        )
+        rotator.verify_operator_logs_contain_any_pattern(
+            constants.CEPHX_OSD_AUTH_ROTATION_FAILURE_PATTERNS,
+            since_time=operator_log_marker,
+        )
+
+        mid_rotation_keys = rotator.capture_auth_keys(osd_entities)
+        rotated_entities = [
+            entity
+            for entity in osd_entities
+            if pre_osd_keys.get(entity) != mid_rotation_keys.get(entity)
+        ]
+        unchanged_entities = [
+            entity
+            for entity in osd_entities
+            if pre_osd_keys.get(entity) == mid_rotation_keys.get(entity)
+        ]
+        assert (
+            rotated_entities
+        ), "Expected at least one OSD key to rotate before failure"
+        assert failed_entity in unchanged_entities or not mid_rotation_keys.get(
+            failed_entity
+        ), f"Failed OSD entity {failed_entity} should retain prior/missing key"
+        assert not rotator.auth_entity_exists(
+            failed_entity
+        ), f"Expected {failed_entity} to remain deleted after inject"
+
+        # Rook does not recreate a missing OSD auth entity on reconcile; restore
+        # from the on-disk keyring, then let rotation finish.
+        rotator.restore_osd_auth_entity_from_pod_keyring(failed_entity)
+        self._deleted_osd_auth_entity = None
+        rotator.trigger_cephcluster_reconcile()
+        rotator.wait_for_osd_rotation(target_generation, timeout=1500)
+        rotator.wait_for_rook_daemon_rotation(target_generation, timeout=1500)
+        post_osd_keys = rotator.verify_auth_keys_changed(
+            pre_osd_keys, entities=osd_entities
+        )
+        assert all(
+            pre_osd_keys.get(entity) != post_osd_keys.get(entity)
+            for entity in osd_entities
+            if pre_osd_keys.get(entity)
+        ), "Not all OSD auth keys reached the target generation after recovery"
+        assert rotator.get_status_key_generation("osd") > pre_osd_generation
+        rotator.assert_osd_deployment_cephx_status_updated(
+            pre_cephx_status, target_generation
+        )
+
+        ceph_health_check(namespace=namespace)
+        rotator.wait_for_cluster_ready()
+        log.info(
+            "CephCluster recovered after OSD auth restore and reconcile "
+            f"(failed_entity={failed_entity})"
+        )
+
+    @pytest.mark.polarion_id("OCS-8157")
+    @tier2
+    @skipif_ocs_version(["<4.21", ">=4.23"])
+    def test_cephx_daemon_key_generation_decrease_rejected(
+        self, cephx_keyrotation_setup
+    ):
+        """
+        TC-38: Decreasing StorageCluster daemon keyGeneration is rejected.
+
+        Steps:
+            1. Record CephCluster daemon keyGeneration / Ready phases and
+               StorageCluster daemon keyGeneration.
+            2. Patch StorageCluster daemon keyGeneration to a lower value.
+            3. Expect admission error: keyGeneration cannot be decreased.
+            4. Verify StorageCluster and CephCluster generations and phases
+               are unchanged (no reconcile / state change).
+        """
+        rotator = cephx_keyrotation_setup
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        ceph_health_check(namespace=namespace)
+        rotator.wait_for_cluster_ready()
+
+        pre_daemon_generations = rotator.record_daemon_generations()
+        pre_all_generations = rotator.record_all_cephx_status_generations()
+        pre_sc_generation = rotator.get_spec_key_generation(rotator.COMPONENT_DAEMON)
+        pre_cc_phase = rotator.get_cephcluster_phase()
+        pre_sc_phase = rotator.get_storagecluster_phase()
+        rotator.log_generation_status("Pre-decrease-reject")
+
+        if pre_sc_generation < 1:
+            pytest.skip(
+                "StorageCluster daemon keyGeneration is unset; decrease "
+                "rejection requires an existing generation"
+            )
+
+        lower_generation = pre_sc_generation - 1
+        log.info(
+            "Current StorageCluster daemon keyGeneration=%s; CephCluster "
+            "daemon generations=%s; attempting decrease to %s",
+            pre_sc_generation,
+            pre_daemon_generations,
+            lower_generation,
+        )
+
+        rotator.assert_decreasing_daemon_key_generation_rejected(lower_generation)
+
+        # Brief settle so a mistaken reconcile would be visible in phase/gens.
+        time.sleep(15)
+
+        post_sc_generation = rotator.get_spec_key_generation(rotator.COMPONENT_DAEMON)
+        post_cc_phase = rotator.get_cephcluster_phase()
+        post_sc_phase = rotator.get_storagecluster_phase()
+        assert post_sc_generation == pre_sc_generation, (
+            "StorageCluster daemon keyGeneration changed after rejected "
+            f"decrease: before={pre_sc_generation}, after={post_sc_generation}"
+        )
+        assert (
+            pre_cc_phase == constants.STATUS_READY
+        ), f"CephCluster precondition phase was not Ready: {pre_cc_phase}"
+        assert post_cc_phase == pre_cc_phase, (
+            "CephCluster phase changed after rejected keyGeneration decrease: "
+            f"before={pre_cc_phase}, after={post_cc_phase}"
+        )
+        assert (
+            pre_sc_phase == constants.STATUS_READY
+        ), f"StorageCluster precondition phase was not Ready: {pre_sc_phase}"
+        assert post_sc_phase == pre_sc_phase, (
+            "StorageCluster phase changed after rejected keyGeneration decrease: "
+            f"before={pre_sc_phase}, after={post_sc_phase}"
+        )
+        rotator.assert_cephx_status_generations_unchanged(
+            pre_all_generations,
+            context="after rejected daemon keyGeneration decrease",
+        )
+
+        ceph_health_check(namespace=namespace)
+        rotator.wait_for_cluster_ready()
+        log.info(
+            "TC-38: decreasing daemon keyGeneration to %s was rejected; "
+            "StorageCluster/CephCluster state unchanged",
+            lower_generation,
+        )
+
+    @pytest.mark.polarion_id("OCS-8162")
+    @tier2
+    @pytest.mark.skip(
+        reason="Bootstrap CephX key cleanup is not covered while only daemon "
+        "key rotation is supported"
+    )
+    def test_cephx_bootstrap_deletion_idempotent(self, cephx_bootstrap_setup):
+        """
+        TC-36: Bootstrap key deletion is idempotent on already-deleted keys.
+
+        Wait for bootstrap cleanup, restart the operator, and verify no errors
+        are logged when deletion is attempted again.
+        """
+        rotator = cephx_bootstrap_setup
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        ceph_health_check(namespace=namespace)
+        rotator.trigger_cephcluster_reconcile()
+        rotator.wait_for_post_mon_startup_bootstrap_cleanup(timeout=900)
+        rotator.verify_bootstrap_deletion_idempotent_after_operator_restart()
+
+        ceph_health_check(namespace=namespace)
+        log.info("Bootstrap key deletion idempotency verified after operator restart")
+
+
+@skipif_external_mode
+@skipif_ocs_version(["<4.21", ">=4.23"])
+@green_squad
+@ignore_leftovers
+class TestCephXKeyRotationNegativeOSD:
+    @pytest.mark.polarion_id("OCS-8153")
+    @tier2
+    def test_cephx_brownfield_osd_empty_cephx_status(
+        self, cephx_keyrotation_setup, request
+    ):
+        """
+        TC-32: Brownfield OSD deployments start with empty cephx-status.
+
+        Simulate brownfield OSDs by clearing cephx-status annotations, trigger
+        rotation, verify annotations are populated, then verify a subsequent
+        rotation behaves like a greenfield deployment.
+        """
+        rotator = cephx_keyrotation_setup
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        osd_entities = rotator.discover_osd_auth_entities()
+        if len(osd_entities) < MIN_OSD_COUNT:
+            pytest.skip(f"Need at least {MIN_OSD_COUNT} OSDs for this test")
+
+        ceph_health_check(namespace=namespace)
+        rotator.wait_for_pgs_active_clean()
+
+        pre_osd_keys = rotator.capture_auth_keys(
+            osd_entities, label="before brownfield"
+        )
+        pre_cephx_status = rotator.capture_osd_deployment_cephx_status()
+
+        def restore_cephx_status():
+            """
+            Restore the pre-test cephx-status snapshot only when annotations are
+            still empty/partial (test failed after clear).
+
+            After a successful brownfield rotation the annotations are already
+            correctly populated at a newer generation. Restoring the stale
+            pre-test snapshot patches every OSD Deployment template and rolls
+            all OSDs at once, which races health_checker teardown and can mark
+            the test ERROR despite a PASSED call phase.
+            """
+            try:
+                current = rotator.capture_osd_deployment_cephx_status()
+            except Exception as exc:
+                log.warning(
+                    "Teardown: failed to capture current OSD cephx-status: %s",
+                    exc,
+                )
+                current = {}
+
+            populated = {name: status for name, status in current.items() if status}
+            if current and len(populated) == len(current):
+                log.info(
+                    "Teardown: OSD cephx-status annotations already populated "
+                    f"({len(populated)} deployments); skipping restore of "
+                    "pre-test snapshot to avoid simultaneous OSD rollout"
+                )
+                return
+
+            log.info(
+                "Teardown: restoring OSD deployment cephx-status annotations "
+                "to pre-test state (current status incomplete/empty)"
+            )
+            try:
+                rotator.restore_osd_deployment_cephx_status_annotations(
+                    pre_cephx_status
+                )
+                # Annotation restore mutates Deployment pod templates and rolls
+                # OSDs; wait before health_checker teardown runs.
+                rotator.wait_for_rook_daemon_pods_ready()
+                rotator.wait_for_pgs_active_clean()
+            except Exception as exc:
+                log.warning(
+                    "Teardown: failed to restore OSD cephx-status annotations: %s",
+                    exc,
+                )
+
+        request.addfinalizer(restore_cephx_status)
+
+        rotator.clear_osd_deployment_cephx_status_annotations()
+        rotator.assert_osd_deployments_have_empty_cephx_status()
+
+        first_target = rotator.rotate_daemon_keys()
+        rotator.wait_for_osd_rotation(first_target, timeout=1500)
+        rotator.verify_auth_keys_changed(pre_osd_keys, entities=osd_entities)
+        rotator.assert_osd_deployment_cephx_status_updated(
+            {name: {} for name in pre_cephx_status},
+            first_target,
+        )
+        rotator.assert_all_osd_deployments_cephx_status_at_generation(first_target)
+
+        brownfield_post_keys = rotator.capture_auth_keys(
+            osd_entities, label="after brownfield rotation"
+        )
+        brownfield_post_status = rotator.capture_osd_deployment_cephx_status()
+
+        second_target = rotator.rotate_daemon_keys()
+        rotator.wait_for_osd_rotation(second_target, timeout=1500)
+        rotator.verify_auth_keys_changed(brownfield_post_keys, entities=osd_entities)
+        rotator.assert_osd_deployment_cephx_status_updated(
+            brownfield_post_status, second_target
+        )
+
+        ceph_health_check(namespace=namespace)
+        rotator.wait_for_pgs_active_clean()
+        log.info(
+            "Brownfield OSD cephx-status simulation and subsequent rotation "
+            "completed successfully"
+        )
+
+    @pytest.mark.polarion_id("OCS-8154")
+    @tier2
+    def test_cephx_operator_restart_during_partial_osd_rotation(
+        self, cephx_keyrotation_setup
+    ):
+        """
+        TC-33: Operator restart mid OSD rotation only rotates remaining OSDs.
+
+        Kill the operator after a partial OSD cephx-status checkpoint, verify
+        already-rotated OSDs are not rotated again, then verify all OSDs reach
+        the target generation.
+        """
+        rotator = cephx_keyrotation_setup
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        baseline_cephx_status = rotator.capture_osd_deployment_cephx_status()
+        osd_count = len(baseline_cephx_status)
+        if osd_count < MIN_OSD_COUNT_PARTIAL_ROTATION:
+            pytest.skip(
+                f"Need at least {MIN_OSD_COUNT_PARTIAL_ROTATION} OSD deployments; "
+                f"found {osd_count}"
+            )
+
+        osd_entities = rotator.discover_osd_auth_entities()
+        pre_osd_keys = rotator.capture_auth_keys(
+            osd_entities, label="before partial osd rotation"
+        )
+
+        ceph_health_check(namespace=namespace)
+        rotator.wait_for_pgs_active_clean()
+
+        min_rotated = min(MIN_ROTATED_OSDS_BEFORE_OPERATOR_KILL, osd_count - 1)
+        target_generation, rotated_deployments = (
+            rotator.kill_operator_during_partial_osd_rotation(
+                baseline_cephx_status,
+                min_rotated=min_rotated,
+                timeout=1500,
+            )
+        )
+        assert rotated_deployments, "Expected partial OSD rotation before operator kill"
+
+        checkpoint_entities = rotator.map_osd_deployments_to_auth_entities(
+            rotated_deployments
+        )
+        checkpoint_keys = rotator.capture_auth_keys(
+            checkpoint_entities, label="checkpoint osd keys"
+        )
+        checkpoint_status = rotator.capture_osd_deployment_cephx_status()
+
+        rotator.wait_for_rook_ceph_operator_ready()
+        rotator.assert_osd_deployment_cephx_status_unchanged_for(
+            rotated_deployments, checkpoint_status
+        )
+
+        rotator.wait_for_osd_rotation(target_generation, timeout=1500)
+        rotator.assert_all_osd_deployments_cephx_status_at_generation(target_generation)
+        rotator.assert_auth_keys_unchanged_for(
+            checkpoint_keys, entities=checkpoint_entities
+        )
+        rotator.verify_auth_keys_changed(pre_osd_keys, entities=osd_entities)
+
+        ceph_health_check(namespace=namespace)
+        rotator.wait_for_pgs_active_clean()
+        log.info(
+            "Partial OSD rotation checkpoint preserved across operator restart; "
+            f"rotated before kill: {rotated_deployments}"
+        )
+
+
+@skipif_external_mode
+@skipif_ocs_version(["<4.21", ">=4.23"])
+@green_squad
+@ignore_leftovers
+class TestCephXKeyRotationNegativeEncryptedCSI:
+    @pytest.mark.polarion_id("OCS-8155")
+    @tier2
+    @encryption_at_rest_required
+    def test_cephx_lockbox_rotation_failure_preserves_key(
+        self, cephx_keyrotation_setup
+    ):
+        """
+        TC-34: Lockbox key is preserved when lockbox rotation init fails.
+
+        Break mon quorum during lockbox rotation, verify lockbox keys are not
+        lost, restore quorum, and verify encrypted OSDs complete rotation.
+        """
+        rotator = cephx_keyrotation_setup
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        encrypted_deployments = rotator.capture_encrypted_osd_deployments()
+        if len(encrypted_deployments) < MIN_ENCRYPTED_OSD_COUNT:
+            pytest.skip(
+                f"Need at least {MIN_ENCRYPTED_OSD_COUNT} encrypted OSD "
+                f"deployment(s); found {len(encrypted_deployments)}"
+            )
+
+        lockbox_entities = rotator.discover_lockbox_auth_entities()
+        if not lockbox_entities:
+            pytest.skip("No client.osd-lockbox.* auth entities found on cluster")
+
+        if len(rotator.get_mon_deployment_names()) < MIN_MON_COUNT:
+            pytest.skip(f"Need at least {MIN_MON_COUNT} mon deployments for this test")
+
+        ceph_health_check(namespace=namespace)
+        pre_lockbox_keys = rotator.capture_auth_keys(
+            lockbox_entities, label="lockbox keys before disruption"
+        )
+
+        target_generation, self._scaled_mon_deployments = (
+            rotator.break_mon_quorum_during_lockbox_rotation(mons_to_stop=2)
+        )
+        rotator.wait_for_mon_quorum_count_at_most(MON_QUORUM_BROKEN_MAX, timeout=300)
+
+        rotator.assert_lockbox_auth_keys_present(lockbox_entities)
+        rotator.assert_auth_keys_unchanged(
+            pre_lockbox_keys,
+            entities=lockbox_entities,
+            context="during lockbox rotation disruption",
+        )
+        rotator.verify_osd_lockbox_init_container_disruption_logs()
+
+        rotator.restore_mon_deployments(self._scaled_mon_deployments)
+        self._scaled_mon_deployments = []
+        rotator.wait_for_pgs_active_clean(timeout=900)
+
+        rotator.wait_for_osd_rotation(target_generation, timeout=1500)
+        rotator.verify_auth_keys_changed(pre_lockbox_keys, entities=lockbox_entities)
+
+        encrypted_osd_pods = rotator.get_encrypted_osd_pods()
+        rotator.verify_osd_activate_lockbox_logs(encrypted_osd_pods)
+        rotator.verify_encrypted_osd_pods_running(encrypted_osd_pods)
+
+        ceph_health_check(namespace=namespace)
+        log.info("Lockbox keys preserved through rotation failure and recovered")
+
+    @pytest.mark.polarion_id("OCS-8156")
+    @tier2
+    @encryption_at_rest_required
+    def test_cephx_disk_encrypted_osd_label_and_lockbox_rotation(
+        self, cephx_keyrotation_setup
+    ):
+        """
+        TC-NEG-15: Disk-based encrypted OSD deployments are labeled encrypted=true.
+
+        Verify host/disk-based encrypted OSDs carry the encrypted label and
+        receive lockbox key rotation (not silently skipped).
+        """
+        rotator = cephx_keyrotation_setup
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        disk_encrypted = rotator.get_disk_based_encrypted_osd_deployments()
+        if len(disk_encrypted) < MIN_DISK_ENCRYPTED_OSD_COUNT:
+            pytest.skip(
+                "No disk-based encrypted OSD deployments found; "
+                "need host/disk encrypted OSDs for this test"
+            )
+
+        rotator.assert_encrypted_osd_labels(disk_encrypted)
+        log.info(
+            "Disk-based encrypted OSD deployments: "
+            + ", ".join(
+                f"{name} (osd_id={info['osd_id']})"
+                for name, info in sorted(disk_encrypted.items())
+            )
+        )
+
+        lockbox_entities = rotator.discover_lockbox_auth_entities()
+        if not lockbox_entities:
+            pytest.skip("No client.osd-lockbox.* auth entities found on cluster")
+
+        pre_lockbox_keys = rotator.capture_auth_keys(
+            lockbox_entities, label="disk encrypted lockbox keys before rotation"
+        )
+        operator_log_marker = get_last_log_time_date()
+
+        ceph_health_check(namespace=namespace)
+        target_generation = rotator.rotate_daemon_keys()
+        rotator.wait_for_osd_rotation(target_generation, timeout=1500)
+        rotator.verify_auth_keys_changed(pre_lockbox_keys, entities=lockbox_entities)
+
+        operator_logs = rotator.get_operator_logs_since(operator_log_marker)
+        disk_lockbox_logs = [
+            line for line in operator_logs if constants.OSD_LOCKBOX_OPERATOR_LOG in line
+        ]
+        assert disk_lockbox_logs, (
+            "Operator did not log lockbox rotation for encrypted OSDs; "
+            "disk-based OSDs may have been skipped"
+        )
+        log.info(
+            f"Operator logged {len(disk_lockbox_logs)} encrypted OSD lockbox "
+            "rotation line(s) for disk-based OSDs"
+        )
+
+        ceph_health_check(namespace=namespace)
+        log.info("Disk-based encrypted OSD label and lockbox rotation verified")
+
+    @pytest.mark.polarion_id("OCS-8163")
+    @tier2
+    @pytest.mark.skip(
+        reason="CSI CephX key rotation is not supported; only daemon key "
+        "rotation is currently enabled"
+    )
+    def test_cephx_csi_rotation_prior_key_count_zero_with_mounted_volume(
+        self, cephx_keyrotation_setup, deployment_pod_factory
+    ):
+        """
+        TC-37: CSI rotation with priorKeyCount 0 while a volume stays mounted.
+
+        Documents that deleting old CSI keys immediately may disrupt mounted
+        volumes; verifies new PVC provisioning still works after rotation.
+        """
+        rotator = cephx_keyrotation_setup
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        csi_entities = rotator.discover_csi_auth_entities()
+        if not csi_entities:
+            pytest.skip("No CSI Ceph auth entities found on cluster")
+
+        ceph_health_check(namespace=namespace)
+
+        workload_pod = deployment_pod_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            size=CSI_WORKLOAD_PVC_SIZE,
+        )
+        io_thread = rotator.start_dd_io_in_background(
+            workload_pod, CSI_IO_FILE, bs=CSI_IO_BS, count=CSI_IO_COUNT
+        )
+
+        pre_csi_keys = rotator.capture_auth_keys(
+            csi_entities, label="csi keys before priorKeyCount=0 rotation"
+        )
+        csi_log_marker = get_last_log_time_date()
+
+        target_generation = rotator.rotate_csi_keys(keep_prior_key_count_max=0)
+        log.info(
+            f"Triggered CSI rotation to generation {target_generation} with "
+            "keepPriorKeyCountMax=0"
+        )
+
+        auth_errors = rotator.verify_csi_node_plugin_logs_for_auth_errors(
+            since_time=csi_log_marker
+        )
+        if auth_errors:
+            log.warning(
+                "AUTH_BAD_KEY observed on CSI node plugins after deleting old "
+                f"CSI keys (expected risk with priorKeyCount=0): "
+                f"{len(auth_errors)} line(s)"
+            )
+
+        if io_thread.is_alive():
+            log.info("Mounted volume I/O remained active during CSI rotation")
+            rotator.stop_dd_io(workload_pod, CSI_IO_FILE)
+            rotator.verify_io_file_readable(workload_pod, CSI_IO_FILE)
+        else:
+            log.warning(
+                "Mounted volume I/O stopped during CSI rotation with "
+                "priorKeyCount=0 (documented trade-off)"
+            )
+
+        rotator.wait_for_csi_rotation(target_generation, timeout=1500)
+        rotator.verify_auth_keys_changed(pre_csi_keys, entities=csi_entities)
+
+        new_pod = deployment_pod_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            size=CSI_POST_ROTATION_PVC_SIZE,
+        )
+        new_pod.exec_cmd_on_pod(
+            "dd if=/dev/urandom of=/mnt/post_rotation_csi_test "
+            "bs=4k count=100 status=none",
+            out_yaml_format=False,
+        )
+        new_pod.exec_cmd_on_pod(
+            "test -s /mnt/post_rotation_csi_test", out_yaml_format=False
+        )
+
+        ceph_health_check(namespace=namespace)
+        log.info("CSI rotation with priorKeyCount=0 completed; new PVC mount verified")
