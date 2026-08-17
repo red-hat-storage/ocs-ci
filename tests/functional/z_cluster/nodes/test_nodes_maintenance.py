@@ -33,7 +33,11 @@ from ocs_ci.ocs.node import (
     get_node_mon_ids,
     generate_new_nodes_and_osd_running_nodes_ipi,
 )
-from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
+from ocs_ci.ocs.cluster import (
+    get_ec_pool_ec_optimizations,
+    validate_existence_of_blocking_pdb,
+    verify_ec_optimizations_unchanged,
+)
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
@@ -1225,6 +1229,14 @@ class TestECNodeOperations(ManageTest):
                 total_hosts >= size
             ), f"Not enough OSD hosts ({total_hosts}) for EC pool (need {size})"
 
+            # Snapshot EC optimizations flags before node shutdowns
+            ec_baseline_pools, ec_baseline_default = get_ec_pool_ec_optimizations()
+            if ec_baseline_pools:
+                log.info(
+                    f"FastEC baseline: pools={ec_baseline_pools}, "
+                    f"default={ec_baseline_default}"
+                )
+
             # Phase 1: Create workload on a master node (never shut down)
             pod_obj, original_md5 = self._create_workload_on_master(
                 pvc_factory, pod_factory
@@ -1423,6 +1435,16 @@ class TestECNodeOperations(ManageTest):
             verify_data_integrity(pod_obj, "fio-rand-write", original_md5)
             self.sanity_helpers.health_check(tries=90)
 
+            if ec_baseline_pools:
+                log.test_step(
+                    "Post-recovery: verifying EC optimizations flags persisted"
+                )
+                verify_ec_optimizations_unchanged(
+                    ec_baseline_pools,
+                    ec_baseline_default,
+                    context="gradual node shutdown and recovery",
+                )
+
     @tier4a
     @runs_on_provider
     @skipif_managed_service
@@ -1446,6 +1468,14 @@ class TestECNodeOperations(ManageTest):
 
         """
         with config.RunWithProviderConfigContextIfAvailable():
+            # Snapshot EC optimizations flags before bulk shutdown
+            ec_baseline_pools, ec_baseline_default = get_ec_pool_ec_optimizations()
+            if ec_baseline_pools:
+                log.info(
+                    f"FastEC baseline: pools={ec_baseline_pools}, "
+                    f"default={ec_baseline_default}"
+                )
+
             # Phase 0: Pre-conditions and EC thresholds
             thresholds = get_ec_drain_thresholds()
             m = thresholds["m"]
@@ -1591,3 +1621,13 @@ class TestECNodeOperations(ManageTest):
             verify_data_integrity(pod_obj, "fio-rand-write", original_md5)
             log.test_step("Data integrity verified after full recovery")
             self.sanity_helpers.health_check(tries=90)
+
+            if ec_baseline_pools:
+                log.test_step(
+                    "Post-recovery: verifying EC optimizations flags persisted"
+                )
+                verify_ec_optimizations_unchanged(
+                    ec_baseline_pools,
+                    ec_baseline_default,
+                    context="bulk node shutdown and recovery",
+                )
