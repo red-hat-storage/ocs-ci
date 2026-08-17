@@ -1779,9 +1779,6 @@ def validate_compression(pool_name):
     raise PoolNotFound(f"Pool {pool_name} not found on cluster")
 
 
-EC_POOL_TYPE = 3
-
-
 def get_ec_pool_ec_optimizations():
     """
     Retrieve the ec_optimizations flag state for every EC pool in the cluster
@@ -1793,6 +1790,8 @@ def get_ec_pool_ec_optimizations():
             cluster-wide default value (e.g. "true" or "false").
             Returns (None, None) if no EC pools exist.
     """
+    EC_POOL_TYPE = 3
+
     ct_pod = pod.get_ceph_tools_pod()
     pool_details = ct_pod.exec_ceph_cmd(
         ceph_cmd="ceph osd pool ls detail", format="json"
