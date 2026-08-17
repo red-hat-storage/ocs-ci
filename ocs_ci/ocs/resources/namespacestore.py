@@ -408,6 +408,19 @@ def oc_create_namespacestore(
                 },
             },
         },
+        constants.ARCHIVE_PLATFORM: lambda: {
+            "type": "s3-compatible",
+            "archive": True,
+            "s3Compatible": {
+                "targetBucket": uls_name,
+                "endpoint": mcg_obj.s3_internal_endpoint,
+                "signatureVersion": "v4",
+                "secret": {
+                    "name": f"noobaa-account-{nss_tup[2]}",
+                    "namespace": nss_data["metadata"]["namespace"],
+                },
+            },
+        },
     }
 
     if (
@@ -505,7 +518,9 @@ def namespace_store_factory(
             for platform, nss_lst in nss_dict.items():
                 for nss_tup in nss_lst:
                     for _ in range(nss_tup[0] if isinstance(nss_tup[0], int) else 1):
-                        if platform.lower() == "nsfs":
+                        if platform.lower() == constants.ARCHIVE_PLATFORM:
+                            uls_name = nss_tup[1]
+                        elif platform.lower() == "nsfs":
                             # Use nss_tup[0] as PVC name only if it's a string
                             # If it's an int (amount) or None, generate a unique name
                             if isinstance(nss_tup[0], str) and nss_tup[0].strip():

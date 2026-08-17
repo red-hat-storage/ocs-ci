@@ -672,6 +672,7 @@ class MCG:
         namespace_policy,
         replication_policy,
         vector_policy=None,
+        archive_policy=None,
     ):
         """
         Creates a new NooBaa bucket class using a template YAML
@@ -684,6 +685,8 @@ class MCG:
             replication_policy (dict): The replication policy dictionary
             vector_policy (dict): The vector policy for vector buckets with
                 resource and vectorDBType fields
+            archive_policy (str): Name of the archive NamespaceStore to use
+                as the deepArchiveResource in the archivePolicy spec
 
         Returns:
             OCS: The bucket class resource
@@ -740,6 +743,11 @@ class MCG:
             bc_data["spec"]["vectorPolicy"] = {
                 "resource": vector_policy["resource"],
                 "vectorDBType": vector_policy["vectorDBType"],
+            }
+
+        if archive_policy:
+            bc_data["spec"]["archivePolicy"] = {
+                "deepArchiveResource": archive_policy,
             }
 
         return create_resource(**bc_data)

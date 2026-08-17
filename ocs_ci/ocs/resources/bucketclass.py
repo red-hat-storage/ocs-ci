@@ -24,6 +24,7 @@ class BucketClass:
         placement_policy,
         replication_policy,
         namespace_policy,
+        archive_policy=None,
     ):
         self.name = name
         self.backingstores = backingstores
@@ -31,6 +32,7 @@ class BucketClass:
         self.placement_policy = placement_policy
         self.replication_policy = replication_policy
         self.namespace_policy = namespace_policy
+        self.archive_policy = archive_policy
 
     # TODO: verify health of bucketclass
 
@@ -131,9 +133,21 @@ def bucket_class_factory(
             placement_policy = None
             vector_policy = None
 
+            archive_policy = bucket_class_dict.get("archive_policy")
+            if "archive_nss_dict" in bucket_class_dict:
+                archive_nss = namespace_store_factory(
+                    interface, bucket_class_dict["archive_nss_dict"]
+                )
+                archive_policy = archive_nss[0].name
+
             if "vector_policy" in bucket_class_dict and interface.lower() != "oc":
                 raise RuntimeError(
                     f"vector_policy is supported only with 'oc' interface, got: {interface}"
+                )
+
+            if archive_policy and interface.lower() != "oc":
+                raise RuntimeError(
+                    f"archive_policy is supported only with 'oc' interface, got: {interface}"
                 )
 
             if "vector_policy" in bucket_class_dict:
@@ -202,7 +216,11 @@ def bucket_class_factory(
                     raise
             else:
                 backingstores = [
-                    BackingStore(constants.DEFAULT_NOOBAA_BACKINGSTORE, method="oc")
+                    BackingStore(
+                        constants.DEFAULT_NOOBAA_BACKINGSTORE,
+                        method="oc",
+                        type=constants.BACKINGSTORE_TYPE_PV_POOL,
+                    )
                 ]
 
             if "placement_policy" in bucket_class_dict:
@@ -239,6 +257,7 @@ def bucket_class_factory(
                     namespace_policy,
                     replication_policy,
                     vector_policy,
+                    archive_policy,
                 )
             elif interface.lower() == "cli" and backingstores:
                 mcg_obj.cli_create_bucketclass_over_backingstores(
@@ -259,6 +278,7 @@ def bucket_class_factory(
                 placement_policy,
                 replication_policy,
                 namespace_policy,
+                archive_policy,
             )
             created_bucket_classes.append(bucket_class_object)
         return bucket_class_object

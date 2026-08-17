@@ -7,8 +7,10 @@ import logging
 import os
 import shlex
 import time
+from string import Template
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import boto3
@@ -34,6 +36,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
 )
 from ocs_ci.helpers.helpers import create_resource, remove_port_from_url
+from ocs_ci.ocs.resources.pod import get_noobaa_endpoint_pods
 from ocs_ci.utility import version
 from ocs_ci.utility.prometheus import PrometheusAPI
 
@@ -1472,7 +1475,13 @@ def delete_bucket_policy(s3_obj, bucketname):
 
 @retry(boto3exception.ClientError, tries=4, delay=15)
 def s3_put_object(
-    s3_obj, bucketname, object_key, data, content_type="", content_encoding=""
+    s3_obj,
+    bucketname,
+    object_key,
+    data,
+    content_type="",
+    content_encoding="",
+    storage_class="",
 ):
     """
     Simple Boto3 client based Put object
@@ -1483,18 +1492,22 @@ def s3_put_object(
         object_key (str): Unique object Identifier
         data (str): string content to write to a new S3 object
         content_type (str): Type of object data. eg: html, txt etc,
+        storage_class (str): S3 storage class. eg: STANDARD, DEEP_ARCHIVE
 
     Returns:
         dict : Put object response
 
     """
-    return s3_obj.s3_client.put_object(
+    kwargs = dict(
         Bucket=bucketname,
         Key=object_key,
         Body=data,
         ContentType=content_type,
         ContentEncoding=content_encoding,
     )
+    if storage_class:
+        kwargs["StorageClass"] = storage_class
+    return s3_obj.s3_client.put_object(**kwargs)
 
 
 def s3_get_object(s3_obj, bucketname, object_key, versionid=""):
@@ -1539,6 +1552,70 @@ def s3_delete_object(s3_obj, bucketname, object_key, versionid=None):
         )
     else:
         return s3_obj.s3_client.delete_object(Bucket=bucketname, Key=object_key)
+
+
+def s3_restore_object(s3_obj, bucketname, object_key, days=1, tier="Bulk"):
+    """
+    Initiate restore of a Glacier/Deep Archive object
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucketname (str): Name of the bucket
+        object_key (str): Unique object Identifier
+        days (int): Number of days the restored copy should be available
+        tier (str): Retrieval tier - Bulk, Standard, or Expedited
+
+    Returns:
+        dict : Restore object response
+
+    """
+    return s3_obj.s3_client.restore_object(
+        Bucket=bucketname,
+        Key=object_key,
+        RestoreRequest={
+            "Days": days,
+            "GlacierJobParameters": {"Tier": tier},
+        },
+    )
+
+
+def nsfs_simulate_archive_restore(nsfs_obj, object_key, days):
+    """
+    Simulate completion of an archive restore on an NSFS bucket.
+
+    In a real deployment, the archive target is IBM Deep Archive backed by
+    tape storage via noobaa-non-containerized (NSFS). When S3 RestoreObject
+    is called, NSFS sets a ``user.noobaa.restore.request`` xattr on the file,
+    signaling the tape backend to recall the data. Once the tape backend
+    finishes the recall, it removes the request xattr and sets
+    ``user.noobaa.restore.expiry`` with an expiration timestamp - indicating
+    the object is now available for reads.
+
+    This helper replaces the tape recall step by directly manipulating
+    the xattrs on the NSFS PVC via a noobaa-endpoint pod (which mounts
+    the PVC at /nsfs/<nss_name>/<bucket_name>), allowing the RestoreWorker
+    to detect the restore as complete and copy the data back to the
+    standard tier.
+
+    Args:
+        nsfs_obj (NSFS): The NSFS object with nss and bucket_name attributes
+        object_key (str): The S3 object key (used for logging only)
+        days (int): Number of days the restored copy should remain available
+
+    """
+    base_path = f"/nsfs/{nsfs_obj.nss.name}/{nsfs_obj.bucket_name}"
+    expiry = (datetime.now(timezone.utc) + timedelta(days=days)).strftime(
+        "%Y-%m-%dT%H:%M:%S.000Z"
+    )
+    logger.info(
+        f"Simulating archive restore for object '{object_key}' under "
+        f"{base_path}, expiry={expiry}"
+    )
+    endpoint_pod = get_noobaa_endpoint_pods()[0]
+    with open(constants.NSFS_RESTORE_XATTR_SCRIPT) as f:
+        script = Template(f.read()).substitute(base_path=base_path, expiry=expiry)
+    result = endpoint_pod.exec_cmd_on_pod(f"python3 -c {shlex.quote(script)}")
+    logger.info(f"Simulated restore completion on NSFS file: {result}")
 
 
 def s3_put_object_tagging(s3_obj, bucketname, object_key, tags):
