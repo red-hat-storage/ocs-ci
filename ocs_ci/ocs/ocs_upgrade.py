@@ -198,6 +198,12 @@ def _patch_max_openshift_version_in_annotation(annotation_value, target_version)
                     changed = True
     elif isinstance(data, dict):
         props = data.get("properties", [])
+        if not isinstance(props, list):
+            log.warning(
+                "Unexpected type for 'properties' in annotation: %s",
+                type(props).__name__,
+            )
+            return None
         for entry in props:
             if (
                 isinstance(entry, dict)
