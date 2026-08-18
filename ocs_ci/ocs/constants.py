@@ -1972,6 +1972,7 @@ AWS_PLATFORM = "aws"
 AZURE_PLATFORM = "azure"
 AZURE_WITH_LOGS_PLATFORM = "azure-with-logs"
 AZURE_STS_PLATFORM = "azure-sts"
+GCP_STS_PLATFORM = "gcp-sts"
 GCP_PLATFORM = "gcp"
 VSPHERE_PLATFORM = "vsphere"
 BAREMETAL_PLATFORM = "baremetal"
@@ -3124,6 +3125,7 @@ CLOUD_MNGR_PLATFORMS = [
     "IBMCOS",
     "AWS_STS",
     "AZURE_STS",
+    "GCP_STS",
     "SELF_REF_MCG",
 ]
 

@@ -33,6 +33,7 @@ from ocs_ci.utility.utils import (
     load_auth_config,
     get_role_arn_from_sub,
     get_azure_sts_creds_from_sub,
+    get_gcp_sts_creds_from_sub,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ class CloudManager(ABC):
             "AZURE": AzureClient,
             "AZURE_WITH_LOGS": AzureWithLogsClient,
             "AZURE_STS": AzureSTSClient,
+            "GCP_STS": GcpSTSClient,
             "IBMCOS": IbmCosClient,
             "RGW": RgwClient,
             "SELF_REF_MCG": SelfRefMcgClient,
@@ -132,6 +134,16 @@ class CloudManager(ABC):
             )
         except ClusterNotInSTSModeException:
             setattr(self, "azure_sts_client", None)
+
+        # set the client for GCP STS enabled cluster
+        try:
+            setattr(
+                self,
+                "gcp_sts_client",
+                cloud_map["GCP_STS"](full_auth_dict=cred_dict),
+            )
+        except ClusterNotInSTSModeException:
+            setattr(self, "gcp_sts_client", None)
 
         try:
             setattr(
@@ -875,3 +887,29 @@ class AzureSTSClient(AzureClient):
         ).decode("ascii")
 
         return create_resource(**bs_secret_data)
+
+
+class GcpSTSClient(GoogleClient):
+    """
+    Implementation of a GCP Client for STS (Workload Identity Federation) clusters.
+
+    Reuses GoogleClient's GCS storage client for ULS operations but provides
+    WIF parameters (project_number, pool_id, provider_id, service_account_email)
+    for creating google-cloud-storage-sts backingstores.
+
+    """
+
+    @config.run_with_provider_context_if_available
+    def __init__(self, full_auth_dict, *args, **kwargs):
+        sts_creds = get_gcp_sts_creds_from_sub()
+        gcp_auth_dict = full_auth_dict.get("GCP")
+        if not gcp_auth_dict:
+            logger.error("Cluster is in GCP STS mode, but no GCP credentials found")
+            raise ClusterNotInSTSModeException
+
+        self.project_number = sts_creds["project_number"]
+        self.pool_id = sts_creds["pool_id"]
+        self.provider_id = sts_creds["provider_id"]
+        self.service_account_email = sts_creds["service_account_email"]
+
+        super().__init__(auth_dict=gcp_auth_dict, *args, **kwargs)

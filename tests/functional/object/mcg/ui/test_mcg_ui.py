@@ -11,6 +11,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     skipif_ibm_cloud_managed,
     provider_mode,
+    gcp_platform_required,
+    sts_deployment_required,
+    polarion_id,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -152,6 +155,63 @@ class TestStoreUserInterface(object):
         assert test_store.check_resource_existence(
             should_exist=False
         ), f"resource kind='{kind}' name='{store_name}' preserved on cluster after deletion"
+
+    @ui
+    @tier2
+    @sts_deployment_required
+    @gcp_platform_required
+    @polarion_id("OCS-8217")
+    def test_gcp_sts_backingstore_ui_creation(
+        self,
+        setup_ui_class_factory,
+        cloud_uls_factory,
+    ):
+        """
+        Test GCP STS backingstore creation via the ODF UI
+
+        1. Get the WIF secret name from the default GCP STS backingstore
+        2. Create a GCS bucket for the backingstore target
+        3. Navigate to ODF UI and create a Google Cloud Storage backingstore
+        4. Verify the backingstore reaches Ready state
+
+        """
+        setup_ui_class_factory()
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        # 1. Get the WIF secret name from the default GCP STS backingstore
+        logger.test_step("Get the WIF secret from the default backingstore")
+        default_bs = OCP(
+            kind="backingstore",
+            namespace=namespace,
+            resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
+        ).get()
+        secret_name = default_bs["spec"]["googleCloudStorage"]["secret"]["name"]
+        logger.info(f"Using WIF secret: {secret_name}")
+
+        # 2. Create a GCS bucket for the backingstore target
+        logger.test_step("Create a GCS bucket as the underlying storage")
+        uls_name = list(cloud_uls_factory({"gcp": [(1, None)]})["gcp"])[0]
+        store_name = create_unique_resource_name(
+            resource_description="ui", resource_type="backingstore"
+        )
+
+        # 3. Navigate to ODF UI and create the backingstore
+        logger.test_step(
+            "Navigate to Backing Store tab and create GCP STS backingstore"
+        )
+        object_storage = PageNavigator().nav_object_storage_page()
+        store_tab = object_storage.nav_backing_store_tab()
+        _, store_ready = store_tab.create_store_verify_state(
+            kind="BackingStore",
+            store_name=store_name,
+            provider="Google Cloud Storage",
+            region=None,
+            secret=secret_name,
+            uls_name=uls_name,
+        )
+
+        # 4. Verify the backingstore is ready
+        assert store_ready, f"GCP STS backingstore '{store_name}' was not ready in time"
 
 
 @mcg

@@ -18,6 +18,7 @@ from ocs_ci.ocs.bucket_utils import (
     cli_create_aws_sts_backingstore,
     cli_create_azure_sts_backingstore,
     oc_create_azure_sts_backingstore,
+    oc_create_gcp_sts_backingstore,
     oc_create_self_ref_mcg_backingstore,
     cli_create_self_ref_mcg_backingstore,
 )
@@ -291,6 +292,7 @@ def backingstore_factory(
                 "self-ref-mcg": oc_create_self_ref_mcg_backingstore,
                 "pv": oc_create_pv_backingstore,
                 "azure-sts": oc_create_azure_sts_backingstore,
+                "gcp-sts": oc_create_gcp_sts_backingstore,
             },
             "cli": {
                 "aws": cli_create_aws_backingstore,

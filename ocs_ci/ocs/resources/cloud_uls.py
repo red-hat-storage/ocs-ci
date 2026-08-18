@@ -33,6 +33,7 @@ def cloud_uls_factory(
         "azure": set(),
         "azure-with-logs": set(),
         "azure-sts": set(),
+        "gcp-sts": set(),
         "ibmcos": set(),
         "rgw": set(),
         "self-ref-mcg": set(),
@@ -45,6 +46,7 @@ def cloud_uls_factory(
             "azure": cld_mgr.azure_client,
             "azure-with-logs": cld_mgr.azure_with_logs_client,
             "azure-sts": cld_mgr.azure_sts_client,
+            "gcp-sts": cld_mgr.gcp_sts_client,
             "ibmcos": cld_mgr.ibmcos_client,
         }
     except AttributeError as e:
@@ -67,6 +69,11 @@ def cloud_uls_factory(
         ulsMap["azure-sts"] = cld_mgr.azure_sts_client
     except AttributeError:
         log.warning("Cluster is not deployed in Azure STS mode")
+
+    try:
+        ulsMap["gcp-sts"] = cld_mgr.gcp_sts_client
+    except AttributeError:
+        log.warning("Cluster is not deployed in GCP STS mode")
 
     try:
         ulsMap["self-ref-mcg"] = cld_mgr.self_ref_mcg_client
@@ -96,6 +103,7 @@ def cloud_uls_factory(
             "azure": set(),
             "azure-with-logs": set(),
             "azure-sts": set(),
+            "gcp-sts": set(),
             "ibmcos": set(),
             "rgw": set(),
             "self-ref-mcg": set(),
