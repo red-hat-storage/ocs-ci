@@ -430,7 +430,7 @@ class OCSUpgrade(object):
             resource_name=resource_name,
             selector=operator_selector,
         )
-        package_manifest.wait_for_resource()
+        package_manifest.wait_for_resource(timeout=120)
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
         if not channel:
             channel = package_manifest.get_default_channel()
