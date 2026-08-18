@@ -20,7 +20,15 @@ Usage (conf yaml)::
       fdf_standalone_deployment: true
       fdf_standalone_catalog_image: "cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.23.0-40"
 
-The ``fdf_standalone_catalog_image`` must be the full image reference
+``fdf_standalone_catalog_image`` falls back to ``ocs_registry_image`` when not
+set, so the existing ``--ocs-registry-image`` CLI argument and
+``OCS_REGISTRY_IMAGE`` Jenkins parameter work without any new parameter::
+
+    DEPLOYMENT:
+      fdf_standalone_deployment: true
+      ocs_registry_image: "cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.23.0-40"
+
+The catalog image must be the full image reference
 (registry + path + tag) as shown in the RHSTOR-8840 example::
 
     apiVersion: operators.coreos.com/v1alpha1
@@ -34,6 +42,7 @@ The ``fdf_standalone_catalog_image`` must be the full image reference
 """
 
 import logging
+import re
 import tempfile
 
 from ocs_ci.framework import config
@@ -44,6 +53,27 @@ from ocs_ci.utility.deployment import get_and_apply_idms_from_catalog
 from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(__name__)
+
+# Matches a tagged reference (registry/path/name:tag) or a digested reference
+# (registry/path/name@sha256:<hex>).  Both formats are accepted by oc image extract.
+_IMAGE_REF_RE = re.compile(
+    r"^[a-zA-Z0-9][a-zA-Z0-9.\-:/]+"  # registry + path
+    r"(?::[a-zA-Z0-9_.\-]+|@sha256:[a-fA-F0-9]{64})$"  # :tag or @sha256:<hex>
+)
+
+_CATALOG_IMAGE_MISSING_MSG = (
+    "A catalog image must be set for standalone FDF deployment. "
+    "Set 'fdf_standalone_catalog_image' or use the existing "
+    "'ocs_registry_image' config key (--ocs-registry-image CLI / "
+    "OCS_REGISTRY_IMAGE Jenkins parameter).\n"
+    "Example: 'cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.23.0-40'"
+)
+_CATALOG_IMAGE_INVALID_MSG = (
+    "Invalid catalog image reference '{image}'. "
+    "Expected a tagged (registry/path:tag) or digested (registry/path@sha256:<hex>) "
+    "image reference.\n"
+    "Example: 'cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.23.0-40'"
+)
 
 
 def _apply_fdf_mirror_sets(catalog_image):
@@ -77,7 +107,10 @@ def _apply_fdf_mirror_sets(catalog_image):
         "Extracting and applying IDMS rules from FDF catalog image '%s'",
         catalog_image,
     )
-    idms_path = get_and_apply_idms_from_catalog(image=catalog_image)
+    idms_path = get_and_apply_idms_from_catalog(
+        image=catalog_image,
+        insecure=config.DEPLOYMENT.get("disconnected", False),
+    )
     if idms_path:
         logger.info("IDMS applied from catalog image, path: %s", idms_path)
     else:
@@ -114,7 +147,9 @@ class StandaloneFDFCatalogSource:
 
     def __init__(self):
         self.kubeconfig = config.RUN["kubeconfig"]
-        self.catalog_image = config.DEPLOYMENT.get("fdf_standalone_catalog_image", "")
+        self.catalog_image = config.DEPLOYMENT.get(
+            "fdf_standalone_catalog_image"
+        ) or config.DEPLOYMENT.get("ocs_registry_image", "")
         self.catalog_source_name = constants.FDF_STANDALONE_CATALOG_SOURCE_NAME
 
     # ------------------------------------------------------------------
@@ -207,25 +242,36 @@ class StandaloneFDFCatalogSource:
 
 def _validate_catalog_image():
     """
-    Return the configured catalog image, raising ``ValueError`` early if unset.
+    Return the validated catalog image, raising ``ValueError`` early if unset
+    or malformed.
+
+    Checks ``fdf_standalone_catalog_image`` first, then falls back to
+    ``ocs_registry_image`` so the existing ``--ocs-registry-image`` CLI
+    argument and ``OCS_REGISTRY_IMAGE`` Jenkins parameter work without
+    introducing a new parameter.
 
     Centralises the check so neither ``_apply_fdf_mirror_sets`` nor
     ``StandaloneFDFCatalogSource.create_catalog_source`` can be reached
-    with an empty image string.
+    with a missing, whitespace-only, or malformed image reference.
 
     Returns:
-        str: The non-empty ``fdf_standalone_catalog_image`` config value.
+        str: The resolved, stripped, non-empty catalog image reference.
 
     Raises:
-        ValueError: when ``fdf_standalone_catalog_image`` is not set in config.
+        ValueError: when neither ``fdf_standalone_catalog_image`` nor
+            ``ocs_registry_image`` is set, or when the resolved value is not a
+            valid tagged (``registry/path:tag``) or digested
+            (``registry/path@sha256:<hex>``) image reference.
     """
-    catalog_image = config.DEPLOYMENT.get("fdf_standalone_catalog_image", "")
+    raw = config.DEPLOYMENT.get(
+        "fdf_standalone_catalog_image"
+    ) or config.DEPLOYMENT.get("ocs_registry_image", "")
+    # Reject non-string types (e.g. accidental integer in YAML) and whitespace-only values.
+    catalog_image = raw.strip() if isinstance(raw, str) else ""
     if not catalog_image:
-        raise ValueError(
-            "config.DEPLOYMENT['fdf_standalone_catalog_image'] must be set "
-            "for standalone FDF deployment.\n"
-            "Example: 'cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.23.0-40'"
-        )
+        raise ValueError(_CATALOG_IMAGE_MISSING_MSG)
+    if not _IMAGE_REF_RE.match(catalog_image):
+        raise ValueError(_CATALOG_IMAGE_INVALID_MSG.format(image=catalog_image))
     return catalog_image
 
 
