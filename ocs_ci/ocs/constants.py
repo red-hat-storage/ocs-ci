@@ -1850,6 +1850,10 @@ PSA_PRIVILEGED = "privileged"
 PSA_BASELINE = "baseline"
 PSA_RESTRICTED = "restricted"
 
+# SCC annotations for user namespaces
+SA_SCC_UID_RANGE = "openshift.io/sa.scc.uid-range"
+SA_SCC_SUPPLEMENTAL_GROUPS = "openshift.io/sa.scc.supplemental-groups"
+
 # Platforms
 AWS_PLATFORM = "aws"
 AZURE_PLATFORM = "azure"

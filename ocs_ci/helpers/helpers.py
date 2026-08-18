@@ -7704,11 +7704,11 @@ def create_userns_project(project_name=None, uid_range="10000/1000"):
 
     ns_ocp = ocp.OCP(kind="namespace")
     ns_ocp.annotate(
-        f"openshift.io/sa.scc.supplemental-groups={uid_range}",
+        f"{constants.SA_SCC_SUPPLEMENTAL_GROUPS}={uid_range}",
         resource_name=namespace,
     )
     ns_ocp.annotate(
-        f"openshift.io/sa.scc.uid-range={uid_range}",
+        f"{constants.SA_SCC_UID_RANGE}={uid_range}",
         resource_name=namespace,
     )
     logger.info(
