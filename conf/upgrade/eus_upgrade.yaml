@@ -1,0 +1,6 @@
+UPGRADE:
+  eus_upgrade: true
+  eus_max_ocp_version_override: "4.22"
+  eus_csvs_to_patch:
+    - "odf-operator"
+    - "odf-dependencies"
