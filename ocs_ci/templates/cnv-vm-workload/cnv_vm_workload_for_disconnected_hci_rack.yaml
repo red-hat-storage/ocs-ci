@@ -1,0 +1,72 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  labels:
+    appname: vm
+  name: vm
+  namespace: namespace-cnv-workload
+spec:
+  dataVolumeTemplates:
+  - metadata:
+      annotations:
+        cdi.kubevirt.io/storage.checkStaticVolume: "true"
+      labels:
+        appname: vm
+      name: root-disk
+    spec:
+      source:
+        registry:
+          certConfigMap: user-ca-bundle
+          secretRef: quayadmin
+          url: docker://r11-ru22-w-l.quay-service.fusion.tadn.ibm.com:8443/df_team/nirsof/cirros:0.6.2-1
+      storage:
+        accessModes:
+        - ReadWriteMany
+        resources:
+          requests:
+            storage: 128Mi
+        storageClassName: ocs-storagecluster-ceph-rbd-virtualization
+  running: true
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: vm
+        kubevirt.io/size: small
+    spec:
+      accessCredentials:
+      - sshPublicKey:
+          propagationMethod:
+            configDrive: {}
+          source:
+            secret:
+              secretName: my-public-key
+      domain:
+        devices:
+          disks:
+          - disk:
+              bus: virtio
+            name: root-disk
+          - disk:
+              bus: virtio
+            name: cloud-init
+          interfaces:
+          - masquerade: {}
+            model: virtio
+            name: default
+        resources:
+          requests:
+            memory: 256Mi
+      networks:
+      - name: default
+        pod: {}
+      volumes:
+      - name: root-disk
+        persistentVolumeClaim:
+          claimName: root-disk
+      - cloudInitConfigDrive:
+          userData: |-
+            #user-config
+            user: cirros
+            password: gocubsgo
+            chpasswd: { expire: False }
+        name: cloud-init
