@@ -98,6 +98,7 @@ class TestApplicationFailoverAndRelocate:
             ),
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_application_failover_and_relocate(
         self,
         setup_acm_ui,

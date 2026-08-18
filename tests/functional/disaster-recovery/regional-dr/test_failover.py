@@ -67,6 +67,7 @@ class TestFailover:
             ),
         ],
     )
+    @pytest.mark.zstream_4_16_13
     def test_failover(
         self,
         primary_cluster_down,
