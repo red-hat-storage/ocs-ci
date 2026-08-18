@@ -4,7 +4,7 @@ from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
-from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad, zstream_4_18_1
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.drpc import DRPC
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @tier1
 @turquoise_squad
 @skipif_ocs_version("<4.16")
+@zstream_4_18_1
 class TestFailoverAndRelocateWithDiscoveredApps:
     """
     Test Failover and Relocate with Discovered Apps
