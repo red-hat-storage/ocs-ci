@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     tier1,
     stretchcluster_required,
+    zstream_4_16_13,
 )
 from ocs_ci.helpers.stretchcluster_helper import (
     check_for_logwriter_workload_pods,
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 @tier1
 @stretchcluster_required
 @turquoise_squad
+@zstream_4_16_13
 class TestNetSplit:
     @pytest.fixture()
     def init_sanity(self, request):

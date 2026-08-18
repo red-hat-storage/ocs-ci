@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     tier1,
     mcg,
+    zstream_4_16_13,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, skipif_ocp_version
 from ocs_ci.ocs import constants, ocp
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 @marks.polarion_id("OCS-2376")
 @marks.bugzilla("1873162")
 @skipif_managed_service
+@zstream_4_16_13
 def test_hpa_noobaa_endpoint_metric():
     """
     Test to verify HPA noobaa-hpav2 cpu metrics is available.
