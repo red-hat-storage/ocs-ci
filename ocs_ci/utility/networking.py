@@ -293,14 +293,11 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
         cluster_data["spec"]["network"]["addressRanges"]["public"] = [str_network]
 
     if cluster_enabled:
-        cluster_cidr = config.ENV_DATA.get(
-            "multus_cluster_net_ip_range"
-        ) or config.ENV_DATA.get("multus_cluster_net_range")
         logger.info(
             f"Configuring data replication separation with cluster network: "
-            f"{cluster_cidr} (interface: {interface})"
+            f"{str_network} (interface: {interface})"
         )
-        cluster_data["spec"]["network"]["addressRanges"]["cluster"] = [cluster_cidr]
+        cluster_data["spec"]["network"]["addressRanges"]["cluster"] = [str_network]
 
     return cluster_data
 
