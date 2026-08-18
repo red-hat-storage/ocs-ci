@@ -7796,10 +7796,10 @@ def verify_file_ownership(pod_obj, file_path, expected_uid, expected_gid):
     assert len(parts) >= 4, f"Unexpected ls -ln output for {file_path}: {out}"
     file_uid = int(parts[2])
     file_gid = int(parts[3])
-    assert file_uid == expected_uid, (
-        f"File UID {file_uid} != expected " f"{expected_uid} for {file_path}"
-    )
-    assert file_gid == expected_gid, (
-        f"File GID {file_gid} != expected " f"{expected_gid} for {file_path}"
-    )
+    assert (
+        file_uid == expected_uid
+    ), f"File UID {file_uid} != expected {expected_uid} for {file_path}"
+    assert (
+        file_gid == expected_gid
+    ), f"File GID {file_gid} != expected {expected_gid} for {file_path}"
     return file_uid, file_gid

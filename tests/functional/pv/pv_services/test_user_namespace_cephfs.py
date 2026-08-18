@@ -19,7 +19,6 @@ from ocs_ci.helpers.helpers import (
 logger = logging.getLogger(__name__)
 
 CONTAINER_UID = 10900
-CONTAINER_GID = 10900
 SUPPLEMENTAL_GROUPS_BASE = 10000
 USERNS_UID_RANGE = "10000/1000"
 
@@ -71,9 +70,9 @@ class TestUserNamespaceCephFS(ManageTest):
         logger.info(f"PVC {pvc_obj.name} created and Bound")
         logger.test_step("Steps 3-6: Deploy pods with hostUsers=false")
         worker_nodes = node.get_worker_nodes()
-        assert len(worker_nodes) >= 2, (
-            f"Need >= 2 worker nodes, " f"found {len(worker_nodes)}"
-        )
+        assert (
+            len(worker_nodes) >= 2
+        ), f"Need >= 2 worker nodes, found {len(worker_nodes)}"
         pods = []
         for i in range(2):
             p = create_userns_pod(
@@ -94,16 +93,16 @@ class TestUserNamespaceCephFS(ManageTest):
         pod1, pod2 = pods
         node1 = pod1.get()["spec"]["nodeName"]
         node2 = pod2.get()["spec"]["nodeName"]
-        logger.info(f"Pod {pod1.name} on {node1}, " f"Pod {pod2.name} on {node2}")
+        logger.info(f"Pod {pod1.name} on {node1}, Pod {pod2.name} on {node2}")
         assert node1 != node2, f"Both pods on same node: {node1}"
         logger.test_step("Step 7: Write from pod-1 and read back")
         out = pod1.exec_sh_cmd_on_pod(
             "id && echo testing > /mnt/test/a " "&& cat /mnt/test/a && sync"
         )
         logger.info(f"Pod-1 output: {out}")
-        assert f"uid={CONTAINER_UID}" in out, (
-            f"Expected uid={CONTAINER_UID} in id output, " f"got: {out}"
-        )
+        assert (
+            f"uid={CONTAINER_UID}" in out
+        ), f"Expected uid={CONTAINER_UID} in id output, got: {out}"
         assert "testing" in out, f"Expected 'testing' in output: {out}"
         logger.test_step("Step 8: Read from pod-2 and write new file")
         out = pod2.exec_sh_cmd_on_pod(
@@ -222,9 +221,7 @@ class TestUserNamespaceCephFS(ManageTest):
             CONTAINER_UID,
             SUPPLEMENTAL_GROUPS_BASE,
         )
-        logger.info(
-            f"Ownership correct: " f"{CONTAINER_UID}:{SUPPLEMENTAL_GROUPS_BASE}"
-        )
+        logger.info(f"Ownership correct: {CONTAINER_UID}:{SUPPLEMENTAL_GROUPS_BASE}")
         logger.test_step("Step 8: Verify host UID remapping")
         host_uid = node.get_host_uid_for_pod(pod_node, pod_obj.name)
         assert host_uid != CONTAINER_UID, (
@@ -250,7 +247,7 @@ class TestUserNamespaceCephFS(ManageTest):
         logger.test_step("Step 11: Verify data persists")
         out = pod_obj.exec_sh_cmd_on_pod("cat /mnt/test/file1")
         logger.info(f"Persisted content: {out}")
-        assert "rwo-test" in out, f"Data did not persist after pod restart: " f"{out}"
+        assert "rwo-test" in out, f"Data did not persist after pod restart: {out}"
         logger.test_step("Step 12: Verify ownership persists")
         verify_file_ownership(
             pod_obj,
@@ -258,6 +255,4 @@ class TestUserNamespaceCephFS(ManageTest):
             CONTAINER_UID,
             SUPPLEMENTAL_GROUPS_BASE,
         )
-        logger.info(
-            f"Ownership persisted: " f"{CONTAINER_UID}:{SUPPLEMENTAL_GROUPS_BASE}"
-        )
+        logger.info(f"Ownership persisted: {CONTAINER_UID}:{SUPPLEMENTAL_GROUPS_BASE}")

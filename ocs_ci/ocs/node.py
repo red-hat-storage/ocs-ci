@@ -3917,18 +3917,16 @@ def get_host_uid_for_pod(node_name, pod_name):
         int: Host-level real UID of the container process
     """
     oc_cmd = OCP()
-    pod_id_cmd = f"crictl pods --name ^{pod_name}$" f" --state ready -q | head -1"
+    pod_id_cmd = f"crictl pods --name ^{pod_name}$ --state ready -q | head -1"
     pod_id = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[pod_id_cmd]).strip()
-    assert pod_id, f"crictl found no ready pod matching " f"{pod_name} on {node_name}"
+    assert pod_id, f"crictl found no ready pod matching {pod_name} on {node_name}"
     log.info(f"crictl pod ID for {pod_name}: {pod_id}")
 
-    container_id_cmd = f"crictl ps --pod {pod_id}" f" --state running -q | head -1"
+    container_id_cmd = f"crictl ps --pod {pod_id} --state running -q | head -1"
     container_id = oc_cmd.exec_oc_debug_cmd(
         node=node_name, cmd_list=[container_id_cmd]
     ).strip()
-    assert container_id, (
-        f"No running container found in pod {pod_id} " f"on {node_name}"
-    )
+    assert container_id, f"No running container found in pod {pod_id} on {node_name}"
     log.info(f"Container ID: {container_id}")
 
     inspect_cmd = f"crictl inspect {container_id}"
@@ -3939,14 +3937,12 @@ def get_host_uid_for_pod(node_name, pod_name):
         f"output for pod {pod_name} on node {node_name}"
     )
     pid = pid_match.group(1)
-    log.info(f"Container PID for {pod_name} " f"on {node_name}: {pid}")
+    log.info(f"Container PID for {pod_name} on {node_name}: {pid}")
 
     status_cmd = f"cat /proc/{pid}/status"
     status_output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[status_cmd])
     uid_match = re.search(r"Uid:\s+(\d+)", status_output)
-    assert uid_match, (
-        f"Could not parse Uid from /proc/{pid}/status " f"on node {node_name}"
-    )
+    assert uid_match, f"Could not parse Uid from /proc/{pid}/status on node {node_name}"
     host_uid = int(uid_match.group(1))
-    log.info(f"Host UID for {pod_name} " f"on {node_name}: {host_uid}")
+    log.info(f"Host UID for {pod_name} on {node_name}: {host_uid}")
     return host_uid
