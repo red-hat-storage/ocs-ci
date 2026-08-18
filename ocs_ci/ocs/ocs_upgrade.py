@@ -227,7 +227,6 @@ def get_expected_noobaa_pod_count(upgrade_version):
 
     """
     expected_noobaa_pods = [
-        "noobaa-core-0",
         "noobaa-operator",
         "noobaa-db-pg-cluster-1",
         "noobaa-db-pg-cluster-2",
@@ -238,6 +237,8 @@ def get_expected_noobaa_pod_count(upgrade_version):
     noobaa_pod_names = [pod.name for pod in noobaa_pod_obj]
     logger.info(f"Current noobaa pods under validation: {noobaa_pod_names}")
     for pod in noobaa_pod_obj:
+        if pod.name.startswith("noobaa-core-"):
+            expected_noobaa_pods.append(pod.name)
         if "pv-backingstore" in pod.name:
             expected_noobaa_pods.append(pod.name)
         if upgrade_version >= parse_version("4.19"):
