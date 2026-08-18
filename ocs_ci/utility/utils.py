@@ -5243,7 +5243,13 @@ def prepare_customized_pull_secret(images=None):
 
 def inspect_image(image, authfile_fo, cluster_config=None):
     """
-    Inspect image
+    Inspect image remotely using skopeo (no local pull required).
+
+    Uses ``skopeo inspect`` to query the registry API directly, avoiding
+    the need to pull and extract image layers locally.  This eliminates
+    UID/GID namespace issues that cause ``podman image pull`` to fail on
+    containerized CI agents with restricted user-namespace mappings
+    (e.g. disconnected Fusion HCI Jenkins agents).
 
     Args:
         image (str): image to inspect
@@ -5251,20 +5257,37 @@ def inspect_image(image, authfile_fo, cluster_config=None):
         cluster_config (MultiClusterConfig): Holds the context of a cluster
 
     Returns:
-        dict: json object of the inspected image
+        list[dict]: a single-element list whose dict contains the keys
+            ``RepoTags``, ``RepoDigests`` and ``Digest``, matching the
+            structure previously returned by ``podman image inspect``.
 
     """
-    # pull original image (to be able to inspect it)
-    exec_cmd(
-        f"podman image pull {image} --authfile {authfile_fo.name}",
+    cmd_result = exec_cmd(
+        f"skopeo inspect --authfile {authfile_fo.name} docker://{image}",
         cluster_config=cluster_config,
     )
-    # inspect the image
-    cmd_result = exec_cmd(
-        f"podman image inspect {image}", cluster_config=cluster_config
-    )
-    image_inspect = json.loads(cmd_result.stdout)
-    return image_inspect
+    skopeo_data = json.loads(cmd_result.stdout)
+
+    repo_name = skopeo_data.get("Name", "")
+    digest = skopeo_data.get("Digest", "")
+
+    # Extract the tag from the input image reference so it appears first
+    # in RepoTags (callers use RepoTags[0]).
+    input_tag = None
+    if ":" in image and "@" not in image:
+        input_tag = image.rsplit(":", 1)[-1]
+
+    repo_tags = []
+    if input_tag:
+        repo_tags.append(f"{repo_name}:{input_tag}")
+    for tag in skopeo_data.get("RepoTags", []):
+        full_ref = f"{repo_name}:{tag}"
+        if full_ref not in repo_tags:
+            repo_tags.append(full_ref)
+
+    repo_digests = [f"{repo_name}@{digest}"] if digest else []
+
+    return [{"RepoTags": repo_tags, "RepoDigests": repo_digests, "Digest": digest}]
 
 
 def get_image_with_digest(image):
@@ -5376,13 +5399,15 @@ def mirror_image(image, cluster_config=None):
         if "@sha256" in mirrored_image:
             mirrored_image = mirrored_image.split("@")[0]
             mirrored_image += f":odf-qe-temp-tag-{get_random_str(10)}"
-        # mirror the image
+        # mirror the image using skopeo copy (direct registry-to-registry
+        # transfer without pulling layers to local storage)
         log.info(
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
         )
         exec_cmd(
-            f"oc image mirror --insecure --registry-config"
-            f" {authfile_fo.name} {orig_image_full} {mirrored_image}",
+            f"skopeo copy --authfile {authfile_fo.name}"
+            f" --dest-tls-verify=false --src-tls-verify=false"
+            f" docker://{orig_image_full} docker://{mirrored_image}",
             cluster_config=cluster_config,
         )
     return mirrored_image
