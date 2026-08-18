@@ -275,7 +275,7 @@ class TestSTSBucket:
             pytest.param(
                 "aws-sts",
                 "aws",
-                "eu-central-1",
+                None,
                 "CLI",
                 marks=[tier2, aws_platform_required, polarion_id("OCS-8213")],
             ),
