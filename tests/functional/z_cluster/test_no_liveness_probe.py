@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     polarion_id,
     brown_squad,
+    zstream_4_18_1,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_containers_names_by_pod
@@ -25,6 +26,7 @@ LIVENESS_CONTAINER = "liveness-prometheus"
 @brown_squad
 @tier1
 @polarion_id("OCS-4847")
+@zstream_4_18_1
 def test_no_liveness_container():
     """
     Automated test for BZ #2142901
