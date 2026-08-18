@@ -481,8 +481,10 @@ class TestVolumeAttributesClassQoS(ManageTest):
             )
 
             # Verify Read Path Workload
-            read_dd = (f"oc exec {pod_obj.name} -n {proj.namespace} -- "
-                       f"dd if=/dev/rbdblock of=/dev/null bs=1M count=10 status=progress")
+            read_dd = (
+                f"oc exec {pod_obj.name} -n {proj.namespace} -- "
+                f"dd if=/dev/rbdblock of=/dev/null bs=1M count=10 status=progress"
+            )
             read_res = exec_cmd(read_dd, shell=True, ignore_error=True)
             assert (
                 read_res.returncode == 0
@@ -497,16 +499,20 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 io_target = "/dev/rbdblock"
 
             # Execute sequential write I/O through Ceph-CSI mounted volume path
-            write_dd = (f"oc exec {pod_obj.name} -n {proj.namespace} -- "
-                        f"dd if=/dev/zero of={io_target} bs=1M count=20 conv=fsync status=progress")
+            write_dd = (
+                f"oc exec {pod_obj.name} -n {proj.namespace} -- "
+                f"dd if=/dev/zero of={io_target} bs=1M count=20 conv=fsync status=progress"
+            )
             write_res = exec_cmd(write_dd, shell=True, ignore_error=True)
             assert (
                 write_res.returncode == 0
             ), f"[{test_id}] Write I/O workload failed on target {io_target}: {write_res.stderr}"
 
             # Execute sequential read I/O through Ceph-CSI mounted volume path
-            read_dd = (f"oc exec {pod_obj.name} -n {proj.namespace} -- "
-                       f"dd if={io_target} of=/dev/null bs=1M count=20 status=progress")
+            read_dd = (
+                f"oc exec {pod_obj.name} -n {proj.namespace} -- "
+                f"dd if={io_target} of=/dev/null bs=1M count=20 status=progress"
+            )
             read_res = exec_cmd(read_dd, shell=True, ignore_error=True)
             assert (
                 read_res.returncode == 0
