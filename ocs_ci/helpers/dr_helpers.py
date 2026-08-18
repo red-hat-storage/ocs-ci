@@ -4534,14 +4534,23 @@ def validate_application_odf_cli(
     Returns:
         str or None: The stdout output from the command,
             or None if any cluster in the multicluster config is a hosted
-            cluster, or if gather failed.
+            cluster, or if gather failed, or if
+            ``skip_odf_cli_validation`` is set in ENV_DATA.
 
     Note:
         Returns None immediately (without running any command) when any
-        cluster in ``config.clusters`` has ``is_hosted=True``.  Skips
-        the test on validation failure.
+        cluster in ``config.clusters`` has ``is_hosted=True``, or when
+        ``skip_odf_cli_validation`` is ``True`` in ``config.ENV_DATA``.
+        Skips the test on validation failure.
 
     """
+    if config.ENV_DATA.get("skip_odf_cli_validation", False):
+        logger.info(
+            f"Skipping ODF CLI DR {action} for DRPC '{drpc_name}': "
+            f"'skip_odf_cli_validation' is set in ENV_DATA"
+        )
+        return None
+
     for cluster in config.clusters:
         if cluster.MULTICLUSTER.get("is_hosted", False):
             cluster_name = cluster.MULTICLUSTER.get(
