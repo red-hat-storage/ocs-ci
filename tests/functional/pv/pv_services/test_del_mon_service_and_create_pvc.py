@@ -3,7 +3,7 @@ import logging
 import pytest
 import time
 
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, zstream_4_16_16
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_external_mode,
@@ -37,6 +37,7 @@ POD_OBJ = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
 @tier4c
 @ignore_leftovers
 @skipif_external_mode
+@zstream_4_16_16
 class TestPvcCreationAfterDelMonService(E2ETest):
     """
     Tests to verify PVC creation after deleting

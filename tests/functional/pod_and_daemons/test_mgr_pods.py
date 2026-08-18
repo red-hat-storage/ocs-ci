@@ -11,7 +11,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, zstream_4_16_16
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @post_upgrade
 @post_ocs_upgrade
+@zstream_4_16_16
 class TestMgrPods(BaseTest):
     """
     This test class contains tests that would check mgr pods from odf-version 4.15
