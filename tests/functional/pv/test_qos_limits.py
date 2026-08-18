@@ -26,10 +26,9 @@ class TestVolumeAttributesClassQoS(ManageTest):
 
     @pytest.fixture(autouse=True, scope="class")
     def setup_qos_classes(self, request):
-        """Provisions Silver, Gold, and Unthrottled VolumeAttributesClass resources once for the test class."""
+        """Provisions Silver, Gold VolumeAttributesClass resources once for the test class."""
         request.cls.silver_vac_name = "silver-qos-tier"
         request.cls.gold_vac_name = "gold-qos-tier"
-        request.cls.unthrottled_vac_name = "unthrottled-qos-tier"
 
         request.cls.silver_limits = {
             "rbps": "1048576",
@@ -99,19 +98,6 @@ class TestVolumeAttributesClassQoS(ManageTest):
             },
         }
 
-        unthrottled_manifest = {
-            "apiVersion": "storage.k8s.io/v1",
-            "kind": "VolumeAttributesClass",
-            "metadata": {"name": request.cls.unthrottled_vac_name},
-            "driverName": "openshift-storage.rbd.csi.ceph.com",
-            "parameters": {
-                "maxReadBps": request.cls.unthrottled_limits["rbps"],
-                "maxWriteBps": request.cls.unthrottled_limits["wbps"],
-                "maxReadIops": request.cls.unthrottled_limits["riops"],
-                "maxWriteIops": request.cls.unthrottled_limits["wiops"],
-            },
-        }
-
         log.info(
             "Writing clean VolumeAttributesClass payload manifests via tempfile..."
         )
@@ -123,14 +109,9 @@ class TestVolumeAttributesClassQoS(ManageTest):
             json.dump(gold_manifest, gf)
             tmp_gold = gf.name
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as uf:
-            json.dump(unthrottled_manifest, uf)
-            tmp_unthrottled = uf.name
-
         log.info("Injecting class structures into cluster context...")
         exec_cmd(f"oc apply -f {tmp_silver}")
         exec_cmd(f"oc apply -f {tmp_gold}")
-        exec_cmd(f"oc apply -f {tmp_unthrottled}")
 
     @pytest.fixture
     def test_resources_cleanup(self, request):
