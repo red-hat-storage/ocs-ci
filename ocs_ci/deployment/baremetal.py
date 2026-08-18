@@ -1508,7 +1508,9 @@ def clean_disk(
         device (str): path to the device to be cleaned up
         size (int): size of the device, if not provided, it will be obtained via `lsblk -n --output SIZE -b {device}`
             command
-        run_sgdisk (bool): run `sgdisk --zap-all {device}` command (default: True)
+        run_sgdisk (bool): run `sgdisk --zap-all {device}` command (default:
+            True). Skipped automatically when `sgdisk` is not present on the
+            node (e.g. OCP 5.0+ RHCOS images).
         ocp_obj (obj): OCP object, if not provided, new one is initialized
         namespace (str): namespace where the oc_debug command will be executed
 
@@ -1523,12 +1525,28 @@ def clean_disk(
     )
 
     logger.info(out)
-    out = ocp_obj.exec_oc_debug_cmd(
-        node=node_name,
-        cmd_list=[f"sgdisk --zap-all {device}"],
-        namespace=namespace,
-    )
-    logger.info(out)
+    if run_sgdisk:
+        sgdisk_check = ocp_obj.exec_oc_debug_cmd(
+            node=node_name,
+            cmd_list=["command -v sgdisk || echo SGDISK_MISSING"],
+            namespace=namespace,
+        )
+        if "SGDISK_MISSING" in str(sgdisk_check):
+            logger.warning(
+                "sgdisk not found on node %s; skipping sgdisk --zap-all "
+                "for %s (wipefs and bluestore dd cleanup still run)",
+                node_name,
+                device,
+            )
+        else:
+            out = ocp_obj.exec_oc_debug_cmd(
+                node=node_name,
+                cmd_list=[f"sgdisk --zap-all {device}"],
+                namespace=namespace,
+            )
+            logger.info(out)
+    else:
+        logger.info("Skipping sgdisk --zap-all for %s (run_sgdisk=False)", device)
 
     # Write different portion because bluestore replicates its metadata at multiple places on the device
     # (at 0 / 1Gb / 10Gb / 100Gb / 1000Gb etc.)
