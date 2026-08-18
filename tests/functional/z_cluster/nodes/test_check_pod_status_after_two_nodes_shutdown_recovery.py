@@ -2,7 +2,7 @@ import logging
 import pytest
 import time
 
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_rook
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4b,
@@ -24,6 +24,8 @@ log = logging.getLogger(__name__)
 @brown_squad
 @ignore_leftovers
 @tier4b
+@zstream_4_18_1
+@zstream_4_18_1_rook
 class TestOCSWorkerNodeShutdown(ManageTest):
     """
     Test case validate both the MDS pods rbd and cephfs plugin Provisioner
