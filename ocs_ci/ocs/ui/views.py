@@ -421,6 +421,10 @@ deployment_4_22 = {
         By.XPATH,
     ),
     # MCO operator locators for rebranding validation
+    "mco_search_operators": (
+        "//input[@data-test='name-filter-input']",
+        By.XPATH,
+    ),
     "mco_operator_row": (
         "//a[@data-test-operator-row='DF Multicluster Orchestrator']",
         By.XPATH,
@@ -430,39 +434,19 @@ deployment_4_22 = {
         By.XPATH,
     ),
     "operator_display_name": (
-        "//h1[contains(@class, 'co-clusterserviceversion-details__name')]",
+        "//div[contains(@class,'co-clusterserviceversion-logo')]//h1",
         By.XPATH,
     ),
     "operator_provider": (
-        "//span[contains(text(), 'Provided by')]/following-sibling::span",
+        "//dt[normalize-space(.)='Provider']/following-sibling::dd[1]",
         By.XPATH,
     ),
     "operator_description": (
-        "//h5[normalize-space()='Description']/following-sibling::p",
+        "//h5[normalize-space()='Description']/following-sibling::p[1]",
         By.XPATH,
     ),
     "operator_installed_status": (
-        "//span[contains(@class, 'co-icon-and-text')][contains(text(), 'Installed')]",
-        By.XPATH,
-    ),
-    "operator_capability_basic_install": (
-        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
-        "//dt[text()='Capability Level']/following-sibling::dd"
-        "//span[contains(text(), 'Basic Install')]",
-        By.XPATH,
-    ),
-    "operator_capability_seamless_upgrades": (
-        "//div[contains(@class, 'co-clusterserviceversion-details__section')]"
-        "//dt[text()='Capability Level']/following-sibling::dd"
-        "//span[contains(text(), 'Seamless Upgrades')]",
-        By.XPATH,
-    ),
-    "operator_channel": (
-        "//dt[text()='Channel']/following-sibling::dd",
-        By.XPATH,
-    ),
-    "operator_installed_version": (
-        "//dt[text()='Installed Version']/following-sibling::dd",
+        "//dt[normalize-space(.)='Status']/following-sibling::dd[1]//span[@data-test='status-text']",
         By.XPATH,
     ),
     "ec_scheme_table_rows": (
