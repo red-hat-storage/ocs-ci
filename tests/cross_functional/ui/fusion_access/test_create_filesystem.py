@@ -16,7 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
 )
 from ocs_ci.framework import config
-from ocs_ci.ocs import ocp
+from ocs_ci.ocs import ocp, constants
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
 )
@@ -56,10 +56,15 @@ class TestFDFSANConnection(ManageTest):
 
         """
         # Set target namespace
-        ns = "ibm-spectrum-scale"
+        ns = constants.IBM_STORAGE_SCALE_NAMESPACE
 
         # Fetch IBM entitlement key from config.AUTH
         ent_key = config.AUTH.get("ibm_entitlement_key")
+        if not ent_key:
+            raise ValueError(
+                "ibm_entitlement_key is not set in config.AUTH. "
+                "Cannot create IBM entitlement secret."
+            )
 
         # Build base64-encoded auth string
         auth_b64 = base64.b64encode(f"cp:{ent_key}".encode()).decode()
@@ -78,7 +83,7 @@ class TestFDFSANConnection(ManageTest):
         )
 
         # Create / update the entitlement-key secret
-        secret_name = "ibm-entitlement-key"
+        secret_name = constants.IBM_ENTITLEMENT_SECRET_NAME
         logger.info(f"Creating/updating secret '{secret_name}' in namespace '{ns}'")
         secret_data_b64 = base64.b64encode(docker_config.encode()).decode()
         secret_manifest = {
@@ -217,7 +222,7 @@ class TestFDFSANConnection(ManageTest):
         fusion_access.take_screenshot("image_repository_name_entered")
 
         # Step 4c: Create docker-registry secret in ibm-spectrum-scale namespace
-        secret_name = "quayio-secret"
+        secret_name = constants.IBM_QUAYIO_SECRET_NAME
         quay_server = config.ENV_DATA.get("san_quay_server")
         quay_username = config.ENV_DATA.get("san_quay_username")
         quay_password = config.ENV_DATA.get("san_quay_password")
