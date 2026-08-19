@@ -273,13 +273,14 @@ def get_hyperconverged_corresponding_version(ocp_version: str) -> str:
     Rules:
     - Optional override: DEPLOYMENT.hyperconverged_version
     - OCP 5.x (or hyperconverged_use_stable): latest stable HCO
-    - OCP 4.x: HCO = (OCP Major - 3).(OCP Minor - 4), e.g. 4.18 -> 1.14
+    - OCP 4.x: Hyperconverged Major = OCP Major - 3,
+      Hyperconverged Minor = OCP Minor - 4 (e.g. 4.18 -> 1.14)
 
     Args:
         ocp_version: OCP version as a string (e.g., "4.18" or "4.18.3")
-
     Returns:
-        Corresponding Hyperconverged version (e.g. "1.14" or "1.18.1")
+        Corresponding Hyperconverged version as a string (e.g., "1.14" or
+        "1.18.1")
     """
     override = config.DEPLOYMENT.get("hyperconverged_version")
     if override:
