@@ -1044,12 +1044,13 @@ class Deployment(object):
         ocp_version = version.get_semantic_ocp_version_from_config()
         if ocp_version < version.VERSION_5_0:
             self.do_gitops_deploy()
-        self.do_deploy_oadp()
+            self.do_deploy_oadp()
         if config.DEPLOYMENT.get("unique_rack_node_labels"):
             create_unique_rack_labels()
         self.do_deploy_ocs()
         if ocp_version >= version.VERSION_5_0:
             self.do_gitops_deploy()
+            self.do_deploy_oadp()
         self.do_deploy_rdr()
         self.do_deploy_mce()
         self.do_deploy_cnv()
