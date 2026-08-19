@@ -210,6 +210,12 @@ class PreMigrationFusionAccessUI(PageNavigator, BaseUI):
         name_locator = FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS[
             "file_system_claim_name_input"
         ]
+        # Explicitly wait for the name input to be present in the DOM before
+        # attempting to clear it.  .
+        logger.info(
+            "Step 7: Waiting for file system claim name input to be present in the DOM"
+        )
+        self.check_element_presence(locator=name_locator[::-1], timeout=60)
         self.clear_with_ctrl_a_del(locator=name_locator, timeout=30)
         self.do_send_keys(locator=name_locator, text=fs_claim_name)
         self.take_screenshot("file_system_claim_name_entered")
