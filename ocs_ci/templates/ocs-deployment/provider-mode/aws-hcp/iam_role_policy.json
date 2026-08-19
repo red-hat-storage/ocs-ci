@@ -95,7 +95,9 @@
                 "iam:DeleteRolePolicy",
                 "iam:UpdateRole",
                 "iam:DeleteOpenIDConnectProvider",
-                "iam:GetRolePolicy"
+                "iam:GetRolePolicy",
+                "iam:TagOpenIDConnectProvider",
+                "iam:TagInstanceProfile"
             ],
             "Resource": "*"
         },
