@@ -4,8 +4,5 @@ metadata:
   name: hyperconverged-catalogsource
   namespace: openshift-marketplace
 spec:
-  # Image is set in ocs_ci.deployment.hyperconverged.create_catalog_source
-  # OCP 4.x: quay.io/kubevirt/hyperconverged-cluster-index:<x.y>.0-unstable
-  # OCP 5.x: quay.io/kubevirt/hyperconverged-cluster-index:<latest-stable>
-  image: ''
+  image: 'quay.io/kubevirt/hyperconverged-cluster-index:{hyperconverged_version}.0-unstable'
   sourceType: grpc
