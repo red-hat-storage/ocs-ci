@@ -4,10 +4,10 @@ metadata:
   name: community-kubevirt-hyperconverged
   namespace: kubevirt-hyperconverged
 spec:
-  # candidate-v1.14 is the latest version of the kubevirt-hyperconverged operator that supports OCP 4.18,
-  # 1.15 is the latest version that supports OCP 4.19
-  # rule is OCP version - 3.4
-  channel: candidate-v{hyperconverged_version}
+  # Channel is set in ocs_ci.deployment.hyperconverged.create_subscription
+  # OCP 4.x: candidate-v<x.y> where HCO = OCP - 3.4 (e.g. 4.18 -> candidate-v1.14)
+  # OCP 5.x: stable-vX.Y for latest stable HCO (e.g. 1.18.1 -> stable-v1.18)
+  channel: ''
   installPlanApproval: Automatic
   name: community-kubevirt-hyperconverged
   source: hyperconverged-catalogsource
