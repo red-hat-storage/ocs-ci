@@ -4025,6 +4025,7 @@ def clone_repo(
     clone_type="shallow",
     force_checkout=False,
     clone_token=None,
+    timeout=3600,
 ):
     """
     Clone a repository or checkout latest changes if it already exists at
@@ -4042,6 +4043,8 @@ def clone_repo(
         force_checkout (bool): True for force checkout to branch.
             force checkout will ignore the unmerged entries.
         clone_token (str): Token to clone repo
+        timeout (int): Timeout in seconds for git clone/fetch commands.
+            Defaults to 1800 (30 minutes).
 
     Raises:
         UnknownCloneTypeException: In case of incorrect clone_type is used
@@ -4084,22 +4087,28 @@ def clone_repo(
         if clone_token:
             url = url.replace("https://", f"https://{clone_token}@")
             clone_token = [clone_token]
-        run_cmd(  # IgnoreDeprecation
-            cmd=f"git clone {git_params} {url} {location}", secrets=clone_token
+        exec_cmd(
+            cmd=f"git clone {git_params} {url} {location}",
+            secrets=clone_token,
+            timeout=timeout,
         )
     else:
         log.info("Repository already cloned at %s, skipping clone", location)
         log.info("Fetching latest changes from repository")
-        run_cmd("git fetch --all", cwd=location)
+        exec_cmd(
+            "git fetch --all",
+            cwd=location,
+            timeout=timeout,
+        )
     log.info("Checking out repository to specific branch: %s", branch)
     if force_checkout:
-        run_cmd(f"git checkout --force {branch}", cwd=location)
+        exec_cmd(f"git checkout --force {branch}", cwd=location)
     else:
-        run_cmd(f"git checkout {branch}", cwd=location)
+        exec_cmd(f"git checkout {branch}", cwd=location)
     log.info("Reset branch: %s with latest changes", branch)
-    run_cmd(f"git reset --hard origin/{branch}", cwd=location)
+    exec_cmd(f"git reset --hard origin/{branch}", cwd=location)
     if to_checkout:
-        run_cmd(f"git checkout {to_checkout}", cwd=location)
+        exec_cmd(f"git checkout {to_checkout}", cwd=location)
 
 
 def get_latest_ds_olm_tag(upgrade=False, latest_tag=None, stable_upgrade_version=False):
