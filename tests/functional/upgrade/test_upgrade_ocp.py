@@ -319,7 +319,8 @@ class TestUpgradeOCP(ManageTest):
                     continue
                 ver = ocp.get_cluster_operator_version(ocp_operator)
                 logger.info(f"current {ocp_operator} version: {ver}")
-                check_cluster_operator_versions(target_image, operator_upgrade_timeout)
+
+            check_cluster_operator_versions(target_image, operator_upgrade_timeout)
 
             # resume a MachineHealthCheck resource
             if get_semantic_ocp_running_version() > VERSION_4_8 and not rosa_platform:
