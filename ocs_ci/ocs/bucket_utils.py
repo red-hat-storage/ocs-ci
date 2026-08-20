@@ -3988,3 +3988,217 @@ def assert_store_phase_and_mode(
             f"{expected_mode} within {timeout}s"
         )
         raise
+
+
+def restore_archived_object(
+    s3_obj,
+    nsfs_obj,
+    bucketname,
+    object_key,
+    days=1,
+    restore_timeout=300,
+    ongoing_timeout=120,
+    completion_timeout=600,
+):
+    """
+    Restore an archived (DEEP_ARCHIVE/GLACIER) object and wait until it is readable.
+
+    Initiates RestoreObject - retrying while the object's archive or transition
+    source data is still pending reclaim, which briefly blocks a restore - then
+    waits for the restore to be reported as ongoing, simulates the NSFS tape recall
+    via nsfs_simulate_archive_restore, and waits for the restore to complete.
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        nsfs_obj (NSFS): The NSFS object backing the archive target
+        bucketname (str): Name of the bucket
+        object_key (str): The object key to restore
+        days (int): Number of days the restored copy should remain available
+        restore_timeout (int): Timeout in seconds for RestoreObject to be accepted
+        ongoing_timeout (int): Timeout in seconds for the restore to become ongoing
+        completion_timeout (int): Timeout in seconds for the restore to complete
+
+    Returns:
+        str: The completed Restore response header
+            (contains ongoing-request="false" and an expiry-date)
+
+    """
+    logger.info(f"Restoring archived object '{object_key}' for {days} day(s)")
+    for restore_resp in TimeoutSampler(
+        restore_timeout,
+        15,
+        s3_restore_object,
+        s3_obj=s3_obj,
+        bucketname=bucketname,
+        object_key=object_key,
+        days=days,
+    ):
+        if restore_resp["ResponseMetadata"]["HTTPStatusCode"] == 202:
+            break
+
+    # Wait for the restore to be reported as ongoing before simulating the tape
+    # recall - the NSFS restore-request xattr must exist for the simulation to run
+    for head_resp in TimeoutSampler(
+        ongoing_timeout,
+        5,
+        s3_head_object,
+        s3_obj=s3_obj,
+        bucketname=bucketname,
+        object_key=object_key,
+    ):
+        if 'ongoing-request="true"' in head_resp.get("Restore", ""):
+            break
+
+    nsfs_simulate_archive_restore(nsfs_obj, object_key, days)
+
+    for head_resp in TimeoutSampler(
+        completion_timeout,
+        20,
+        s3_head_object,
+        s3_obj=s3_obj,
+        bucketname=bucketname,
+        object_key=object_key,
+    ):
+        restore_header = head_resp.get("Restore", "")
+        if 'ongoing-request="false"' in restore_header:
+            logger.info(f"Restore of '{object_key}' completed: {restore_header!r}")
+            return restore_header
+
+
+def trigger_objs_transition(bucket_name, object_keys=[], prefix="", days=1):
+    """
+    Trigger a lifecycle transition of objects in a bucket by backdating their
+    creation date in the noobaa-db, making them immediately eligible for the
+    bucket's transition rule.
+
+    Note that this is a workaround for the fact that the shortest lifecycle
+    transition span is 1 day, which is too long for the tests to wait. The
+    lifecycle worker rounds an object's creation time up to the next UTC midnight
+    before adding the rule's Days, so the creation date is set days + 2 in the
+    past to guarantee eligibility across the midnight boundary.
+
+    Args:
+        bucket_name (str): The name of the bucket where the objects reside
+        object_keys (list): A list of object keys to transition
+            Note: If object_keys is empty, all objects in the bucket will be transitioned.
+        prefix (str): The prefix of the objects to transition
+        days (int): The number of days set in the bucket's transition rule
+
+    """
+    logger.info(
+        f"Triggering transition of objects in bucket {bucket_name} "
+        f"by changing their creation date"
+    )
+
+    # Ensure prefix ends with a slash
+    if prefix and not prefix.endswith("/"):
+        prefix += "/"
+
+    object_keys = [prefix + key for key in object_keys]
+    seconds_to_backdate = (days + 2) * 24 * 60 * 60
+    change_objects_creation_date_in_noobaa_db(
+        bucket_name, object_keys, time.time() - seconds_to_backdate
+    )
+
+
+def wait_for_objs_transition(
+    s3_obj,
+    bucket_name,
+    object_keys,
+    target_storage_class,
+    prefix="",
+    timeout=600,
+    sleep=30,
+):
+    """
+    Wait for objects in a bucket to transition to the target storage class.
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucket_name (str): The name of the bucket where the objects reside
+        object_keys (list): A list of object keys to wait on
+        target_storage_class (str): The storage class the objects are expected to
+            transition to, e.g. "DEEP_ARCHIVE"
+        prefix (str): The prefix of the objects to wait on
+        timeout (int): Timeout in seconds
+        sleep (int): Sleep interval in seconds between checks
+
+    Raises:
+        AssertionError: If not all objects transitioned within the timeout
+
+    """
+    # Ensure prefix ends with a slash
+    if prefix and not prefix.endswith("/"):
+        prefix += "/"
+    full_object_keys = [prefix + key for key in object_keys]
+
+    logger.info(
+        f"Waiting for objects {full_object_keys} in bucket {bucket_name} to "
+        f"transition to {target_storage_class} (timeout: {timeout}s)"
+    )
+
+    def _check_all_objs_transitioned():
+        for object_key in full_object_keys:
+            storage_class = s3_head_object(s3_obj, bucket_name, object_key).get(
+                "StorageClass"
+            )
+            logger.debug(
+                f"Object {object_key} storage class is {storage_class!r}, "
+                f"waiting for {target_storage_class!r}"
+            )
+            if storage_class != target_storage_class:
+                return False
+        return True
+
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=_check_all_objs_transitioned,
+    )
+    assert sampler.wait_for_func_status(result=True), (
+        f"Objects {full_object_keys} in bucket {bucket_name} did not transition "
+        f"to {target_storage_class} within {timeout} seconds"
+    )
+    logger.info(
+        f"Objects {full_object_keys} in bucket {bucket_name} transitioned to "
+        f"{target_storage_class}"
+    )
+
+
+def expire_objects_restore(bucket_name, object_keys=[]):
+    """
+    Expire the restore window of restored archive objects by backdating their
+    restore_status.expiry_time in the noobaa-db.
+
+    Note that this is a workaround for the fact that the shortest restore window
+    is 1 day, which is too long for the tests to wait. Backdating the expiry makes
+    the objects eligible for the ObjectsReclaimer, which purges the temporary
+    STANDARD restore copy and reverts them to archive-only.
+
+    Args:
+        bucket_name (str): The name of the bucket where the objects reside
+        object_keys (list): A list of object keys whose restore window to expire
+            Note:
+                If object_keys is empty, all restored objects in the bucket will
+                be affected.
+
+    """
+    logger.info(
+        f"Expiring the restore window of objects in bucket {bucket_name} "
+        f"by backdating their restore expiry"
+    )
+    past_expiry = "2000-01-01T00:00:00.000Z"
+    psql_query = (
+        "UPDATE objectmds "
+        "SET data = jsonb_set(data, '{restore_status,expiry_time}', "
+        f"to_jsonb('{past_expiry}'::text)) "
+        "WHERE data->>'bucket' IN ( "
+        "SELECT _id "
+        "FROM buckets "
+        f"WHERE data->>'name' = '{bucket_name}') "
+        "AND data ? 'restore_status'"
+    )
+    if object_keys:
+        psql_query += f" AND data->>'key' = ANY(ARRAY{object_keys})"
+    psql_query += ";"
+    exec_nb_db_query(psql_query)

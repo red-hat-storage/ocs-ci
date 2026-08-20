@@ -2,6 +2,7 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+from time import sleep
 
 import botocore.exceptions as boto3exception
 import pytest
@@ -11,17 +12,24 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    skipif_noobaa_external_pgsql,
 )
 from ocs_ci.framework.testlib import MCGTest, skipif_ocs_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
-    nsfs_simulate_archive_restore,
+    restore_archived_object,
     s3_put_object,
     s3_get_object,
     s3_head_object,
     s3_delete_object,
     s3_list_objects_v2,
-    s3_restore_object,
+    expire_objects_restore,
+    trigger_objs_transition,
+    wait_for_objs_transition,
+)
+from ocs_ci.ocs.resources.mcg_lifecycle_policies import (
+    LifecyclePolicy,
+    TransitionRule,
 )
 from ocs_ci.ocs.resources.mcg_params import NSFS
 from ocs_ci.ocs.resources.objectbucket import OBC
@@ -29,11 +37,15 @@ from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
+# Time to wait for a lifecycle policy to propagate after it is applied
+PROP_SLEEP_TIME = 10
+
 
 @mcg
 @red_squad
 @runs_on_provider
 @skipif_ocs_version("<4.23")
+@skipif_noobaa_external_pgsql
 class TestDeepArchive(MCGTest):
     """
     Tests for the MCG S3 Deep Archive feature (RHSTOR-8823)
@@ -53,16 +65,21 @@ class TestDeepArchive(MCGTest):
         NSFS_GLACIER_ENABLED - enables Glacier storage class in RestoreWorker
         ARCHIVE_TARGET_BUCKET_CHECK_ENABLED - bypasses IBM Deep Archive validation on the archive NSS
         RESTORE_WORKER_EMPTY_DELAY - reduces the RestoreWorker polling interval from 15min to 30s
+        LIFECYCLE_INTERVAL - reduces the lifecycle background worker wake interval from 8h to 2min
+        LIFECYCLE_SCHEDULE_MIN - reduces the per-rule lifecycle schedule guard from 5min to 2min
 
         On endpoint:
         NSFS_GLACIER_ENABLED - enables Glacier storage class for S3 data path (PutObject, RestoreObject)
 
         """
+        lifecycle_interval_in_ms = 2 * 60 * 1000
         add_env_vars_to_noobaa_core_class(
             [
                 (constants.NSFS_GLACIER_ENABLED, "true"),
                 (constants.ARCHIVE_TARGET_BUCKET_CHECK_ENABLED, "false"),
                 (constants.RESTORE_WORKER_EMPTY_DELAY, 30 * 1000),
+                (constants.LIFECYCLE_INTERVAL_PARAM, lifecycle_interval_in_ms),
+                (constants.LIFECYCLE_SCHED_MINUTES, lifecycle_interval_in_ms),
             ]
         )
         add_env_vars_to_noobaa_endpoint_class(
@@ -116,14 +133,11 @@ class TestDeepArchive(MCGTest):
         5. List the bucket - verify both objects with correct storage classes
         6. Get the non-restored archived object - expect InvalidObjectState
         7. Get the standard object - expect success with matching data
-        8. Restore the archived object - verify 202 Accepted
-        9. Head the object while restore is in progress - verify ongoing
-        10. Simulate restore completion via NSFS xattrs
-        11. Wait for restore to complete
-        12. Head the restored object - verify restored status with expiry date
-        13. Get the restored object - verify data matches original
-        14. Delete the archived object
-        15. List the bucket - verify archived object is gone
+        8. Restore the archived object and wait for the restore to complete
+        9. Head the restored object - verify restored status with expiry date
+        10. Get the restored object - verify data matches original
+        11. Delete the archived object
+        12. List the bucket - verify archived object is gone
 
         """
         archive_key = "test-archive-object"
@@ -207,54 +221,14 @@ class TestDeepArchive(MCGTest):
             body == standard_data
         ), f"Standard object data mismatch: expected {standard_data!r}, got {body!r}"
 
-        # 8. Restore the archived object - verify 202 Accepted
-        logger.test_step("Initiate restore and verify 202 Accepted")
-        restore_resp = s3_restore_object(
-            obc, obc.bucket_name, archive_key, days=restore_days
+        # 8. Restore the archived object and wait for the restore to complete
+        logger.test_step("Restore the archived object and wait for completion")
+        restore_header = restore_archived_object(
+            obc, nsfs_obj, obc.bucket_name, archive_key, days=restore_days
         )
-        status_code = restore_resp["ResponseMetadata"]["HTTPStatusCode"]
-        logger.assertion(f"Restore status code: expected=202, actual={status_code}")
-        assert status_code == 202, f"Expected 202 Accepted, got {status_code}"
 
-        # 9. Head the object while restore is in progress - verify ongoing
-        logger.test_step("Verify restore is ongoing")
-        for head_resp in TimeoutSampler(
-            timeout=60,
-            sleep=5,
-            func=s3_head_object,
-            s3_obj=obc,
-            bucketname=obc.bucket_name,
-            object_key=archive_key,
-        ):
-            restore_header = head_resp.get("Restore", "")
-            if 'ongoing-request="true"' in restore_header:
-                logger.assertion(f"Restore header: {restore_header!r}")
-                break
-
-        # 10. Simulate restore completion via NSFS xattrs
-        logger.test_step("Simulate restore completion via NSFS xattrs")
-        nsfs_simulate_archive_restore(nsfs_obj, archive_key, restore_days)
-
-        # 11. Wait for RestoreWorker to complete the restore
-        logger.test_step("Wait for RestoreWorker to complete the restore")
-        for head_resp in TimeoutSampler(
-            timeout=600,
-            sleep=20,
-            func=s3_head_object,
-            s3_obj=obc,
-            bucketname=obc.bucket_name,
-            object_key=archive_key,
-        ):
-            restore_header = head_resp.get("Restore", "")
-            logger.debug(f"Restore header: {restore_header!r}")
-            if 'ongoing-request="false"' in restore_header:
-                logger.info("Restore completed successfully")
-                break
-
-        # 12. Head the restored object - verify restored status with expiry date
+        # 9. Head the restored object - verify restored status with expiry date
         logger.test_step("Verify restored object has expiry date")
-        head_resp = s3_head_object(obc, obc.bucket_name, archive_key)
-        restore_header = head_resp.get("Restore", "")
         logger.assertion(f"Restore header after completion: {restore_header!r}")
         assert (
             'ongoing-request="false"' in restore_header
@@ -271,7 +245,7 @@ class TestDeepArchive(MCGTest):
             f"got {expiry_dt.isoformat()}"
         )
 
-        # 13. Get the restored object - verify data matches original
+        # 10. Get the restored object - verify data matches original
         logger.test_step("Verify restored object data via GetObject")
         get_resp = s3_get_object(obc, obc.bucket_name, archive_key)
         body = get_resp["Body"].read().decode()
@@ -280,11 +254,11 @@ class TestDeepArchive(MCGTest):
             body == archive_data
         ), f"Restored data mismatch: expected {archive_data!r}, got {body!r}"
 
-        # 14. Delete the archived object
+        # 11. Delete the archived object
         logger.test_step("Delete the archived object")
         s3_delete_object(obc, obc.bucket_name, archive_key)
 
-        # 15. List the bucket - verify archived object is gone
+        # 12. List the bucket - verify archived object is gone
         logger.test_step("Verify archived object is gone from listing")
         list_resp = s3_list_objects_v2(obc, obc.bucket_name)
         listed_keys = [obj["Key"] for obj in list_resp.get("Contents", [])]
@@ -299,3 +273,153 @@ class TestDeepArchive(MCGTest):
         assert (
             standard_key in listed_keys
         ), f"{standard_key} should still be present: {listed_keys}"
+
+    @tier1
+    @pytest.mark.polarion_id("OCS-8229")
+    def test_lifecycle_transition_standard_to_archive(self, archive_bucket):
+        """
+        Test lifecycle transition of a standard object to DEEP_ARCHIVE
+
+        1. Put a standard object to an archive-enabled bucket
+        2. Set a lifecycle rule to transition objects to DEEP_ARCHIVE
+        3. Read back the lifecycle configuration - verify the transition rule
+        4. Wait for the lifecycle transition to complete
+        5. Head the transitioned object - verify StorageClass is DEEP_ARCHIVE
+        6. Get the transitioned object - expect InvalidObjectState
+        7. Restore the transitioned object and wait for completion
+        8. Get the restored object - verify data and a restore expiry date
+        9. Expire the restore window by backdating the restore expiry
+        10. Verify the object reverts to archive-only (restore is time-limited)
+
+        """
+        object_key = "test-transition-object"
+        object_data = "lifecycle transition test data"
+        deep_archive = "DEEP_ARCHIVE"
+        transition_days = 1
+        restore_days = 1
+
+        obc, nsfs_obj = archive_bucket
+
+        # 1. Put a standard object to the archive-enabled bucket
+        logger.test_step("Put a standard object to the archive-enabled bucket")
+        s3_put_object(obc, obc.bucket_name, object_key, object_data)
+        # Confirm the object starts outside the archive storage class so that the
+        # transition asserted later is genuine and not a spurious pass
+        initial_storage_class = s3_head_object(obc, obc.bucket_name, object_key).get(
+            "StorageClass"
+        )
+        logger.assertion(f"Initial StorageClass: {initial_storage_class!r}")
+        assert (
+            initial_storage_class != deep_archive
+        ), f"Object should not start as {deep_archive}, got {initial_storage_class!r}"
+
+        # 2. Set a lifecycle rule to transition objects to DEEP_ARCHIVE
+        logger.test_step("Set a lifecycle rule to transition objects to DEEP_ARCHIVE")
+        lifecycle_policy = LifecyclePolicy(
+            TransitionRule(storage_class=deep_archive, days=transition_days)
+        )
+        obc.s3_client.put_bucket_lifecycle_configuration(
+            Bucket=obc.bucket_name,
+            LifecycleConfiguration=lifecycle_policy.as_dict(),
+        )
+        sleep(PROP_SLEEP_TIME)
+
+        # 3. Read back the lifecycle configuration - verify the transition rule
+        logger.test_step(
+            "Verify the lifecycle configuration returns the transition rule"
+        )
+        lifecycle_config = obc.s3_client.get_bucket_lifecycle_configuration(
+            Bucket=obc.bucket_name
+        )
+        rules = lifecycle_config.get("Rules", [])
+        transitions = rules[0].get("Transitions", []) if rules else []
+        logger.assertion(f"Returned lifecycle rules: {rules}")
+        assert len(rules) == 1, f"Expected a single rule, got: {rules}"
+        assert (
+            len(transitions) == 1
+        ), f"Expected a single transition, got: {transitions}"
+        assert (
+            transitions[0].get("StorageClass") == deep_archive
+        ), f"Expected StorageClass={deep_archive}, got {transitions[0].get('StorageClass')}"
+        assert (
+            transitions[0].get("Days") == transition_days
+        ), f"Expected Days={transition_days}, got {transitions[0].get('Days')}"
+        assert (
+            rules[0].get("Status") == "Enabled"
+        ), f"Expected rule Status=Enabled, got {rules[0].get('Status')}"
+
+        # 4. Wait for the lifecycle transition to complete
+        logger.test_step("Trigger the transition and wait for it to complete")
+        trigger_objs_transition(obc.bucket_name, [object_key], days=transition_days)
+        wait_for_objs_transition(obc, obc.bucket_name, [object_key], deep_archive)
+
+        # 5. Head the transitioned object - verify StorageClass is DEEP_ARCHIVE
+        logger.test_step("Verify the transitioned object StorageClass is DEEP_ARCHIVE")
+        head_resp = s3_head_object(obc, obc.bucket_name, object_key)
+        logger.assertion(
+            f"StorageClass after transition: expected={deep_archive}, "
+            f"actual={head_resp.get('StorageClass')}"
+        )
+        assert (
+            head_resp.get("StorageClass") == deep_archive
+        ), f"Expected StorageClass={deep_archive}, got {head_resp.get('StorageClass')}"
+
+        # 6. Get the transitioned object - expect InvalidObjectState
+        logger.test_step(
+            "Verify GetObject on the transitioned object raises InvalidObjectState"
+        )
+        with pytest.raises(boto3exception.ClientError, match="InvalidObjectState"):
+            s3_get_object(obc, obc.bucket_name, object_key)
+
+        # 7. Restore the transitioned object and wait for the restore to complete
+        logger.test_step("Restore the transitioned object and wait for completion")
+        restore_header = restore_archived_object(
+            obc, nsfs_obj, obc.bucket_name, object_key, days=restore_days
+        )
+
+        # 8. Get the restored object - verify data and a restore expiry date
+        logger.test_step("Verify the restored object is readable with an expiry date")
+        body = s3_get_object(obc, obc.bucket_name, object_key)["Body"].read().decode()
+        logger.assertion(f"Restored data: expected={object_data!r}, actual={body!r}")
+        assert (
+            body == object_data
+        ), f"Restored data mismatch: expected {object_data!r}, got {body!r}"
+        logger.assertion(f"Restore header while restored: {restore_header!r}")
+        assert re.search(
+            r'expiry-date="[^"]+"', restore_header
+        ), f"Expected an expiry-date in the Restore header, got {restore_header!r}"
+
+        # 9. Expire the restore window by backdating the restore expiry
+        logger.test_step("Expire the restore window by backdating the restore expiry")
+        expire_objects_restore(obc.bucket_name, [object_key])
+
+        # 10. Verify the object reverts to archive-only (restore is time-limited)
+        logger.test_step(
+            "Verify the object reverts to archive-only after restore expiry"
+        )
+        for head_resp in TimeoutSampler(
+            timeout=300,
+            sleep=15,
+            func=s3_head_object,
+            s3_obj=obc,
+            bucketname=obc.bucket_name,
+            object_key=object_key,
+        ):
+            # The reclaimer clears restore_status, so the Restore header disappears
+            if not head_resp.get("Restore"):
+                logger.info("Restore window expired; object reverted to archive-only")
+                break
+        head_resp = s3_head_object(obc, obc.bucket_name, object_key)
+        logger.assertion(
+            f"After restore expiry: StorageClass={head_resp.get('StorageClass')!r}, "
+            f"Restore={head_resp.get('Restore')!r}"
+        )
+        assert head_resp.get("StorageClass") == deep_archive, (
+            f"Expected StorageClass={deep_archive} after restore expiry, "
+            f"got {head_resp.get('StorageClass')!r}"
+        )
+        assert not head_resp.get(
+            "Restore"
+        ), f"Restore header should be gone after expiry, got {head_resp.get('Restore')!r}"
+        with pytest.raises(boto3exception.ClientError, match="InvalidObjectState"):
+            s3_get_object(obc, obc.bucket_name, object_key)
