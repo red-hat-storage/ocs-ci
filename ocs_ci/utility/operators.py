@@ -46,6 +46,13 @@ UNRELEASED_DEFAULT_MIRROR = (
 )
 
 
+def get_openshift_registry_namespace(ocp_version):
+    """
+    OCP 5.x images are published under openshift5/ instead of openshift4/.
+    """
+    return f"registry.redhat.io/openshift{ocp_version.major}"
+
+
 class Operator:
     # expected to be overridden by child classes
     name: str = None
@@ -442,12 +449,13 @@ class NMStateOperator(Operator):
         self.unreleased_catalog_image_tag: str = (
             f"ocp__{ocp_version}__kubernetes-nmstate-rhel9-operator"
         )
+        ns = get_openshift_registry_namespace(ocp_version)
         self.unreleased_images = [
-            "registry.redhat.io/openshift4/kubernetes-nmstate-operator-bundle",
-            "registry.redhat.io/openshift4/kubernetes-nmstate-rhel9-operator",
-            "registry.redhat.io/openshift4/nmstate-console-plugin-rhel9",
-            "registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9",
-            "registry.redhat.io/openshift4/ose-kubernetes-nmstate-handler-rhel9",
+            f"{ns}/kubernetes-nmstate-operator-bundle",
+            f"{ns}/kubernetes-nmstate-rhel9-operator",
+            f"{ns}/nmstate-console-plugin-rhel9",
+            f"{ns}/ose-kube-rbac-proxy-rhel9",
+            f"{ns}/ose-kubernetes-nmstate-handler-rhel9",
         ]
         self.namespace = constants.NMSTATE_NAMESPACE
         self.disconnected_required_packages = [
@@ -585,12 +593,13 @@ class LocalStorageOperator(Operator):
         self.unreleased_catalog_image_tag: str = (
             f"ocp__{ocp_version}__ose-local-storage-rhel9-operator"
         )
+        ns = get_openshift_registry_namespace(ocp_version)
         self.unreleased_images = [
-            "registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9",
-            "registry.redhat.io/openshift4/ose-local-storage-diskmaker-rhel9",
-            "registry.redhat.io/openshift4/ose-local-storage-mustgather-rhel9",
-            "registry.redhat.io/openshift4/ose-local-storage-operator-bundle",
-            "registry.redhat.io/openshift4/ose-local-storage-rhel9-operator",
+            f"{ns}/ose-kube-rbac-proxy-rhel9",
+            f"{ns}/ose-local-storage-diskmaker-rhel9",
+            f"{ns}/ose-local-storage-mustgather-rhel9",
+            f"{ns}/ose-local-storage-operator-bundle",
+            f"{ns}/ose-local-storage-rhel9-operator",
         ]
         self.disconnected_required_packages = [
             "local-storage-operator",
@@ -628,12 +637,13 @@ class MetalLBOperator(Operator):
         self.unreleased_catalog_image_tag: str = (
             f"ocp__{ocp_version}__metallb-rhel9-operator"
         )
+        ns = get_openshift_registry_namespace(ocp_version)
         self.unreleased_images = [
-            "registry.redhat.io/openshift4/frr-rhel9",
-            "registry.redhat.io/openshift4/metallb-rhel9-operator",
-            "registry.redhat.io/openshift4/metallb-rhel9",
-            "registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9",
-            "registry.redhat.io/openshift4/ose-metallb-operator-bundle",
+            f"{ns}/frr-rhel9",
+            f"{ns}/metallb-rhel9-operator",
+            f"{ns}/metallb-rhel9",
+            f"{ns}/ose-kube-rbac-proxy-rhel9",
+            f"{ns}/ose-metallb-operator-bundle",
         ]
         self.disconnected_required_packages = [
             "metallb-operator",
@@ -739,11 +749,12 @@ class IngressNodeFirewallOperator(Operator):
         self.unreleased_catalog_image_tag: str = (
             f"ocp__{ocp_version}__ingress-node-firewall-rhel9-operator"
         )
+        ns = get_openshift_registry_namespace(ocp_version)
         self.unreleased_images = [
-            "registry.redhat.io/openshift4/ingress-node-firewall-operator-bundle",
-            "registry.redhat.io/openshift4/ingress-node-firewall-rhel9-operator",
-            "registry.redhat.io/openshift4/ingress-node-firewall-rhel9",
-            "registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9",
+            f"{ns}/ingress-node-firewall-operator-bundle",
+            f"{ns}/ingress-node-firewall-rhel9-operator",
+            f"{ns}/ingress-node-firewall-rhel9",
+            f"{ns}/ose-kube-rbac-proxy-rhel9",
         ]
         self.disconnected_required_packages = [
             "ingress-node-firewall",
