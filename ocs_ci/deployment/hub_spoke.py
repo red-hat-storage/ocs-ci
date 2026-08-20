@@ -596,6 +596,18 @@ def get_fdf_catalog_image():
     return image
 
 
+def clear_fdf_catalog_image_cache():
+    """
+    Clear the cached FDF CatalogSource image so the next call to
+    get_fdf_catalog_image() fetches the current image from the management
+    cluster. Call this after upgrading FDF on the provider so that client
+    clusters receive the updated catalog image.
+    """
+    global _fdf_catalog_image_cache
+    _fdf_catalog_image_cache = None
+    logger.info("FDF catalog image cache cleared")
+
+
 def storage_installation_requested(cluster_name):
     """
     Check if the storage client installation was requested in the config
@@ -1682,6 +1694,13 @@ class HostedClients(HyperShiftBase):
 
             hypershift_cluster.apply_admin_acks_to_hosted_cluster()
             hypershift_cluster.patch_hosted_cluster_for_ocp_upgrade()
+            root_volume_size = config.ENV_DATA.get("hcp_root_volume_upgrade_size")
+            if root_volume_size:
+                logger.info(
+                    f"Patching NodePool rootVolume to {root_volume_size} "
+                    f"on cluster '{cluster_name}' to prevent DiskPressure"
+                )
+                hypershift_cluster.patch_nodepool_root_volume(root_volume_size)
             hypershift_cluster.patch_nodepool_for_ocp_upgrade()
 
             logger.info(
@@ -2438,6 +2457,62 @@ class HypershiftHostedOCP(
                 return True
         except Exception as e:
             logger.error(f"Failed to patch NodePool '{self.name}' for OCP upgrade: {e}")
+            return False
+
+    def patch_nodepool_root_volume(self, size):
+        """
+        Patch NodePool rootVolume size to prevent DiskPressure during OCP upgrade.
+        Only patches when the requested size is larger than the current value.
+
+        Args:
+            size (str): Target root volume size, e.g. "64Gi".
+
+        Returns:
+            bool: True if patch applied or not needed, False on failure.
+        """
+        try:
+            with config.RunWithProviderConfigContextIfAvailable():
+                ocp_np = OCP(
+                    kind="nodepools",
+                    namespace=constants.CLUSTERS_NAMESPACE,
+                )
+                nodepool_data = ocp_np.get(resource_name=self.name)
+                current_size = (
+                    nodepool_data.get("spec", {})
+                    .get("platform", {})
+                    .get("kubevirt", {})
+                    .get("rootVolume", {})
+                    .get("persistent", {})
+                    .get("size", "")
+                )
+                if current_size and current_size >= size:
+                    logger.info(
+                        f"NodePool '{self.name}' rootVolume is already "
+                        f"{current_size}, skipping patch to {size}"
+                    )
+                    return True
+                patch_body = json.dumps(
+                    {
+                        "spec": {
+                            "platform": {
+                                "kubevirt": {
+                                    "rootVolume": {"persistent": {"size": size}}
+                                }
+                            }
+                        }
+                    }
+                )
+                logger.info(
+                    f"Patching NodePool '{self.name}' rootVolume from "
+                    f"{current_size!r} to {size} to prevent DiskPressure"
+                )
+                ocp_np.exec_oc_cmd(
+                    f"patch nodepools {self.name} --type=merge -p '{patch_body}'",
+                    out_yaml_format=False,
+                )
+                return True
+        except Exception as e:
+            logger.error(f"Failed to patch NodePool '{self.name}' rootVolume: {e}")
             return False
 
     def wait_hosted_cluster_upgrade_completed(self, timeout=3600):
