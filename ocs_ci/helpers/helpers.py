@@ -7803,3 +7803,125 @@ def verify_file_ownership(pod_obj, file_path, expected_uid, expected_gid):
         file_gid == expected_gid
     ), f"File GID {file_gid} != expected {expected_gid} for {file_path}"
     return file_uid, file_gid
+
+
+def assert_pvc_volume_health_event(pvc_obj, reason, event_type, message_substr):
+    """
+    Assert that at least one K8s event matching the given criteria exists
+    for the PVC, with ``source.component == 'CSI-Addons'``.
+
+    Args:
+        pvc_obj: PVC object
+        reason (str): Expected event reason
+            (e.g. 'VolumeConditionHealthy', 'VolumeConditionAbnormal')
+        event_type (str): Expected event type ('Normal' or 'Warning')
+        message_substr (str): Substring expected in the event message
+
+    Returns:
+        list: Matching event dicts (for caller to do additional checks)
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    event_ocp = OCP(kind="Event", namespace=pvc_obj.namespace)
+    events = event_ocp.get(
+        field_selector=f"involvedObject.name={pvc_obj.name}",
+    )["items"]
+    matching = [
+        e
+        for e in events
+        if e.get("reason") == reason and message_substr in e.get("message", "")
+    ]
+    assert len(matching) >= 1, (
+        f"No {reason} events with '{message_substr}' "
+        f"for PVC {pvc_obj.name}. "
+        f"Events: {[(e.get('reason'), e.get('message')) for e in events]}"
+    )
+    for evt in matching:
+        assert (
+            evt["type"] == event_type
+        ), f"Expected event type '{event_type}', got '{evt['type']}'"
+        source = evt.get("source", {})
+        assert source.get("component") == "CSI-Addons", (
+            f"Expected source.component 'CSI-Addons', "
+            f"got '{source.get('component')}'"
+        )
+    return matching
+
+
+def blocklist_cephfs_client(pvc_obj):
+    """
+    Find the CephFS client for a PVC's subvolume, add it to the
+    Ceph OSD blocklist, and evict it from the active MDS.
+
+    Args:
+        pvc_obj: PVC object (must be CephFS-backed and have a bound PV)
+
+    Returns:
+        tuple: (client_id, client_addr) for use in cleanup
+    """
+    import json as _json
+
+    from ocs_ci.ocs.ocp import OCP
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    pvc_obj.reload()
+    pv_name = pvc_obj.backed_pv
+    assert pv_name, f"PVC {pvc_obj.name} has no bound PV"
+
+    pv_ocp = OCP(kind="pv", resource_name=pv_name)
+    pv_data = pv_ocp.get()
+    subvolume_path = pv_data["spec"]["csi"]["volumeAttributes"]["subvolumePath"]
+    logger.info(f"Subvolume path: {subvolume_path}")
+
+    toolbox = get_ceph_tools_pod()
+    client_ls_out = toolbox.exec_sh_cmd_on_pod(command="ceph tell mds.0 client ls")
+    clients = _json.loads(client_ls_out)
+
+    client_id = None
+    client_addr = None
+    for c in clients:
+        root = c.get("client_metadata", {}).get("root", "")
+        if subvolume_path in root:
+            client_id = c["id"]
+            client_addr = c["inst"].split(" ")[-1]
+            break
+
+    assert (
+        client_id is not None
+    ), f"No CephFS client found for subvolume {subvolume_path}"
+    logger.info(f"Found client id={client_id}, addr={client_addr}")
+
+    toolbox.exec_sh_cmd_on_pod(command=f"ceph osd blocklist add {client_addr}")
+    logger.info(f"Blocklisted client {client_addr}")
+
+    fs_status_out = toolbox.exec_sh_cmd_on_pod(command="ceph fs status -f json")
+    fs_status = _json.loads(fs_status_out)
+    active_mds = [m["name"] for m in fs_status["mdsmap"] if m["state"] == "active"][0]
+    logger.info(f"Active MDS: {active_mds}")
+
+    try:
+        toolbox.exec_sh_cmd_on_pod(
+            command=f"ceph tell mds.{active_mds} client evict id={client_id}"
+        )
+        logger.info(f"Evicted client id={client_id}")
+    except Exception:
+        logger.warning("Client eviction returned error (may already be disconnected)")
+
+    return client_id, client_addr
+
+
+def remove_cephfs_client_blocklist(client_addr):
+    """
+    Remove a CephFS client address from the Ceph OSD blocklist.
+
+    Args:
+        client_addr (str): Client address previously blocklisted
+    """
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    try:
+        toolbox = get_ceph_tools_pod()
+        toolbox.exec_sh_cmd_on_pod(command=f"ceph osd blocklist rm {client_addr}")
+        logger.info(f"Removed blocklist for {client_addr}")
+    except Exception:
+        logger.warning(f"Failed to remove blocklist for {client_addr}")
