@@ -228,11 +228,15 @@ def bucket_class_factory(
                     log.info(f"Backingstore was not created after {timeout} secs")
                     raise
             else:
+                # Reference the pre-existing default backingstore by name only.
+                # Its real type is platform-dependent (pv-pool on bare metal, a
+                # cloud type such as ibm-cos/aws-s3 otherwise), so pass None
+                # rather than fabricating a possibly-wrong type.
                 backingstores = [
                     BackingStore(
                         constants.DEFAULT_NOOBAA_BACKINGSTORE,
                         method="oc",
-                        type=constants.BACKINGSTORE_TYPE_PV_POOL,
+                        type=None,
                     )
                 ]
 
