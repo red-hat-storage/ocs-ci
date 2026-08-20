@@ -2,7 +2,6 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from time import sleep
 
 import botocore.exceptions as boto3exception
 import pytest
@@ -37,8 +36,8 @@ from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
-# Time to wait for a lifecycle policy to propagate after it is applied
-PROP_SLEEP_TIME = 10
+# Timeout (s) to wait for a lifecycle policy to propagate and be readable back
+PROP_TIMEOUT = 60
 
 
 @mcg
@@ -322,16 +321,22 @@ class TestDeepArchive(MCGTest):
             Bucket=obc.bucket_name,
             LifecycleConfiguration=lifecycle_policy.as_dict(),
         )
-        sleep(PROP_SLEEP_TIME)
 
         # 3. Read back the lifecycle configuration - verify the transition rule
         logger.test_step(
             "Verify the lifecycle configuration returns the transition rule"
         )
-        lifecycle_config = obc.s3_client.get_bucket_lifecycle_configuration(
-            Bucket=obc.bucket_name
-        )
-        rules = lifecycle_config.get("Rules", [])
+        # Poll the read-back until the rule propagates instead of a fixed sleep
+        rules = []
+        for lifecycle_config in TimeoutSampler(
+            timeout=PROP_TIMEOUT,
+            sleep=5,
+            func=obc.s3_client.get_bucket_lifecycle_configuration,
+            Bucket=obc.bucket_name,
+        ):
+            rules = lifecycle_config.get("Rules", [])
+            if rules:
+                break
         transitions = rules[0].get("Transitions", []) if rules else []
         logger.assertion(f"Returned lifecycle rules: {rules}")
         assert len(rules) == 1, f"Expected a single rule, got: {rules}"

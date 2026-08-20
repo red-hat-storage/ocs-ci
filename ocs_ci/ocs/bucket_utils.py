@@ -4033,11 +4033,13 @@ def restore_archived_object(
         object_key=object_key,
         days=days,
     ):
-        if restore_resp["ResponseMetadata"]["HTTPStatusCode"] == 202:
+        # 202: a restore was initiated; 200: a restore is already active or complete.
+        if restore_resp["ResponseMetadata"]["HTTPStatusCode"] in (200, 202):
             break
 
     # Wait for the restore to be reported as ongoing before simulating the tape
-    # recall - the NSFS restore-request xattr must exist for the simulation to run
+    # recall (the NSFS restore-request xattr must exist for the simulation to run).
+    # If the restore already completed (fast path), return without simulating.
     for head_resp in TimeoutSampler(
         ongoing_timeout,
         5,
@@ -4046,7 +4048,13 @@ def restore_archived_object(
         bucketname=bucketname,
         object_key=object_key,
     ):
-        if 'ongoing-request="true"' in head_resp.get("Restore", ""):
+        restore_header = head_resp.get("Restore", "")
+        if 'ongoing-request="false"' in restore_header:
+            logger.info(
+                f"Restore of '{object_key}' already complete: {restore_header!r}"
+            )
+            return restore_header
+        if 'ongoing-request="true"' in restore_header:
             break
 
     nsfs_simulate_archive_restore(nsfs_obj, object_key, days)
