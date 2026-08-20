@@ -1090,6 +1090,7 @@ class TestACMKubevirtDRIntergration:
                 all_cnv_workloads[0],
                 all_cnv_workloads[2],
             ],
+            skip_odf_cli_validation=True,
         )
         dr_helpers.relocate(
             preferred_cluster=primary_cluster_name,
@@ -1102,6 +1103,7 @@ class TestACMKubevirtDRIntergration:
                 all_cnv_workloads[1],
                 all_cnv_workloads[3],
             ],
+            skip_odf_cli_validation=True,
         )
 
         for resource_name in drpc_resources:
