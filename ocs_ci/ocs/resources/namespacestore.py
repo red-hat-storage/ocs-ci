@@ -313,11 +313,10 @@ def oc_create_namespacestore(
             pvc_size (int): Size in Gi of the PVC that will host the namespace filesystem
             sub_path (str): The path to a subdirectory inside the PVC FS which the NSS will use as the root directory
             fs_backend (str): The file system backend type - CEPH_FS | GPFS | NFSv4. Defaults to None.
-            For the archive platform (constants.ARCHIVE_PLATFORM), the tuple is instead:
-                amount (int): Number of namespacestores to create
-                target_bucket (str): The existing MCG bucket to use as the archive target
-                account_name (str): The MCG account whose noobaa-account-<name> secret
-                    grants access to the target bucket
+            For the archive platform (constants.ARCHIVE_PLATFORM) the tuple is instead
+            (amount, target_bucket, account_name): the number of namespacestores to
+            create, the existing MCG bucket to use as the archive target, and the MCG
+            account whose noobaa-account-<name> secret grants access to it.
 
     """
     nss_data = templating.load_yaml(constants.MCG_NAMESPACESTORE_YAML)
