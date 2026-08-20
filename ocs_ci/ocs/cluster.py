@@ -3503,6 +3503,16 @@ def check_clusters():
             config.RUN["lvm"] = True
         else:
             config.RUN["lvm"] = False
+
+    # Fusion Access clusters have no CephCluster / StorageCluster
+    if config.DEPLOYMENT.get("fusion_access_deployment"):
+        config.RUN["cephcluster"] = False
+        logger.info(
+            "Fusion Access cluster detected — skipping CephCluster check, "
+            "setting cephcluster=False"
+        )
+        return
+
     try:
         cephcluster_obj = OCP(
             kind="cephcluster",
