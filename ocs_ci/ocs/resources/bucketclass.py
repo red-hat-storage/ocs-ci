@@ -107,6 +107,15 @@ def bucket_class_factory(
                       check if the etag of the file has changed.
                       **Very important** ttl field is in ms not seconds!!
 
+                - archive_policy (str): The name of an existing archive NamespaceStore
+                  to use as the deepArchiveResource. Supported only with the 'oc' interface.
+
+                - archive_nss_dict (dict): A namespace store factory dictionary used to
+                  create the archive NamespaceStore. The created store's name becomes the
+                  archive_policy. For the archive platform, each entry is a tuple of
+                  (amount, target_bucket, account_name). Supported only with the 'oc'
+                  interface.
+
         Returns:
             BucketClass: A Bucket Class object.
 
@@ -144,7 +153,8 @@ def bucket_class_factory(
                 archive_policy or "archive_nss_dict" in bucket_class_dict
             ) and interface.lower() != "oc":
                 raise RuntimeError(
-                    f"archive_policy is supported only with 'oc' interface, got: {interface}"
+                    "archive_policy and archive_nss_dict are supported only with "
+                    f"the 'oc' interface, got: {interface}"
                 )
 
             if "archive_nss_dict" in bucket_class_dict:

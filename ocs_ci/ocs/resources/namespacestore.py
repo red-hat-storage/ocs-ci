@@ -313,18 +313,24 @@ def oc_create_namespacestore(
             pvc_size (int): Size in Gi of the PVC that will host the namespace filesystem
             sub_path (str): The path to a subdirectory inside the PVC FS which the NSS will use as the root directory
             fs_backend (str): The file system backend type - CEPH_FS | GPFS | NFSv4. Defaults to None.
+            For the archive platform (constants.ARCHIVE_PLATFORM), the tuple is instead:
+                amount (int): Number of namespacestores to create
+                target_bucket (str): The existing MCG bucket to use as the archive target
+                account_name (str): The MCG account whose noobaa-account-<name> secret
+                    grants access to the target bucket
 
     """
     nss_data = templating.load_yaml(constants.MCG_NAMESPACESTORE_YAML)
     nss_data["metadata"]["name"] = nss_name
     nss_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
 
-    if platform.lower() == constants.ARCHIVE_PLATFORM:
-        if not nss_tup or len(nss_tup) < 3 or not nss_tup[2]:
-            raise ValueError(
-                f"Archive namespacestore tuple must be "
-                f"(amount, target_bucket, account_name), got: {nss_tup}"
-            )
+    if platform.lower() == constants.ARCHIVE_PLATFORM and (
+        not nss_tup or len(nss_tup) < 3 or not nss_tup[2]
+    ):
+        raise ValueError(
+            f"Archive namespacestore tuple must be "
+            f"(amount, target_bucket, account_name), got: {nss_tup}"
+        )
 
     NSS_MAPPING = {
         constants.AWS_PLATFORM: lambda: {
