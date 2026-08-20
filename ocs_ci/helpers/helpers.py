@@ -7732,7 +7732,7 @@ def create_userns_pod(
     Create a pod with user namespace isolation (hostUsers=false)
     and a restricted-v2 compatible security context.
 
-    The pod runs ``sleep 3600`` so it stays alive for exec
+    The pod runs ``sleep infinity`` so it stays alive for exec
     commands.
 
     Args:
@@ -7757,7 +7757,7 @@ def create_userns_pod(
         namespace=namespace,
         node_name=node_name,
         pod_name=pod_name,
-        command=["sh", "-c", "sleep 3600"],
+        command=["sh", "-c", "sleep infinity"],
         security_context={
             "allowPrivilegeEscalation": False,
             "capabilities": {"drop": ["ALL"]},
