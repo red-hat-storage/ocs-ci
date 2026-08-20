@@ -576,7 +576,15 @@ def storagecluster_health_check():
 def wait_for_storageclusters_crd():
     """
     Wait for the storageclusters CRD to exist.
+    On IBM HCI platform storage is managed via OdfCluster CR, not
+    StorageCluster, so the storageclusters CRD is not expected to exist.
     """
+    if config.ENV_DATA.get("platform", "").lower() == constants.IBM_HCI_PLATFORM:
+        logger.info(
+            "IBM HCI platform detected, storage managed by OdfCluster CR, "
+            "skipping StorageClusters CRD wait"
+        )
+        return
     logger.info("Waiting for the StorageClusters CRD to exist")
 
     @retry((CommandFailed, AssertionError, KeyError), 30, 30, backoff=1)
