@@ -338,12 +338,10 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
         logger.test_step("Remove blocklist and restart pod")
         remove_cephfs_client_blocklist(client_addr)
 
-        pod_data = pod_obj.get()
-        pod_ns = pod_data["metadata"]["namespace"]
-        pod_name = pod_data["metadata"]["name"]
-        pod_ocp = ocp.OCP(kind="Pod", namespace=pod_ns)
-        pod_ocp.delete(resource_name=pod_name)
-        logger.info(f"Deleted pod {pod_name}")
+        pod_obj.delete()
+        pod_obj.ocp.wait_for_delete(pod_obj.name)
+        logger.info(f"Deleted pod {pod_obj.name}")
+        pod_obj.delete = lambda **kwargs: None
 
         logger.info("Recreating pod for fresh CephFS mount")
         new_pod = pod_factory(
