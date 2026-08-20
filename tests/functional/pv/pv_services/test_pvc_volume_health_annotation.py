@@ -240,6 +240,7 @@ class TestPVCVolumeHealthAnnotation(ManageTest):
 @tier1
 @green_squad
 @skipif_ocs_version("<4.23")
+@jira("DFBUGS-9421", run=False)
 class TestPVCVolumeHealthUnhealthy(ManageTest):
     """
     Test PVC volume health annotation transitions to unhealthy state
