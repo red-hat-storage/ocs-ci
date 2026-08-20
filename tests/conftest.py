@@ -8661,16 +8661,28 @@ def discovered_apps_dr_workload_cnv(request):
             len({i.workload_namespace for i in instances}) == 1
         )
         if same_namespace:
-            # Delete all but the last instance without waiting, skipping
-            # per-instance namespace/project cleanup.
-            # DRPC deletion uses --ignore-not-found so it is safe even if
-            # another instance already removed the shared DRPC.
-            for instance in instances[:-1]:
+            # Skip resource deletion verification for all instances.
+            # When the test fails mid-way (before DR unprotection), PVCs
+            # retain VGR finalizers that block deletion for 25+ minutes.
+            # Submitting all deletions without waiting and then deleting the
+            # project is more resilient — namespace deletion cascades and
+            # Ramen will release finalizers once it processes the DRPC removal.
+            for instance in instances:
                 instance.delete_workload(skip_resource_deletion_verification=True)
-            # Last instance: delete its own DRPC (--ignore-not-found handles
-            # the case where it was already removed as a Shared DRPC), then
-            # wait for all pods in the namespace and remove the project.
-            instances[-1].delete_workload()
+            namespace = instances[0].workload_namespace
+            for cluster in utils.get_non_acm_cluster_config():
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                try:
+                    OCP().delete_project(project_name=namespace)
+                    log.info(
+                        f"Project {namespace} deleted on"
+                        f" {cluster.ENV_DATA['cluster_name']}"
+                    )
+                except Exception:
+                    log.warning(
+                        f"Failed to delete project {namespace} on"
+                        f" {cluster.ENV_DATA['cluster_name']}"
+                    )
         else:
             for instance in instances:
                 try:
