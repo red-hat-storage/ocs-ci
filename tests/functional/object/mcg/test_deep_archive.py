@@ -15,17 +15,15 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import MCGTest, skipif_ocs_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
-    nsfs_simulate_archive_restore,
+    restore_archived_object,
     s3_put_object,
     s3_get_object,
     s3_head_object,
     s3_delete_object,
     s3_list_objects_v2,
-    s3_restore_object,
 )
 from ocs_ci.ocs.resources.mcg_params import NSFS
 from ocs_ci.ocs.resources.objectbucket import OBC
-from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -116,14 +114,11 @@ class TestDeepArchive(MCGTest):
         5. List the bucket - verify both objects with correct storage classes
         6. Get the non-restored archived object - expect InvalidObjectState
         7. Get the standard object - expect success with matching data
-        8. Restore the archived object - verify 202 Accepted
-        9. Head the object while restore is in progress - verify ongoing
-        10. Simulate restore completion via NSFS xattrs
-        11. Wait for restore to complete
-        12. Head the restored object - verify restored status with expiry date
-        13. Get the restored object - verify data matches original
-        14. Delete the archived object
-        15. List the bucket - verify archived object is gone
+        8. Restore the archived object and wait for the restore to complete
+        9. Head the restored object - verify restored status with expiry date
+        10. Get the restored object - verify data matches original
+        11. Delete the archived object
+        12. List the bucket - verify archived object is gone
 
         """
         archive_key = "test-archive-object"
@@ -207,54 +202,14 @@ class TestDeepArchive(MCGTest):
             body == standard_data
         ), f"Standard object data mismatch: expected {standard_data!r}, got {body!r}"
 
-        # 8. Restore the archived object - verify 202 Accepted
-        logger.test_step("Initiate restore and verify 202 Accepted")
-        restore_resp = s3_restore_object(
-            obc, obc.bucket_name, archive_key, days=restore_days
+        # 8. Restore the archived object and wait for the restore to complete
+        logger.test_step("Restore the archived object and wait for completion")
+        restore_header = restore_archived_object(
+            obc, nsfs_obj, obc.bucket_name, archive_key, days=restore_days
         )
-        status_code = restore_resp["ResponseMetadata"]["HTTPStatusCode"]
-        logger.assertion(f"Restore status code: expected=202, actual={status_code}")
-        assert status_code == 202, f"Expected 202 Accepted, got {status_code}"
 
-        # 9. Head the object while restore is in progress - verify ongoing
-        logger.test_step("Verify restore is ongoing")
-        for head_resp in TimeoutSampler(
-            timeout=60,
-            sleep=5,
-            func=s3_head_object,
-            s3_obj=obc,
-            bucketname=obc.bucket_name,
-            object_key=archive_key,
-        ):
-            restore_header = head_resp.get("Restore", "")
-            if 'ongoing-request="true"' in restore_header:
-                logger.assertion(f"Restore header: {restore_header!r}")
-                break
-
-        # 10. Simulate restore completion via NSFS xattrs
-        logger.test_step("Simulate restore completion via NSFS xattrs")
-        nsfs_simulate_archive_restore(nsfs_obj, archive_key, restore_days)
-
-        # 11. Wait for RestoreWorker to complete the restore
-        logger.test_step("Wait for RestoreWorker to complete the restore")
-        for head_resp in TimeoutSampler(
-            timeout=600,
-            sleep=20,
-            func=s3_head_object,
-            s3_obj=obc,
-            bucketname=obc.bucket_name,
-            object_key=archive_key,
-        ):
-            restore_header = head_resp.get("Restore", "")
-            logger.debug(f"Restore header: {restore_header!r}")
-            if 'ongoing-request="false"' in restore_header:
-                logger.info("Restore completed successfully")
-                break
-
-        # 12. Head the restored object - verify restored status with expiry date
+        # 9. Head the restored object - verify restored status with expiry date
         logger.test_step("Verify restored object has expiry date")
-        head_resp = s3_head_object(obc, obc.bucket_name, archive_key)
-        restore_header = head_resp.get("Restore", "")
         logger.assertion(f"Restore header after completion: {restore_header!r}")
         assert (
             'ongoing-request="false"' in restore_header
@@ -271,7 +226,7 @@ class TestDeepArchive(MCGTest):
             f"got {expiry_dt.isoformat()}"
         )
 
-        # 13. Get the restored object - verify data matches original
+        # 10. Get the restored object - verify data matches original
         logger.test_step("Verify restored object data via GetObject")
         get_resp = s3_get_object(obc, obc.bucket_name, archive_key)
         body = get_resp["Body"].read().decode()
@@ -280,11 +235,11 @@ class TestDeepArchive(MCGTest):
             body == archive_data
         ), f"Restored data mismatch: expected {archive_data!r}, got {body!r}"
 
-        # 14. Delete the archived object
+        # 11. Delete the archived object
         logger.test_step("Delete the archived object")
         s3_delete_object(obc, obc.bucket_name, archive_key)
 
-        # 15. List the bucket - verify archived object is gone
+        # 12. List the bucket - verify archived object is gone
         logger.test_step("Verify archived object is gone from listing")
         list_resp = s3_list_objects_v2(obc, obc.bucket_name)
         listed_keys = [obj["Key"] for obj in list_resp.get("Contents", [])]

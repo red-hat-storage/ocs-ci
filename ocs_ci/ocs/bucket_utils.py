@@ -3988,3 +3988,86 @@ def assert_store_phase_and_mode(
             f"{expected_mode} within {timeout}s"
         )
         raise
+
+
+def restore_archived_object(
+    s3_obj,
+    nsfs_obj,
+    bucketname,
+    object_key,
+    days=1,
+    restore_timeout=300,
+    ongoing_timeout=120,
+    completion_timeout=600,
+):
+    """
+    Restore an archived (DEEP_ARCHIVE/GLACIER) object and wait until it is readable.
+
+    Initiates RestoreObject - retrying while the object's archive or transition
+    source data is still pending reclaim, which briefly blocks a restore - then
+    waits for the restore to be reported as ongoing, simulates the NSFS tape recall
+    via nsfs_simulate_archive_restore, and waits for the restore to complete.
+
+    Args:
+        s3_obj (obj): MCG or OBC object
+        nsfs_obj (NSFS): The NSFS object backing the archive target
+        bucketname (str): Name of the bucket
+        object_key (str): The object key to restore
+        days (int): Number of days the restored copy should remain available
+        restore_timeout (int): Timeout in seconds for RestoreObject to be accepted
+        ongoing_timeout (int): Timeout in seconds for the restore to become ongoing
+        completion_timeout (int): Timeout in seconds for the restore to complete
+
+    Returns:
+        str: The completed Restore response header
+            (contains ongoing-request="false" and an expiry-date)
+
+    """
+    logger.info(f"Restoring archived object '{object_key}' for {days} day(s)")
+    for restore_resp in TimeoutSampler(
+        restore_timeout,
+        15,
+        s3_restore_object,
+        s3_obj=s3_obj,
+        bucketname=bucketname,
+        object_key=object_key,
+        days=days,
+    ):
+        # 202: a restore was initiated; 200: a restore is already active or complete.
+        if restore_resp["ResponseMetadata"]["HTTPStatusCode"] in (200, 202):
+            break
+
+    # Wait for the restore to be reported as ongoing before simulating the tape
+    # recall (the NSFS restore-request xattr must exist for the simulation to run).
+    # If the restore already completed (fast path), return without simulating.
+    for head_resp in TimeoutSampler(
+        ongoing_timeout,
+        5,
+        s3_head_object,
+        s3_obj=s3_obj,
+        bucketname=bucketname,
+        object_key=object_key,
+    ):
+        restore_header = head_resp.get("Restore", "")
+        if 'ongoing-request="false"' in restore_header:
+            logger.info(
+                f"Restore of '{object_key}' already complete: {restore_header!r}"
+            )
+            return restore_header
+        if 'ongoing-request="true"' in restore_header:
+            break
+
+    nsfs_simulate_archive_restore(nsfs_obj, object_key, days)
+
+    for head_resp in TimeoutSampler(
+        completion_timeout,
+        20,
+        s3_head_object,
+        s3_obj=s3_obj,
+        bucketname=bucketname,
+        object_key=object_key,
+    ):
+        restore_header = head_resp.get("Restore", "")
+        if 'ongoing-request="false"' in restore_header:
+            logger.info(f"Restore of '{object_key}' completed: {restore_header!r}")
+            return restore_header
