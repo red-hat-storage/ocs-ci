@@ -36,7 +36,7 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
 
 RUN curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz | tar -C /usr/local/bin -zxvf - oc
 
-RUN dnf install -y --nodocs python3.11 git jq rsync make \
+RUN dnf install -y --nodocs python3.11 git jq rsync make skopeo \
     && dnf clean all \
     && rm -rf /var/cache/yum /var/cache/dnf /var/lib/dnf/repos /var/log/dnf.librepo.log /var/log/dnf.log /var/log/dnf.rpm.log /var/log/hawkey.log /var/cache/ldconfig \
     && curl -sL https://github.com/mikefarah/yq/releases/download/v4.32.2/yq_linux_amd64.tar.gz | tar -C /usr/local/bin -zxvf - ./yq_linux_amd64 \
