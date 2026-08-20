@@ -824,7 +824,7 @@ def validate_page_title(title):
     Args:
         title (str): required title
     """
-    WebDriverWait(SeleniumDriver(), 60).until(ec.title_is(title))
+    WebDriverWait(SeleniumDriver(), 60).until(ec.title_contains(title))
     log.info(f"page title: {title}")
 
 
