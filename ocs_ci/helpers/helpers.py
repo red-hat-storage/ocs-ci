@@ -285,6 +285,7 @@ def create_pod(
     volumemounts=None,
     pvc_read_only_mode=None,
     priorityClassName=None,
+    host_users=None,
 ):
     """
     Create a pod
@@ -312,6 +313,8 @@ def create_pod(
         deployment (bool): True for Deployment creation, False otherwise
         scc (dict): Set security context on pod like fsGroup, runAsUer, runAsGroup
         volumemounts (list): Value of mountPath parameter in pod yaml
+        host_users (bool): Set spec.hostUsers on the pod
+            (False enables user namespaces)
 
     Returns:
         Pod: A Pod instance
@@ -443,6 +446,11 @@ def create_pod(
             pod_data["spec"]["template"]["securityContext"] = scc
         else:
             pod_data["spec"]["securityContext"] = scc
+    if host_users is not None:
+        if deployment:
+            pod_data["spec"]["template"]["spec"]["hostUsers"] = host_users
+        else:
+            pod_data["spec"]["hostUsers"] = host_users
     if node_name:
         if deployment:
             pod_data["spec"]["template"]["spec"]["nodeName"] = node_name
@@ -7669,3 +7677,129 @@ def delete_cephfs_ec_pool(pool_name):
             f"Ceph pool '{full_pool_name}' was not removed within timeout. "
             "The pool entry was already removed from StorageCluster CR."
         )
+
+
+def create_userns_project(project_name=None, uid_range="10000/1000"):
+    """
+    Create a project with restricted PSA policy and user namespace
+    UID/GID annotations.
+
+    Sets both ``openshift.io/sa.scc.uid-range`` and
+    ``openshift.io/sa.scc.supplemental-groups`` to *uid_range*.
+
+    Args:
+        project_name (str): Name for the new project.
+            Auto-generated if not provided.
+        uid_range (str): UID/GID range in ``start/count`` format
+            (default ``10000/1000``).
+
+    Returns:
+        ocp.OCP: Project object (kind ``Project``)
+    """
+    namespace = project_name or create_unique_resource_name("test-userns", "namespace")
+    project_obj = ocp.OCP(kind="Project", namespace=namespace)
+    assert project_obj.new_project(
+        namespace, policy=constants.PSA_RESTRICTED
+    ), f"Failed to create project {namespace}"
+
+    ns_ocp = ocp.OCP(kind="namespace")
+    ns_ocp.annotate(
+        f"{constants.SA_SCC_SUPPLEMENTAL_GROUPS}={uid_range}",
+        resource_name=namespace,
+    )
+    ns_ocp.annotate(
+        f"{constants.SA_SCC_UID_RANGE}={uid_range}",
+        resource_name=namespace,
+    )
+    logger.info(
+        f"Created user namespace project {namespace} "
+        f"with restricted PSA and uid-range={uid_range}"
+    )
+    return project_obj
+
+
+def create_userns_pod(
+    pvc_name,
+    namespace,
+    run_as_user=10900,
+    run_as_group=10900,
+    interface_type=None,
+    node_name=None,
+    mount_path="/mnt/test",
+    pod_name=None,
+):
+    """
+    Create a pod with user namespace isolation (hostUsers=false)
+    and a restricted-v2 compatible security context.
+
+    The pod runs ``sleep infinity`` so it stays alive for exec
+    commands.
+
+    Args:
+        pvc_name (str): PVC to attach
+        namespace (str): Target namespace
+        run_as_user (int): Container UID (default 10900)
+        run_as_group (int): Container GID (default 10900)
+        interface_type (str): CephFileSystem or CephBlockPool
+            (default CephFileSystem)
+        node_name (str): Schedule on this node (optional)
+        mount_path (str): Container mount path for the PVC
+            (default ``/mnt/test``)
+        pod_name (str): Explicit pod name (optional)
+
+    Returns:
+        Pod: Created Pod object
+    """
+    interface_type = interface_type or constants.CEPHFILESYSTEM
+    return create_pod(
+        interface_type=interface_type,
+        pvc_name=pvc_name,
+        namespace=namespace,
+        node_name=node_name,
+        pod_name=pod_name,
+        command=["sh", "-c", "sleep infinity"],
+        security_context={
+            "allowPrivilegeEscalation": False,
+            "capabilities": {"drop": ["ALL"]},
+            "seccompProfile": {
+                "type": "RuntimeDefault",
+            },
+        },
+        scc={
+            "runAsUser": run_as_user,
+            "runAsGroup": run_as_group,
+            "runAsNonRoot": True,
+        },
+        volumemounts=[
+            {"mountPath": mount_path, "name": "mypvc"},
+        ],
+        host_users=False,
+    )
+
+
+def verify_file_ownership(pod_obj, file_path, expected_uid, expected_gid):
+    """
+    Verify file ownership inside a pod using ``ls -ln``.
+
+    Args:
+        pod_obj (Pod): Pod to exec into
+        file_path (str): Absolute path to the file
+        expected_uid (int): Expected numeric UID
+        expected_gid (int): Expected numeric GID
+
+    Returns:
+        tuple: ``(uid, gid)`` parsed from ``ls -ln`` output
+    """
+    out = pod_obj.exec_sh_cmd_on_pod(f"ls -ln {file_path}")
+    logger.info(f"ls -ln {file_path}: {out}")
+    parts = out.split()
+    assert len(parts) >= 4, f"Unexpected ls -ln output for {file_path}: {out}"
+    file_uid = int(parts[2])
+    file_gid = int(parts[3])
+    assert (
+        file_uid == expected_uid
+    ), f"File UID {file_uid} != expected {expected_uid} for {file_path}"
+    assert (
+        file_gid == expected_gid
+    ), f"File GID {file_gid} != expected {expected_gid} for {file_path}"
+    return file_uid, file_gid
