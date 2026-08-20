@@ -5271,6 +5271,11 @@ def inspect_image(image, authfile_fo, cluster_config=None):
     repo_name = skopeo_data.get("Name", "")
     digest = skopeo_data.get("Digest", "")
 
+    # For a digest-pinned reference the caller explicitly wants the immutable
+    # image, so RepoTags is left empty to avoid selecting a mutable repo tag
+    # (mirror_image falls back to RepoDigests in that case).
+    is_digest_ref = "@sha256" in image
+
     # Extract the tag from the input image reference so it appears first
     # in RepoTags (callers use RepoTags[0]).
     input_tag = None
@@ -5278,12 +5283,13 @@ def inspect_image(image, authfile_fo, cluster_config=None):
         input_tag = image.rsplit(":", 1)[-1]
 
     repo_tags = []
-    if input_tag:
-        repo_tags.append(f"{repo_name}:{input_tag}")
-    for tag in skopeo_data.get("RepoTags", []):
-        full_ref = f"{repo_name}:{tag}"
-        if full_ref not in repo_tags:
-            repo_tags.append(full_ref)
+    if not is_digest_ref:
+        if input_tag:
+            repo_tags.append(f"{repo_name}:{input_tag}")
+        for tag in skopeo_data.get("RepoTags", []):
+            full_ref = f"{repo_name}:{tag}"
+            if full_ref not in repo_tags:
+                repo_tags.append(full_ref)
 
     repo_digests = [f"{repo_name}@{digest}"] if digest else []
 
@@ -5405,8 +5411,8 @@ def mirror_image(image, cluster_config=None):
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
         )
         exec_cmd(
-            f"skopeo copy --authfile {authfile_fo.name}"
-            f" --dest-tls-verify=false --src-tls-verify=false"
+            f"skopeo copy --all --authfile {authfile_fo.name}"
+            f" --dest-tls-verify=false"
             f" docker://{orig_image_full} docker://{mirrored_image}",
             cluster_config=cluster_config,
         )
