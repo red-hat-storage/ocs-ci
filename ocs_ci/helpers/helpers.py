@@ -7859,8 +7859,6 @@ def blocklist_cephfs_client(pvc_obj):
     Returns:
         tuple: (client_id, client_addr) for use in cleanup
     """
-    import json as _json
-
     from ocs_ci.ocs.ocp import OCP
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
@@ -7875,7 +7873,7 @@ def blocklist_cephfs_client(pvc_obj):
 
     toolbox = get_ceph_tools_pod()
     client_ls_out = toolbox.exec_sh_cmd_on_pod(command="ceph tell mds.0 client ls")
-    clients = _json.loads(client_ls_out)
+    clients = json.loads(client_ls_out)
 
     client_id = None
     client_addr = None
@@ -7894,18 +7892,25 @@ def blocklist_cephfs_client(pvc_obj):
     toolbox.exec_sh_cmd_on_pod(command=f"ceph osd blocklist add {client_addr}")
     logger.info(f"Blocklisted client {client_addr}")
 
-    fs_status_out = toolbox.exec_sh_cmd_on_pod(command="ceph fs status -f json")
-    fs_status = _json.loads(fs_status_out)
-    active_mds = [m["name"] for m in fs_status["mdsmap"] if m["state"] == "active"][0]
-    logger.info(f"Active MDS: {active_mds}")
-
     try:
+        fs_status_out = toolbox.exec_sh_cmd_on_pod(command="ceph fs status -f json")
+        fs_status = json.loads(fs_status_out)
+        active_mds = [m["name"] for m in fs_status["mdsmap"] if m["state"] == "active"][
+            0
+        ]
+        logger.info(f"Active MDS: {active_mds}")
+
         toolbox.exec_sh_cmd_on_pod(
             command=f"ceph tell mds.{active_mds} client evict id={client_id}"
         )
         logger.info(f"Evicted client id={client_id}")
     except Exception:
-        logger.warning("Client eviction returned error (may already be disconnected)")
+        logger.warning(
+            f"MDS lookup or client eviction failed after blocklisting "
+            f"{client_addr}. Removing blocklist before re-raising."
+        )
+        remove_cephfs_client_blocklist(client_addr)
+        raise
 
     return client_id, client_addr
 
@@ -7914,14 +7919,23 @@ def remove_cephfs_client_blocklist(client_addr):
     """
     Remove a CephFS client address from the Ceph OSD blocklist.
 
+    Idempotent: logs a warning if the address is not currently
+    blocklisted. Re-raises unexpected errors.
+
     Args:
         client_addr (str): Client address previously blocklisted
     """
+    from ocs_ci.ocs.exceptions import CommandFailed
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
+    toolbox = get_ceph_tools_pod()
     try:
-        toolbox = get_ceph_tools_pod()
         toolbox.exec_sh_cmd_on_pod(command=f"ceph osd blocklist rm {client_addr}")
         logger.info(f"Removed blocklist for {client_addr}")
-    except Exception:
-        logger.warning(f"Failed to remove blocklist for {client_addr}")
+    except CommandFailed as ex:
+        if "isn't blocklisted" in str(ex) or "not blocklisted" in str(ex):
+            logger.warning(
+                f"{client_addr} is not currently blocklisted, " f"nothing to remove"
+            )
+        else:
+            raise
