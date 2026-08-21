@@ -1106,6 +1106,8 @@ class TestACMKubevirtDRIntergration:
             skip_odf_cli_validation=True,
         )
 
+        # Switch to old_primary (c2) where do_discovered_apps_cleanup ran with --wait=false
+        config.switch_to_cluster_by_name(secondary_cluster_name)
         for resource_name in drpc_resources:
             wait_for_all_resources_deletion(
                 namespace=workload_namespace,
