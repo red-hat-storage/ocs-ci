@@ -50,6 +50,7 @@ from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.ingress_node_firewall import (
     restrict_ssh_access_to_nodes,
 )
+from ocs_ci.deployment.networkpolicy import apply_allow_all_network_policy
 from ocs_ci.deployment.helpers.lso_helpers import (
     setup_local_storage,
     cleanup_nodes_for_lso_install,
@@ -1661,6 +1662,10 @@ class Deployment(object):
             else:
                 raise
 
+        if config.DEPLOYMENT.get("disable_networkpolicy"):
+            logger.test_step("Apply allow-all NetworkPolicy override")
+            apply_allow_all_network_policy()
+
         # Create Multus Networks
         if config.ENV_DATA.get("is_multus_enabled"):
             log_step("Establish Multus Network")
@@ -2085,6 +2090,10 @@ class Deployment(object):
         deployment_obj.install_ocs_ui()
         close_browser()
 
+        if config.DEPLOYMENT.get("disable_networkpolicy"):
+            logger.test_step("Apply allow-all NetworkPolicy override")
+            apply_allow_all_network_policy()
+
     def set_noobaa_core_for_rgw_ssl(self):
         """
         Set env variables for noobaa-core StatefulSet to inject SSL environment variables
@@ -2151,6 +2160,9 @@ class Deployment(object):
             if not ui_deployment:
                 logger.info("Creating namespace and operator group.")
                 run_cmd(f"oc apply -f {constants.OLM_YAML}")
+            if config.DEPLOYMENT.get("disable_networkpolicy"):
+                logger.test_step("Apply allow-all NetworkPolicy override")
+                apply_allow_all_network_policy()
             if not live_deployment:
                 create_catalog_source(image)
             self.subscribe_ocs()
