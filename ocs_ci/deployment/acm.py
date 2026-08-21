@@ -8,13 +8,9 @@ import logging
 import tempfile
 import shutil
 import requests
-import subprocess
-import time
-import glob
 
 import semantic_version
 import platform
-import tarfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -242,113 +238,52 @@ class Submariner(object):
                 os.path.join(config.RUN["bin_dir"], "subctl"),
             )
         elif self.source == "downstream":
-            try:
-                self.download_downstream_binary()
-            except IndexError:
-                self.download_downstream_binary(
-                    download_url=constants.SUBCTL_BREW_DOWNSTREAM_URL
-                )
-
-    @retry((tarfile.TarError, EOFError, FileNotFoundError), tries=8, delay=5)
-    def wait_for_tar_file(self, subctl_download_tar_file):
-        """
-        1. First check if file exists
-        2. Check if file is accessible
-        3. check if tarfile is intact
-        """
-        if not os.path.exists(subctl_download_tar_file):
-            raise FileNotFoundError(f"Tar file not found {subctl_download_tar_file}")
-        else:
-            logger.info(f"Found the tar file {subctl_download_tar_file}")
-
-        if os.path.isfile(f"{subctl_download_tar_file}") and os.access(
-            f"{subctl_download_tar_file}", os.R_OK
-        ):
-            logger.info(f"File {subctl_download_tar_file} successfully downloaded")
-            try:
-                # Check if tar is readable without any errors
-                with tarfile.open(subctl_download_tar_file) as tar:
-                    tar.getmembers()
-                logger.info("the tar.xz is intact and readable")
-            except (tarfile.TarError, EOFError) as tar_error:
-                logger.error(f"The tar.xz is corrupted or not readable {tar_error}")
-                raise
-        else:
-            logger.warning(
-                f"File {subctl_download_tar_file} is not accessible or corrupted,"
-                f"Retrying reading the tar file again"
-            )
-            raise tarfile.TarError()
+            self.download_downstream_binary()
 
     @retry((SubctlDownloadFailed, CommandFailed))
     def download_downstream_binary(self, download_url=constants.SUBCTL_DOWNSTREAM_URL):
         """
-        Download downstream subctl binary
+        Download downstream subctl binary from container image.
+        Extracts the binary directly from /usr/local/bin/subctl in the image.
 
         Raises:
             UnsupportedPlatformError : If current platform has no supported subctl binary
+            SubctlDownloadFailed : If the binary extraction fails
         """
 
         subctl_ver = config.ENV_DATA["subctl_version"]
-        version_str = subctl_ver.split(":")[1]
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-        processor = platform.processor()
         arch = platform.machine()
-        if arch == "x86_64" and processor == "x86_64":
+        if arch == "x86_64":
             binary_pltfrm = "amd64"
-        elif arch == "arm64" and processor == "arm":
+        elif arch == "arm64":
             binary_pltfrm = "arm64"
         else:
             raise UnsupportedPlatformError(
-                "Not a supported architecture for subctl binary"
+                f"Not a supported architecture for subctl binary: {arch}"
             )
+        target_dir = config.RUN["bin_dir"]
+        os.makedirs(target_dir, exist_ok=True)
         cmd = (
             f"oc image extract --filter-by-os linux/{binary_pltfrm} --registry-config "
             f"{pull_secret_path} {download_url}{subctl_ver} "
-            f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
+            f"--path=/usr/local/bin/subctl:{target_dir} --confirm"
         )
-        run_cmd(cmd)
-        # After oc image extract wait for some time
-        # so that tar won't fail
-        time.sleep(10)
-        # Check if file exists before calling tar
-        subctl_download_tar_file = glob.glob(
-            f"/tmp/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz"
-        )[0]
         try:
-            self.wait_for_tar_file(subctl_download_tar_file)
-        except Exception as e:
-            logger.error(
-                f"Unexpected error during subctl tar file download/extract: {e}"
+            run_cmd(cmd)
+        except CommandFailed as e:
+            logger.error(f"Failed to extract subctl binary: {e}")
+            raise SubctlDownloadFailed(
+                f"Failed to extract subctl from {download_url}{subctl_ver}"
             )
-            raise SubctlDownloadFailed("Failed to download subctl tar file")
-
-        decompress = f"tar -C /tmp/ -xf {subctl_download_tar_file}"
-        p = subprocess.run(
-            decompress,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=True,
-            text=True,
-        )
-        if p.returncode:
-            logger.error("Failed to untar subctl")
-            if p.stderr:
-                logger.error(f"{p.stderr}")
-            raise CommandFailed
-        else:
-            logger.info(f"Tar decompressed successfully {p.stdout}")
-        target_dir = config.RUN["bin_dir"]
-        install_cmd = (
-            f"install -m744 /tmp/subctl-{version_str}*/subctl-{version_str}*-linux-{binary_pltfrm} "
-            f"{target_dir} "
-        )
-        run_cmd(install_cmd, shell=True)
-        subctl_bin_file = glob.glob(
-            f"{target_dir}/subctl-{version_str}*-linux-{binary_pltfrm}"
-        )[0]
-        run_cmd(f"mv {subctl_bin_file} {target_dir}/subctl", shell=True)
-        os.environ["PATH"] = os.environ["PATH"] + ":" + os.path.abspath(f"{target_dir}")
+        subctl_path = os.path.join(target_dir, "subctl")
+        if not os.path.isfile(subctl_path):
+            raise SubctlDownloadFailed(
+                f"subctl binary not found at {subctl_path} after extraction"
+            )
+        os.chmod(subctl_path, 0o744)
+        os.environ["PATH"] = os.environ["PATH"] + ":" + os.path.abspath(target_dir)
+        logger.info(f"subctl binary downloaded to {subctl_path}")
 
     def submariner_configure_upstream(self):
         """
