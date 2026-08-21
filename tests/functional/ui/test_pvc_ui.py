@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_cephfs_disabled,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, get_pvc_objs
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state, create_unique_resource_name
@@ -103,6 +104,10 @@ class TestPvcUserInterface(object):
 
         pvc_ui_obj.create_pvc_ui(
             project_name, sc_name, pvc_name, access_mode, pvc_size, vol_mode
+        )
+
+        OCP(kind=constants.PVC, namespace=project_name).wait_for_resource(
+            condition=constants.STATUS_BOUND, resource_name=pvc_name, timeout=120
         )
 
         pvc_objs = get_all_pvc_objs(namespace=project_name)
