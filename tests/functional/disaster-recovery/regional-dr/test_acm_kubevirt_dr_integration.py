@@ -1057,20 +1057,21 @@ class TestACMKubevirtDRIntergration:
             drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
         logger.test_step("Verify all VM statuses via ACM UI after failover")
-        logger.assertion("navigate_using_fleet_virtualization: expected=True")
-        assert navigate_using_fleet_virtualization(acm_obj)
-        logger.assertion(
-            f"check_or_assign_drpolicy_for_discovered_vms_via_ui:"
-            f" all_vms, cluster={secondary_cluster_name}, expected=True"
-        )
-        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj,
-            vms=all_cnv_workloads,
-            protection_name=protection_name_1,
-            namespace=workload_namespace,
-            managed_cluster_name=secondary_cluster_name,
-            assign_policy=False,
-        )
+        for cnv_wl in all_cnv_workloads:
+            logger.assertion("navigate_using_fleet_virtualization: expected=True")
+            assert navigate_using_fleet_virtualization(acm_obj)
+            logger.assertion(
+                f"check_or_assign_drpolicy_for_discovered_vms_via_ui:"
+                f" vm={cnv_wl.vm_name}, cluster={secondary_cluster_name}, expected=True"
+            )
+            assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
+                acm_obj,
+                vms=[cnv_wl],
+                protection_name=protection_name_1,
+                namespace=workload_namespace,
+                managed_cluster_name=secondary_cluster_name,
+                assign_policy=False,
+            )
 
         # Perform Relocate operation
         config.switch_to_cluster_by_name(primary_cluster_name)
@@ -1157,20 +1158,21 @@ class TestACMKubevirtDRIntergration:
 
         config.switch_acm_ctx()
         logger.test_step("Verify all VM statuses via ACM UI after relocate")
-        logger.assertion("navigate_using_fleet_virtualization: expected=True")
-        assert navigate_using_fleet_virtualization(acm_obj)
-        logger.assertion(
-            f"check_or_assign_drpolicy_for_discovered_vms_via_ui:"
-            f" all_vms, cluster={primary_cluster_name}, expected=True"
-        )
-        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj,
-            vms=all_cnv_workloads,
-            protection_name=protection_name_1,
-            namespace=workload_namespace,
-            managed_cluster_name=primary_cluster_name,
-            assign_policy=False,
-        )
+        for cnv_wl in all_cnv_workloads:
+            logger.assertion("navigate_using_fleet_virtualization: expected=True")
+            assert navigate_using_fleet_virtualization(acm_obj)
+            logger.assertion(
+                f"check_or_assign_drpolicy_for_discovered_vms_via_ui:"
+                f" vm={cnv_wl.vm_name}, cluster={primary_cluster_name}, expected=True"
+            )
+            assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
+                acm_obj,
+                vms=[cnv_wl],
+                protection_name=protection_name_1,
+                namespace=workload_namespace,
+                managed_cluster_name=primary_cluster_name,
+                assign_policy=False,
+            )
         config.switch_to_cluster_by_name(primary_cluster_name)
 
         # Validating data integrity (file1) after relocating VMs back to primary managed cluster
