@@ -10,13 +10,13 @@ DEPLOYMENT:
   ignition_version: "3.2.0" # TODO: We might want to update to 3.5 or later: https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/release_notes/ocp-4-19-release-notes
 ENV_DATA:
   # Dictionary of available RHCOS templates by major version
-  # To use RHCOS 10, set rhcos_version: "10" in your custom config
+  # RHEL 9 is the default for 4.23. To use RHCOS 10, set rhcos_version: "10"
+  # in your custom config (requires TechPreviewNoUpgrade feature set).
   vm_templates:
     "9": "rhcos-9.8.20260428-0-vmware.x86_64"
     "10": "rhcos-10.2.20260423-0-vmware.x86_64"
   # Legacy single template (fallback if vm_templates not defined)
-  vm_template: "rhcos-10.2.20260423-0-vmware.x86_64"
-  rhcos_version: "10"
+  vm_template: "rhcos-9.8.20260428-0-vmware.x86_64"
   acm_hub_channel: "release-2.17"
   acm_version: "2.17"
   mce_version: "2.17"

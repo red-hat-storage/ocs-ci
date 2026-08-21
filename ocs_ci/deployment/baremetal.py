@@ -716,12 +716,19 @@ class BAREMETALUPI(BAREMETALBASE):
             # Configure RHCOS 10 specific settings
             rhcos_version = config.ENV_DATA.get("rhcos_version")
             if rhcos_version and str(rhcos_version) == "10":
-                install_config_obj["featureSet"] = "TechPreviewNoUpgrade"
-                install_config_obj["osImageStream"] = "rhel-10"
-                logger.info(
-                    "Configured install-config for RHEL 10 deployment with "
-                    "TechPreviewNoUpgrade feature set"
-                )
+                ocp_version = version.get_semantic_ocp_version_from_config()
+                if ocp_version < version.VERSION_5_0:
+                    install_config_obj["featureSet"] = "TechPreviewNoUpgrade"
+                    install_config_obj["osImageStream"] = "rhel-10"
+                    logger.info(
+                        "Configured install-config for RHEL 10 deployment with "
+                        "TechPreviewNoUpgrade feature set"
+                    )
+                else:
+                    logger.info(
+                        "OCP 5.0+ detected - RHEL 10 is the default, skipping "
+                        "TechPreviewNoUpgrade and osImageStream configuration"
+                    )
 
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
