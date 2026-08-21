@@ -3892,7 +3892,7 @@ virtualmachine = {
         By.XPATH,
     ),
     "guest_os_type_centos_stream_options": (
-        "//button[@role='option'][.//span[@class='pf-v6-c-menu__item-text']"
+        "//button[@role='option'][.//span[contains(@class,'c-menu__item-text')]"
         "[starts-with(normalize-space(.), 'centos.stream')]]",
         By.XPATH,
     ),
@@ -4052,29 +4052,24 @@ virtualmachine = {
         By.XPATH,
     ),
     "add_volume_project_dropdown": (
-        "//button[@aria-expanded][.//*[contains(normalize-space(.),'Select Volume project')] "
-        "or contains(normalize-space(.),'Select Volume project')]",
+        "//*[@id='pvc-project-select']//button[contains(@class,'c-menu-toggle')]",
         By.XPATH,
     ),
     "add_volume_project_search_input": (
-        "//input[@type='text'][@placeholder='--- Select Volume project ---'"
-        " or @aria-label='Search input']",
+        "//div[contains(@class,'c-menu__search')]//input",
         By.XPATH,
     ),
     "add_volume_project_option_tmpl": (
-        "//li[@role='none' or @role='option']"
-        "//button[normalize-space(.)='{project}' or "
-        ".//*[normalize-space(.)='{project}']]",
+        "//li[@data-test-id='select-option-{project}']//button[@role='option']",
         By.XPATH,
     ),
     "add_volume_name_dropdown": (
-        "//button[@aria-expanded][.//*[contains(normalize-space(.),'Select Volume name')] "
-        "or contains(normalize-space(.),'Select Volume name')]",
+        "//*[@id='pvc-name-select']//button[contains(@class,'c-menu-toggle')]",
         By.XPATH,
     ),
     "add_volume_first_centos_stream_option": (
-        "(//li[@data-test-id[starts-with(.,'select-option-centos-stream')]]"
-        "//button[@role='option'])[1]",
+        "//li[@data-test-id[starts-with(.,'select-option-centos-stream')]]"
+        "//button[@role='option']",
         By.XPATH,
     ),
     "add_volume_destination_name_input": (
@@ -4082,23 +4077,19 @@ virtualmachine = {
         By.XPATH,
     ),
     "add_volume_storageclass_dropdown": (
-        "//button[@aria-expanded][.//*[contains(normalize-space(.),'Select StorageClass')] "
-        "or contains(normalize-space(.),'Select StorageClass') "
-        "or .//*[@title='StorageClass']]",
+        "//div[@data-test-id='storage-class-select']//button",
         By.XPATH,
     ),
     "add_volume_storageclass_vm_option": (
-        "//li[@role='none']//button[@role='option']"
-        "[.//*[@data-test and substring(@data-test, string-length(@data-test)-2)='-vm']]",
+        "//li[@data-test-id[substring(.,string-length(.)-2)='-vm']]//button[@role='option']",
         By.XPATH,
     ),
     "add_volume_preference_dropdown": (
-        "//button[@aria-expanded][contains(normalize-space(.),'Select preference') "
-        "or .//*[contains(normalize-space(.),'Select preference')]]",
+        "//button[.//span[normalize-space(.)='Select preference']]",
         By.XPATH,
     ),
     "add_volume_preference_centos_stream_options": (
-        "//li[@data-test-id[contains(.,'select-option-') and contains(.,'centos.stream')]]"
+        "//li[@data-test-id[contains(.,'VirtualMachineClusterPreference-centos.stream')]]"
         "//button[@role='option']",
         By.XPATH,
     ),
@@ -4121,10 +4112,6 @@ virtualmachine = {
     ),
     "san_storage_link": (
         "//a[@data-discover='true'][normalize-space(text())='SAN_Storage']",
-        By.XPATH,
-    ),
-    "lungroup_row_name_link": (
-        "(//td[@data-label='Name' or @data-label='LUN group']//a[starts-with(normalize-space(.),'lungroup-')])[1]",
         By.XPATH,
     ),
     "lungroup_kebab_button": (

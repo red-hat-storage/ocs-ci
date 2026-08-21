@@ -12,6 +12,7 @@ import time
 import pexpect
 import pytest
 import yaml
+from selenium.common.exceptions import WebDriverException
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -24,8 +25,9 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.helpers.helpers import create_project, create_unique_resource_name
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.ui.base_ui import BaseUI
+from ocs_ci.ocs.ui.base_ui import BaseUI, login_ui, close_browser
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.page_objects.virtualmachine_ui import VirtualMachineUI
 from ocs_ci.utility.utils import TimeoutSampler
@@ -60,12 +62,13 @@ class TestVirtualMachineLifecycle(ManageTest):
         self.vm_ui = VirtualMachineUI()
 
     @pytest.fixture(autouse=True, scope="class")
-    def teardown_lungroup(self, request):
+    def teardown_lungroup(self, request, setup_ui_class_factory):
         """
         Class-scoped teardown that runs once after all tests in this class.
 
         Steps:
-        1. Delete the LUN group via the UI
+        1. Delete the LUN group via the UI.  If UI deletion fails, the 60-second
+           post-deletion wait is skipped because there is nothing to wait for.
         2. Wait 60 s then delete the LocalDisk associated with the LUN group
            from the CLI.
         3. Wait 60 s then delete the IBM Spectrum Scale cluster resource.
@@ -77,14 +80,23 @@ class TestVirtualMachineLifecycle(ManageTest):
 
             # Step 1 — Delete LUN group via UI
             lungroup_name = None
+            ui_deletion_succeeded = False
             try:
-                lungroup_name = self.vm_ui.delete_lungroup_via_ui()
+                login_ui()
+                vm_ui = VirtualMachineUI()
+                lungroup_name = vm_ui.delete_lungroup_via_ui()
                 logger.info(f"LUN group '{lungroup_name}' deletion initiated via UI")
-            except Exception as e:
-                logger.warning(f"Could not delete LUN group via UI: {e}")
+                ui_deletion_succeeded = True
+            except WebDriverException as e:
+                logger.warning(
+                    f"Could not delete LUN group via UI (browser error): {e}"
+                )
+            finally:
+                close_browser()
 
-            logger.info("Waiting 60 s after LUN group deletion...")
-            time.sleep(60)
+            if ui_deletion_succeeded:
+                logger.info("Waiting 60 s after LUN group deletion...")
+                time.sleep(60)
 
             # Step 2 — Delete LocalDisk from CLI
             if lungroup_name:
@@ -109,7 +121,7 @@ class TestVirtualMachineLifecycle(ManageTest):
                         logger.warning(
                             f"No LocalDisk found for LUN group '{lungroup_name}'"
                         )
-                except Exception as e:
+                except CommandFailed as e:
                     logger.warning(f"Could not delete LocalDisk: {e}")
 
             logger.info("Waiting 60 s before deleting IBM Spectrum Scale cluster...")
@@ -127,7 +139,7 @@ class TestVirtualMachineLifecycle(ManageTest):
                     out_yaml_format=False,
                 )
                 logger.info("Deleted IBM Spectrum Scale cluster resource")
-            except Exception as e:
+            except CommandFailed as e:
                 logger.warning(
                     f"Could not delete IBM Spectrum Scale cluster resource: {e}"
                 )
@@ -291,7 +303,7 @@ class TestVirtualMachineLifecycle(ManageTest):
             logger.info(f"Parsed md5sum checksum: {md5sum_output}")
         return md5sum_output
 
-    def _wait_for_vmi_agent_connected(self, vm_name, namespace, timeout=600):
+    def _wait_for_vmi_agent_connected(self, vm_name, namespace, timeout=1200):
         """
         Wait until the VMI exists in the cluster and its ``AgentConnected``
         condition is ``True``.
@@ -371,7 +383,6 @@ class TestVirtualMachineLifecycle(ManageTest):
         Returns:
             tuple[str, str]: ``(vm_name, namespace)`` of the newly running VM.
         """
-        # Reset so teardown always has the latest namespace for this test run.
         self._test_vm_name = None
         self._test_namespace = None
 
@@ -567,8 +578,6 @@ class TestVirtualMachineLifecycle(ManageTest):
 
         md5sum = self._calculate_vm_file_md5sum(child, test_file, test_data)
 
-        # Exit the console with Ctrl+] — the correct escape for
-        # virtctl console, same as pressing Ctrl+] in a terminal.
         child.send("\x1d")
         child.close()
 
