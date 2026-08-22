@@ -219,6 +219,13 @@ class PageNavigator(BaseUI):
             avoid_stale=True,
         )
         self.page_has_loaded(retries=25, sleep_time=1)
+        if self.ocp_version_full >= version.VERSION_4_23:
+            logger.info("OCP >=4.23: clicking Operators (OLMv0) tab")
+            self.do_click(
+                self.page_nav["operators_olmv0_tab"],
+                enable_screenshot=True,
+            )
+            self.page_has_loaded(retries=25, sleep_time=1)
         if self.ocp_version_full >= version.VERSION_4_9:
             self.do_click(self.page_nav["drop_down_projects"])
             self.do_click(self.page_nav["choose_all_projects"])

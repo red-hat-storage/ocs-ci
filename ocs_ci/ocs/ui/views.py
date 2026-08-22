@@ -224,7 +224,8 @@ deployment_4_9 = {
         By.CSS_SELECTOR,
     ),
     "storage_system_tab": (
-        'a[data-test-id="horizontal-link-Storage System"]',
+        'a[data-test-id="horizontal-link-Storage System"],'
+        'a[data-test="nav"][href*="storage-cluster"]',
         By.CSS_SELECTOR,
     ),
     "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
@@ -965,7 +966,14 @@ page_nav = {
     ),
     "operatorhub_page": ("OperatorHub", By.LINK_TEXT),
     "software_catalog": ("Software Catalog", By.LINK_TEXT),
-    "installed_operators_page": ("Installed Operators", By.LINK_TEXT),
+    "installed_operators_page": (
+        "//a[text()='Installed Operators'] | //a[text()='Installed Software']",
+        By.XPATH,
+    ),
+    "operators_olmv0_tab": (
+        'a[data-test="horizontal-link-Operators (OLMv0)"]',
+        By.CSS_SELECTOR,
+    ),
     "Storage": ("//button[text()='Storage']", By.XPATH),
     "persistentvolumes_page": ("PersistentVolumes", By.LINK_TEXT),
     "persistentvolumeclaims_page": ("PersistentVolumeClaims", By.LINK_TEXT),
@@ -1967,7 +1975,8 @@ add_capacity = {
         By.CSS_SELECTOR,
     ),
     "storage_system_tab": (
-        'a[data-test-id="horizontal-link-Storage System"]',
+        'a[data-test-id="horizontal-link-Storage System"],'
+        'a[data-test="nav"][href*="storage-cluster"]',
         By.CSS_SELECTOR,
     ),
     "kebab_storage_cluster": ("//button[@data-test-id='kebab-button']", By.XPATH),
