@@ -5309,7 +5309,7 @@ def ns_resource_factory(
 
 
 @pytest.fixture()
-def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory, pvc_factory):
+def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
     """
     Create a Namespace Store factory.
     Calling this fixture creates a new Namespace Store(s).
@@ -5320,13 +5320,13 @@ def namespace_store_factory(request, cld_mgr, mcg_obj, cloud_uls_factory, pvc_fa
 
     """
     return namespacestore_factory_implementation(
-        request, cld_mgr, mcg_obj, cloud_uls_factory, pvc_factory
+        request, cld_mgr, mcg_obj, cloud_uls_factory
     )
 
 
 @pytest.fixture(scope="session")
 def namespace_store_factory_session(
-    request, cld_mgr, mcg_obj_session, cloud_uls_factory_session, pvc_factory_session
+    request, cld_mgr, mcg_obj_session, cloud_uls_factory_session
 ):
     """
     Create a Namespace Store factory.
@@ -5342,7 +5342,6 @@ def namespace_store_factory_session(
         cld_mgr,
         mcg_obj_session,
         cloud_uls_factory_session,
-        pvc_factory_session,
     )
 
 
@@ -7142,12 +7141,21 @@ def mcg_account_factory_fixture(
 
     def mcg_account_factory_cleanup():
         with cluster_context():
+            cleanup_errors = []
             for acc_name in created_accounts:
                 log.info(f"Deleting MCG account {acc_name}")
-                deletion_process_output = mcg_obj_session.exec_mcg_cmd(
-                    f"account delete {acc_name}"
-                )
-                assert "Deleted" in str(deletion_process_output)
+                try:
+                    deletion_process_output = mcg_obj_session.exec_mcg_cmd(
+                        f"account delete {acc_name}"
+                    )
+                    assert "Deleted" in str(deletion_process_output)
+                except Exception as e:
+                    cleanup_errors.append(
+                        f"Failed to delete MCG account {acc_name}: {e}"
+                    )
+            assert (
+                not cleanup_errors
+            ), "Errors during MCG account cleanup:\n" + "\n".join(cleanup_errors)
 
     request.addfinalizer(mcg_account_factory_cleanup)
     return mcg_account_factory_implementation
