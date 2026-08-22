@@ -191,7 +191,8 @@ ENV_DATA:
   krkn_config:
     workloads: ["VDBENCH"]
     vdbench_config:
-      num_pvcs_per_interface: 4  # Number of PVCs per storage interface (default: 4)
+      num_rbd_pvcs: 4  # Number of RBD PVCs (default: 4)
+      num_cephfs_pvcs: 4  # Number of CephFS PVCs (default: 4)
       pvc_size: 50  # PVC size in GiB (default: 50)
       threads: 32
       size: "15g"
@@ -270,6 +271,8 @@ ENV_DATA:
 |-----------|-------------|-----------|
 | `snapshot_lifecycle` | PVC snapshot creation/deletion | Snapshot functionality |
 | `clone_lifecycle` | PVC clone creation/deletion | Clone functionality |
+| `aggressive_clone_operation` | Parallel/nested clone stress, Vdbench on clones, integrity, scale (dedicated loop) | Aggressive clone validation |
+| `aggressive_snapshot_operation` | Parallel/nested snapshot+restore stress, Vdbench on restores, integrity, scale (dedicated loop) | Aggressive snapshot validation |
 | `node_taint_churn` | Node taint/untaint operations | Node scheduling |
 | `osd_operations` | OSD start/stop/restart | Ceph OSD resilience |
 | `mds_failover` | MDS failover testing | CephFS availability |
@@ -402,7 +405,8 @@ ENV_DATA:
     workload: "VDBENCH"
     enable_verification: true
     vdbench_config:
-      num_pvcs_per_interface: 6  # Create 6 PVCs per storage type (12 total workloads)
+      num_rbd_pvcs: 6  # Create 6 RBD PVCs
+      num_cephfs_pvcs: 6  # Create 6 CephFS PVCs (12 total workloads)
       pvc_size: 100  # 100 GiB per PVC
       threads: 32
       size: "20g"
@@ -418,7 +422,8 @@ ENV_DATA:
     workload: "VDBENCH"
     enable_verification: true
     vdbench_config:
-      num_pvcs_per_interface: 2  # Only 2 PVCs per storage type (4 total workloads)
+      num_rbd_pvcs: 2  # Only 2 RBD PVCs
+      num_cephfs_pvcs: 2  # Only 2 CephFS PVCs (4 total workloads)
       pvc_size: 30  # Smaller PVCs for faster provisioning
       threads: 16
       elapsed: 300
