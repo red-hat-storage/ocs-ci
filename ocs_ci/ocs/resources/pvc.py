@@ -4,6 +4,8 @@ General PVC object
 
 import logging
 import time
+import json
+import pytest
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
@@ -181,6 +183,75 @@ class PVC(OCS):
             str: volume handle name from pv
         """
         return self.backed_pv_obj.get()["spec"]["csi"]["volumeHandle"]
+
+    def get_volume_health_annotations(self):
+        """
+        Get all volumehealth annotations from this PVC.
+
+        Returns:
+            dict: Annotation key-value pairs whose keys start
+                with VOLUME_HEALTH_ANNOTATION_PREFIX.
+        """
+        annotations = self.get().get("metadata", {}).get("annotations", {})
+        return {
+            k: v
+            for k, v in annotations.items()
+            if k.startswith(constants.VOLUME_HEALTH_ANNOTATION_PREFIX)
+        }
+
+    def wait_for_volume_health_state(
+        self, expected_state, timeout=180, interval=15, expected_count=1
+    ):
+        """
+        Poll until at least ``expected_count`` volumehealth annotations
+        report ``expected_state``.
+
+        Args:
+            expected_state (str): Target state ('healthy' or 'unhealthy')
+            timeout (int): Seconds to wait before failing
+            interval (int): Seconds between polls
+            expected_count (int): Minimum annotations that must match
+
+        Returns:
+            dict: The volumehealth annotations at the time the condition
+                was met
+
+        Raises:
+            pytest.fail: If the condition is not met within the timeout
+        """
+
+        health_annotations = {}
+        try:
+            for sample in TimeoutSampler(
+                timeout=timeout,
+                sleep=interval,
+                func=self.get_volume_health_annotations,
+            ):
+                health_annotations = sample
+                if health_annotations:
+                    matching = sum(
+                        1
+                        for v in health_annotations.values()
+                        if json.loads(v).get("state") == expected_state
+                    )
+                    if matching >= expected_count:
+                        log.info(
+                            f"Found {matching} annotation(s) with "
+                            f"state='{expected_state}' on PVC {self.name}"
+                        )
+                        return health_annotations
+                log.debug(
+                    f"Waiting for {expected_count} annotation(s) with "
+                    f"state='{expected_state}' on PVC {self.name}"
+                )
+        except TimeoutExpiredError:
+            all_annots = self.get().get("metadata", {}).get("annotations", {})
+            pytest.fail(
+                f"Expected {expected_count} annotation(s) with "
+                f"state='{expected_state}' on PVC {self.name} "
+                f"within {timeout}s. Annotations: {all_annots}"
+            )
+        return health_annotations
 
     def resize_pvc(self, new_size, verify=False, timeout=240):
         """
