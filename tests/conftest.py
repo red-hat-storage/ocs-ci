@@ -8594,8 +8594,18 @@ def discovered_apps_dr_workload_cnv(request):
         if custom_sc:
             workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
 
+        shared_already = (
+            sum(
+                1
+                for i in instances[1:]
+                if i.workload_namespace == instances[0].workload_namespace
+            )
+            if instances
+            else 0
+        )
         for index in range(pvc_vm):
-            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            config_index = shared_already + index if shared_drpc_protection else index
+            workload_details = ocsci_config.ENV_DATA[workload_key][config_index]
             workload_namespace = create_unique_resource_name("wrkld-vm", "dist")[:20]
             if shared_drpc_protection and instances:
                 workload_details["workload_namespace"] = instances[0].workload_namespace
@@ -8643,9 +8653,36 @@ def discovered_apps_dr_workload_cnv(request):
         return instances
 
     def teardown():
-        if "shared" in request.node.nodeid:
-            instances[0].delete_workload(skip_resource_deletion_verification=True)
-            instances[1].delete_workload(shared_drpc_protection=True)
+        # Detect whether all instances share the same namespace.
+        # When they do, we must delete all VMs before triggering
+        # wait_for_all_resources_deletion, otherwise pods from the
+        # remaining VMs block the wait.
+        same_namespace = len(instances) > 1 and (
+            len({i.workload_namespace for i in instances}) == 1
+        )
+        if same_namespace:
+            # Skip resource deletion verification for all instances.
+            # When the test fails mid-way (before DR unprotection), PVCs
+            # retain VGR finalizers that block deletion for 25+ minutes.
+            # Submitting all deletions without waiting and then deleting the
+            # project is more resilient — namespace deletion cascades and
+            # Ramen will release finalizers once it processes the DRPC removal.
+            for instance in instances:
+                instance.delete_workload(skip_resource_deletion_verification=True)
+            namespace = instances[0].workload_namespace
+            for cluster in utils.get_non_acm_cluster_config():
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                try:
+                    OCP().delete_project(project_name=namespace)
+                    log.info(
+                        f"Project {namespace} deleted on"
+                        f" {cluster.ENV_DATA['cluster_name']}"
+                    )
+                except Exception:
+                    log.warning(
+                        f"Failed to delete project {namespace} on"
+                        f" {cluster.ENV_DATA['cluster_name']}"
+                    )
         else:
             for instance in instances:
                 try:
