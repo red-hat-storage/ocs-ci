@@ -1,3 +1,4 @@
+import json
 import os
 import logging
 from datetime import datetime
@@ -164,6 +165,139 @@ def prune_old_df_repo_idms(keep_latest: int = 1, force_delete_pods: bool = False
     )
 
     return to_delete
+
+
+def _patch_max_openshift_version_in_annotation(annotation_value, target_version):
+    """
+    Parse a JSON annotation string containing olm.maxOpenShiftVersion
+    and replace its value with target_version.
+
+    Args:
+        annotation_value (str): JSON string from CSV annotation
+        target_version (str): New maxOpenShiftVersion value
+
+    Returns:
+        str: Updated JSON string, or None if no change was needed
+
+    """
+    try:
+        data = json.loads(annotation_value)
+    except (json.JSONDecodeError, TypeError):
+        log.warning("Failed to parse annotation value as JSON: %s", annotation_value)
+        return None
+
+    changed = False
+    if isinstance(data, list):
+        for entry in data:
+            if (
+                isinstance(entry, dict)
+                and entry.get("type") == "olm.maxOpenShiftVersion"
+            ):
+                if entry.get("value") != target_version:
+                    entry["value"] = target_version
+                    changed = True
+    elif isinstance(data, dict):
+        props = data.get("properties", [])
+        if not isinstance(props, list):
+            log.warning(
+                "Unexpected type for 'properties' in annotation: %s",
+                type(props).__name__,
+            )
+            return None
+        for entry in props:
+            if (
+                isinstance(entry, dict)
+                and entry.get("type") == "olm.maxOpenShiftVersion"
+            ):
+                if entry.get("value") != target_version:
+                    entry["value"] = target_version
+                    changed = True
+
+    return json.dumps(data) if changed else None
+
+
+def patch_csv_max_openshift_version(target_version, csv_prefixes=None, namespace=None):
+    """
+    Patch maxOpenShiftVersion in olm.properties and
+    operatorframework.io/properties annotations on ODF CSVs.
+
+    During EUS-to-EUS upgrades, ODF CSVs restrict OCP upgrades via the
+    maxOpenShiftVersion annotation. This patches the restriction so that
+    OCP can advance to the target version.
+
+    Args:
+        target_version (str): The maxOpenShiftVersion value to set
+            (e.g., "4.22")
+        csv_prefixes (list): CSV name prefixes to patch. Defaults to
+            config UPGRADE.eus_csvs_to_patch or
+            ["odf-operator", "odf-dependencies"].
+        namespace (str): Namespace where CSVs live. Defaults to
+            config ENV_DATA.cluster_namespace.
+
+    """
+    if csv_prefixes is None:
+        csv_prefixes = config.UPGRADE.get(
+            "eus_csvs_to_patch", ["odf-operator", "odf-dependencies"]
+        )
+    if namespace is None:
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+    log.info(
+        "EUS upgrade: patching maxOpenShiftVersion to %s on CSVs "
+        "matching prefixes %s in namespace %s",
+        target_version,
+        csv_prefixes,
+        namespace,
+    )
+
+    annotation_keys = ["olm.properties", "operatorframework.io/properties"]
+    csv_ocp = OCP(kind="csv", namespace=namespace)
+
+    for prefix in csv_prefixes:
+        matching_csvs = get_csvs_start_with_prefix(prefix, namespace)
+        if not matching_csvs:
+            log.warning("No CSVs found matching prefix %s", prefix)
+            continue
+
+        for csv_data in matching_csvs:
+            csv_name = csv_data["metadata"]["name"]
+            annotations = csv_data.get("metadata", {}).get("annotations", {})
+
+            for ann_key in annotation_keys:
+                ann_value = annotations.get(ann_key)
+                if not ann_value:
+                    continue
+
+                updated = _patch_max_openshift_version_in_annotation(
+                    ann_value, target_version
+                )
+                if updated is None:
+                    log.info(
+                        "No maxOpenShiftVersion change needed in %s "
+                        "annotation on CSV %s",
+                        ann_key,
+                        csv_name,
+                    )
+                    continue
+
+                escaped = json.dumps(updated)
+                patch_str = (
+                    f'{{"metadata":{{"annotations":' f'{{"{ann_key}":{escaped}}}}}}}'
+                )
+                log.info(
+                    "Patching annotation %s on CSV %s to allow "
+                    "maxOpenShiftVersion %s",
+                    ann_key,
+                    csv_name,
+                    target_version,
+                )
+                csv_ocp.patch(
+                    resource_name=csv_name,
+                    params=patch_str,
+                    format_type="merge",
+                )
+
+    log.info("EUS upgrade: maxOpenShiftVersion patch complete")
 
 
 def get_upgrade_image_info(old_csv_images, new_csv_images):
@@ -852,6 +986,16 @@ def run_ocs_upgrade(
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
     )
+
+    if config.UPGRADE.get("eus_upgrade"):
+        eus_target = config.UPGRADE.get("eus_max_ocp_version_override")
+        if eus_target:
+            patch_csv_max_openshift_version(eus_target, namespace=namespace)
+        else:
+            log.warning(
+                "EUS upgrade enabled but eus_max_ocp_version_override is not set, "
+                "skipping maxOpenShiftVersion patch"
+            )
 
     # Update values CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE and CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE
     # in rook-ceph-operator-config configmap

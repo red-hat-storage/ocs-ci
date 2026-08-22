@@ -336,6 +336,12 @@ UPGRADE:
   # Values to be set after upgrade started - used for resiliancy testing
   csi_rbd_plugin_update_strategy_max_unavailable_upgrade_middle: null
   csi_cephfs_plugin_update_strategy_max_unavailable_upgrade_middle: null
+  # EUS-to-EUS ODF upgrade settings
+  eus_upgrade: false
+  eus_max_ocp_version_override: null
+  eus_csvs_to_patch:
+    - "odf-operator"
+    - "odf-dependencies"
 
 # This section stores secret and uploaded from home dir or s3
 # for entry into this section, please email ecosystem team
