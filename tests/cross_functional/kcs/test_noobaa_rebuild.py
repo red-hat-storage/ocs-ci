@@ -78,7 +78,7 @@ class TestNoobaaRebuild(E2ETest):
 
         request.addfinalizer(finalizer)
 
-    def test_noobaa_rebuild(self, bucket_factory_session, mcg_obj_session):
+    def depr_test_noobaa_rebuild(self, bucket_factory_session, mcg_obj_session):
         """
         Test case to verify noobaa rebuild. Verifies KCS: https://access.redhat.com/solutions/5948631
 

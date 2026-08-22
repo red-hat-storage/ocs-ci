@@ -27,6 +27,10 @@ from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_fio_rw_iops,
 )
+from ocs_ci.ocs.cluster import (
+    get_ec_pool_ec_optimizations,
+    verify_ec_optimizations_unchanged,
+)
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check, run_cmd
 from ocs_ci.helpers.helpers import (
     verify_volume_deleted_in_backend,
@@ -238,6 +242,14 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         Kill ceph daemons while PVCs creation, PVCs deletion, pods creation, pods deletion
         and IO are progressing
         """
+        # Snapshot EC optimizations flags before daemon kills
+        ec_baseline_pools, ec_baseline_default = get_ec_pool_ec_optimizations()
+        if ec_baseline_pools:
+            log.info(
+                f"FastEC baseline: pools={ec_baseline_pools}, "
+                f"default={ec_baseline_default}"
+            )
+
         daemons_to_kill = [
             "mgr",
             "mon",
@@ -696,3 +708,12 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
         # Check ceph status
         ceph_health_check(namespace=config.ENV_DATA["cluster_namespace"])
         log.info("Ceph cluster health is OK")
+
+        # Verify EC optimizations flags persisted across daemon kills
+        if ec_baseline_pools:
+            log.info("Verifying EC optimizations flags after daemon kills")
+            verify_ec_optimizations_unchanged(
+                ec_baseline_pools,
+                ec_baseline_default,
+                context="daemon kill (mgr, mon, osd, mds)",
+            )
