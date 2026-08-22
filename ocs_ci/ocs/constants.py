@@ -310,6 +310,30 @@ L2_ADVERTISEMENT = "L2Advertisement"
 METALLB_INSTANCE = "MetalLB"
 NETWORK_ATTACHMENT_DEFINITION = "NetworkAttachmentDefinition"
 NETWORK_POLICY = "NetworkPolicy"
+
+ODF_CSV_PREFIXES_FOR_NETWORK_POLICY_RBAC = [
+    "odf-operator",
+    "ocs-operator",
+    "mcg-operator",
+    "rook-ceph-operator",
+    "cephcsi-operator",
+    "ocs-client-operator",
+    "odf-csi-addons-operator",
+]
+
+ODF_OPERATOR_SA_FOR_NETWORK_POLICY = {
+    "rook-ceph-operator": "rook-ceph-system",
+    "cephcsi-operator": "ceph-csi-controller-manager",
+    "mcg-operator": "noobaa",
+    "ocs-operator": "ocs-operator",
+    "odf-operator": "odf-operator-controller-manager",
+    "ocs-client-operator": "ocs-client-operator-controller-manager",
+    "odf-csi-addons-operator": "csi-addons-controller-manager",
+}
+
+NETWORK_POLICY_REQUIRED_VERBS = {"create", "delete"}
+NETWORK_POLICY_REQUIRED_UPDATE_VERBS = {"update", "patch"}
+
 DAEMONSET = "DaemonSet"
 INGRESSCONTROLLER = "ingresscontroller"
 PROVISIONING = "Provisioning"
