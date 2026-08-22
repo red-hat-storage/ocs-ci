@@ -1,0 +1,6 @@
+---
+# This configuration file enables the allow-all NetworkPolicy override
+# in the storage namespace before operator installation and upgrade.
+# Use this when default deny policies block ODF operator traffic.
+DEPLOYMENT:
+  disable_networkpolicy: True
