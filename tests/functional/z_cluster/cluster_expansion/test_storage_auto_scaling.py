@@ -31,6 +31,7 @@ from ocs_ci.helpers.osd_resize import (
     check_resize_osd_pre_conditions,
     update_resize_osd_count,
 )
+from ocs_ci.helpers.pod_helpers import run_io_on_small_groups_of_pods
 from ocs_ci.helpers.storage_auto_scaler import (
     wait_for_auto_scaler_status,
     generate_default_scaling_threshold,
@@ -40,7 +41,6 @@ from ocs_ci.helpers.storage_auto_scaler import (
 )
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
-    calculate_md5sum_of_pod_files,
     verify_md5sum_on_pod_files,
     get_ocs_operator_pod,
     delete_pods,
@@ -227,41 +227,16 @@ class TestStorageAutoscalerBase(ManageTest):
             self.is_cleanup_cluster = True
             config.RUN["cleanup_cluster_time"] = time.time()
 
-    def run_io_on_pods(self, pods, size="1G", runtime=30):
-        """
-        Run IO on the pods
-
-        Args:
-            pods (list): The list of pods for running the IO
-            size (str): Size in MB or Gi, e.g. '200M'. Default value is '1G'
-            runtime (int): The number of seconds IO should run for
-
-        """
-        logger.info("Starting IO on all pods")
-        for pod_obj in pods:
-            storage_type = (
-                "block"
-                if pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK
-                else "fs"
-            )
-            rate = f"{random.randint(1, 5)}M"
-            pod_obj.run_io(
-                storage_type=storage_type,
-                size=size,
-                runtime=runtime,
-                rate=rate,
-                fio_filename=self.pod_file_name,
-                end_fsync=1,
-            )
-            logger.info(f"IO started on pod {pod_obj.name}")
-        logger.info("Started IO on all pods")
-
     def prepare_data_before_auto_scaling(
         self, create_resources_for_integrity=True, run_io_in_bg=True
     ):
         """
         Prepare the data before the storage-auto-scaling is triggered.
         Creates PVCs/pods and runs I/O for data integrity or background load testing.
+
+        IO is run on the pods in small staggered groups (instead of all pods at
+        once) to avoid overwhelming the Ceph OSDs with a simultaneous write burst,
+        which can cause slow ops and RBD watch/I/O errors on small clusters.
 
         Args:
             create_resources_for_integrity (bool): If True, create resources for integrity check. False, otherwise.
@@ -275,10 +250,10 @@ class TestStorageAutoscalerBase(ManageTest):
                 pvc_size=pvc_size, num_of_rbd_pvc=6, num_of_cephfs_pvc=6
             )
             logger.info("Run IO on the pods for integrity check")
-            self.run_io_on_pods(self.pods_for_integrity_check)
-            logger.info("Calculate the md5sum of the pods for integrity check")
-            calculate_md5sum_of_pod_files(
-                self.pods_for_integrity_check, self.pod_file_name
+            run_io_on_small_groups_of_pods(
+                self.pods_for_integrity_check,
+                self.pod_file_name,
+                do_md5sum=True,
             )
 
         if run_io_in_bg:
@@ -290,7 +265,12 @@ class TestStorageAutoscalerBase(ManageTest):
             logger.info(
                 f"Run IO on the pods in the test background for {runtime} seconds"
             )
-            self.run_io_on_pods(self.pods_for_run_io, size="2G", runtime=runtime)
+            run_io_on_small_groups_of_pods(
+                self.pods_for_run_io,
+                self.pod_file_name,
+                size="2G",
+                runtime=runtime,
+            )
 
     def verify_post_resize_osd_steps(self):
         """
@@ -401,7 +381,9 @@ class TestStorageAutoscalerBase(ManageTest):
             self.pvcs3, self.pods_for_run_io = self.create_pvcs_and_pods(
                 pvc_size=pvc_size, num_of_rbd_pvc=6, num_of_cephfs_pvc=6
             )
-            self.run_io_on_pods(self.pods_for_run_io, size="2G")
+            run_io_on_small_groups_of_pods(
+                self.pods_for_run_io, self.pod_file_name, size="2G"
+            )
 
         logger.info("Final cluster health check after SmartScaling validation...")
         self.sanity_helpers.health_check()
