@@ -6079,17 +6079,41 @@ def enable_huge_pages():
         + config.ENV_DATA["master_replicas"]
         + config.ENV_DATA.get("infra_replicas", 0)
     )
-    timeout = 1200
     if not len(get_nodes(node_type=constants.WORKER_MACHINE)):
+        timeout = _mcp_timeout_for_node_count(num_nodes)
         wait_for_machineconfigpool_status(
             node_type=constants.MASTER_MACHINE, timeout=timeout
         )
     else:
-        if num_nodes >= 6:
-            timeout = 2400
+        timeout = _mcp_timeout_for_node_count(num_nodes)
         wait_for_machineconfigpool_status(
             node_type=constants.WORKER_MACHINE, timeout=timeout
         )
+
+
+def _mcp_timeout_for_node_count(num_nodes):
+    """
+    Return an appropriate MachineConfigPool wait timeout based on cluster size.
+
+    Thresholds:
+        < 6  nodes  ->  1200 s (20 min)
+        6-11 nodes  ->  2400 s (40 min)
+        12-17 nodes ->  3600 s (60 min)
+        >= 18 nodes ->  4440 s (74 min)
+
+    Args:
+        num_nodes (int): Total number of nodes in the cluster.
+
+    Returns:
+        int: Timeout in seconds.
+    """
+    if num_nodes >= 18:
+        return 4440
+    if num_nodes >= 12:
+        return 3600
+    if num_nodes >= 6:
+        return 2400
+    return 1200
 
 
 def disable_huge_pages():
@@ -6101,7 +6125,24 @@ def disable_huge_pages():
     exec_cmd(f"oc delete -f {constants.HUGE_PAGES_TEMPLATE}")
     time.sleep(10)
     log.info("Waiting for machine config to be ready")
-    wait_for_machineconfigpool_status(node_type=constants.WORKER_MACHINE, timeout=1200)
+    # Wait for Master nodes ready state when Compact mode 3M 0W config
+    from ocs_ci.ocs.node import get_nodes
+
+    num_nodes = (
+        config.ENV_DATA["worker_replicas"]
+        + config.ENV_DATA["master_replicas"]
+        + config.ENV_DATA.get("infra_replicas", 0)
+    )
+    if not len(get_nodes(node_type=constants.WORKER_MACHINE)):
+        timeout = _mcp_timeout_for_node_count(num_nodes)
+        wait_for_machineconfigpool_status(
+            node_type=constants.MASTER_MACHINE, timeout=timeout
+        )
+    else:
+        timeout = _mcp_timeout_for_node_count(num_nodes)
+        wait_for_machineconfigpool_status(
+            node_type=constants.WORKER_MACHINE, timeout=timeout
+        )
 
 
 def encode(message):
