@@ -6,9 +6,11 @@ lokistack stack
 import logging
 import base64
 
+import pytest
+
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility import templating
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.utils import (
@@ -404,7 +406,6 @@ def create_clusterlogforwarder(yaml_file, skip_resource_exists=False):
     )
     pvc_status = pvc_obj.wait_for_resource(
         condition=constants.STATUS_BOUND,
-        resource_count=nodes_in_cluster,
         timeout=150,
         sleep=5,
     )
@@ -549,6 +550,19 @@ def install_logging(skip_resource_exists=False):
 
     logger.info("Configuring Openshift-logging")
 
+    # Check if cluster-logging operator is available in the catalog
+    try:
+        package_manifest = PackageManifest(
+            resource_name="cluster-logging",
+            selector="catalog=redhat-operators",
+        )
+        package_manifest.get()  # Verify it exists
+    except ResourceNotFoundError:
+        pytest.skip(
+            "cluster-logging operator not available in catalog. "
+            "Skipping openshift-logging tests."
+        )
+
     # Gets OCP version to align logging version to OCP version
     package_manifest = PackageManifest(
         resource_name=constants.CLUSTERLOGGING_SUBSCRIPTION,
@@ -605,22 +619,17 @@ def install_logging(skip_resource_exists=False):
 
     ocp_logging_obj.get_obc()
 
-    # Creating secret
-    sample = TimeoutSampler(
-        timeout=500,
-        sleep=20,
-        func=run_cmd_verify_cli_output,
-        cmd=(
-            f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get configmap"
-            f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_PORT}}'"
-        ),
-    )
-    if not sample.wait_for_func_status(result=True):
-        raise Exception("Failed to get configmap")
-
+    # Wait for ConfigMap to be created by OBC provisioner
     configmap_obj = ocp.OCP(
         kind=constants.CONFIGMAP, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
+    if not configmap_obj.check_resource_existence(
+        resource_name=constants.OBJECT_BUCKET_CLAIM,
+        should_exist=True,
+        timeout=180,
+    ):
+        raise Exception("Failed to get configmap")
+
     cm_dict = configmap_obj.get(resource_name=constants.OBJECT_BUCKET_CLAIM)
 
     access_key_cmd = (

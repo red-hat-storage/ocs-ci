@@ -123,6 +123,7 @@ class Testopenshiftloggingonocs(E2ETest):
         return lokistack_route, token.stdout.decode("utf-8")
 
     @retry(ModuleNotFoundError, tries=5, delay=200, backoff=1)
+    @retry((IndexError, AssertionError), tries=5, delay=200, backoff=1)
     def validate_project_exists_in_logs(self, project):
         """
         This function checks whether the new project exists in the
@@ -168,6 +169,14 @@ class Testopenshiftloggingonocs(E2ETest):
             logger.error(f"Error in curl response: {error_msg} (Type: {error_type})")
             raise AssertionError(
                 f"Curl query returned error: {error_msg} (Type: {error_type}). "
+                f"Full response: {curl_output_str}"
+            )
+
+        # Check if any results were returned
+        if not curl_output.get("data", {}).get("result"):
+            raise AssertionError(
+                f"No logs found for namespace {project} in LokiStack. "
+                f"Query may need more time for log collection/indexing. "
                 f"Full response: {curl_output_str}"
             )
 
