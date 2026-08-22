@@ -1289,7 +1289,10 @@ GATHER_COMMANDS_VERSION = {
         ),
         "OTHERS_EXTERNAL": list(
             set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
-            - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
+            - set(
+                GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_20
+            )
         ),
     },
 }
