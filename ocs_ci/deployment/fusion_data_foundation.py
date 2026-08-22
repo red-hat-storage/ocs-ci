@@ -102,10 +102,37 @@ class FusionDataFoundationDeployment:
         lso_operator = LocalStorageOperator(create_catalog=True)
         lso_operator.deploy()
 
+    def _is_mirror_already_configured(self):
+        """
+        Check whether mirroring has already been completed externally.
+
+        Returns True when both ``DEPLOYMENT.disconnected`` and
+        ``DEPLOYMENT.disconnected_mirror_completed`` are set to True, meaning
+        the mirror registry is already configured and IDMS/ITMS resources must
+        not be re-created.
+
+        Returns:
+            bool: True if mirroring is already done and should be skipped.
+
+        """
+        return config.DEPLOYMENT.get("disconnected") and config.DEPLOYMENT.get(
+            "disconnected_mirror_completed"
+        )
+
     def create_image_tag_mirror_set(self):
         """
         Create or update ImageTagMirrorSet.
+
+        Skipped when ``DEPLOYMENT.disconnected`` and
+        ``DEPLOYMENT.disconnected_mirror_completed`` are both True (mirroring
+        was completed externally, e.g. via fdf-mirror entrypoint).
         """
+        if self._is_mirror_already_configured():
+            logger.info(
+                "Skipping ImageTagMirrorSet creation: disconnected mirror already configured"
+            )
+            return
+
         logger.info("Creating or Updating FDF ImageTagMirrorSet")
 
         imagetag_file = constants.FDF_IMAGE_TAG_MIRROR_SET
@@ -118,11 +145,21 @@ class FusionDataFoundationDeployment:
         """
         Create or update ImageDigestMirrorSet.
 
+        Skipped when ``DEPLOYMENT.disconnected`` and
+        ``DEPLOYMENT.disconnected_mirror_completed`` are both True (mirroring
+        was completed externally, e.g. via fdf-mirror entrypoint).
+
         Args:
             upgrade (bool): If True, use upgrade-specific config values for
                 registry and image tag. Default is False.
 
         """
+        if self._is_mirror_already_configured():
+            logger.info(
+                "Skipping ImageDigestMirrorSet creation: disconnected mirror already configured"
+            )
+            return
+
         logger.info("Creating FDF ImageDigestMirrorSet")
         image_digest_mirror_set = extract_image_digest_mirror_set(upgrade=upgrade)
 
@@ -539,7 +576,15 @@ def storagecluster_health_check():
 def wait_for_storageclusters_crd():
     """
     Wait for the storageclusters CRD to exist.
+    On IBM HCI platform storage is managed via OdfCluster CR, not
+    StorageCluster, so the storageclusters CRD is not expected to exist.
     """
+    if config.ENV_DATA.get("platform", "").lower() == constants.IBM_HCI_PLATFORM:
+        logger.info(
+            "IBM HCI platform detected, storage managed by OdfCluster CR, "
+            "skipping StorageClusters CRD wait"
+        )
+        return
     logger.info("Waiting for the StorageClusters CRD to exist")
 
     @retry((CommandFailed, AssertionError, KeyError), 30, 30, backoff=1)
