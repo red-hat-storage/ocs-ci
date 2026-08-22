@@ -166,6 +166,7 @@ from ocs_ci.utility.deployment import (
     workaround_mark_disks_as_ssd,
 )
 from ocs_ci.utility.flexy import load_cluster_info
+from ocs_ci.deployment.fdf_standalone import create_fdf_standalone_catalog_source
 from ocs_ci.utility.networking import (
     annotate_worker_nodes_with_mon_ip,
 )
@@ -1353,7 +1354,17 @@ class Deployment(object):
         rosa_hcp_non_ga = platform == constants.ROSA_HCP_PLATFORM and bool(
             config.DEPLOYMENT.get("ocs_registry_image")
         )
-        if config.DEPLOYMENT.get("live_deployment") and not rosa_hcp_non_ga:
+        if config.DEPLOYMENT.get("fdf_standalone_deployment", False):
+            # Standalone FDF (RHSTOR-8840): resolve odf-operator from the IBM
+            # catalog source created by StandaloneFDFCatalogSource, not redhat-operators.
+            subscription_yaml_data["spec"][
+                "source"
+            ] = constants.FDF_STANDALONE_CATALOG_SOURCE_NAME
+            logger.info(
+                "FDF standalone: subscription source set to '%s'",
+                constants.FDF_STANDALONE_CATALOG_SOURCE_NAME,
+            )
+        elif config.DEPLOYMENT.get("live_deployment") and not rosa_hcp_non_ga:
             subscription_yaml_data["spec"]["source"] = config.DEPLOYMENT.get(
                 "live_content_source", defaults.LIVE_CONTENT_SOURCE
             )
@@ -1525,6 +1536,19 @@ class Deployment(object):
             simulate_full_ceph_bluestore_process_on_wnodes()
             add_new_disks_for_lso = False
 
+        # Standalone FDF (RHSTOR-8840): create the IBM catalog source BEFORE
+        # the ui_deployment early-return so the ibm-operators CatalogSource is
+        # present and READY regardless of whether the rest of the install is
+        # driven by the UI or the CLI path.  deployment_with_ui() will then
+        # find the CatalogSource already READY and skip its own
+        # create_catalog_source() call (see that method below).
+        fdf_standalone = config.DEPLOYMENT.get("fdf_standalone_deployment", False)
+        if fdf_standalone:
+            logger.test_step(
+                "Create FDF standalone CatalogSource (ibm-operators) and wait READY"
+            )
+            create_fdf_standalone_catalog_source()
+
         if ui_deployment and ui_deployment_conditions():
             log_step("Start ODF deployment with UI")
             self.deployment_with_ui()
@@ -1577,8 +1601,14 @@ class Deployment(object):
         upgrade = config.UPGRADE.get("upgrade", False)
         rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
         rosa_hcp_non_ga = rosa_hcp and bool(config.DEPLOYMENT.get("ocs_registry_image"))
-        if (not live_deployment or rosa_hcp_non_ga) and not (
-            stage_testing and konflux_build and not rosa_hcp
+        # fdf_standalone CatalogSource is created above (before ui_deployment
+        # early-return) so it is available for both UI and CLI paths.
+        # Here we only need to fall through to the normal OCS catalog source
+        # when fdf_standalone is NOT set.
+        if (
+            not fdf_standalone
+            and (not live_deployment or rosa_hcp_non_ga)
+            and not (stage_testing and konflux_build and not rosa_hcp)
         ):
             log_step("Create catalog source and wait it to be READY")
             create_catalog_source(image)
@@ -2064,7 +2094,16 @@ class Deployment(object):
         from ocs_ci.ocs.ui.deployment_ui import DeploymentUI
 
         live_deployment = config.DEPLOYMENT.get("live_deployment")
-        if not live_deployment:
+        fdf_standalone = config.DEPLOYMENT.get("fdf_standalone_deployment", False)
+        if fdf_standalone:
+            # ibm-operators CatalogSource was already created and verified READY
+            # by create_fdf_standalone_catalog_source() before this method was
+            # called — nothing to do here.
+            logger.info(
+                "FDF standalone: ibm-operators CatalogSource already created, "
+                "skipping create_catalog_source()"
+            )
+        elif not live_deployment:
             create_catalog_source()
 
         # Complete all CLI prep work (LSO catalog, disk attachment) before
@@ -2146,12 +2185,18 @@ class Deployment(object):
 
         if not config.DEPLOYMENT.get("multi_storagecluster"):
             live_deployment = config.DEPLOYMENT.get("live_deployment")
+            fdf_standalone = config.DEPLOYMENT.get("fdf_standalone_deployment", False)
             logger.info("Deploying OCS with external mode RHCS")
             ui_deployment = config.DEPLOYMENT.get("ui_deployment")
             if not ui_deployment:
                 logger.info("Creating namespace and operator group.")
                 run_cmd(f"oc apply -f {constants.OLM_YAML}")
-            if not live_deployment:
+            if fdf_standalone:
+                logger.test_step(
+                    "Create FDF standalone CatalogSource (ibm-operators) and wait READY"
+                )
+                create_fdf_standalone_catalog_source()
+            elif not live_deployment:
                 create_catalog_source(image)
             self.subscribe_ocs()
             operator_selector = get_selector_for_ocs_operator()

@@ -306,7 +306,8 @@ def get_selector_for_ocs_operator():
             return constants.OPERATOR_INTERNAL_SELECTOR
     except CommandFailed:
         log.info("Internal catalog source not found!")
-    # TODO: we might need to limit this to ODF only as FDF might come from different source
+    if config.DEPLOYMENT.get("fdf_standalone_deployment", False):
+        return constants.FDF_STANDALONE_OPERATOR_SELECTOR
     return constants.REDHAT_OPERATOR_SELECTOR
 
 
