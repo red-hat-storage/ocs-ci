@@ -168,6 +168,64 @@ class DRPC(OCP):
         )
         return last_kubeobject_protection_time
 
+    def get_dryrun_annotation(self):
+        """
+        Return the current value of the test-failover-dryrun annotation on this
+        DRPC, or None if the annotation is absent.
+
+        Returns:
+            str | None: "true" when dryRun is active, None when the annotation
+                        has been removed (i.e. after revert/promote completes).
+        """
+        annotations = self.get().get("metadata", {}).get("annotations", {}) or {}
+        return annotations.get(constants.DRPC_TEST_FAILOVER_DRYRUN_ANNOTATION)
+
+    def get_abort_dryrun_patch(self):
+        """
+        Build and return the correct DRPC merge-patch string to abort a dryRun
+        failover, based on the last-action and last-app-deployment-cluster
+        annotations recorded on this DRPC before dryRun was triggered.
+
+        Abort rules (from the dryRun design spec §5.5):
+          - last-action = ""  / absent (Deployed state):
+                {"spec":{"action":null,"failoverCluster":null,"dryRun":false}}
+          - last-action = "Failover":
+                {"spec":{"action":"Failover",
+                         "failoverCluster":"<last-app-deployment-cluster>",
+                         "dryRun":false}}
+          - last-action = "Relocate":
+                {"spec":{"action":"Relocate",
+                         "preferredCluster":"<last-app-deployment-cluster>",
+                         "dryRun":false}}
+
+        Returns:
+            str: JSON merge-patch string ready to pass to drpc_obj.patch()
+        """
+        annotations = self.get().get("metadata", {}).get("annotations", {}) or {}
+        last_action = annotations.get(constants.DRPC_LAST_ACTION_ANNOTATION, "")
+        last_cluster = annotations.get(
+            constants.DRPC_LAST_APP_DEPLOYMENT_CLUSTER_ANNOTATION, ""
+        )
+        logger.info(
+            f"DRPC '{self.resource_name}': last-action={last_action!r}, "
+            f"last-app-deployment-cluster={last_cluster!r}"
+        )
+        if last_action == constants.ACTION_FAILOVER:
+            return (
+                f'{{"spec":{{"action":"{constants.ACTION_FAILOVER}",'
+                f'"failoverCluster":"{last_cluster}",'
+                f'"dryRun":false}}}}'
+            )
+        elif last_action == constants.ACTION_RELOCATE:
+            return (
+                f'{{"spec":{{"action":"{constants.ACTION_RELOCATE}",'
+                f'"preferredCluster":"{last_cluster}",'
+                f'"dryRun":false}}}}'
+            )
+        else:
+            # Deployed state — clear action and failoverCluster entirely
+            return '{"spec":{"action":null,"failoverCluster":null,"dryRun":false}}'
+
 
 def get_drpc_name(namespace, switch_ctx=None):
     """

@@ -148,6 +148,8 @@ STATUS_FAILEDOVER = "FailedOver"
 STATUS_RELOCATED = "Relocated"
 STATUS_RELOCATING = "Relocating"
 STATUS_DELETING = "Deleting"
+STATUS_TESTING_FAILOVER = "TestingFailover"
+STATUS_CLEANING_UP = "Cleaning Up"
 STATUS_CONTAINER_STATUS_UNKNOWN = "ContainerStatusUnknown"
 STATUS_WAITFORUSERTOCLEANUP = "WaitOnUserToCleanUp"
 STATUS_POWERON = "ON"
@@ -3680,6 +3682,25 @@ SPACE = " "
 # DR actions
 ACTION_FAILOVER = "Failover"
 ACTION_RELOCATE = "Relocate"
+
+# DryRun (test-failover) annotation key — same key is used on DRPC and VRG
+# DRPC: present with value "true" while dryRun active; deleted on exit
+# VRG:  present with value "true" while dryRun active; set to "false" on exit
+DRPC_TEST_FAILOVER_DRYRUN_ANNOTATION = (
+    "drplacementcontrol.ramendr.openshift.io/test-failover-dryrun"
+)
+
+# Ramen annotations used to track DR state on the DRPC
+# last-action: "Failover", "Relocate", or "" (empty/absent = Deployed)
+DRPC_LAST_ACTION_ANNOTATION = "ramendr.openshift.io/last-action"
+# last-app-deployment-cluster: cluster the workload was last deployed on
+DRPC_LAST_APP_DEPLOYMENT_CLUSTER_ANNOTATION = (
+    "ramendr.openshift.io/last-app-deployment-cluster"
+)
+
+# Labels applied by Ramen to every VolumeSnapshot created during a dryRun
+DRYRUN_SNAPSHOT_LABEL = "ramendr.openshift.io/dry-run-snapshot"
+DRYRUN_VRG_LABEL = "ramendr.openshift.io/dry-run-vrg"
 
 # Longevity constants
 STAGE_0_NAMESPACE = "ever-running-project"
