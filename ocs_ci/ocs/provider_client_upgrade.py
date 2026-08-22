@@ -5,7 +5,13 @@ All provider client operator upgrades implemented here
 
 import logging
 
-from ocs_ci.deployment.hub_spoke import HostedODF, HostedClients
+from ocs_ci.deployment.hub_spoke import (
+    HostedODF,
+    HostedFDF,
+    HostedClients,
+    clear_fdf_catalog_image_cache,
+    is_fdf_on_provider,
+)
 from ocs_ci.ocs.dr_upgrade import DRUpgrade
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocs_upgrade
@@ -25,6 +31,19 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.deployment.helpers.lso_helpers import lso_upgrade
 
 log = logging.getLogger(__name__)
+
+
+def _is_fdf_upgrade():
+    """
+    Return True when this upgrade run targets FDF rather than ODF.
+
+    Checks the explicit ``product_type`` config key first (set via
+    ``--product-type fdf``). Falls back to a live cluster probe so that
+    ad-hoc runs without the CLI flag still route correctly.
+    """
+    if config.ENV_DATA.get("product_type") == "fdf":
+        return True
+    return is_fdf_on_provider()
 
 
 @skipif_ocs_version("<4.15")
@@ -139,41 +158,98 @@ class OperatorUpgrade(ProviderUpgrade):
 
     def bump_ocs_version_on_clients(self, cluster_names=None):
         """
-        Bump the OCS version to the latest version available in the registry
+        Bump the ODF/FDF catalog on all HCP client clusters.
+
+        For ODF: updates the ocs-catalogsource image tag to the target version.
+        For FDF: patches the isf-data-foundation-catalog with the post-upgrade
+        image resolved from the provider (mirror-resolved for offline racks).
 
         Args:
-            cluster_names (list): List of cluster names to upgrade. If None, all clusters will be upgraded.
+            cluster_names (list): Cluster names to update. Defaults to all
+                hci_client clusters from config.
 
         """
-        log.info(
-            "Bumping OCS version to the latest available in the registry of client clusters"
-        )
+        log.info("Bumping OCS/FDF catalog version on client clusters")
 
         if not cluster_names:
-            cluster_names = list(config.ENV_DATA.get("clusters").keys())
+            cluster_names = list((config.ENV_DATA.get("clusters") or {}).keys())
+        if not cluster_names:
+            from ocs_ci.deployment.helpers.hypershift_base import (
+                get_hosted_cluster_names,
+            )
+
+            cluster_names = get_hosted_cluster_names()
+
+        is_fdf = _is_fdf_upgrade()
 
         for cluster_name in cluster_names:
-            log.info(
-                f"Validate ODF client operator installed on hosted OCP cluster '{cluster_name}'"
-            )
+            log.info(f"Bumping catalog on hosted OCP cluster '{cluster_name}'")
             try:
-                hosted_odf = HostedODF(cluster_name)
-                if not hosted_odf.odf_client_installed():
-                    log.info(
-                        f"ODF client operator not installed on HCP cluster '{cluster_name}', skipping this client"
+                if is_fdf:
+                    hosted_odf = HostedFDF(cluster_name)
+                    if not hosted_odf.odf_client_installed():
+                        log.info(
+                            f"FDF client operator not installed on HCP cluster "
+                            f"'{cluster_name}', skipping this client"
+                        )
+                        continue
+                    hosted_odf.create_catalog_source(reapply=True)
+                else:
+                    hosted_odf = HostedODF(cluster_name)
+                    if not hosted_odf.odf_client_installed():
+                        log.info(
+                            f"ODF client operator not installed on HCP cluster "
+                            f"'{cluster_name}', skipping this client"
+                        )
+                        continue
+                    hosted_odf.create_catalog_source(
+                        reapply=True,
+                        odf_version_tag=f"latest-stable-{self.upgrade_version}",
                     )
-                    continue
-                hosted_odf.create_catalog_source(
-                    reapply=True,
-                    odf_version_tag=f"latest-stable-{self.upgrade_version}",
-                )
             except Exception as e:
-                # we don't want to abort the upgrade process if one client upgrade fails because:
-                # It will be easier to address issue manually with one client
-                # It allows to run negative tests, when one client fails to upgrade
+                # Non-fatal: easier to fix one client manually; also enables
+                # negative tests where a single client is expected to fail.
                 log.error(
-                    f"Failed to bump ODF client operator version on hosted OCP cluster '{cluster_name}': {e}"
+                    f"Failed to bump catalog on hosted OCP cluster '{cluster_name}': {e}"
                 )
+
+    def verify_fdf_clients_upgraded(self, cluster_names=None):
+        """
+        Verify that FDF client operator CSVs are Succeeded on all HCP clusters.
+
+        Called after the provider FDF upgrade and catalog push so we confirm
+        that the auto-upgrade propagated to every hosted client cluster.
+
+        Args:
+            cluster_names (list): Cluster names to check. Defaults to all
+                hci_client clusters from config.
+
+        Raises:
+            AssertionError: If one or more client clusters did not upgrade.
+        """
+        if not cluster_names:
+            cluster_names = list((config.ENV_DATA.get("clusters") or {}).keys())
+
+        results = []
+        for cluster_name in cluster_names:
+            log.info(f"Verifying FDF client upgrade on HCP cluster '{cluster_name}'")
+            try:
+                hosted_fdf = HostedFDF(cluster_name)
+                client_upgraded = hosted_fdf.odf_client_installed()
+                results.append(client_upgraded)
+                if client_upgraded:
+                    log.info(f"FDF client CSVs Succeeded on '{cluster_name}'")
+                else:
+                    log.error(f"FDF client CSVs not all Succeeded on '{cluster_name}'")
+            except Exception as e:
+                log.error(
+                    f"Failed to verify FDF client upgrade on '{cluster_name}': {e}"
+                )
+                results.append(False)
+
+        assert all(
+            results
+        ), "FDF client upgrade verification failed on one or more HCP clusters"
 
 
 class KubevirtClusterUpgrade(ProviderUpgrade):
@@ -198,20 +274,78 @@ class ProviderClusterOperatorUpgrade(ProviderUpgrade):
 
     def run_provider_upgrade(self):
         """
-        This method is for running the upgrade of ocs, metallb, acm and cnv opertaors
+        Upgrade all operators on the provider cluster, routing between ODF and
+        FDF paths based on product_type config or runtime detection.
+
+        ODF path (existing behaviour, unchanged):
+            1. Prune old IDMS
+            2. Bump OCS catalog on clients
+            3. OCS upgrade on provider
+            4. Propagate IDMS to hosted clusters
+            5. Upgrade supporting operators (MetalLB, CNV, ACM, LSO)
+
+        FDF path:
+            1. Upgrade Fusion + FDF operator on provider (ITMS/IDMS handled
+               inside FDFUpgrade.run_upgrade() for offline racks)
+            2. Invalidate the cached FDF catalog image
+            3. Push updated FDF catalog to client clusters (mirror-resolved
+               image for offline racks)
+            4. Propagate IDMS mirror config to hosted clusters
+            5. Verify FDF auto-upgraded on all client clusters
+            6. Upgrade supporting operators (MetalLB, CNV, ACM, LSO)
         """
         try:
             log.info("Starting the operator upgrade process...")
             operator_upgrade = OperatorUpgrade()
-            # delete old idms, if exist from the previous upgrades
-            prune_old_df_repo_idms(force_delete_pods=True)
-            # Bump OCS version on clients. This function will not fail upgrade if bump of any client fails
-            operator_upgrade.bump_ocs_version_on_clients()
-            ocs_upgrade.run_ocs_upgrade()
+            is_fdf = _is_fdf_upgrade()
 
-            hosted_clients = HostedClients()
-            hosted_clients.apply_idms_to_hosted_clusters()
+            if is_fdf:
+                log.info("FDF detected -- running FDF provider upgrade path")
 
+                from ocs_ci.deployment.fusion_data_foundation import (
+                    FusionDataFoundationDeployment,
+                )
+                from ocs_ci.ocs.fdf_upgrade import FDFUpgrade
+
+                # Step 1: Upgrade Fusion + FDF operator on the provider.
+                # For offline racks this also creates ITMS/IDMS, waits for
+                # MCP, and patches FusionServiceDefinition.
+                namespace = config.ENV_DATA["cluster_namespace"]
+                fdf_deployment = FusionDataFoundationDeployment()
+                fdf_version = fdf_deployment.get_installed_version()
+                if fdf_version.startswith("v"):
+                    fdf_version = fdf_version[1:]
+                FDFUpgrade(
+                    namespace=namespace,
+                    version_before_upgrade=fdf_version,
+                ).run_upgrade()
+
+                # Step 2: Invalidate cached catalog image so clients get the
+                # post-upgrade image from the provider on the next fetch.
+                clear_fdf_catalog_image_cache()
+
+                # Step 3: Push updated FDF catalog to client clusters.
+                # For offline racks the image is resolved through the
+                # provider's ITMS before being sent to clients.
+                operator_upgrade.bump_ocs_version_on_clients()
+
+                # Step 4: Propagate IDMS mirror config to hosted clusters so
+                # client nodes can pull FDF operator images from local mirrors.
+                hosted_clients = HostedClients()
+                hosted_clients.apply_idms_to_hosted_clusters()
+
+                # Step 5: Verify FDF auto-upgraded on all client clusters.
+                operator_upgrade.verify_fdf_clients_upgraded()
+            else:
+                # ODF path (existing logic, unchanged)
+                prune_old_df_repo_idms(force_delete_pods=True)
+                operator_upgrade.bump_ocs_version_on_clients()
+                ocs_upgrade.run_ocs_upgrade()
+
+                hosted_clients = HostedClients()
+                hosted_clients.apply_idms_to_hosted_clusters()
+
+            # Step 6: Upgrade supporting operators (common to both paths).
             operator_upgrade.run_operators_upgrade()
             log.info("Operator upgrade completed successfully.")
         except Exception as e:
