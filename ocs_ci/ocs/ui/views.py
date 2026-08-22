@@ -1856,6 +1856,36 @@ acm_configuration_4_21 = {
 }
 
 acm_configuration_4_22 = {
+    # OCP 4.22 Fleet Management perspective: nav entries are sidebar links, not
+    # collapsible buttons.  Override both keys so navigate_data_services() uses
+    # the correct element type instead of the pre-4.22 <button> XPath.
+    # Notification drawer (bell icon in masthead) — alerts moved here in PF v6.
+    "notification-drawer-toggle": (
+        "//button[@data-quickstart-id='qs-masthead-notifications']",
+        By.XPATH,
+    ),
+    # Anchor both locators on the ul with aria-label="Notifications in the
+    # critical alerts group" — stable PF v6 accessibility attribute.
+    "pending-cleanup-alert-drpc-message": (
+        "//ul[@aria-label='Notifications in the critical alerts group']"
+        "//span[contains(text(), \"DRPC '{}' in namespace '{}' requires manual cleanup\")]",
+        By.XPATH,
+    ),
+    "notification-drawer-cleanup-alert-title": (
+        "//ul[@aria-label='Notifications in the critical alerts group']"
+        "//h2[normalize-space()='ApplicationCleanupPending']",
+        By.XPATH,
+    ),
+    "data-services": (
+        "//*[@data-test-id='acm-perspective-nav']//*[normalize-space()='Data Services'] | "
+        "//nav[contains(@class,'c-nav')]//a[normalize-space()='Data Services']",
+        By.XPATH,
+    ),
+    "disaster-recovery": (
+        "//*[@data-test-id='acm-perspective-nav']//*[normalize-space()='Disaster recovery'] | "
+        "//nav[contains(@class,'c-nav')]//a[normalize-space()='Disaster recovery']",
+        By.XPATH,
+    ),
     "single-perspective": (
         "//*[@id='only-one-perspective']",
         By.XPATH,
@@ -1872,6 +1902,16 @@ acm_configuration_4_22 = {
     "local-cluster_dropdown": (
         "//h2[normalize-space()='Administrator'] | "
         "//*[@data-test-id='perspective-switcher-toggle']//h2[normalize-space()='Core platform']",
+        By.XPATH,
+    ),
+    "click-fleet-management": (
+        "//button[@data-test-id='perspective-switcher-toggle']"
+        "//*[normalize-space()='Core platform']",
+        By.XPATH,
+    ),
+    "fleet-management-item": (
+        "//li[@data-test-id='perspective-switcher-menu-option']"
+        "//button[@role='option' and .//h2[normalize-space()='Fleet management']]",
         By.XPATH,
     ),
     "click-local-cluster": (
