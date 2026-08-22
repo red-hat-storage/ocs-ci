@@ -248,6 +248,58 @@ class ExpirationRule(LifecycleRule):
         return rule_dict
 
 
+class TransitionRule(LifecycleRule):
+    """
+    A class for handling the parsing of an MCG object transition rule
+
+    """
+
+    def __init__(
+        self,
+        storage_class,
+        days=None,
+        filter=LifecycleFilter(),
+        use_date=False,
+        is_enabled=True,
+    ):
+        """
+        Constructor method for the class
+
+        Args:
+            storage_class (str): Target storage class to transition to,
+                e.g. "DEEP_ARCHIVE" or "GLACIER"
+            days (int): Number of days after which the objects will transition
+                Note: Unlike expiration, transitions may use days=0
+            filter (LifecycleFilter): Optional object filter
+            use_date (bool): Whether to set a date instead of the number of days
+            is_enabled (bool): Whether the rule is enabled or not
+        """
+        super().__init__(filter=filter, is_enabled=is_enabled)
+        self.storage_class = storage_class
+        self.days = days
+        self.use_date = use_date
+
+    def as_dict(self):
+        """
+        Returns the rule as a dictionary that matches
+        the expected S3 lifecycle policy JSON format
+        """
+        rule_dict = super().as_dict()
+
+        transition = {"StorageClass": self.storage_class}
+        # Use "is not None" so that days=0 (immediate transition) is respected
+        if self.days is not None:
+            if self.use_date:
+                transition["Date"] = (
+                    datetime.datetime.now() + datetime.timedelta(days=self.days)
+                ).strftime("%Y-%m-%d")
+            else:
+                transition["Days"] = self.days
+
+        rule_dict["Transitions"] = [transition]
+        return rule_dict
+
+
 class ExpiredObjectDeleteMarkerRule(LifecycleRule):
     """
     A class for handling the parsing of an MCG expired object delete marker rule
