@@ -2072,6 +2072,27 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self.preferred_primary_cluster = config.ENV_DATA.get(
             "preferred_primary_cluster"
         ) or (get_primary_cluster_config().ENV_DATA["cluster_name"])
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            # dr_cluster_relations is a list containing cluster pairs list
+            dr_cluster_names = dr_cluster_relations[0]
+            self.preferred_secondary_cluster = [
+                cluster_name
+                for cluster_name in dr_cluster_names
+                if cluster_name != self.preferred_primary_cluster
+            ][0]
+            if is_hosted_cluster(self.preferred_primary_cluster):
+                self.preferred_primary_cluster = (
+                    constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                    + "-"
+                    + self.preferred_primary_cluster
+                )
+            if is_hosted_cluster(self.preferred_secondary_cluster):
+                self.preferred_secondary_cluster = (
+                    constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                    + "-"
+                    + self.preferred_secondary_cluster
+                )
         self.target_clone_dir = config.ENV_DATA.get(
             "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
         )
