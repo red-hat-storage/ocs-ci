@@ -44,7 +44,7 @@ class TestDisableMCGExternalService:
         logger.test_step("Scale up NooBaa endpoints (min=2, max=4)")
         noobaa_ocp_obj.patch(
             resource_name="noobaa",
-            params='{"spec": {"multiCloudGateway": {"endpoints": {"minCount": 2,"maxCount": 4}}}}',
+            params='{"spec": {"endpoints": {"minCount": 2,"maxCount": 4}}}',
             format_type="merge",
         )
         wait_for_noobaa_db_ready()
@@ -61,7 +61,7 @@ class TestDisableMCGExternalService:
             logger.test_step("Restore NooBaa endpoints to defaults (min=1, max=2)")
             noobaa_ocp_obj.patch(
                 resource_name="noobaa",
-                params='{"spec": {"multiCloudGateway": {"endpoints": {"minCount": 1,"maxCount": 2}}}}',
+                params='{"spec": {"endpoints": {"minCount": 1,"maxCount": 2}}}',
                 format_type="merge",
             )
             wait_for_noobaa_db_ready()
