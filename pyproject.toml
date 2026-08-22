@@ -68,7 +68,7 @@ dependencies = [
     "ping3==4.0.3",
     "prettytable==0.7.2; python_version < '3.12'",
     "prettytable>=3.0.0; python_version >= '3.12'",
-    "protobuf==4.25.8",
+    "protobuf==5.29.6",
     "psutil==5.9.0",
     "psycopg2-binary==2.9.9",
     "pyopenssl==24.0.0",
