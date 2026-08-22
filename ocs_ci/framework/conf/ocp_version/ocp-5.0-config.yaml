@@ -18,9 +18,9 @@ ENV_DATA:
   # Legacy single template (fallback if vm_templates not defined)
   vm_template: "rhcos-10.2.20260423-0-vmware.x86_64"
   rhcos_version: "10"
-  acm_hub_channel: "release-2.17"
-  acm_version: "2.17"
-  mce_version: "2.17"
+  acm_hub_channel: "release-5.0"
+  acm_version: "5.0"
+  mce_version: "5.0"
   submariner_version: "0.24.0"
   submariner_image: "quay.io/redhat-user-workloads/submariner-tenant/submariner-fbc-4-22@sha256:1a666c3c2c99b1148f184f54efcee293f45cfff32cf9ca7a239097fe574ff700"
   oadp_version: "1.6"
