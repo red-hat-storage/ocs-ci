@@ -5,8 +5,9 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    brown_squad,
+    green_squad,
     ignore_leftover_label,
+    mcg,
     skipif_disconnected_cluster,
     skipif_external_mode,
     skipif_fips_enabled,
@@ -16,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.storage_cluster import get_noobaa_phase
 from ocs_ci.helpers.tlsprofile_helper import (
     TLS_PROFILE_SELECTOR_NOOBAA_DOMAIN,
     TLS_PROFILE_SELECTOR_RGW_DOMAIN,
@@ -47,14 +49,20 @@ def require_tlsprofile_crd():
         )
 
 
-@brown_squad
+@green_squad
 @tier3
 @skipif_ocs_version("<4.22")
 @skipif_disconnected_cluster
 @skipif_fips_enabled
 @skipif_external_mode
 @skipif_managed_service
-@ignore_leftover_label(constants.NOOBAA_ENDPOINT_POD_LABEL)
+@ignore_leftover_label(
+    constants.NOOBAA_ENDPOINT_POD_LABEL,
+    constants.OCS_METRICS_EXPORTER,
+    constants.OCS_CLIENT_OPERATOR_LABEL,
+    constants.RBD_CTRLPLUGIN_LABEL,
+    constants.CEPHFS_CTRLPLUGIN_LABEL,
+)
 class TestCentralizedTLSProfileConfiguration(ManageTest):
     """
     Lifecycle tests for centralized ``TLSProfile`` (DF 4.22+): TLS 1.3 / 1.2 rules,
@@ -93,7 +101,7 @@ class TestCentralizedTLSProfileConfiguration(ManageTest):
             pytest.param(
                 "noobaa",
                 [TLS_PROFILE_SELECTOR_NOOBAA_DOMAIN],
-                marks=pytest.mark.polarion_id("OCS-7936"),
+                marks=[mcg, pytest.mark.polarion_id("OCS-7936")],
                 id="Centralized TLSProfile: noobaa.io selector",
             ),
             pytest.param(
@@ -146,6 +154,22 @@ class TestCentralizedTLSProfileConfiguration(ManageTest):
                 namespace,
             )
             verify_rgw = False
+
+        if verify_nb:
+            nb_phase = get_noobaa_phase(namespace)
+            if nb_phase != constants.STATUS_READY:
+                if component == "noobaa" or not verify_rgw:
+                    pytest.skip(
+                        f"NooBaa is not Ready (phase={nb_phase}); TLSProfile "
+                        "NooBaa checks require a Ready MCG (apiServerSecurity "
+                        "is not applied while NooBaa is Creating/Error)"
+                    )
+                log.warning(
+                    "NooBaa is not Ready (phase=%s); skipping NooBaa-side "
+                    "assertions for selector-all",
+                    nb_phase,
+                )
+                verify_nb = False
 
         tls = TLSProfile()
         assert (
