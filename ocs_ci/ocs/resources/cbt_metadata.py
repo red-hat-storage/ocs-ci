@@ -424,23 +424,23 @@ class ListerTool:
             if sample:
                 break
 
+        # If build didn't complete, check if pod terminated and fail fast
+        phase = ocp_pod.get_resource_status(pod_name)
+        if phase in (constants.STATUS_FAILED, constants.STATUS_SUCCEED):
+            logs = ocp_pod.exec_oc_cmd(
+                f"logs {pod_name}",
+                out_yaml_format=False,
+            )
+            raise RuntimeError(
+                f"Lister pod {pod_name} terminated ({phase}) "
+                f"before build completed:\n{logs}"
+            )
+
         logger.info("CBT lister pod %s is ready", pod_name)
 
     def _check_build_complete(self):
         """Return True once the lister binary has been built."""
         ocp_pod = OCP(kind=constants.POD, namespace=self.namespace)
-        phase = ocp_pod.get_resource_status(
-            self._lister_pod_name,
-        )
-        terminal = (constants.STATUS_FAILED, constants.STATUS_SUCCEED)
-        if phase in terminal:
-            logs = ocp_pod.exec_oc_cmd(
-                f"logs {self._lister_pod_name}",
-                out_yaml_format=False,
-            )
-            raise RuntimeError(
-                f"Lister pod {self._lister_pod_name} " f"terminated ({phase}):\n{logs}"
-            )
         try:
             logs = ocp_pod.exec_oc_cmd(
                 f"logs {self._lister_pod_name}",
