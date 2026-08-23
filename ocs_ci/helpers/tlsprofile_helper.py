@@ -4,8 +4,9 @@ scanning via :func:`scan_cluster`. The scan logic lives in
 ``scripts/bash/tls_scan_endpoints.sh`` (loaded at runtime).
 
 References (DF 4.22+): ``TLSProfile`` centralizes TLS version, ciphers, and groups
-for NooBaa and RGW; CR name ``ocs-tls-profile`` in the operator namespace;
-``ocs-tls-profiles`` is an OLM dependency (include in disconnected mirroring).
+for NooBaa, RGW, and ocs-metrics-exporter; CR name ``ocs-tls-profile`` in the
+operator namespace; ``ocs-tls-profiles`` is an OLM dependency (include in
+disconnected mirroring).
 Cipher/group sets follow the product-supported lists (Mozilla Intermediate/Modern
 plus PQC groups). On FIPS-enabled clusters, PQ hybrids and ChaCha are not
 FIPS 140-2 approved; use the ``skipif_fips_enabled`` pytest mark on tests that
@@ -63,8 +64,16 @@ TLS_PROFILE_V12_GROUPS = [
 # Selector strings for rook Object Gateway TLS (domain form domain or domain/server).
 # DF docs list ``noobaa.io``, ``rook.io``, and ``*``; RGW reconciliation uses the
 # ceph object store gateway domain ``ceph.rook.io`` in practice.
+# ocs-metrics-exporter is selected with ``ocs.openshift.io/metrics-exporter``.
 TLS_PROFILE_SELECTOR_NOOBAA_DOMAIN = "noobaa.io"
 TLS_PROFILE_SELECTOR_RGW_DOMAIN = "ceph.rook.io"
+TLS_PROFILE_SELECTOR_METRICS_EXPORTER = "ocs.openshift.io/metrics-exporter"
+# ocs-metrics-exporter HTTPS listeners: https-main (metrics scrape) and
+# https-self (exporter process metrics). TLSProfile applies to both.
+METRICS_EXPORTER_HTTPS_PORTS = (
+    constants.OCS_METRICS_EXPORTER_PORT,
+    constants.OCS_METRICS_EXPORTER_LEGACY_PORT,
+)
 
 # Heuristic: log lines that likely indicate TLS/handshake/cert/TLSProfile handling failures.
 # Use re.IGNORECASE: inline (?i) after "|" is invalid in Python 3.11+.
@@ -90,8 +99,8 @@ def gather_tls_relevant_pod_names(namespace, component):
     """
     Pod names to scan for TLS-related log errors based on test parametrization.
 
-    Always includes ocs-operator and rook-ceph-operator; adds NooBaa / RGW pods when
-    those paths are under test.
+    Always includes ocs-operator and rook-ceph-operator; adds NooBaa / RGW /
+    ocs-metrics-exporter pods when those paths are under test.
     """
     from ocs_ci.ocs.resources.pod import get_pods_having_label
 
@@ -108,6 +117,8 @@ def gather_tls_relevant_pod_names(namespace, component):
         )
     if component in ("rgw", "all"):
         selectors.append(constants.RGW_APP_LABEL)
+    if component == "metrics-exporter":
+        selectors.append(constants.OCS_METRICS_EXPORTER)
 
     names = set()
     for label in selectors:
@@ -174,7 +185,8 @@ def assert_no_tls_errors_in_relevant_pod_logs(
 
     Args:
         namespace (str): Storage namespace (e.g. openshift-storage).
-        component (str): Test parametrization key: ``all``, ``noobaa``, or ``rgw``.
+        component (str): Test parametrization key: ``all``, ``noobaa``,
+            ``rgw``, or ``metrics-exporter``.
         since (str): Passed to ``oc logs --since`` (recent window for this run).
         tail (str|int): Max tail lines per pod.
         max_lines_per_pod (int): Cap lines included in failure output.
@@ -251,6 +263,7 @@ TLS_SCAN_COMPONENT_SELECTORS = {
     },
     "ceph": {"label": "rook_cluster=openshift-storage"},
     "csi": {"name_filter": "csi"},
+    "metrics-exporter": {"label": constants.OCS_METRICS_EXPORTER},
     "all": {},
 }
 
@@ -619,7 +632,8 @@ def scan_cluster(
     scanner pod in ``scantls-system``, and return per-endpoint TLS probe results.
 
     Args:
-        component: ``noobaa``, ``rgw``, ``ceph``, ``csi``, or ``all``.
+        component: ``noobaa``, ``rgw``, ``ceph``, ``csi``, ``metrics-exporter``,
+            or ``all``.
         kubeconfig: Path to kubeconfig; defaults from RUN / ENV_DATA (see
             :func:`_resolve_tls_scan_kubeconfig`).
         namespaces: Namespaces to scan; default
@@ -1145,3 +1159,145 @@ def wait_for_cephobjectstore_security_cleared(
         return len(ciphers) == 0 and len(groups) == 0
 
     TimeoutSampler(timeout, sleep, _cleared).wait_for_func_value(True)
+
+
+def metrics_exporter_is_deployed(namespace):
+    """Return True if at least one ocs-metrics-exporter pod exists in namespace."""
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    return bool(
+        get_pods_having_label(constants.OCS_METRICS_EXPORTER, namespace=namespace)
+    )
+
+
+def wait_for_metrics_exporter_ready(namespace, timeout=600, sleep=15):
+    """
+    Wait until at least one ocs-metrics-exporter pod is Running with ready
+    containers (TLSProfile changes may roll the Deployment).
+    """
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    def _ready():
+        pods = get_pods_having_label(
+            constants.OCS_METRICS_EXPORTER,
+            namespace=namespace,
+            statuses=[constants.STATUS_RUNNING],
+        )
+        if not pods:
+            return False
+        for pod in pods:
+            container_statuses = pod.get("status", {}).get("containerStatuses") or []
+            if not container_statuses:
+                return False
+            if not all(cs.get("ready") for cs in container_statuses):
+                return False
+        return True
+
+    TimeoutSampler(timeout, sleep, _ready).wait_for_func_value(True)
+
+
+def _format_tls_scan_row(row):
+    """Short one-line summary of a :func:`scan_cluster` row for assertions."""
+    return (
+        f"{row.get('pod_namespace')}/{row.get('pod_name')}:"
+        f"{row.get('port')} status={row.get('status')!r} "
+        f"tls_versions={row.get('tls_versions')!r} "
+        f"tls12_ciphers={row.get('tls12_ciphers')!r} "
+        f"tls13_ciphers={row.get('tls13_ciphers')!r} "
+        f"reason={row.get('reason')!r}"
+    )
+
+
+def filter_tls_scan_results_by_ports(results, ports):
+    """Return scan rows whose ``port`` is in ``ports`` (int-compared)."""
+    port_set = {int(p) for p in ports}
+    return [r for r in results if int(r.get("port") or 0) in port_set]
+
+
+def assert_metrics_exporter_https_tls_applied(
+    results,
+    api_tls_version,
+    ports=None,
+    context="",
+):
+    """
+    Fail unless ocs-metrics-exporter HTTPS ports (default 8443 and 9443) are
+    serving TLS and the TLSProfile version is in effect on each port.
+
+    TLSProfile version is exact (min == max), so a matching port must negotiate
+    the expected version and must not still offer the other of tls1.2 / tls1.3.
+
+    Args:
+        results: Return value of :func:`scan_cluster` for component
+            ``metrics-exporter``.
+        api_tls_version: ``TLSv1.2`` or ``TLSv1.3``.
+        ports: HTTPS ports to require (default ``METRICS_EXPORTER_HTTPS_PORTS``).
+        context: Short string appended to failure messages.
+    """
+    ports = tuple(ports) if ports is not None else METRICS_EXPORTER_HTTPS_PORTS
+    token = tls_profile_api_version_to_scan_token(api_tls_version)
+    other_token = "tls1.2" if token == "tls1.3" else "tls1.3"
+    suffix = f" ({context})" if context else ""
+    problems = []
+
+    for port in ports:
+        rows = filter_tls_scan_results_by_ports(results, (port,))
+        if not rows:
+            problems.append(
+                f"port {port}: no scan row (HTTPS listener not discovered on "
+                "ocs-metrics-exporter)"
+            )
+            continue
+
+        ok_rows = [r for r in rows if r.get("status") == "OK"]
+        if not ok_rows:
+            problems.append(
+                f"port {port}: not serving HTTPS/TLS "
+                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in rows)})"
+            )
+            continue
+
+        matching = [r for r in ok_rows if token in (r.get("tls_versions") or [])]
+        if not matching:
+            problems.append(
+                f"port {port}: HTTPS is up but {api_tls_version} ({token!r}) "
+                f"was not negotiated "
+                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in ok_rows)})"
+            )
+            continue
+
+        leaked = [r for r in matching if other_token in (r.get("tls_versions") or [])]
+        if leaked:
+            problems.append(
+                f"port {port}: TLSProfile {api_tls_version} should be exact, "
+                f"but {other_token!r} was still offered "
+                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in leaked)})"
+            )
+            continue
+
+        log.info(
+            "ocs-metrics-exporter HTTPS TLSProfile applied: port=%s version=%s%s",
+            port,
+            api_tls_version,
+            suffix,
+        )
+        for r in matching:
+            log.info(
+                "HTTPS %s:%s pod=%s container=%s tls_versions=%s "
+                "tls12_ciphers=%s tls13_ciphers=%s tls12_groups=%s tls13_groups=%s",
+                r.get("pod_ip"),
+                r.get("port"),
+                r.get("pod_name"),
+                r.get("container_name"),
+                r.get("tls_versions"),
+                r.get("tls12_ciphers"),
+                r.get("tls13_ciphers"),
+                r.get("tls12_groups"),
+                r.get("tls13_groups"),
+            )
+
+    if problems:
+        raise AssertionError(
+            "ocs-metrics-exporter HTTPS ports 8443/9443 did not apply "
+            f"{api_tls_version}{suffix}:\n" + "\n".join(f"  - {p}" for p in problems)
+        )
