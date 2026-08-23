@@ -8,6 +8,11 @@ operations, and parsing results.
 
 The tools are built from source inside pods using the upstream
 repository at github.com/red-hat-storage/external-snapshot-metadata.
+
+Requirements:
+    - ODF 5.0 or later
+    - SnapshotMetadataService CR deployed (automatic in ODF 5.0+)
+    - RBD CSI controller pods running the snapshot-metadata sidecar
 """
 
 import logging
@@ -321,7 +326,16 @@ class ListerTool:
     # ---- ConfigMap ------------------------------------------------
 
     def _read_configmap(self):
-        """Read CBT service connection details from the ConfigMap."""
+        """
+        Read CBT service connection details from the ConfigMap.
+
+        The ConfigMap is created automatically by ODF 5.0+ when the
+        SnapshotMetadataService CR is deployed.
+
+        Raises:
+            KeyError: If required keys (address, audience, caCert)
+                are missing from the ConfigMap
+        """
         ocp = OCP(
             kind="ConfigMap",
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,

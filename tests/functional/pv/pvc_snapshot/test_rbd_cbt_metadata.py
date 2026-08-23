@@ -5,6 +5,9 @@ Validates the GetMetadataAllocated and GetMetadataDelta gRPC
 operations exposed by the snapshot-metadata sidecar running in
 the RBD CSI controller pods.
 
+These tests require ODF 5.0 or later, where the
+SnapshotMetadataService is automatically deployed.
+
 RHSTOR-6440
 """
 
@@ -31,7 +34,7 @@ log = logging.getLogger(__name__)
 
 @green_squad
 @tier1
-@skipif_ocs_version("<4.23")
+@skipif_ocs_version("<5.0")
 class TestRbdCBTMetadata(ManageTest):
     """
     Test CBT snapshot metadata operations on RBD PVCs.
