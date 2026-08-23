@@ -20,8 +20,8 @@ from ocs_ci.framework.testlib import (
     tier1,
 )
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.cbt_metadata import VerifierTool
-from ocs_ci.helpers.snapshot_helpers import (
+from ocs_ci.ocs.resources.cbt_metadata import VerifierTool
+from ocs_ci.ocs.resources.snapshots import (
     restore_snapshot_to_block_pvc,
     write_data_to_pvc,
 )

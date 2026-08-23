@@ -1,7 +1,7 @@
 """
-Snapshot helper functions.
+Snapshot resource utilities.
 
-Provides utilities for restoring snapshots to Block-mode PVCs
+Provides functions for restoring snapshots to Block-mode PVCs
 with proper annotations and writing data to PVCs via dd.
 """
 
@@ -83,7 +83,7 @@ def restore_snapshot_to_block_pvc(
     if original_volume_mode and original_volume_mode != constants.VOLUME_MODE_BLOCK:
         annotate_snapshot_for_block_restore(snap_obj)
 
-    # Avoid circular import: pvc -> helpers -> snapshot_helpers
+    # Avoid circular import: pvc -> snapshots
     from ocs_ci.ocs.resources.pvc import create_restore_pvc
 
     restored_pvc = create_restore_pvc(
