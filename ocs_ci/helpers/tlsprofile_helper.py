@@ -13,6 +13,7 @@ FIPS 140-2 approved; use the ``skipif_fips_enabled`` pytest mark on tests that
 rely on those algorithms.
 """
 
+import copy
 import csv
 import io
 import json
@@ -1183,6 +1184,83 @@ class TLSProfile:
                 self.name,
             )
 
+    def apply_rules(self, rules, do_reload=True):
+        """
+        Replace spec.rules, creating the TLSProfile if it is absent.
+
+        Args:
+            rules (list): spec.rules value to apply.
+            do_reload (bool): Reload OCS object after create when the CR is missing.
+        """
+        rules = copy.deepcopy(list(rules))
+        if not self.is_tls_profile_available(silent=True):
+            tls_resource = {
+                "apiVersion": self.API_VERSION,
+                "kind": self.KIND,
+                "metadata": {"name": self.name, "namespace": self.namespace},
+                "spec": {"rules": rules},
+            }
+            log.info(
+                "Recreating %s %s in namespace %s to restore rules",
+                self.KIND,
+                self.name,
+                self.namespace,
+            )
+            OCS(**tls_resource).create(do_reload=do_reload)
+            return
+        patch = {"spec": {"rules": rules}}
+        patched = self._ocp.patch(
+            resource_name=self.name,
+            params=json.dumps(patch),
+            format_type="merge",
+        )
+        if not patched:
+            log.warning(
+                "oc patch for %s did not report success; validating via get",
+                self.name,
+            )
+
+
+def snapshot_tlsprofile_state(tls):
+    """
+    Capture whether ``ocs-tls-profile`` exists and a copy of spec.rules.
+
+    Returns:
+        tuple: ``(existed_before, original_rules)``. ``original_rules`` is None
+        when the profile is absent.
+    """
+    existed_before = tls.is_tls_profile_available(silent=True)
+    if not existed_before:
+        return False, None
+    data = tls.get_tls_profile()
+    original_rules = copy.deepcopy((data.get("spec") or {}).get("rules") or [])
+    return True, original_rules
+
+
+def teardown_tlsprofile(tls, existed_before, original_rules):
+    """
+    Restore a pre-existing TLSProfile or delete one this test created.
+
+    No-op when the profile is still absent after a skip, or when pre-existing
+    spec.rules are unchanged.
+    """
+    present = tls.is_tls_profile_available(silent=True)
+    if not existed_before:
+        if present:
+            log.info("Teardown: deleting ocs-tls-profile created by this test")
+            tls.delete_tls_profile(wait=True, force=True)
+        return
+    current_rules = None
+    if present:
+        data = tls.get_tls_profile()
+        current_rules = (data.get("spec") or {}).get("rules") or []
+    if present and current_rules == original_rules:
+        return
+    if original_rules is None:
+        return
+    log.info("Teardown: restoring pre-existing ocs-tls-profile rules")
+    tls.apply_rules(original_rules)
+
 
 def tlsprofile_crd_exists():
     """Return True if tlsprofiles.ocs.openshift.io CRD is installed."""
@@ -1355,6 +1433,172 @@ def filter_tls_scan_results_by_ports(results, ports):
     return [r for r in results if int(r.get("port") or 0) in port_set]
 
 
+def _tls_port_label(port, port_roles=None):
+    """Return ``(label, role)`` for assertion messages. ``role`` is None unless mapped."""
+    if port_roles:
+        role = port_roles.get(int(port), "unknown")
+        return f"port {port} ({role})", role
+    return f"port {port}", None
+
+
+def _assert_https_tls_applied(
+    results,
+    api_tls_version,
+    ports,
+    component_label,
+    error_header,
+    context="",
+    expected_ciphers=None,
+    expected_groups=None,
+    port_roles=None,
+    verify_ciphers_groups=False,
+    success_log_includes_role=False,
+):
+    """
+    Fail unless each required port is serving HTTPS with the TLSProfile version.
+
+    Every OK scan row for a port must negotiate ``api_tls_version`` and must not
+    offer the other of tls1.2 / tls1.3. When ``verify_ciphers_groups`` is True,
+    scantls cipher/group names must stay within the TLSProfile set.
+    """
+    token = tls_profile_api_version_to_scan_token(api_tls_version)
+    other_token = "tls1.2" if token == "tls1.3" else "tls1.3"
+    suffix = f" ({context})" if context else ""
+    problems = []
+
+    if verify_ciphers_groups:
+        if expected_ciphers is None:
+            expected_ciphers = (
+                TLS_PROFILE_V13_CIPHERS
+                if token == "tls1.3"
+                else TLS_PROFILE_V12_CIPHERS
+            )
+        if expected_groups is None:
+            expected_groups = (
+                TLS_PROFILE_V13_GROUPS if token == "tls1.3" else TLS_PROFILE_V12_GROUPS
+            )
+        allowed_ciphers = set(openssl_ciphers_for_tls_profile(expected_ciphers))
+        allowed_groups = set(openssl_groups_for_tls_profile(expected_groups))
+        cipher_field = "tls13_ciphers" if token == "tls1.3" else "tls12_ciphers"
+        group_field = "tls13_groups" if token == "tls1.3" else "tls12_groups"
+        other_cipher_field = "tls12_ciphers" if token == "tls1.3" else "tls13_ciphers"
+
+    for port in ports:
+        port_label, role = _tls_port_label(port, port_roles)
+        rows = filter_tls_scan_results_by_ports(results, (port,))
+        if not rows:
+            problems.append(
+                f"{port_label}: no scan row (HTTPS listener not discovered on "
+                f"{component_label})"
+            )
+            continue
+
+        ok_rows = [r for r in rows if r.get("status") == "OK"]
+        if not ok_rows:
+            problems.append(
+                f"{port_label}: not serving HTTPS/TLS "
+                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in rows)})"
+            )
+            continue
+
+        missing_token = [
+            r for r in ok_rows if token not in (r.get("tls_versions") or [])
+        ]
+        if missing_token:
+            problems.append(
+                f"{port_label}: HTTPS is up but {api_tls_version} ({token!r}) "
+                f"was not negotiated "
+                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in missing_token)})"
+            )
+            continue
+
+        leaked = [r for r in ok_rows if other_token in (r.get("tls_versions") or [])]
+        if leaked:
+            problems.append(
+                f"{port_label}: TLSProfile {api_tls_version} should be exact, "
+                f"but {other_token!r} was still offered "
+                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in leaked)})"
+            )
+            continue
+
+        if verify_ciphers_groups:
+            for r in ok_rows:
+                scanned_ciphers = r.get(cipher_field) or []
+                other_ciphers = r.get(other_cipher_field) or []
+                scanned_groups = r.get(group_field) or []
+                if not scanned_ciphers:
+                    problems.append(
+                        f"{port_label}: {api_tls_version} negotiated but scantls "
+                        f"reported no {cipher_field} "
+                        f"({_format_tls_scan_row(r)})"
+                    )
+                    continue
+                unexpected_ciphers = [
+                    c for c in scanned_ciphers if c not in allowed_ciphers
+                ]
+                if unexpected_ciphers:
+                    problems.append(
+                        f"{port_label}: scantls reported ciphers not in TLSProfile "
+                        f"{api_tls_version}: {unexpected_ciphers}; "
+                        f"allowed={sorted(allowed_ciphers)} "
+                        f"({_format_tls_scan_row(r)})"
+                    )
+                if other_ciphers:
+                    problems.append(
+                        f"{port_label}: TLSProfile {api_tls_version} should not offer "
+                        f"{other_cipher_field}={other_ciphers} "
+                        f"({_format_tls_scan_row(r)})"
+                    )
+                unexpected_groups = [
+                    g for g in scanned_groups if g not in allowed_groups
+                ]
+                if unexpected_groups:
+                    problems.append(
+                        f"{port_label}: scantls reported groups not in TLSProfile "
+                        f"{api_tls_version}: {unexpected_groups}; "
+                        f"allowed={sorted(allowed_groups)} "
+                        f"({_format_tls_scan_row(r)})"
+                    )
+
+        if success_log_includes_role:
+            log.info(
+                "%s HTTPS TLSProfile applied: port=%s role=%s version=%s%s",
+                component_label,
+                port,
+                role,
+                api_tls_version,
+                suffix,
+            )
+        else:
+            log.info(
+                "%s HTTPS TLSProfile applied: port=%s version=%s%s",
+                component_label,
+                port,
+                api_tls_version,
+                suffix,
+            )
+        for r in ok_rows:
+            log.info(
+                "HTTPS %s:%s pod=%s container=%s tls_versions=%s "
+                "tls12_ciphers=%s tls13_ciphers=%s tls12_groups=%s tls13_groups=%s",
+                r.get("pod_ip"),
+                r.get("port"),
+                r.get("pod_name"),
+                r.get("container_name"),
+                r.get("tls_versions"),
+                r.get("tls12_ciphers"),
+                r.get("tls13_ciphers"),
+                r.get("tls12_groups"),
+                r.get("tls13_groups"),
+            )
+
+    if problems:
+        raise AssertionError(
+            f"{error_header} {api_tls_version}{suffix}:\n"
+            + "\n".join(f"  - {p}" for p in problems)
+        )
+
+
 def assert_metrics_exporter_https_tls_applied(
     results,
     api_tls_version,
@@ -1376,72 +1620,14 @@ def assert_metrics_exporter_https_tls_applied(
         context: Short string appended to failure messages.
     """
     ports = tuple(ports) if ports is not None else METRICS_EXPORTER_HTTPS_PORTS
-    token = tls_profile_api_version_to_scan_token(api_tls_version)
-    other_token = "tls1.2" if token == "tls1.3" else "tls1.3"
-    suffix = f" ({context})" if context else ""
-    problems = []
-
-    for port in ports:
-        rows = filter_tls_scan_results_by_ports(results, (port,))
-        if not rows:
-            problems.append(
-                f"port {port}: no scan row (HTTPS listener not discovered on "
-                "ocs-metrics-exporter)"
-            )
-            continue
-
-        ok_rows = [r for r in rows if r.get("status") == "OK"]
-        if not ok_rows:
-            problems.append(
-                f"port {port}: not serving HTTPS/TLS "
-                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in rows)})"
-            )
-            continue
-
-        matching = [r for r in ok_rows if token in (r.get("tls_versions") or [])]
-        if not matching:
-            problems.append(
-                f"port {port}: HTTPS is up but {api_tls_version} ({token!r}) "
-                f"was not negotiated "
-                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in ok_rows)})"
-            )
-            continue
-
-        leaked = [r for r in matching if other_token in (r.get("tls_versions") or [])]
-        if leaked:
-            problems.append(
-                f"port {port}: TLSProfile {api_tls_version} should be exact, "
-                f"but {other_token!r} was still offered "
-                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in leaked)})"
-            )
-            continue
-
-        log.info(
-            "ocs-metrics-exporter HTTPS TLSProfile applied: port=%s version=%s%s",
-            port,
-            api_tls_version,
-            suffix,
-        )
-        for r in matching:
-            log.info(
-                "HTTPS %s:%s pod=%s container=%s tls_versions=%s "
-                "tls12_ciphers=%s tls13_ciphers=%s tls12_groups=%s tls13_groups=%s",
-                r.get("pod_ip"),
-                r.get("port"),
-                r.get("pod_name"),
-                r.get("container_name"),
-                r.get("tls_versions"),
-                r.get("tls12_ciphers"),
-                r.get("tls13_ciphers"),
-                r.get("tls12_groups"),
-                r.get("tls13_groups"),
-            )
-
-    if problems:
-        raise AssertionError(
-            "ocs-metrics-exporter HTTPS ports 8443/9443 did not apply "
-            f"{api_tls_version}{suffix}:\n" + "\n".join(f"  - {p}" for p in problems)
-        )
+    _assert_https_tls_applied(
+        results,
+        api_tls_version,
+        ports,
+        component_label="ocs-metrics-exporter",
+        error_header="ocs-metrics-exporter HTTPS ports 8443/9443 did not apply",
+        context=context,
+    )
 
 
 def openssl_ciphers_for_tls_profile(iana_ciphers):
@@ -1552,121 +1738,17 @@ def assert_csi_snapshot_metadata_https_tls_applied(
         expected_groups: TLSProfile IANA group list (defaults from version).
     """
     ports = tuple(ports) if ports is not None else CSI_SNAPSHOT_METADATA_HTTPS_PORTS
-    token = tls_profile_api_version_to_scan_token(api_tls_version)
-    other_token = "tls1.2" if token == "tls1.3" else "tls1.3"
-    if expected_ciphers is None:
-        expected_ciphers = (
-            TLS_PROFILE_V13_CIPHERS if token == "tls1.3" else TLS_PROFILE_V12_CIPHERS
-        )
-    if expected_groups is None:
-        expected_groups = (
-            TLS_PROFILE_V13_GROUPS if token == "tls1.3" else TLS_PROFILE_V12_GROUPS
-        )
-    allowed_ciphers = set(openssl_ciphers_for_tls_profile(expected_ciphers))
-    allowed_groups = set(openssl_groups_for_tls_profile(expected_groups))
-    cipher_field = "tls13_ciphers" if token == "tls1.3" else "tls12_ciphers"
-    group_field = "tls13_groups" if token == "tls1.3" else "tls12_groups"
-    other_cipher_field = "tls12_ciphers" if token == "tls1.3" else "tls13_ciphers"
-    suffix = f" ({context})" if context else ""
-    problems = []
-
-    for port in ports:
-        rows = filter_tls_scan_results_by_ports(results, (port,))
-        if not rows:
-            problems.append(
-                f"port {port}: no scan row (HTTPS listener not discovered on "
-                "csi-snapshot-metadata)"
-            )
-            continue
-
-        ok_rows = [r for r in rows if r.get("status") == "OK"]
-        if not ok_rows:
-            problems.append(
-                f"port {port}: not serving HTTPS/TLS "
-                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in rows)})"
-            )
-            continue
-
-        matching = [r for r in ok_rows if token in (r.get("tls_versions") or [])]
-        if not matching:
-            problems.append(
-                f"port {port}: HTTPS is up but {api_tls_version} ({token!r}) "
-                f"was not negotiated "
-                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in ok_rows)})"
-            )
-            continue
-
-        leaked = [r for r in matching if other_token in (r.get("tls_versions") or [])]
-        if leaked:
-            problems.append(
-                f"port {port}: TLSProfile {api_tls_version} should be exact, "
-                f"but {other_token!r} was still offered "
-                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in leaked)})"
-            )
-            continue
-
-        for r in matching:
-            scanned_ciphers = r.get(cipher_field) or []
-            other_ciphers = r.get(other_cipher_field) or []
-            scanned_groups = r.get(group_field) or []
-            if not scanned_ciphers:
-                problems.append(
-                    f"port {port}: {api_tls_version} negotiated but scantls "
-                    f"reported no {cipher_field} "
-                    f"({_format_tls_scan_row(r)})"
-                )
-                continue
-            unexpected_ciphers = [
-                c for c in scanned_ciphers if c not in allowed_ciphers
-            ]
-            if unexpected_ciphers:
-                problems.append(
-                    f"port {port}: scantls reported ciphers not in TLSProfile "
-                    f"{api_tls_version}: {unexpected_ciphers}; "
-                    f"allowed={sorted(allowed_ciphers)} "
-                    f"({_format_tls_scan_row(r)})"
-                )
-            if other_ciphers:
-                problems.append(
-                    f"port {port}: TLSProfile {api_tls_version} should not offer "
-                    f"{other_cipher_field}={other_ciphers} "
-                    f"({_format_tls_scan_row(r)})"
-                )
-            unexpected_groups = [g for g in scanned_groups if g not in allowed_groups]
-            if unexpected_groups:
-                problems.append(
-                    f"port {port}: scantls reported groups not in TLSProfile "
-                    f"{api_tls_version}: {unexpected_groups}; "
-                    f"allowed={sorted(allowed_groups)} "
-                    f"({_format_tls_scan_row(r)})"
-                )
-
-        log.info(
-            "csi-snapshot-metadata HTTPS TLSProfile applied: port=%s version=%s%s",
-            port,
-            api_tls_version,
-            suffix,
-        )
-        for r in matching:
-            log.info(
-                "HTTPS %s:%s pod=%s container=%s tls_versions=%s "
-                "tls12_ciphers=%s tls13_ciphers=%s tls12_groups=%s tls13_groups=%s",
-                r.get("pod_ip"),
-                r.get("port"),
-                r.get("pod_name"),
-                r.get("container_name"),
-                r.get("tls_versions"),
-                r.get("tls12_ciphers"),
-                r.get("tls13_ciphers"),
-                r.get("tls12_groups"),
-                r.get("tls13_groups"),
-            )
-
-    if problems:
-        raise AssertionError(
-            "csi-snapshot-metadata HTTPS port 50051 did not apply "
-            f"{api_tls_version}{suffix}:\n" + "\n".join(f"  - {p}" for p in problems)
-        )
+    _assert_https_tls_applied(
+        results,
+        api_tls_version,
+        ports,
+        component_label="csi-snapshot-metadata",
+        error_header="csi-snapshot-metadata HTTPS port 50051 did not apply",
+        context=context,
+        expected_ciphers=expected_ciphers,
+        expected_groups=expected_groups,
+        verify_ciphers_groups=True,
+    )
 
 
 def ocs_client_operator_is_deployed(namespace):
@@ -1730,122 +1812,16 @@ def assert_ocs_client_operator_https_tls_applied(
         expected_groups: TLSProfile IANA group list (defaults from version).
     """
     ports = tuple(ports) if ports is not None else CLIENT_OPERATOR_HTTPS_PORTS
-    token = tls_profile_api_version_to_scan_token(api_tls_version)
-    other_token = "tls1.2" if token == "tls1.3" else "tls1.3"
-    if expected_ciphers is None:
-        expected_ciphers = (
-            TLS_PROFILE_V13_CIPHERS if token == "tls1.3" else TLS_PROFILE_V12_CIPHERS
-        )
-    if expected_groups is None:
-        expected_groups = (
-            TLS_PROFILE_V13_GROUPS if token == "tls1.3" else TLS_PROFILE_V12_GROUPS
-        )
-    allowed_ciphers = set(openssl_ciphers_for_tls_profile(expected_ciphers))
-    allowed_groups = set(openssl_groups_for_tls_profile(expected_groups))
-    cipher_field = "tls13_ciphers" if token == "tls1.3" else "tls12_ciphers"
-    group_field = "tls13_groups" if token == "tls1.3" else "tls12_groups"
-    other_cipher_field = "tls12_ciphers" if token == "tls1.3" else "tls13_ciphers"
-    suffix = f" ({context})" if context else ""
-    problems = []
-
-    for port in ports:
-        role = CLIENT_OPERATOR_HTTPS_PORT_ROLES.get(int(port), "unknown")
-        port_label = f"port {port} ({role})"
-        rows = filter_tls_scan_results_by_ports(results, (port,))
-        if not rows:
-            problems.append(
-                f"{port_label}: no scan row (HTTPS listener not discovered on "
-                "ocs-client-operator)"
-            )
-            continue
-
-        ok_rows = [r for r in rows if r.get("status") == "OK"]
-        if not ok_rows:
-            problems.append(
-                f"{port_label}: not serving HTTPS/TLS "
-                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in rows)})"
-            )
-            continue
-
-        matching = [r for r in ok_rows if token in (r.get("tls_versions") or [])]
-        if not matching:
-            problems.append(
-                f"{port_label}: HTTPS is up but {api_tls_version} ({token!r}) "
-                f"was not negotiated "
-                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in ok_rows)})"
-            )
-            continue
-
-        leaked = [r for r in matching if other_token in (r.get("tls_versions") or [])]
-        if leaked:
-            problems.append(
-                f"{port_label}: TLSProfile {api_tls_version} should be exact, "
-                f"but {other_token!r} was still offered "
-                f"(rows: {'; '.join(_format_tls_scan_row(r) for r in leaked)})"
-            )
-            continue
-
-        for r in matching:
-            scanned_ciphers = r.get(cipher_field) or []
-            other_ciphers = r.get(other_cipher_field) or []
-            scanned_groups = r.get(group_field) or []
-            if not scanned_ciphers:
-                problems.append(
-                    f"{port_label}: {api_tls_version} negotiated but scantls "
-                    f"reported no {cipher_field} "
-                    f"({_format_tls_scan_row(r)})"
-                )
-                continue
-            unexpected_ciphers = [
-                c for c in scanned_ciphers if c not in allowed_ciphers
-            ]
-            if unexpected_ciphers:
-                problems.append(
-                    f"{port_label}: scantls reported ciphers not in TLSProfile "
-                    f"{api_tls_version}: {unexpected_ciphers}; "
-                    f"allowed={sorted(allowed_ciphers)} "
-                    f"({_format_tls_scan_row(r)})"
-                )
-            if other_ciphers:
-                problems.append(
-                    f"{port_label}: TLSProfile {api_tls_version} should not offer "
-                    f"{other_cipher_field}={other_ciphers} "
-                    f"({_format_tls_scan_row(r)})"
-                )
-            unexpected_groups = [g for g in scanned_groups if g not in allowed_groups]
-            if unexpected_groups:
-                problems.append(
-                    f"{port_label}: scantls reported groups not in TLSProfile "
-                    f"{api_tls_version}: {unexpected_groups}; "
-                    f"allowed={sorted(allowed_groups)} "
-                    f"({_format_tls_scan_row(r)})"
-                )
-
-        log.info(
-            "ocs-client-operator HTTPS TLSProfile applied: port=%s role=%s "
-            "version=%s%s",
-            port,
-            role,
-            api_tls_version,
-            suffix,
-        )
-        for r in matching:
-            log.info(
-                "HTTPS %s:%s pod=%s container=%s tls_versions=%s "
-                "tls12_ciphers=%s tls13_ciphers=%s tls12_groups=%s tls13_groups=%s",
-                r.get("pod_ip"),
-                r.get("port"),
-                r.get("pod_name"),
-                r.get("container_name"),
-                r.get("tls_versions"),
-                r.get("tls12_ciphers"),
-                r.get("tls13_ciphers"),
-                r.get("tls12_groups"),
-                r.get("tls13_groups"),
-            )
-
-    if problems:
-        raise AssertionError(
-            "ocs-client-operator webhook/metrics HTTPS ports did not apply "
-            f"{api_tls_version}{suffix}:\n" + "\n".join(f"  - {p}" for p in problems)
-        )
+    _assert_https_tls_applied(
+        results,
+        api_tls_version,
+        ports,
+        component_label="ocs-client-operator",
+        error_header=("ocs-client-operator webhook/metrics HTTPS ports did not apply"),
+        context=context,
+        expected_ciphers=expected_ciphers,
+        expected_groups=expected_groups,
+        port_roles=CLIENT_OPERATOR_HTTPS_PORT_ROLES,
+        verify_ciphers_groups=True,
+        success_log_includes_role=True,
+    )

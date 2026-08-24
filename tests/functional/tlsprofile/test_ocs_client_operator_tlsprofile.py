@@ -28,6 +28,8 @@ from ocs_ci.helpers.tlsprofile_helper import (
     assert_ocs_client_operator_https_tls_applied,
     ocs_client_operator_is_deployed,
     scan_cluster,
+    snapshot_tlsprofile_state,
+    teardown_tlsprofile,
     tlsprofile_crd_exists,
     wait_for_ocs_client_operator_ready,
     wait_for_tlsprofile_config_version,
@@ -75,14 +77,13 @@ class TestOCSClientOperatorTLSProfile(ManageTest):
     @pytest.fixture(autouse=True)
     def cleanup_tlsprofile(self, request):
         tls = TLSProfile()
+        existed_before, original_rules = snapshot_tlsprofile_state(tls)
 
         def _cleanup():
             try:
-                if tls.is_tls_profile_available(silent=True):
-                    log.info("Teardown: deleting leftover ocs-tls-profile")
-                    tls.delete_tls_profile(wait=True, force=True)
+                teardown_tlsprofile(tls, existed_before, original_rules)
             except Exception:
-                log.exception("Teardown: failed to delete TLSProfile")
+                log.exception("Teardown: failed to restore or delete TLSProfile")
                 raise
 
         request.addfinalizer(_cleanup)
