@@ -417,12 +417,28 @@ class TestStretchClusterZoneBNodeShutdown(ManageTest):
                 "Zone-aware RBD pods are Pending (FailedScheduling) as expected"
             )
         else:
-            logger.info("Healthy Zone-B nodes exist – verifying pods relocated there")
-            sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
+            # All Zone-B nodes carry the out-of-service:NoExecute taint (applied
+            # above), so evicted pods cannot reschedule onto any Zone-B node.
+            # The zone-spread constraint (maxSkew=1, whenUnsatisfiable=DoNotSchedule)
+            # also prevents the full replica count from running on Zone-A alone.
+            # Only the replicas that were already scheduled on Zone-A workers survive
+            # as Running; the evicted Zone-B replicas stay Pending or Terminating.
+            # With a 4-worker cluster (2 per zone): 2 CephFS and 1 RBD pod survive.
+            # With a 6-worker cluster (3 per zone): same ceiling applies while taints
+            # are held, so use the conservative lower bound.
+            logger.info(
+                "Healthy Zone-B nodes exist (but tainted out-of-service) – "
+                "verifying surviving pods on Zone-A nodes are Running"
             )
-            logger.info("Zone-aware workload pods relocated to healthy Zone-B nodes")
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGWRITER_CEPHFS_LABEL, exp_num_replicas=2
+            )
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=1
+            )
+            logger.info(
+                "Zone-aware workload pods surviving on Zone-A nodes as expected"
+            )
 
         end_time = datetime.now(timezone.utc)
         if healthy_zone_b_nodes:
