@@ -1,6 +1,7 @@
 from selenium.common.exceptions import (
     NoSuchElementException,
 )
+from selenium.webdriver.common.by import By
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import get_ocp_url
@@ -374,8 +375,8 @@ class PageNavigator(BaseUI):
             )
             return True
 
-        default_projects_is_checked = self.driver.find_element_by_css_selector(
-            "input[class='pf-c-switch__input']"
+        default_projects_is_checked = self.driver.find_element(
+            By.CSS_SELECTOR, "input[class='pf-c-switch__input']"
         )
         if default_projects_is_checked.get_attribute("data-checked-state") == "false":
             logger.info("Show default projects")
