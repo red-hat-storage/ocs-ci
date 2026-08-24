@@ -287,7 +287,7 @@ class ListerTool:
         self.address = None
         self.audience = None
         self.tools_repo = (
-            "https://github.com/red-hat-storage/" "external-snapshot-metadata.git"
+            "https://github.com/red-hat-storage/external-snapshot-metadata.git"
         )
         self.tools_ref = "main"
         self.golang_image = "golang:1.26"
@@ -346,7 +346,7 @@ class ListerTool:
         missing = [k for k in required if k not in data]
         if missing:
             raise KeyError(
-                f"ConfigMap {constants.CBT_CONFIGMAP_NAME} " f"missing keys: {missing}"
+                f"ConfigMap {constants.CBT_CONFIGMAP_NAME} missing keys: {missing}"
             )
         self.address = data["address"]
         self.audience = data["audience"]
@@ -608,6 +608,8 @@ class VerifierTool(ListerTool):
         verifier.cleanup()
     """
 
+    verifier_pod_name = None
+
     def run_verifier(
         self,
         snapshot_name,
@@ -638,13 +640,13 @@ class VerifierTool(ListerTool):
             tuple: (exit_code, logs) where exit_code is an int
                 and logs is the pod's stdout/stderr as a string
         """
-        pod_name = self._deploy_verifier_pod(
+        self.verifier_pod_name = self._deploy_verifier_pod(
             snapshot_name,
             source_pvc_name,
             dest_pvc_name,
             previous_snapshot,
         )
-        return self._wait_for_pod_completion(pod_name, timeout)
+        return self._wait_for_pod_completion(self.verifier_pod_name, timeout)
 
     def _deploy_verifier_pod(
         self,
@@ -709,7 +711,7 @@ class VerifierTool(ListerTool):
         self._created_ns_resources.append(pod)
 
         logger.info(
-            "Deployed verifier pod %s " "(snap=%s, src=%s, dst=%s, prev=%s)",
+            "Deployed verifier pod %s (snap=%s, src=%s, dst=%s, prev=%s)",
             pod_name,
             snapshot_name,
             source_pvc_name,

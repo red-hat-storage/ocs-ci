@@ -195,9 +195,7 @@ class TestRbdCBTMetadata(ManageTest):
             previous_snapshot=previous_snapshot,
         )
         log.info("Verifier logs:\n%s", logs)
-        assert exit_code == 0, (
-            f"Verifier exited with code {exit_code}. " f"Logs:\n{logs}"
-        )
+        assert exit_code == 0, f"Verifier exited with code {exit_code}. Logs:\n{logs}"
         return restored_pvc
 
     # -- Test 1 ----------------------------------------------------
@@ -232,7 +230,7 @@ class TestRbdCBTMetadata(ManageTest):
            and assert it exits with code 0.
         """
         log.test_step(
-            "Create an empty %s application PVC and a " "Block-mode copy PVC",
+            "Create an empty %s application PVC and a Block-mode copy PVC",
             volume_mode,
         )
         app_pvc = self._create_app_pvc(volume_mode)
@@ -242,7 +240,7 @@ class TestRbdCBTMetadata(ManageTest):
         snap_obj = self._take_snapshot(app_pvc, "cbt-empty")
 
         log.test_step(
-            "Restore the snapshot, run the CBT verifier, " "and assert exit code 0"
+            "Restore the snapshot, run the CBT verifier, and assert exit code 0"
         )
         self._restore_and_verify(snap_obj, copy_pvc, volume_mode)
 
@@ -280,7 +278,7 @@ class TestRbdCBTMetadata(ManageTest):
            and assert it exits with code 0.
         """
         log.test_step(
-            "Create a %s application PVC and a Block-mode " "copy PVC",
+            "Create a %s application PVC and a Block-mode copy PVC",
             volume_mode,
         )
         app_pvc = self._create_app_pvc(volume_mode)
@@ -298,20 +296,20 @@ class TestRbdCBTMetadata(ManageTest):
         log.test_step("Take a VolumeSnapshot of the PVC")
         snap_obj = self._take_snapshot(app_pvc, "cbt-data")
 
-        log.test_step("Run the CBT lister and verify allocated blocks " "are returned")
+        log.test_step("Run the CBT lister and verify allocated blocks are returned")
         entries = self.cbt_runner.run_lister_allocated(
             snap_obj.name,
         )
-        assert len(entries) > 0, (
-            "Lister returned no allocated blocks for a PVC " "with 10 MiB of data"
-        )
+        assert (
+            len(entries) > 0
+        ), "Lister returned no allocated blocks for a PVC with 10 MiB of data"
         log.info(
             "Lister returned %d allocated block(s)",
             len(entries),
         )
 
         log.test_step(
-            "Restore the snapshot, run the CBT verifier, " "and assert exit code 0"
+            "Restore the snapshot, run the CBT verifier, and assert exit code 0"
         )
         self._restore_and_verify(snap_obj, copy_pvc, volume_mode)
 
@@ -353,7 +351,7 @@ class TestRbdCBTMetadata(ManageTest):
            exits with code 0.
         """
         log.test_step(
-            "Create a %s application PVC, a Block-mode copy " "PVC, and a writer pod",
+            "Create a %s application PVC, a Block-mode copy PVC, and a writer pod",
             volume_mode,
         )
         app_pvc = self._create_app_pvc(volume_mode)
@@ -370,7 +368,7 @@ class TestRbdCBTMetadata(ManageTest):
             filename="file1.bin",
         )
 
-        log.test_step("Take snap-1 and run an allocated-mode " "verification")
+        log.test_step("Take snap-1 and run an allocated-mode verification")
         snap_1 = self._take_snapshot(app_pvc, "cbt-incr-1")
         restored_pvc_1 = self._restore_and_verify(
             snap_1,
@@ -379,6 +377,8 @@ class TestRbdCBTMetadata(ManageTest):
         )
 
         log.test_step("Delete the restored PVC from the allocated copy")
+        if self.cbt_runner.verifier_pod_name:
+            self.cbt_runner.delete_pod(self.cbt_runner.verifier_pod_name)
         restored_pvc_1.delete()
         restored_pvc_1.ocp.wait_for_delete(restored_pvc_1.name, timeout=120)
 
@@ -396,7 +396,7 @@ class TestRbdCBTMetadata(ManageTest):
         log.test_step("Take snap-2")
         snap_2 = self._take_snapshot(app_pvc, "cbt-incr-2")
 
-        log.test_step("Run the CBT lister in delta mode " "(snap-2 vs snap-1)")
+        log.test_step("Run the CBT lister in delta mode (snap-2 vs snap-1)")
         entries = self.cbt_runner.run_lister_delta(
             target_snap=snap_2.name,
             base_snap=snap_1.name,
@@ -407,7 +407,7 @@ class TestRbdCBTMetadata(ManageTest):
         )
         assert len(entries) > 0, "Delta lister returned no changed blocks"
 
-        log.test_step("Run the CBT verifier in delta mode and " "assert exit code 0")
+        log.test_step("Run the CBT verifier in delta mode and assert exit code 0")
         self._restore_and_verify(
             snap_2,
             copy_pvc,
