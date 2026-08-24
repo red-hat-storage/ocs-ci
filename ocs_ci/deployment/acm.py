@@ -30,11 +30,14 @@ from ocs_ci.utility.ibmcloud import (
     is_ibm_platform,
 )
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import (
+    exec_cmd,
     run_cmd,
     run_cmd_interactive,
     wait_for_machineconfigpool_status,
 )
+from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.ocs.node import get_typed_worker_nodes, label_nodes, get_worker_nodes
 
 logger = logging.getLogger(__name__)
@@ -188,7 +191,80 @@ class Submariner(object):
         else:
             acm_obj.install_submariner_ui(globalnet=global_net)
 
+        # TODO  Remove after submariner 0.24.1
+        self.override_submariner_routeagent_image()
+
         acm_obj.submariner_validation_ui()
+
+    def override_submariner_routeagent_image(self):
+        """
+        Workaround for submariner issue #4124: override the routeagent image on
+        each managed cluster via the SubmarinerConfig on the hub.
+
+        For every non-ACM cluster:
+          1. Switch to the hub context and patch the SubmarinerConfig
+             (namespace = cluster_name, resource_name = "submariner") with the
+             routeagent image override.
+          2. Switch to the managed cluster context and wait for the
+             routeagent DaemonSet rollout to complete.
+
+        TODO: Remove after submariner 0.24.1
+        """
+        routeagent_image = "quay.io/yboaron/submariner-route-agent:dev-20260811"
+        logger.info(
+            f"[submariner#4124 WA] Overriding routeagent image to {routeagent_image}"
+        )
+        restore_index = config.cur_index
+
+        for cluster in get_non_acm_cluster_config():
+            cluster_name = cluster.ENV_DATA["cluster_name"]
+            if is_hosted_cluster(cluster_name):
+                cluster_name = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name}"
+                )
+            cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+
+            # 1. Switch to hub and patch the SubmarinerConfig for this cluster
+            config.switch_acm_ctx()
+            submariner_config = OCP(
+                kind=constants.SUBMARINERCONFIG,
+                namespace=cluster_name,
+                resource_name="submariner",
+            )
+            if not submariner_config.check_resource_existence(
+                timeout=10, should_exist=True
+            ):
+                logger.warning(
+                    f"SubmarinerConfig 'submariner' not found in namespace '{cluster_name}' "
+                    f"on hub; skipping routeagent override for cluster '{cluster_name}'"
+                )
+                continue
+
+            submariner_config.patch(
+                params=f'{{"spec":{{"imageOverrides":{{"submariner-routeagent":"{routeagent_image}"}}}}}}',
+                format_type="merge",
+            )
+            logger.info(
+                f"Patched SubmarinerConfig for cluster '{cluster_name}' "
+                f"with routeagent image '{routeagent_image}'"
+            )
+
+            # 2. Switch to the managed cluster and wait for the routeagent DaemonSet rollout
+            config.switch_ctx(cluster_index)
+            kubeconfig = cluster.RUN["kubeconfig"]
+            rollout_cmd = (
+                f"oc --kubeconfig {kubeconfig} rollout status "
+                f"daemonset/submariner-routeagent "
+                f"-n {constants.SUBMARINER_OPERATOR_NAMESPACE} --timeout=120s"
+            )
+            try:
+                exec_cmd(rollout_cmd)
+            except Exception:
+                logger.warning(
+                    f"Routeagent rollout did not complete within timeout on cluster '{cluster_name}'; continuing"
+                )
+
+        config.switch_ctx(restore_index)
 
     def create_acm_brew_idms(self):
         """
