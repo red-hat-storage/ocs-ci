@@ -881,9 +881,7 @@ class TNFHypervisor:
             domain = f"{cluster_name}_master_{i}"
             for dev_name, target_size in self._disk_resize_map.items():
                 logger.info(f"Resizing {dev_name} on {domain} to {target_size}G")
-                self._ssh_cmd(
-                    f"sudo virsh blockresize {domain} {dev_name} " f"{target_size}G"
-                )
+                self._ssh_cmd(f"virsh blockresize {domain} {dev_name} {target_size}G")
 
         logger.info("VM disk resize complete")
 

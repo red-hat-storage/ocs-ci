@@ -1,5 +1,5 @@
 """
-Two-Node Failover (TNF) cluster deployment module
+Two-Node Fencing (TNF) cluster deployment module
 
 This module handles deployment of OpenShift Data Foundation on
 two-node clusters with DRBD for high availability.
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 class TNFBASE(Deployment):
     """
-    Base class for Two-Node Failover deployments
+    Base class for Two-Node Fencing deployments
     """
 
     def __init__(self):
@@ -51,7 +51,7 @@ class TNFBASE(Deployment):
 
 class TNF(TNFBASE):
     """
-    Two-Node Failover deployment class
+    Two-Node Fencing deployment class
 
     Handles complete OCP + ODF deployment on two-node clusters
     following Red Hat ODF 4.22 documentation.

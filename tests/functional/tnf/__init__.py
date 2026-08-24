@@ -1,3 +1,3 @@
 """
-Two-Node Failover (TNF) tests package
+Two-Node Fencing (TNF) tests package
 """

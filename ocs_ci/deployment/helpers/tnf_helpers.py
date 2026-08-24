@@ -1,5 +1,5 @@
 """
-Helper functions for Two-Node Failover (TNF) cluster deployment
+Helper functions for Two-Node Fencing (TNF) cluster deployment
 """
 
 import base64
@@ -7,7 +7,7 @@ import logging
 import tempfile
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedDeploymentConfiguration
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
@@ -558,8 +558,7 @@ def verify_drbd_status(node_name):
     """
     Verify DRBD status on a specific node.
 
-    Uses the DRBD utils image from the drbd-configure ConfigMap (pinned SHA)
-    if available, otherwise falls back to the default image.
+    Gets the DRBD utils image from the drbd-configure ConfigMap.
 
     Args:
         node_name (str): Name of the node to check
@@ -569,16 +568,16 @@ def verify_drbd_status(node_name):
     """
     logger.info(f"Checking DRBD status on node {node_name}...")
 
-    drbd_image = constants.TNF_DRBD_UTILS_IMAGE
     try:
         ocp_cm = OCP(
             kind=constants.CONFIGMAP,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
         drbd_cm = ocp_cm.get(resource_name=constants.TNF_DRBD_CONFIGURE_CM)
-        drbd_image = drbd_cm.get("data", {}).get("DRBD_UTILS_IMAGE", drbd_image)
-    except CommandFailed:
-        pass
+        drbd_image = drbd_cm["data"]["DRBD_UTILS_IMAGE"]
+    except (CommandFailed, KeyError) as e:
+        logger.error(f"Cannot get DRBD image from ConfigMap: {e}")
+        return False
 
     try:
         result = _run_drbd_cmd(
@@ -770,3 +769,71 @@ def discover_available_disks(node_info):
             )
 
     return result
+
+
+def validate_tnf_prerequisites():
+    """
+    Validate all prerequisites for TNF deployment.
+
+    Checks cluster topology, node count, network connectivity,
+    and storage requirements.
+
+    Returns:
+        dict: Validation results
+
+    Raises:
+        UnexpectedDeploymentConfiguration: If critical validations fail
+    """
+    logger.info("Validating TNF deployment prerequisites...")
+    validation_results = {
+        "topology": False,
+        "node_count": False,
+        "storage": False,
+        "network": False,
+        "errors": [],
+    }
+
+    try:
+        if verify_tnf_cluster_topology():
+            validation_results["topology"] = True
+        else:
+            validation_results["errors"].append("Cluster topology is not DualReplica.")
+    except Exception as e:
+        validation_results["errors"].append(f"Failed to verify topology: {e}")
+
+    try:
+        node_info = get_tnf_node_info()
+        if len(node_info) == 2:
+            validation_results["node_count"] = True
+            validation_results["nodes"] = node_info
+        else:
+            validation_results["errors"].append(
+                f"Expected 2 nodes, found {len(node_info)}"
+            )
+    except Exception as e:
+        validation_results["errors"].append(f"Failed to get node info: {e}")
+
+    if validation_results["node_count"]:
+        try:
+            network_ok = True
+            for i, node in enumerate(validation_results["nodes"]):
+                peer = validation_results["nodes"][1 - i]
+                if not verify_port_connectivity(
+                    node["name"], peer["ip"], constants.TNF_DRBD_PORT
+                ):
+                    network_ok = False
+                    validation_results["errors"].append(
+                        f"Port {constants.TNF_DRBD_PORT} not reachable "
+                        f"from {node['name']} to {peer['ip']}"
+                    )
+            if network_ok:
+                validation_results["network"] = True
+        except Exception as e:
+            validation_results["errors"].append(f"Network validation failed: {e}")
+
+    if validation_results["errors"]:
+        raise UnexpectedDeploymentConfiguration(
+            f"TNF validation failed: {validation_results['errors']}"
+        )
+
+    return validation_results

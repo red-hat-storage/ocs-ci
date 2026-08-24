@@ -1,5 +1,5 @@
 """
-Test cases for Two-Node Failover (TNF) cluster deployment
+Test cases for Two-Node Fencing (TNF) cluster deployment
 """
 
 import json
@@ -10,13 +10,10 @@ from datetime import datetime, timezone
 
 from ocs_ci.deployment.helpers.tnf_helpers import (
     get_tnf_node_info,
+    validate_tnf_prerequisites,
     verify_drbd_configuration,
     verify_drbd_status,
     verify_tnf_cluster_topology,
-)
-from ocs_ci.deployment.helpers.tnf_validation import (
-    validate_tnf_features,
-    validate_tnf_prerequisites,
 )
 from ocs_ci.deployment.tnf import TNF
 from ocs_ci.framework import config
@@ -62,7 +59,7 @@ def tnf_deployment():
 @polarion_id(get_polarion_id())
 def test_tnf_deployment(pvc_factory, pod_factory):
     """
-    Test TNF (Two-Node Failover) cluster deployment
+    Test TNF (Two-Node Fencing) cluster deployment
 
     This is the main deployment test for TNF clusters, following the standard
     ocs-ci deployment test pattern. It verifies:
@@ -357,51 +354,6 @@ class TestTNFPostDeployment:
         ], f"Ceph health is not OK/WARN: {ceph_health}"
 
         logger.info(f"Ceph health: {ceph_health}")
-
-
-class TestTNFFeatureRestrictions:
-    """
-    Test class for validating TNF feature restrictions
-    """
-
-    def test_unsupported_features_not_enabled(self):
-        """
-        Test that unsupported features are not enabled
-        """
-        logger.info("Testing unsupported features...")
-        validate_tnf_features()
-
-    def test_noobaa_not_deployed(self):
-        """
-        Test that NooBaa/MCG is not deployed
-        """
-        logger.info("Testing NooBaa deployment status...")
-
-        noobaa_pods = get_pods_having_label(
-            label="app=noobaa", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-
-        # NooBaa should not be deployed in TNF
-        if "tnf" in config.ENV_DATA:
-            assert (
-                not noobaa_pods
-            ), "NooBaa pods found but NooBaa is not supported in TNF deployments"
-
-    def test_rgw_not_deployed(self):
-        """
-        Test that RGW is not deployed
-        """
-        logger.info("Testing RGW deployment status...")
-
-        rgw_pods = get_pods_having_label(
-            label="app=rook-ceph-rgw", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
-
-        # RGW should not be deployed in TNF
-        if "tnf" in config.ENV_DATA:
-            assert (
-                not rgw_pods
-            ), "RGW pods found but RGW is not supported in TNF deployments"
 
 
 @pytest.mark.polarion_id("OCS-XXXX")

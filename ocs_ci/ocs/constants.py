@@ -727,38 +727,15 @@ AVAILABILITY_POLICIES = [
     AVAILABILITY_POLICY_DUAL,
 ]
 
-# Two-Node Failover (TNF) / Two-Node Cluster Constants
+# Two-Node Fencing (TNF) / Two-Node Cluster Constants
 TNF_CONTROL_PLANE_TOPOLOGY = "DualReplica"
-TNF_MIN_STORAGE_SIZE_GB = 500
-TNF_MIN_MONITOR_DISK_SIZE_GB = 10
-TNF_MAX_MONITOR_DISK_SIZE_GB = 50
 TNF_DRBD_PORT = 7794
 TNF_DRBD_RESOURCE_NAME = "r0"
-TNF_DRBD_DEVICE_NAME = "/dev/drbd0"
 TNF_DRBD_CONF_PATH = "/etc/drbd.conf"
 TNF_DRBD_DIR_PATH = "/etc/drbd.d"
-TNF_DRBD_VERSION = "9.2.18"
-# DRBD utilities image - can be overridden in deployment config for specific versions
-TNF_DRBD_UTILS_IMAGE = "registry.redhat.io/odf4/odf-drbd-rhel9:latest"
 TNF_DRBD_CONFIGURE_CM = "drbd-configure"
-TNF_DRBD_AUTOSTART_DS = "drbd-autostart"
 TNF_DRBD_SETUP_SCRIPT_CM = "rook-ceph-drbd-setup-script"
 TNF_LOCALBLOCK_SC = "localblock"
-TNF_FEATURES_NOT_SUPPORTED = [
-    "noobaa",
-    "nfs",
-    "rgw",
-    "disaster-recovery",
-    "pdb",
-    "monitor-failover",
-    "multus",
-    "external-postgresql",
-    "performance-profiles",
-    "auto-capacity-scaling",
-    "host-networking",
-    "erasure-coded-pools",
-    "external-clients",
-]
 
 # TNF Hypervisor (AWS EC2 bare-metal for dev-scripts)
 TNF_HYPERVISOR_DEFAULT_INSTANCE_TYPE = "c5n.metal"
