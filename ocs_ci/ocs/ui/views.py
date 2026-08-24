@@ -3896,8 +3896,14 @@ virtualmachine = {
         "[starts-with(normalize-space(.), 'centos.stream')]]",
         By.XPATH,
     ),
+    "compute_general_purpose_card": (
+        "//div[contains(@class,'instance-type-series-menu-card__card-title')]"
+        "[.//*[normalize-space(.)='General Purpose']]",
+        By.XPATH,
+    ),
     "compute_size_dropdown": (
-        "//div[contains(@class,'instance-type-series-menu-card__size-dropdown')]//button",
+        "//div[contains(@class,'instance-type-series-menu-card__size-dropdown')]"
+        "//button[.//span[normalize-space(.)='Select size']]",
         By.XPATH,
     ),
     "compute_size_small_option": (
@@ -3907,6 +3913,10 @@ virtualmachine = {
     ),
     "boot_volume_centos_stream_options": (
         "//td[starts-with(normalize-space(.), 'centos-stream')]",
+        By.XPATH,
+    ),
+    "boot_volume_row_by_name_tmpl": (
+        "//td[normalize-space(.)='{volume_name}']",
         By.XPATH,
     ),
     "customization_storage_tab": (
@@ -4094,7 +4104,7 @@ virtualmachine = {
         By.XPATH,
     ),
     "add_volume_save_button": (
-        "//button[@data-test='save-button']",
+        "//*[@role='dialog']//button[@data-test='save-button']",
         By.XPATH,
     ),
     "boot_volume_clone_in_progress": (
@@ -4110,10 +4120,7 @@ virtualmachine = {
         "//a[normalize-space(text())='External systems']",
         By.XPATH,
     ),
-    "san_storage_link": (
-        "//a[@data-discover='true'][normalize-space(text())='SAN_Storage']",
-        By.XPATH,
-    ),
+    "san_storage_link": FDF_SAN_LOCATORS["san_storage_link"],
     "lungroup_kebab_button": (
         "(//button[@aria-expanded][ancestor::tr][not(@id)])[last()]",
         By.XPATH,

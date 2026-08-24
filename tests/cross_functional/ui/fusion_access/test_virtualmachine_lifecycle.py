@@ -228,11 +228,13 @@ class TestVirtualMachineLifecycle(ManageTest):
 
         # Wait for the "Press Ctrl" banner confirming the console is connected
         child.expect(r"Press Ctrl", timeout=60)
+        # Send a newline to nudge the console past any deprecation warnings or
+        # buffered output before the login/shell prompt appears
         child.sendline("")
 
         # The console may already be at a shell prompt (prior session still
         # active) or at a login: prompt — handle both.
-        index = child.expect([r"\]\$\s", r"login:"], timeout=60)
+        index = child.expect([r"\]\$\s*", r"[Ll]ogin:\s*"], timeout=120)
         if index == 0:
             logger.info("Shell prompt detected directly — already logged in")
         else:
@@ -243,7 +245,7 @@ class TestVirtualMachineLifecycle(ManageTest):
             logger.info("Password prompt detected — sending password")
             child.sendline(vm_password)
 
-            child.expect(r"\]\$\s", timeout=60)
+            child.expect(r"\]\$\s*", timeout=120)
             logger.info("Shell prompt detected — logged in successfully")
 
         return child
@@ -373,8 +375,9 @@ class TestVirtualMachineLifecycle(ManageTest):
         3. Open the creation wizard, enter a unique VM name, click Next.
         4. Guest OS: select Other Linux, pick the latest centos.stream* version,
            click Next.
-        5. Boot source: no volumes are present — click 'Add volume'  Wait up to 15 minutes
-           for the 'Clone in progress' badge to disappear, then click the volume row and click Next.
+        5. Boot source: no volumes are present — click 'Add volume', fill the
+           dialog, and save. Wait up to 15 minutes for the 'Clone in progress'
+           badge to disappear, then click the volume row and click Next.
         6. Compute resources: select the small size, click Next.
         7. Customization: no changes needed — click Next.
         8. Review and create: click Create VirtualMachine.
@@ -435,15 +438,17 @@ class TestVirtualMachineLifecycle(ManageTest):
         logger.info("-" * 80)
         self.base_ui.take_screenshot("boot_source_page_no_volumes")
 
-        self.vm_ui.add_boot_volume_via_dialog(vm_name)
+        dest_volume_name = self.vm_ui.add_boot_volume_via_dialog(vm_name)
         self.base_ui.take_screenshot("add_volume_dialog_saved")
 
         logger.info("Waiting for boot volume clone to finish ")
         self.vm_ui.wait_for_clone_in_progress_to_finish(timeout=900)
         self.base_ui.take_screenshot("clone_finished")
 
-        logger.info("Selecting the newly cloned boot volume row")
-        self.vm_ui.select_boot_volume_centos_stream_latest()
+        logger.info(
+            f"Selecting the cloned destination volume row: '{dest_volume_name}'"
+        )
+        self.vm_ui.select_boot_volume_by_name(dest_volume_name)
         self.base_ui.take_screenshot("boot_volume_selected")
 
         self.vm_ui.click_next_button()
@@ -544,11 +549,13 @@ class TestVirtualMachineLifecycle(ManageTest):
         3. Click Create, enter a unique VM name, click Next (Deployment details).
         4. Guest OS page: select "Other Linux" (3rd card), open Guest operating
            system type dropdown and pick the latest centos.stream* version, click Next.
-        5. Boot source page: click on the latest centos-stream* volume, click Next.
+        5. Boot source page: click 'Add volume', fill the Add Volume dialog
+           (source type Volume, project openshift-virtualization-os-images, latest
+           centos-stream PVC, destination volume name), and save. Wait for the
+           'Clone in progress' badge to disappear, then click the volume row and
+           click Next.
         6. Compute resources page: select small size, click Next.
-        7. Customization page: click Storage tab, click the kebab menu on the
-           rootdisk row, select Edit, change StorageClass to option ending with
-           -vm, click Save, click Next.
+        7. Customization page: no changes needed — click Next.
         8. Review and create page: click Create VirtualMachine.
         9. Wait for VM status: Provisioning → Running.
         10. Fetch VM credentials (username/password) from the VM YAML,
@@ -672,8 +679,17 @@ class TestVirtualMachineLifecycle(ManageTest):
         child.sendline(f'echo "Data modified after snapshot" >> {test_file}')
         child.expect(r"\]\$\s", timeout=30)
         logger.info("Data modification appended to test file")
+        modified_md5sum = self._calculate_vm_file_md5sum(child, test_file)
         child.send("\x1d")
         child.close()
+
+        assert modified_md5sum, "md5sum after modification is empty"
+        assert modified_md5sum != original_md5sum, (
+            "The post-snapshot modification did not change the file: "
+            f"md5sum is still {original_md5sum}. The restore check would pass "
+            "without exercising the restore."
+        )
+        logger.info(f"Modified VM md5sum: {modified_md5sum}")
 
         logger.info("\nStep 6: Power off VM via Actions > Control > Stop")
         logger.info("-" * 80)

@@ -189,10 +189,13 @@ class VirtualMachineUI(PageNavigator):
 
     def select_compute_size_small(self):
         """
-        On the Compute resources page open the size dropdown and select
-        'small: 1 CPUs, 2 GiB Memory'.
+        On the Compute resources page select the General Purpose card to reveal
+        the size dropdown, then open it and select 'small: 1 CPUs, 2 GiB Memory'.
         """
+        self.do_click(self.vm_loc["compute_general_purpose_card"])
+        logger.info("Selected General Purpose instance type card")
         self.do_click(self.vm_loc["compute_size_dropdown"])
+        logger.info("Opened size dropdown")
         self.do_click(self.vm_loc["compute_size_small_option"])
         logger.info("Selected compute size: small: 1 CPUs, 2 GiB Memory")
 
@@ -509,6 +512,9 @@ class VirtualMachineUI(PageNavigator):
         Args:
             vm_name (str): The VM name generated for this run; used to derive
                 the destination volume name (``<vm_name>-volume``).
+
+        Returns:
+            str: The destination volume name.
         """
         self.do_click(self.vm_loc["boot_source_add_volume_button"])
         logger.info("Clicked 'Add volume' button on Boot source page")
@@ -516,6 +522,9 @@ class VirtualMachineUI(PageNavigator):
         self.do_click(self.vm_loc["add_volume_source_type_dropdown"])
         logger.info("Opened Source type dropdown")
 
+        wait_for_element_to_be_visible(
+            locator=self.vm_loc["add_volume_source_use_existing_volume"], timeout=10
+        )
         self.do_click(self.vm_loc["add_volume_source_use_existing_volume"])
         logger.info("Selected 'Volume / Use volume already available on the cluster'")
 
@@ -609,7 +618,25 @@ class VirtualMachineUI(PageNavigator):
         self.do_click(self.vm_loc["add_volume_save_button"])
         logger.info("Clicked Save in Add Volume dialog")
 
-    def wait_for_clone_in_progress_to_finish(self, timeout=900):
+        return dest_volume_name
+
+    def select_boot_volume_by_name(self, volume_name):
+        """
+        On the Boot source page, click the row whose name cell exactly matches
+        ``volume_name``.  This selects the cloned destination volume created by
+        :meth:`add_boot_volume_via_dialog`
+
+        Args:
+            volume_name (str): Exact name of the volume row to select
+        """
+        locator = format_locator(
+            self.vm_loc["boot_volume_row_by_name_tmpl"], volume_name=volume_name
+        )
+        wait_for_element_to_be_visible(locator=locator, timeout=30)
+        self.do_click(locator)
+        logger.info(f"Selected boot volume row: '{volume_name}'")
+
+    def wait_for_clone_in_progress_to_finish(self, timeout=1200):
         """
         After saving the Add Volume dialog, wait for the 'Clone in progress'
         badge to disappear from the boot volume row on the Boot source page.
