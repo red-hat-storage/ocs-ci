@@ -253,7 +253,9 @@ def _run_post_recovery_checks(
 
     _check_ceph_accessible(sc_obj, "after Zone-B recovery")
 
-    sc_obj.reset_conn_score()
+    # The API server may still be stabilising immediately after node recovery
+    # (TLS handshake timeouts, oc rsh timeouts).  Retry with back-off.
+    retry(CommandFailed, tries=6, delay=20)(sc_obj.reset_conn_score)()
     logger.info("Connection scores are clean after Zone-B recovery")
 
     retry(CommandFailed, tries=5, delay=10)(vm_obj.wait_for_ssh_connectivity)()
