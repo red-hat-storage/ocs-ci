@@ -341,7 +341,6 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
         pod_obj.delete()
         pod_obj.ocp.wait_for_delete(pod_obj.name)
         logger.info(f"Deleted pod {pod_obj.name}")
-        pod_obj.delete = lambda **kwargs: None
 
         logger.info("Recreating pod for fresh CephFS mount")
         new_pod = pod_factory(

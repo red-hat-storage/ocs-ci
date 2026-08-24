@@ -5,7 +5,6 @@ General PVC object
 import logging
 import time
 import json
-import pytest
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
@@ -217,7 +216,7 @@ class PVC(OCS):
                 was met
 
         Raises:
-            pytest.fail: If the condition is not met within the timeout
+            TimeoutExpiredError: If the condition is not met within the timeout
         """
 
         health_annotations = {}
@@ -246,7 +245,7 @@ class PVC(OCS):
                 )
         except TimeoutExpiredError:
             all_annots = self.get().get("metadata", {}).get("annotations", {})
-            pytest.fail(
+            raise TimeoutExpiredError(
                 f"Expected {expected_count} annotation(s) with "
                 f"state='{expected_state}' on PVC {self.name} "
                 f"within {timeout}s. Annotations: {all_annots}"
