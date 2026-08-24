@@ -956,6 +956,14 @@ ROOK_CEPH_MON_PVC_LABEL = "pvc_name"
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
 OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
+CSI_SNAPSHOT_METADATA = "app=csi-snapshot-metadata"
+CSI_SNAPSHOT_METADATA_NAME_SUBSTRING = "snapshot-metadata"
+CSI_SNAPSHOT_METADATA_PORT = 50051
+# ocs-client-operator HTTPS listeners (controller-runtime). Metrics is bound
+# with --metrics-bind-address=:8443; webhook default flag is --webhook-port=7443.
+# Do not confuse these with ocs-metrics-exporter 8443/9443.
+OCS_CLIENT_OPERATOR_METRICS_PORT = 8443
+OCS_CLIENT_OPERATOR_WEBHOOK_PORT = 7443
 MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
 MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
 MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
