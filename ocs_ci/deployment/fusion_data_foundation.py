@@ -179,9 +179,9 @@ class FusionDataFoundationDeployment:
             fdf_service_data = yaml.safe_load(f.read())
 
         backing_storage_type = config.DEPLOYMENT.get("backing_storage_type")
+        platform = config.ENV_DATA.get("platform", "").lower()
 
         if not backing_storage_type:
-            platform = config.ENV_DATA.get("platform", "").lower()
             local_platforms = [
                 constants.VSPHERE_PLATFORM,
                 constants.BAREMETAL_PLATFORM,
@@ -197,6 +197,13 @@ class FusionDataFoundationDeployment:
                 if param["name"] == "backingStorageType":
                     param["value"] = backing_storage_type
                     break
+
+        if platform == constants.IBM_HCI_PLATFORM:
+            logger.info(
+                "IBM HCI platform detected, setting creator=Fusion and enableLVMStorage=true"
+            )
+            fdf_service_data["spec"]["creator"] = "Fusion"
+            fdf_service_data["spec"]["enableLVMStorage"] = True
 
         fdf_service_cr_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="fdf_service_cr", delete=False
