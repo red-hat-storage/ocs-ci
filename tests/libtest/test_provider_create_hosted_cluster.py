@@ -7,6 +7,7 @@ import random
 from ocs_ci.deployment.deployment import validate_acm_hub_install, Deployment
 from ocs_ci.deployment.helpers.hypershift_base import (
     get_hosted_cluster_names,
+    get_hosted_cluster_namespace,
     get_random_hosted_cluster_name,
 )
 from ocs_ci.deployment.hub_spoke import (
@@ -917,7 +918,7 @@ class TestAWSHCPDestroy:
 
         hc_ocp = OCP(
             kind=constants.HOSTED_CLUSTERS,
-            namespace=constants.CLUSTERS_NAMESPACE,
+            namespace=get_hosted_cluster_namespace(cluster_name),
         )
         assert not hc_ocp.is_exist(
             resource_name=cluster_name
