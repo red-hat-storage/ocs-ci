@@ -51,7 +51,7 @@ from ocs_ci.helpers.stretchcluster_helper import (
     verify_vm_workload,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.node import (
     taint_nodes,
     untaint_nodes,
@@ -225,6 +225,59 @@ def _run_post_failure_checks(sc_obj, start_time, end_time, context: str) -> None
     _check_ceph_accessible(sc_obj, context)
 
 
+def _wait_for_workload_pods_post_recovery(sc_obj) -> None:
+    """
+    Wait for all logwriter/logreader pods to return to their expected replica
+    counts after Zone-B recovery, without triggering ``recover_by_zone_restart``.
+
+    After a node is powered back on and taints are removed, pods need time to
+    reschedule.  ``check_for_logwriter_workload_pods`` falls through to
+    ``recover_by_zone_restart`` → ``nodes.restart_nodes`` too quickly, which
+    raises ``RebootEventNotFoundException`` on a node that was just started
+    (fresh boot has no new "Rebooted" event delta).  Instead, we retry the pod
+    count checks directly with a generous back-off, only calling the shared
+    helper (and its node-restart fallback) if pods are still not healthy after
+    the wait.
+
+    Args:
+        sc_obj: StretchCluster instance.
+    """
+    # Give rescheduled pods up to ~3 minutes to reach Running before we
+    # consider a node-restart workaround.
+    MAX_WAIT_S = 180
+    POLL_S = 15
+    deadline = time.time() + MAX_WAIT_S
+
+    while time.time() < deadline:
+        try:
+            sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGREADER_CEPHFS_LABEL,
+                statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
+            )
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
+            )
+            logger.info(
+                "All logwriter/logreader pods are running after Zone-B recovery"
+            )
+            return
+        except UnexpectedBehaviour:
+            remaining = max(0, int(deadline - time.time()))
+            logger.info(
+                f"Pods not yet at full replica count; retrying in {POLL_S}s "
+                f"({remaining}s remaining before node-restart fallback)"
+            )
+            time.sleep(POLL_S)
+
+    # Pods are still not healthy after the wait; fall through to the shared
+    # helper which may perform a node restart as a last resort.
+    logger.warning(
+        "Pods did not recover within the wait window; "
+        "delegating to check_for_logwriter_workload_pods for node-restart workaround"
+    )
+
+
 def _run_post_recovery_checks(
     sc_obj, start_time, nodes, vm_obj, md5sum_before, logreader_workload_factory
 ) -> None:
@@ -263,6 +316,10 @@ def _run_post_recovery_checks(
     vm_obj.stop()
     logger.info("VM data integrity verified and VM stopped")
 
+    # Wait for pods to settle naturally before falling back to node-restart
+    # workaround.  A freshly-started node does not emit a "Rebooted" event
+    # delta, so restart_nodes would raise RebootEventNotFoundException.
+    _wait_for_workload_pods_post_recovery(sc_obj)
     check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
     verify_data_loss(sc_obj)
     logger.info("No data loss detected")
