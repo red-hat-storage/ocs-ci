@@ -169,8 +169,8 @@ class TNF(TNFBASE):
                 logger.info("Step 6: Running dev-scripts (45-90 minutes)...")
                 hypervisor.run_dev_scripts()
 
-                logger.info("Step 6b: Attaching monitor disks to VMs...")
-                hypervisor.attach_monitor_disks()
+                logger.info("Step 6b: Resizing OSD disks on VMs...")
+                hypervisor.resize_vm_disks()
 
                 proxy_config = self.tnf_config.get("proxy", {})
                 if proxy_config.get("enabled", True):

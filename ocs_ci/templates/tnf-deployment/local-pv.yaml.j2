@@ -5,6 +5,7 @@ metadata:
 spec:
   capacity:
     storage: {{ storage_size | default('500Gi') }}
+  volumeMode: Block
   accessModes:
   - ReadWriteOnce
   persistentVolumeReclaimPolicy: Delete

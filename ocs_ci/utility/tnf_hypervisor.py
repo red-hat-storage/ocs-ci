@@ -65,7 +65,7 @@ class TNFHypervisor:
         self.ssh_key, self.ssh_pub_key = self._resolve_ssh_keys()
         self._created_sg_id = None
         self._created_vpc_stack = {}
-        self._monitor_disk_size = None
+        self._disk_resize_map = {}
 
     def _resolve_ssh_keys(self):
         """
@@ -739,14 +739,19 @@ class TNFHypervisor:
         extra_disks = self.dev_scripts_config.get("extra_disks", [])
 
         # dev-scripts VM_EXTRADISKS_SIZE applies one size to ALL extra disks.
-        # Separate monitor disk (smallest, for DRBD) from OSD disks (rest).
-        # OSD disks go through VM_EXTRADISKS; monitor disk is attached
-        # separately via qemu-img + virsh after dev-scripts completes.
-        osd_disks = extra_disks
-        if len(extra_disks) >= 2:
+        # Create all disks at the smallest size (for DRBD monitor), then
+        # resize the larger disks (OSD) after dev-scripts via virsh blockresize.
+        # This avoids PCI slot exhaustion from hotplugging additional disks.
+        if extra_disks:
             sorted_disks = sorted(extra_disks, key=lambda d: d["size"])
-            self._monitor_disk_size = sorted_disks[0]["size"]
-            osd_disks = sorted_disks[1:]
+            min_disk_size = sorted_disks[0]["size"]
+            self._disk_resize_map = {}
+            for i, disk in enumerate(sorted_disks):
+                if disk["size"] > min_disk_size:
+                    self._disk_resize_map[f"vd{chr(98 + i)}"] = disk["size"]
+        else:
+            min_disk_size = 8
+            self._disk_resize_map = {}
 
         config_lines = [
             "export IP_STACK=v4",
@@ -760,16 +765,13 @@ class TNFHypervisor:
             f"export BASE_DOMAIN={self.dev_scripts_config.get('base_domain', 'tnf.testing')}",
         ]
 
-        if osd_disks:
-            osd_disk_names = " ".join(
-                [f"vd{chr(98 + i)}" for i in range(len(osd_disks))]
-            )
-            osd_disk_size = max(d["size"] for d in osd_disks)
+        if extra_disks:
+            disk_names = " ".join([f"vd{chr(98 + i)}" for i in range(len(extra_disks))])
             config_lines.extend(
                 [
                     "export VM_EXTRADISKS=true",
-                    f'export VM_EXTRADISKS_LIST="{osd_disk_names}"',
-                    f"export VM_EXTRADISKS_SIZE={osd_disk_size}G",
+                    f'export VM_EXTRADISKS_LIST="{disk_names}"',
+                    f"export VM_EXTRADISKS_SIZE={min_disk_size}G",
                 ]
             )
 
@@ -859,49 +861,31 @@ class TNFHypervisor:
             return int(stdout.strip())
         return None
 
-    def attach_monitor_disks(self):
+    def resize_vm_disks(self):
         """
-        Create and attach small monitor disks to each master VM.
+        Resize OSD disks from initial min size to their intended sizes.
 
-        dev-scripts VM_EXTRADISKS_SIZE uses a single size for all disks.
-        To get different-sized disks (small monitor + large OSD), the
-        monitor disk is created separately via qemu-img and attached
-        via virsh after dev-scripts completes.
+        All extra disks are created at the smallest size (for DRBD monitor)
+        via VM_EXTRADISKS_SIZE. After dev-scripts completes, OSD disks are
+        grown to their configured size using virsh blockresize on the
+        running VMs. This avoids PCI slot exhaustion from hotplugging.
         """
-        if not self._monitor_disk_size:
-            logger.info("No separate monitor disks to attach")
+        if not self._disk_resize_map:
+            logger.info("No disk resizing needed")
             return
 
         cluster_name = self.dev_scripts_config.get("cluster_name", "tnf-cluster")
         num_masters = self.dev_scripts_config.get("num_masters", 2)
-        osd_disks = self.dev_scripts_config.get("extra_disks", [])
-        sorted_disks = sorted(osd_disks, key=lambda d: d["size"])
-        num_osd = len(sorted_disks) - 1
-        target_dev = f"vd{chr(98 + num_osd)}"
-        pool_dir = "/opt/dev-scripts/pool"
 
         for i in range(num_masters):
             domain = f"{cluster_name}_master_{i}"
-            img_path = f"{pool_dir}/{domain}_monitor.qcow2"
+            for dev_name, target_size in self._disk_resize_map.items():
+                logger.info(f"Resizing {dev_name} on {domain} to {target_size}G")
+                self._ssh_cmd(
+                    f"sudo virsh blockresize {domain} {dev_name} " f"{target_size}G"
+                )
 
-            logger.info(
-                f"Creating {self._monitor_disk_size}G monitor disk for {domain}"
-            )
-            self._ssh_cmd(
-                f"sudo qemu-img create -f qcow2 {img_path} "
-                f"{self._monitor_disk_size}G"
-            )
-
-            logger.info(f"Attaching monitor disk as {target_dev} to {domain}")
-            self._ssh_cmd(
-                f"sudo virsh attach-disk {domain} {img_path} {target_dev} "
-                f"--persistent --subdriver qcow2"
-            )
-
-        logger.info(
-            f"Attached {self._monitor_disk_size}G monitor disks to "
-            f"{num_masters} master VMs as {target_dev}"
-        )
+        logger.info("VM disk resize complete")
 
     def setup_proxy(self):
         """
