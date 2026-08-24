@@ -5,6 +5,7 @@ import time
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     mdr,
+    turquoise_squad,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs.acm.acm import AcmAddClusters
@@ -34,7 +35,6 @@ from ocs_ci.helpers.dr_helpers_ui import (
     failover_relocate_ui,
     verify_failover_relocate_status_ui,
 )
-from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 
 logger = logging.getLogger(__name__)
 
