@@ -244,8 +244,12 @@ class Submariner(object):
                     )
                     continue
 
+                patch_params = (
+                    f'{{"spec":{{"imagePullSpecs":{{"submarinerRouteAgentImagePullSpec":'
+                    f'"{routeagent_image}"}}}}}}'
+                )
                 submariner_config.patch(
-                    params=f'{{"spec":{{"imageOverrides":{{"submariner-routeagent":"{routeagent_image}"}}}}}}',
+                    params=patch_params,
                     format_type="merge",
                 )
                 logger.info(
