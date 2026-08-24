@@ -1,0 +1,30 @@
+---
+# Two-Node Failover (TNF) deployment configuration
+# Following Red Hat ODF 4.22 documentation for two-node clusters
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+  ocs_operator_nodes_to_label: 2
+ENV_DATA:
+  platform: 'baremetal'
+  deployment_type: 'tnf'
+  worker_replicas: 0
+  master_replicas: 2
+  # TNF-specific configuration
+  tnf:
+    # Monitor disk paths (must be provided per deployment)
+    # monitor_disk_node_0: /dev/disk/by-id/YOUR_MONITOR_DISK_0
+    # monitor_disk_node_1: /dev/disk/by-id/YOUR_MONITOR_DISK_1
+    # OSD device mappings (must be provided per deployment)
+    # osd_device_mappings:
+    #   - node_name: master-0
+    #     device_path: /dev/disk/by-id/YOUR_DISK_ID_1
+    #     size: 500Gi
+    #     pv_name: local-pv-1
+    #   - node_name: master-1
+    #     device_path: /dev/disk/by-id/YOUR_DISK_ID_2
+    #     size: 500Gi
+    #     pv_name: local-pv-2
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-XXXX'  # Update with actual Polarion ID
