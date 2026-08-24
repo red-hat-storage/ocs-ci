@@ -4028,6 +4028,7 @@ def clone_repo(
     clone_type="shallow",
     force_checkout=False,
     clone_token=None,
+    sparse_checkout_dirs=None,
 ):
     """
     Clone a repository or checkout latest changes if it already exists at
@@ -4045,6 +4046,9 @@ def clone_repo(
         force_checkout (bool): True for force checkout to branch.
             force checkout will ignore the unmerged entries.
         clone_token (str): Token to clone repo
+        sparse_checkout_dirs (list): list of directories to include in sparse
+            checkout. When provided, only the specified directories will be
+            checked out, significantly reducing disk usage for large repos.
 
     Raises:
         UnknownCloneTypeException: In case of incorrect clone_type is used
@@ -4072,7 +4076,7 @@ def clone_repo(
     if ("installer" in location) and installer_path_exist:
         if "coreos" not in location:
             installer_dir = os.path.join(constants.EXTERNAL_DIR, "installer")
-            remote_output = run_cmd(f"git -C {installer_dir} remote -v")
+            remote_output = exec_cmd(f"git -C {installer_dir} remote -v")
             if (("srozen" in remote_output) and ("openshift" in url)) or (
                 ("openshift" in remote_output) and ("srozen" in url)
             ):
@@ -4082,27 +4086,32 @@ def clone_repo(
                 )
                 time.sleep(5)
 
+    if sparse_checkout_dirs:
+        git_params += " --sparse"
+
     if not os.path.isdir(location) or (tmp_repo and os.path.isdir(location)):
         log.info("Cloning repository into %s", location)
         if clone_token:
             url = url.replace("https://", f"https://{clone_token}@")
             clone_token = [clone_token]
-        run_cmd(  # IgnoreDeprecation
-            cmd=f"git clone {git_params} {url} {location}", secrets=clone_token
-        )
+        exec_cmd(cmd=f"git clone {git_params} {url} {location}", secrets=clone_token)
+        if sparse_checkout_dirs:
+            sparse_paths = " ".join(sparse_checkout_dirs)
+            log.info("Setting sparse checkout for directories: %s", sparse_paths)
+            exec_cmd(f"git sparse-checkout set {sparse_paths}", cwd=location)
     else:
         log.info("Repository already cloned at %s, skipping clone", location)
         log.info("Fetching latest changes from repository")
-        run_cmd("git fetch --all", cwd=location)
+        exec_cmd("git fetch --all", cwd=location)
     log.info("Checking out repository to specific branch: %s", branch)
     if force_checkout:
-        run_cmd(f"git checkout --force {branch}", cwd=location)
+        exec_cmd(f"git checkout --force {branch}", cwd=location)
     else:
-        run_cmd(f"git checkout {branch}", cwd=location)
+        exec_cmd(f"git checkout {branch}", cwd=location)
     log.info("Reset branch: %s with latest changes", branch)
-    run_cmd(f"git reset --hard origin/{branch}", cwd=location)
+    exec_cmd(f"git reset --hard origin/{branch}", cwd=location)
     if to_checkout:
-        run_cmd(f"git checkout {to_checkout}", cwd=location)
+        exec_cmd(f"git checkout {to_checkout}", cwd=location)
 
 
 def get_latest_ds_olm_tag(upgrade=False, latest_tag=None, stable_upgrade_version=False):
