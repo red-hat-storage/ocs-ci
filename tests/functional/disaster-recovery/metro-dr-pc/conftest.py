@@ -13,6 +13,7 @@ def pytest_collection_modifyitems(items):
         items: list of collected tests
 
     """
+    client_cluster_present = config.hci_client_exist()
     if config.MULTICLUSTER.get("multicluster_mode") != constants.MDR_MODE:
         for item in items.copy():
             if "disaster-recovery/metro-dr-pc" in str(item.fspath):
@@ -22,7 +23,10 @@ def pytest_collection_modifyitems(items):
                 items.remove(item)
     else:
         for item in items.copy():
-            if not config.hci_client_exist():
+            if (
+                "disaster-recovery/metro-dr-pc" in str(item.fspath)
+                and not client_cluster_present
+            ):
                 log.debug(
                     f"Test {item} is removed from the collected items. Test runs only on client MDR clusters"
                 )
