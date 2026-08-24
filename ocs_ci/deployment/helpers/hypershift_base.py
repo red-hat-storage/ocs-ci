@@ -599,9 +599,16 @@ class HyperShiftBase:
                 logger.error("Falling back to configured hcp_version.")
                 return self.install_hcp_and_hypershift_from_git(install_latest=False)
         else:
-            hcp_version = config.ENV_DATA.get("hcp_version")
+            raw_version = config.ENV_DATA.get("hcp_version")
+            match = re.match(r"^(\d+\.\d+)", str(raw_version))
+            hcp_version = match.group(1) if match else str(raw_version)
+            if hcp_version != str(raw_version):
+                logger.warning(
+                    f"Configured hcp_version '{raw_version}' contains extra qualifiers; "
+                    f"normalized to '{hcp_version}' for git branch name."
+                )
             logger.info(
-                f"Using configured hcp_version: {hcp_version} (branch release-{hcp_version})."
+                f"Using configured hcp_version: {raw_version} (branch release-{hcp_version})."
             )
 
         logger.info("Downloading hcp binary from git")
