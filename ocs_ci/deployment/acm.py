@@ -3,8 +3,10 @@ All ACM related deployment classes and functions should go here.
 
 """
 
+import json
 import os
 import logging
+import subprocess
 import tempfile
 import shutil
 import requests
@@ -35,6 +37,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     run_cmd,
     run_cmd_interactive,
+    TimeoutSampler,
     wait_for_machineconfigpool_status,
 )
 from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
@@ -216,55 +219,108 @@ class Submariner(object):
         )
         restore_index = config.cur_index
 
-        for cluster in get_non_acm_cluster_config():
-            cluster_name = cluster.ENV_DATA["cluster_name"]
-            if is_hosted_cluster(cluster_name):
-                cluster_name = (
-                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name}"
+        try:
+            for cluster in get_non_acm_cluster_config():
+                cluster_name = cluster.ENV_DATA["cluster_name"]
+                if is_hosted_cluster(cluster_name):
+                    cluster_name = (
+                        f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name}"
+                    )
+                cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+
+                # 1. Switch to hub and patch the SubmarinerConfig for this cluster
+                config.switch_acm_ctx()
+                submariner_config = OCP(
+                    kind=constants.SUBMARINERCONFIG,
+                    namespace=cluster_name,
+                    resource_name="submariner",
                 )
-            cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+                if not submariner_config.check_resource_existence(
+                    timeout=10, should_exist=True
+                ):
+                    logger.warning(
+                        f"SubmarinerConfig 'submariner' not found in namespace '{cluster_name}' "
+                        f"on hub; skipping routeagent override for cluster '{cluster_name}'"
+                    )
+                    continue
 
-            # 1. Switch to hub and patch the SubmarinerConfig for this cluster
-            config.switch_acm_ctx()
-            submariner_config = OCP(
-                kind=constants.SUBMARINERCONFIG,
-                namespace=cluster_name,
-                resource_name="submariner",
-            )
-            if not submariner_config.check_resource_existence(
-                timeout=10, should_exist=True
-            ):
-                logger.warning(
-                    f"SubmarinerConfig 'submariner' not found in namespace '{cluster_name}' "
-                    f"on hub; skipping routeagent override for cluster '{cluster_name}'"
+                submariner_config.patch(
+                    params=f'{{"spec":{{"imageOverrides":{{"submariner-routeagent":"{routeagent_image}"}}}}}}',
+                    format_type="merge",
                 )
-                continue
+                logger.info(
+                    f"Patched SubmarinerConfig for cluster '{cluster_name}' "
+                    f"with routeagent image '{routeagent_image}'"
+                )
+                # 2. Switch to the managed cluster, wait for DaemonSet image update, then rollout
+                config.switch_ctx(cluster_index)
+                kubeconfig = cluster.RUN["kubeconfig"]
 
-            submariner_config.patch(
-                params=f'{{"spec":{{"imageOverrides":{{"submariner-routeagent":"{routeagent_image}"}}}}}}',
-                format_type="merge",
-            )
-            logger.info(
-                f"Patched SubmarinerConfig for cluster '{cluster_name}' "
-                f"with routeagent image '{routeagent_image}'"
-            )
+                # Wait for ACM to reconcile the image into the DaemonSet spec.
+                # sleep=30 means the first poll happens after 30s (giving ACM time to start
+                # reconciling) and repeats every 30s if the image is not yet updated.
+                # (both main container and init container must reflect the new image)
+                logger.info(
+                    f"Waiting for submariner-routeagent DaemonSet on cluster '{cluster_name}' "
+                    f"to reflect image '{routeagent_image}'"
+                )
+                image_updated = False
+                for ds_data in TimeoutSampler(
+                    timeout=300,
+                    sleep=30,
+                    func=exec_cmd,
+                    cmd=(
+                        f"oc --kubeconfig {kubeconfig} get daemonset submariner-routeagent "
+                        f"-n {constants.SUBMARINER_OPERATOR_NAMESPACE} -o json"
+                    ),
+                ):
+                    if ds_data is None:
+                        continue
+                    ds = json.loads(ds_data.stdout)
+                    containers = ds["spec"]["template"]["spec"].get("containers", [])
+                    init_containers = ds["spec"]["template"]["spec"].get(
+                        "initContainers", []
+                    )
+                    all_images = [c["image"] for c in containers + init_containers]
+                    if all(img == routeagent_image for img in all_images):
+                        logger.info(
+                            f"DaemonSet image updated on cluster '{cluster_name}'"
+                        )
+                        image_updated = True
+                        break
 
-            # 2. Switch to the managed cluster and wait for the routeagent DaemonSet rollout
-            config.switch_ctx(cluster_index)
-            kubeconfig = cluster.RUN["kubeconfig"]
-            rollout_cmd = (
-                f"oc --kubeconfig {kubeconfig} rollout status "
-                f"daemonset/submariner-routeagent "
-                f"-n {constants.SUBMARINER_OPERATOR_NAMESPACE} --timeout=120s"
-            )
-            try:
-                exec_cmd(rollout_cmd)
-            except Exception:
-                logger.warning(
-                    f"Routeagent rollout did not complete within timeout on cluster '{cluster_name}'; continuing"
+                if not image_updated:
+                    logger.warning(
+                        f"DaemonSet image not updated within timeout on cluster '{cluster_name}'; "
+                        "skipping rollout check"
+                    )
+                    continue
+
+                # Wait for rollout to complete with retry (tries=3, 30s initial delay, backoff=2)
+                rollout_cmd = (
+                    f"oc --kubeconfig {kubeconfig} rollout status "
+                    f"daemonset/submariner-routeagent "
+                    f"-n {constants.SUBMARINER_OPERATOR_NAMESPACE} --timeout=120s"
                 )
 
-        config.switch_ctx(restore_index)
+                @retry(
+                    (CommandFailed, subprocess.TimeoutExpired),
+                    tries=3,
+                    delay=30,
+                    backoff=2,
+                )
+                def _run_rollout():
+                    exec_cmd(rollout_cmd)
+
+                try:
+                    _run_rollout()
+                except (CommandFailed, subprocess.TimeoutExpired) as e:
+                    logger.warning(
+                        f"Routeagent rollout did not complete after retries on cluster "
+                        f"'{cluster_name}': {e}; continuing"
+                    )
+        finally:
+            config.switch_ctx(restore_index)
 
     def create_acm_brew_idms(self):
         """
