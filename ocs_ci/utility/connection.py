@@ -64,24 +64,12 @@ class Connection(object):
             client = SSHClient()
             client.set_missing_host_key_policy(AutoAddPolicy())
             if self.private_key:
-                try:
-                    client.connect(
-                        self.host,
-                        username=self.user,
-                        key_filename=self.private_key,
-                        sock=self.jump_channel,
-                    )
-                except (AuthenticationException, SSHException) as e:
-                    if "encrypted" in str(e).lower():
-                        logger.info("Key is encrypted, falling back to ssh-agent")
-                        client.connect(
-                            self.host,
-                            username=self.user,
-                            allow_agent=True,
-                            sock=self.jump_channel,
-                        )
-                    else:
-                        raise
+                client.connect(
+                    self.host,
+                    username=self.user,
+                    key_filename=self.private_key,
+                    sock=self.jump_channel,
+                )
             elif self.password:
                 client.connect(
                     self.host,

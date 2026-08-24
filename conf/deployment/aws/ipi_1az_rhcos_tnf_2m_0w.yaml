@@ -1,5 +1,5 @@
 ---
-# TNF (Two-Node Failover) deployment via AWS EC2 bare-metal hypervisor
+# TNF (Two-Node Fencing) deployment via AWS EC2 bare-metal hypervisor
 #
 # Provisions EC2 bare-metal instance, runs dev-scripts to create
 # a 2-node OCP cluster (fencing-ipi), then deploys ODF with DRBD.
@@ -8,8 +8,6 @@
 #   1. AWS credentials configured (~/.aws/credentials or environment)
 #   2. Pull secret at data/pull-secret (from console.redhat.com)
 #   3. SSH key pair at ~/.ssh/id_ed25519 or ~/.ssh/id_rsa (auto-detected)
-#
-# Everything else is auto-created: VPC, subnet, security group, AMI
 #
 # Step 1 - Deploy OCP:
 #   run-ci -m deployment --deploy \
@@ -51,20 +49,15 @@ ENV_DATA:
   master_replicas: 2
   device_class: 'ssd'
   skip_nfs_deployment: true
-  skip_ocp_deployment: false
   region: 'us-east-2'
   tnf:
     hypervisor:
       instance_type: 'c5n.metal'
-      ami: ''                         # Auto-detected if empty (latest RHEL 9 for region)
+      ami: ''
       region: 'us-east-2'
-      # subnet_id: ''                 # Auto-created if empty (full VPC stack)
-      # security_group_ids:           # Auto-created if empty (SSH, HTTPS, API, proxy, NodePorts)
-      #   - 'sg-xxxxxxxxx'            # Override to use a pre-existing security group
-      root_volume_size: 200           # GB
+      root_volume_size: 200
       root_volume_type: 'gp3'
       ssh_user: 'ec2-user'
-      # ssh_key_private: ''           # Auto-detected from ~/.ssh/ if empty
       instance_name_prefix: 'tnf-hypervisor'
     dev_scripts:
       topology: 'fencing-ipi'
@@ -76,14 +69,10 @@ ENV_DATA:
       extra_disks:
         - size: 20                    # GB, DRBD monitor (<50 GB recommended)
         - size: 500                   # GB, OSD (>= 500 GB required)
-      ocp_release_image: ''           # e.g. quay.io/openshift-release-dev/ocp-release:4.22.0-x86_64
+      ocp_release_image: ''
       network_type: 'OVNKubernetes'
       cluster_name: 'tnf-cluster'
       base_domain: 'tnf.testing'
-      # repo: 'https://github.com/openshift-metal3/dev-scripts.git'
-      # branch: 'master'
     proxy:
       enabled: true
       port: 8213
-REPORTING:
-  display_name: 'AWS-HYPERVISOR-BAREMETAL-IPI-1AZ-RHCOS-LSO-2M-0W-deployment'
