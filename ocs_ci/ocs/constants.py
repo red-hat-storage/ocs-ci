@@ -205,6 +205,7 @@ CEPHBLOCKPOOL = "CephBlockPool"
 CEPHBLOCKPOOLRADOSNS = "cephblockpoolradosnamespaces"
 CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
+CEPH_NVMEOF_SC = "ocs-storagecluster-ceph-nvmeof"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 CEPHFILESYSTEM_SC_SELINUX = "ocs-storagecluster-cephfs-selinux-relabel"
 CEPHOBJECTSTORE = "CephObjectStore"
@@ -783,6 +784,7 @@ MGR_APP_LABEL = "app=rook-ceph-mgr"
 OSD_APP_LABEL = "app=rook-ceph-osd"
 OSD_PREPARE_APP_LABEL = "app=rook-ceph-osd-prepare"
 RGW_APP_LABEL = "app=rook-ceph-rgw"
+NVMEOF_APP_LABEL = "app=rook-ceph-nvmeof"
 # Map performance profile component name to pod label selector for Ceph daemons
 CEPH_DAEMON_LABEL_BY_COMPONENT = {
     "mgr": MGR_APP_LABEL,

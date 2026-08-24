@@ -484,6 +484,7 @@ def pytest_collection_modifyitems(session, config, items):
                 "skipif_upgraded_from"
             )
             skipif_no_kms_marker = item.get_closest_marker("skipif_no_kms")
+            skipif_no_nvmeof_marker = item.get_closest_marker("skipif_no_nvmeof")
             skipif_ui_not_support_marker = item.get_closest_marker(
                 "skipif_ui_not_support"
             )
@@ -537,6 +538,14 @@ def pytest_collection_modifyitems(session, config, items):
                     log.warning(
                         "Cluster is not yet installed. Skipping skipif_no_kms check."
                     )
+            if skipif_no_nvmeof_marker:
+                if not ocsci_config.DEPLOYMENT.get("nvmeof_enable"):
+                    log.debug(
+                        f"Test: {item} will be skipped because NVMe-oF is not"
+                        " enabled/configured on the OCS cluster"
+                    )
+                    items.remove(item)
+                    continue
             if skipif_ui_not_support_marker:
                 skip_condition = skipif_ui_not_support_marker
                 if skipif_ui_not_support(skip_condition.args[0]):
