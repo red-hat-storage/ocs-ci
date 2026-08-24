@@ -210,7 +210,11 @@ deployment_4_9 = {
         By.CSS_SELECTOR,
     ),
     "choose_openshift-storage_project": (
-        "//span[text()='" + config.ENV_DATA["cluster_namespace"] + "']",
+        "//span[text()='" + config.ENV_DATA["cluster_namespace"] + "'] | "
+        "//a[@data-test='" + config.ENV_DATA["cluster_namespace"] + "'] | "
+        "//button[@role='menuitem'][normalize-space()='"
+        + config.ENV_DATA["cluster_namespace"]
+        + "']",
         By.XPATH,
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
@@ -1856,17 +1860,18 @@ acm_configuration_4_21 = {
 }
 
 acm_configuration_4_22 = {
-    "single-perspective": (
-        "//*[@id='only-one-perspective']",
+    "perspective-switcher-toggle": (
+        "//*[@data-test-id='perspective-switcher-toggle']",
         By.XPATH,
     ),
-    "all-clusters_dropdown": (
-        "//button[@data-test-id='perspective-switcher-toggle']",
+    "all-clusters_dropdown_item": (
+        "//button[@role='option'][normalize-space()='Fleet management'] | "
+        "//button[@role='option'][normalize-space()='All Clusters']",
         By.XPATH,
     ),
     "local-cluster_dropdown_item": (
-        "//*[@data-test-id='perspective-switcher-toggle']//*[normalize-space()='local-cluster'] | "
-        "//*[@data-test-id='perspective-switcher-toggle']//*[normalize-space()='Core platform']",
+        "//button[@role='option'][normalize-space()='local-cluster'] | "
+        "//button[@role='option'][normalize-space()='Core platform']",
         By.XPATH,
     ),
     "local-cluster_dropdown": (
@@ -2162,6 +2167,10 @@ block_pool_4_22 = {
     ),
     "pool_replicas_in_list": (
         'span[data-test="{}-replicas"]',
+        By.CSS_SELECTOR,
+    ),
+    "pool_replicas_all_in_list": (
+        'span[data-test$="-replicas"]',
         By.CSS_SELECTOR,
     ),
 }
@@ -2499,7 +2508,11 @@ validation_4_9 = {
         "//button[normalize-space()='Refresh web console']",
         By.XPATH,
     ),
-    "odf-operator": ("//h1[normalize-space()='OpenShift Data Foundation']", By.XPATH),
+    "odf-operator": (
+        "//h1[normalize-space()='OpenShift Data Foundation']",
+        By.XPATH,
+    ),
+    "odf-operator-by-display-name": ("//h1[normalize-space()='{}']", By.XPATH),
     # project-dropdown is different for Storage pages and generic such as Operators/Installed Operators
     "project-dropdown": (
         "//span[contains(@class, 'menu-toggle__text') and contains(text(), 'Project:')] | "
