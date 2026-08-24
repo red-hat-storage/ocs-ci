@@ -167,8 +167,11 @@ class TestNvmeofPvc(ManageTest):
                 pv_obj, constants.STATUS_RELEASED, timeout=180
             )
             logger.info("PV %s is Released as per Retain reclaim policy", pv_name)
-            # Cleanup the retained PV so no leftovers remain
-            pv_obj.delete()
+            # Cleanup the retained PV so no leftovers remain. Switch the reclaim
+            # policy to Delete so the controller removes the backing volume too,
+            # then wait for controller-driven deletion (pvc_factory_fixture pattern).
+            patch_param = '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
+            pv_obj.ocp.patch(resource_name=pv_name, params=patch_param)
             pv_obj.ocp.wait_for_delete(resource_name=pv_name, timeout=180)
         else:
             pytest.fail(f"Unexpected reclaim policy {reclaim_policy} for PV {pv_name}")
