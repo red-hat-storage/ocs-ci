@@ -1047,13 +1047,13 @@ class Deployment(object):
             self.do_deploy_oadp()
         if config.DEPLOYMENT.get("unique_rack_node_labels"):
             create_unique_rack_labels()
-        self.do_deploy_ocs()
         if ocp_version >= version.VERSION_5_0:
             # Temporary workaround: create the GitOps CatalogSource on all
             # clusters before deploying the GitOps operator and OADP.
             run_cmd_multicluster(f"oc create -f {constants.TEMP_GITOPS_WA_YAML}")
             self.do_gitops_deploy()
             self.do_deploy_oadp()
+        self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_mce()
         self.do_deploy_cnv()
