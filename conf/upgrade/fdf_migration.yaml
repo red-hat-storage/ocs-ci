@@ -1,9 +1,9 @@
 ---
 # ODF to FDF migration configuration.
 # Sets subscription approval to Manual (required for catalog switch).
+#
+# The ISF Data Foundation catalog image is constructed at runtime from the
+# --fdf-upgrade-registry and --fdf-upgrade-image-tag CLI arguments, e.g.:
+#   --fdf-upgrade-registry cp.stg.icr.io/cp/df --fdf-upgrade-image-tag 4.21.9-4
 DEPLOYMENT:
   subscription_plan_approval: "Manual"
-
-UPGRADE:
-  # Set to the full pull-spec of the ISF Data Foundation catalog image.
-  fdf_registry_image: "cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.21.9-4"

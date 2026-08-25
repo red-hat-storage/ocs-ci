@@ -11,6 +11,8 @@ Run with:
         --cluster-name <n> \
         --cluster-path <path> \
         -m 'pre_fdf_migration or fdf_migration or post_fdf_migration' \
+        --fdf-upgrade-registry cp.stg.icr.io/cp/df \
+        --fdf-upgrade-image-tag 4.21.9-4 \
         --ocsci-conf conf/upgrade/fdf_migration.yaml \
         --ocsci-conf conf/ocsci/manual_subscription_plan_approval.yaml
 """
@@ -28,7 +30,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework.pytest_customization.marks import purple_squad
 from ocs_ci.ocs.cluster import ceph_health_check
 from ocs_ci.ocs import defaults
-from ocs_ci.ocs.fdf_upgrade import FDFUpgrade
+from ocs_ci.ocs.fdf_migration import FDFMigration
 from ocs_ci.ocs.resources.csv import (
     check_all_csvs_are_succeeded,
     get_csvs_start_with_prefix,
@@ -63,8 +65,10 @@ class TestFDFMigration(ManageTest):
     """
     Main ODF -> FDF migration test.
 
-    Reads ``config.UPGRADE['fdf_registry_image']`` for the target catalog
-    image.
+    The target catalog image is constructed from
+    ``config.DEPLOYMENT['fdf_upgrade_registry']`` and
+    ``config.DEPLOYMENT['fdf_upgrade_image_tag']`` (set via the
+    ``--fdf-upgrade-registry`` and ``--fdf-upgrade-image-tag`` CLI args).
     """
 
     def test_fdf_migration(self):
@@ -79,10 +83,11 @@ class TestFDFMigration(ManageTest):
           7. Wait for all CSVs to reach Succeeded.
           8. Post-migration CSV verification.
         """
-        fdf_image = config.UPGRADE.get("fdf_registry_image")
-        assert fdf_image, (
-            "fdf_registry_image must be set in config.UPGRADE. "
-            "Pass via --ocsci-conf conf/upgrade/fdf_migration.yaml."
+        fdf_registry = config.DEPLOYMENT.get("fdf_upgrade_registry")
+        fdf_image_tag = config.DEPLOYMENT.get("fdf_upgrade_image_tag")
+        assert fdf_registry and fdf_image_tag, (
+            "fdf_upgrade_registry and fdf_upgrade_image_tag must be set. "
+            "Pass via --fdf-upgrade-registry and --fdf-upgrade-image-tag."
         )
         namespace = config.ENV_DATA["cluster_namespace"]
 
@@ -93,10 +98,10 @@ class TestFDFMigration(ManageTest):
         odf_version = odf_csv["spec"]["version"]
 
         logger.test_step("Starting ODF -> FDF migration")
-        logger.info(f"Catalog image: {fdf_image}")
+        logger.info(f"FDF registry: {fdf_registry}, image tag: {fdf_image_tag}")
         logger.info(f"ODF version from cluster CSV: {odf_version}")
 
-        fdf_migration_obj = FDFUpgrade(
+        fdf_migration_obj = FDFMigration(
             namespace=namespace,
             version_before_upgrade=odf_version,
         )

@@ -28,17 +28,23 @@ logger = logging.getLogger(__name__)
 
 class FDFMigration(FDFUpgrade):
     """
-    Handles ODF to FDF (IBM Fusion Data Foundation) migration.
+    ODF -> FDF (IBM Fusion Data Foundation) migration helper class.
 
-    Extends FDFUpgrade to reuse common initialization, version validation,
-    and deployment helpers. Migration-specific logic (catalog swap,
-    subscription patching) lives here.
+    This is distinct from :class:`FDFUpgrade`, which handles FDF-to-FDF
+    version upgrades. This class handles the initial migration from Red Hat
+    ODF to IBM Fusion Data Foundation by switching the catalog source and
+    re-pointing subscriptions. It reuses the version handling and deployment
+    helpers provided by :class:`FDFUpgrade`.
 
     """
 
     def run_migration(self):
         """
         Orchestrate the full ODF to FDF migration sequence.
+
+        This method handles migrating from Red Hat ODF to IBM Fusion Data
+        Foundation by replacing the ODF catalog source with the ISF FDF
+        catalog and re-pointing all subscriptions.
 
         The migration flow:
         1. Version validation - ensures target version is >= current version
@@ -52,19 +58,20 @@ class FDFMigration(FDFUpgrade):
         9. Post-migration CSV and FDF install verification
 
         Raises:
-            AssertionError: When fdf_registry_image is not configured, or
-                post-migration verification fails.
+            AssertionError: When the FDF upgrade registry/image tag are not
+                configured, or post-migration verification fails.
             TimeoutException: When the migration does not complete in time.
 
         """
         fdf_registry = config.DEPLOYMENT.get("fdf_upgrade_registry")
         fdf_image_tag = config.DEPLOYMENT.get("fdf_upgrade_image_tag")
-        fdf_catalog_name = defaults.FUSION_CATALOG_NAME
         assert fdf_registry and fdf_image_tag, (
             "config.DEPLOYMENT['fdf_upgrade_registry'] and "
             "config.DEPLOYMENT['fdf_upgrade_image_tag'] must be set before "
-            "running FDF migration."
+            "running FDF migration. Provide them via --fdf-upgrade-registry "
+            "and --fdf-upgrade-image-tag."
         )
+        fdf_catalog_name = defaults.FUSION_CATALOG_NAME
         fdf_registry_image = f"{fdf_registry}/{fdf_catalog_name}:{fdf_image_tag}"
         logger.info(f"Constructed fdf_registry_image: {fdf_registry_image}")
 
@@ -172,9 +179,7 @@ class FDFMigration(FDFUpgrade):
         fdf_catalog.wait_for_state("READY", timeout=300)
 
         logger.info("Setting ODF subscription installPlanApproval to Manual")
-        _set_subscription_approval_strategy(
-            approval="Manual", namespace=self.namespace
-        )
+        _set_subscription_approval_strategy(approval="Manual", namespace=self.namespace)
 
     def _get_odf_csv_name(self):
         """
@@ -322,8 +327,7 @@ def _patch_subscriptions_source(catalog_source_name, namespace=None):
 
     for sub_name in subscription_names:
         logger.info(
-            f"Patching subscription '{sub_name}' -> "
-            f"source='{catalog_source_name}'"
+            f"Patching subscription '{sub_name}' -> " f"source='{catalog_source_name}'"
         )
         patch_json = json.dumps({"spec": {"source": catalog_source_name}})
         exec_cmd(
