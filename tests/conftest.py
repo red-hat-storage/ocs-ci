@@ -7990,7 +7990,10 @@ def create_workload_factory():
 
         for index in range(num_of_subscription):
             workload_key = "dr_workload_subscription"
-            if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+            is_mdr_specific = ocsci_config.ENV_DATA.get(workload_key, False)
+            if (
+                ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
+            ) or (not is_mdr_specific):
                 workload_key = "dr_workload_subscription_placement"
                 workload_key += f"_{interface}"
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
@@ -8014,7 +8017,10 @@ def create_workload_factory():
 
         for index in range(num_of_appset):
             workload_key = "dr_workload_appset"
-            if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+            is_mdr_specific = ocsci_config.ENV_DATA.get(workload_key, False)
+            if (
+                ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
+            ) or (not is_mdr_specific):
                 workload_key += f"_{interface}"
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyBox_AppSet(
