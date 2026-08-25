@@ -54,7 +54,11 @@ def require_tlsprofile_crd():
 @skipif_fips_enabled
 @skipif_external_mode
 @skipif_managed_service
-@ignore_leftover_label(constants.NOOBAA_ENDPOINT_POD_LABEL)
+@ignore_leftover_label(
+    constants.NOOBAA_ENDPOINT_POD_LABEL,
+    constants.OCS_METRICS_EXPORTER,
+    constants.OCS_CLIENT_OPERATOR_LABEL,
+)
 class TestCentralizedTLSProfileConfiguration(ManageTest):
     """
     Lifecycle tests for centralized ``TLSProfile`` (DF 4.22+): TLS 1.3 / 1.2 rules,

@@ -27,6 +27,7 @@ from ocs_ci.helpers.tlsprofile_helper import (
     assert_no_tls_errors_in_relevant_pod_logs,
     metrics_exporter_is_deployed,
     scan_cluster,
+    snapshot_metrics_exporter_roll_state,
     snapshot_tlsprofile_state,
     teardown_tlsprofile,
     tlsprofile_crd_exists,
@@ -54,7 +55,10 @@ def require_tlsprofile_crd():
 @skipif_fips_enabled
 @skipif_external_mode
 @skipif_managed_service
-@ignore_leftover_label(constants.OCS_METRICS_EXPORTER)
+@ignore_leftover_label(
+    constants.OCS_METRICS_EXPORTER,
+    constants.OCS_CLIENT_OPERATOR_LABEL,
+)
 class TestMetricsExporterTLSProfile(ManageTest):
     """
     Lifecycle tests for centralized ``TLSProfile`` on ocs-metrics-exporter
@@ -122,6 +126,7 @@ class TestMetricsExporterTLSProfile(ManageTest):
             "Create or normalize TLSProfile with ocs.openshift.io/metrics-exporter "
             "selector and TLSv1.3"
         )
+        prev_roll = snapshot_metrics_exporter_roll_state(namespace)
         if not tls.is_tls_profile_available():
             log.info("TLSProfile absent; creating with TLSv1.3 for metrics-exporter")
             tls.create_tls_profile(
@@ -147,7 +152,7 @@ class TestMetricsExporterTLSProfile(ManageTest):
             f"TLSProfile version: expected='TLSv1.3', actual='{actual_version}'"
         )
         assert actual_version == "TLSv1.3"
-        wait_for_metrics_exporter_ready(namespace)
+        wait_for_metrics_exporter_ready(namespace, previous_fingerprints=prev_roll)
 
         log.test_step(
             "Scan ocs-metrics-exporter HTTPS ports "
@@ -163,6 +168,7 @@ class TestMetricsExporterTLSProfile(ManageTest):
         )
 
         log.test_step("Patch TLSProfile to TLSv1.2 and validate metrics-exporter")
+        prev_roll = snapshot_metrics_exporter_roll_state(namespace)
         tls.replace_rules(
             _METRICS_EXPORTER_SELECTORS,
             "TLSv1.2",
@@ -175,7 +181,7 @@ class TestMetricsExporterTLSProfile(ManageTest):
             f"TLSProfile version: expected='TLSv1.2', actual='{actual_version}'"
         )
         assert actual_version == "TLSv1.2"
-        wait_for_metrics_exporter_ready(namespace)
+        wait_for_metrics_exporter_ready(namespace, previous_fingerprints=prev_roll)
 
         log.test_step(
             "Scan ocs-metrics-exporter HTTPS ports "
@@ -191,6 +197,7 @@ class TestMetricsExporterTLSProfile(ManageTest):
         )
 
         log.test_step("Restore TLSv1.3 on TLSProfile, then delete the resource")
+        prev_roll = snapshot_metrics_exporter_roll_state(namespace)
         tls.replace_rules(
             _METRICS_EXPORTER_SELECTORS,
             "TLSv1.3",
@@ -198,7 +205,7 @@ class TestMetricsExporterTLSProfile(ManageTest):
             TLS_PROFILE_V13_GROUPS,
         )
         wait_for_tlsprofile_config_version(tls, "TLSv1.3")
-        wait_for_metrics_exporter_ready(namespace)
+        wait_for_metrics_exporter_ready(namespace, previous_fingerprints=prev_roll)
 
         log.test_step(
             "Scan ocs-metrics-exporter HTTPS ports "
@@ -213,13 +220,14 @@ class TestMetricsExporterTLSProfile(ManageTest):
             context="TLSProfile restored to TLSv1.3, component=metrics-exporter",
         )
 
+        prev_roll = snapshot_metrics_exporter_roll_state(namespace)
         tls.delete_tls_profile(wait=True, force=False)
         still_present = tls.is_tls_profile_available()
         log.assertion(
             f"TLSProfile after delete: expected=absent, actual_present={still_present}"
         )
         assert not still_present, "TLSProfile should be absent after delete"
-        wait_for_metrics_exporter_ready(namespace)
+        wait_for_metrics_exporter_ready(namespace, previous_fingerprints=prev_roll)
 
         elapsed_s = max(
             120,

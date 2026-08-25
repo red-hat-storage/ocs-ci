@@ -17,16 +17,17 @@ from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.tlsprofile_helper import (
     CSI_SNAPSHOT_METADATA_HTTPS_PORTS,
+    CSI_SNAPSHOT_METADATA_V13_GROUPS,
     TLS_PROFILE_SELECTOR_CSI_SNAPSHOT_METADATA,
     TLS_PROFILE_V12_CIPHERS,
     TLS_PROFILE_V12_GROUPS,
     TLS_PROFILE_V13_CIPHERS,
-    TLS_PROFILE_V13_GROUPS,
     TLSProfile,
     assert_csi_snapshot_metadata_https_tls_applied,
     assert_no_tls_errors_in_relevant_pod_logs,
     csi_snapshot_metadata_is_deployed,
     scan_cluster,
+    snapshot_csi_snapshot_metadata_roll_state,
     snapshot_tlsprofile_state,
     teardown_tlsprofile,
     tlsprofile_crd_exists,
@@ -58,6 +59,8 @@ def require_tlsprofile_crd():
     constants.CSI_SNAPSHOT_METADATA,
     constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
     constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
+    constants.OCS_METRICS_EXPORTER,
+    constants.OCS_CLIENT_OPERATOR_LABEL,
 )
 class TestCSISnapshotMetadataTLSProfile(ManageTest):
     """
@@ -65,10 +68,11 @@ class TestCSISnapshotMetadataTLSProfile(ManageTest):
     (DF 4.22+): selector ``cbt.storage.k8s.io``, TLS 1.3 then TLS 1.2, in-cluster
     scantls of gRPC HTTPS port 50051, then delete ``ocs-tls-profile``.
 
-    The CSI Snapshot Metadata service must pick up the ODF TLS API without
-    manual restarts. Skips on FIPS (PQ / ChaCha in our cipher lists). Deletes
-    the CR at the end—only run where that is safe. An autouse fixture also
-    deletes a leftover ``ocs-tls-profile`` if the test aborts early. CSI
+    The CSI Snapshot Metadata sidecar rejects SecP256r1MLKEM768 and
+    SecP384r1MLKEM1024 (crashloop). TLS 1.3 rules use
+    ``CSI_SNAPSHOT_METADATA_V13_GROUPS`` instead of the full product list.
+    Deletes the CR at the end—only run where that is safe. An autouse fixture
+    also deletes a leftover ``ocs-tls-profile`` if the test aborts early. CSI
     provisioner / snapshot-metadata pods may roll when TLS settings change.
     """
 
@@ -121,8 +125,10 @@ class TestCSISnapshotMetadataTLSProfile(ManageTest):
 
         log.test_step(
             "Apply TLSProfile selector cbt.storage.k8s.io with TLSv1.3, "
-            "required cipher suites, and TLS groups"
+            "required cipher suites, and TLS groups supported by "
+            "csi-snapshot-metadata"
         )
+        prev_roll = snapshot_csi_snapshot_metadata_roll_state(namespace)
         if not tls.is_tls_profile_available():
             log.info(
                 "TLSProfile absent; creating with TLSv1.3 for csi-snapshot-metadata"
@@ -131,7 +137,7 @@ class TestCSISnapshotMetadataTLSProfile(ManageTest):
                 selectors=_CSI_SNAPSHOT_METADATA_SELECTORS,
                 tls_version="TLSv1.3",
                 ciphers=TLS_PROFILE_V13_CIPHERS,
-                groups=TLS_PROFILE_V13_GROUPS,
+                groups=CSI_SNAPSHOT_METADATA_V13_GROUPS,
             )
         else:
             log.info(
@@ -142,7 +148,7 @@ class TestCSISnapshotMetadataTLSProfile(ManageTest):
                 _CSI_SNAPSHOT_METADATA_SELECTORS,
                 "TLSv1.3",
                 TLS_PROFILE_V13_CIPHERS,
-                TLS_PROFILE_V13_GROUPS,
+                CSI_SNAPSHOT_METADATA_V13_GROUPS,
             )
 
         log.test_step("Wait for TLSProfile reconciliation (TLSv1.3)")
@@ -152,7 +158,7 @@ class TestCSISnapshotMetadataTLSProfile(ManageTest):
             f"TLSProfile version: expected='TLSv1.3', actual='{actual_version}'"
         )
         assert actual_version == "TLSv1.3"
-        wait_for_csi_snapshot_metadata_ready(namespace)
+        wait_for_csi_snapshot_metadata_ready(namespace, previous_fingerprints=prev_roll)
 
         log.test_step(
             "scantls csi-snapshot-metadata HTTPS port "
@@ -166,7 +172,7 @@ class TestCSISnapshotMetadataTLSProfile(ManageTest):
             scan_after_v13,
             "TLSv1.3",
             expected_ciphers=TLS_PROFILE_V13_CIPHERS,
-            expected_groups=TLS_PROFILE_V13_GROUPS,
+            expected_groups=CSI_SNAPSHOT_METADATA_V13_GROUPS,
             context="TLSProfile TLSv1.3, component=csi-snapshot-metadata",
         )
 
@@ -174,6 +180,7 @@ class TestCSISnapshotMetadataTLSProfile(ManageTest):
             "Patch TLSProfile to TLSv1.2; service must update without "
             "manual intervention"
         )
+        prev_roll = snapshot_csi_snapshot_metadata_roll_state(namespace)
         tls.replace_rules(
             _CSI_SNAPSHOT_METADATA_SELECTORS,
             "TLSv1.2",
@@ -187,7 +194,7 @@ class TestCSISnapshotMetadataTLSProfile(ManageTest):
             f"TLSProfile version: expected='TLSv1.2', actual='{actual_version}'"
         )
         assert actual_version == "TLSv1.2"
-        wait_for_csi_snapshot_metadata_ready(namespace)
+        wait_for_csi_snapshot_metadata_ready(namespace, previous_fingerprints=prev_roll)
 
         log.test_step(
             "scantls csi-snapshot-metadata HTTPS port "
@@ -205,13 +212,14 @@ class TestCSISnapshotMetadataTLSProfile(ManageTest):
             context="TLSProfile TLSv1.2, component=csi-snapshot-metadata",
         )
 
+        prev_roll = snapshot_csi_snapshot_metadata_roll_state(namespace)
         tls.delete_tls_profile(wait=True, force=False)
         still_present = tls.is_tls_profile_available()
         log.assertion(
             f"TLSProfile after delete: expected=absent, actual_present={still_present}"
         )
         assert not still_present, "TLSProfile should be absent after delete"
-        wait_for_csi_snapshot_metadata_ready(namespace)
+        wait_for_csi_snapshot_metadata_ready(namespace, previous_fingerprints=prev_roll)
 
         elapsed_s = max(
             120,

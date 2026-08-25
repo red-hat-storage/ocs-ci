@@ -47,6 +47,16 @@ TLS_PROFILE_V13_GROUPS = [
     "SecP256r1MLKEM768",
     "SecP384r1MLKEM1024",
 ]
+# csi-snapshot-metadata sidecar (DF 5.0) accepts only CurveP256/P384/P521, X25519,
+# and X25519MLKEM768. Passing SecP256r1MLKEM768 / SecP384r1MLKEM1024 makes it
+# crashloop: unsupported curve "... must be one of: CurveP256, ... X25519MLKEM768".
+CSI_SNAPSHOT_METADATA_V13_GROUPS = [
+    "secp256r1",
+    "secp384r1",
+    "secp521r1",
+    "X25519",
+    "X25519MLKEM768",
+]
 TLS_PROFILE_V12_CIPHERS = [
     "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
     "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
@@ -580,6 +590,24 @@ def _tls_scan_setup_namespace(kubeconfig):
             kubeconfig=kubeconfig,
             timeout=10,
         )
+        # Ensure namespaceSelector matchLabels used by NetworkPolicy resolve.
+        try:
+            _tls_scan_run_oc(
+                [
+                    "label",
+                    "namespace",
+                    TLS_SCANNER_NAMESPACE,
+                    f"kubernetes.io/metadata.name={TLS_SCANNER_NAMESPACE}",
+                    "--overwrite",
+                ],
+                kubeconfig=kubeconfig,
+                timeout=10,
+            )
+        except CommandFailed:
+            log.warning(
+                "TLS scan: could not label namespace %s for NetworkPolicy selection",
+                TLS_SCANNER_NAMESPACE,
+            )
 
 
 def _tls_scan_wait_for_pod_ready(
@@ -754,6 +782,125 @@ def _tls_scan_delete_scanner_namespace(kubeconfig):
         log.warning("TLS scan: namespace cleanup failed: %s", e)
 
 
+def _tls_scan_metrics_exporter_scanner_ingress():
+    """Ingress rule allowing ``scantls-system`` to HTTPS ports 8443 and 9443."""
+    return {
+        "from": [
+            {
+                "namespaceSelector": {
+                    "matchLabels": {
+                        "kubernetes.io/metadata.name": TLS_SCANNER_NAMESPACE,
+                    }
+                }
+            }
+        ],
+        "ports": [
+            {"port": int(constants.OCS_METRICS_EXPORTER_PORT), "protocol": "TCP"},
+            {
+                "port": int(constants.OCS_METRICS_EXPORTER_LEGACY_PORT),
+                "protocol": "TCP",
+            },
+        ],
+    }
+
+
+def _tls_scan_np_ingress_allows_scanner(ingress):
+    """Return True if any ingress rule already selects ``scantls-system``."""
+    for rule in ingress or []:
+        for src in rule.get("from") or []:
+            labels = (src.get("namespaceSelector") or {}).get("matchLabels") or {}
+            if labels.get("kubernetes.io/metadata.name") == TLS_SCANNER_NAMESPACE:
+                return True
+    return False
+
+
+def _tls_scan_metrics_exporter_np_allow_scanner(kubeconfig, namespace):
+    """
+    Temporarily allow scantls-system to reach ocs-metrics-exporter HTTPS ports.
+
+    StorageCluster owns a NetworkPolicy that otherwise admits only
+    openshift-monitoring, so pod-IP openssl from scantls-system times out.
+
+    Returns:
+        callable | None: Restore function, or None if there is nothing to restore.
+    """
+    try:
+        raw = _tls_scan_run_oc(
+            [
+                "get",
+                "networkpolicy",
+                "ocs-metrics-exporter",
+                "-n",
+                namespace,
+                "-o",
+                "json",
+            ],
+            kubeconfig=kubeconfig,
+            timeout=30,
+        )
+    except CommandFailed:
+        log.info(
+            "TLS scan: no NetworkPolicy ocs-metrics-exporter in %s; "
+            "not adding scanner ingress",
+            namespace,
+        )
+        return None
+    data = json.loads(raw)
+    original_ingress = copy.deepcopy((data.get("spec") or {}).get("ingress") or [])
+    if _tls_scan_np_ingress_allows_scanner(original_ingress):
+        log.info(
+            "TLS scan: ocs-metrics-exporter NetworkPolicy already allows %s",
+            TLS_SCANNER_NAMESPACE,
+        )
+        return None
+    new_ingress = original_ingress + [_tls_scan_metrics_exporter_scanner_ingress()]
+    _tls_scan_run_oc(
+        [
+            "patch",
+            "networkpolicy",
+            "ocs-metrics-exporter",
+            "-n",
+            namespace,
+            "--type",
+            "merge",
+            "-p",
+            json.dumps({"spec": {"ingress": new_ingress}}),
+        ],
+        kubeconfig=kubeconfig,
+        timeout=30,
+    )
+    log.info(
+        "TLS scan: allowed %s to scrape ocs-metrics-exporter HTTPS in %s",
+        TLS_SCANNER_NAMESPACE,
+        namespace,
+    )
+
+    def _restore():
+        try:
+            _tls_scan_run_oc(
+                [
+                    "patch",
+                    "networkpolicy",
+                    "ocs-metrics-exporter",
+                    "-n",
+                    namespace,
+                    "--type",
+                    "merge",
+                    "-p",
+                    json.dumps({"spec": {"ingress": original_ingress}}),
+                ],
+                kubeconfig=kubeconfig,
+                timeout=30,
+            )
+            log.info("TLS scan: restored ocs-metrics-exporter NetworkPolicy ingress")
+        except CommandFailed:
+            log.exception(
+                "TLS scan: failed to restore ocs-metrics-exporter NetworkPolicy"
+            )
+
+    return _restore
+
+
 def scan_cluster(
     component="all",
     kubeconfig=None,
@@ -772,6 +919,9 @@ def scan_cluster(
     """
     Discover pod container ports in the storage namespace(s), run a short-lived
     scanner pod in ``scantls-system``, and return per-endpoint TLS probe results.
+
+    For ``metrics-exporter`` (and ``all``), the ocs-metrics-exporter NetworkPolicy
+    is temporarily patched so ``scantls-system`` may reach ports 8443/9443.
 
     Args:
         component: ``noobaa``, ``rgw``, ``ceph``, ``csi``, ``metrics-exporter``,
@@ -876,8 +1026,14 @@ def scan_cluster(
     if kubeconfig:
         apply_cmd.extend(["--kubeconfig", kubeconfig])
 
+    restore_np = []
     try:
         _tls_scan_setup_namespace(kubeconfig)
+        if component in ("metrics-exporter", "all"):
+            for ns in namespaces:
+                restore_fn = _tls_scan_metrics_exporter_np_allow_scanner(kubeconfig, ns)
+                if restore_fn:
+                    restore_np.append(restore_fn)
         exec_cmd(apply_cmd, timeout=30, input=manifest_json.encode())
         _tls_scan_wait_for_pod_ready(kubeconfig, pod_name)
         csv_output = _tls_scan_run_in_pod(
@@ -893,6 +1049,8 @@ def scan_cluster(
         )
         return results
     finally:
+        for restore_fn in restore_np:
+            restore_fn()
         if cleanup:
             _tls_scan_cleanup_pod(kubeconfig, pod_name)
             _tls_scan_delete_scanner_namespace(kubeconfig)
@@ -1380,6 +1538,119 @@ def wait_for_cephobjectstore_security_cleared(
     TimeoutSampler(timeout, sleep, _cleared).wait_for_func_value(True)
 
 
+def _tls_container_fingerprints(pods, container_name_substr=None):
+    """
+    Return a frozenset identifying ready/running containers for rollout waits.
+
+    Each item is ``(pod_uid, pod_name, container_name, startedAt, restartCount)``.
+    """
+    fingerprints = []
+    for pod in pods or []:
+        uid = pod.get("metadata", {}).get("uid") or ""
+        pname = pod.get("metadata", {}).get("name") or ""
+        for cs in pod.get("status", {}).get("containerStatuses") or []:
+            cname = cs.get("name") or ""
+            if container_name_substr and container_name_substr not in cname:
+                continue
+            started = ((cs.get("state") or {}).get("running") or {}).get(
+                "startedAt"
+            ) or ""
+            restarts = int(cs.get("restartCount") or 0)
+            fingerprints.append((uid, pname, cname, started, restarts))
+    return frozenset(fingerprints)
+
+
+def _tls_workload_containers_ready(pods, container_name_substr=None):
+    """Return True if matching containers exist and all of them are ready."""
+    running = [
+        p
+        for p in (pods or [])
+        if p.get("status", {}).get("phase") == constants.STATUS_RUNNING
+    ]
+    if not running:
+        return False
+    saw_match = False
+    for pod in running:
+        statuses = pod.get("status", {}).get("containerStatuses") or []
+        if not statuses:
+            return False
+        for cs in statuses:
+            cname = cs.get("name") or ""
+            if container_name_substr and container_name_substr not in cname:
+                continue
+            saw_match = True
+            if not cs.get("ready"):
+                return False
+        if not container_name_substr and not all(cs.get("ready") for cs in statuses):
+            return False
+    if container_name_substr:
+        return saw_match
+    return True
+
+
+def _wait_for_tls_workload_ready(
+    list_pods_fn,
+    previous_fingerprints,
+    container_name_substr=None,
+    timeout=600,
+    sleep=15,
+    workload_name="workload",
+):
+    """
+    Wait until the workload is ready. When ``previous_fingerprints`` is set,
+    also wait until none of those fingerprints remain (new pod UID, restart,
+    or container start time).
+    """
+    log.info(
+        "Waiting for %s to be ready after TLSProfile change "
+        "(previous fingerprints=%d)",
+        workload_name,
+        len(previous_fingerprints or ()),
+    )
+
+    def _done():
+        pods = list_pods_fn() or []
+        if not _tls_workload_containers_ready(pods, container_name_substr):
+            return False
+        if previous_fingerprints is None:
+            return True
+        current = _tls_container_fingerprints(pods, container_name_substr)
+        if not current:
+            return False
+        return previous_fingerprints.isdisjoint(current)
+
+    TimeoutSampler(timeout, sleep, _done).wait_for_func_value(True)
+
+
+def snapshot_metrics_exporter_roll_state(namespace):
+    """Capture ocs-metrics-exporter container fingerprints before a TLSProfile apply."""
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    pods = (
+        get_pods_having_label(constants.OCS_METRICS_EXPORTER, namespace=namespace) or []
+    )
+    return _tls_container_fingerprints(pods)
+
+
+def snapshot_csi_snapshot_metadata_roll_state(namespace):
+    """Capture csi-snapshot-metadata sidecar fingerprints before a TLSProfile apply."""
+    return _tls_container_fingerprints(
+        _list_csi_snapshot_metadata_pod_items(namespace),
+        constants.CSI_SNAPSHOT_METADATA_NAME_SUBSTRING,
+    )
+
+
+def snapshot_ocs_client_operator_roll_state(namespace):
+    """Capture ocs-client-operator manager fingerprints before a TLSProfile apply."""
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    pods = (
+        get_pods_having_label(constants.OCS_CLIENT_OPERATOR_LABEL, namespace=namespace)
+        or []
+    )
+    return _tls_container_fingerprints(pods, "manager")
+
+
 def metrics_exporter_is_deployed(namespace):
     """Return True if at least one ocs-metrics-exporter pod exists in namespace."""
     from ocs_ci.ocs.resources.pod import get_pods_having_label
@@ -1389,30 +1660,36 @@ def metrics_exporter_is_deployed(namespace):
     )
 
 
-def wait_for_metrics_exporter_ready(namespace, timeout=600, sleep=15):
+def wait_for_metrics_exporter_ready(
+    namespace, timeout=600, sleep=15, previous_fingerprints=None
+):
     """
-    Wait until at least one ocs-metrics-exporter pod is Running with ready
-    containers (TLSProfile changes may roll the Deployment).
+    Wait until ocs-metrics-exporter is Running and ready.
+
+    When ``previous_fingerprints`` is set (from
+    :func:`snapshot_metrics_exporter_roll_state` taken before applying a
+    TLSProfile), also wait until every remaining fingerprint is new so the
+    scan does not hit a pre-rollout pod.
     """
     from ocs_ci.ocs.resources.pod import get_pods_having_label
 
-    def _ready():
-        pods = get_pods_having_label(
-            constants.OCS_METRICS_EXPORTER,
-            namespace=namespace,
-            statuses=[constants.STATUS_RUNNING],
+    def _list_pods():
+        return (
+            get_pods_having_label(
+                constants.OCS_METRICS_EXPORTER,
+                namespace=namespace,
+                statuses=[constants.STATUS_RUNNING],
+            )
+            or []
         )
-        if not pods:
-            return False
-        for pod in pods:
-            container_statuses = pod.get("status", {}).get("containerStatuses") or []
-            if not container_statuses:
-                return False
-            if not all(cs.get("ready") for cs in container_statuses):
-                return False
-        return True
 
-    TimeoutSampler(timeout, sleep, _ready).wait_for_func_value(True)
+    _wait_for_tls_workload_ready(
+        _list_pods,
+        previous_fingerprints,
+        workload_name="ocs-metrics-exporter",
+        timeout=timeout,
+        sleep=sleep,
+    )
 
 
 def _format_tls_scan_row(row):
@@ -1687,30 +1964,28 @@ def csi_snapshot_metadata_is_deployed(namespace):
     return bool(_list_csi_snapshot_metadata_pod_items(namespace))
 
 
-def wait_for_csi_snapshot_metadata_ready(namespace, timeout=600, sleep=15):
+def wait_for_csi_snapshot_metadata_ready(
+    namespace, timeout=600, sleep=15, previous_fingerprints=None
+):
     """
-    Wait until at least one csi-snapshot-metadata pod is Running with ready
-    containers (TLSProfile changes may roll the Deployment or CSI sidecar).
+    Wait until csi-snapshot-metadata sidecars are Running and ready.
+
+    When ``previous_fingerprints`` is set, wait until those sidecars have
+    rolled (new UID/start/restart) so scantls does not hit pre-TLSProfile
+    listeners that still offer both TLS 1.2 and 1.3.
     """
 
-    def _ready():
-        pods = _list_csi_snapshot_metadata_pod_items(namespace)
-        running = [
-            p
-            for p in pods
-            if p.get("status", {}).get("phase") == constants.STATUS_RUNNING
-        ]
-        if not running:
-            return False
-        for pod in running:
-            container_statuses = pod.get("status", {}).get("containerStatuses") or []
-            if not container_statuses:
-                return False
-            if not all(cs.get("ready") for cs in container_statuses):
-                return False
-        return True
+    def _list_pods():
+        return _list_csi_snapshot_metadata_pod_items(namespace)
 
-    TimeoutSampler(timeout, sleep, _ready).wait_for_func_value(True)
+    _wait_for_tls_workload_ready(
+        _list_pods,
+        previous_fingerprints,
+        container_name_substr=constants.CSI_SNAPSHOT_METADATA_NAME_SUBSTRING,
+        workload_name="csi-snapshot-metadata",
+        timeout=timeout,
+        sleep=sleep,
+    )
 
 
 def assert_csi_snapshot_metadata_https_tls_applied(
@@ -1760,30 +2035,36 @@ def ocs_client_operator_is_deployed(namespace):
     )
 
 
-def wait_for_ocs_client_operator_ready(namespace, timeout=600, sleep=15):
+def wait_for_ocs_client_operator_ready(
+    namespace, timeout=600, sleep=15, previous_fingerprints=None
+):
     """
-    Wait until at least one ocs-client-operator pod is Running with ready
-    containers (TLSProfile changes restart the manager).
+    Wait until ocs-client-operator manager is Running and ready.
+
+    TLSProfile changes often restart the manager in place (same pod UID,
+    new startedAt). When ``previous_fingerprints`` is set, wait until that
+    restart is visible.
     """
     from ocs_ci.ocs.resources.pod import get_pods_having_label
 
-    def _ready():
-        pods = get_pods_having_label(
-            constants.OCS_CLIENT_OPERATOR_LABEL,
-            namespace=namespace,
-            statuses=[constants.STATUS_RUNNING],
+    def _list_pods():
+        return (
+            get_pods_having_label(
+                constants.OCS_CLIENT_OPERATOR_LABEL,
+                namespace=namespace,
+                statuses=[constants.STATUS_RUNNING],
+            )
+            or []
         )
-        if not pods:
-            return False
-        for pod in pods:
-            container_statuses = pod.get("status", {}).get("containerStatuses") or []
-            if not container_statuses:
-                return False
-            if not all(cs.get("ready") for cs in container_statuses):
-                return False
-        return True
 
-    TimeoutSampler(timeout, sleep, _ready).wait_for_func_value(True)
+    _wait_for_tls_workload_ready(
+        _list_pods,
+        previous_fingerprints,
+        container_name_substr="manager",
+        workload_name="ocs-client-operator",
+        timeout=timeout,
+        sleep=sleep,
+    )
 
 
 def assert_ocs_client_operator_https_tls_applied(
