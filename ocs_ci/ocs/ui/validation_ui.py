@@ -406,12 +406,14 @@ class ValidationUI(PageNavigator):
                 "matches its actual scheme (replicated or erasure coded)"
             )
             pools_verification = storage_pools_tab.verify_existing_pools()
-            res_dict["storage_pools_data_protection_policy_match"] = all(
-                pools_verification.values()
-            )
-            if not all(pools_verification.values()):
+            # An empty result means no pool was checked - treat it as a failure
+            # rather than a vacuously-true all([]) pass.
+            res_dict["storage_pools_data_protection_policy_match"] = bool(
+                pools_verification
+            ) and all(pools_verification.values())
+            if not res_dict["storage_pools_data_protection_policy_match"]:
                 logger.error(
-                    "Data protection policy mismatch in the Storage Pools list "
+                    "Data protection policy check failed in the Storage Pools list "
                     f"(pool -> matches actual scheme): {pools_verification}"
                 )
 

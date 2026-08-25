@@ -210,8 +210,6 @@ deployment_4_9 = {
         By.CSS_SELECTOR,
     ),
     "choose_openshift-storage_project": (
-        "//span[text()='" + config.ENV_DATA["cluster_namespace"] + "'] | "
-        "//a[@data-test='" + config.ENV_DATA["cluster_namespace"] + "'] | "
         "//button[@role='menuitem'][normalize-space()='"
         + config.ENV_DATA["cluster_namespace"]
         + "']",

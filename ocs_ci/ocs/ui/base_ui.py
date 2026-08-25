@@ -1653,7 +1653,8 @@ def navigate_to_local_cluster(**kwargs):
     logger.info(f"Current perspective switcher title: '{current_perspective}'")
 
     if any(
-        title in current_perspective for title in ("Core platform", "local-cluster")
+        title in current_perspective
+        for title in ("Core platform", "local-cluster", "Administrator")
     ):
         logger.info("Already on local cluster — skipping cluster navigation.")
         return
