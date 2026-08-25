@@ -27,7 +27,7 @@ from ocs_ci.helpers.helpers import create_project, create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.ui.base_ui import BaseUI, login_ui, close_browser
+from ocs_ci.ocs.ui.base_ui import BaseUI
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.page_objects.virtualmachine_ui import VirtualMachineUI
 from ocs_ci.utility.utils import TimeoutSampler
@@ -67,8 +67,8 @@ class TestVirtualMachineLifecycle(ManageTest):
         Class-scoped teardown that runs once after all tests in this class.
 
         Steps:
-        1. Delete the LUN group via the UI.  If UI deletion fails, the 60-second
-           post-deletion wait is skipped because there is nothing to wait for.
+        1. Check via CLI if any filesystem exists in ibm-spectrum-scale.
+           If none found, skip to step 2.  If found, delete it via CLI.
         2. Wait 60 s then delete the LocalDisk associated with the LUN group
            from the CLI.
         3. Wait 60 s then delete the IBM Spectrum Scale cluster resource.
@@ -78,32 +78,51 @@ class TestVirtualMachineLifecycle(ManageTest):
 
             logger.info("teardown_lungroup: starting class-level cleanup")
 
-            # Step 1 — Delete LUN group via UI
+            # Step 1 — Check filesystem exists and delete via CLI
             lungroup_name = None
-            ui_deletion_succeeded = False
             try:
-                login_ui()
-                vm_ui = VirtualMachineUI()
-                lungroup_name = vm_ui.delete_lungroup_via_ui()
-                logger.info(f"LUN group '{lungroup_name}' deletion initiated via UI")
-                ui_deletion_succeeded = True
-            except WebDriverException as e:
-                logger.warning(
-                    f"Could not delete LUN group via UI (browser error): {e}"
+                ocp_fs = OCP(
+                    kind=constants.IBM_STORAGE_SCALE_FILESYSTEM,
+                    namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
                 )
-            finally:
-                close_browser()
-
-            if ui_deletion_succeeded:
-                logger.info("Waiting 60 s after LUN group deletion...")
-                time.sleep(60)
+                fs_out = ocp_fs.exec_oc_cmd(
+                    f"get {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
+                    f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE} --no-headers",
+                    out_yaml_format=False,
+                )
+                if not fs_out or not fs_out.strip():
+                    logger.info(
+                        f"No {constants.IBM_STORAGE_SCALE_FILESYSTEM} found in "
+                        f"{constants.IBM_STORAGE_SCALE_NAMESPACE} — skipping LUN group deletion"
+                    )
+                else:
+                    for line in fs_out.splitlines():
+                        line = line.strip()
+                        if line:
+                            lungroup_name = line.split()[0]
+                            break
+                    if lungroup_name:
+                        ocp_fs.exec_oc_cmd(
+                            f"delete {constants.IBM_STORAGE_SCALE_FILESYSTEM} {lungroup_name}"
+                            f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
+                            out_yaml_format=False,
+                        )
+                        logger.info(f"Deleted filesystem '{lungroup_name}' via CLI")
+                        logger.info("Waiting 60 s after filesystem deletion...")
+                        time.sleep(60)
+            except CommandFailed as e:
+                logger.warning(f"Could not delete filesystem via CLI: {e}")
 
             # Step 2 — Delete LocalDisk from CLI
             if lungroup_name:
                 try:
-                    ocp = OCP(kind="LocalDisk", namespace="ibm-spectrum-scale")
+                    ocp = OCP(
+                        kind=constants.IBM_STORAGE_SCALE_LOCALDISK,
+                        namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
+                    )
                     ld_out = ocp.exec_oc_cmd(
-                        "get localdisks -n ibm-spectrum-scale --no-headers",
+                        f"get localdisks -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+                        " --no-headers",
                         out_yaml_format=False,
                     )
                     localdisk_name = None
@@ -113,7 +132,8 @@ class TestVirtualMachineLifecycle(ManageTest):
                             break
                     if localdisk_name:
                         ocp.exec_oc_cmd(
-                            f"delete localdisk {localdisk_name} -n ibm-spectrum-scale",
+                            f"delete localdisk {localdisk_name}"
+                            f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
                             out_yaml_format=False,
                         )
                         logger.info(f"Deleted LocalDisk '{localdisk_name}'")
@@ -130,12 +150,13 @@ class TestVirtualMachineLifecycle(ManageTest):
             # Step 3 — Delete IBM Spectrum Scale cluster resource
             try:
                 ocp = OCP(
-                    kind="clusters.scale.spectrum.ibm.com",
-                    namespace="ibm-spectrum-scale",
+                    kind=constants.IBM_STORAGE_SCALE_CLUSTER_KIND,
+                    namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
                 )
                 ocp.exec_oc_cmd(
-                    "delete clusters.scale.spectrum.ibm.com ibm-spectrum-scale "
-                    "-n ibm-spectrum-scale",
+                    f"delete {constants.IBM_STORAGE_SCALE_CLUSTER_KIND}"
+                    f" ibm-spectrum-scale"
+                    f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
                     out_yaml_format=False,
                 )
                 logger.info("Deleted IBM Spectrum Scale cluster resource")
@@ -891,3 +912,14 @@ class TestVirtualMachineLifecycle(ManageTest):
             f"clone md5sum={clone_md5sum}"
         )
         logger.info("md5sum matches original — data integrity verified: PASS")
+
+        # Initiating Ui deletion for lungroup and verification of lungorup deletion
+        # will be taken care in teardown part
+
+        logger.info("\nStep 9: Delete LUN group via UI")
+        logger.info("-" * 80)
+        try:
+            lungroup_name = self.vm_ui.delete_lungroup_via_ui()
+            logger.info(f"LUN group '{lungroup_name}' deletion initiated via UI")
+        except WebDriverException as e:
+            logger.warning(f"Could not delete LUN group via UI (browser error): {e}")
