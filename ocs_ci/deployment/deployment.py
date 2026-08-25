@@ -1048,10 +1048,13 @@ class Deployment(object):
         if config.DEPLOYMENT.get("unique_rack_node_labels"):
             create_unique_rack_labels()
         self.do_deploy_ocs()
+        self.do_deploy_rdr()
+        # For OCP >= 5.0, GitOps and OADP must be deployed after the ODF
+        # Multicluster Orchestrator (MCO), which is installed as part of
+        # do_deploy_rdr().
         if ocp_version >= version.VERSION_5_0:
             self.do_gitops_deploy()
             self.do_deploy_oadp()
-        self.do_deploy_rdr()
         self.do_deploy_mce()
         self.do_deploy_cnv()
         self.do_deploy_hyperconverged()
