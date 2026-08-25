@@ -38,8 +38,9 @@ from datetime import datetime, timezone
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    stretchcluster_required,
+    ignore_leftovers,
     magenta_squad,
+    stretchcluster_required,
 )
 from ocs_ci.framework.testlib import ManageTest, tier4b
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
@@ -381,6 +382,7 @@ def _redeploy_and_verify(
 @tier4b
 @stretchcluster_required
 @magenta_squad
+@ignore_leftovers
 class TestStretchClusterZoneBNodeShutdown(ManageTest):
     """
     Shutdown one Zone-B node while zone-aware workloads are running.
@@ -641,6 +643,7 @@ class TestStretchClusterZoneBNodeShutdown(ManageTest):
 @tier4b
 @stretchcluster_required
 @magenta_squad
+@ignore_leftovers
 class TestStretchClusterZoneBShutdownZoneUnaware(ManageTest):
     """
     Shutdown all Zone-B nodes while zone-UNAWARE workloads are running.
@@ -774,6 +777,7 @@ class TestStretchClusterZoneBShutdownZoneUnaware(ManageTest):
 @tier4b
 @stretchcluster_required
 @magenta_squad
+@ignore_leftovers
 class TestStretchClusterZoneBKubeletDown(ManageTest):
     """
     Zone B down / network down — simulated by stopping kubelet.
