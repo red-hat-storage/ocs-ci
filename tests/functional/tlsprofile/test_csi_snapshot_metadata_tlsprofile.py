@@ -57,8 +57,8 @@ def require_tlsprofile_crd():
 @skipif_managed_service
 @ignore_leftover_label(
     constants.CSI_SNAPSHOT_METADATA,
-    constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
-    constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
+    constants.RBD_CTRLPLUGIN_LABEL,
+    constants.CEPHFS_CTRLPLUGIN_LABEL,
     constants.OCS_METRICS_EXPORTER,
     constants.OCS_CLIENT_OPERATOR_LABEL,
 )
@@ -71,7 +71,8 @@ class TestCSISnapshotMetadataTLSProfile(ManageTest):
     The CSI Snapshot Metadata sidecar rejects SecP256r1MLKEM768 and
     SecP384r1MLKEM1024 (crashloop). TLS 1.3 rules use
     ``CSI_SNAPSHOT_METADATA_V13_GROUPS`` instead of the full product list.
-    Deletes the CR at the end—only run where that is safe. An autouse fixture
+    TLS 1.2 is a minimum (``--tls-min-version=VersionTLS12``); TLS 1.3 may
+    still be offered. Deletes the CR at the end—only run where that is safe. An autouse fixture
     also deletes a leftover ``ocs-tls-profile`` if the test aborts early. CSI
     provisioner / snapshot-metadata pods may roll when TLS settings change.
     """
@@ -101,8 +102,8 @@ class TestCSISnapshotMetadataTLSProfile(ManageTest):
         3. Wait for reconciliation.
         4. Run scantls against port 50051 and verify TLS 1.3 (and only the
            configured ciphers/groups) is used.
-        5. Repeat with a TLS 1.2 profile; the service must update without
-           manual intervention.
+        5. Repeat with a TLS 1.2 profile (minimum version; TLS 1.3 may still
+           be offered). The service must update without manual intervention.
         6. Delete the TLSProfile and scan operator / snapshot-metadata logs
            for TLS-related errors.
         """
@@ -198,8 +199,8 @@ class TestCSISnapshotMetadataTLSProfile(ManageTest):
 
         log.test_step(
             "scantls csi-snapshot-metadata HTTPS port "
-            f"{list(CSI_SNAPSHOT_METADATA_HTTPS_PORTS)}: expect tls1.2 only, "
-            "configured ciphers/groups"
+            f"{list(CSI_SNAPSHOT_METADATA_HTTPS_PORTS)}: expect tls1.2 "
+            "(min version; tls1.3 may still be offered), configured ciphers/groups"
         )
         scan_after_v12 = scan_cluster(
             component=_CSI_SNAPSHOT_METADATA_COMPONENT, namespaces=[namespace]

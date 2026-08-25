@@ -306,6 +306,9 @@ SCAN_CLUSTER_DEFAULT_TLS13_GROUPS = (
 
 TLS_SCANNER_IMAGE = "ghcr.io/leelavg/scantls@sha256:5e80dd5576812f3c8248fad7cbf19a74b74384aafd14614ccd53ef6b4e1f40d1"
 TLS_SCANNER_NAMESPACE = "scantls-system"
+# Extra NetworkPolicy (not StorageCluster-owned) so the scanner can reach
+# ocs-metrics-exporter HTTPS. The operator reverts patches to the owned NP.
+TLS_SCAN_METRICS_EXPORTER_SCANNER_NP = "ocs-metrics-exporter-scantls"
 # Seconds between ``oc get pod … jsonpath={.status.phase}`` samples (scanner pod startup).
 TLS_SCAN_POD_PHASE_POLL_SLEEP = 2
 
@@ -818,8 +821,9 @@ def _tls_scan_metrics_exporter_np_allow_scanner(kubeconfig, namespace):
     """
     Temporarily allow scantls-system to reach ocs-metrics-exporter HTTPS ports.
 
-    StorageCluster owns a NetworkPolicy that otherwise admits only
-    openshift-monitoring, so pod-IP openssl from scantls-system times out.
+    StorageCluster owns NetworkPolicy ``ocs-metrics-exporter`` (ingress only
+    from openshift-monitoring). ocs-operator reverts patches to that object, so
+    this creates a separate additive policy instead of mutating the owned one.
 
     Returns:
         callable | None: Restore function, or None if there is nothing to restore.
@@ -846,31 +850,41 @@ def _tls_scan_metrics_exporter_np_allow_scanner(kubeconfig, namespace):
         )
         return None
     data = json.loads(raw)
-    original_ingress = copy.deepcopy((data.get("spec") or {}).get("ingress") or [])
+    spec = data.get("spec") or {}
+    original_ingress = spec.get("ingress") or []
     if _tls_scan_np_ingress_allows_scanner(original_ingress):
         log.info(
             "TLS scan: ocs-metrics-exporter NetworkPolicy already allows %s",
             TLS_SCANNER_NAMESPACE,
         )
         return None
-    new_ingress = original_ingress + [_tls_scan_metrics_exporter_scanner_ingress()]
-    _tls_scan_run_oc(
-        [
-            "patch",
-            "networkpolicy",
-            "ocs-metrics-exporter",
-            "-n",
-            namespace,
-            "--type",
-            "merge",
-            "-p",
-            json.dumps({"spec": {"ingress": new_ingress}}),
-        ],
-        kubeconfig=kubeconfig,
-        timeout=30,
-    )
+    pod_selector = copy.deepcopy(spec.get("podSelector") or {})
+    if not pod_selector:
+        pod_selector = {
+            "matchLabels": {"app.kubernetes.io/name": "ocs-metrics-exporter"}
+        }
+    np_manifest = {
+        "apiVersion": "networking.k8s.io/v1",
+        "kind": "NetworkPolicy",
+        "metadata": {
+            "name": TLS_SCAN_METRICS_EXPORTER_SCANNER_NP,
+            "namespace": namespace,
+            "labels": {"app": "tls-scanner"},
+        },
+        "spec": {
+            "podSelector": pod_selector,
+            "policyTypes": ["Ingress"],
+            "ingress": [_tls_scan_metrics_exporter_scanner_ingress()],
+        },
+    }
+    apply_cmd = ["oc", "apply", "-f", "-"]
+    if kubeconfig:
+        apply_cmd.extend(["--kubeconfig", kubeconfig])
+    exec_cmd(apply_cmd, timeout=30, input=json.dumps(np_manifest).encode())
     log.info(
-        "TLS scan: allowed %s to scrape ocs-metrics-exporter HTTPS in %s",
+        "TLS scan: created NetworkPolicy %s so %s can scrape "
+        "ocs-metrics-exporter HTTPS in %s",
+        TLS_SCAN_METRICS_EXPORTER_SCANNER_NP,
         TLS_SCANNER_NAMESPACE,
         namespace,
     )
@@ -879,23 +893,24 @@ def _tls_scan_metrics_exporter_np_allow_scanner(kubeconfig, namespace):
         try:
             _tls_scan_run_oc(
                 [
-                    "patch",
+                    "delete",
                     "networkpolicy",
-                    "ocs-metrics-exporter",
+                    TLS_SCAN_METRICS_EXPORTER_SCANNER_NP,
                     "-n",
                     namespace,
-                    "--type",
-                    "merge",
-                    "-p",
-                    json.dumps({"spec": {"ingress": original_ingress}}),
+                    "--ignore-not-found",
                 ],
                 kubeconfig=kubeconfig,
                 timeout=30,
             )
-            log.info("TLS scan: restored ocs-metrics-exporter NetworkPolicy ingress")
+            log.info(
+                "TLS scan: deleted NetworkPolicy %s",
+                TLS_SCAN_METRICS_EXPORTER_SCANNER_NP,
+            )
         except CommandFailed:
             log.exception(
-                "TLS scan: failed to restore ocs-metrics-exporter NetworkPolicy"
+                "TLS scan: failed to delete NetworkPolicy %s",
+                TLS_SCAN_METRICS_EXPORTER_SCANNER_NP,
             )
 
     return _restore
@@ -920,8 +935,9 @@ def scan_cluster(
     Discover pod container ports in the storage namespace(s), run a short-lived
     scanner pod in ``scantls-system``, and return per-endpoint TLS probe results.
 
-    For ``metrics-exporter`` (and ``all``), the ocs-metrics-exporter NetworkPolicy
-    is temporarily patched so ``scantls-system`` may reach ports 8443/9443.
+    For ``metrics-exporter`` (and ``all``), a temporary NetworkPolicy
+    ``ocs-metrics-exporter-scantls`` is applied so ``scantls-system`` may reach
+    ports 8443/9443 (the StorageCluster-owned policy is left unchanged).
 
     Args:
         component: ``noobaa``, ``rgw``, ``ceph``, ``csi``, ``metrics-exporter``,
@@ -1730,13 +1746,17 @@ def _assert_https_tls_applied(
     port_roles=None,
     verify_ciphers_groups=False,
     success_log_includes_role=False,
+    exact_version=True,
 ):
     """
     Fail unless each required port is serving HTTPS with the TLSProfile version.
 
-    Every OK scan row for a port must negotiate ``api_tls_version`` and must not
-    offer the other of tls1.2 / tls1.3. When ``verify_ciphers_groups`` is True,
-    scantls cipher/group names must stay within the TLSProfile set.
+    Every OK scan row for a port must negotiate ``api_tls_version``. When
+    ``exact_version`` is True, the row must not also offer the other of
+    tls1.2 / tls1.3. When False (min-version semantics), a higher version such
+    as tls1.3 may still be offered for a TLSv1.2 profile. When
+    ``verify_ciphers_groups`` is True, scantls cipher/group names for the
+    requested version must stay within the TLSProfile set.
     """
     token = tls_profile_api_version_to_scan_token(api_tls_version)
     other_token = "tls1.2" if token == "tls1.3" else "tls1.3"
@@ -1790,7 +1810,7 @@ def _assert_https_tls_applied(
             continue
 
         leaked = [r for r in ok_rows if other_token in (r.get("tls_versions") or [])]
-        if leaked:
+        if exact_version and leaked:
             problems.append(
                 f"{port_label}: TLSProfile {api_tls_version} should be exact, "
                 f"but {other_token!r} was still offered "
@@ -1820,7 +1840,7 @@ def _assert_https_tls_applied(
                         f"allowed={sorted(allowed_ciphers)} "
                         f"({_format_tls_scan_row(r)})"
                     )
-                if other_ciphers:
+                if exact_version and other_ciphers:
                     problems.append(
                         f"{port_label}: TLSProfile {api_tls_version} should not offer "
                         f"{other_cipher_field}={other_ciphers} "
@@ -2000,8 +2020,12 @@ def assert_csi_snapshot_metadata_https_tls_applied(
     Fail unless csi-snapshot-metadata port 50051 is serving HTTPS with the
     TLSProfile version, and scantls reports only the configured ciphers/groups.
 
-    TLSProfile version is exact (min == max). Cipher/group names from the
-    TLSProfile spec are mapped to OpenSSL names used by scantls.
+    Cipher/group names from the TLSProfile spec are mapped to OpenSSL names
+    used by scantls.
+
+    ``TLSv1.3`` is exact (no tls1.2). ``TLSv1.2`` is a minimum: the sidecar
+    sets ``--tls-min-version=VersionTLS12`` with no max, so tls1.3 may still
+    be offered.
 
     Args:
         results: Return value of :func:`scan_cluster` for component
@@ -2023,6 +2047,7 @@ def assert_csi_snapshot_metadata_https_tls_applied(
         expected_ciphers=expected_ciphers,
         expected_groups=expected_groups,
         verify_ciphers_groups=True,
+        exact_version=api_tls_version != "TLSv1.2",
     )
 
 

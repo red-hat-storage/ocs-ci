@@ -62,6 +62,8 @@ def require_tlsprofile_crd():
 @ignore_leftover_label(
     constants.OCS_CLIENT_OPERATOR_LABEL,
     constants.OCS_METRICS_EXPORTER,
+    constants.RBD_CTRLPLUGIN_LABEL,
+    constants.CEPHFS_CTRLPLUGIN_LABEL,
 )
 class TestOCSClientOperatorTLSProfile(ManageTest):
     """

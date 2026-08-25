@@ -58,6 +58,8 @@ def require_tlsprofile_crd():
     constants.NOOBAA_ENDPOINT_POD_LABEL,
     constants.OCS_METRICS_EXPORTER,
     constants.OCS_CLIENT_OPERATOR_LABEL,
+    constants.RBD_CTRLPLUGIN_LABEL,
+    constants.CEPHFS_CTRLPLUGIN_LABEL,
 )
 class TestCentralizedTLSProfileConfiguration(ManageTest):
     """
