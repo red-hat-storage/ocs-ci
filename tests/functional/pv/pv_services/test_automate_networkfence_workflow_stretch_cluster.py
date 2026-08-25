@@ -61,6 +61,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     Pod,
     get_pods_having_label,
+    wait_for_pods_deletion,
     wait_for_pods_to_be_in_statuses,
 )
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
@@ -336,8 +337,11 @@ def _redeploy_and_verify(
 ) -> None:
     """
     Delete existing RBD logwriter pods, wait for the StatefulSet to recreate
-    them, deploy a fresh RBD logwriter StatefulSet and verify all workload
-    pods are healthy.
+    them, then delete the StatefulSet itself, deploy a fresh RBD logwriter
+    StatefulSet and verify all workload pods are healthy.
+
+    The factory creates a new StatefulSet with the same name (``logwriter-rbd``),
+    so the existing one must be deleted before calling it.
 
     Args:
         sc_obj: StretchCluster instance.
@@ -352,6 +356,19 @@ def _redeploy_and_verify(
         label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
     )
     logger.info("Logwriter-RBD pods re-scheduled and Running after Zone-B recovery")
+
+    # Delete the existing StatefulSet so the factory can create a fresh one.
+    # The StatefulSet name is fixed (logwriter-rbd); oc create would fail with
+    # AlreadyExists if the old object is still present.
+    if sc_obj.rbd_logwriter_sts is not None:
+        logger.info(f"Deleting existing StatefulSet {sc_obj.rbd_logwriter_sts.name}")
+        sc_obj.rbd_logwriter_sts.delete()
+        wait_for_pods_deletion(
+            constants.LOGWRITER_RBD_LABEL,
+            timeout=300,
+            namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+        )
+        sc_obj.rbd_logwriter_sts = None
 
     new_rbd_sts = setup_logwriter_rbd_workload_factory(zone_aware=zone_aware)
     logger.info(f"New logwriter-rbd workload deployed: {new_rbd_sts.name}")
