@@ -14,11 +14,14 @@ from ocs_ci.deployment.fusion_data_foundation import (
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
+from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.ocs.exceptions import (
+    CSVNotFound,
     ChannelNotFound,
     ConfigurationError,
     TimeoutExpiredError,
 )
+from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.packagemanifest import get_packagemanifest_by_catalog_source
 from ocs_ci.ocs.upgrade import BaseUpgrade
 from ocs_ci.utility.retry import retry
@@ -158,6 +161,57 @@ class FDFUpgrade(BaseUpgrade):
                 f"FDF version config file not found: {version_config_file}, "
                 "using current configuration"
             )
+
+    def get_parsed_versions(self):
+        """
+        Get parsed version objects for current and upgrade versions.
+
+        Overrides the base implementation to normalize FDF version strings
+        (e.g., "4.20.999-1.stable") to X.Y format before parsing, since
+        FDF versions are not PEP 440 compliant.
+
+        Returns:
+            tuple: (parsed_current_version, parsed_upgrade_version)
+
+        """
+        current_parts = self.version_before_upgrade.split(".")
+        current_xy = f"{current_parts[0]}.{current_parts[1]}"
+
+        upgrade_version = self.get_upgrade_version()
+        upgrade_parts = upgrade_version.split(".")
+        upgrade_xy = f"{upgrade_parts[0]}.{upgrade_parts[1]}"
+
+        return parse_version(current_xy), parse_version(upgrade_xy)
+
+    def get_csv_name_pre_upgrade(self, resource_name=OCS_OPERATOR_NAME):
+        """
+        Get pre-upgrade CSV name for FDF.
+
+        Overrides the base implementation to use self.version_before_upgrade
+        (sourced from the FusionServiceInstance on the cluster) instead of
+        PREUPGRADE_CONFIG['ENV_DATA']['ocs_version'], which may not be set
+        correctly for FDF deployments.
+
+        Args:
+            resource_name (str, optional): String the resource CSVs start with.
+                Defaults to OCS_OPERATOR_NAME.
+
+        Raises:
+            CSVNotFound: If the CSV with the provided resource isn't found.
+
+        Returns:
+            str: Name of the resource CSV
+
+        """
+        version = self.version_before_upgrade
+        csv_list = get_csvs_start_with_prefix(resource_name, namespace=self.namespace)
+        for csv in csv_list:
+            csv_name = csv.get("metadata").get("name")
+            if resource_name in csv_name:
+                logger.info(f"Searching for pre-upgrade CSV with version: {version}")
+                if version in csv_name:
+                    return csv_name
+        raise CSVNotFound(f"No preupgrade CSV found for {resource_name}")
 
     def run_upgrade(self):
         """
