@@ -1047,7 +1047,7 @@ class Deployment(object):
         if ocp_version >= version.VERSION_5_0:
             # Temporary workaround: create the GitOps CatalogSource on all
             # clusters before deploying the GitOps operator and OADP.
-            run_cmd_multicluster(f"oc create -f {constants.TEMP_GITOPS_WA_YAML}")
+            run_cmd_multicluster(f"oc apply -f {constants.TEMP_GITOPS_WA_YAML}")
         self.do_gitops_deploy()
         self.do_deploy_oadp()
         self.do_deploy_ocs()
