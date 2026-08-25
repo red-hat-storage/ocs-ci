@@ -84,6 +84,10 @@ DEPLOYMENT:
   # UI deployment is not part of this framework, it will just do preparation
   # steps for openshift-console.
   ui_deployment: False
+  # Apply an allow-all NetworkPolicy to the storage namespace before operator
+  # installation and upgrade. Useful for environments where default deny
+  # policies block ODF operator traffic.
+  disable_networkpolicy: False
   # Import clusters to ACM via UI
   ui_acm_import: False
   # Following options are defaults for deployment from live content

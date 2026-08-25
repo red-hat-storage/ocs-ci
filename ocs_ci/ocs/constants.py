@@ -114,6 +114,9 @@ UBI8_TEMPLATE = os.path.join(TEMPLATE_DIR, "app-deployments", "ubi8-simple.yaml"
 NETWORK_POLICY_PROVIDER_TO_CLIENT_TEMPLATE = os.path.join(
     TEMPLATE_DIR, "ocs-deployment", "provider-mode", "network_policy_provider_mode.yaml"
 )
+NETWORK_POLICY_ALLOW_ALL_OVERRIDE_TEMPLATE = os.path.join(
+    TEMPLATE_DIR, "ocs-deployment", "allow-all-override.yaml"
+)
 AI_NETWORK_CONFIG_TEMPLATE = os.path.join(
     "ocp-deployment", "ai-host-network-config.yaml.j2"
 )

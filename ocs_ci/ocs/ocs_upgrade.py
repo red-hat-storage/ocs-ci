@@ -892,6 +892,12 @@ def run_ocs_upgrade(
         )
         exec_cmd(cmd)
 
+    if config.DEPLOYMENT.get("disable_networkpolicy"):
+        from ocs_ci.deployment.networkpolicy import apply_allow_all_network_policy
+
+        log.info("Applying allow-all NetworkPolicy override before upgrade")
+        apply_allow_all_network_policy()
+
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
     upgrade_ocs.load_version_config_file(upgrade_version)
