@@ -594,7 +594,7 @@ class StorageClusterSetup(object):
                     }
                 },
             )
-            config.ENV_DATA.set("noobaa_db_backup_enabled", False)
+            config.ENV_DATA["noobaa_db_backup_enabled"] = False
         # Add NooBaa DB backup configuration if enabled
         if config.ENV_DATA.get("noobaa_db_backup_enabled"):
             log_step("Adding NooBaa DB backup configuration to StorageCluster")
