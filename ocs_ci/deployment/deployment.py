@@ -417,6 +417,7 @@ class Deployment(object):
         run_cmd(f"oc apply -f {constants.GITOPS_OPERATORGROUP_YAML}")
 
         logger.info("Creating GitOps Operator Subscription")
+        ocp_version = version.get_semantic_ocp_version_from_config()
         if config.DEPLOYMENT.get("disconnected"):
             gitops_catalog_name = PackageManifest(
                 resource_name=constants.GITOPS_OPERATOR_NAME,
@@ -434,6 +435,22 @@ class Deployment(object):
                 gitops_subscription_manifest.name,
             )
             run_cmd(f"oc apply -f {gitops_subscription_manifest.name}")
+        elif ocp_version >= version.VERSION_5_0:
+            # Use the temporary GitOps workaround CatalogSource
+            gitops_subscription_yaml_data = templating.load_yaml(
+                constants.GITOPS_SUBSCRIPTION_YAML
+            )
+            gitops_subscription_yaml_data["spec"][
+                "source"
+            ] = constants.TEMP_GITOPS_WA_CATSRC_NAME
+            gitops_subscription_manifest = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="gitops_subscription_manifest", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                gitops_subscription_yaml_data,
+                gitops_subscription_manifest.name,
+            )
+            exec_cmd(f"oc apply -f {gitops_subscription_manifest.name}")
         else:
             run_cmd(f"oc apply -f {constants.GITOPS_SUBSCRIPTION_YAML}")
 
@@ -452,7 +469,6 @@ class Deployment(object):
         csv = CSV(resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE)
         csv.wait_for_phase("Succeeded", timeout=720)
         logger.info("GitOps Operator Deployment Succeeded")
-        ocp_version = version.get_semantic_ocp_version_from_config()
         if (
             config.ENV_DATA.get("acm_version") in ["2.14", "2.13"]
             and ocp_version <= version.VERSION_4_19
