@@ -487,13 +487,13 @@ class Deployment(object):
         Returns:
 
         """
-        # Temporary workaround: create the GitOps CatalogSource on all clusters
-        # before deploying the GitOps operator and OADP.
-        if version.get_semantic_ocp_version_from_config() >= version.VERSION_5_0:
-            run_cmd_multicluster(f"oc apply -f {constants.TEMP_GITOPS_WA_YAML}")
-
         # Multicluster operations
         if config.multicluster:
+            # Temporary workaround: create the GitOps CatalogSource on all
+            # clusters before deploying the GitOps operator and OADP.
+            if version.get_semantic_ocp_version_from_config() >= version.VERSION_5_0:
+                run_cmd_multicluster(f"oc apply -f {constants.TEMP_GITOPS_WA_YAML}")
+
             # Gitops operator is needed on all clusters for appset type workload deployment using pull model
             for cluster_index in range(config.nclusters):
                 self.deploy_gitops_operator(switch_ctx=cluster_index)
