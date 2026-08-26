@@ -489,6 +489,14 @@ class Deployment(object):
         """
         # Multicluster operations
         if config.multicluster:
+            ocp_version = version.get_semantic_ocp_version_from_config()
+            if ocp_version >= version.VERSION_5_0:
+                logger.warning(
+                    "WORKAROUND: create the GitOps CatalogSource from ocs-registry 4.22"
+                )
+                # Temporary workaround: create the GitOps CatalogSource on all
+                # clusters before deploying the GitOps operator and OADP.
+                run_cmd_multicluster(f"oc apply -f {constants.TEMP_GITOPS_WA_YAML}")
             # Gitops operator is needed on all clusters for appset type workload deployment using pull model
             for cluster_index in range(config.nclusters):
                 self.deploy_gitops_operator(switch_ctx=cluster_index)
@@ -1058,13 +1066,8 @@ class Deployment(object):
 
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
-        ocp_version = version.get_semantic_ocp_version_from_config()
         if config.DEPLOYMENT.get("unique_rack_node_labels"):
             create_unique_rack_labels()
-        if ocp_version >= version.VERSION_5_0:
-            # Temporary workaround: create the GitOps CatalogSource on all
-            # clusters before deploying the GitOps operator and OADP.
-            run_cmd_multicluster(f"oc apply -f {constants.TEMP_GITOPS_WA_YAML}")
         self.do_gitops_deploy()
         self.do_deploy_oadp()
         self.do_deploy_ocs()
