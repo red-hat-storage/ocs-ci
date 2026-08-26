@@ -1,0 +1,17 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+ name: temp-gitops-wa
+ namespace: openshift-marketplace
+spec:
+ displayName: OpenShift Data Foundation
+ icon:
+  base64data: ''
+  mediatype: ''
+ image: quay.io/rhceph-dev/ocs-registry:latest-stable-4.22
+ priority: 100
+ publisher: Red Hat
+ sourceType: grpc
+ updateStrategy:
+  registryPoll:
+   interval: 15m
