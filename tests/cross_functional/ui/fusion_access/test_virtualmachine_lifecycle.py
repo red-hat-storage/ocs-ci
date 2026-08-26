@@ -44,25 +44,24 @@ class TestVirtualMachineLifecycle(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup_ui(self, setup_ui_class_factory):
+    def setup_ui(self, setup_ui_class):
         """
         Setup UI session for the test class.  Initialises instance attributes
         used by the teardown fixture so they are always defined even if a test
         fails before the VM is created.
 
         Args:
-            setup_ui_class_factory: Factory fixture to setup UI session
+            setup_ui_class: Fixture that logs in and registers browser close on teardown
         """
         self._test_vm_name = None
         self._test_namespace = None
 
-        setup_ui_class_factory()
         self.page_nav = PageNavigator()
         self.base_ui = BaseUI()
         self.vm_ui = VirtualMachineUI()
 
     @pytest.fixture(autouse=True, scope="class")
-    def teardown_lungroup(self, request, setup_ui_class_factory):
+    def teardown_lungroup(self, request):
         """
         Class-scoped teardown that runs once after all tests in this class.
 
