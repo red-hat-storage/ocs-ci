@@ -289,7 +289,7 @@ class ListerTool:
         self.tools_repo = (
             "https://github.com/red-hat-storage/external-snapshot-metadata.git"
         )
-        self.tools_ref = "main"
+        self.tools_ref = "tools/v1"
         self.golang_image = "golang:1.26"
         self.service_account = "cbt-client"
         self.ca_cert_cm_name = "cbt-ca-cert"

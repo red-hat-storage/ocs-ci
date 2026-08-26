@@ -12,10 +12,12 @@ RHSTOR-6440
 """
 
 import logging
+import re
 
 import pytest
 
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -34,7 +36,7 @@ log = logging.getLogger(__name__)
 
 @green_squad
 @tier1
-@skipif_ocs_version("<5.0")
+@skipif_ocs_version("<4.23")
 class TestRbdCBTMetadata(ManageTest):
     """
     Test CBT snapshot metadata operations on RBD PVCs.
@@ -414,3 +416,232 @@ class TestRbdCBTMetadata(ManageTest):
             volume_mode,
             previous_snapshot=snap_1.name,
         )
+
+
+@green_squad
+@tier1
+@skipif_ocs_version("<4.23")
+class TestRbdCBTInfrastructure(ManageTest):
+    """
+    Test CBT infrastructure deployment and service health.
+
+    Validates that the CBT snapshot metadata service is correctly
+    deployed, the sidecar containers are running in the RBD CSI
+    controller pods, and the ConfigMap contains valid connection
+    details.
+
+    These tests check the infrastructure components rather than
+    the metadata API operations themselves.
+    """
+
+    def test_cbt_sidecar_running(self):
+        """
+        Verify that the CBT sidecar container is running and healthy
+        in all RBD CSI controller pods.
+
+        Checks that:
+        - RBD CSI controller pods exist and are running
+        - Each pod has a csi-snapshot-metadata container that is ready
+        - The Service for the metadata endpoint exists
+        - Service Endpoints match the controller pod IPs
+
+        Steps:
+        1. Get the RBD CSI controller pods by label.
+        2. Check each pod for a container named
+           csi-snapshot-metadata.
+        3. Get the Service openshift-storage-rbd-snapshot-metadata
+           in the openshift-storage namespace.
+        4. Get the Endpoints for the Service.
+        5. Compare the endpoint IPs with the RBD controller pod IPs.
+        """
+        log.test_step("Get the RBD CSI controller pods by label")
+        pod_ocp = OCP(
+            kind=constants.POD,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        controller_pods = pod_ocp.get(
+            selector=constants.RBD_CTRLPLUGIN_LABEL,
+        )["items"]
+
+        assert len(controller_pods) > 0, (
+            f"No RBD CSI controller pods found with label "
+            f"{constants.RBD_CTRLPLUGIN_LABEL}"
+        )
+        log.info(
+            "Found %d RBD CSI controller pod(s)",
+            len(controller_pods),
+        )
+
+        log.test_step("Check each pod for a container named csi-snapshot-metadata")
+        pod_ips = []
+        for pod in controller_pods:
+            pod_name = pod["metadata"]["name"]
+            pod_ip = pod["status"]["podIP"]
+            pod_ips.append(pod_ip)
+
+            containers = pod["spec"]["containers"]
+            container_names = [c["name"] for c in containers]
+            assert "csi-snapshot-metadata" in container_names, (
+                f"Pod {pod_name} does not have a csi-snapshot-metadata "
+                f"container. Found containers: {container_names}"
+            )
+
+            container_statuses = pod["status"].get("containerStatuses", [])
+            sidecar_status = next(
+                (
+                    cs
+                    for cs in container_statuses
+                    if cs["name"] == "csi-snapshot-metadata"
+                ),
+                None,
+            )
+            assert sidecar_status is not None, (
+                f"Pod {pod_name} has no containerStatus for " f"csi-snapshot-metadata"
+            )
+            assert sidecar_status["ready"] is True, (
+                f"Pod {pod_name} sidecar container is not ready: " f"{sidecar_status}"
+            )
+            log.info(
+                "Pod %s has csi-snapshot-metadata container ready (IP: %s)",
+                pod_name,
+                pod_ip,
+            )
+
+        log.test_step("Get the Service openshift-storage-rbd-snapshot-metadata")
+        svc_ocp = OCP(
+            kind="Service",
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        svc_name = "openshift-storage-rbd-snapshot-metadata"
+        svc = svc_ocp.get(resource_name=svc_name)
+
+        assert svc is not None, f"Service {svc_name} not found"
+        log.info("Service %s exists", svc_name)
+
+        ports = svc["spec"]["ports"]
+        port_6443 = next((p for p in ports if p["port"] == 6443), None)
+        assert port_6443 is not None, (
+            f"Service {svc_name} does not expose port 6443/TCP. "
+            f"Found ports: {ports}"
+        )
+        log.info(
+            "Service %s exposes port 6443/TCP",
+            svc_name,
+        )
+
+        log.test_step("Get the Endpoints for the Service")
+        ep_ocp = OCP(
+            kind="Endpoints",
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        endpoints = ep_ocp.get(resource_name=svc_name)
+        assert endpoints is not None, f"Endpoints {svc_name} not found"
+
+        subsets = endpoints.get("subsets", [])
+        assert (
+            len(subsets) > 0
+        ), f"Endpoints {svc_name} has no subsets (no ready endpoints)"
+        log.info("Endpoints %s has %d subset(s)", svc_name, len(subsets))
+
+        log.test_step("Compare the endpoint IPs with the RBD controller pod IPs")
+        endpoint_ips = []
+        for subset in subsets:
+            addresses = subset.get("addresses", [])
+            for addr in addresses:
+                endpoint_ips.append(addr["ip"])
+
+        assert len(endpoint_ips) > 0, f"Endpoints {svc_name} has no IPs"
+        log.info(
+            "Endpoints IPs: %s, Pod IPs: %s",
+            sorted(endpoint_ips),
+            sorted(pod_ips),
+        )
+
+        assert set(endpoint_ips) == set(pod_ips), (
+            f"Endpoints IPs {sorted(endpoint_ips)} do not match "
+            f"controller pod IPs {sorted(pod_ips)}"
+        )
+        log.info(
+            "All %d endpoint IP(s) match the RBD controller pod IP(s)",
+            len(endpoint_ips),
+        )
+
+    def test_cbt_configmap_connection_details(self):
+        """
+        Verify that the CBT service ConfigMap contains correct
+        connection details.
+
+        Checks that:
+        - The ConfigMap exists in the openshift-storage namespace
+        - Required keys are present and non-empty
+        - The driverName value is correct
+        - The address format is valid (host:port)
+        - The caCert is a valid PEM-encoded certificate
+
+        Steps:
+        1. Get ConfigMap openshift-storage.rbd.csi.ceph.com from the
+           openshift-storage namespace.
+        2. Check that the ConfigMap exists.
+        3. Check that the keys address, audience, caCert, and
+           driverName are present and non-empty.
+        4. Check the value of the driverName key.
+        5. Check the format of the address value.
+        6. Check the format of the caCert value.
+        """
+        log.test_step(
+            "Get ConfigMap %s from the openshift-storage namespace",
+            constants.CBT_CONFIGMAP_NAME,
+        )
+        cm_ocp = OCP(
+            kind="ConfigMap",
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        cm = cm_ocp.get(resource_name=constants.CBT_CONFIGMAP_NAME)
+
+        log.test_step("Check that the ConfigMap exists")
+        assert cm is not None, (
+            f"ConfigMap {constants.CBT_CONFIGMAP_NAME} not found in "
+            f"{constants.OPENSHIFT_STORAGE_NAMESPACE}"
+        )
+        log.info("ConfigMap %s exists", constants.CBT_CONFIGMAP_NAME)
+
+        log.test_step(
+            "Check that keys address, audience, caCert, and driverName "
+            "are present and non-empty"
+        )
+        data = cm.get("data", {})
+        required_keys = ["address", "audience", "caCert", "driverName"]
+        for key in required_keys:
+            assert key in data, (
+                f"ConfigMap {constants.CBT_CONFIGMAP_NAME} missing " f"key '{key}'"
+            )
+            assert data[key], (
+                f"ConfigMap {constants.CBT_CONFIGMAP_NAME} key '{key}' " f"is empty"
+            )
+        log.info("All required keys are present and non-empty")
+
+        log.test_step("Check the value of the driverName key")
+        driver_name = data["driverName"]
+        expected_driver = "openshift-storage.rbd.csi.ceph.com"
+        assert (
+            driver_name == expected_driver
+        ), f"driverName is '{driver_name}', expected '{expected_driver}'"
+        log.info("driverName is correct: %s", driver_name)
+
+        log.test_step("Check the format of the address value")
+        address = data["address"]
+        host_port_pattern = r"^[a-zA-Z0-9._-]+:\d+$"
+        assert re.match(
+            host_port_pattern, address
+        ), f"address '{address}' is not a valid host:port format"
+        log.info("address format is valid: %s", address)
+
+        log.test_step("Check the format of the caCert value")
+        ca_cert = data["caCert"]
+        assert ca_cert.startswith(
+            "-----BEGIN CERTIFICATE-----"
+        ), "caCert does not start with PEM header"
+        assert ca_cert.strip().endswith(
+            "-----END CERTIFICATE-----"
+        ), "caCert does not end with PEM footer"
+        log.info("caCert is a valid PEM-encoded certificate")
