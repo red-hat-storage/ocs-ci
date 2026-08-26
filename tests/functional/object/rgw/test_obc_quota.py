@@ -83,7 +83,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 logger.info(f"Quota {quota} worked as expected!!")
             else:
                 logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
@@ -116,7 +116,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 assert False, f"New quota {new_quota_str} didn't get applied!!"
             else:
                 logger.error("Copy objects to bucket failed unexpectedly!!")
@@ -147,7 +147,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 logger.info(
                     f"Decreased maxObjects quota to {decreased_quota} blocked writes as expected!!"
                 )
@@ -208,7 +208,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 logger.info(f"Size quota {quota} worked as expected!!")
             else:
                 logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
@@ -244,7 +244,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 assert False, f"New maxSize quota {new_max_size} didn't get applied!!"
             else:
                 logger.error("Copy objects to bucket failed unexpectedly!!")
@@ -302,7 +302,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 logger.info("Both quotas hit as expected!!")
             else:
                 logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
@@ -329,7 +329,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 logger.info("Write still blocked by maxObjects as expected!!")
             else:
                 logger.error("Copying objects to bucket failed unexpectedly!!")
@@ -364,7 +364,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 logger.info("Write still blocked by maxSize as expected!!")
             else:
                 logger.error("Copying objects to bucket failed unexpectedly!!")
@@ -396,7 +396,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 assert False, "Both quotas were increased but writes still blocked!!"
             else:
                 logger.error("Copying objects to bucket failed unexpectedly!!")
@@ -460,7 +460,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 logger.info(
                     f"maxSize quota blocked writes on {bucket_max_size} as expected!!"
                 )
@@ -483,7 +483,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 logger.info(
                     f"maxObjects quota blocked writes on {bucket_max_objects} as expected!!"
                 )
@@ -506,7 +506,7 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            if err_msg in e.args[0]:
+            if err_msg in str(e):
                 logger.info(
                     f"Combined quota blocked writes on {bucket_both} as expected!!"
                 )
