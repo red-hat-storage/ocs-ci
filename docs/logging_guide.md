@@ -1414,6 +1414,84 @@ def deploy_cluster(self):
     logger.test_step("Deploy 3-node cluster with ODF storage")  # ✅
 ```
 
+### ❌ Don't: Duplicate Information Across Log Messages
+
+Every log line should earn its place by telling the reader something they don't
+already know. Do not restate information that another log message has already
+conveyed — **the log level is irrelevant to this rule.** Two messages at
+different levels (e.g. TEST_STEP and INFO) that carry the same information are
+still duplication, and a different level does not justify repeating content.
+
+Duplication takes several forms. Watch for all of them:
+
+**1. A TEST_STEP followed by an INFO that just rephrases it.** This is the most
+common case — the INFO adds no detail the TEST_STEP didn't already give.
+
+```python
+# ❌ Each INFO merely restates the TEST_STEP above it
+logger.test_step("Deploy PostgreSQL workload")
+logger.info("Deploying PostgreSQL workload with 1 replica")
+
+logger.test_step("Wait for all background operations to complete")
+logger.info(
+    "Waiting for background snapshot/clone operations to complete (timeout: 600s)"
+)
+
+logger.test_step(f"Setup KMS encryption with Vault KV version: {kv_version}")
+logger.info("Setting up csi-kms-connection-details configmap")
+```
+
+**2. A message that repeats what a called function already logs.** If a helper
+logs its own operation, don't log the same thing at the call site.
+
+```python
+# ❌ create_pvc() already logs "Creating PVC ..." internally
+logger.info("Creating PVC for the workload")
+pvc = create_pvc(name="workload-pvc", size="10Gi")
+```
+
+**3. A message that repeats context already established earlier.** Once the
+reader knows something, restating it in later lines is noise.
+
+```python
+# ❌ "for the encryption test" is already clear from earlier steps
+logger.info("Starting the encryption test")
+...
+logger.info("Creating namespace for the encryption test")
+logger.info("Creating storage class for the encryption test")
+```
+
+**Why avoid it?**
+- Duplication doubles the lines a reader must scan without doubling the
+  information — it hides the signal, not amplifies it.
+- Repetition across levels blurs each level's role: TEST_STEP marks the *phase*,
+  INFO reports *distinct* progress, results, or values within it.
+- Redundant lines drift out of sync during edits, leaving contradictory logs.
+
+✅ **Do:** Say each thing once, at the most appropriate level
+
+```python
+# ✅ Fold the detail into the TEST_STEP; drop the redundant INFO
+logger.test_step("Deploy PostgreSQL workload with 1 replica")
+
+# ✅ Let the helper's own logging stand; don't echo it at the call site
+pvc = create_pvc(name="workload-pvc", size="10Gi")
+```
+
+✅ **Do:** Keep an additional message only when it carries genuinely new detail
+
+```python
+# ✅ INFO reports distinct sub-operations and results, not a restatement
+logger.test_step(f"Setup KMS encryption with Vault KV version: {kv_version}")
+create_vault_backend(kv_version)
+logger.info("Enrolled 3 OSDs with Vault transit keys")
+```
+
+**Rule of thumb:** Before adding a log line, ask "does the reader already know
+this from another message, an enclosing TEST_STEP, or a function being called?"
+If yes, don't add it. If a line would still make sense as the *text of the
+TEST_STEP itself*, fold it in and delete the separate message.
+
 ### ❌ Don't: Logging Secrets
 
 ```python
