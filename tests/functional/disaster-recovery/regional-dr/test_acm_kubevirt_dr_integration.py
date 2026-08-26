@@ -233,6 +233,7 @@ class TestACMKubevirtDRIntergration:
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             vrg_name=resource_name,
+            skip_replication_resources=True,
         )
         dr_helpers.wait_for_cnv_workload(
             vm_name=cnv_workloads[0].vm_name,
@@ -300,6 +301,8 @@ class TestACMKubevirtDRIntergration:
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             vrg_name=resource_name,
+            timeout=1800,
+            skip_replication_resources=True,
         )
         for cnv_wl in cnv_workloads:
             dr_helpers.wait_for_cnv_workload(
@@ -427,6 +430,8 @@ class TestACMKubevirtDRIntergration:
             cnv_workloads[0].workload_namespace,
             discovered_apps=True,
             vrg_name=resource_name,
+            timeout=1800,
+            skip_replication_resources=True,
         )
         dr_helpers.wait_for_cnv_workload(
             vm_name=cnv_workloads[0].vm_name,
