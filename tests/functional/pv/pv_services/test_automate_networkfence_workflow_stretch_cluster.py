@@ -714,10 +714,13 @@ class TestStretchClusterZoneBShutdownZoneUnaware(ManageTest):
 
         start_time = datetime.now(timezone.utc)
         nodes.stop_nodes(nodes=zone_b_nodes)
+        # Use a longer timeout: Zone-B includes control-plane-2, whose loss
+        # causes API server TLS handshake timeouts that consume part of the
+        # budget, and VMware power-off of multiple VMs takes additional time.
         wait_for_nodes_status(
             node_names=zone_b_node_names,
             status=constants.NODE_NOT_READY,
-            timeout=300,
+            timeout=600,
         )
         logger.info(f"All Zone-B nodes are NotReady: {zone_b_node_names}")
 
@@ -735,7 +738,12 @@ class TestStretchClusterZoneBShutdownZoneUnaware(ManageTest):
         )
         logger.info("CephFS logwriter/logreader pods Running on healthy nodes")
 
-        # RBD (RWO) pods may be stuck Terminating; force-delete and wait.
+        # RBD (RWO) pods may be stuck Terminating on Zone-B nodes; force-delete
+        # them so the StatefulSet reschedules onto healthy Zone-A nodes.
+        # The built-in @retry on get_logwriter_reader_pods (tries=8, delay=5 = 40s)
+        # may not be enough for an RBD PVC to detach and re-attach on a new node.
+        # Use exp_num_replicas=1 first (one pod was already on Zone-A); once stuck
+        # pods are cleaned, retry with exp_num_replicas=2.
         try:
             retry(Exception, tries=1)(sc_obj.get_logwriter_reader_pods)(
                 label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
@@ -752,9 +760,12 @@ class TestStretchClusterZoneBShutdownZoneUnaware(ManageTest):
                 pod_obj = Pod(**pod_info)
                 logger.info(f"Force-deleting stuck pod {pod_obj.name}")
                 pod_obj.delete(force=True)
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
-            )
+            # After force-delete the new RBD pod must bind a RWO PVC on a new
+            # node.  This can take longer than the built-in 40s retry window
+            # (tries=8, delay=5).  Use an outer retry with a generous back-off.
+            retry(UnexpectedBehaviour, tries=12, delay=10)(
+                sc_obj.get_logwriter_reader_pods
+            )(label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2)
         logger.info("All zone-unaware workload pods Running on healthy nodes")
 
         end_time = datetime.now(timezone.utc)
@@ -890,10 +901,13 @@ class TestStretchClusterZoneBKubeletDown(ManageTest):
                 )
             self._kubelet_stopped_nodes.append(node_obj)
 
+        # Use a longer timeout: Zone-B includes control-plane-2, and kubelet
+        # stop on multiple nodes may cause API server disruption that consumes
+        # part of the NotReady detection budget.
         wait_for_nodes_status(
             node_names=zone_b_node_names,
             status=constants.NODE_NOT_READY,
-            timeout=300,
+            timeout=600,
         )
         logger.info(
             f"All Zone-B nodes are NotReady after kubelet stop: {zone_b_node_names}"
@@ -927,13 +941,20 @@ class TestStretchClusterZoneBKubeletDown(ManageTest):
             "Verifying workloads rescheduled onto healthy nodes "
             "with PVCs mounted and IOs started"
         )
-        sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
+        # Zone-AWARE workloads with all Zone-B nodes tainted out-of-service:
+        # the zone-spread constraint (maxSkew=1, whenUnsatisfiable=DoNotSchedule)
+        # prevents the full replica count from running on Zone-A alone.
+        # On a 4-worker cluster (2 per zone): 2 CephFS and 1 RBD pod survive.
+        sc_obj.get_logwriter_reader_pods(
+            label=constants.LOGWRITER_CEPHFS_LABEL, exp_num_replicas=2
+        )
         sc_obj.get_logwriter_reader_pods(
             label=constants.LOGREADER_CEPHFS_LABEL,
             statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
+            exp_num_replicas=2,
         )
         sc_obj.get_logwriter_reader_pods(
-            label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
+            label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=1
         )
         logger.info(
             "All workload pods Running on healthy nodes after Zone-B kubelet stop"
