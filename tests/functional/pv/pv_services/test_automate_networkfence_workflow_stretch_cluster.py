@@ -590,10 +590,15 @@ class TestStretchClusterZoneBNodeShutdown(ManageTest):
 
         start_time = datetime.now(timezone.utc)
         nodes.stop_nodes(nodes=zone_b_nodes)
+        # Use a longer timeout when shutting down ALL Zone-B nodes (including
+        # control-plane-2). With a control-plane node down, the API server
+        # experiences TLS handshake timeouts that consume part of the budget,
+        # and VMware power-off of multiple VMs simultaneously can take longer
+        # than the standard 300s to propagate NotReady status.
         wait_for_nodes_status(
             node_names=zone_b_node_names,
             status=constants.NODE_NOT_READY,
-            timeout=300,
+            timeout=600,
         )
         logger.info(f"All Zone-B nodes are NotReady: {zone_b_node_names}")
 
