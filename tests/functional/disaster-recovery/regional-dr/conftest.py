@@ -40,6 +40,11 @@ from ocs_ci.helpers.dr_helpers import (
     validate_cluster_odf_cli,
 )
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
+from ocs_ci.helpers.dr_helpers_vm_ip_translation import (  # noqa: F401
+    network_mapping_configmap,
+    setup_nad_in_namespace,
+    setup_udn_nad,
+)
 
 log = logging.getLogger(__name__)
 
