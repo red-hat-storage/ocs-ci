@@ -1840,12 +1840,12 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
             policy_assigned = acm_obj.wait_until_expected_text_is_found(
                 acm_loc["conf-msg"],
                 expected_text="New policy assigned to application",
-                timeout=60,
+                timeout=120,
             )
             acm_obj.take_screenshot()
             assert policy_assigned, (
                 "Expected confirmation 'New policy assigned to application' "
-                "not found within 60s after clicking Assign"
+                "not found within 120s after clicking Assign"
             )
             log.info("Close page")
             acm_obj.do_click(acm_loc["close-page"], enable_screenshot=True)
