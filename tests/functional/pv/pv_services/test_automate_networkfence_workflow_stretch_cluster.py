@@ -54,6 +54,7 @@ from ocs_ci.helpers.stretchcluster_helper import (
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.node import (
+    get_node_internal_ip,
     taint_nodes,
     untaint_nodes,
     wait_for_nodes_status,
@@ -67,11 +68,37 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(__name__)
 
 ZONE_B = "data-2"
 CEPH_CHECK_TIMEOUT = 120
+
+
+def _ssh_node_cmd(node_obj, cmd: str, timeout: int = 120) -> None:
+    """
+    Run *cmd* on *node_obj* via SSH using the cluster's default private key.
+
+    This is used in place of ``OCP.exec_oc_debug_cmd`` when the node's kubelet
+    is stopped: ``oc debug nodes/<name>`` schedules a debug pod on the target
+    node, which requires a running kubelet and will fail when kubelet is down.
+    Direct SSH bypasses the kubelet entirely.
+
+    Args:
+        node_obj: OCS node object (must be reachable via SSH on its InternalIP).
+        cmd (str): Shell command to execute on the node (run via ``sudo``).
+        timeout (int): SSH command timeout in seconds.
+    """
+    node_ip = get_node_internal_ip(node_obj)
+    ssh_cmd = (
+        f"ssh -i {constants.SSH_PRIV_KEY} "
+        f'-o "StrictHostKeyChecking no" -o "ConnectTimeout=30" '
+        f"core@{node_ip} sudo {cmd}"
+    )
+    logger.info(f"SSH to {node_obj.name} ({node_ip}): {cmd}")
+    exec_cmd(ssh_cmd, timeout=timeout)
+    logger.info(f"SSH command succeeded on {node_obj.name}: {cmd}")
 
 
 def _teardown_taints(tainted_nodes: list) -> None:
@@ -819,12 +846,11 @@ class TestStretchClusterZoneBKubeletDown(ManageTest):
             if self._kubelet_stopped_nodes:
                 names = [n.name for n in self._kubelet_stopped_nodes]
                 logger.info(f"Teardown: restarting kubelet on nodes {names}")
-                ocp_obj = OCP(kind="node")
                 for node_obj in self._kubelet_stopped_nodes:
                     try:
-                        ocp_obj.exec_oc_debug_cmd(
-                            node=node_obj.name,
-                            cmd_list=[self._START_KUBELET_CMD],
+                        _ssh_node_cmd(
+                            node_obj,
+                            self._START_KUBELET_CMD,
                             timeout=self.KUBELET_START_TIMEOUT,
                         )
                     except Exception as exc:
@@ -967,9 +993,9 @@ class TestStretchClusterZoneBKubeletDown(ManageTest):
 
         logger.info(f"Restarting kubelet on Zone-B nodes: {zone_b_node_names}")
         for node_obj in list(self._kubelet_stopped_nodes):
-            ocp_node.exec_oc_debug_cmd(
-                node=node_obj.name,
-                cmd_list=[self._START_KUBELET_CMD],
+            _ssh_node_cmd(
+                node_obj,
+                self._START_KUBELET_CMD,
                 timeout=self.KUBELET_START_TIMEOUT,
             )
             logger.info(f"Kubelet restarted on {node_obj.name}")
