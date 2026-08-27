@@ -1621,6 +1621,7 @@ class VSPHEREUPI(VSPHEREBASE):
                         location=upi_repo_path,
                         branch=installer_release_branch,
                         force_checkout=True,
+                        sparse_checkout_dirs=["upi/vsphere"],
                     )
 
                     # comment sensitive variable as current terraform version doesn't support
@@ -2766,6 +2767,7 @@ def clone_openshift_installer():
                 location=upi_repo_path,
                 branch="master",
                 clone_type="normal",
+                sparse_checkout_dirs=["upi/vsphere"],
             )
         else:
             # due to failure domain changes in 4.13, use 4.12 branch till
@@ -2779,6 +2781,7 @@ def clone_openshift_installer():
                     url=constants.VSPHERE_INSTALLER_REPO,
                     location=upi_repo_path,
                     branch="release-4.12",
+                    sparse_checkout_dirs=["upi/vsphere"],
                 )
             else:
                 if config.DEPLOYMENT.get("dual_stack") or config.DEPLOYMENT.get("ipv6"):
@@ -2795,18 +2798,21 @@ def clone_openshift_installer():
                     url=constants.VSPHERE_INSTALLER_REPO,
                     location=upi_repo_path,
                     branch=branch,
+                    sparse_checkout_dirs=["upi/vsphere"],
                 )
     elif Version.coerce(ocp_version) == Version.coerce("4.4"):
         clone_repo(
             url=constants.VSPHERE_INSTALLER_REPO,
             location=upi_repo_path,
             branch=constants.VSPHERE_INSTALLER_BRANCH,
+            sparse_checkout_dirs=["upi/vsphere"],
         )
     else:
         clone_repo(
             url=constants.VSPHERE_INSTALLER_REPO,
             location=upi_repo_path,
             branch=f"release-{ocp_version}",
+            sparse_checkout_dirs=["upi/vsphere"],
         )
 
 
