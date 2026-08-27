@@ -100,6 +100,26 @@ CLIENT_OPERATOR_HTTPS_PORT_ROLES = {
     constants.OCS_CLIENT_OPERATOR_METRICS_PORT: "metrics",
     constants.OCS_CLIENT_OPERATOR_WEBHOOK_PORT: "webhook",
 }
+CSI_ADDONS_GRPC_PORTS = (
+    constants.CSI_ADDONS_GRPC_PORT,
+    constants.CSI_ADDONS_NODEPLUGIN_GRPC_PORT,
+    constants.CSI_ADDONS_CEPHFS_CTRLPLUGIN_GRPC_PORT,
+)
+METRICS_EXPORTER_TLS_PROFILE_GENERATION_ENV = "TLS_PROFILE_GENERATION"
+# TLSProfile IANA groups -> Go crypto/tls --tls-curve-preferences names.
+TLS_PROFILE_GROUP_TO_GO_CURVE = {
+    "secp256r1": "CurveP256",
+    "secp384r1": "CurveP384",
+    "secp521r1": "CurveP521",
+    "X25519": "X25519",
+    "X25519MLKEM768": "X25519MLKEM768",
+    "SecP256r1MLKEM768": "SecP256r1MLKEM768",
+    "SecP384r1MLKEM1024": "SecP384r1MLKEM1024",
+}
+TLS_PROFILE_VERSION_TO_GO_MIN = {
+    "TLSv1.2": "VersionTLS12",
+    "TLSv1.3": "VersionTLS13",
+}
 
 # IANA names from TLSProfile spec -> OpenSSL names produced by scantls.
 TLS_PROFILE_IANA_TO_OPENSSL_CIPHER = {
@@ -148,8 +168,8 @@ def gather_tls_relevant_pod_names(namespace, component):
     Pod names to scan for TLS-related log errors based on test parametrization.
 
     Always includes ocs-operator and rook-ceph-operator; adds NooBaa / RGW /
-    ocs-metrics-exporter / csi-snapshot-metadata / ocs-client-operator pods
-    when those paths are under test.
+    ocs-metrics-exporter / csi-snapshot-metadata / ocs-client-operator /
+    csi-addons pods when those paths are under test.
     """
     from ocs_ci.ocs.resources.pod import get_pods_having_label
 
@@ -170,6 +190,14 @@ def gather_tls_relevant_pod_names(namespace, component):
         selectors.append(constants.OCS_METRICS_EXPORTER)
     if component == "ocs-client-operator":
         selectors.append(constants.OCS_CLIENT_OPERATOR_LABEL)
+    if component == "csi-addons":
+        selectors.extend(
+            [
+                constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
+                constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+                constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+            ]
+        )
 
     names = set()
     for label in selectors:
@@ -242,8 +270,8 @@ def assert_no_tls_errors_in_relevant_pod_logs(
     Args:
         namespace (str): Storage namespace (e.g. openshift-storage).
         component (str): Test parametrization key: ``all``, ``noobaa``,
-            ``rgw``, ``metrics-exporter``, ``csi-snapshot-metadata``, or
-            ``ocs-client-operator``.
+            ``rgw``, ``metrics-exporter``, ``csi-snapshot-metadata``,
+            ``ocs-client-operator``, or ``csi-addons``.
         since (str): Passed to ``oc logs --since`` (recent window for this run).
         tail (str|int): Max tail lines per pod.
         max_lines_per_pod (int): Cap lines included in failure output.
@@ -332,6 +360,15 @@ TLS_SCAN_COMPONENT_SELECTORS = {
         "label": constants.OCS_CLIENT_OPERATOR_LABEL,
         "name_filter": constants.OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX,
         "extra_ports": CLIENT_OPERATOR_HTTPS_PORTS,
+    },
+    "csi-addons": {
+        "labels": [
+            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+            constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+            constants.RBD_CTRLPLUGIN_LABEL,
+            constants.CEPHFS_CTRLPLUGIN_LABEL,
+        ],
+        "container_name_filter": "csi-addons",
     },
     "all": {},
 }
@@ -466,98 +503,117 @@ def _tls_scan_discover_endpoints(kubeconfig, namespaces, component="all"):
     name_filter = selector.get("name_filter")
     container_name_filter = selector.get("container_name_filter")
     extra_ports = tuple(int(p) for p in (selector.get("extra_ports") or ()))
+    labels = selector.get("labels")
+    if labels:
+        label_list = list(labels)
+    elif label:
+        label_list = [label]
+    else:
+        label_list = [None]
 
     endpoints = []
+    seen = set()
     for ns in namespaces:
         log.info("TLS scan: discovering %s pods in namespace %s", component, ns)
-        cmd = [
-            "get",
-            "pods",
-            "-n",
-            ns,
-            "-o",
-            "json",
-            "--field-selector=status.phase=Running",
-        ]
-        if label:
-            cmd.extend(["-l", label])
+        for lbl in label_list:
+            cmd = [
+                "get",
+                "pods",
+                "-n",
+                ns,
+                "-o",
+                "json",
+                "--field-selector=status.phase=Running",
+            ]
+            if lbl:
+                cmd.extend(["-l", lbl])
 
-        out = _tls_scan_run_oc(cmd, kubeconfig=kubeconfig, timeout=30)
-        data = json.loads(out)
+            out = _tls_scan_run_oc(cmd, kubeconfig=kubeconfig, timeout=30)
+            data = json.loads(out)
 
-        for pod in data.get("items", []):
-            pod_name = pod["metadata"]["name"]
-            pod_ns = pod["metadata"]["namespace"]
-            pod_ip = pod["status"].get("podIP", "")
-            if not pod_ip:
-                continue
-            containers = pod["spec"]["containers"]
-            fallback_ports = _find_fallback_ports(selector, component, pod)
-            declared_ports = set()
-            extra_template = None
-            snapshot_fallback_added = False
-            for container in containers:
-                c_name = container["name"]
-                if not _tls_scan_include_container(
-                    pod_name,
-                    c_name,
-                    containers,
-                    name_filter,
-                    container_name_filter,
-                ):
+            for pod in data.get("items", []):
+                pod_name = pod["metadata"]["name"]
+                pod_ns = pod["metadata"]["namespace"]
+                pod_ip = pod["status"].get("podIP", "")
+                if not pod_ip:
                     continue
-                new_eps = _build_container_endpoints(
-                    container, pod_name, pod_ns, pod_ip, fallback_ports
-                )
-                cmd_parts = container.get("command", []) + container.get("args", [])
-                process = ""
-                if cmd_parts:
-                    process = cmd_parts[0].rsplit("/", 1)[-1][:15]
-                if not process:
-                    process = (
-                        container.get("image", "").split("/")[-1].split(":")[0][:15]
+                containers = pod["spec"]["containers"]
+                fallback_ports = _find_fallback_ports(selector, component, pod)
+                declared_ports = set()
+                extra_template = None
+                snapshot_fallback_added = False
+                for container in containers:
+                    c_name = container["name"]
+                    if not _tls_scan_include_container(
+                        pod_name,
+                        c_name,
+                        containers,
+                        name_filter,
+                        container_name_filter,
+                    ):
+                        continue
+                    new_eps = _build_container_endpoints(
+                        container, pod_name, pod_ns, pod_ip, fallback_ports
                     )
-                # Prefer the manager container so extra-port probes are not
-                # labeled with a later sidecar.
-                if extra_template is None or c_name == "manager":
-                    extra_template = {
-                        "pod_namespace": pod_ns,
-                        "pod_name": pod_name,
-                        "pod_ip": pod_ip,
-                        "container_name": c_name,
-                        "process": process,
-                    }
-                for ep in new_eps:
-                    declared_ports.add(int(ep["port"]))
-                    endpoints.append(ep)
-                if (
-                    not new_eps
-                    and component == "csi-snapshot-metadata"
-                    and not snapshot_fallback_added
-                ):
-                    snapshot_port = int(constants.CSI_SNAPSHOT_METADATA_PORT)
-                    if snapshot_port not in declared_ports:
-                        snapshot_fallback_added = True
-                        declared_ports.add(snapshot_port)
-                        endpoints.append(
-                            {
-                                "pod_namespace": pod_ns,
-                                "pod_name": pod_name,
-                                "pod_ip": pod_ip,
-                                "container_name": c_name,
-                                "process": process,
-                                "port": str(snapshot_port),
-                            }
+                    cmd_parts = container.get("command", []) + container.get("args", [])
+                    process = ""
+                    if cmd_parts:
+                        process = cmd_parts[0].rsplit("/", 1)[-1][:15]
+                    if not process:
+                        process = (
+                            container.get("image", "").split("/")[-1].split(":")[0][:15]
                         )
-            if extra_template:
-                for extra in extra_ports:
-                    if extra not in declared_ports:
-                        endpoints.append(
-                            {
-                                **extra_template,
-                                "port": str(extra),
-                            }
-                        )
+                    # Prefer the manager container so extra-port probes are not
+                    # labeled with a later sidecar.
+                    if extra_template is None or c_name == "manager":
+                        extra_template = {
+                            "pod_namespace": pod_ns,
+                            "pod_name": pod_name,
+                            "pod_ip": pod_ip,
+                            "container_name": c_name,
+                            "process": process,
+                        }
+                    for ep in new_eps:
+                        declared_ports.add(int(ep["port"]))
+                        key = (ep["pod_namespace"], ep["pod_name"], int(ep["port"]))
+                        if key not in seen:
+                            seen.add(key)
+                            endpoints.append(ep)
+                    if (
+                        not new_eps
+                        and component == "csi-snapshot-metadata"
+                        and not snapshot_fallback_added
+                    ):
+                        snapshot_port = int(constants.CSI_SNAPSHOT_METADATA_PORT)
+                        if snapshot_port not in declared_ports:
+                            snapshot_fallback_added = True
+                            declared_ports.add(snapshot_port)
+                            key = (pod_ns, pod_name, snapshot_port)
+                            if key not in seen:
+                                seen.add(key)
+                                endpoints.append(
+                                    {
+                                        "pod_namespace": pod_ns,
+                                        "pod_name": pod_name,
+                                        "pod_ip": pod_ip,
+                                        "container_name": c_name,
+                                        "process": process,
+                                        "port": str(snapshot_port),
+                                    }
+                                )
+                if extra_template:
+                    for extra in extra_ports:
+                        if extra not in declared_ports:
+                            key = (pod_ns, pod_name, int(extra))
+                            if key in seen:
+                                continue
+                            seen.add(key)
+                            endpoints.append(
+                                {
+                                    **extra_template,
+                                    "port": str(extra),
+                                }
+                            )
 
     log.info(
         "TLS scan: discovered %d endpoints for component %r in %d namespace(s)",
@@ -941,7 +997,8 @@ def scan_cluster(
 
     Args:
         component: ``noobaa``, ``rgw``, ``ceph``, ``csi``, ``metrics-exporter``,
-            ``csi-snapshot-metadata``, ``ocs-client-operator``, or ``all``.
+            ``csi-snapshot-metadata``, ``ocs-client-operator``, ``csi-addons``,
+            or ``all``.
         kubeconfig: Path to kubeconfig; defaults from RUN / ENV_DATA (see
             :func:`_resolve_tls_scan_kubeconfig`).
         namespaces: Namespaces to scan; default
@@ -1648,6 +1705,47 @@ def snapshot_metrics_exporter_roll_state(namespace):
     return _tls_container_fingerprints(pods)
 
 
+def get_metrics_exporter_tls_profile_generations(namespace):
+    """Return [(pod_name, TLS_PROFILE_GENERATION), ...] for exporter pods."""
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    rows = []
+    for pod in (
+        get_pods_having_label(constants.OCS_METRICS_EXPORTER, namespace=namespace) or []
+    ):
+        name = pod.get("metadata", {}).get("name")
+        if not name:
+            continue
+        gen = get_container_env_value(
+            pod, "ocs-metrics-exporter", METRICS_EXPORTER_TLS_PROFILE_GENERATION_ENV
+        )
+        rows.append((name, gen))
+    return rows
+
+
+def assert_metrics_exporter_tls_profile_generation(namespace):
+    """Fail unless every exporter pod has a non-zero TLS_PROFILE_GENERATION."""
+    rows = get_metrics_exporter_tls_profile_generations(namespace)
+    log.info(
+        "ocs-metrics-exporter %s: expected>=1 pods with non-zero generation, "
+        "actual=%s",
+        METRICS_EXPORTER_TLS_PROFILE_GENERATION_ENV,
+        rows,
+    )
+    if not rows:
+        raise AssertionError("ocs-metrics-exporter pods were not found")
+    problems = [
+        f"{name}: {METRICS_EXPORTER_TLS_PROFILE_GENERATION_ENV}={gen!r}"
+        for name, gen in rows
+        if gen in (None, "", "0")
+    ]
+    if problems:
+        raise AssertionError(
+            "ocs-metrics-exporter did not record a TLSProfile generation:\n"
+            + "\n".join(f"  - {p}" for p in problems)
+        )
+
+
 def snapshot_csi_snapshot_metadata_roll_state(namespace):
     """Capture csi-snapshot-metadata sidecar fingerprints before a TLSProfile apply."""
     return _tls_container_fingerprints(
@@ -1901,6 +1999,10 @@ def assert_metrics_exporter_https_tls_applied(
     api_tls_version,
     ports=None,
     context="",
+    expected_ciphers=None,
+    expected_groups=None,
+    exact_version=True,
+    verify_ciphers_groups=True,
 ):
     """
     Fail unless ocs-metrics-exporter HTTPS ports (default 8443 and 9443) are
@@ -1908,6 +2010,7 @@ def assert_metrics_exporter_https_tls_applied(
 
     TLSProfile version is exact (min == max), so a matching port must negotiate
     the expected version and must not still offer the other of tls1.2 / tls1.3.
+    Cipher/group names from the TLSProfile spec are mapped to OpenSSL names.
 
     Args:
         results: Return value of :func:`scan_cluster` for component
@@ -1915,6 +2018,11 @@ def assert_metrics_exporter_https_tls_applied(
         api_tls_version: ``TLSv1.2`` or ``TLSv1.3``.
         ports: HTTPS ports to require (default ``METRICS_EXPORTER_HTTPS_PORTS``).
         context: Short string appended to failure messages.
+        expected_ciphers: TLSProfile IANA cipher list (defaults from version).
+        expected_groups: TLSProfile IANA group list (defaults from version).
+        exact_version: When False, TLSv1.2 is treated as a minimum.
+        verify_ciphers_groups: When False, skip cipher/group membership checks
+            (cluster TLSSecurityProfile Modern uses a different suite).
     """
     ports = tuple(ports) if ports is not None else METRICS_EXPORTER_HTTPS_PORTS
     _assert_https_tls_applied(
@@ -1924,6 +2032,10 @@ def assert_metrics_exporter_https_tls_applied(
         component_label="ocs-metrics-exporter",
         error_header="ocs-metrics-exporter HTTPS ports 8443/9443 did not apply",
         context=context,
+        expected_ciphers=expected_ciphers,
+        expected_groups=expected_groups,
+        verify_ciphers_groups=verify_ciphers_groups,
+        exact_version=exact_version,
     )
 
 
@@ -2130,4 +2242,471 @@ def assert_ocs_client_operator_https_tls_applied(
         port_roles=CLIENT_OPERATOR_HTTPS_PORT_ROLES,
         verify_ciphers_groups=True,
         success_log_includes_role=True,
+    )
+
+
+def parse_tls_cli_flags(command_and_args):
+    """
+    Parse --tls-min-version, --tls-max-version, --tls-cipher-suites, and
+    --tls-curve-preferences from a container command/args list.
+    """
+    flags = {
+        "min_version": None,
+        "max_version": None,
+        "cipher_suites": [],
+        "curve_preferences": [],
+    }
+    items = list(command_and_args or [])
+    i = 0
+    while i < len(items):
+        item = items[i]
+        if not isinstance(item, str):
+            i += 1
+            continue
+        if item.startswith("--tls-min-version="):
+            flags["min_version"] = item.split("=", 1)[1]
+        elif item == "--tls-min-version" and i + 1 < len(items):
+            i += 1
+            flags["min_version"] = items[i]
+        elif item.startswith("--tls-max-version="):
+            flags["max_version"] = item.split("=", 1)[1]
+        elif item == "--tls-max-version" and i + 1 < len(items):
+            i += 1
+            flags["max_version"] = items[i]
+        elif item.startswith("--tls-cipher-suites="):
+            flags["cipher_suites"] = [p for p in item.split("=", 1)[1].split(",") if p]
+        elif item == "--tls-cipher-suites" and i + 1 < len(items):
+            i += 1
+            flags["cipher_suites"] = [p for p in str(items[i]).split(",") if p]
+        elif item.startswith("--tls-curve-preferences="):
+            flags["curve_preferences"] = [
+                p for p in item.split("=", 1)[1].split(",") if p
+            ]
+        elif item == "--tls-curve-preferences" and i + 1 < len(items):
+            i += 1
+            flags["curve_preferences"] = [p for p in str(items[i]).split(",") if p]
+        i += 1
+    return flags
+
+
+def go_curves_for_tls_profile_groups(iana_groups):
+    """Map TLSProfile IANA groups to Go --tls-curve-preferences names."""
+    return [TLS_PROFILE_GROUP_TO_GO_CURVE.get(g, g) for g in iana_groups]
+
+
+def get_container_command_args(pod_item, container_name_substr):
+    """Return command+args for the first container whose name contains substr."""
+    for container in pod_item.get("spec", {}).get("containers") or []:
+        if container_name_substr in (container.get("name") or ""):
+            return list(container.get("command") or []) + list(
+                container.get("args") or []
+            )
+    return []
+
+
+def get_container_env_value(pod_item, container_name_substr, env_name):
+    """Return an env value from the first container whose name contains substr."""
+    for container in pod_item.get("spec", {}).get("containers") or []:
+        if container_name_substr not in (container.get("name") or ""):
+            continue
+        for env in container.get("env") or []:
+            if env.get("name") == env_name:
+                return env.get("value")
+    return None
+
+
+def list_labeled_container_cli(namespace, labels, container_name_substr):
+    """
+    Return list of (pod_name, command_and_args) for matching containers.
+
+    Args:
+        labels: One label selector string or an iterable of them.
+    """
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    if isinstance(labels, str):
+        labels = [labels]
+    seen = set()
+    results = []
+    for label in labels:
+        for pod_item in get_pods_having_label(label, namespace=namespace) or []:
+            name = pod_item.get("metadata", {}).get("name")
+            if not name or name in seen:
+                continue
+            args = get_container_command_args(pod_item, container_name_substr)
+            if not args:
+                continue
+            seen.add(name)
+            results.append((name, args))
+    return results
+
+
+def assert_tls_cli_flags(
+    flags,
+    min_version=None,
+    max_version=None,
+    cipher_suites=None,
+    curve_preferences=None,
+    require_max_version=False,
+    context="",
+):
+    """Fail unless parsed CLI flags include the expected TLS settings."""
+    suffix = f" ({context})" if context else ""
+    problems = []
+    if min_version and flags.get("min_version") != min_version:
+        problems.append(
+            f"tls-min-version: expected={min_version!r}, "
+            f"actual={flags.get('min_version')!r}{suffix}"
+        )
+    if require_max_version and not flags.get("max_version"):
+        problems.append(f"tls-max-version is not set{suffix}")
+    if max_version and flags.get("max_version") != max_version:
+        problems.append(
+            f"tls-max-version: expected={max_version!r}, "
+            f"actual={flags.get('max_version')!r}{suffix}"
+        )
+    if cipher_suites:
+        actual = set(flags.get("cipher_suites") or [])
+        missing = [c for c in cipher_suites if c not in actual]
+        if missing:
+            problems.append(
+                f"tls-cipher-suites missing {missing}; actual={sorted(actual)}{suffix}"
+            )
+    if curve_preferences:
+        actual = set(flags.get("curve_preferences") or [])
+        missing = [c for c in curve_preferences if c not in actual]
+        if missing:
+            problems.append(
+                f"tls-curve-preferences missing {missing}; "
+                f"actual={sorted(actual)}{suffix}"
+            )
+    if problems:
+        raise AssertionError(
+            "TLS CLI flags did not match expected configuration:\n"
+            + "\n".join(f"  - {p}" for p in problems)
+        )
+
+
+def maybe_assert_tls_cli_flags(
+    cli_rows,
+    min_version=None,
+    max_version=None,
+    cipher_suites=None,
+    curve_preferences=None,
+    require_max_version=False,
+):
+    """
+    Assert TLS CLI flags on containers that set any ``--tls-*`` flag.
+
+    ocs-metrics-exporter (DF 5.0) applies TLSProfile through process config
+    and ``TLS_PROFILE_GENERATION`` rather than CLI flags. When flags are
+    absent this logs and returns False instead of failing.
+    """
+    saw_flags = False
+    for pod_name, args in cli_rows:
+        flags = parse_tls_cli_flags(args)
+        log.info("TLS CLI flags for %s: %s", pod_name, flags)
+        if not (
+            flags.get("min_version")
+            or flags.get("max_version")
+            or flags.get("cipher_suites")
+            or flags.get("curve_preferences")
+        ):
+            continue
+        saw_flags = True
+        assert_tls_cli_flags(
+            flags,
+            min_version=min_version if flags.get("min_version") else None,
+            max_version=max_version if flags.get("max_version") else None,
+            cipher_suites=cipher_suites if flags.get("cipher_suites") else None,
+            curve_preferences=(
+                curve_preferences if flags.get("curve_preferences") else None
+            ),
+            require_max_version=require_max_version,
+            context=pod_name,
+        )
+    if not saw_flags:
+        log.info(
+            "No --tls-* CLI flags on matching containers; listener scan is "
+            "the source of truth"
+        )
+    return saw_flags
+
+
+def wait_for_tls_cli_min_version(
+    namespace,
+    labels,
+    container_name_substr,
+    expected_min_version,
+    timeout=600,
+    sleep=15,
+):
+    """Wait until at least one matching container has --tls-min-version set."""
+
+    def _done():
+        for _name, args in list_labeled_container_cli(
+            namespace, labels, container_name_substr
+        ):
+            flags = parse_tls_cli_flags(args)
+            if flags.get("min_version") == expected_min_version:
+                return True
+        return False
+
+    TimeoutSampler(timeout, sleep, _done).wait_for_func_value(True)
+
+
+def snapshot_apiserver_tls_security_profile():
+    """Return a copy of APIServer/cluster spec.tlsSecurityProfile (may be None)."""
+    raw = _tls_scan_run_oc(["get", "apiserver", "cluster", "-o", "json"], timeout=60)
+    data = json.loads(raw)
+    return copy.deepcopy((data.get("spec") or {}).get("tlsSecurityProfile"))
+
+
+def set_apiserver_tls_security_profile(profile_type):
+    """
+    Merge-patch APIServer/cluster spec.tlsSecurityProfile.type.
+
+    ``profile_type`` is ``Modern`` or ``Intermediate`` (OpenShift named profiles).
+    """
+    key = profile_type.lower()
+    patch = {"spec": {"tlsSecurityProfile": {"type": profile_type, key: {}}}}
+    _tls_scan_run_oc(
+        [
+            "patch",
+            "apiserver",
+            "cluster",
+            "--type",
+            "merge",
+            "-p",
+            json.dumps(patch),
+        ],
+        timeout=60,
+    )
+    log.info("Patched APIServer/cluster tlsSecurityProfile.type=%s", profile_type)
+
+
+def restore_apiserver_tls_security_profile(original):
+    """Restore APIServer/cluster tlsSecurityProfile (remove if original is None)."""
+    if original:
+        patch = [
+            {
+                "op": "replace",
+                "path": "/spec/tlsSecurityProfile",
+                "value": original,
+            }
+        ]
+        try:
+            _tls_scan_run_oc(
+                [
+                    "patch",
+                    "apiserver",
+                    "cluster",
+                    "--type",
+                    "json",
+                    "-p",
+                    json.dumps(patch),
+                ],
+                timeout=60,
+            )
+            log.info("Restored APIServer/cluster tlsSecurityProfile to prior value")
+            return
+        except CommandFailed:
+            log.warning(
+                "JSON replace of tlsSecurityProfile failed; falling back to merge"
+            )
+            _tls_scan_run_oc(
+                [
+                    "patch",
+                    "apiserver",
+                    "cluster",
+                    "--type",
+                    "merge",
+                    "-p",
+                    json.dumps({"spec": {"tlsSecurityProfile": original}}),
+                ],
+                timeout=60,
+            )
+            return
+    try:
+        _tls_scan_run_oc(
+            [
+                "patch",
+                "apiserver",
+                "cluster",
+                "--type",
+                "json",
+                "-p",
+                json.dumps([{"op": "remove", "path": "/spec/tlsSecurityProfile"}]),
+            ],
+            timeout=60,
+        )
+        log.info("Removed APIServer/cluster spec.tlsSecurityProfile")
+    except CommandFailed:
+        set_apiserver_tls_security_profile("Intermediate")
+        log.info("Restored APIServer/cluster tlsSecurityProfile to Intermediate")
+
+
+def wait_for_kube_apiserver_stable(timeout=1800, sleep=30):
+    """Wait until ClusterOperator kube-apiserver is not Progressing/Degraded."""
+    from ocs_ci.ocs.ocp import verify_cluster_operator_status
+
+    def _stable():
+        try:
+            return verify_cluster_operator_status(
+                constants.OPENSHIFT_API_CLUSTER_OPERATOR
+            )
+        except CommandFailed:
+            return False
+
+    TimeoutSampler(timeout, sleep, _stable).wait_for_func_value(True)
+
+
+def csi_addons_sidecar_is_deployed(namespace):
+    """Return True if a csi-addons sidecar container is present."""
+    return bool(
+        list_labeled_container_cli(
+            namespace,
+            [
+                constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+                constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+                constants.RBD_CTRLPLUGIN_LABEL,
+                constants.CEPHFS_CTRLPLUGIN_LABEL,
+            ],
+            "csi-addons",
+        )
+    )
+
+
+def _args_enable_auth(command_and_args):
+    """Return True if CLI args enable CSI-Addons gRPC TLS (--enable-auth)."""
+    items = list(command_and_args or [])
+    for i, item in enumerate(items):
+        if not isinstance(item, str):
+            continue
+        if item.startswith("--enable-auth="):
+            return item.split("=", 1)[1].lower() in ("true", "1", "yes")
+        if item == "--enable-auth":
+            if i + 1 < len(items) and str(items[i + 1]).lower() in (
+                "false",
+                "0",
+                "no",
+            ):
+                return False
+            return True
+    return False
+
+
+def csi_addons_grpc_tls_is_enabled(namespace):
+    """Return True if any csi-addons sidecar is started with --enable-auth."""
+    for _name, args in list_labeled_container_cli(
+        namespace,
+        [
+            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+            constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+            constants.RBD_CTRLPLUGIN_LABEL,
+            constants.CEPHFS_CTRLPLUGIN_LABEL,
+        ],
+        "csi-addons",
+    ):
+        if _args_enable_auth(args):
+            return True
+    return False
+
+
+def snapshot_csi_addons_sidecar_roll_state(namespace):
+    """Capture csi-addons sidecar fingerprints before a TLS change."""
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    pods = []
+    seen = set()
+    for label in (
+        constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+        constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+        constants.RBD_CTRLPLUGIN_LABEL,
+        constants.CEPHFS_CTRLPLUGIN_LABEL,
+    ):
+        for pod_item in get_pods_having_label(label, namespace=namespace) or []:
+            name = pod_item.get("metadata", {}).get("name")
+            if name and name not in seen:
+                seen.add(name)
+                pods.append(pod_item)
+    return _tls_container_fingerprints(pods, "csi-addons")
+
+
+def wait_for_csi_addons_sidecar_ready(
+    namespace, timeout=600, sleep=15, previous_fingerprints=None
+):
+    """Wait until csi-addons sidecar containers are ready (and rolled if asked)."""
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    def _list_pods():
+        pods = []
+        seen = set()
+        for label in (
+            constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+            constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+            constants.RBD_CTRLPLUGIN_LABEL,
+            constants.CEPHFS_CTRLPLUGIN_LABEL,
+        ):
+            for pod_item in (
+                get_pods_having_label(
+                    label, namespace=namespace, statuses=[constants.STATUS_RUNNING]
+                )
+                or []
+            ):
+                name = pod_item.get("metadata", {}).get("name")
+                if name and name not in seen:
+                    seen.add(name)
+                    pods.append(pod_item)
+        return pods
+
+    _wait_for_tls_workload_ready(
+        _list_pods,
+        previous_fingerprints,
+        container_name_substr="csi-addons",
+        workload_name="csi-addons sidecar",
+        timeout=timeout,
+        sleep=sleep,
+    )
+
+
+def assert_csi_addons_grpc_tls_applied(
+    results,
+    api_tls_version,
+    ports=None,
+    context="",
+    expected_ciphers=None,
+    expected_groups=None,
+    exact_version=True,
+    verify_ciphers_groups=True,
+):
+    """
+    Fail unless discovered CSI-Addons sidecar gRPC ports serve the expected TLS.
+
+    Default ports are 9070 (RBD ctrlplugin), 9071 (nodeplugin), and 9080
+    (CephFS ctrlplugin). Only ports that appear in ``results`` are required,
+    so a cluster without CephFS does not fail on 9080.
+    """
+    requested = tuple(ports) if ports is not None else CSI_ADDONS_GRPC_PORTS
+    discovered = []
+    for port in requested:
+        if filter_tls_scan_results_by_ports(results, (port,)):
+            discovered.append(port)
+    if not discovered:
+        raise AssertionError(
+            "csi-addons gRPC ports were not discovered "
+            f"(looked for {list(requested)})"
+            f"{(' (' + context + ')') if context else ''}"
+        )
+    _assert_https_tls_applied(
+        results,
+        api_tls_version,
+        tuple(discovered),
+        component_label="csi-addons",
+        error_header="csi-addons gRPC TLS did not apply",
+        context=context,
+        expected_ciphers=expected_ciphers,
+        expected_groups=expected_groups,
+        verify_ciphers_groups=verify_ciphers_groups,
+        exact_version=exact_version,
     )

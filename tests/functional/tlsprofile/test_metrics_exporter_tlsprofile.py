@@ -22,9 +22,14 @@ from ocs_ci.helpers.tlsprofile_helper import (
     TLS_PROFILE_V12_GROUPS,
     TLS_PROFILE_V13_CIPHERS,
     TLS_PROFILE_V13_GROUPS,
+    TLS_PROFILE_VERSION_TO_GO_MIN,
     TLSProfile,
     assert_metrics_exporter_https_tls_applied,
+    assert_metrics_exporter_tls_profile_generation,
     assert_no_tls_errors_in_relevant_pod_logs,
+    go_curves_for_tls_profile_groups,
+    list_labeled_container_cli,
+    maybe_assert_tls_cli_flags,
     metrics_exporter_is_deployed,
     scan_cluster,
     snapshot_metrics_exporter_roll_state,
@@ -166,6 +171,8 @@ class TestMetricsExporterTLSProfile(ManageTest):
         assert_metrics_exporter_https_tls_applied(
             scan_after_v13,
             "TLSv1.3",
+            expected_ciphers=TLS_PROFILE_V13_CIPHERS,
+            expected_groups=TLS_PROFILE_V13_GROUPS,
             context="TLSProfile TLSv1.3, component=metrics-exporter",
         )
 
@@ -195,6 +202,8 @@ class TestMetricsExporterTLSProfile(ManageTest):
         assert_metrics_exporter_https_tls_applied(
             scan_after_v12,
             "TLSv1.2",
+            expected_ciphers=TLS_PROFILE_V12_CIPHERS,
+            expected_groups=TLS_PROFILE_V12_GROUPS,
             context="TLSProfile TLSv1.2, component=metrics-exporter",
         )
 
@@ -219,6 +228,8 @@ class TestMetricsExporterTLSProfile(ManageTest):
         assert_metrics_exporter_https_tls_applied(
             scan_after_restore,
             "TLSv1.3",
+            expected_ciphers=TLS_PROFILE_V13_CIPHERS,
+            expected_groups=TLS_PROFILE_V13_GROUPS,
             context="TLSProfile restored to TLSv1.3, component=metrics-exporter",
         )
 
@@ -241,4 +252,113 @@ class TestMetricsExporterTLSProfile(ManageTest):
         )
         assert_no_tls_errors_in_relevant_pod_logs(
             namespace, _METRICS_EXPORTER_COMPONENT, since=f"{elapsed_s}s"
+        )
+
+    def test_metrics_exporter_tls_cli_flags(self):
+        """
+        ocs-metrics-exporter applies TLSProfile on 8443/9443 as an exclusive
+        version (TLS 1.2 rejects 1.3 and the reverse). DF 5.0 records the
+        apply with ``TLS_PROFILE_GENERATION``; ``--tls-*`` CLI flags are
+        asserted only when the exporter sets them.
+
+        Steps:
+        1. Apply TLS 1.2 with a single RSA GCM cipher and X25519/P-256/P-384.
+        2. Assert TLS_PROFILE_GENERATION, optional CLI flags, scan 8443/9443.
+        3. Switch to TLS 1.3 with AES-GCM ciphers and PQ/classic groups.
+        4. Assert generation and scan tls1.3 only.
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+        if not metrics_exporter_is_deployed(namespace):
+            pytest.skip(
+                f"ocs-metrics-exporter is not deployed in {namespace}; "
+                "TLSProfile listener checks require it"
+            )
+
+        tls = TLSProfile()
+        v12_ciphers = ["TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"]
+        v12_groups = ["X25519", "secp256r1", "secp384r1"]
+        v13_ciphers = [
+            "TLS_AES_128_GCM_SHA256",
+            "TLS_AES_256_GCM_SHA384",
+        ]
+        v13_groups = ["X25519MLKEM768", "X25519", "secp256r1"]
+
+        log.test_step(
+            "Apply TLSProfile TLSv1.2 with one TLS 1.2 cipher suite and "
+            "X25519/CurveP256/CurveP384"
+        )
+        prev_roll = snapshot_metrics_exporter_roll_state(namespace)
+        if not tls.is_tls_profile_available():
+            tls.create_tls_profile(
+                selectors=_METRICS_EXPORTER_SELECTORS,
+                tls_version="TLSv1.2",
+                ciphers=v12_ciphers,
+                groups=v12_groups,
+            )
+        else:
+            tls.replace_rules(
+                _METRICS_EXPORTER_SELECTORS, "TLSv1.2", v12_ciphers, v12_groups
+            )
+        wait_for_tlsprofile_config_version(tls, "TLSv1.2")
+        wait_for_metrics_exporter_ready(namespace, previous_fingerprints=prev_roll)
+        assert_metrics_exporter_tls_profile_generation(namespace)
+
+        cli_rows = list_labeled_container_cli(
+            namespace, constants.OCS_METRICS_EXPORTER, "ocs-metrics-exporter"
+        )
+        log.assertion(
+            f"ocs-metrics-exporter containers with CLI args: expected>=1, "
+            f"actual={len(cli_rows)}"
+        )
+        assert cli_rows, "ocs-metrics-exporter container args were not found"
+        maybe_assert_tls_cli_flags(
+            cli_rows,
+            min_version=TLS_PROFILE_VERSION_TO_GO_MIN["TLSv1.2"],
+            cipher_suites=v12_ciphers,
+            curve_preferences=go_curves_for_tls_profile_groups(v12_groups),
+        )
+
+        log.test_step(
+            "scantls metrics-exporter 8443/9443 after TLS 1.2: expect tls1.2 only"
+        )
+        scan_v12 = scan_cluster(
+            component=_METRICS_EXPORTER_COMPONENT, namespaces=[namespace]
+        )
+        assert_metrics_exporter_https_tls_applied(
+            scan_v12,
+            "TLSv1.2",
+            expected_ciphers=v12_ciphers,
+            expected_groups=v12_groups,
+            context="TLSProfile TLSv1.2 on metrics-exporter",
+        )
+
+        log.test_step("Patch TLSProfile to TLSv1.3 (exclusive) with AES-GCM ciphers")
+        prev_roll = snapshot_metrics_exporter_roll_state(namespace)
+        tls.replace_rules(
+            _METRICS_EXPORTER_SELECTORS, "TLSv1.3", v13_ciphers, v13_groups
+        )
+        wait_for_tlsprofile_config_version(tls, "TLSv1.3")
+        wait_for_metrics_exporter_ready(namespace, previous_fingerprints=prev_roll)
+        assert_metrics_exporter_tls_profile_generation(namespace)
+
+        cli_rows = list_labeled_container_cli(
+            namespace, constants.OCS_METRICS_EXPORTER, "ocs-metrics-exporter"
+        )
+        assert cli_rows, "ocs-metrics-exporter container args were not found"
+        maybe_assert_tls_cli_flags(
+            cli_rows,
+            min_version=TLS_PROFILE_VERSION_TO_GO_MIN["TLSv1.3"],
+            curve_preferences=go_curves_for_tls_profile_groups(v13_groups),
+        )
+
+        log.test_step("scantls metrics-exporter 8443/9443: expect tls1.3 only")
+        scan_v13 = scan_cluster(
+            component=_METRICS_EXPORTER_COMPONENT, namespaces=[namespace]
+        )
+        assert_metrics_exporter_https_tls_applied(
+            scan_v13,
+            "TLSv1.3",
+            expected_ciphers=v13_ciphers,
+            expected_groups=v13_groups,
+            context="TLSProfile TLSv1.3 on metrics-exporter",
         )
