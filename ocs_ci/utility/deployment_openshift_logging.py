@@ -381,9 +381,11 @@ def create_clusterlogforwarder(yaml_file, skip_resource_exists=False):
     try:
         clf_obj.create(yaml_file=yaml_file)
     except CommandFailed as e:
-        if "AlreadyExists" in str(e) and skip_resource_exists:
-            logger.warning("clusterlogforwader already exists")
-            return True
+        if "AlreadyExists" in str(e):
+            logger.warning(
+                "clusterlogforwarder already exists, skipping creation "
+                "and continuing with pod/PVC verification"
+            )
         else:
             raise
 
