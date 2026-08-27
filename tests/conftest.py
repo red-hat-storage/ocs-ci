@@ -7552,16 +7552,36 @@ def switch_to_provider_for_test(request):
             in constants.HCI_PC_OR_MS_PLATFORM
         )
     ):
-        for cluster in ocsci_config.clusters:
-            if cluster.ENV_DATA.get("cluster_type") == "provider":
-                provider_cluster = cluster
-                log.debug("Switching to the provider cluster context")
-                # TODO: Use 'switch_to_provider' function introduced in PR 5541
-                ocsci_config.switch_ctx(
-                    provider_cluster.MULTICLUSTER["multicluster_index"]
+        # If the test is parameterized with config_index and that index
+        # already points to a provider cluster, honour it instead of
+        # always picking the first provider in the list.  This is
+        # critical for multi-provider setups (e.g. RDR with two
+        # provider clusters) where blindly selecting the first provider
+        # causes the second provider's upgrade test to run on the wrong
+        # cluster.
+        callspec = getattr(request.node, "callspec", None)
+        parameterized_index = callspec.params.get("config_index") if callspec else None
+        if parameterized_index is not None:
+            target = ocsci_config.clusters[parameterized_index]
+            if target.ENV_DATA.get("cluster_type") == "provider":
+                log.debug(
+                    f"Switching to parameterized provider cluster context "
+                    f"(config_index={parameterized_index})"
                 )
+                ocsci_config.switch_ctx(parameterized_index)
                 switched_to_provider = True
-                break
+
+        if not switched_to_provider:
+            for cluster in ocsci_config.clusters:
+                if cluster.ENV_DATA.get("cluster_type") == "provider":
+                    provider_cluster = cluster
+                    log.debug("Switching to the provider cluster context")
+                    # TODO: Use 'switch_to_provider' function introduced in PR 5541
+                    ocsci_config.switch_ctx(
+                        provider_cluster.MULTICLUSTER["multicluster_index"]
+                    )
+                    switched_to_provider = True
+                    break
 
     def finalizer():
         """
