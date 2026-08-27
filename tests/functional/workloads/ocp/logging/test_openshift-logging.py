@@ -9,6 +9,7 @@ import time
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import LokiEmptyResultError
 from ocs_ci.ocs.resources.pod import delete_deployment_pods
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3, magenta_squad
@@ -122,8 +123,7 @@ class Testopenshiftloggingonocs(E2ETest):
         logger.info(f"Retrieved Loki route: {lokistack_route}")
         return lokistack_route, token.stdout.decode("utf-8")
 
-    @retry(ModuleNotFoundError, tries=5, delay=200, backoff=1)
-    @retry((IndexError, AssertionError), tries=5, delay=200, backoff=1)
+    @retry(LokiEmptyResultError, tries=5, delay=200, backoff=1)
     def validate_project_exists_in_logs(self, project):
         """
         This function checks whether the new project exists in the
@@ -133,7 +133,8 @@ class Testopenshiftloggingonocs(E2ETest):
             project (str): The project
 
         Raises:
-            AssertionError: If curl command fails or logs are not accessible
+            LokiEmptyResultError: If Loki returns no results (transient, retried)
+            AssertionError: If curl command fails, returns an error, or log_type is wrong
 
         """
         logger.info(f"Validating project exists in Loki logs: {project}")
@@ -172,9 +173,9 @@ class Testopenshiftloggingonocs(E2ETest):
                 f"Full response: {curl_output_str}"
             )
 
-        # Check if any results were returned
+        # Check if any results were returned — transient, safe to retry
         if not curl_output.get("data", {}).get("result"):
-            raise AssertionError(
+            raise LokiEmptyResultError(
                 f"No logs found for namespace {project} in LokiStack. "
                 f"Query may need more time for log collection/indexing. "
                 f"Full response: {curl_output_str}"

@@ -10,7 +10,11 @@ import pytest
 
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility import templating
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ConfigMapDataNotAvailable,
+    ResourceNotFoundError,
+)
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.utils import (
@@ -621,7 +625,8 @@ def install_logging(skip_resource_exists=False):
 
     ocp_logging_obj.get_obc()
 
-    # Wait for ConfigMap to be created by OBC provisioner
+    # Wait for ConfigMap to be created by OBC provisioner and for
+    # BUCKET_NAME / BUCKET_HOST to be populated by the provisioner.
     configmap_obj = ocp.OCP(
         kind=constants.CONFIGMAP, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
@@ -630,9 +635,27 @@ def install_logging(skip_resource_exists=False):
         should_exist=True,
         timeout=180,
     ):
-        raise Exception("Failed to get configmap")
+        raise ConfigMapDataNotAvailable(
+            f"ConfigMap {constants.OBJECT_BUCKET_CLAIM} was not created in "
+            f"{constants.OPENSHIFT_LOGGING_NAMESPACE} within the timeout"
+        )
 
-    cm_dict = configmap_obj.get(resource_name=constants.OBJECT_BUCKET_CLAIM)
+    cm_dict = None
+    for cm in TimeoutSampler(
+        timeout=180,
+        sleep=10,
+        func=configmap_obj.get,
+        resource_name=constants.OBJECT_BUCKET_CLAIM,
+    ):
+        data = (cm or {}).get("data", {})
+        if data.get("BUCKET_NAME") and data.get("BUCKET_HOST"):
+            cm_dict = cm
+            break
+    if cm_dict is None:
+        raise ConfigMapDataNotAvailable(
+            f"ConfigMap {constants.OBJECT_BUCKET_CLAIM} exists but "
+            "BUCKET_NAME and BUCKET_HOST were not populated within the timeout"
+        )
 
     access_key_cmd = (
         f"oc get -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
