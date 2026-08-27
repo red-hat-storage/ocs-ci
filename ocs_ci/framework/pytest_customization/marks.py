@@ -40,6 +40,7 @@ from ocs_ci.ocs.constants import (
     MS_CONSUMER_TYPE,
     HCI_PROVIDER,
     BAREMETAL_PLATFORMS,
+    IBM_HCI_PLATFORM,
     AZURE_KV_PROVIDER_NAME,
     ROSA_HCP_PLATFORM,
     VAULT_KMS_PROVIDER,
@@ -763,6 +764,11 @@ skipif_vsphere_platform = pytest.mark.skipif(
 skipif_azure_platform = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() == "azure",
     reason="Test will not run on Azure deployed cluster",
+)
+
+skipif_ibm_hci_platform = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == IBM_HCI_PLATFORM,
+    reason="Test will not run on IBM HCI platform",
 )
 
 skipif_tainted_nodes = pytest.mark.skipif(
