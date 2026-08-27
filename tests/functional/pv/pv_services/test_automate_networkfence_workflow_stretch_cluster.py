@@ -340,7 +340,14 @@ def _run_post_recovery_checks(
     retry(CommandFailed, tries=6, delay=20)(sc_obj.reset_conn_score)()
     logger.info("Connection scores are clean after Zone-B recovery")
 
-    retry(CommandFailed, tries=5, delay=10)(vm_obj.wait_for_ssh_connectivity)()
+    # After a Zone-B kubelet-down recovery the VM may take longer than the
+    # default 600 s to become reachable via SSH: the VMI pod may need to
+    # restart or live-migrate to a recovered node, and OSDs/MDSs are still
+    # recovering.  Use 1200 s to match the timeout used by other post-disruption
+    # call sites in virtual_machine.py.  Note: wait_for_ssh_connectivity raises
+    # TimeoutExpiredError (not CommandFailed) on timeout, so wrapping it with
+    # retry(CommandFailed) has no effect and is intentionally omitted here.
+    vm_obj.wait_for_ssh_connectivity(timeout=1200)
     retry(CommandFailed, tries=5, delay=10)(verify_vm_workload)(vm_obj, md5sum_before)
     vm_obj.stop()
     logger.info("VM data integrity verified and VM stopped")
