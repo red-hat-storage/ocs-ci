@@ -3,7 +3,7 @@ import logging
 
 log = logging.getLogger(__name__)
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
-from ocs_ci.framework.pytest_customization.marks import green_squad, tier1
+from ocs_ci.framework.pytest_customization.marks import green_squad, tier1, zstream_4_18_1
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -13,6 +13,7 @@ from ocs_ci.helpers.helpers import storagecluster_independent_check
 
 @green_squad
 @tier1
+@zstream_4_18_1
 class TestEncryptionConfigurationDashboard:
     @pytest.fixture(autouse=True)
     def encryption_status(self):
