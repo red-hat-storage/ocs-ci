@@ -1395,9 +1395,7 @@ def _collect_ocs_logs(
                 )
 
             # We want to skip submariner log collection if it's in import clusters phase
-            if not cluster_config.ENV_DATA.get(
-                "import_clusters_to_acm", False
-            ) or cluster_config.ENV_DATA.get("submariner_source", ""):
+            if not cluster_config.ENV_DATA.get("import_clusters_to_acm", False):
                 with subctl_lock:
                     try:
                         run_cmd("subctl")
