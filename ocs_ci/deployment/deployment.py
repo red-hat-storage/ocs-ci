@@ -3861,15 +3861,27 @@ class MultiClusterDROperatorsDeploy(object):
         odf_multicluster_orchestrator_data = templating.load_yaml(
             constants.ODF_MULTICLUSTER_ORCHESTRATOR
         )
+
+        # Determine the appropriate catalog source selector
+        # to avoid non-deterministic package manifest selection when multiple
+        # catalogs provide odf-multicluster-orchestrator (e.g., redhat-operators
+        # and temp-gitops-wa)
         if use_fdf_catsrc:
-            package_manifest = packagemanifest.PackageManifest(
-                resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
-                selector=constants.FDF_OPERATOR_SELECTOR,
-            )
+            selector = constants.FDF_OPERATOR_SELECTOR
+        elif not live_deployment:
+            # Dev/testing deployment: use OPERATOR_INTERNAL_SELECTOR to target
+            # the custom redhat-operators catalog (with ocs-operator-internal=true)
+            # and avoid other catalogs like temp-gitops-wa
+            selector = constants.OPERATOR_INTERNAL_SELECTOR
         else:
-            package_manifest = packagemanifest.PackageManifest(
-                resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
-            )
+            # Live/GA deployment: no selector since the real redhat-operators
+            # catalog doesn't have the ocs-operator-internal label
+            selector = None
+
+        package_manifest = packagemanifest.PackageManifest(
+            resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
+            selector=selector,
+        )
 
         retry(
             (
