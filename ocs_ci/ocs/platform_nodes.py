@@ -1552,7 +1552,7 @@ class AWSUPINode(AWSNodes):
         with open(temp, "w") as wfp:
             logger.info(final_content)
             wfp.write(final_content)
-        os.rename(temp, worker_template_path)
+        shutil.move(temp, worker_template_path)
 
     def get_cert_content(self, worker_ignition_path):
         """
