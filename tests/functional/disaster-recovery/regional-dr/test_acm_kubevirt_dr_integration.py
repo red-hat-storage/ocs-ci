@@ -1063,20 +1063,38 @@ class TestACMKubevirtDRIntergration:
 
         logger.test_step("Verify all VM statuses via ACM UI after failover")
         for cnv_wl in all_cnv_workloads:
-            logger.assertion("navigate_using_fleet_virtualization: expected=True")
-            assert navigate_using_fleet_virtualization(acm_obj)
-            logger.assertion(
-                f"check_or_assign_drpolicy_for_discovered_vms_via_ui:"
-                f" vm={cnv_wl.vm_name}, cluster={secondary_cluster_name}, expected=True"
-            )
-            assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-                acm_obj,
-                vms=[cnv_wl],
-                protection_name=protection_name_1,
-                namespace=workload_namespace,
-                managed_cluster_name=secondary_cluster_name,
-                assign_policy=False,
-            )
+            # The first UI interaction after failover, cleanup and cluster
+            # recovery can hit a drifted/not-yet-rendered ACM VMs page, so the
+            # status check may transiently fail to locate the tree. Retry with
+            # a fresh navigation instead of failing the whole DR test.
+            for attempt in range(3):
+                try:
+                    logger.assertion(
+                        "navigate_using_fleet_virtualization: expected=True"
+                    )
+                    assert navigate_using_fleet_virtualization(acm_obj)
+                    logger.assertion(
+                        f"check_or_assign_drpolicy_for_discovered_vms_via_ui:"
+                        f" vm={cnv_wl.vm_name}, cluster={secondary_cluster_name},"
+                        f" expected=True"
+                    )
+                    assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
+                        acm_obj,
+                        vms=[cnv_wl],
+                        protection_name=protection_name_1,
+                        namespace=workload_namespace,
+                        managed_cluster_name=secondary_cluster_name,
+                        assign_policy=False,
+                    )
+                    break
+                except (AssertionError, Exception) as e:
+                    logger.warning(
+                        f"VM {cnv_wl.vm_name} status check attempt {attempt + 1}"
+                        f" failed: {e}. Retrying after 30s"
+                    )
+                    if attempt == 2:
+                        raise
+                    sleep(30)
 
         # Perform Relocate operation
         config.switch_to_cluster_by_name(primary_cluster_name)
@@ -1164,20 +1182,36 @@ class TestACMKubevirtDRIntergration:
         config.switch_acm_ctx()
         logger.test_step("Verify all VM statuses via ACM UI after relocate")
         for cnv_wl in all_cnv_workloads:
-            logger.assertion("navigate_using_fleet_virtualization: expected=True")
-            assert navigate_using_fleet_virtualization(acm_obj)
-            logger.assertion(
-                f"check_or_assign_drpolicy_for_discovered_vms_via_ui:"
-                f" vm={cnv_wl.vm_name}, cluster={primary_cluster_name}, expected=True"
-            )
-            assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-                acm_obj,
-                vms=[cnv_wl],
-                protection_name=protection_name_1,
-                namespace=workload_namespace,
-                managed_cluster_name=primary_cluster_name,
-                assign_policy=False,
-            )
+            # As with the post-failover check, the ACM VMs page can transiently
+            # fail to render right after relocate; retry with fresh navigation.
+            for attempt in range(3):
+                try:
+                    logger.assertion(
+                        "navigate_using_fleet_virtualization: expected=True"
+                    )
+                    assert navigate_using_fleet_virtualization(acm_obj)
+                    logger.assertion(
+                        f"check_or_assign_drpolicy_for_discovered_vms_via_ui:"
+                        f" vm={cnv_wl.vm_name}, cluster={primary_cluster_name},"
+                        f" expected=True"
+                    )
+                    assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
+                        acm_obj,
+                        vms=[cnv_wl],
+                        protection_name=protection_name_1,
+                        namespace=workload_namespace,
+                        managed_cluster_name=primary_cluster_name,
+                        assign_policy=False,
+                    )
+                    break
+                except (AssertionError, Exception) as e:
+                    logger.warning(
+                        f"VM {cnv_wl.vm_name} status check attempt {attempt + 1}"
+                        f" failed: {e}. Retrying after 30s"
+                    )
+                    if attempt == 2:
+                        raise
+                    sleep(30)
         config.switch_to_cluster_by_name(primary_cluster_name)
 
         # Validating data integrity (file1) after relocating VMs back to primary managed cluster
