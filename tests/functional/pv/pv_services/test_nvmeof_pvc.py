@@ -73,7 +73,7 @@ class TestNvmeofPvc(ManageTest):
         )
         return OCS(**sc_ocp_obj.get())
 
-    @polarion_id("OCS-6666")
+    @polarion_id("OCS-8237")
     def test_nvmeof_pvc_data_integrity_and_reclaim(
         self, nvmeof_storageclass, pvc_factory, pod_factory
     ):
