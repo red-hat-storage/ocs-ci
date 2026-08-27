@@ -5,6 +5,7 @@ import time
 from subprocess import TimeoutExpired
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import skipif_ibm_hci_platform
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     E2ETest,
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-2653")
 @skipif_managed_service
 @skipif_external_mode
+@skipif_ibm_hci_platform
 class TestNoobaaRebuild(E2ETest):
     """
     Test to verify noobaa rebuild.
