@@ -2011,6 +2011,9 @@ def assert_metrics_exporter_https_tls_applied(
     TLSProfile version is exact (min == max), so a matching port must negotiate
     the expected version and must not still offer the other of tls1.2 / tls1.3.
     Cipher/group names from the TLSProfile spec are mapped to OpenSSL names.
+    TLS 1.3 cipher subsets are not enforced: ocs-metrics-exporter is Go and
+    always offers the Go TLS 1.3 suite (AES-GCM and ChaCha). TLS 1.2 cipher
+    lists and TLS 1.3 groups are still checked.
 
     Args:
         results: Return value of :func:`scan_cluster` for component
@@ -2025,6 +2028,21 @@ def assert_metrics_exporter_https_tls_applied(
             (cluster TLSSecurityProfile Modern uses a different suite).
     """
     ports = tuple(ports) if ports is not None else METRICS_EXPORTER_HTTPS_PORTS
+    ciphers = expected_ciphers
+    if (
+        verify_ciphers_groups
+        and api_tls_version == "TLSv1.3"
+        and expected_ciphers is not None
+    ):
+        # Go crypto/tls does not honor TLS 1.3 cipher configuration (CRD:
+        # OpenSSL only). The exporter still offers the full Go TLS 1.3 suite.
+        log.info(
+            "ocs-metrics-exporter TLS 1.3 cipher subset %s is not enforced "
+            "on Go servers; allowing %s",
+            expected_ciphers,
+            TLS_PROFILE_V13_CIPHERS,
+        )
+        ciphers = list(TLS_PROFILE_V13_CIPHERS)
     _assert_https_tls_applied(
         results,
         api_tls_version,
@@ -2032,7 +2050,7 @@ def assert_metrics_exporter_https_tls_applied(
         component_label="ocs-metrics-exporter",
         error_header="ocs-metrics-exporter HTTPS ports 8443/9443 did not apply",
         context=context,
-        expected_ciphers=expected_ciphers,
+        expected_ciphers=ciphers,
         expected_groups=expected_groups,
         verify_ciphers_groups=verify_ciphers_groups,
         exact_version=exact_version,
@@ -2546,19 +2564,100 @@ def restore_apiserver_tls_security_profile(original):
         log.info("Restored APIServer/cluster tlsSecurityProfile to Intermediate")
 
 
-def wait_for_kube_apiserver_stable(timeout=1800, sleep=30):
-    """Wait until ClusterOperator kube-apiserver is not Progressing/Degraded."""
-    from ocs_ci.ocs.ocp import verify_cluster_operator_status
+def _cluster_operator_conditions(name):
+    """Return {type: status} for a ClusterOperator without dumping full JSON."""
+    raw = _tls_scan_run_oc(
+        [
+            "get",
+            "clusteroperator",
+            name,
+            "-o",
+            "jsonpath={range .status.conditions[*]}{.type}={.status};{end}",
+        ],
+        timeout=30,
+    )
+    conditions = {}
+    for part in (raw or "").split(";"):
+        part = part.strip()
+        if "=" in part:
+            key, value = part.split("=", 1)
+            conditions[key] = value
+    return conditions
+
+
+def _apiserver_tls_profile_type():
+    """Return APIServer/cluster spec.tlsSecurityProfile.type, or None."""
+    raw = _tls_scan_run_oc(
+        [
+            "get",
+            "apiserver",
+            "cluster",
+            "-o",
+            "jsonpath={.spec.tlsSecurityProfile.type}",
+        ],
+        timeout=30,
+    )
+    return (raw or "").strip() or None
+
+
+def wait_for_kube_apiserver_stable(timeout=1800, sleep=15):
+    """Wait until ClusterOperator kube-apiserver is Available and not Progressing."""
 
     def _stable():
         try:
-            return verify_cluster_operator_status(
+            cond = _cluster_operator_conditions(
                 constants.OPENSHIFT_API_CLUSTER_OPERATOR
             )
         except CommandFailed:
             return False
+        if cond.get("Degraded") == "True":
+            return False
+        if cond.get("Progressing") == "True":
+            return False
+        return cond.get("Available") == "True"
 
     TimeoutSampler(timeout, sleep, _stable).wait_for_func_value(True)
+    log.info("kube-apiserver ClusterOperator is Available and not Progressing")
+
+
+def wait_for_kube_apiserver_tls_profile_rollout(
+    expected_type, timeout=1800, progressing_timeout=600, sleep=15
+):
+    """
+    Wait for an APIServer tlsSecurityProfile change to finish rolling kube-apiserver.
+
+    OpenShift does not set Progressing in the same second as the patch.
+    Sampling Available once races the rollout and leaves operands on the
+    previous (usually Intermediate) listener.
+    """
+    expected = (expected_type or "").strip() or None
+
+    def _spec_matches():
+        actual = _apiserver_tls_profile_type()
+        if expected is None:
+            return actual in (None, "", "Intermediate")
+        return actual == expected
+
+    TimeoutSampler(timeout, sleep, _spec_matches).wait_for_func_value(True)
+    log.info("APIServer/cluster tlsSecurityProfile.type=%s", expected or "(unset)")
+
+    def _progressing():
+        try:
+            cond = _cluster_operator_conditions(
+                constants.OPENSHIFT_API_CLUSTER_OPERATOR
+            )
+        except CommandFailed:
+            return False
+        return cond.get("Progressing") == "True"
+
+    log.info(
+        "Waiting up to %ss for kube-apiserver Progressing=True after TLS "
+        "profile change",
+        progressing_timeout,
+    )
+    TimeoutSampler(progressing_timeout, sleep, _progressing).wait_for_func_value(True)
+    log.info("kube-apiserver ClusterOperator is Progressing (TLS profile rollout)")
+    wait_for_kube_apiserver_stable(timeout=timeout, sleep=sleep)
 
 
 def csi_addons_sidecar_is_deployed(namespace):

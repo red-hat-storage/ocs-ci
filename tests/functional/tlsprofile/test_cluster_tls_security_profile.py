@@ -33,7 +33,7 @@ from ocs_ci.helpers.tlsprofile_helper import (
     set_apiserver_tls_security_profile,
     snapshot_apiserver_tls_security_profile,
     wait_for_csi_addons_sidecar_ready,
-    wait_for_kube_apiserver_stable,
+    wait_for_kube_apiserver_tls_profile_rollout,
     wait_for_metrics_exporter_ready,
 )
 
@@ -57,9 +57,10 @@ def cluster_modern_tls_profile(request):
         tls.delete_tls_profile(wait=True, force=True)
 
     original = snapshot_apiserver_tls_security_profile()
+    original_type = (original or {}).get("type")
     log.info("Setting APIServer/cluster tlsSecurityProfile to Modern")
     set_apiserver_tls_security_profile("Modern")
-    wait_for_kube_apiserver_stable()
+    wait_for_kube_apiserver_tls_profile_rollout("Modern")
     if metrics_exporter_is_deployed(namespace):
         wait_for_metrics_exporter_ready(namespace, timeout=900)
     if csi_addons_sidecar_is_deployed(namespace):
@@ -68,7 +69,7 @@ def cluster_modern_tls_profile(request):
     def _restore():
         try:
             restore_apiserver_tls_security_profile(original)
-            wait_for_kube_apiserver_stable()
+            wait_for_kube_apiserver_tls_profile_rollout(original_type)
         except Exception:
             log.exception("Failed to restore APIServer tlsSecurityProfile")
             raise

@@ -259,13 +259,15 @@ class TestMetricsExporterTLSProfile(ManageTest):
         ocs-metrics-exporter applies TLSProfile on 8443/9443 as an exclusive
         version (TLS 1.2 rejects 1.3 and the reverse). DF 5.0 records the
         apply with ``TLS_PROFILE_GENERATION``; ``--tls-*`` CLI flags are
-        asserted only when the exporter sets them.
+        asserted only when the exporter sets them. TLS 1.3 cipher subsets in
+        the CR are not enforced (Go crypto/tls).
 
         Steps:
         1. Apply TLS 1.2 with a single RSA GCM cipher and X25519/P-256/P-384.
         2. Assert TLS_PROFILE_GENERATION, optional CLI flags, scan 8443/9443.
-        3. Switch to TLS 1.3 with AES-GCM ciphers and PQ/classic groups.
-        4. Assert generation and scan tls1.3 only.
+        3. Switch to TLS 1.3 with AES-GCM in the CR (Go still offers ChaCha)
+           and PQ/classic groups.
+        4. Assert generation and scan tls1.3 only (cipher subset not enforced).
         """
         namespace = config.ENV_DATA["cluster_namespace"]
         if not metrics_exporter_is_deployed(namespace):
