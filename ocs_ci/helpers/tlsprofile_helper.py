@@ -2196,9 +2196,10 @@ def wait_for_ocs_client_operator_ready(
     """
     Wait until ocs-client-operator manager is Running and ready.
 
-    TLSProfile changes often restart the manager in place (same pod UID,
-    new startedAt). When ``previous_fingerprints`` is set, wait until that
-    restart is visible.
+    A TLS 1.3 apply typically restarts the manager in place (same pod UID,
+    new startedAt). A later TLS 1.2 patch may reload in-process with no
+    fingerprint change. When ``previous_fingerprints`` is set, wait until
+    those fingerprints are gone; omit it when a roll is not required.
     """
     from ocs_ci.ocs.resources.pod import get_pods_having_label
 
@@ -2261,6 +2262,55 @@ def assert_ocs_client_operator_https_tls_applied(
         verify_ciphers_groups=True,
         success_log_includes_role=True,
     )
+
+
+def wait_for_ocs_client_operator_https_tls(
+    namespace,
+    api_tls_version,
+    expected_ciphers=None,
+    expected_groups=None,
+    context="",
+    timeout=600,
+    sleep=20,
+):
+    """
+    Wait until ocs-client-operator webhook/metrics HTTPS matches the
+    TLSProfile version.
+
+    Polls scantls instead of requiring a manager restart. TLS 1.3 usually
+    rolls the pod; TLS 1.2 may apply in-process with the same fingerprints.
+    """
+    wait_for_ocs_client_operator_ready(namespace)
+    last_error = {"msg": None}
+
+    def _done():
+        results = scan_cluster(component="ocs-client-operator", namespaces=[namespace])
+        try:
+            assert_ocs_client_operator_https_tls_applied(
+                results,
+                api_tls_version,
+                expected_ciphers=expected_ciphers,
+                expected_groups=expected_groups,
+                context=context,
+            )
+            return True
+        except AssertionError as err:
+            last_error["msg"] = str(err)
+            log.info(
+                "ocs-client-operator HTTPS not yet at %s: %s",
+                api_tls_version,
+                err,
+            )
+            return False
+
+    try:
+        TimeoutSampler(timeout, sleep, _done).wait_for_func_value(True)
+    except TimeoutExpiredError:
+        detail = last_error["msg"] or "scantls assertion did not succeed"
+        raise TimeoutExpiredError(
+            f"Timed out after {timeout}s waiting for ocs-client-operator "
+            f"HTTPS to apply {api_tls_version}: {detail}"
+        )
 
 
 def parse_tls_cli_flags(command_and_args):

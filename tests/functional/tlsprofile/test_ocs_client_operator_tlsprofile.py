@@ -25,13 +25,11 @@ from ocs_ci.helpers.tlsprofile_helper import (
     TLS_PROFILE_V13_GROUPS,
     TLSProfile,
     assert_no_tls_errors_in_relevant_pod_logs,
-    assert_ocs_client_operator_https_tls_applied,
     ocs_client_operator_is_deployed,
-    scan_cluster,
-    snapshot_ocs_client_operator_roll_state,
     snapshot_tlsprofile_state,
     teardown_tlsprofile,
     tlsprofile_crd_exists,
+    wait_for_ocs_client_operator_https_tls,
     wait_for_ocs_client_operator_ready,
     wait_for_tlsprofile_config_version,
 )
@@ -76,8 +74,8 @@ class TestOCSClientOperatorTLSProfile(ManageTest):
     Both servers must pick up the ODF TLS API without manual restarts. Skips
     on FIPS (PQ / ChaCha in our cipher lists). Deletes the CR at the end—only
     run where that is safe. An autouse fixture also deletes a leftover
-    ``ocs-tls-profile`` if the test aborts early. The operator pod restarts
-    when TLS settings change.
+    ``ocs-tls-profile`` if the test aborts early. TLS 1.3 typically restarts
+    the manager; TLS 1.2 may reload in-process.
     """
 
     @pytest.fixture(autouse=True)
@@ -134,7 +132,6 @@ class TestOCSClientOperatorTLSProfile(ManageTest):
             "ocs.openshift.io/metrics with TLSv1.3, required cipher suites, "
             "and TLS groups"
         )
-        prev_roll = snapshot_ocs_client_operator_roll_state(namespace)
         if not tls.is_tls_profile_available():
             log.info("TLSProfile absent; creating with TLSv1.3 for ocs-client-operator")
             tls.create_tls_profile(
@@ -162,18 +159,12 @@ class TestOCSClientOperatorTLSProfile(ManageTest):
             f"TLSProfile version: expected='TLSv1.3', actual='{actual_version}'"
         )
         assert actual_version == "TLSv1.3"
-        wait_for_ocs_client_operator_ready(namespace, previous_fingerprints=prev_roll)
-
         log.test_step(
-            "scantls ocs-client-operator HTTPS ports "
-            f"{list(CLIENT_OPERATOR_HTTPS_PORTS)} (metrics 8443, webhook 7443): "
-            "expect tls1.3 only, configured ciphers/groups"
+            "Wait until ocs-client-operator HTTPS is TLSv1.3 "
+            f"(ports {list(CLIENT_OPERATOR_HTTPS_PORTS)}: metrics 8443, webhook 7443)"
         )
-        scan_after_v13 = scan_cluster(
-            component=_CLIENT_OPERATOR_COMPONENT, namespaces=[namespace]
-        )
-        assert_ocs_client_operator_https_tls_applied(
-            scan_after_v13,
+        wait_for_ocs_client_operator_https_tls(
+            namespace,
             "TLSv1.3",
             expected_ciphers=TLS_PROFILE_V13_CIPHERS,
             expected_groups=TLS_PROFILE_V13_GROUPS,
@@ -184,7 +175,6 @@ class TestOCSClientOperatorTLSProfile(ManageTest):
             "Patch TLSProfile to TLSv1.2; webhook and metrics must update "
             "without manual intervention"
         )
-        prev_roll = snapshot_ocs_client_operator_roll_state(namespace)
         tls.replace_rules(
             _CLIENT_OPERATOR_SELECTORS,
             "TLSv1.2",
@@ -198,32 +188,26 @@ class TestOCSClientOperatorTLSProfile(ManageTest):
             f"TLSProfile version: expected='TLSv1.2', actual='{actual_version}'"
         )
         assert actual_version == "TLSv1.2"
-        wait_for_ocs_client_operator_ready(namespace, previous_fingerprints=prev_roll)
-
         log.test_step(
-            "scantls ocs-client-operator HTTPS ports "
-            f"{list(CLIENT_OPERATOR_HTTPS_PORTS)} (metrics 8443, webhook 7443): "
-            "expect tls1.2 only, configured ciphers/groups"
+            "Wait until ocs-client-operator HTTPS is TLSv1.2 "
+            f"(ports {list(CLIENT_OPERATOR_HTTPS_PORTS)}: metrics 8443, webhook 7443); "
+            "TLS 1.2 may apply without a manager restart"
         )
-        scan_after_v12 = scan_cluster(
-            component=_CLIENT_OPERATOR_COMPONENT, namespaces=[namespace]
-        )
-        assert_ocs_client_operator_https_tls_applied(
-            scan_after_v12,
+        wait_for_ocs_client_operator_https_tls(
+            namespace,
             "TLSv1.2",
             expected_ciphers=TLS_PROFILE_V12_CIPHERS,
             expected_groups=TLS_PROFILE_V12_GROUPS,
             context="TLSProfile TLSv1.2, component=ocs-client-operator",
         )
 
-        prev_roll = snapshot_ocs_client_operator_roll_state(namespace)
         tls.delete_tls_profile(wait=True, force=False)
         still_present = tls.is_tls_profile_available()
         log.assertion(
             f"TLSProfile after delete: expected=absent, actual_present={still_present}"
         )
         assert not still_present, "TLSProfile should be absent after delete"
-        wait_for_ocs_client_operator_ready(namespace, previous_fingerprints=prev_roll)
+        wait_for_ocs_client_operator_ready(namespace)
 
         elapsed_s = max(
             120,
