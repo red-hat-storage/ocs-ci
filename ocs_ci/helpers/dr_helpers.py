@@ -4773,3 +4773,149 @@ def validate_cluster_odf_cli(retries=5, retry_interval=60):
         f"ODF DR validate clusters did not report success after {retries} attempts. "
         f"Output:\n{last_stdout}"
     )
+
+
+def verify_pending_cleanup_alert_firing_cli(
+    operation="Failover", drpc_name=None, namespace=None, timeout=120
+):
+    """
+    Verify that the ApplicationCleanupPending alert is firing via Prometheus CLI.
+
+    This is a CLI-based alternative to the Selenium UI check.  The alert is
+    queried directly from the Prometheus API on the ACM hub cluster.
+
+    Args:
+        operation (str): DR operation name used only for log messages
+            (``"Failover"`` or ``"Relocate"``).
+        drpc_name (str): When provided, the alert must carry a label
+            ``drpc_name=<drpc_name>`` to be considered a match.
+        namespace (str): Namespace used only for log context.  Defaults to
+            ``constants.DR_OPS_NAMESPACE``.
+        timeout (int): Seconds to wait for the alert to appear in firing state.
+
+    Raises:
+        AssertionError: If the alert does not reach firing state within
+            ``timeout`` seconds.
+    """
+    import threading
+
+    from ocs_ci.utility.prometheus import PrometheusAPI, wait_for_alert_firing
+
+    namespace = namespace or constants.DR_OPS_NAMESPACE
+    restore_index = config.cur_index
+    try:
+        config.switch_acm_ctx()
+        logger.info(
+            f"[CLI] Verifying '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+            f"alert is firing via Prometheus after {operation}"
+            + (
+                f" for DRPC '{drpc_name}' in namespace '{namespace}'"
+                if drpc_name
+                else ""
+            )
+        )
+        prometheus_api = PrometheusAPI(threading_lock=threading.Lock())
+        alerts = wait_for_alert_firing(
+            api=prometheus_api,
+            alert_name=constants.ALERT_APPLICATION_CLEANUP_PENDING,
+            timeout=timeout,
+        )
+        # If a specific DRPC name is expected, confirm at least one matching instance
+        if drpc_name:
+            matching = [
+                a
+                for a in alerts
+                if a.get("labels", {}).get("drpc_name") == drpc_name
+                or a.get("labels", {}).get("name") == drpc_name
+            ]
+            assert matching, (
+                f"'{constants.ALERT_APPLICATION_CLEANUP_PENDING}' alert fired but "
+                f"no instance matched DRPC '{drpc_name}'. Got labels: "
+                + str([a.get("labels") for a in alerts])
+            )
+            logger.info(
+                f"[CLI] Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+                f"confirmed firing for DRPC '{drpc_name}' after {operation}"
+            )
+        else:
+            logger.info(
+                f"[CLI] Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+                f"confirmed firing after {operation}"
+            )
+    finally:
+        config.switch_ctx(restore_index)
+
+
+def verify_pending_cleanup_alert_resolved_cli(
+    operation="Failover", drpc_name=None, namespace=None, timeout=120
+):
+    """
+    Verify that the ApplicationCleanupPending alert is no longer firing via Prometheus CLI.
+
+    Args:
+        operation (str): DR operation name used only for log messages.
+        drpc_name (str): When provided, only alerts whose ``drpc_name`` label
+            matches this value are considered.  The check passes when no such
+            alert is still active.
+        namespace (str): Namespace used only for log context.  Defaults to
+            ``constants.DR_OPS_NAMESPACE``.
+        timeout (int): Seconds to wait for the alert to disappear.
+
+    Raises:
+        AssertionError: If the alert is still firing after ``timeout`` seconds.
+    """
+    import threading
+    import time as _time
+
+    from ocs_ci.utility.prometheus import PrometheusAPI, wait_for_alert_cleared
+
+    namespace = namespace or constants.DR_OPS_NAMESPACE
+    restore_index = config.cur_index
+    try:
+        config.switch_acm_ctx()
+        logger.info(
+            f"[CLI] Verifying '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+            f"alert is cleared via Prometheus after {operation} cleanup"
+            + (f" for DRPC '{drpc_name}'" if drpc_name else "")
+        )
+        prometheus_api = PrometheusAPI(threading_lock=threading.Lock())
+        if drpc_name:
+            # Poll until no firing instance matches the specific DRPC
+            deadline = _time.time() + timeout
+            while _time.time() < deadline:
+                alerts = prometheus_api.get_alerts_by_labels(
+                    alert_name=constants.ALERT_APPLICATION_CLEANUP_PENDING,
+                    labels_dict={"drpc_name": drpc_name},
+                )
+                if not alerts:
+                    # Also check by 'name' label as some versions use that key
+                    alerts = prometheus_api.get_alerts_by_labels(
+                        alert_name=constants.ALERT_APPLICATION_CLEANUP_PENDING,
+                        labels_dict={"name": drpc_name},
+                    )
+                if not alerts:
+                    logger.info(
+                        f"[CLI] Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+                        f"cleared for DRPC '{drpc_name}' after {operation} cleanup"
+                    )
+                    return
+                logger.info(
+                    f"[CLI] Alert still present for DRPC '{drpc_name}', waiting..."
+                )
+                _time.sleep(10)
+            raise AssertionError(
+                f"'{constants.ALERT_APPLICATION_CLEANUP_PENDING}' alert for DRPC "
+                f"'{drpc_name}' did not clear within {timeout}s after {operation} cleanup"
+            )
+        else:
+            wait_for_alert_cleared(
+                api=prometheus_api,
+                alert_name=constants.ALERT_APPLICATION_CLEANUP_PENDING,
+                timeout=timeout,
+            )
+            logger.info(
+                f"[CLI] Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' "
+                f"cleared after {operation} cleanup"
+            )
+    finally:
+        config.switch_ctx(restore_index)

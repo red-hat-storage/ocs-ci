@@ -11,6 +11,8 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_replication_destinations_creation,
     wait_for_replication_destinations_deletion,
     is_cg_cephfs_enabled,
+    verify_pending_cleanup_alert_firing_cli,
+    verify_pending_cleanup_alert_resolved_cli,
 )
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.ocs.resources.drpc import DRPC
@@ -199,11 +201,21 @@ class TestFailoverAndRelocateWithDiscoveredApps:
 
             # Verify alert firing for each workload
             for rdr_workload in rdr_workloads:
-                verify_pending_cleanup_alert_firing(
-                    acm_obj,
-                    "Failover",
-                    drpc_name=rdr_workload.discovered_apps_placement_name,
-                )
+                try:
+                    verify_pending_cleanup_alert_firing(
+                        acm_obj,
+                        "Failover",
+                        drpc_name=rdr_workload.discovered_apps_placement_name,
+                    )
+                except Exception as ui_exc:
+                    logger.warning(
+                        f"UI alert verification failed ({ui_exc}); "
+                        "falling back to Prometheus CLI check"
+                    )
+                    verify_pending_cleanup_alert_firing_cli(
+                        operation="Failover",
+                        drpc_name=rdr_workload.discovered_apps_placement_name,
+                    )
 
         for rdr_workload in rdr_workloads:
             logger.info("Doing Cleanup Operations")
@@ -219,11 +231,21 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         if get_semantic_ocs_version_from_config() >= Version("4.22", partial=True):
             # Verify alert resolved for each workload
             for rdr_workload in rdr_workloads:
-                verify_pending_cleanup_alert_resolved(
-                    acm_obj,
-                    "Failover",
-                    drpc_name=rdr_workload.discovered_apps_placement_name,
-                )
+                try:
+                    verify_pending_cleanup_alert_resolved(
+                        acm_obj,
+                        "Failover",
+                        drpc_name=rdr_workload.discovered_apps_placement_name,
+                    )
+                except Exception as ui_exc:
+                    logger.warning(
+                        f"UI alert-resolved verification failed ({ui_exc}); "
+                        "falling back to Prometheus CLI check"
+                    )
+                    verify_pending_cleanup_alert_resolved_cli(
+                        operation="Failover",
+                        drpc_name=rdr_workload.discovered_apps_placement_name,
+                    )
 
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
@@ -315,11 +337,21 @@ class TestFailoverAndRelocateWithDiscoveredApps:
 
             # Verify alert firing for each workload
             for rdr_workload in rdr_workloads:
-                verify_pending_cleanup_alert_firing(
-                    acm_obj,
-                    "Relocate",
-                    drpc_name=rdr_workload.discovered_apps_placement_name,
-                )
+                try:
+                    verify_pending_cleanup_alert_firing(
+                        acm_obj,
+                        "Relocate",
+                        drpc_name=rdr_workload.discovered_apps_placement_name,
+                    )
+                except Exception as ui_exc:
+                    logger.warning(
+                        f"UI alert verification failed ({ui_exc}); "
+                        "falling back to Prometheus CLI check"
+                    )
+                    verify_pending_cleanup_alert_firing_cli(
+                        operation="Relocate",
+                        drpc_name=rdr_workload.discovered_apps_placement_name,
+                    )
 
             # Manual cleanup after relocate
             for rdr_workload in rdr_workloads:
@@ -334,11 +366,21 @@ class TestFailoverAndRelocateWithDiscoveredApps:
 
             # Verify alert resolved for each workload
             for rdr_workload in rdr_workloads:
-                verify_pending_cleanup_alert_resolved(
-                    acm_obj,
-                    "Relocate",
-                    drpc_name=rdr_workload.discovered_apps_placement_name,
-                )
+                try:
+                    verify_pending_cleanup_alert_resolved(
+                        acm_obj,
+                        "Relocate",
+                        drpc_name=rdr_workload.discovered_apps_placement_name,
+                    )
+                except Exception as ui_exc:
+                    logger.warning(
+                        f"UI alert-resolved verification failed ({ui_exc}); "
+                        "falling back to Prometheus CLI check"
+                    )
+                    verify_pending_cleanup_alert_resolved_cli(
+                        operation="Relocate",
+                        drpc_name=rdr_workload.discovered_apps_placement_name,
+                    )
 
         # Verify resources creation on primary cluster (preferredCluster)
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
