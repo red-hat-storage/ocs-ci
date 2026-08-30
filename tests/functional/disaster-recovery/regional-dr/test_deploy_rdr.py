@@ -31,8 +31,6 @@ Required config parameters in multicluster_mode_rdr.yaml:
         skip_dr_deployment: false            # Skip RDR deployment
         skip_post_deployment_validation: false  # Skip post-deployment validation
 
-        # Optional parameters
-        rbd_dr_scenario: true                # For RBD DR scenario
 """
 
 import logging
@@ -94,8 +92,6 @@ def test_deploy_rdr():
     log.info(f"  - Multicluster mode: {multicluster_mode}")
     log.info(f"  - Multicluster enabled: {config.multicluster}")
     log.info(f"  - Number of clusters: {config.nclusters}")
-    log.info(f"  - RBD DR scenario: {config.ENV_DATA.get('rbd_dr_scenario', False)}")
-
     # ========================================================================
     # STEP 2: Detect and Deploy ACM Hub (if needed)
     # ========================================================================

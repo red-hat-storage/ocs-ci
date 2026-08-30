@@ -1012,9 +1012,7 @@ class Deployment(object):
             dict: of Regional DR config parameters
 
         """
-        dr_conf = dict()
-        dr_conf["rbd_dr_scenario"] = config.ENV_DATA.get("rbd_dr_scenario", False)
-        return dr_conf
+        return dict()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         """
@@ -4800,10 +4798,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
     def __init__(self, dr_conf):
         super().__init__(dr_conf)
-        # DR use case could be RBD or CephFS or Both
-        self.rbd = dr_conf.get("rbd_dr_scenario", False)
-        # CephFS For future usecase
-        self.cephfs = dr_conf.get("cephfs_dr_scenario", False)
 
     def deploy(self):
         """
@@ -4905,11 +4899,10 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             # create service exporter
             create_service_exporter()
 
-        # RBD specific dr deployment
-        if self.rbd:
-            rbddops = RBDDRDeployOps()
-            self.configure_mirror_peer()
-            rbddops.deploy()
+        # RBD dr deployment
+        rbddops = RBDDRDeployOps()
+        self.configure_mirror_peer()
+        rbddops.deploy()
 
         self.apply_custom_ramen_image()
 
