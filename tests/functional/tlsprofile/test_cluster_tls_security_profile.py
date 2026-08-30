@@ -21,10 +21,11 @@ from ocs_ci.helpers.tlsprofile_helper import (
     TLS_PROFILE_VERSION_TO_GO_MIN,
     TLSProfile,
     assert_csi_addons_grpc_tls_applied,
-    assert_metrics_exporter_https_tls_applied,
     assert_no_tls_errors_in_relevant_pod_logs,
     csi_addons_grpc_tls_is_enabled,
     csi_addons_sidecar_is_deployed,
+    filter_tls_scan_results_by_ports,
+    get_metrics_exporter_tls_profile_generations,
     list_labeled_container_cli,
     maybe_assert_tls_cli_flags,
     metrics_exporter_is_deployed,
@@ -53,7 +54,10 @@ def cluster_modern_tls_profile(request):
     namespace = config.ENV_DATA["cluster_namespace"]
     tls = TLSProfile()
     if tls.is_tls_profile_available(silent=True):
-        log.info("Deleting ocs-tls-profile so operands inherit the cluster TLS profile")
+        log.info(
+            "Deleting ocs-tls-profile so the cluster APIServer profile is "
+            "not overridden by a CR"
+        )
         tls.delete_tls_profile(wait=True, force=True)
 
     original = snapshot_apiserver_tls_security_profile()
@@ -98,18 +102,22 @@ def cluster_modern_tls_profile(request):
 )
 class TestClusterTLSSecurityProfile(ManageTest):
     """
-    Cluster APIServer tlsSecurityProfile Modern: ocs-metrics-exporter must
-    follow the cluster TLS profile when no ocs-tls-profile CR overrides it.
-    CSI-Addons sidecar gRPC is checked only when the sidecar is started with
-    --enable-auth (otherwise the ports are plaintext).
+    Cluster APIServer tlsSecurityProfile Modern with no ocs-tls-profile CR.
+
+    ocs-metrics-exporter applies TLS only from ``ocs-tls-profile``
+    (``TLS_PROFILE_GENERATION``). Cluster Modern does not restrict the
+    exporter listener. CSI-Addons sidecar gRPC is checked only when the
+    sidecar is started with ``--enable-auth`` (otherwise the ports are
+    plaintext).
     """
 
     def test_metrics_exporter_cluster_modern_tls_profile(
         self, cluster_modern_tls_profile
     ):
         """
-        ocs-metrics-exporter accepts TLS 1.3 only when the cluster TLS profile
-        is Modern (no ocs-tls-profile CR).
+        Without ocs-tls-profile, cluster Modern does not make
+        ocs-metrics-exporter TLS 1.3-only. HTTPS stays on the operand
+        default (tls1.2 and tls1.3) and TLS_PROFILE_GENERATION stays 0.
         """
         test_start_time = datetime.now(timezone.utc)
         namespace = config.ENV_DATA["cluster_namespace"]
@@ -119,26 +127,58 @@ class TestClusterTLSSecurityProfile(ManageTest):
                 "cluster Modern TLS profile check requires it"
             )
 
-        log.test_step("Check exporter TLS CLI flags if the operand sets them")
+        log.test_step(
+            "Confirm exporter has no ocs-tls-profile generation bump and "
+            "no TLS 1.3-only CLI flags"
+        )
+        generations = get_metrics_exporter_tls_profile_generations(namespace)
+        log.assertion(
+            f"TLS_PROFILE_GENERATION: expected all '0' (no ocs-tls-profile), "
+            f"actual={generations}"
+        )
+        assert generations, "ocs-metrics-exporter pods were not found"
+        nonzero = [
+            (name, gen)
+            for name, gen in generations
+            if str(gen if gen is not None else "0") != "0"
+        ]
+        assert not nonzero, (
+            "ocs-metrics-exporter TLS_PROFILE_GENERATION is non-zero without "
+            f"ocs-tls-profile; cluster Modern is not the TLSProfile CR path: "
+            f"{nonzero}"
+        )
         cli_rows = list_labeled_container_cli(
             namespace, constants.OCS_METRICS_EXPORTER, "ocs-metrics-exporter"
         )
-        maybe_assert_tls_cli_flags(
-            cli_rows,
-            min_version=TLS_PROFILE_VERSION_TO_GO_MIN["TLSv1.3"],
-        )
+        # Flags are optional; if present they must not claim TLS 1.3-only.
+        maybe_assert_tls_cli_flags(cli_rows)
 
         log.test_step(
             f"scantls metrics-exporter ports {list(METRICS_EXPORTER_HTTPS_PORTS)}: "
-            "expect tls1.3 only (TLS 1.2 rejected)"
+            "expect tls1.2 and tls1.3 (cluster Modern is not inherited)"
         )
         results = scan_cluster(component="metrics-exporter", namespaces=[namespace])
-        assert_metrics_exporter_https_tls_applied(
-            results,
-            "TLSv1.3",
-            context="cluster tlsSecurityProfile=Modern",
-            verify_ciphers_groups=False,
-        )
+        for port in METRICS_EXPORTER_HTTPS_PORTS:
+            rows = filter_tls_scan_results_by_ports(results, (port,))
+            ok_rows = [row for row in rows if row.get("status") == "OK"]
+            log.assertion(
+                f"exporter port {port}: expected HTTPS OK, actual_ok={len(ok_rows)}"
+            )
+            assert ok_rows, (
+                f"ocs-metrics-exporter port {port} is not serving HTTPS after "
+                f"cluster Modern (rows={rows})"
+            )
+            versions = set()
+            for row in ok_rows:
+                versions.update(row.get("tls_versions") or [])
+            log.assertion(
+                f"exporter port {port} tls_versions: expected tls1.2 and "
+                f"tls1.3, actual={sorted(versions)}"
+            )
+            assert "tls1.2" in versions and "tls1.3" in versions, (
+                "without ocs-tls-profile, cluster Modern must not restrict "
+                f"ocs-metrics-exporter port {port}; got {sorted(versions)}"
+            )
 
         elapsed_s = max(
             120,
