@@ -156,10 +156,14 @@ _TLS_LOG_ERROR_RE = re.compile(
 )
 
 # Transient / non-TLS errors that sometimes mention "tls" or "handshake" in unrelated contexts.
+# scantls probes each cipher and version one at a time, so Go HTTP servers log
+# expected handshake rejections for the suites/versions the profile does not offer.
 _TLS_LOG_EXCLUDE_RE = re.compile(
     r"(?i)connection refused|dial tcp|websocket dial|handshake request|"
     r"RPC:\s*Reconnect|reconnect\s*-\s*got error|context deadline exceeded|"
-    r"i/o timeout|no route to host|broken pipe|\bEOF\b|temporary failure",
+    r"i/o timeout|no route to host|broken pipe|\bEOF\b|temporary failure|"
+    r"no cipher suite supported by both client and server|"
+    r"client offered only unsupported versions",
 )
 
 

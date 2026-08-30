@@ -92,6 +92,9 @@ def cluster_modern_tls_profile(request):
     constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
     constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
     constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+    # kube-apiserver TLS profile rolls recreate these node-local rook pods
+    constants.CRASHCOLLECTOR_APP_LABEL,
+    constants.EXPORTER_APP_LABEL,
 )
 class TestClusterTLSSecurityProfile(ManageTest):
     """
