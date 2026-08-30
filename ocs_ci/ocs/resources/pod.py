@@ -2288,9 +2288,9 @@ def get_odf_external_snapshotter_leader(namespace=None):
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
-    non_leader_msg = "Failed to acquire lease"
-    lease_acq_msg = "Successfully acquired lease"
-    lease_renew_msg = "Successfully renewed lease"
+    non_leader_msg = "failed to acquire lease"
+    lease_acq_msg = "successfully acquired lease"
+    lease_renew_msg = "successfully renewed lease"
     leader_pod = ""
 
     # Get all ODF external snapshotter pods
@@ -2310,11 +2310,16 @@ def get_odf_external_snapshotter_leader(namespace=None):
         for log_msg in log_list:
             # Check for last occurrence of leader message
             # This will be the first occurrence in reversed list.
-            if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
+            # Use case-insensitive comparison to handle both old (lowercase)
+            # and new structured-logging (Title-case) leaderelection messages.
+            log_msg_lower = log_msg.lower()
+            if (lease_renew_msg in log_msg_lower) or (lease_acq_msg in log_msg_lower):
                 curr_index = log_list.index(log_msg)
                 # Ensure that there is no non leader message logged after
                 # the last occurrence of leader message
-                if not any(non_leader_msg in msg for msg in log_list[:curr_index]):
+                if not any(
+                    non_leader_msg in msg.lower() for msg in log_list[:curr_index]
+                ):
                     leader_pod = pod
                 break
     assert leader_pod, "Couldn't identify ODF external snapshotter leader pod."
