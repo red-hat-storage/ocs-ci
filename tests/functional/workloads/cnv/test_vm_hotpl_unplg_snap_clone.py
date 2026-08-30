@@ -1,4 +1,5 @@
 import logging
+import time
 
 import pytest
 
@@ -232,6 +233,13 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 f"Disk state on VM '{vm_obj_pvc.name}' after unplug (used as "
                 f"baseline for clone hotplug detection):\n{before_disks_pvc}"
             )
+            # removevolume(verify=True) only confirms the kubevirt spec is updated.
+            # QEMU/virt-launcher may still hold the virtio-scsi slot open for
+            # several seconds after the spec clears, causing a subsequent
+            # addvolume hotplug event to be silently dropped inside the guest.
+            # Sleep here to let QEMU fully release the slot before the next
+            # addvolume call.
+            time.sleep(20)
 
             logger.info(
                 f"Unplugging original PVC '{dvt_obj.name}' from VM '{vm_obj_dvt.name}' "
@@ -245,6 +253,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 f"Disk state on VM '{vm_obj_dvt.name}' after unplug (used as "
                 f"baseline for clone hotplug detection):\n{before_disks_dvt}"
             )
+            time.sleep(20)
 
             # Attach clones to opposite VMs (now the only hotplugged device on each)
             logger.info(
