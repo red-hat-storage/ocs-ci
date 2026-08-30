@@ -1086,7 +1086,6 @@ class Deployment(object):
 
         """
         dr_conf = dict()
-        dr_conf["rbd_dr_scenario"] = config.ENV_DATA.get("rbd_dr_scenario", False)
         dr_conf["dr_metadata_store"] = config.ENV_DATA.get("dr_metadata_store", "awss3")
         return dr_conf
 
@@ -4956,10 +4955,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
     def __init__(self, dr_conf):
         super().__init__(dr_conf)
-        # DR use case could be RBD or CephFS or Both
-        self.rbd = dr_conf.get("rbd_dr_scenario", False)
-        # CephFS For future usecase
-        self.cephfs = dr_conf.get("cephfs_dr_scenario", False)
 
     def deploy(self):
         """
@@ -5061,20 +5056,24 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             # create service exporter
             create_service_exporter()
 
-        # RBD specific dr deployment
-        if self.rbd:
-            rbddops = RBDDRDeployOps()
-            self.configure_mirror_peer()
-            rbddops.deploy()
+        # RBD DR deployment
+        rbddops = RBDDRDeployOps()
+        self.configure_mirror_peer()
+        rbddops.deploy()
 
         self.apply_custom_ramen_image()
+
+        logger.info("Creating Drpolicy")
+        self.deploy_dr_policy()
+
+        # Adding Ca Cert
+        self.add_cacert_ramen_configmap()
 
         multicluster_observability = ocp.OCP(kind="MultiClusterObservability")
         if not multicluster_observability.get()["items"]:
             # TODO: Check whether this need to be enabled for each pair of RDR clusters
             self.enable_acm_observability()
 
-        self.deploy_dr_policy()
         if odf_running_version >= version.VERSION_4_19:
             # validate storage cluster peer state
             validate_storage_cluster_peer_state()
@@ -5153,8 +5152,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         config.switch_acm_ctx()
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             apply_oadp_workaround(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
-        # Adding Ca Cert
-        self.add_cacert_ramen_configmap()
+
         # Only on the active hub enable managedserviceaccount-preview
         managed_clusters = get_non_acm_cluster_config()
         for cluster in managed_clusters:

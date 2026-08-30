@@ -32,7 +32,6 @@ Required config parameters in multicluster_mode_rdr.yaml:
         skip_post_deployment_validation: false  # Skip post-deployment validation
 
         # Optional parameters
-        rbd_dr_scenario: true                # For RBD DR scenario
         dr_metadata_store: "awss3"           # Metadata store type (awss3 or mcg)
 """
 
@@ -95,7 +94,6 @@ def test_deploy_rdr():
     log.info(f"  - Multicluster mode: {multicluster_mode}")
     log.info(f"  - Multicluster enabled: {config.multicluster}")
     log.info(f"  - Number of clusters: {config.nclusters}")
-    log.info(f"  - RBD DR scenario: {config.ENV_DATA.get('rbd_dr_scenario', False)}")
     log.info(
         f"  - DR metadata store: {config.ENV_DATA.get('dr_metadata_store', 'awss3')}"
     )
