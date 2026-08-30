@@ -1,4 +1,5 @@
 import logging
+
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
@@ -219,21 +220,36 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 f"before attaching clone"
             )
             self.unplug_disks_and_verify(vm_obj_pvc, pvc_obj)
+            # Capture the current disk state and wait until the block device is
+            # fully gone from lsblk inside the guest before calling addvolume.
+            # removevolume(verify=True) only confirms the kubevirt spec is updated;
+            # QEMU/virt-launcher may still hold the RBD slot open for several
+            # seconds afterwards.  Polling lsblk guards against the race.
+            before_disks_pvc = vm_obj_pvc.run_ssh_cmd(
+                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
+            )
+            logger.info(
+                f"Disk state on VM '{vm_obj_pvc.name}' after unplug (used as "
+                f"baseline for clone hotplug detection):\n{before_disks_pvc}"
+            )
 
             logger.info(
                 f"Unplugging original PVC '{dvt_obj.name}' from VM '{vm_obj_dvt.name}' "
                 f"before attaching clone"
             )
             self.unplug_disks_and_verify(vm_obj_dvt, dvt_obj)
+            before_disks_dvt = vm_obj_dvt.run_ssh_cmd(
+                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
+            )
+            logger.info(
+                f"Disk state on VM '{vm_obj_dvt.name}' after unplug (used as "
+                f"baseline for clone hotplug detection):\n{before_disks_dvt}"
+            )
 
             # Attach clones to opposite VMs (now the only hotplugged device on each)
             logger.info(
                 f"Attaching clone '{clone_obj_dvt.name}' to VM '{vm_obj_pvc.name}'"
             )
-            before_disks_pvc = vm_obj_pvc.run_ssh_cmd(
-                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
-            )
-
             self.hotplug_and_run_io(
                 vm_obj_pvc, clone_obj_dvt, file_paths, before_disks_pvc, cross_pvc=True
             )
@@ -241,10 +257,6 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             logger.info(
                 f"Attaching clone '{clone_obj_pvc.name}' to VM '{vm_obj_dvt.name}'"
             )
-            before_disks_dvt = vm_obj_dvt.run_ssh_cmd(
-                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
-            )
-
             self.hotplug_and_run_io(
                 vm_obj_dvt, clone_obj_pvc, file_paths, before_disks_dvt, cross_pvc=True
             )
