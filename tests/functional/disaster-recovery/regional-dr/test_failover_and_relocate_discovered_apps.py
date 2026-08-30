@@ -26,6 +26,11 @@ from ocs_ci.helpers.dr_helpers_ui import (
     verify_pending_cleanup_alert_resolved,
 )
 from ocs_ci.ocs.acm.acm import AcmAddClusters
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    StaleElementReferenceException,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -207,7 +212,11 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                         "Failover",
                         drpc_name=rdr_workload.discovered_apps_placement_name,
                     )
-                except Exception as ui_exc:
+                except (
+                    NoSuchElementException,
+                    StaleElementReferenceException,
+                    UnexpectedBehaviour,
+                ) as ui_exc:
                     logger.warning(
                         f"UI alert verification failed ({ui_exc}); "
                         "falling back to Prometheus CLI check"
@@ -237,7 +246,11 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                         "Failover",
                         drpc_name=rdr_workload.discovered_apps_placement_name,
                     )
-                except Exception as ui_exc:
+                except (
+                    NoSuchElementException,
+                    StaleElementReferenceException,
+                    UnexpectedBehaviour,
+                ) as ui_exc:
                     logger.warning(
                         f"UI alert-resolved verification failed ({ui_exc}); "
                         "falling back to Prometheus CLI check"
@@ -343,7 +356,11 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                         "Relocate",
                         drpc_name=rdr_workload.discovered_apps_placement_name,
                     )
-                except Exception as ui_exc:
+                except (
+                    NoSuchElementException,
+                    StaleElementReferenceException,
+                    UnexpectedBehaviour,
+                ) as ui_exc:
                     logger.warning(
                         f"UI alert verification failed ({ui_exc}); "
                         "falling back to Prometheus CLI check"
@@ -372,7 +389,11 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                         "Relocate",
                         drpc_name=rdr_workload.discovered_apps_placement_name,
                     )
-                except Exception as ui_exc:
+                except (
+                    NoSuchElementException,
+                    StaleElementReferenceException,
+                    UnexpectedBehaviour,
+                ) as ui_exc:
                     logger.warning(
                         f"UI alert-resolved verification failed ({ui_exc}); "
                         "falling back to Prometheus CLI check"
