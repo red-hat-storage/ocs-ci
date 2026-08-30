@@ -5043,13 +5043,15 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         rbddops.deploy()
 
         self.apply_custom_ramen_image()
-
+        logger.info("Deploying DR policy")
+        self.deploy_dr_policy()
+        logger.info("Adding CA cert to Ramen configmap")
+        self.add_cacert_ramen_configmap()
         multicluster_observability = ocp.OCP(kind="MultiClusterObservability")
         if not multicluster_observability.get()["items"]:
             # TODO: Check whether this need to be enabled for each pair of RDR clusters
             self.enable_acm_observability()
 
-        self.deploy_dr_policy()
         if odf_running_version >= version.VERSION_4_19:
             # validate storage cluster peer state
             validate_storage_cluster_peer_state()
@@ -5128,8 +5130,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         config.switch_acm_ctx()
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             apply_oadp_workaround(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
-        # Adding Ca Cert
-        self.add_cacert_ramen_configmap()
         # Only on the active hub enable managedserviceaccount-preview
         managed_clusters = get_non_acm_cluster_config()
         for cluster in managed_clusters:
