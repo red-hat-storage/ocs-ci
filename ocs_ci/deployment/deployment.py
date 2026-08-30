@@ -789,8 +789,7 @@ class Deployment(object):
         if config.ENV_DATA.get("skip_dr_deployment", False):
             return
         if config.multicluster:
-            dr_conf = self.get_rdr_conf()
-            deploy_dr = get_multicluster_dr_deployment()(dr_conf)
+            deploy_dr = get_multicluster_dr_deployment()()
             deploy_dr.deploy()
 
     def do_deploy_lvmo(self):
@@ -1003,16 +1002,6 @@ class Deployment(object):
         self.do_deploy_metallb()
         self.do_deploy_hosted_spoke_clusters()
         self.do_deploy_external_spoke_clusters()
-
-    def get_rdr_conf(self):
-        """
-        Aggregate important Regional DR parameters in the dictionary
-
-        Returns:
-            dict: of Regional DR config parameters
-
-        """
-        return dict()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         """
@@ -3640,7 +3629,7 @@ class MultiClusterDROperatorsDeploy(object):
 
     """
 
-    def __init__(self, dr_conf):
+    def __init__(self):
         self.meta_obj = self.s3_meta_obj_store()
         self.channel = config.DEPLOYMENT.get("ocs_csv_channel")
 
@@ -4796,8 +4785,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
     A class for Regional-DR deployments
     """
 
-    def __init__(self, dr_conf):
-        super().__init__(dr_conf)
+    def __init__(self):
+        super().__init__()
 
     def deploy(self):
         """
@@ -5176,8 +5165,8 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
     A class for Metro-DR deployments
     """
 
-    def __init__(self, dr_conf):
-        super().__init__(dr_conf)
+    def __init__(self):
+        super().__init__()
 
     def deploy(self):
         # We need multicluster orchestrator on both the active/passive ACM clusters
