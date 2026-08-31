@@ -5269,6 +5269,14 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             )
             return
 
+        logger.info(f"Creating namespace {constants.ACM_OBSERVABILITY_NAMESPACE}")
+        observability_namespace = OCP(
+            kind=constants.NAMESPACE,
+            resource_name=constants.ACM_OBSERVABILITY_NAMESPACE,
+        )
+        if not observability_namespace.is_exist():
+            exec_cmd(f"oc create namespace {constants.ACM_OBSERVABILITY_NAMESPACE}")
+
         logger.info("Create thanos secret yaml")
         self.thanos_secret()
 
