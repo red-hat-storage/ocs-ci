@@ -1542,15 +1542,35 @@ def wait_for_noobaa_tls_min_version_substring(
     Wait until NooBaa apiServerSecurity.tlsMinVersion contains expected_substring
     (e.g. '1.2' or '1.3').
     """
+    from ocs_ci.ocs.resources.storage_cluster import get_noobaa_phase
+
+    last = {"phase": None, "sec": None, "ver": None}
 
     def _match():
-        sec = get_noobaa_api_server_security(namespace)
-        if sec is None:
+        last["phase"] = get_noobaa_phase(namespace)
+        last["sec"] = get_noobaa_api_server_security(namespace)
+        last["ver"] = None if last["sec"] is None else last["sec"].get("tlsMinVersion")
+        log.info(
+            "Waiting for NooBaa tlsMinVersion to contain %r "
+            "(phase=%s apiServerSecurity=%s tlsMinVersion=%s)",
+            expected_substring,
+            last["phase"],
+            last["sec"],
+            last["ver"],
+        )
+        if last["sec"] is None:
             return False
-        ver = sec.get("tlsMinVersion")
-        return ver is not None and expected_substring in str(ver).lower()
+        return (
+            last["ver"] is not None and expected_substring in str(last["ver"]).lower()
+        )
 
-    TimeoutSampler(timeout, sleep, _match).wait_for_func_value(True)
+    try:
+        TimeoutSampler(timeout, sleep, _match).wait_for_func_value(True)
+    except TimeoutExpiredError:
+        raise TimeoutExpiredError(
+            f"NooBaa tlsMinVersion never contained {expected_substring!r} "
+            f"(phase={last['phase']}, apiServerSecurity={last['sec']})"
+        )
 
 
 def get_first_cephobjectstore_name(namespace):
