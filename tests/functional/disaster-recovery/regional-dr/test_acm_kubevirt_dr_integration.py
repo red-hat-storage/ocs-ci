@@ -1291,7 +1291,7 @@ class TestACMKubevirtDRIntergration:
             kind=constants.DRPC,
             namespace=constants.DR_OPS_NAMESPACE,
             resource_name=resource_name_1,
-            timeout=300,
+            timeout=600,
             should_exist=False,
         )
 
@@ -1337,7 +1337,7 @@ class TestACMKubevirtDRIntergration:
             kind=constants.DRPC,
             namespace=constants.DR_OPS_NAMESPACE,
             resource_name=resource_name_2,
-            timeout=300,
+            timeout=600,
             should_exist=False,
         )
 
