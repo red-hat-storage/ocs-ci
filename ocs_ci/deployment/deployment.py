@@ -5269,6 +5269,9 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             )
             return
 
+        logger.info("Create thanos secret yaml")
+        self.thanos_secret()
+
         logger.info(
             "Enabling ACM MultiClusterObservability for DR monitoring dashboard"
         )
@@ -5289,9 +5292,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         )
 
         exec_cmd(f"oc create -f {multiclusterobservability_data_yaml.name}")
-
-        logger.info("Create thanos secret yaml")
-        self.thanos_secret()
 
         # Ensure we're in ACM context after thanos_secret() completes
         # (in case context was switched during ODF bucket creation)
