@@ -5250,10 +5250,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         )
         exec_cmd(f"oc create -f {thanos_data_yaml.name}")
 
-        logger.info("Thanos secret created, checking observability status")
-        self.check_observability_status()
-        logger.info("Observability status check passed, thanos_secret() completed")
-
     def enable_acm_observability(self):
         """
         Function to enable ACM observability for enabling DR monitoring dashboard for Regional DR on the RHACM console.
@@ -5300,6 +5296,10 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         )
 
         exec_cmd(f"oc create -f {multiclusterobservability_data_yaml.name}")
+
+        logger.info("Thanos secret created, checking observability status")
+        self.check_observability_status()
+        logger.info("Observability status check passed, thanos_secret() completed")
 
         # Ensure we're in ACM context after thanos_secret() completes
         # (in case context was switched during ODF bucket creation)
