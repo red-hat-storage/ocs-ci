@@ -117,6 +117,12 @@ def rdr_health_check(request):
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
         return
 
+    if request.session.items:
+        for item in request.session.items:
+            if "test_deploy_rdr" in item.nodeid:
+                log.info("Skipping rdr_health_check fixture for test_deploy_rdr")
+                return
+
     if config.RUN["cli_params"].get("dev_mode"):
         log.info("Skipping RDR health checks for development mode")
         return
