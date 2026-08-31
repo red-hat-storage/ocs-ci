@@ -3,8 +3,10 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
+    skipif_ec_pools_disabled,
     skipif_ocs_version,
     brown_squad,
+    polarion_id,
 )
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -18,6 +20,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import (
+    get_ec_pool_ec_optimizations,
     get_pg_balancer_status,
     get_mon_config_value,
     is_lower_requirements,
@@ -374,3 +377,40 @@ class TestCephDefaultValuesCheck(ManageTest):
         assert (
             not result
         ), "PG counts still match defaults — autoscaler may not have adjusted PGs"
+
+
+@brown_squad
+@tier1
+@skipif_external_mode
+@skipif_ec_pools_disabled
+@runs_on_provider
+@polarion_id("OCS-8230")
+class TestECPoolOptimizationsCheck(ManageTest):
+    """
+    Validate EC pool ec_optimizations (FastEC) flags on day-1 EC clusters.
+    """
+
+    def test_validate_ec_pool_optimizations(self):
+        """
+        Verify that all EC pools have ec_optimizations enabled and the
+        cluster-wide default osd_pool_default_flag_ec_optimizations is true.
+        """
+        ec_pools, cluster_default = get_ec_pool_ec_optimizations()
+        assert ec_pools, "No EC pools found despite ec_default_pools being set"
+
+        log.info(f"EC pools ec_optimizations state: {ec_pools}")
+        log.info(
+            f"Cluster default osd_pool_default_flag_ec_optimizations: "
+            f"{cluster_default}"
+        )
+
+        for pool_name, flag_set in ec_pools.items():
+            assert (
+                flag_set
+            ), f"EC pool '{pool_name}' does not have ec_optimizations flag set"
+            log.info(f"Pool '{pool_name}': ec_optimizations=True")
+
+        assert cluster_default == "true", (
+            f"Cluster default osd_pool_default_flag_ec_optimizations "
+            f"is '{cluster_default}', expected 'true'"
+        )

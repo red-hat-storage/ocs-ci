@@ -161,6 +161,14 @@ class TestRGWECConfig:
         ), f"Data pool '{data_pool_name}' is not erasure coded (type={data_pool_type}, expected 3)"
         logger.info(f"Data pool '{data_pool_name}' is erasure coded as expected")
 
+        # Verify ec_optimizations (FastEC) flag is set on the data pool
+        data_pool_flags = rgw_data_pool.get("flags_names", "")
+        assert "ec_optimizations" in data_pool_flags, (
+            f"Data pool '{data_pool_name}' does not have ec_optimizations flag set. "
+            f"Flags: {data_pool_flags}"
+        )
+        logger.info(f"Data pool '{data_pool_name}' has ec_optimizations flag set")
+
         # Verify index pool is replicated
         index_pool_type = rgw_index_pool.get("type")
         assert (
