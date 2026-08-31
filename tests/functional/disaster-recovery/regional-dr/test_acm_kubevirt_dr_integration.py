@@ -1130,13 +1130,17 @@ class TestACMKubevirtDRIntergration:
             skip_odf_cli_validation=True,
         )
 
-        # Switch to old_primary (c2) where do_discovered_apps_cleanup ran with --wait=false
+        # Switch to old_primary (c2) where do_discovered_apps_cleanup ran with --wait=false.
+        # Use an extended timeout here: unlike failover (where VMs on the old primary are
+        # already stopped), the VMs on the secondary were actively running and require
+        # graceful termination before VRG/VR cascade cleanup can complete.
         config.switch_to_cluster_by_name(secondary_cluster_name)
         for resource_name in drpc_resources:
             wait_for_all_resources_deletion(
                 namespace=workload_namespace,
                 discovered_apps=True,
                 vrg_name=resource_name,
+                timeout=2100,
             )
 
         config.switch_acm_ctx()
