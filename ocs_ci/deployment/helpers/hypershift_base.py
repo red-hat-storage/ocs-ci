@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import time
 from datetime import datetime
@@ -1132,7 +1133,8 @@ class HyperShiftBase:
         Download hosted cluster kubeconfig using the hcp binary.
 
         Runs hcp without shell=True so path/name are not interpolated into a
-        shell command, and writes stdout to kubeconfig_path only after success.
+        shell command. Writes stdout directly to kubeconfig_path so the
+        kubeconfig (credentials) is never logged via exec_cmd DEBUG stdout.
 
         Args:
             name (str): Hosted cluster name
@@ -1142,21 +1144,40 @@ class HyperShiftBase:
             bool: True if a non-empty kubeconfig was written
         """
         try:
-            completed = exec_cmd(
-                [
-                    self.hcp_binary_path,
-                    "create",
-                    "kubeconfig",
-                    "--name",
+            env = os.environ.copy()
+            provider_kubeconfig = config.RUN.get("kubeconfig")
+            if provider_kubeconfig:
+                env["KUBECONFIG"] = provider_kubeconfig
+            with open(kubeconfig_path, "w") as out_f:
+                completed = subprocess.run(
+                    [
+                        self.hcp_binary_path,
+                        "create",
+                        "kubeconfig",
+                        "--name",
+                        name,
+                    ],
+                    stdout=out_f,
+                    stderr=subprocess.PIPE,
+                    timeout=600,
+                    env=env,
+                    check=False,
+                )
+            if completed.returncode != 0:
+                stderr = (
+                    completed.stderr.decode(errors="replace")
+                    if completed.stderr
+                    else ""
+                )
+                logger.warning(
+                    "hcp kubeconfig download for '%s' failed (rc=%s): %s",
                     name,
-                ],
-            )
-            kubeconfig_data = completed.stdout
-            if kubeconfig_data:
-                if isinstance(kubeconfig_data, bytes):
-                    kubeconfig_data = kubeconfig_data.decode("utf-8")
-                with open(kubeconfig_path, "w") as kubeconfig_file:
-                    kubeconfig_file.write(kubeconfig_data)
+                    completed.returncode,
+                    stderr,
+                )
+                if os.path.isfile(kubeconfig_path):
+                    os.remove(kubeconfig_path)
+                return False
         except Exception as e:
             logger.warning(
                 "hcp kubeconfig download for '%s' failed: %s",
