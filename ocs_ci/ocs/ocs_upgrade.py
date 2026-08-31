@@ -29,11 +29,11 @@ from ocs_ci.deployment.helpers.odf_deployment_helpers import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.defaults import (
     EXTERNAL_CLUSTER_USER,
     MUST_GATHER_UPSTREAM_IMAGE,
     MUST_GATHER_UPSTREAM_TAG,
-    OCS_OPERATOR_NAME,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
@@ -555,7 +555,7 @@ class OCSUpgrade(object):
             config.REPORTING["ocs_must_gather_image"] = must_gather_image
             config.REPORTING["ocs_must_gather_latest_tag"] = must_gather_tag
 
-    def get_csv_name_pre_upgrade(self, resource_name=OCS_OPERATOR_NAME):
+    def get_csv_name_pre_upgrade(self, resource_name=None):
         """
         Get pre-upgrade CSV name
 
@@ -565,7 +565,12 @@ class OCSUpgrade(object):
         finding csv name from csv list and also look for pre-upgrade ocs version for finding out
         the actual csv
 
+        Args:
+            resource_name (str): Operator package name. Defaults to odf-operator.
+
         """
+        if resource_name is None:
+            resource_name = defaults.ODF_OPERATOR_NAME
         csv_name = None
         csv_list = get_csvs_start_with_prefix(resource_name, namespace=self.namespace)
         for csv in csv_list:
@@ -601,23 +606,34 @@ class OCSUpgrade(object):
         )
         return get_images(csv_pre_upgrade.get())
 
-    def set_upgrade_channel(self, resource_name=OCS_OPERATOR_NAME):
+    def set_upgrade_channel(self, resource_name=None):
         """
         Wait for the new package manifest for upgrade.
+
+        Args:
+            resource_name (str): Operator package name. Defaults to odf-operator.
 
         Returns:
             str: OCS subscription channel
 
         """
+        # Check if channel is already configured (required for unreleased versions)
+        channel = config.DEPLOYMENT.get("ocs_csv_channel")
+        if channel:
+            log.info(f"Using pre-configured channel: {channel}")
+            return channel
+
+        # For released versions, query packagemanifest for default channel
+        if resource_name is None:
+            resource_name = defaults.ODF_OPERATOR_NAME
+
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
             resource_name=resource_name,
             selector=operator_selector,
         )
         package_manifest.wait_for_resource(timeout=120)
-        channel = config.DEPLOYMENT.get("ocs_csv_channel")
-        if not channel:
-            channel = package_manifest.get_default_channel()
+        channel = package_manifest.get_default_channel()
 
         return channel
 
@@ -667,7 +683,7 @@ class OCSUpgrade(object):
             return False
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME,
+            resource_name=defaults.ODF_OPERATOR_NAME,
             selector=operator_selector,
             subscription_plan_approval=self.subscription_plan_approval,
         )
@@ -684,7 +700,7 @@ class OCSUpgrade(object):
         channel,
         pre_upgrade_images,
         upgrade_version,
-        resource_name=OCS_OPERATOR_NAME,
+        resource_name=None,
     ):
         """
         Checks if all images of OCS cluster upgraded,
@@ -694,11 +710,14 @@ class OCSUpgrade(object):
             channel: (str): OCS subscription channel
             pre_upgrade_images: (dict): Contains all OCS cluster images
             upgrade_version: (str): version to be upgraded
+            resource_name (str): Operator package name. Defaults to odf-operator.
 
         Returns:
             set: Contains full path of OCS cluster old images
 
         """
+        if resource_name is None:
+            resource_name = defaults.ODF_OPERATOR_NAME
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
             resource_name=resource_name,
@@ -933,7 +952,7 @@ def run_ocs_upgrade(
 
             operator_selector = get_selector_for_ocs_operator()
             package_manifest = PackageManifest(
-                resource_name=OCS_OPERATOR_NAME,
+                resource_name=defaults.ODF_OPERATOR_NAME,
                 selector=operator_selector,
             )
             try:
