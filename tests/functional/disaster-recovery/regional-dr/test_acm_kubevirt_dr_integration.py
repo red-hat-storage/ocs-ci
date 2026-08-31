@@ -353,6 +353,7 @@ class TestACMKubevirtDRIntergration:
                 workload_dir=cnv_wl.workload_dir,
                 vrg_name=resource_name,
                 skip_resource_deletion_verification=True,
+                wait_for_cleanup_timeout=600,
             )
 
         wait_for_all_resources_deletion(

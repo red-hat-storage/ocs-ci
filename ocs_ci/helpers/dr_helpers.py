@@ -3100,6 +3100,7 @@ def do_discovered_apps_cleanup(
     vrg_name,
     skip_resource_deletion_verification=False,
     ignore_resource_not_found=False,
+    wait_for_cleanup_timeout=300,
 ):
     """
     Function to clean up Resources
@@ -3116,12 +3117,16 @@ def do_discovered_apps_cleanup(
 
         ignore_resource_not_found (bool): False by default, resource not found is ignored when the workload which was
                                         DR protected via ACM UI is deleted, refer DFBUGS-3706
+        wait_for_cleanup_timeout (int): Timeout in seconds for waiting for DRPC WaitOnUserToCleanUp
+                                        progression status (default: 300)
 
     """
     restore_index = config.cur_index
     config.switch_acm_ctx()
     drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESPACE, resource_name=drpc_name)
-    drpc_obj.wait_for_progression_status(status=constants.STATUS_WAITFORUSERTOCLEANUP)
+    drpc_obj.wait_for_progression_status(
+        status=constants.STATUS_WAITFORUSERTOCLEANUP, timeout=wait_for_cleanup_timeout
+    )
     time.sleep(90)
     assert drpc_obj.get_progression_status(
         status_to_check=constants.STATUS_WAITFORUSERTOCLEANUP
