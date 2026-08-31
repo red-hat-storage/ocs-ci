@@ -27,7 +27,7 @@ MIN_ENCRYPTED_OSD_COUNT = 1
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @green_squad
 class TestCephXKeyRotationOSDLockbox:
     @pytest.mark.polarion_id("OCS-8135")

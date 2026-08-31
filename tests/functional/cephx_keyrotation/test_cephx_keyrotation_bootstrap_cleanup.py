@@ -33,7 +33,7 @@ pytestmark = pytest.mark.skip(
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @green_squad
 @pytest.mark.order("last")
 class TestCephXBootstrapKeyCleanup:

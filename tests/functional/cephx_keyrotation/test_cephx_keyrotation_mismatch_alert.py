@@ -483,7 +483,7 @@ def _induce_daemon_key_mismatch(rotator, namespace):
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @green_squad
 class TestCephXKeyRotationMismatchMetric:
     """TC1–TC2: mismatch metric emission and in-sync (value 0) state."""
@@ -549,7 +549,7 @@ class TestCephXKeyRotationMismatchMetric:
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @green_squad
 @ignore_leftovers
 class TestCephXKeyRotationMismatchAlertLifecycle:
@@ -864,7 +864,7 @@ class TestCephXKeyRotationMismatchAlertLifecycle:
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @green_squad
 class TestCephXKeyRotationMismatchNoFilesystem:
     """TC7: MDS mismatch metric is 0 when no CephFilesystem exists."""
@@ -894,7 +894,7 @@ class TestCephXKeyRotationMismatchNoFilesystem:
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @green_squad
 class TestCephXCephClusterReconciliation:
     """TC8–TC13: CephCluster annotations and daemon keyGeneration reconciliation."""
@@ -1171,7 +1171,7 @@ class TestCephXCephClusterReconciliation:
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @green_squad
 class TestCephXCephClientAnnotations:
     """TC14–TC15: CephClient created-with-cephx-features and keyType."""
@@ -1259,7 +1259,7 @@ class TestCephXCephClientAnnotations:
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @green_squad
 @ignore_leftovers
 class TestCephXDesiredKeyGenNegative:
