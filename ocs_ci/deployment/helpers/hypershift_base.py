@@ -1129,7 +1129,9 @@ class HyperShiftBase:
         Args:
             name (str): name of the cluster
             cluster_path (str): path to create auth_path folder and download kubeconfig there
-            from_hcp (bool): if True, use hcp binary to download kubeconfig, otherwise use ocp secret
+            from_hcp (bool): If True, try hcp first; fall back to extracting the
+                admin-kubeconfig secret if hcp fails or writes an empty file.
+                If False, extract the secret only.
 
         Returns:
             str: path to the downloaded kubeconfig, None if failed
@@ -1146,10 +1148,6 @@ class HyperShiftBase:
             )
             os.remove(kubeconfig_path)
 
-        # touch the file
-        time.sleep(0.5)
-        open(kubeconfig_path, "a").close()
-
         logger.info(
             f"Downloading kubeconfig for HyperShift hosted cluster {name} to {kubeconfig_path}"
         )
@@ -1161,22 +1159,42 @@ class HyperShiftBase:
                         f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path}",
                         shell=True,
                     )
-                else:
+                if not from_hcp or not (
+                    os.path.isfile(kubeconfig_path)
+                    and os.stat(kubeconfig_path).st_size > 0
+                ):
+                    if from_hcp:
+                        logger.warning(
+                            "hcp kubeconfig download for '%s' failed or was "
+                            "empty; falling back to admin-kubeconfig secret",
+                            name,
+                        )
+                        if os.path.isfile(kubeconfig_path):
+                            os.remove(kubeconfig_path)
                     # kubeconfig will be stored with name 'kubeconfig'
                     OCP().exec_oc_cmd(
                         f"extract secret/admin-kubeconfig -n clusters-{name} "
-                        f"--to {os.path.dirname(kubeconfig_path)} --confirm"
+                        f"--to {auth_path} --confirm"
                     )
         except Exception as e:
             logger.error(
                 f"Failed to download kubeconfig for HyperShift hosted cluster {name}\n{e}"
             )
+            if (
+                os.path.isfile(kubeconfig_path)
+                and os.stat(kubeconfig_path).st_size == 0
+            ):
+                os.remove(kubeconfig_path)
             return
 
-        if not os.stat(kubeconfig_path).st_size > 0:
+        if not (
+            os.path.isfile(kubeconfig_path) and os.stat(kubeconfig_path).st_size > 0
+        ):
             logger.error(
                 f"Failed to download kubeconfig for HyperShift hosted cluster {name}"
             )
+            if os.path.isfile(kubeconfig_path):
+                os.remove(kubeconfig_path)
             return
         return kubeconfig_path
 
