@@ -2172,7 +2172,8 @@ block_pool_4_22 = {
         By.CSS_SELECTOR,
     ),
     "block_pool_replica": (
-        "//dt[normalize-space()='Data protection policy']/following-sibling::dd[1]",
+        "//dt[normalize-space()='Data protection policy']"
+        "/following-sibling::dd[@data-test='detail-item-value']",
         By.XPATH,
     ),
 }
