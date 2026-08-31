@@ -4274,6 +4274,8 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         """
         all_clean = True
 
+        self._discover_oidc_config()
+
         hypershift_cli_available = self._ensure_sts_credentials()
 
         if not self.role_arn:
@@ -4286,6 +4288,12 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             except ClientError as e:
                 logger.warning(f"Could not discover deployer IAM role: {e}")
                 hypershift_cli_available = False
+
+        # Remove VPC peering and cross-VPC security group rules early.
+        # These create dependencies that cause hypershift destroy to loop
+        # on DependencyViolation errors when deleting security groups.
+        if not self._cleanup_vpc_peering():
+            all_clean = False
 
         if hypershift_cli_available:
             if not self._destroy_cluster_via_hypershift(timeout=timeout):
@@ -4324,9 +4332,6 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         if not self._cleanup_stale_oidc_providers():
             all_clean = False
 
-        if not self._cleanup_vpc_peering():
-            all_clean = False
-
         if not self._cleanup_hosted_cluster_secrets():
             all_clean = False
 
@@ -4355,6 +4360,72 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 )
 
         return verified
+
+    def _discover_oidc_config(self):
+        """
+        Discover OIDC bucket configuration for cleanup.
+
+        During destroy, ``deploy_dependencies()`` is not called, so
+        ``oidc_bucket_name`` and ``oidc_bucket_region`` remain ``None``.
+        This method discovers the OIDC bucket configuration using
+        multiple strategies (in order):
+
+        1. Cluster config (``ENV_DATA["clusters"][name]["oidc_bucket_name"]``)
+        2. Kubernetes secret on management cluster
+        3. Naming convention fallback: ``{name}-oidc-bucket``
+
+        Sets ``self.oidc_bucket_name`` and ``self.oidc_bucket_region``.
+        """
+        if self.oidc_bucket_name and self.oidc_bucket_region:
+            logger.info(
+                f"OIDC config already set: bucket={self.oidc_bucket_name}, "
+                f"region={self.oidc_bucket_region}"
+            )
+            return
+
+        cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
+        self.oidc_bucket_name = cluster_config.get("oidc_bucket_name")
+        self.oidc_bucket_region = cluster_config.get(
+            "oidc_bucket_region", self.aws_region
+        )
+
+        if self.oidc_bucket_name:
+            logger.info(
+                f"OIDC bucket from cluster config: {self.oidc_bucket_name} "
+                f"in region {self.oidc_bucket_region}"
+            )
+            return
+
+        try:
+            secret_name = constants.HCP_OIDC_S3_SECRET
+            secret_ns = cluster_config.get("oidc_secret_namespace", "local-cluster")
+            secret_obj = OCP(
+                kind="secret",
+                namespace=secret_ns,
+                resource_name=secret_name,
+            )
+            if secret_obj.is_exist():
+                secret_data = secret_obj.get()
+                encoded = secret_data.get("data", {})
+                bucket = base64.b64decode(encoded.get("bucket", "")).decode()
+                region = base64.b64decode(encoded.get("region", "")).decode()
+                if bucket:
+                    self.oidc_bucket_name = bucket
+                    self.oidc_bucket_region = region or self.aws_region
+                    logger.info(
+                        f"OIDC bucket from K8s secret '{secret_name}': "
+                        f"{self.oidc_bucket_name} in region {self.oidc_bucket_region}"
+                    )
+                    return
+        except (CommandFailed, Exception) as e:
+            logger.debug(f"Could not discover OIDC bucket from K8s secret: {e}")
+
+        self.oidc_bucket_name = f"{self.name}-oidc-bucket"
+        self.oidc_bucket_region = self.aws_region
+        logger.info(
+            f"Using OIDC bucket naming convention fallback: "
+            f"{self.oidc_bucket_name} in region {self.oidc_bucket_region}"
+        )
 
     def _ensure_sts_credentials(self):
         """
@@ -5196,13 +5267,14 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
     def _cleanup_s3_oidc_objects(self):
         """
-        Clean up S3 OIDC documents for this infra_id.
+        Clean up S3 OIDC bucket/objects for this cluster.
 
-        Deletes all objects under the ``{infra_id}/`` prefix from the shared
-        OIDC S3 bucket. Does not delete the bucket itself.
+        For per-cluster OIDC buckets (named ``{name}-oidc-bucket``), deletes
+        the entire bucket including all objects. For shared OIDC buckets,
+        deletes only objects under the ``{infra_id}/`` prefix.
 
         Returns:
-            bool: True if all objects deleted, False otherwise
+            bool: True if cleanup succeeded, False otherwise
         """
         logger.info(f"Cleaning up S3 OIDC objects for infra_id '{self.infra_id}'")
 
@@ -5210,45 +5282,82 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             logger.warning("OIDC bucket name not set, skipping S3 OIDC object cleanup")
             return True
 
-        success = True
-        prefix = f"{self.infra_id}/"
-
         try:
-            paginator = self.s3_client.get_paginator("list_objects_v2")
-            objects_to_delete = []
-
-            for page in paginator.paginate(Bucket=self.oidc_bucket_name, Prefix=prefix):
-                for obj in page.get("Contents", []):
-                    objects_to_delete.append({"Key": obj["Key"]})
-
-            if not objects_to_delete:
-                logger.info(
-                    f"No S3 objects found under prefix '{prefix}' "
-                    f"in bucket '{self.oidc_bucket_name}'"
-                )
-                return True
-
+            self.s3_client.head_bucket(Bucket=self.oidc_bucket_name)
+        except ClientError:
             logger.info(
-                f"Deleting {len(objects_to_delete)} S3 objects from "
-                f"'{self.oidc_bucket_name}' with prefix '{prefix}'"
+                f"OIDC bucket '{self.oidc_bucket_name}' does not exist, "
+                "nothing to clean up"
             )
+            return True
 
-            batch_size = 1000
-            for i in range(0, len(objects_to_delete), batch_size):
-                batch = objects_to_delete[i : i + batch_size]
-                self.s3_client.delete_objects(
-                    Bucket=self.oidc_bucket_name,
-                    Delete={"Objects": batch},
+        success = True
+        is_per_cluster_bucket = self.oidc_bucket_name == f"{self.name}-oidc-bucket"
+
+        if is_per_cluster_bucket:
+            try:
+                logger.info(
+                    f"Deleting per-cluster OIDC bucket '{self.oidc_bucket_name}' "
+                    "and all its contents"
+                )
+                paginator = self.s3_client.get_paginator("list_objects_v2")
+                for page in paginator.paginate(Bucket=self.oidc_bucket_name):
+                    objects = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+                    if objects:
+                        self.s3_client.delete_objects(
+                            Bucket=self.oidc_bucket_name,
+                            Delete={"Objects": objects},
+                        )
+                self.s3_client.delete_bucket(Bucket=self.oidc_bucket_name)
+                logger.info(
+                    f"Deleted per-cluster OIDC bucket '{self.oidc_bucket_name}'"
+                )
+            except ClientError as e:
+                logger.error(
+                    f"Failed to delete per-cluster OIDC bucket "
+                    f"'{self.oidc_bucket_name}': {e}"
+                )
+                success = False
+        else:
+            prefix = f"{self.infra_id}/"
+            try:
+                paginator = self.s3_client.get_paginator("list_objects_v2")
+                objects_to_delete = []
+
+                for page in paginator.paginate(
+                    Bucket=self.oidc_bucket_name, Prefix=prefix
+                ):
+                    for obj in page.get("Contents", []):
+                        objects_to_delete.append({"Key": obj["Key"]})
+
+                if not objects_to_delete:
+                    logger.info(
+                        f"No S3 objects found under prefix '{prefix}' "
+                        f"in bucket '{self.oidc_bucket_name}'"
+                    )
+                    return True
+
+                logger.info(
+                    f"Deleting {len(objects_to_delete)} S3 objects from "
+                    f"'{self.oidc_bucket_name}' with prefix '{prefix}'"
                 )
 
-            logger.info("S3 OIDC objects deleted successfully")
+                batch_size = 1000
+                for i in range(0, len(objects_to_delete), batch_size):
+                    batch = objects_to_delete[i : i + batch_size]
+                    self.s3_client.delete_objects(
+                        Bucket=self.oidc_bucket_name,
+                        Delete={"Objects": batch},
+                    )
 
-        except ClientError as e:
-            logger.error(f"Failed to clean up S3 OIDC objects: {e}")
-            success = False
-        except (KeyError, ValueError) as e:
-            logger.error(f"Unexpected error cleaning up S3 OIDC objects: {e}")
-            success = False
+                logger.info("S3 OIDC objects deleted successfully")
+
+            except ClientError as e:
+                logger.error(f"Failed to clean up S3 OIDC objects: {e}")
+                success = False
+            except (KeyError, ValueError) as e:
+                logger.error(f"Unexpected error cleaning up S3 OIDC objects: {e}")
+                success = False
 
         return success
 
