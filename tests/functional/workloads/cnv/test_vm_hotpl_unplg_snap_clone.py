@@ -1,5 +1,5 @@
 import logging
-import time
+import re
 
 import pytest
 
@@ -85,6 +85,46 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         logger.info(f"Unplugging PVC '{pvc.name}' from VM '{vm_obj.name}'")
         vm_obj.removevolume(volume_name=pvc.name, persist=True, verify=True)
         logger.info(f"PVC '{pvc.name}' unplugged and verified for VM '{vm_obj.name}'")
+
+    def _wait_for_disk_gone_in_guest(
+        self, vm_obj, known_disks_after_unplug, timeout=120
+    ):
+        """
+        Polls lsblk inside the guest until the disk set stabilises at exactly the
+        expected post-unplug baseline (i.e. no extra block device remains visible).
+
+        This guards against the race where removevolume() clears the kubevirt spec
+        but QEMU/virt-launcher still holds the virtio-scsi slot open for several
+        seconds, causing a subsequent addvolume call to be silently dropped.
+
+        Args:
+            vm_obj: The VM object.
+            known_disks_after_unplug (set): Disk names visible right after unplug
+                (used as the stable baseline to wait for).
+            timeout (int): Maximum seconds to wait.
+        """
+
+        def _disks_match():
+            raw = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
+            current = set(re.findall(r'NAME="([^"]+)"', raw))
+            extra = current - known_disks_after_unplug
+            if extra:
+                logger.info(
+                    f"Waiting for guest disk slot to clear on '{vm_obj.name}': "
+                    f"extra devices still visible: {extra}"
+                )
+                return False
+            return True
+
+        sample = TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=_disks_match,
+        )
+        sample.wait_for_func_value(value=True)
+        logger.info(
+            f"Guest disk slot fully released on '{vm_obj.name}'; safe to hotplug next volume."
+        )
 
     def test_vm_hotpl_unplg_snap_clone(
         self,
@@ -221,39 +261,37 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 f"before attaching clone"
             )
             self.unplug_disks_and_verify(vm_obj_pvc, pvc_obj)
-            # Capture the current disk state and wait until the block device is
-            # fully gone from lsblk inside the guest before calling addvolume.
-            # removevolume(verify=True) only confirms the kubevirt spec is updated;
-            # QEMU/virt-launcher may still hold the RBD slot open for several
-            # seconds afterwards.  Polling lsblk guards against the race.
-            before_disks_pvc = vm_obj_pvc.run_ssh_cmd(
+            # Capture the post-unplug baseline disk set.  Then poll lsblk until
+            # the guest confirms no extra block device remains: removevolume()
+            # only clears the kubevirt spec; QEMU/virt-launcher may still hold
+            # the virtio-scsi slot open for several seconds afterwards, causing a
+            # subsequent addvolume event to be silently dropped inside the guest.
+            before_disks_pvc_raw = vm_obj_pvc.run_ssh_cmd(
                 "lsblk -o NAME,SIZE,MOUNTPOINT -P"
             )
+            before_disks_pvc = before_disks_pvc_raw
             logger.info(
                 f"Disk state on VM '{vm_obj_pvc.name}' after unplug (used as "
                 f"baseline for clone hotplug detection):\n{before_disks_pvc}"
             )
-            # removevolume(verify=True) only confirms the kubevirt spec is updated.
-            # QEMU/virt-launcher may still hold the virtio-scsi slot open for
-            # several seconds after the spec clears, causing a subsequent
-            # addvolume hotplug event to be silently dropped inside the guest.
-            # Sleep here to let QEMU fully release the slot before the next
-            # addvolume call.
-            time.sleep(20)
+            baseline_set_pvc = set(re.findall(r'NAME="([^"]+)"', before_disks_pvc_raw))
+            self._wait_for_disk_gone_in_guest(vm_obj_pvc, baseline_set_pvc)
 
             logger.info(
                 f"Unplugging original PVC '{dvt_obj.name}' from VM '{vm_obj_dvt.name}' "
                 f"before attaching clone"
             )
             self.unplug_disks_and_verify(vm_obj_dvt, dvt_obj)
-            before_disks_dvt = vm_obj_dvt.run_ssh_cmd(
+            before_disks_dvt_raw = vm_obj_dvt.run_ssh_cmd(
                 "lsblk -o NAME,SIZE,MOUNTPOINT -P"
             )
+            before_disks_dvt = before_disks_dvt_raw
             logger.info(
                 f"Disk state on VM '{vm_obj_dvt.name}' after unplug (used as "
                 f"baseline for clone hotplug detection):\n{before_disks_dvt}"
             )
-            time.sleep(20)
+            baseline_set_dvt = set(re.findall(r'NAME="([^"]+)"', before_disks_dvt_raw))
+            self._wait_for_disk_gone_in_guest(vm_obj_dvt, baseline_set_dvt)
 
             # Attach clones to opposite VMs (now the only hotplugged device on each)
             logger.info(
