@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 
 import pytest
 
@@ -87,21 +88,31 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         logger.info(f"PVC '{pvc.name}' unplugged and verified for VM '{vm_obj.name}'")
 
     def _wait_for_disk_gone_in_guest(
-        self, vm_obj, known_disks_after_unplug, timeout=120
+        self, vm_obj, known_disks_after_unplug, timeout=120, settle_time=15
     ):
         """
         Polls lsblk inside the guest until the disk set stabilises at exactly the
-        expected post-unplug baseline (i.e. no extra block device remains visible).
+        expected post-unplug baseline (i.e. no extra block device remains visible),
+        then waits an additional settle period for virt-launcher to fully quiesce its
+        internal SCSI bus state.
 
-        This guards against the race where removevolume() clears the kubevirt spec
-        but QEMU/virt-launcher still holds the virtio-scsi slot open for several
-        seconds, causing a subsequent addvolume call to be silently dropped.
+        Two separate races are guarded here:
+        1. removevolume() clears the kubevirt spec but QEMU/virt-launcher still holds
+           the virtio-scsi slot open for several seconds, causing a subsequent
+           addvolume call to be silently dropped inside the guest.
+        2. The virtio-scsi slot is gone from lsblk but virt-launcher's internal device
+           tracking has not yet processed the removal acknowledgement from QEMU, so a
+           new addvolume notification is issued before virt-launcher is ready to handle
+           it and is silently ignored.
 
         Args:
             vm_obj: The VM object.
             known_disks_after_unplug (set): Disk names visible right after unplug
                 (used as the stable baseline to wait for).
-            timeout (int): Maximum seconds to wait.
+            timeout (int): Maximum seconds to wait for the disk to disappear from lsblk.
+            settle_time (int): Additional seconds to sleep after the disk is confirmed
+                gone, allowing virt-launcher to fully acknowledge the removal at the
+                QEMU level before the next addvolume call is issued.
         """
 
         def _disks_match():
@@ -123,7 +134,12 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         )
         sample.wait_for_func_value(value=True)
         logger.info(
-            f"Guest disk slot fully released on '{vm_obj.name}'; safe to hotplug next volume."
+            f"Guest disk slot cleared in lsblk on '{vm_obj.name}'; "
+            f"waiting {settle_time}s for virt-launcher to quiesce before next hotplug."
+        )
+        time.sleep(settle_time)
+        logger.info(
+            f"Settle period complete on '{vm_obj.name}'; safe to hotplug next volume."
         )
 
     def test_vm_hotpl_unplg_snap_clone(
