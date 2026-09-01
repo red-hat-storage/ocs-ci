@@ -528,7 +528,13 @@ class TestOLSRecipeGeneration:
             "        - name: sample-app\n"
             "          image: registry.k8s.io/busybox:latest\n"
         )
-        attachments = [{"content_type": "application/yaml", "content": deployment_yaml}]
+        attachments = [
+            {
+                "attachment_type": "log",
+                "content_type": "application/yaml",
+                "content": deployment_yaml,
+            }
+        ]
 
         prompt = _build_prompt(
             "Using the attached Deployment manifest, generate a complete ODF "
