@@ -74,12 +74,9 @@ class OpenShiftLightspeed:
         """
         Initialize the OLS client.
 
-        On construction, :meth:`ensure_working_model` is called automatically:
-        it reads the live OLSConfig, probes each model in the provider's
-        ``models`` list via the LiteMaaS ``/v1/models`` endpoint, and patches
-        ``spec.ols.defaultModel`` to the first healthy model if the current
-        default is unavailable.  This means tests never need to manually
-        switch models after a LiteMaaS outage.
+        Does not perform any cluster operations.  Callers that need automatic
+        model failover should call :meth:`ensure_working_model` explicitly after
+        construction.
 
         Args:
             namespace (str): Namespace where OLS is installed.
@@ -94,7 +91,6 @@ class OpenShiftLightspeed:
         self.verify_tls = verify_tls
         self._token = None
         self._base_url = None
-        self.ensure_working_model()
 
     def ensure_working_model(self):
         """
@@ -170,7 +166,7 @@ class OpenShiftLightspeed:
                     verify=self.verify_tls,
                     timeout=(10, 30),
                 )
-                return resp.status_code < 500
+                return resp.status_code < 300
             except Exception:
                 return False
 
