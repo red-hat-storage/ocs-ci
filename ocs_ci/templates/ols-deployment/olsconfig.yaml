@@ -1,0 +1,20 @@
+apiVersion: ols.openshift.io/v1alpha1
+kind: OLSConfig
+metadata:
+  name: cluster
+  namespace: openshift-lightspeed
+spec:
+  llm:
+    providers:
+      - credentialsSecretRef:
+          name: PLACEHOLDER_SECRET_NAME
+        models:
+          - name: PLACEHOLDER_MODEL
+        name: PLACEHOLDER_PROVIDER_NAME
+        type: PLACEHOLDER_PROVIDER_TYPE
+        url: PLACEHOLDER_PROVIDER_URL
+  ols:
+    defaultModel: PLACEHOLDER_MODEL
+    defaultProvider: PLACEHOLDER_PROVIDER_NAME
+    introspectionEnabled: true
+    rag: []

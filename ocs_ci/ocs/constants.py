@@ -3823,6 +3823,50 @@ UI_INPUT_RULES_STORAGE_SYSTEM = {
     "rule4": UI_INPUT_RULES_GENERAL["rule3"],
 }
 
+# OpenShift Lightspeed (OLS)
+OLS_NAMESPACE = "openshift-lightspeed"
+OLS_ROUTE_NAME = "lightspeed-app-server"
+OLS_OPERATOR_NAME = "lightspeed-operator"
+OLS_OPERATOR_CHANNEL = "stable"
+OLS_CSV_PREFIX = "lightspeed-operator"
+OLS_CONFIG_KIND = "OLSConfig"
+OLS_CONFIG_NAME = "cluster"
+OLS_OPERATORGROUP_NAME = "openshift-lightspeed-operator-group"
+OLS_SUBSCRIPTION_NAME = "lightspeed-operator"
+CLUSTERROLEBINDING = "ClusterRoleBinding"
+CLUSTER_ROLE = "ClusterRole"
+# ClusterRole created by the OLS operator that grants non-resource URL access
+# to /ols-access.  This is the role that must be bound to any principal that
+# needs to call the OLS API (formerly called "ols-user" in older docs).
+OLS_QUERY_ACCESS_ROLE = "lightspeed-operator-query-access"
+# Service account created by the test fixture for cert-based kubeconfig
+# environments (system:admin) where oc whoami --show-token is unavailable.
+OLS_TEST_SA_NAME = "ols-test-user"
+
+# Default LLM provider settings for ODF DR Recipe generation (RHSTOR-8222).
+# All values can be overridden via ENV_DATA keys of the same name (without the
+# OLS_ prefix, e.g. ``ols_provider_name``).
+# Provider: LiteLLM proxy hosting Qwen3 on Red Hat AI Services
+OLS_DEFAULT_PROVIDER_NAME = "rhoai-qwen"
+OLS_DEFAULT_PROVIDER_TYPE = "rhoai_vllm"
+OLS_DEFAULT_PROVIDER_URL = "https://litemaas.rhoai.rh-aiservices-bu.com/v1"
+OLS_DEFAULT_MODEL_NAME = "Qwen3.6-35B-A3B"
+OLS_DEFAULT_SECRET_NAME = "qwen-creds"
+
+# Paths to OLS deployment YAML templates
+OLS_TEMPLATE_DIR = os.path.join(TEMPLATE_DIR, "ols-deployment")
+OLS_NAMESPACE_YAML = os.path.join(OLS_TEMPLATE_DIR, "namespace.yaml")
+OLS_OPERATORGROUP_YAML = os.path.join(OLS_TEMPLATE_DIR, "operatorgroup.yaml")
+OLS_SUBSCRIPTION_YAML = os.path.join(OLS_TEMPLATE_DIR, "subscription.yaml")
+OLS_CONFIG_YAML = os.path.join(OLS_TEMPLATE_DIR, "olsconfig.yaml")
+# Base image repository for the ODF Lightspeed RAG content image.
+# The version tag (e.g. "v4.22") is appended at runtime by
+# ocs_ci.deployment.openshift_lightspeed.get_ols_rag_images().
+OLS_RAG_CONTENT_IMAGE_BASE = "quay.io/rhceph-dev/odf4-odf-lightspeed-rag-content-rhel9"
+# DR recipe BYOK RAG image (version-independent)
+OLS_RAG_RECIPE_BYOK_IMAGE = "quay.io/anarasag/recipe-byok-image:latest"
+
+
 # DR
 DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
 DRPC_RECIPE_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc_with_recipe.yaml")

@@ -5191,6 +5191,46 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         else:
             self.enable_managed_serviceaccount()
 
+        # Deploy OLS on the ACM hub for ODF >= 5.0 (RHSTOR-8222).
+        # Enabled by default — set skip_ols_deployment: true in ENV_DATA to opt out.
+        #
+        # Provider settings default to the hardcoded constants and are
+        # overridable via ENV_DATA keys of the same name.
+        #
+        # The LLM API token is a secret: it must be supplied in the AUTH
+        # section of a private conf file, e.g.:
+        #   AUTH:
+        #     ols:
+        #       api_token: "<litemaas-or-other-token>"
+        if not config.ENV_DATA.get("skip_ols_deployment", False) and (
+            version.get_semantic_ocs_version_from_config() >= version.VERSION_5_0
+        ):
+            from ocs_ci.deployment.openshift_lightspeed import OLSInstaller
+
+            config.switch_acm_ctx()
+            OLSInstaller().deploy(
+                provider_name=config.ENV_DATA.get(
+                    "ols_provider_name", constants.OLS_DEFAULT_PROVIDER_NAME
+                ),
+                provider_type=config.ENV_DATA.get(
+                    "ols_provider_type", constants.OLS_DEFAULT_PROVIDER_TYPE
+                ),
+                provider_url=config.ENV_DATA.get(
+                    "ols_provider_url", constants.OLS_DEFAULT_PROVIDER_URL
+                ),
+                model_name=config.ENV_DATA.get(
+                    "ols_model_name", constants.OLS_DEFAULT_MODEL_NAME
+                ),
+                secret_name=config.ENV_DATA.get(
+                    "ols_secret_name", constants.OLS_DEFAULT_SECRET_NAME
+                ),
+                api_token=config.AUTH.get("ols", {}).get("api_token"),
+                rag_images=config.ENV_DATA.get("ols_rag_images"),
+                username=config.ENV_DATA.get("ols_grant_user"),
+                service_account=config.ENV_DATA.get("ols_grant_sa"),
+                sa_namespace=config.ENV_DATA.get("ols_grant_sa_namespace"),
+            )
+
     @retry(ACMObservabilityNotEnabled, tries=10, delay=30)
     def check_observability_status(self):
         """
