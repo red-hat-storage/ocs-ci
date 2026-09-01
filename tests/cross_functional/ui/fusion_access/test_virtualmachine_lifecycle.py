@@ -107,8 +107,24 @@ class TestVirtualMachineLifecycle(ManageTest):
                             out_yaml_format=False,
                         )
                         logger.info(f"Deleted filesystem '{lungroup_name}' via CLI")
-                        logger.info("Waiting 60 s after filesystem deletion...")
-                        time.sleep(60)
+                        logger.info(
+                            f"Waiting for filesystem '{lungroup_name}' to disappear..."
+                        )
+                        for fs_check in TimeoutSampler(
+                            timeout=120,
+                            sleep=10,
+                            func=ocp_fs.exec_oc_cmd,
+                            command=(
+                                f"get {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
+                                f" {lungroup_name}"
+                                f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+                                f" --ignore-not-found --no-headers"
+                            ),
+                            out_yaml_format=False,
+                        ):
+                            if not fs_check or not fs_check.strip():
+                                logger.info(f"Filesystem '{lungroup_name}' is gone")
+                                break
             except CommandFailed as e:
                 logger.warning(f"Could not delete filesystem via CLI: {e}")
 
@@ -143,8 +159,24 @@ class TestVirtualMachineLifecycle(ManageTest):
                 except CommandFailed as e:
                     logger.warning(f"Could not delete LocalDisk: {e}")
 
-            logger.info("Waiting 60 s before deleting IBM Spectrum Scale cluster...")
-            time.sleep(60)
+            logger.info(
+                "Waiting for LocalDisk deletion to settle before deleting cluster..."
+            )
+            ocp_ld_wait = OCP(namespace=constants.IBM_STORAGE_SCALE_NAMESPACE)
+            for ld_check in TimeoutSampler(
+                timeout=120,
+                sleep=10,
+                func=ocp_ld_wait.exec_oc_cmd,
+                command=(
+                    f"get localdisks"
+                    f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+                    f" --no-headers"
+                ),
+                out_yaml_format=False,
+            ):
+                if not ld_check or not ld_check.strip():
+                    logger.info("All LocalDisks gone — proceeding to cluster deletion")
+                    break
 
             # Step 3 — Delete IBM Spectrum Scale cluster resource
             try:
@@ -691,8 +723,8 @@ class TestVirtualMachineLifecycle(ManageTest):
         self.base_ui.take_screenshot("snapshot_test_snapshot_succeeded")
         logger.info("Snapshot status reached: Succeeded ")
 
-        logger.info("Sleeping 30 s after snapshot succeeded before modifying data...")
-        time.sleep(30)
+        logger.info("Waiting for VM guest agent to be ready before modifying data...")
+        self._wait_for_vmi_agent_connected(vm_name, namespace)
 
         logger.info("Modifying VM data — appending to test file via console")
         child = self._login_to_vm_console(vm_name, namespace, vm_username, vm_password)

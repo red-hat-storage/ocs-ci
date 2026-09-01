@@ -9,6 +9,7 @@ from selenium.common.exceptions import (
     TimeoutException,
     WebDriverException,
 )
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.base_ui import wait_for_element_to_be_visible
@@ -644,7 +645,7 @@ class VirtualMachineUI(PageNavigator):
 
         Args:
             timeout (int): Maximum seconds to wait for the clone to finish
-                (default 900 s = 15 minutes).
+                (default 1200s = 20 minutes).
 
         Raises:
             TimeoutExpiredError: If the badge is still present after *timeout*.
@@ -690,9 +691,13 @@ class VirtualMachineUI(PageNavigator):
             str: The LUN group name that was deleted.
         """
         logger.info("Fetching LUN group name")
-        ocp = OCP(kind="filesystem", namespace="ibm-spectrum-scale")
+        ocp = OCP(
+            kind=constants.IBM_STORAGE_SCALE_FILESYSTEM,
+            namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
+        )
         fs_out = ocp.exec_oc_cmd(
-            "get filesystem -n ibm-spectrum-scale --no-headers",
+            f"get {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
+            f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE} --no-headers",
             out_yaml_format=False,
         )
         lungroup_name = None
