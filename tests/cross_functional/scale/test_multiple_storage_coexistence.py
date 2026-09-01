@@ -1,199 +1,78 @@
 import logging
-import pytest
-import base64
-import json
-import tempfile
 import os
+import tempfile
+import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    orange_squad,
+    cnsa_remote_mount,
     fdf_required,
     skipif_ocs_version,
-    cnsa_remote_mount,
+    yellow_squad,
 )
 from ocs_ci.framework.testlib import ManageTest, tier1
-from ocs_ci.ocs import constants, exceptions
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.helpers import (
+    setup_scale_cluster_infrastructure_for_cnsa_rm,
+    setup_scale_remote_connection,
+)
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.resources.ocs import OCP, OCS
-from ocs_ci.framework import config
-from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
-from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.ocs.resources.pod import Pod
+from ocs_ci.utility.templating import dump_data_to_temp_yaml
+from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 
 log = logging.getLogger(__name__)
 
 
-def create_custom_secret(name, namespace, data_dict, secret_type="Opaque"):
-    """
-    Helper to create secret using OCP class and temporary YAML files.
-    """
-    encoded_data = {}
-    for k, v in data_dict.items():
-        val_str = json.dumps(v) if isinstance(v, dict) else str(v)
-        encoded_data[k] = base64.b64encode(val_str.encode()).decode()
-
-    manifest = {
-        "apiVersion": "v1",
-        "kind": "Secret",
-        "metadata": {"name": name, "namespace": namespace},
-        "type": secret_type,
-        "data": encoded_data,
-    }
-    fd, temp_path = tempfile.mkstemp(suffix=".yaml")
-    try:
-        dump_data_to_temp_yaml(manifest, temp_path)
-        secret_ocp = OCP(kind="Secret", namespace=namespace)
-        return secret_ocp.create(yaml_file=temp_path)
-    finally:
-        os.close(fd)
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-
-
-@orange_squad
+@yellow_squad
 @fdf_required
 @skipif_ocs_version("<4.21")
 @cnsa_remote_mount
 class TestMultiStorageCoexistence(ManageTest):
+
     @pytest.fixture(autouse=True)
     def setup_scale_infrastructure(self, request):
         """
         Infrastructure Setup: MCO, Entitlement, Cluster CR, and Pod Health Check.
-        Uses addfinalizer to guarantee execution tracking even on early failures.
+        Registers tracked resources for clean finalizer scrubbing.
         """
-        log.info("--- Phase 1: Scale Infrastructure Setup ---")
-        ns = constants.IBM_STORAGE_SCALE_NAMESPACE
-        cluster_name = "ibm-spectrum-scale"
-
-        # Dynamically generate unique resource names to safely permit parallel/re-run scenarios
         sc_name = helpers.create_unique_resource_name("scale-test", "sc")
         rc_name = helpers.create_unique_resource_name("scale-test", "rc")
         user_secret_name = f"{rc_name}-user-details-secret"
 
-        # Cache dynamic names to the test class instance so the validation methods can reference them
         self.sc_name = sc_name
         self.rc_name = rc_name
         self.user_secret_name = user_secret_name
 
+        self.tracked_resources = []
+
         def finalizer_cleanup():
-            log.info("--- Phase 5: Cleanup Scale Resources ---")
-
-            # Cleanup cluster-scoped StorageClass resource
-            try:
-                log.info(f"Scrubbing manual StorageClass: {sc_name}")
-                exec_cmd(f"oc delete storageclass {sc_name} --ignore-not-found")
-            except exceptions.CommandFailed as e:
-                log.warning(f"StorageClass deletion skipped or failed: {e}")
-
-            # Cleanup test authentication details secret
-            try:
-                log.info(f"Scrubbing user details secret: {user_secret_name}")
-                exec_cmd(
-                    f"oc delete secret {user_secret_name} -n {ns} --ignore-not-found"
-                )
-            except exceptions.CommandFailed as e:
-                log.warning(f"User details secret deletion skipped or failed: {e}")
-
-            # Cleanup core storage custom definitions
-            for kind in ["Filesystem", "RemoteCluster", "Cluster"]:
-                ocp_obj = OCP(kind=f"{kind}.scale.spectrum.ibm.com", namespace=ns)
+            log.info("--- Cleanup: Scale Test Resources ---")
+            for kind, name, ns in reversed(self.tracked_resources):
                 try:
-                    items = ocp_obj.get().get("items", [])
-                except exceptions.CommandFailed as e:
-                    log.warning(f"Could not list custom resources for kind {kind}: {e}")
-                    continue
+                    log.info(f"Scrubbing {kind}: {name} in {ns}")
+                    exec_cmd(
+                        f'oc patch {kind} {name} -n {ns} --type=merge -p \'{{"metadata":{{"finalizers":null}}}}\'',
+                        ignore_error=True,
+                    )
+                    exec_cmd(f"oc delete {kind} {name} -n {ns} --ignore-not-found")
+                except (CommandFailed, TimeoutExpiredError) as e:
+                    log.warning(f"Cleanup warning for {kind} '{name}': {e}")
 
-                for res in items:
-                    name = res["metadata"]["name"]
-                    # Clean up all generated test resources but preserve shared infrastructure if required
-                    if "scale-test" in name or name == cluster_name:
-                        try:
-                            log.info(f"Scrubbing {kind}: {name}")
-                            exec_cmd(
-                                f"oc patch {kind.lower()}.scale.spectrum.ibm.com {name} -n {ns}"
-                                f' --type=merge -p \'{{"metadata":{{"finalizers":null}}}}\''
-                            )
-                            ocp_obj.delete(resource_name=name)
-                        except exceptions.CommandFailed as e:
-                            log.warning(
-                                f"Teardown cleanup failed for {kind} '{name}': {e}"
-                            )
+            try:
+                log.info(f"Scrubbing StorageClass: {sc_name}")
+                exec_cmd(f"oc delete storageclass {sc_name} --ignore-not-found")
+            except (CommandFailed, TimeoutExpiredError) as e:
+                log.warning(f"StorageClass deletion failed: {e}")
 
         request.addfinalizer(finalizer_cleanup)
 
-        # 1. Apply MCO (Operator)
-        mco_url = (
-            "https://raw.githubusercontent.com/IBM/ibm-spectrum-scale-container-native/"
-            "v6.0.0.x/generated/scale/mco/mco.yaml"
+        # Deploy scale infrastructure; created resources are recorded on
+        # self.tracked_resources so the finalizer scrubs everything.
+        setup_scale_cluster_infrastructure_for_cnsa_rm(
+            tracked_resources=self.tracked_resources
         )
-        helpers.run_cmd(f"oc apply -f {mco_url}")
-
-        # 2. Check and Create Entitlement Secret
-        secret_name = "ibm-entitlement-key"
-        secret_ocp = OCP(kind="Secret", namespace=ns)
-        try:
-            secret_ocp.get(resource_name=secret_name)
-            log.info(f"Secret '{secret_name}' already exists.")
-        except exceptions.CommandFailed:
-            log.info(f"Secret '{secret_name}' not found. Creating...")
-            ent_key = config.AUTH.get("ibm_entitlement_key")
-            if not ent_key:
-                pytest.fail("ibm_entitlement_key not found in config.AUTH")
-
-            auth_b64 = base64.b64encode(f"cp:{ent_key}".encode()).decode()
-            docker_config = {
-                "auths": {
-                    "cp.icr.io": {
-                        "username": "cp",
-                        "password": ent_key,
-                        "auth": auth_b64,
-                    }
-                }
-            }
-            create_custom_secret(
-                name=secret_name,
-                namespace=ns,
-                data_dict={".dockerconfigjson": docker_config},
-                secret_type="kubernetes.io/dockerconfigjson",
-            )
-
-        scale_cluster_kind = "Cluster.scale.spectrum.ibm.com"
-        scale_cluster_ocp = OCP(kind=scale_cluster_kind, namespace=ns)
-
-        try:
-            scale_cluster_ocp.get(resource_name=cluster_name)
-            log.info(f"Scale Cluster CR '{cluster_name}' already exists.")
-        except exceptions.CommandFailed:
-            log.info(f"Creating local IBM Scale Cluster CR '{cluster_name}'...")
-
-            host_aliases = config.AUTH.get("scale_host_aliases")
-            if not host_aliases:
-                pytest.skip("scale_host_aliases not configured in AUTH")
-
-            cluster_manifest = {
-                "apiVersion": "scale.spectrum.ibm.com/v1beta1",
-                "kind": "Cluster",
-                "metadata": {"name": cluster_name, "namespace": ns},
-                "spec": {
-                    "license": {"accept": True, "license": "data-management"},
-                    "daemon": {
-                        "roles": [{"name": "client"}],
-                        "hostAliases": host_aliases,
-                        "nodeSelector": {"scale.spectrum.ibm.com/daemon-selector": ""},
-                        "resources": {"requests": {"cpu": "2", "memory": "6Gi"}},
-                    },
-                },
-            }
-
-            fd, temp_path = tempfile.mkstemp(suffix=".yaml")
-            try:
-                os.close(fd)
-                dump_data_to_temp_yaml(cluster_manifest, temp_path)
-                exec_cmd(f"oc create -f {temp_path}")
-            finally:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-            log.info(f"Successfully created Cluster {cluster_name}")
 
     @tier1
     def test_pvc_pod_coexistence_ceph_and_scale(self, project_factory):
@@ -202,22 +81,25 @@ class TestMultiStorageCoexistence(ManageTest):
         by concurrently mounting volumes from Ceph (RBD, CephFS) and IBM Storage Scale
         backends into a single application pod.
 
+        Note:
+            Scale infrastructure (MCO, Entitlement, Cluster CR) is provisioned by
+            the ``setup_scale_infrastructure`` autouse fixture before this test runs.
+
         Steps:
         1. Verify that mandatory ODF StorageClasses (RBD and CephFS) exist on the cluster.
-        2. Create a localized authentication secret using configured IBM scale credentials.
-        3. Define and deploy a RemoteCluster CRD pointing to the target GUI hosts.
-        4. Define and deploy a Filesystem CRD mapping to the remote filesystem storage layout.
-        5. Dynamically provision a cluster-scoped StorageClass using the Scale CSI provisioner.
-        6. Request and provision three 5Gi PVCs (one RBD, one CephFS, one IBM Scale).
-        7. Verify all requested persistent claims successfully progress to a 'Bound' state.
-        8. Deploy a multi-mount utility pod binding all three provisioned PVC sources.
-        9. Run localized write/read file system execution checks on all target mount paths.
+        2. Establish the RemoteCluster connection (auth secret + RemoteCluster CR) via
+           ``setup_scale_remote_connection`` and wait for it to reach Ready.
+        3. Define and deploy a Filesystem CRD mapping to the remote filesystem storage layout.
+        4. Dynamically provision a cluster-scoped StorageClass using the Scale CSI provisioner.
+        5. Request and provision three 5Gi PVCs (one RBD, one CephFS, one IBM Scale).
+        6. Verify all requested persistent claims successfully progress to a 'Bound' state.
+        7. Deploy a multi-mount utility pod binding all three provisioned PVC sources.
+        8. Run localized write/read file system execution checks on all target mount paths.
         """
         ns = constants.IBM_STORAGE_SCALE_NAMESPACE
         rc_name = self.rc_name
         fs_cr_name = helpers.create_unique_resource_name("scale-test", "fs2")
 
-        # --- Phase 1.5: Pre-flight StorageClass Check ---
         log.info("Verifying Mandatory ODF StorageClasses...")
         sc_ocp = OCP(kind=constants.STORAGECLASS)
         required_scs = [
@@ -230,68 +112,14 @@ class TestMultiStorageCoexistence(ManageTest):
                 should_exist=True, resource_name=sc
             ), f"Required SC {sc} is missing!"
 
-        # --- Phase 2: Remote Connection ---
-        gui_user = config.AUTH.get("scale_gui_user")
-        gui_password = config.AUTH.get("scale_gui_password")
-        gui_hosts = config.AUTH.get("scale_gui_hosts")
-
-        if not gui_user or not gui_password:
-            pytest.skip("Scale GUI Auth credentials not configured.")
-        if not gui_hosts:
-            pytest.skip("scale_gui_hosts target endpoint mapping not configured.")
-
-        create_custom_secret(
-            name=self.user_secret_name,
+        # Establish Remote Connection; track its resources for cleanup
+        setup_scale_remote_connection(
+            rc_name=rc_name,
+            user_secret_name=self.user_secret_name,
             namespace=ns,
-            data_dict={
-                "username": gui_user,
-                "password": gui_password,
-            },
+            tracked_resources=self.tracked_resources,
         )
 
-        rc_data = {
-            "apiVersion": "scale.spectrum.ibm.com/v1beta1",
-            "kind": "RemoteCluster",
-            "metadata": {"name": rc_name, "namespace": ns},
-            "spec": {
-                "gui": {
-                    "hosts": gui_hosts,
-                    "insecureSkipVerify": True,
-                    "port": 443,
-                    "scheme": "https",
-                    "secretName": self.user_secret_name,
-                }
-            },
-        }
-
-        fd, temp_path = tempfile.mkstemp(suffix=".yaml")
-        try:
-            os.close(fd)
-            dump_data_to_temp_yaml(rc_data, temp_path)
-            exec_cmd(f"oc create -f {temp_path}")
-        finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-
-        # Wait for Ready
-        rc_ocp = OCP(
-            kind="RemoteCluster.scale.spectrum.ibm.com",
-            namespace=ns,
-            resource_name=rc_name,
-        )
-        sampler = TimeoutSampler(
-            timeout=600,
-            sleep=15,
-            func=lambda: any(
-                c.get("type") == "Ready" and c.get("status") == "True"
-                for c in rc_ocp.get().get("status", {}).get("conditions", [])
-            ),
-        )
-        assert sampler.wait_for_func_status(
-            True
-        ), "RemoteCluster failed to reach Ready state."
-
-        # --- Phase 3: Filesystem ---
         fs_data = {
             "apiVersion": "scale.spectrum.ibm.com/v1beta1",
             "kind": "Filesystem",
@@ -304,13 +132,15 @@ class TestMultiStorageCoexistence(ManageTest):
             os.close(fd)
             dump_data_to_temp_yaml(fs_data, temp_path)
             exec_cmd(f"oc create -f {temp_path}")
+            self.tracked_resources.append(
+                (constants.IBM_STORAGE_SCALE_FILESYSTEM_KIND, fs_cr_name, ns)
+            )
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
-        # Wait for Filesystem Ready
         fs_ocp = OCP(
-            kind="Filesystem.scale.spectrum.ibm.com",
+            kind=constants.IBM_STORAGE_SCALE_FILESYSTEM_KIND,
             namespace=ns,
             resource_name=fs_cr_name,
         )
@@ -324,11 +154,9 @@ class TestMultiStorageCoexistence(ManageTest):
         )
         assert fs_sampler.wait_for_func_status(True), "Filesystem failed to stabilize."
 
-        # --- Phase 4: Coexistence Validation ---
         project = project_factory()
         namespace = project.namespace
 
-        # Create Scale StorageClass using dynamic tracking name
         sc_data = {
             "apiVersion": "storage.k8s.io/v1",
             "kind": "StorageClass",
@@ -340,7 +168,6 @@ class TestMultiStorageCoexistence(ManageTest):
         scale_sc = OCS(**sc_data)
         scale_sc.create()
 
-        # Create PVCs from all three backends
         pvc_rbd = helpers.create_pvc(
             sc_name=constants.DEFAULT_STORAGECLASS_RBD, size="5Gi", namespace=namespace
         )
@@ -356,7 +183,6 @@ class TestMultiStorageCoexistence(ManageTest):
         for pvc in [pvc_rbd, pvc_cephfs, pvc_scale]:
             helpers.wait_for_resource_state(pvc, constants.STATUS_BOUND, timeout=300)
 
-        # Deploy Coexistence Pod
         v_mounts = [
             {"name": "rbd-vol", "mountPath": "/mnt/rbd"},
             {"name": "cephfs-vol", "mountPath": "/mnt/cephfs"},
@@ -395,7 +221,6 @@ class TestMultiStorageCoexistence(ManageTest):
         test_pod.create()
         helpers.wait_for_resource_state(test_pod, constants.STATUS_RUNNING, timeout=300)
 
-        # IO Validation
         for mount in ["/mnt/rbd", "/mnt/cephfs", "/mnt/scale"]:
             log.info(f"Running IO on {mount}")
             test_pod.exec_cmd_on_pod(command=f"touch {mount}/test_file")

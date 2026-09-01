@@ -2933,6 +2933,10 @@ RHCOS = "RHCOS"
 
 # Scale constants
 IBM_STORAGE_SCALE_NAMESPACE = "ibm-spectrum-scale"
+IBM_STORAGE_SCALE_CLUSTER_NAME = "ibm-spectrum-scale"
+IBM_STORAGE_SCALE_CLUSTER_KIND = "Cluster.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_REMOTECLUSTER_KIND = "RemoteCluster.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_FILESYSTEM_KIND = "Filesystem.scale.spectrum.ibm.com"
 IBM_ENTITLEMENT_SECRET_NAME = "ibm-entitlement-key"
 IBM_QUAYIO_SECRET_NAME = "quayio-secret"
 REMOTE_CLUSTER = "RemoteCluster"
