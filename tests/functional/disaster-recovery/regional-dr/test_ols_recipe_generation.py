@@ -141,6 +141,7 @@ def ols_client(skip_if_ols_not_available, request):
     request.addfinalizer(_restore)
 
     client = OpenShiftLightspeed()
+    client.ensure_working_model()
     if not client.is_authorized():
         pytest.fail(
             "OLS authorization check failed. "
@@ -530,7 +531,7 @@ class TestOLSRecipeGeneration:
         )
         attachments = [
             {
-                "attachment_type": "log",
+                "attachment_type": "configuration",
                 "content_type": "application/yaml",
                 "content": deployment_yaml,
             }
@@ -602,31 +603,13 @@ class TestOLSRecipeFailoverAndRelocate:
     ]
 
     @pytest.fixture(scope="class")
-    def ols(self, skip_if_ols_not_available, request):
+    def ols(self, ols_client):
         """
-        Authenticated OLS client (hub cluster).
-
-        Skips the entire class when OLS is not installed.
-        Always switches to the ACM hub context and restores the original
-        context afterward.
+        Authenticated OLS client (hub cluster) — delegates to the module-level
+        ``ols_client`` fixture which handles context switching, authorization
+        checks, and teardown.
         """
-        from ocs_ci.framework import config
-
-        saved_index = config.cur_index
-        config.switch_acm_ctx()
-
-        def _restore():
-            config.switch_ctx(saved_index)
-
-        request.addfinalizer(_restore)
-
-        client = OpenShiftLightspeed()
-        if not client.is_authorized():
-            pytest.fail(
-                "OLS authorization check failed — verify OLS pods are running "
-                "and lightspeed-operator-query-access is bound."
-            )
-        return client
+        return ols_client
 
     def _generate_and_apply_ols_recipe(self, workload, ols_client, request):
         """
@@ -698,7 +681,7 @@ class TestOLSRecipeFailoverAndRelocate:
 
         spec = recipe["spec"]
         recipe_name = recipe["metadata"]["name"]
-        recipe_namespace = recipe["metadata"].get("namespace", namespace)
+        recipe_namespace = namespace
 
         # Validate that OLS returned a legal k8s name (RFC-1123 label) for both
         # the Recipe name and its namespace before we use them in oc commands.
