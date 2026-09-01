@@ -271,10 +271,7 @@ def failover(
         f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_FAILEDOVER} phase"
     )
 
-    drpc_obj.wait_for_phase(
-        constants.STATUS_FAILEDOVER,
-        timeout=360,
-    )
+    drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER, timeout=360, sleep=10)
     config.switch_ctx(restore_index)
 
 
@@ -340,7 +337,7 @@ def relocate(
     relocate_condition = constants.STATUS_RELOCATED
     if discovered_apps:
         relocate_condition = constants.STATUS_RELOCATING
-    drpc_obj.wait_for_phase(relocate_condition)
+    drpc_obj.wait_for_phase(relocate_condition, timeout=1200, sleep=15)
 
     if multi_ns:
         logger.info("Doing Cleanup Operations")
@@ -384,14 +381,59 @@ def relocate(
     config.switch_ctx(restore_index)
 
 
+def check_rbd_mirror_running(namespace=None):
+    """
+    Check if the rbd-mirror daemon deployment is running with at least one ready replica.
+    Ceph HEALTH_OK does not reflect rbd-mirror daemon absence, so this explicit
+    check is needed to catch silent failures before tests run.
+
+    Args:
+        namespace (str): Namespace to check in.
+            Defaults to config.ENV_DATA['cluster_namespace'].
+
+    Returns:
+        bool: True if rbd-mirror deployment has ready replicas
+
+    Raises:
+        UnexpectedDeploymentConfiguration: If the rbd-mirror deployment is
+            not found or not running
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    dep_ocp = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+    try:
+        dep_data = dep_ocp.get(resource_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT)
+    except CommandFailed:
+        raise UnexpectedDeploymentConfiguration(
+            f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} deployment not found in {namespace}"
+        )
+    spec_replicas = dep_data.get("spec", {}).get("replicas") or 0
+    ready_replicas = dep_data.get("status", {}).get("readyReplicas") or 0
+    if spec_replicas < 1 or ready_replicas < 1:
+        raise UnexpectedDeploymentConfiguration(
+            f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} is not running: "
+            f"spec.replicas={spec_replicas}, status.readyReplicas={ready_replicas}"
+        )
+    logger.info(
+        f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} is running: "
+        f"replicas={spec_replicas}, readyReplicas={ready_replicas}"
+    )
+    return True
+
+
 def check_mirroring_status_ok(
-    replaying_images=None, cephblockpoolradosns=None, storageclient_uid=None
+    replaying_images=None,
+    replaying_groups=None,
+    cephblockpoolradosns=None,
+    storageclient_uid=None,
 ):
     """
-    Check if mirroring status has health OK and expected number of replaying images
+    Check if mirroring status has health OK and expected number of replaying images and groups.
 
     Args:
         replaying_images (int): Expected number of images in replaying state
+        replaying_groups (int): Expected number of groups in replaying state.
+            Applicable when CG is enabled.
         cephblockpoolradosns (string): The name of the cephblockpoolradosnamespace
         storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
             Applicable for provider - client configuration.
@@ -487,16 +529,32 @@ def check_mirroring_status_ok(
                 )
             return False
 
+    if is_cg_enabled():
+        if replaying_groups is not None:
+            current_replaying_groups = mirroring_status.get("group_states", {}).get(
+                "replaying"
+            )
+            if current_replaying_groups != replaying_groups:
+                logger.warning(
+                    f"Unexpected replaying groups. Current: {current_replaying_groups}, "
+                    f"expected: {replaying_groups}"
+                )
+                return False
+
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
+def wait_for_mirroring_status_ok(
+    replaying_images=None, replaying_groups=None, timeout=900
+):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
-    images for each of the ODF cluster
+    images and groups for each of the ODF cluster.
 
     Args:
         replaying_images (int): Expected number of images in replaying state
+        replaying_groups (int): Expected number of groups in replaying state.
+            Applicable when CG is enabled.
         timeout (int): time in seconds to wait for mirroring status reach OK
 
     Returns:
@@ -522,6 +580,7 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
             sleep=5,
             func=check_mirroring_status_ok,
             replaying_images=replaying_images,
+            replaying_groups=replaying_groups,
         )
         if not sample.wait_for_func_status(result=True):
             error_msg = (
@@ -987,6 +1046,7 @@ def wait_for_replication_resources_deletion(
     discovered_apps=False,
     vrg_name="",
     skip_vrg_check=False,
+    workload_cleanup=False,
 ):
     """
     Wait for replication resources to be deleted
@@ -999,6 +1059,8 @@ def wait_for_replication_resources_deletion(
         discovered_apps (bool): If true then deployed workload is discovered_apps
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
+        workload_cleanup (bool): Set to True during final workload teardown.
+            For CephFS workloads, wait for all VolumeSnapshots to be deleted.
 
     Raises:
         TimeoutExpiredError: In case replication resources not deleted
@@ -1075,6 +1137,14 @@ def wait_for_replication_resources_deletion(
                 timeout=timeout,
             )
 
+        if "cephfs" in namespace and workload_cleanup:
+            wait_for_resource_count(
+                kind=constants.VOLUMESNAPSHOT,
+                namespace=namespace,
+                expected_count=0,
+                timeout=timeout,
+            )
+
 
 def wait_for_all_resources_creation(
     pvc_count,
@@ -1134,7 +1204,7 @@ def wait_for_all_resources_creation(
 
 def wait_for_all_resources_deletion(
     namespace,
-    timeout=1000,
+    timeout=1500,
     discovered_apps=False,
     workload_cleanup=False,
     vrg_name="",
@@ -1147,10 +1217,10 @@ def wait_for_all_resources_deletion(
         namespace (str): the namespace of the workload
         timeout (int): time in seconds to wait for resource deletion
         discovered_apps (bool): If true then deployed workload is discovered_apps
-        workload_cleanup (bool): Set to True when performing final workload cleanup.
-            If True:
-            - PVC and PV deletion will always be checked
-            - Replication resources state check will be skipped.
+        workload_cleanup (bool): Set to True when performing final workload
+            cleanup. When True, waits for PVC and PV deletion, skips
+            replication resource state checks, and for CephFS workloads
+            waits for all VolumeSnapshots to be deleted.
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
 
@@ -1187,7 +1257,13 @@ def wait_for_all_resources_deletion(
 
     check_state = not workload_cleanup
     wait_for_replication_resources_deletion(
-        namespace, timeout, check_state, discovered_apps, vrg_name, skip_vrg_check
+        namespace,
+        timeout,
+        check_state,
+        discovered_apps,
+        vrg_name,
+        skip_vrg_check,
+        workload_cleanup=workload_cleanup,
     )
 
     if workload_cleanup or "cephfs" not in namespace:
@@ -1628,7 +1704,14 @@ def verify_last_group_sync_time(
                 "The value of lastGroupSyncTime in drpc is not updated. Retrying..."
             )
     else:
-        last_group_sync_time = drpc_obj.get_last_group_sync_time()
+        logger.info("Waiting for lastGroupSyncTime to be set")
+        for last_group_sync_time in TimeoutSampler(
+            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
+        ):
+            if last_group_sync_time:
+                logger.info(f"lastGroupSyncTime is now set: {last_group_sync_time}")
+                break
+            logger.info("lastGroupSyncTime not yet set, retrying...")
 
     # Verify lastGroupSyncTime
     time_format = "%Y-%m-%dT%H:%M:%SZ"
