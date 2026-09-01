@@ -104,17 +104,27 @@ def skip_if_ols_not_available():
     Skip the requesting test/class when OLS is not installed on the hub
     cluster (i.e. the ``lightspeed-app-server`` Route does not exist).
 
+    The check must run against the ACM hub context because OLS is only
+    deployed there, not on the managed clusters.
+
     Use via ``usefixtures`` on a class or request directly in a fixture::
 
         @pytest.mark.usefixtures("skip_if_ols_not_available")
         class TestSomething: ...
     """
-    if not is_ols_available():
-        pytest.skip(
-            "OpenShift Lightspeed is not installed on this cluster "
-            "(route 'lightspeed-app-server' not found in 'openshift-lightspeed'). "
-            "Deploy OLS or set skip_ols_deployment=false to enable these tests."
-        )
+    from ocs_ci.framework import config
+
+    saved_index = config.cur_index
+    config.switch_acm_ctx()
+    try:
+        if not is_ols_available():
+            pytest.skip(
+                "OpenShift Lightspeed is not installed on this cluster "
+                "(route 'lightspeed-app-server' not found in 'openshift-lightspeed'). "
+                "Deploy OLS or set skip_ols_deployment=false to enable these tests."
+            )
+    finally:
+        config.switch_ctx(saved_index)
 
 
 @pytest.fixture(scope="class")
