@@ -832,6 +832,9 @@ skipif_lvm_not_installed = pytest.mark.skipif_lvm_not_installed
 # encryption with KMS properly
 skipif_no_kms = pytest.mark.skipif_no_kms
 
+# Marker for skipping tests if NVMe-oF is not enabled/configured on the cluster
+skipif_no_nvmeof = pytest.mark.skipif_no_nvmeof
+
 skipif_ibm_flash = pytest.mark.skipif(
     config.ENV_DATA.get("ibm_flash"),
     reason="This test doesn't work correctly on IBM Flash system",

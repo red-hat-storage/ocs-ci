@@ -462,6 +462,18 @@ class StorageClusterSetup(object):
         # Enable data replication separation
         cluster_data = add_data_replication_separation_to_cluster_data(cluster_data)
 
+        # Enable NVMe-oF (NVMe over Fabrics) gateway
+        if config.DEPLOYMENT.get("nvmeof_enable"):
+            gateway_instances = config.DEPLOYMENT.get("nvmeof_gateway_instances")
+            logger.info(
+                "Enabling NVMe-oF on StorageCluster with %s gateway instances",
+                gateway_instances,
+            )
+            cluster_data["spec"]["nvmeof"] = {
+                "enable": config.DEPLOYMENT.get("nvmeof_enable"),
+                "gatewayInstances": gateway_instances,
+            }
+
         # Erasure Coding: configure EC as default pool type
         if config.DEPLOYMENT.get("ec_default_pools"):
             k = config.DEPLOYMENT.get("ec_data_chunks", 2)
