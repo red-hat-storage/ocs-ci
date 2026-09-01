@@ -2,8 +2,13 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import green_squad, skipif_no_nvmeof
-from ocs_ci.framework.testlib import ManageTest, tier1, polarion_id
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    skipif_no_nvmeof,
+    tier1,
+    polarion_id,
+)
+from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
