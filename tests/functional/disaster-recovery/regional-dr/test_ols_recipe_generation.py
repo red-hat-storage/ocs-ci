@@ -118,7 +118,7 @@ def skip_if_ols_not_available():
 
 
 @pytest.fixture(scope="class")
-def ols_client(skip_if_ols_not_available):
+def ols_client(skip_if_ols_not_available, request):
     """
     Provide an authenticated :class:`~ocs_ci.ocs.openshift_lightspeed.OpenShiftLightspeed`
     client for the test class.
@@ -126,7 +126,20 @@ def ols_client(skip_if_ols_not_available):
     Skips the entire class when OLS is not installed (via
     ``skip_if_ols_not_available``).  Fails with a clear message when OLS is
     installed but the authorization check returns a non-200 response.
+
+    Always switches to the ACM hub context before constructing the client and
+    restores the original context afterward.
     """
+    from ocs_ci.framework import config
+
+    saved_index = config.cur_index
+    config.switch_acm_ctx()
+
+    def _restore():
+        config.switch_ctx(saved_index)
+
+    request.addfinalizer(_restore)
+
     client = OpenShiftLightspeed()
     if not client.is_authorized():
         pytest.fail(
@@ -428,7 +441,7 @@ class TestOLSRecipeGeneration:
             "hook" in last_step
         ), "Last step of restore workflow must be a hook (post-restore check)"
 
-    def test_recipe_multi_turn_conversation(self, ols_client):
+    def test_recipe_multi_turn_conversation(self, ols_client, request):
         """
         OLS uses conversation history to refine a Recipe over multiple turns.
 
@@ -451,6 +464,18 @@ class TestOLSRecipeGeneration:
         assert conversation_id, "OLS must return a conversation_id for multi-turn tests"
         logger.info(f"Turn 1 conversation_id: {conversation_id}")
 
+        # Register cleanup immediately so it runs even if later assertions fail
+        def _delete_conversation():
+            try:
+                ols_client.delete_conversation(conversation_id)
+                logger.info(f"Conversation {conversation_id} deleted")
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to delete conversation {conversation_id}: {exc}"
+                )
+
+        request.addfinalizer(_delete_conversation)
+
         # Turn 2 — add a pre-backup exec hook in the same conversation
         prompt_2 = (
             "Update the Recipe to add a pre-backup exec hook in the finance "
@@ -468,9 +493,6 @@ class TestOLSRecipeGeneration:
         assert (
             "hooks" in spec
         ), "Updated Recipe must contain a hooks section after the follow-up prompt"
-
-        # Clean up conversation history
-        ols_client.delete_conversation(conversation_id)
 
     def test_recipe_attachment_yaml_context(self, ols_client):
         """
@@ -574,12 +596,24 @@ class TestOLSRecipeFailoverAndRelocate:
     ]
 
     @pytest.fixture(scope="class")
-    def ols(self, skip_if_ols_not_available):
+    def ols(self, skip_if_ols_not_available, request):
         """
         Authenticated OLS client (hub cluster).
 
         Skips the entire class when OLS is not installed.
+        Always switches to the ACM hub context and restores the original
+        context afterward.
         """
+        from ocs_ci.framework import config
+
+        saved_index = config.cur_index
+        config.switch_acm_ctx()
+
+        def _restore():
+            config.switch_ctx(saved_index)
+
+        request.addfinalizer(_restore)
+
         client = OpenShiftLightspeed()
         if not client.is_authorized():
             pytest.fail(
@@ -588,7 +622,7 @@ class TestOLSRecipeFailoverAndRelocate:
             )
         return client
 
-    def _generate_and_apply_ols_recipe(self, workload, ols_client):
+    def _generate_and_apply_ols_recipe(self, workload, ols_client, request):
         """
         Ask OLS to generate a DR Recipe for the given workload, validate the
         returned YAML, apply it to **both** managed clusters (primary and
@@ -606,10 +640,14 @@ class TestOLSRecipeFailoverAndRelocate:
             ols_client: An authenticated
                 :class:`~ocs_ci.ocs.openshift_lightspeed.OpenShiftLightspeed`
                 instance.
+            request: The pytest ``request`` fixture — used to register cleanup
+                finalizers for the temp file and applied Recipe objects.
 
         Returns:
             str: Name of the applied Recipe.
         """
+        import os
+        import re
         import tempfile
 
         from ocs_ci.framework import config
@@ -654,6 +692,19 @@ class TestOLSRecipeFailoverAndRelocate:
 
         spec = recipe["spec"]
         recipe_name = recipe["metadata"]["name"]
+        recipe_namespace = recipe["metadata"].get("namespace", namespace)
+
+        # Validate that OLS returned a legal k8s name (RFC-1123 label) for both
+        # the Recipe name and its namespace before we use them in oc commands.
+        _k8s_name_re = re.compile(r"^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?$")
+        for field, value in (
+            ("metadata.name", recipe_name),
+            ("metadata.namespace", recipe_namespace),
+        ):
+            assert _k8s_name_re.match(value), (
+                f"OLS Recipe field '{field}' is not a valid Kubernetes identifier: "
+                f"{value!r}. Must match [a-z0-9][a-z0-9-]{{0,61}}[a-z0-9]."
+            )
 
         # Assert namespace is in resource groups
         groups = spec.get("groups", [])
@@ -687,6 +738,16 @@ class TestOLSRecipeFailoverAndRelocate:
             tmp.write(recipe_yaml_str)
             tmp_path = tmp.name
 
+        # Register tmpfile cleanup — runs even when the test fails or errors out.
+        def _remove_tmpfile():
+            try:
+                os.unlink(tmp_path)
+                logger.info(f"Removed temp Recipe file: {tmp_path}")
+            except OSError as exc:
+                logger.warning(f"Could not remove temp Recipe file {tmp_path}: {exc}")
+
+        request.addfinalizer(_remove_tmpfile)
+
         # Mirror the cluster-selection logic from BusyboxDiscoveredApps.deploy_workload:
         # use the provider-aware variant when dr_cluster_relations is configured.
         dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
@@ -696,14 +757,44 @@ class TestOLSRecipeFailoverAndRelocate:
             managed_clusters = get_non_acm_cluster_config()
 
         for cluster in managed_clusters:
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+            config.switch_ctx(cluster_index)
             cluster_name = config.ENV_DATA.get("cluster_name", "unknown")
             logger.info(
                 f"Applying OLS Recipe '{recipe_name}' to cluster "
                 f"'{cluster_name}' in namespace '{namespace}'"
             )
-            exec_cmd(f"oc apply -f {tmp_path} -n {namespace}")
+            exec_cmd(["oc", "apply", "-f", tmp_path, "-n", namespace])
             logger.info(f"Recipe '{recipe_name}' applied to '{cluster_name}'")
+
+            # Register Recipe deletion on this cluster as a finalizer so it is
+            # removed even when the test fails mid-way.
+            def _delete_recipe(
+                _idx=cluster_index,
+                _name=recipe_name,
+                _ns=recipe_namespace,
+                _cname=cluster_name,
+            ):
+                try:
+                    config.switch_ctx(_idx)
+                    exec_cmd(
+                        [
+                            "oc",
+                            "delete",
+                            "recipe",
+                            _name,
+                            "-n",
+                            _ns,
+                            "--ignore-not-found",
+                        ]
+                    )
+                    logger.info(f"Deleted Recipe '{_name}' from cluster '{_cname}'")
+                except Exception as exc:
+                    logger.warning(
+                        f"Failed to delete Recipe '{_name}' from '{_cname}': {exc}"
+                    )
+
+            request.addfinalizer(_delete_recipe)
 
         # Leave context on ACM hub for the caller
         config.switch_acm_ctx()
@@ -716,6 +807,7 @@ class TestOLSRecipeFailoverAndRelocate:
         pvc_interface,
         discovered_apps_dr_workload,
         ols,
+        request,
     ):
         """
         Deploy a discovered-app workload, generate its DR Recipe via OLS,
@@ -748,7 +840,7 @@ class TestOLSRecipeFailoverAndRelocate:
         # Step 2+3: Generate and apply OLS recipe                             #
         # ------------------------------------------------------------------ #
         config.switch_acm_ctx()
-        recipe_name = self._generate_and_apply_ols_recipe(workload, ols)
+        recipe_name = self._generate_and_apply_ols_recipe(workload, ols, request)
 
         # ------------------------------------------------------------------ #
         # Step 4: Create DRPC with recipeRef                                  #

@@ -62,6 +62,11 @@ class OpenShiftLightspeed:
         print(response["response"])
     """
 
+    # (connect_timeout, read_timeout) in seconds for every OLS HTTP call.
+    # LLM responses can be slow (60–120 s) — read timeout is generous but
+    # bounded so a hung route cannot block the test runner indefinitely.
+    _REQUEST_TIMEOUT = (10, 180)
+
     def __init__(self, namespace=None, route_name=None, verify_tls=False):
         """
         Initialize the OLS client.
@@ -157,11 +162,15 @@ class OpenShiftLightspeed:
             str: Bearer token string.
         """
         if not self._token:
+            from ocs_ci.ocs.exceptions import CommandFailed
+
             ocp = OCP(namespace=self.namespace)
             try:
                 self._token = ocp.get_user_token()
                 logger.info("Retrieved OLS bearer token via oc whoami --show-token")
-            except Exception:
+            except CommandFailed as exc:
+                if "no token is currently in use" not in str(exc):
+                    raise
                 logger.info(
                     "oc whoami --show-token failed (cert-based kubeconfig) — "
                     "creating ols-test-user SA and minting a token"
@@ -212,7 +221,12 @@ class OpenShiftLightspeed:
         """
         url = f"{self.base_url}/authorized"
         logger.info(f"Checking OLS authorization at {url}")
-        response = requests.post(url, headers=self._headers(), verify=self.verify_tls)
+        response = requests.post(
+            url,
+            headers=self._headers(),
+            verify=self.verify_tls,
+            timeout=self._REQUEST_TIMEOUT,
+        )
         if response.status_code == 200:
             logger.info("OLS authorization check passed")
             return True
@@ -267,7 +281,11 @@ class OpenShiftLightspeed:
 
         logger.info(f"Sending OLS query: {query_text[:120]!r}...")
         response = requests.post(
-            url, json=payload, headers=self._headers(), verify=self.verify_tls
+            url,
+            json=payload,
+            headers=self._headers(),
+            verify=self.verify_tls,
+            timeout=self._REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         result = response.json()
@@ -286,7 +304,12 @@ class OpenShiftLightspeed:
         """
         url = f"{self.base_url}/v1/conversations"
         logger.info("Listing OLS conversations")
-        response = requests.get(url, headers=self._headers(), verify=self.verify_tls)
+        response = requests.get(
+            url,
+            headers=self._headers(),
+            verify=self.verify_tls,
+            timeout=self._REQUEST_TIMEOUT,
+        )
         response.raise_for_status()
         return response.json()
 
@@ -303,7 +326,12 @@ class OpenShiftLightspeed:
         """
         url = f"{self.base_url}/v1/conversations/{conversation_id}"
         logger.info(f"Getting OLS conversation: {conversation_id}")
-        response = requests.get(url, headers=self._headers(), verify=self.verify_tls)
+        response = requests.get(
+            url,
+            headers=self._headers(),
+            verify=self.verify_tls,
+            timeout=self._REQUEST_TIMEOUT,
+        )
         response.raise_for_status()
         return response.json()
 
@@ -320,7 +348,12 @@ class OpenShiftLightspeed:
         """
         url = f"{self.base_url}/v1/conversations/{conversation_id}"
         logger.info(f"Deleting OLS conversation: {conversation_id}")
-        response = requests.delete(url, headers=self._headers(), verify=self.verify_tls)
+        response = requests.delete(
+            url,
+            headers=self._headers(),
+            verify=self.verify_tls,
+            timeout=self._REQUEST_TIMEOUT,
+        )
         response.raise_for_status()
         logger.info(f"Conversation {conversation_id} deleted")
         return True
@@ -346,7 +379,11 @@ class OpenShiftLightspeed:
             f"Submitting OLS feedback sentiment={sentiment} for conversation {conversation_id}"
         )
         response = requests.post(
-            url, json=payload, headers=self._headers(), verify=self.verify_tls
+            url,
+            json=payload,
+            headers=self._headers(),
+            verify=self.verify_tls,
+            timeout=self._REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()

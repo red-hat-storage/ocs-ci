@@ -26,6 +26,7 @@ import time
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility import templating
@@ -163,12 +164,12 @@ class OLSInstaller:
         ).is_exist(resource_name=crb_name)
 
     def _ols_csv_succeeded(self):
-        """Return True when an OLS CSV in the namespace has Succeeded."""
+        """Return True only when a matching OLS CSV has phase ``Succeeded``."""
         csvs = get_csvs_start_with_prefix(
             csv_prefix=constants.OLS_CSV_PREFIX,
             namespace=self.namespace,
         )
-        return bool(csvs)
+        return any(csv.get("status", {}).get("phase") == "Succeeded" for csv in csvs)
 
     # ------------------------------------------------------------------
     # Step 1 — Namespace
@@ -308,7 +309,8 @@ class OLSInstaller:
         exec_cmd(
             f"oc create secret generic {secret_name}"
             f" --from-literal=apitoken={api_token}"
-            f" -n {self.namespace}"
+            f" -n {self.namespace}",
+            secrets=[api_token],
         )
 
     # ------------------------------------------------------------------
@@ -393,14 +395,34 @@ class OLSInstaller:
 
         Args:
             timeout (int): Seconds to wait.
+
+        Raises:
+            TimeoutExpiredError: When pods do not reach Running within
+                ``timeout`` seconds.
         """
+        from ocs_ci.ocs.resources.pod import get_all_pods
+
         self._switch()
         logger.info("Waiting for OLS pods to be running")
-        wait_for_pods_to_be_running(
+        # Resolve the current pod names for lightspeed-app-server so we can
+        # pass them explicitly — wait_for_pods_to_be_running does not accept
+        # a prefix filter, only a pod_names list.
+        pods = get_all_pods(
             namespace=self.namespace,
-            pod_prefix="lightspeed-app-server",
+            selector=["lightspeed-app-server"],
+            selector_label="app.kubernetes.io/name",
+        )
+        pod_names = [p.name for p in pods] if pods else None
+        result = wait_for_pods_to_be_running(
+            namespace=self.namespace,
+            pod_names=pod_names,
             timeout=timeout,
         )
+        if not result:
+            raise TimeoutExpiredError(
+                f"OLS pods in namespace '{self.namespace}' did not reach "
+                f"Running state within {timeout} seconds."
+            )
         logger.info("OLS pods are running")
 
     # ------------------------------------------------------------------
