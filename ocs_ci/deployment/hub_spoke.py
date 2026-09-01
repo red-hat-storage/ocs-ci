@@ -521,12 +521,23 @@ def is_fdf_on_provider():
 _fdf_catalog_image_cache = None
 
 
-def _image_ref_matches_repository(image, repository):
+def _image_ref_matches_repository(image, repository) -> bool:
     """
-    Return True if image is exactly repository or repository with a tag/digest.
+    Return True if image matches an ITMS ``source`` boundary.
 
-    Avoids prefix collisions such as repository ``.../catalog`` matching
-    image ``.../catalog-extra:tag``.
+    Checks, in order:
+    1. Both image and repository are non-empty.
+    2. image equals repository exactly -> match.
+    3. image does not start with repository -> no match.
+    4. image starts with repository -> match only if the next character
+       is ``:`` (tag), ``@`` (digest), or ``/`` (registry/namespace prefix).
+
+    Example:
+        repository="icr.io/cpopen" matches image
+        "icr.io/cpopen/isf-data-foundation-catalog:v4.21".
+
+        repository=".../catalog" does NOT match image
+        ".../catalog-extra:tag" (near-match name, not a real boundary).
     """
     if not image or not repository:
         return False
@@ -534,10 +545,10 @@ def _image_ref_matches_repository(image, repository):
         return True
     if not image.startswith(repository):
         return False
-    return image[len(repository)] in (":", "@")
+    return image[len(repository)] in (":", "@", "/")
 
 
-def _mirror_registry_host(mirror):
+def _mirror_registry_host(mirror) -> str:
     """Return the registry host from a mirror repository path."""
     return mirror.split("/", 1)[0] if mirror else ""
 
