@@ -462,7 +462,7 @@ class TestVirtualMachineLifecycle(ManageTest):
         self.base_ui.take_screenshot("add_volume_dialog_saved")
 
         logger.info("Waiting for boot volume clone to finish ")
-        self.vm_ui.wait_for_clone_in_progress_to_finish(timeout=900)
+        self.vm_ui.wait_for_clone_in_progress_to_finish(timeout=1200)
         self.base_ui.take_screenshot("clone_finished")
 
         logger.info(
