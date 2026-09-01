@@ -98,12 +98,13 @@ class OpenShiftLightspeed:
         the first healthy model if the current default is unavailable.
 
         Steps:
+
         1. Read ``spec.llm.providers[0]`` from the OLSConfig CR.
-        2. Probe each model by sending a minimal ``/v1/chat/completions``
-           request to the provider URL using the token from the OLS Secret.
-        3. If the current ``defaultModel`` is unhealthy (non-2xx response) and
-           a healthy alternative is found in the ``models`` list, patch the
-           OLSConfig CR to set the new ``defaultModel``.
+        2. Probe each model via ``/v1/chat/completions`` using the OLS Secret
+           token; only 2xx responses are considered healthy.
+        3. If the current ``defaultModel`` is unhealthy and a healthy
+           alternative exists in the ``models`` list, patch the OLSConfig CR
+           to set the new ``defaultModel``.
 
         Failures are non-fatal: if the OLSConfig cannot be read or all models
         fail the probe, a warning is logged and the method returns silently so
