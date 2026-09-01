@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import random
+import re
 import subprocess
 import tempfile
 import time
@@ -525,27 +526,22 @@ def _image_ref_matches_repository(image, repository) -> bool:
     """
     Return True if image matches an ITMS ``source`` boundary.
 
-    Checks, in order:
-    1. Both image and repository are non-empty.
-    2. image equals repository exactly -> match.
-    3. image does not start with repository -> no match.
-    4. image starts with repository -> match only if the next character
-       is ``:`` (tag), ``@`` (digest), or ``/`` (registry/namespace prefix).
+    image must equal repository, or start with repository followed
+    immediately by one of:
+    - ``@`` (digest boundary), e.g. repository + "@sha256:abc"
+    - ``/`` (registry/namespace prefix boundary), e.g. repository + "/name:tag"
+    - ``:`` followed by a tag with no further ``/`` (tag boundary), e.g.
+      repository + ":v4.21"
 
-    Example:
-        repository="icr.io/cpopen" matches image
-        "icr.io/cpopen/isf-data-foundation-catalog:v4.21".
-
-        repository=".../catalog" does NOT match image
-        ".../catalog-extra:tag" (near-match name, not a real boundary).
+    This rejects near-match names, e.g. repository ``.../catalog`` must not
+    match image ``.../catalog-extra:tag``. It also rejects a registry port
+    masquerading as a tag, e.g. repository ``icr.io`` must not match image
+    ``icr.io:5000/cpopen/catalog:v1`` since ``:5000`` is followed by ``/``.
     """
     if not image or not repository:
         return False
-    if image == repository:
-        return True
-    if not image.startswith(repository):
-        return False
-    return image[len(repository)] in (":", "@", "/")
+    pattern = re.escape(repository) + r"(?:[@/].*|:[^/]*)?$"
+    return re.match(pattern, image) is not None
 
 
 def _mirror_registry_host(mirror) -> str:
