@@ -11,7 +11,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
 )
 from ocs_ci.framework.pytest_customization.marks import (
-    magenta_squad,
+    yellow_squad,
     fusion_access_required,
     ignore_leftovers,
 )
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 @ui
-@magenta_squad
+@yellow_squad
 @fusion_access_required
 @ignore_leftovers
 class TestFDFSANConnection(ManageTest):
