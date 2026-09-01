@@ -177,7 +177,7 @@ class TestCnvApplicationMDR:
         enable_fence(drcluster_name=self.primary_cluster_name)
         assert verify_fence_state(
             drcluster_name=self.primary_cluster_name, state=constants.ACTION_FENCE
-        ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_FENCE} state"
+        ), f"DR cluster {self.primary_cluster_name} failed to be in {constants.ACTION_FENCE} state"
 
         secondary_cluster_name = get_current_secondary_cluster_name(
             self.wl_namespace, cnv_workloads[0].workload_type
@@ -261,7 +261,7 @@ class TestCnvApplicationMDR:
         enable_unfence(drcluster_name=self.primary_cluster_name)
         assert verify_fence_state(
             drcluster_name=self.primary_cluster_name, state=constants.ACTION_UNFENCE
-        ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_UNFENCE} state"
+        ), f"DR cluster {self.primary_cluster_name} failed to reach {constants.ACTION_UNFENCE} state"
 
         # Reboot the nodes after unfenced
         gracefully_reboot_ocp_nodes(
