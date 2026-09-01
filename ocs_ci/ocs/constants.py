@@ -4020,6 +4020,8 @@ SPECTRUM_FUSION_CR = os.path.join(
 FDF_ODFCLUSTER_CR = os.path.join(FDF_TEMPLATE_DIR, "odfcluster.yaml")
 FDF_CATSRC_CR = os.path.join(FDF_TEMPLATE_DIR, "isf_datafoundation_catsrc.yaml")
 FDF_CATSRC_IMAGE_PATH = "icr.io/cpopen/isf-data-foundation-catalog"
+# Host for pre-release FDF catalog mirrors (see fdf_pre_release_registry)
+FDF_PRE_RELEASE_REGISTRY_HOST = "cp.stg.icr.io"
 FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
 FUSION_NAMESPACE = "ibm-spectrum-fusion-ns"
 ISF_CATALOG_SOURCE_NAME = "isf-catalog"

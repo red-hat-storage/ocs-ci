@@ -521,6 +521,27 @@ def is_fdf_on_provider():
 _fdf_catalog_image_cache = None
 
 
+def _image_ref_matches_repository(image, repository):
+    """
+    Return True if image is exactly repository or repository with a tag/digest.
+
+    Avoids prefix collisions such as repository ``.../catalog`` matching
+    image ``.../catalog-extra:tag``.
+    """
+    if not image or not repository:
+        return False
+    if image == repository:
+        return True
+    if not image.startswith(repository):
+        return False
+    return image[len(repository)] in (":", "@")
+
+
+def _mirror_registry_host(mirror):
+    """Return the registry host from a mirror repository path."""
+    return mirror.split("/", 1)[0] if mirror else ""
+
+
 def _resolve_image_through_itms(image):
     """
     Resolve a container image reference through ImageTagMirrorSet on the
@@ -553,7 +574,9 @@ def _resolve_image_through_itms(image):
         for entry in itms.get("spec", {}).get("imageTagMirrors", []):
             source = entry.get("source", "")
             mirrors = entry.get("mirrors", [])
-            if not (source and mirrors and image.startswith(source)):
+            if not (
+                source and mirrors and _image_ref_matches_repository(image, source)
+            ):
                 continue
 
             chosen_mirror = None
@@ -566,7 +589,10 @@ def _resolve_image_through_itms(image):
                         break
             if not chosen_mirror:
                 for mirror in mirrors:
-                    if "cp.stg.icr.io" in mirror:
+                    if (
+                        _mirror_registry_host(mirror)
+                        == constants.FDF_PRE_RELEASE_REGISTRY_HOST
+                    ):
                         chosen_mirror = mirror
                         break
             if not chosen_mirror:
