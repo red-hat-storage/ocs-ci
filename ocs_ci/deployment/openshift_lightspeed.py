@@ -416,15 +416,31 @@ class OLSInstaller:
 
         self._switch()
         logger.info("Waiting for OLS pods to be running")
-        # Resolve the current pod names for lightspeed-service-api so we can
-        # pass them explicitly — wait_for_pods_to_be_running does not accept
-        # a prefix filter, only a pod_names list.
-        pods = get_all_pods(
+
+        # Poll until at least one lightspeed-service-api pod is scheduled
+        # before handing pod names to wait_for_pods_to_be_running.
+        # The deployment controller may not have created the pod yet right
+        # after the OLSConfig is applied.
+        pod_names = None
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=10,
+            func=get_all_pods,
             namespace=self.namespace,
             selector=["lightspeed-service-api"],
             selector_label="app.kubernetes.io/name",
-        )
-        pod_names = [p.name for p in pods] if pods else None
+        ):
+            if sample:
+                pod_names = [p.name for p in sample]
+                logger.info(f"Found OLS pods to watch: {pod_names}")
+                break
+
+        if not pod_names:
+            raise TimeoutExpiredError(
+                f"No lightspeed-service-api pods appeared in namespace "
+                f"'{self.namespace}' within {timeout} seconds."
+            )
+
         result = wait_for_pods_to_be_running(
             namespace=self.namespace,
             pod_names=pod_names,
