@@ -428,6 +428,12 @@ def verify_noobaa_pods_upgraded(old_images, upgrade_version):
         + config.ENV_DATA.get("infra_replicas", 0)
     )
     timeout = 600 if num_nodes < 6 else 900
+    # Workaround: In EUS-to-EUS upgrades to ODF 4.22+ the noobaa-core pod takes
+    # considerably longer to roll to the new image (the NooBaa DB is migrated to
+    # a CNPG-managed PostgreSQL cluster and noobaa-core only rolls once that
+    # migration completes). Extend the timeout for this scenario.
+    if config.UPGRADE.get("eus_upgrade") and upgrade_version >= parse_version("4.22"):
+        timeout = max(timeout, 1800)
 
     verify_pods_upgraded(
         old_images,
