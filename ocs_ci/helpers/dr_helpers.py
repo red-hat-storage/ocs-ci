@@ -4827,6 +4827,7 @@ def verify_pending_cleanup_alert_firing_cli(
                 for a in alerts
                 if a.get("labels", {}).get("drpc_name") == drpc_name
                 or a.get("labels", {}).get("name") == drpc_name
+                or a.get("labels", {}).get("obj_name") == drpc_name
             ]
             assert matching, (
                 f"'{constants.ALERT_APPLICATION_CLEANUP_PENDING}' alert fired but "
