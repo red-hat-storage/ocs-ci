@@ -5,8 +5,9 @@ metadata:
 spec:
   imageTagMirrors:
   - mirrors:
-    - preprod.icr.io/cp/df/isf-data-foundation-catalog
+    # Prefer staging: preprod often lacks unreleased version tags
     - cp.stg.icr.io/cp/df/isf-data-foundation-catalog
+    - preprod.icr.io/cp/df/isf-data-foundation-catalog
     source: icr.io/cpopen/isf-data-foundation-catalog
   mirrorSourcePolicy:
     AllowContactingSource 0
