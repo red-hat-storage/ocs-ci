@@ -1652,7 +1652,7 @@ def get_all_drpolicy():
         drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
         drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
     # Build list of managed clusters for DR
-    # Include clusters with rbd_dr_scenario (RDR) or in metro-dr mode (MDR)
+    # Include clusters in RDR or MDR mode
     # Exclude all ACM hubs (both active and passive) as they are not managed clusters
     multicluster_mode = config.MULTICLUSTER.get("multicluster_mode")
     acm_indexes = get_all_acm_indexes()
@@ -1663,10 +1663,7 @@ def get_all_drpolicy():
         if cluster_index in acm_indexes:
             continue
 
-        if (
-            cluster_name.ENV_DATA.get("rbd_dr_scenario")
-            or multicluster_mode == constants.MDR_MODE
-        ):
+        if multicluster_mode in (constants.RDR_MODE, constants.MDR_MODE):
             current_managed_clusters_list.append(
                 cluster_name.ENV_DATA.get("cluster_name")
             )
@@ -3199,8 +3196,9 @@ def get_cluster_set_name(switch_ctx=None):
     restore_index = config.cur_index
     config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+    multicluster_mode = config.MULTICLUSTER.get("multicluster_mode")
     for cluster_name in config.clusters:
-        if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
+        if multicluster_mode == constants.RDR_MODE:
             current_managed_clusters_list.append(
                 cluster_name.ENV_DATA.get("cluster_name")
             )

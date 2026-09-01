@@ -846,8 +846,7 @@ class Deployment(object):
         if config.ENV_DATA.get("skip_dr_deployment", False):
             return
         if config.multicluster:
-            dr_conf = self.get_rdr_conf()
-            deploy_dr = get_multicluster_dr_deployment()(dr_conf)
+            deploy_dr = get_multicluster_dr_deployment()()
             deploy_dr.deploy()
 
     def do_deploy_lvmo(self):
@@ -1076,19 +1075,6 @@ class Deployment(object):
         self.do_deploy_fusion_access()
         self.do_deploy_hosted_spoke_clusters()
         self.do_deploy_external_spoke_clusters()
-
-    def get_rdr_conf(self):
-        """
-        Aggregate important Regional DR parameters in the dictionary
-
-        Returns:
-            dict: of Regional DR config parameters
-
-        """
-        dr_conf = dict()
-        dr_conf["rbd_dr_scenario"] = config.ENV_DATA.get("rbd_dr_scenario", False)
-        dr_conf["dr_metadata_store"] = config.ENV_DATA.get("dr_metadata_store", "awss3")
-        return dr_conf
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         """
@@ -3821,14 +3807,8 @@ class MultiClusterDROperatorsDeploy(object):
 
     """
 
-    def __init__(self, dr_conf):
-        self.meta_map = {
-            "awss3": self.s3_meta_obj_store,
-            "mcg": self.mcg_meta_obj_store,
-        }
-        # Default to s3 for metadata store
-        self.meta_obj_store = dr_conf.get("dr_metadata_store", "awss3")
-        self.meta_obj = self.meta_map[self.meta_obj_store]()
+    def __init__(self):
+        self.meta_obj = self.s3_meta_obj_store()
         self.channel = config.DEPLOYMENT.get("ocs_csv_channel")
 
     def deploy(self):
@@ -4966,12 +4946,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
     A class for Regional-DR deployments
     """
 
-    def __init__(self, dr_conf):
-        super().__init__(dr_conf)
-        # DR use case could be RBD or CephFS or Both
-        self.rbd = dr_conf.get("rbd_dr_scenario", False)
-        # CephFS For future usecase
-        self.cephfs = dr_conf.get("cephfs_dr_scenario", False)
+    def __init__(self):
+        super().__init__()
 
     def deploy(self):
         """
@@ -5073,20 +5049,21 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             # create service exporter
             create_service_exporter()
 
-        # RBD specific dr deployment
-        if self.rbd:
-            rbddops = RBDDRDeployOps()
-            self.configure_mirror_peer()
-            rbddops.deploy()
+        # RBD dr deployment
+        rbddops = RBDDRDeployOps()
+        self.configure_mirror_peer()
+        rbddops.deploy()
 
         self.apply_custom_ramen_image()
-
+        logger.info("Deploying DR policy")
+        self.deploy_dr_policy()
+        logger.info("Adding CA cert to Ramen configmap")
+        self.add_cacert_ramen_configmap()
         multicluster_observability = ocp.OCP(kind="MultiClusterObservability")
         if not multicluster_observability.get()["items"]:
             # TODO: Check whether this need to be enabled for each pair of RDR clusters
             self.enable_acm_observability()
 
-        self.deploy_dr_policy()
         if odf_running_version >= version.VERSION_4_19:
             # validate storage cluster peer state
             validate_storage_cluster_peer_state()
@@ -5165,8 +5142,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         config.switch_acm_ctx()
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             apply_oadp_workaround(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
-        # Adding Ca Cert
-        self.add_cacert_ramen_configmap()
         # Only on the active hub enable managedserviceaccount-preview
         managed_clusters = get_non_acm_cluster_config()
         for cluster in managed_clusters:
@@ -5287,10 +5262,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         )
         exec_cmd(f"oc create -f {thanos_data_yaml.name}")
 
-        logger.info("Thanos secret created, checking observability status")
-        self.check_observability_status()
-        logger.info("Observability status check passed, thanos_secret() completed")
-
     def enable_acm_observability(self):
         """
         Function to enable ACM observability for enabling DR monitoring dashboard for Regional DR on the RHACM console.
@@ -5305,6 +5276,17 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                 "No default storage class found. Skipping ACM observability enablement."
             )
             return
+
+        logger.info(f"Creating namespace {constants.ACM_OBSERVABILITY_NAMESPACE}")
+        observability_namespace = OCP(
+            kind=constants.NAMESPACE,
+            resource_name=constants.ACM_OBSERVABILITY_NAMESPACE,
+        )
+        if not observability_namespace.is_exist():
+            exec_cmd(f"oc create namespace {constants.ACM_OBSERVABILITY_NAMESPACE}")
+
+        logger.info("Create thanos secret yaml")
+        self.thanos_secret()
 
         logger.info(
             "Enabling ACM MultiClusterObservability for DR monitoring dashboard"
@@ -5327,8 +5309,9 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
         exec_cmd(f"oc create -f {multiclusterobservability_data_yaml.name}")
 
-        logger.info("Create thanos secret yaml")
-        self.thanos_secret()
+        logger.info("Thanos secret created, checking observability status")
+        self.check_observability_status()
+        logger.info("Observability status check passed, thanos_secret() completed")
 
         # Ensure we're in ACM context after thanos_secret() completes
         # (in case context was switched during ODF bucket creation)
@@ -5351,8 +5334,8 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
     A class for Metro-DR deployments
     """
 
-    def __init__(self, dr_conf):
-        super().__init__(dr_conf)
+    def __init__(self):
+        super().__init__()
 
     def deploy(self):
         # We need multicluster orchestrator on both the active/passive ACM clusters
