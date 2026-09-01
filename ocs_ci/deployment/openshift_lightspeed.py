@@ -325,6 +325,7 @@ class OLSInstaller:
         model_name,
         secret_name,
         rag_images=None,
+        fallback_model_name=None,
     ):
         """
         Apply the OLSConfig CR.
@@ -337,12 +338,16 @@ class OLSInstaller:
             provider_type (str): OLS provider type (e.g. ``rhoai_vllm``,
                 ``openai``, ``watsonx``).
             provider_url (str): Base URL of the LLM inference endpoint.
-            model_name (str): Model identifier.
+            model_name (str): Primary model identifier.
             secret_name (str): Name of the Secret holding the LLM API token.
             rag_images (list[dict]): Optional list of RAG image entries.  Each
                 dict must have ``image``, ``indexID``, and ``indexPath`` keys.
                 When ``None`` (default), :func:`get_ols_rag_images` is called
                 to build the list from the current ODF version automatically.
+            fallback_model_name (str): Optional fallback model identifier.
+                When set, a second entry is added to the provider's ``models``
+                list so OLS can fall back to it when the primary model is
+                unavailable.
 
         Example ``rag_images`` entry::
 
@@ -356,7 +361,9 @@ class OLSInstaller:
         rag_images = rag_images if rag_images is not None else get_ols_rag_images()
 
         logger.info(
-            f"Applying OLSConfig (provider={provider_name}, model={model_name})"
+            f"Applying OLSConfig (provider={provider_name}, model={model_name}"
+            + (f", fallback={fallback_model_name}" if fallback_model_name else "")
+            + ")"
         )
         olsconfig_data = templating.load_yaml(constants.OLS_CONFIG_YAML)
 
@@ -364,6 +371,11 @@ class OLSInstaller:
         provider_entry = olsconfig_data["spec"]["llm"]["providers"][0]
         provider_entry["credentialsSecretRef"]["name"] = secret_name
         provider_entry["models"][0]["name"] = model_name
+        if fallback_model_name:
+            provider_entry["models"][1]["name"] = fallback_model_name
+        else:
+            # Remove the placeholder fallback entry from the template
+            provider_entry["models"] = provider_entry["models"][:1]
         provider_entry["name"] = provider_name
         provider_entry["type"] = provider_type
         provider_entry["url"] = provider_url
@@ -391,7 +403,7 @@ class OLSInstaller:
 
     def wait_for_ols_pods(self, timeout=300):
         """
-        Wait until the ``lightspeed-app-server`` pods are running.
+        Wait until the ``lightspeed-service-api`` pods are running.
 
         Args:
             timeout (int): Seconds to wait.
@@ -404,12 +416,12 @@ class OLSInstaller:
 
         self._switch()
         logger.info("Waiting for OLS pods to be running")
-        # Resolve the current pod names for lightspeed-app-server so we can
+        # Resolve the current pod names for lightspeed-service-api so we can
         # pass them explicitly — wait_for_pods_to_be_running does not accept
         # a prefix filter, only a pod_names list.
         pods = get_all_pods(
             namespace=self.namespace,
-            selector=["lightspeed-app-server"],
+            selector=["lightspeed-service-api"],
             selector_label="app.kubernetes.io/name",
         )
         pod_names = [p.name for p in pods] if pods else None
@@ -545,6 +557,7 @@ class OLSInstaller:
         secret_name,
         api_token=None,
         rag_images=None,
+        fallback_model_name=None,
         username=None,
         service_account=None,
         sa_namespace=None,
@@ -570,12 +583,14 @@ class OLSInstaller:
             provider_name (str): LLM provider name.
             provider_type (str): OLS provider type string.
             provider_url (str): LLM inference endpoint URL.
-            model_name (str): Model identifier.
+            model_name (str): Primary model identifier.
             secret_name (str): Name for the credentials Secret.
             api_token (str): API token value for the credentials Secret.
             rag_images (list[dict]): RAG content images.  When ``None``
                 (default) :func:`get_ols_rag_images` builds them dynamically
                 from the current ODF version.
+            fallback_model_name (str): Optional fallback model identifier.
+                When set, OLS will use this model if the primary is unavailable.
             username (str): User to grant ``ols-user`` role to.
             service_account (str): SA to grant ``ols-user`` role to.
             sa_namespace (str): Namespace of the SA.
@@ -596,6 +611,7 @@ class OLSInstaller:
             model_name=model_name,
             secret_name=secret_name,
             rag_images=rag_images,
+            fallback_model_name=fallback_model_name,
         )
         self.wait_for_ols_pods(timeout=pods_timeout)
         self.expose_route()
