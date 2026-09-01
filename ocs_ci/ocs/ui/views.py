@@ -1166,32 +1166,6 @@ FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS = {
         " | (//button[normalize-space()='Create storage cluster'])[last()]",
         By.XPATH,
     ),
-    # "Create file system claim" button — appears (enabled) on the Fusion Access
-    # for SAN landing page once the storage cluster is ready
-    "create_file_system_claim_btn": (
-        "//button[normalize-space()='Create file system claim']"
-        " | //button[contains(normalize-space(),'Create file system claim')]",
-        By.XPATH,
-    ),
-    # File system claim name input — targeted by placeholder text which is
-    # stable across UI versions and does not rely on a form id attribute.
-    "file_system_claim_name_input": (
-        "//input[@placeholder='file-system-1' or @id='fileSystemClaimName'"
-        " or contains(@id,'file-system-claim')]"
-        " | //input[@type='text' and contains(@class,'pf-v6-c-form-control')]",
-        By.XPATH,
-    ),
-    # First LUN row checkbox in the "Select LUNs" table
-    # label click is required because the checkbox input is hidden behind a <label>
-    "first_lun_row_label": (
-        "//*[@id='luns-selection-table']/tbody/tr[1]/td[1]/label",
-        By.XPATH,
-    ),
-    # Submit button at the bottom of the "Create file system claim" form
-    "submit_file_system_claim_btn": (
-        "//button[normalize-space()='Create file system claim'" " and not(@disabled)]",
-        By.XPATH,
-    ),
 }
 
 acm_page_nav = {

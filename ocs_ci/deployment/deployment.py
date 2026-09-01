@@ -939,18 +939,16 @@ class Deployment(object):
 
     def do_deploy_fusion_access_storage_cluster(self):
         """
-        Create the Fusion Access for SAN storage cluster and first file system
-        claim via the OpenShift Console UI.
+        Create the Fusion Access for SAN storage cluster via the OpenShift Console UI.
 
-        Runs only when ``DEPLOYMENT.fusion_access`` is ``True`` in the active
-        config.  The UI automation is performed by
+        Runs only when ``DEPLOYMENT.fusion_access_deployment`` is ``True`` in the
+        active config.  The UI automation is performed by
         :class:`~ocs_ci.ocs.ui.page_objects.premigration_fusion_access_ui.PreMigrationFusionAccessUI`
-        which drives the full wizard:
+        which drives the storage cluster wizard:
 
         1. Navigate to Storage → Fusion Access for SAN.
         2. Click "Create storage cluster" and select all worker nodes.
-        3. Wait for the cluster to become ready.
-        4. Create a file system claim with the first available LUN.
+        3. Submit the storage cluster creation form.
         """
         if not config.DEPLOYMENT.get("fusion_access_deployment"):
             return
