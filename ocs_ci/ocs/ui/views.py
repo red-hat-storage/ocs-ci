@@ -972,10 +972,6 @@ page_nav = {
         "//a[text()='Installed Operators'] | //a[text()='Installed Software']",
         By.XPATH,
     ),
-    "operators_olmv0_tab": (
-        'a[data-test="horizontal-link-Operators (OLMv0)"]',
-        By.CSS_SELECTOR,
-    ),
     "Storage": ("//button[text()='Storage']", By.XPATH),
     "persistentvolumes_page": ("PersistentVolumes", By.LINK_TEXT),
     "persistentvolumeclaims_page": ("PersistentVolumeClaims", By.LINK_TEXT),
