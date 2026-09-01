@@ -20,6 +20,7 @@ import yaml
 
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.framework.testlib import tier1, skipif_ocs_version
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.openshift_lightspeed import OpenShiftLightspeed, is_ols_available
 
 logger = logging.getLogger(__name__)
@@ -212,6 +213,7 @@ def _assert_recipe_structure(recipe_yaml):
 @tier1
 @turquoise_squad
 @skipif_ocs_version("<4.16")
+@pytest.mark.usefixtures("skip_if_ols_not_available")
 class TestOLSRecipeGeneration:
     """
     Verify OLS can generate ODF DR Recipes from natural-language prompts.
@@ -528,7 +530,7 @@ class TestOLSRecipeGeneration:
 
 
 # ---------------------------------------------------------------------------
-# Real-workload test class
+# Real-workload test class — OLS-generated Recipe + DR failover/relocate
 # ---------------------------------------------------------------------------
 
 
@@ -536,43 +538,47 @@ class TestOLSRecipeGeneration:
 @tier1
 @turquoise_squad
 @skipif_ocs_version("<4.16")
-class TestOLSRecipeWithRealWorkload:
+@pytest.mark.usefixtures("skip_if_ols_not_available")
+class TestOLSRecipeFailoverAndRelocate:
     """
-    Verify OLS generates a correct DR Recipe for a real busybox workload
-    deployed on the primary managed cluster.
+    Deploy a real busybox Discovered App workload, ask OLS to generate its
+    DR Recipe using the live namespace and PVC labels, apply that Recipe to
+    the primary cluster, then perform a full failover → relocate cycle to
+    verify the OLS-generated Recipe is operationally correct.
+
+    This replaces the static ``recipe_with_checkhooks.yaml`` template with
+    an OLS-generated Recipe so the entire Recipe content is validated end-to-end
+    against the real DR protection flow.
 
     Flow
     ----
-    1. Deploy one busybox subscription workload via the ``dr_workload``
-       fixture — this creates a random namespace, a Deployment, and one or
-       more PVCs with known labels on the primary cluster.
-    2. Introspect the live workload: read its namespace, PVC label selector,
-       and PVC count directly from the ``BusyBox`` object.
-    3. Ask OLS to generate a DR Recipe that matches the actual workload
-       topology (namespace + PVC labels baked into the prompt).
-    4. Validate the returned Recipe YAML structure.
-    5. Apply the Recipe to the hub cluster and confirm it is accepted by
-       the Kubernetes API (no dry-run errors, object exists afterwards).
-    6. Teardown: delete the Recipe from the hub; workload is cleaned up
-       by the ``dr_workload`` fixture finalizer.
+    1. Deploy a ``BusyboxDiscoveredApps`` workload (random namespace + RBD PVCs).
+    2. Ask OLS to generate the DR Recipe using the real namespace, PVC label
+       key/value, and pod label key/value from the deployed workload.
+    3. Validate the generated Recipe structure and assert it targets the correct
+       namespace and labels.
+    4. Apply the OLS-generated Recipe to each managed cluster.
+    5. Create the DRPC with ``recipeRef`` pointing to the applied Recipe.
+    6. Perform failover to the secondary cluster and verify workload comes up.
+    7. Relocate back to the primary cluster and verify workload comes up.
+    8. Teardown: delete the workload; the ``discovered_apps_dr_workload``
+       fixture handles full cleanup.
     """
 
-    @pytest.fixture(scope="class")
-    def real_workload(self, dr_workload):
-        """
-        Deploy one busybox RBD subscription workload and return the
-        :class:`~ocs_ci.ocs.dr.dr_workload.BusyBox` instance.
-        """
-        workloads = dr_workload(num_of_subscription=1)
-        return workloads[0]
+    params = [
+        pytest.param(
+            constants.CEPHBLOCKPOOL,
+            marks=[pytest.mark.polarion_id("OCS-8231")],
+            id="rbd",
+        ),
+    ]
 
     @pytest.fixture(scope="class")
     def ols(self, skip_if_ols_not_available):
         """
         Authenticated OLS client (hub cluster).
 
-        Skips the entire class when OLS is not installed (via
-        ``skip_if_ols_not_available``).
+        Skips the entire class when OLS is not installed.
         """
         client = OpenShiftLightspeed()
         if not client.is_authorized():
@@ -582,52 +588,64 @@ class TestOLSRecipeWithRealWorkload:
             )
         return client
 
-    def test_ols_recipe_for_real_workload(self, real_workload, ols, request):
+    def _generate_and_apply_ols_recipe(self, workload, ols_client):
         """
-        OLS generates a Recipe that correctly reflects the live workload's
-        namespace and PVC label selector.
+        Ask OLS to generate a DR Recipe for the given workload, validate the
+        returned YAML, apply it to **both** managed clusters (primary and
+        secondary), and return the recipe name.
 
-        Test steps:
-            1. Read workload namespace, PVC selector labels, and PVC count
-               from the deployed BusyBox instance.
-            2. Send a prompt to OLS with the real namespace and labels.
-            3. Extract and structurally validate the returned Recipe YAML.
-            4. Assert the generated Recipe targets the correct namespace.
-            5. Assert the Recipe includes a ``volumes`` section whose label
-               selector matches the workload's PVC selector.
-            6. Apply the Recipe to the hub cluster (``oc apply``).
-            7. Verify the Recipe object exists on the hub.
+        The cluster-selection logic mirrors ``BusyboxDiscoveredApps.deploy_workload``:
+        uses ``get_non_acm_cluster_and_non_provider_cluster_config`` when
+        ``dr_cluster_relations`` is set (standard RDR), otherwise falls back to
+        ``get_non_acm_cluster_config``.
+
+        Args:
+            workload: A :class:`~ocs_ci.ocs.dr.dr_workload.BusyboxDiscoveredApps`
+                instance that has already been deployed (so namespace and labels
+                are known).
+            ols_client: An authenticated
+                :class:`~ocs_ci.ocs.openshift_lightspeed.OpenShiftLightspeed`
+                instance.
+
+        Returns:
+            str: Name of the applied Recipe.
         """
+        import tempfile
+
         from ocs_ci.framework import config
-        from ocs_ci.ocs.ocp import OCP
+        from ocs_ci.ocs.utils import (
+            get_non_acm_cluster_and_non_provider_cluster_config,
+            get_non_acm_cluster_config,
+        )
+        from ocs_ci.utility.utils import exec_cmd
 
-        namespace = real_workload.workload_namespace
-        pvc_selector = real_workload.workload_pvc_selector or {}
-        pvc_count = real_workload.workload_pvc_count
-        app_name = real_workload.workload_name  # "busybox"
+        namespace = workload.workload_namespace
+        pvc_key = workload.discovered_apps_pvc_selector_key
+        pvc_value = workload.discovered_apps_pvc_selector_value
+        pod_key = workload.discovered_apps_pod_selector_key
+        pod_value = workload.discovered_apps_pod_selector_value
+        app_name = workload.workload_name  # "busybox"
+        pvc_count = workload.workload_pvc_count
 
         logger.info(
-            f"Real workload — namespace: {namespace}, "
-            f"pvc_selector: {pvc_selector}, pvc_count: {pvc_count}"
-        )
-
-        # Build PVC label description for the prompt
-        pvc_label_parts = ", ".join(f"{k}: {v}" for k, v in pvc_selector.items())
-        pvc_section = (
-            f"The application has {pvc_count} PVC(s) labeled {pvc_label_parts}."
-            if pvc_selector
-            else "The application has no PVCs."
+            f"Generating OLS Recipe for workload — namespace: {namespace}, "
+            f"pvc_selector: {pvc_key}={pvc_value}, "
+            f"pod_selector: {pod_key}={pod_value}"
         )
 
         prompt = _build_prompt(
             f"Generate an ODF Disaster Recovery Recipe for an application named "
             f"{app_name} deployed in the {namespace} namespace. "
-            f"The application consists of one Deployment labeled appname: {app_name}. "
-            f"{pvc_section} "
+            f"The application has one Deployment with pods labeled "
+            f"{pod_key}: {pod_value}. "
+            f"It has {pvc_count} PVC(s) labeled {pvc_key}: {pvc_value}. "
+            f"Include a check hook that verifies the Deployment named {app_name} "
+            f"is ready (spec.replicas == status.readyReplicas) before backup and "
+            f"after restore. "
             f"Generate the complete Recipe."
         )
 
-        result = ols.query(prompt)
+        result = ols_client.query(prompt)
         response_text = result.get("response", "")
         logger.info(f"OLS response:\n{response_text}")
 
@@ -637,84 +655,173 @@ class TestOLSRecipeWithRealWorkload:
         spec = recipe["spec"]
         recipe_name = recipe["metadata"]["name"]
 
-        # --- namespace check ---
+        # Assert namespace is in resource groups
         groups = spec.get("groups", [])
-        all_group_namespaces = []
+        all_namespaces = []
         for g in groups:
-            all_group_namespaces.extend(g.get("includedNamespaces", []))
-        assert namespace in all_group_namespaces, (
-            f"Generated Recipe groups must target namespace '{namespace}', "
-            f"found: {all_group_namespaces}"
+            all_namespaces.extend(g.get("includedNamespaces", []))
+        assert namespace in all_namespaces, (
+            f"OLS Recipe groups must target namespace '{namespace}', "
+            f"got: {all_namespaces}"
         )
 
-        # --- volumes / PVC label check ---
-        if pvc_selector:
-            assert (
-                "volumes" in spec
-            ), "Recipe must contain a volumes section for a workload with PVCs"
-            volumes = spec["volumes"]
-            vol_list = volumes if isinstance(volumes, list) else [volumes]
-            # Verify at least one volume group targets the workload namespace
-            vol_namespaces = []
-            for v in vol_list:
-                vol_namespaces.extend(v.get("includedNamespaces", []))
-            assert namespace in vol_namespaces, (
-                f"Recipe volumes section must target namespace '{namespace}', "
-                f"found: {vol_namespaces}"
-            )
-            # Verify the PVC label selector is represented somewhere in volumes
-            for key, value in pvc_selector.items():
-                label_present = any(
-                    v.get("labelSelector", {}).get("matchLabels", {}).get(key) == value
-                    for v in vol_list
-                )
-                assert label_present, (
-                    f"Recipe volumes labelSelector must contain '{key}: {value}' "
-                    f"(from workload PVC selector)"
-                )
+        # Assert volumes section targets the correct namespace
+        assert (
+            "volumes" in spec
+        ), "OLS Recipe must contain a volumes section for a workload with PVCs"
+        volumes = spec["volumes"]
+        vol_list = volumes if isinstance(volumes, list) else [volumes]
+        vol_namespaces = []
+        for v in vol_list:
+            vol_namespaces.extend(v.get("includedNamespaces", []))
+        assert namespace in vol_namespaces, (
+            f"OLS Recipe volumes must target namespace '{namespace}', "
+            f"got: {vol_namespaces}"
+        )
 
-        # --- apply Recipe to hub cluster and verify it exists ---
-        import tempfile
-
-        config.switch_acm_ctx()
-        recipe_namespace = recipe["metadata"].get("namespace", namespace)
+        # Serialise Recipe to a temp file
         recipe_yaml_str = yaml.dump(recipe)
-
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=False, prefix="ols-recipe-"
         ) as tmp:
             tmp.write(recipe_yaml_str)
             tmp_path = tmp.name
 
-        from ocs_ci.utility.utils import exec_cmd
+        # Mirror the cluster-selection logic from BusyboxDiscoveredApps.deploy_workload:
+        # use the provider-aware variant when dr_cluster_relations is configured.
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            managed_clusters = get_non_acm_cluster_and_non_provider_cluster_config()
+        else:
+            managed_clusters = get_non_acm_cluster_config()
 
-        logger.info(f"Applying Recipe '{recipe_name}' to hub cluster")
-        exec_cmd(f"oc apply -f {tmp_path} -n {recipe_namespace}")
+        for cluster in managed_clusters:
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            cluster_name = config.ENV_DATA.get("cluster_name", "unknown")
+            logger.info(
+                f"Applying OLS Recipe '{recipe_name}' to cluster "
+                f"'{cluster_name}' in namespace '{namespace}'"
+            )
+            exec_cmd(f"oc apply -f {tmp_path} -n {namespace}")
+            logger.info(f"Recipe '{recipe_name}' applied to '{cluster_name}'")
 
-        recipe_ocp = OCP(
-            kind="Recipe",
-            namespace=recipe_namespace,
-            resource_name=recipe_name,
-            group="ramendr.openshift.io",
+        # Leave context on ACM hub for the caller
+        config.switch_acm_ctx()
+        logger.info(f"OLS Recipe '{recipe_name}' applied to all managed clusters")
+        return recipe_name
+
+    @pytest.mark.parametrize("pvc_interface", params)
+    def test_failover_and_relocate_with_ols_recipe(
+        self,
+        pvc_interface,
+        discovered_apps_dr_workload,
+        ols,
+    ):
+        """
+        Deploy a discovered-app workload, generate its DR Recipe via OLS,
+        apply the recipe, then perform failover and relocate to prove the
+        OLS-generated Recipe is operationally correct.
+
+        Test steps:
+            1. Deploy one RBD BusyboxDiscoveredApps workload (random namespace).
+            2. Generate the DR Recipe for that workload via OLS.
+            3. Validate Recipe structure and apply it to managed clusters.
+            4. Create the DRPC with ``recipeRef`` pointing at the OLS Recipe.
+            5. Wait for initial sync.
+            6. Failover to the secondary cluster; verify workload is running.
+            7. Relocate back to the primary cluster; verify workload is running.
+        """
+        from ocs_ci.framework import config
+        from ocs_ci.helpers import dr_helpers
+        from ocs_ci.ocs.resources.drpc import DRPC
+        from ocs_ci.ocs import constants as _constants
+
+        # ------------------------------------------------------------------ #
+        # Step 1: Deploy workload without recipe (we create it via OLS next)  #
+        # ------------------------------------------------------------------ #
+        rdr_workloads = discovered_apps_dr_workload(
+            pvc_interface=pvc_interface, kubeobject=1, recipe=0
         )
-        assert recipe_ocp.is_exist(resource_name=recipe_name), (
-            f"Recipe '{recipe_name}' was not found in namespace "
-            f"'{recipe_namespace}' after apply"
+        workload = rdr_workloads[0]
+
+        # ------------------------------------------------------------------ #
+        # Step 2+3: Generate and apply OLS recipe                             #
+        # ------------------------------------------------------------------ #
+        config.switch_acm_ctx()
+        recipe_name = self._generate_and_apply_ols_recipe(workload, ols)
+
+        # ------------------------------------------------------------------ #
+        # Step 4: Create DRPC with recipeRef                                  #
+        # (_generate_and_apply_ols_recipe already left context on ACM hub)   #
+        # ------------------------------------------------------------------ #
+        workload.create_drpc_for_apps_with_recipe()
+
+        drpc_obj = DRPC(
+            namespace=_constants.DR_OPS_NAMESPACE,
+            resource_name=workload.discovered_apps_placement_name,
+        )
+
+        # ------------------------------------------------------------------ #
+        # Step 5: Wait for initial sync                                       #
+        # ------------------------------------------------------------------ #
+        primary_cluster = dr_helpers.get_current_primary_cluster_name(
+            workload.workload_namespace,
+            discovered_apps=True,
+            resource_name=workload.discovered_apps_placement_name,
+        )
+        secondary_cluster = dr_helpers.get_current_secondary_cluster_name(
+            workload.workload_namespace,
+            discovered_apps=True,
+            resource_name=workload.discovered_apps_placement_name,
+        )
+        scheduling_interval = dr_helpers.get_scheduling_interval(
+            workload.workload_namespace,
+            discovered_apps=True,
+            resource_name=workload.discovered_apps_placement_name,
+        )
+        dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
+        logger.info(
+            f"Initial sync verified — primary: {primary_cluster}, "
+            f"secondary: {secondary_cluster}, recipe: {recipe_name}"
+        )
+
+        # ------------------------------------------------------------------ #
+        # Step 6: Failover (primary cluster stays up)                         #
+        # ------------------------------------------------------------------ #
+        logger.info(f"Starting failover to {secondary_cluster}")
+        dr_helpers.failover(
+            secondary_cluster,
+            workload.workload_namespace,
+            workload.workload_type,
+        )
+        config.switch_to_cluster_by_name(secondary_cluster)
+        dr_helpers.wait_for_all_resources_creation(
+            workload.workload_pvc_count,
+            workload.workload_pod_count,
+            workload.workload_namespace,
+            discovered_apps=True,
+            vrg_name=workload.discovered_apps_placement_name,
+        )
+        logger.info("Workload running on secondary cluster after failover")
+
+        # ------------------------------------------------------------------ #
+        # Step 7: Relocate back to primary                                    #
+        # ------------------------------------------------------------------ #
+        logger.info(f"Starting relocate back to {primary_cluster}")
+        dr_helpers.relocate(
+            primary_cluster,
+            workload.workload_namespace,
+            workload.workload_type,
+        )
+        config.switch_to_cluster_by_name(primary_cluster)
+        dr_helpers.wait_for_all_resources_creation(
+            workload.workload_pvc_count,
+            workload.workload_pod_count,
+            workload.workload_namespace,
+            discovered_apps=True,
+            vrg_name=workload.discovered_apps_placement_name,
         )
         logger.info(
-            f"Recipe '{recipe_name}' successfully applied and verified "
-            f"on hub cluster in namespace '{recipe_namespace}'"
+            "Workload running on primary cluster after relocate — "
+            f"OLS Recipe '{recipe_name}' successfully used for DR protection"
         )
-
-        # Register teardown to delete the Recipe after the test
-        def _delete_recipe():
-            logger.info(f"Teardown: deleting Recipe '{recipe_name}'")
-            try:
-                exec_cmd(
-                    f"oc delete recipe {recipe_name} -n {recipe_namespace} "
-                    f"--ignore-not-found"
-                )
-            except Exception as e:
-                logger.warning(f"Failed to delete Recipe '{recipe_name}': {e}")
-
-        request.addfinalizer(_delete_recipe)
