@@ -528,6 +528,10 @@ def _resolve_image_through_itms(image):
     the source with the mirror URL so it is pullable from spoke clusters
     that lack ITMS support (e.g. HyperShift hosted clusters).
 
+    Prefer ``fdf_pre_release_registry`` / ``cp.stg.icr.io`` over the first
+    ITMS mirror. The first entry is often ``preprod.icr.io``, which may not
+    publish unreleased tags (manifest unknown), while staging does.
+
     Args:
         image (str): Original image reference (e.g. icr.io/cpopen/catalog:v4.21)
 
@@ -542,14 +546,35 @@ def _resolve_image_through_itms(image):
         logger.debug("No ImageTagMirrorSet resources found on management cluster")
         return image
 
+    fdf_pre_release_registry = config.DEPLOYMENT.get("fdf_pre_release_registry") or ""
+    preferred_registry = fdf_pre_release_registry.rstrip("/")
+
     for itms in itms_list.get("items", []):
         for entry in itms.get("spec", {}).get("imageTagMirrors", []):
             source = entry.get("source", "")
             mirrors = entry.get("mirrors", [])
-            if source and mirrors and image.startswith(source):
-                resolved = image.replace(source, mirrors[0], 1)
-                logger.info(f"Resolved image through ITMS: {image} -> {resolved}")
-                return resolved
+            if not (source and mirrors and image.startswith(source)):
+                continue
+
+            chosen_mirror = None
+            if preferred_registry:
+                for mirror in mirrors:
+                    if mirror == preferred_registry or mirror.startswith(
+                        preferred_registry + "/"
+                    ):
+                        chosen_mirror = mirror
+                        break
+            if not chosen_mirror:
+                for mirror in mirrors:
+                    if "cp.stg.icr.io" in mirror:
+                        chosen_mirror = mirror
+                        break
+            if not chosen_mirror:
+                chosen_mirror = mirrors[0]
+
+            resolved = image.replace(source, chosen_mirror, 1)
+            logger.info("Resolved image through ITMS: %s -> %s", image, resolved)
+            return resolved
     return image
 
 
