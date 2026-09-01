@@ -1,6 +1,4 @@
 import logging
-import re
-import time
 
 import pytest
 
@@ -87,60 +85,39 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         vm_obj.removevolume(volume_name=pvc.name, persist=True, verify=True)
         logger.info(f"PVC '{pvc.name}' unplugged and verified for VM '{vm_obj.name}'")
 
-    def _wait_for_disk_gone_in_guest(
-        self, vm_obj, known_disks_after_unplug, timeout=120, settle_time=15
-    ):
+    def _restart_and_get_disk_baseline(self, vm_obj):
         """
-        Polls lsblk inside the guest until the disk set stabilises at exactly the
-        expected post-unplug baseline (i.e. no extra block device remains visible),
-        then waits an additional settle period for virt-launcher to fully quiesce its
-        internal SCSI bus state.
+        Restarts the VM and returns a fresh lsblk baseline after it comes back up.
 
-        Two separate races are guarded here:
-        1. removevolume() clears the kubevirt spec but QEMU/virt-launcher still holds
-           the virtio-scsi slot open for several seconds, causing a subsequent
-           addvolume call to be silently dropped inside the guest.
-        2. The virtio-scsi slot is gone from lsblk but virt-launcher's internal device
-           tracking has not yet processed the removal acknowledgement from QEMU, so a
-           new addvolume notification is issued before virt-launcher is ready to handle
-           it and is silently ignored.
+        After a VM has been rebooted with a persisted hotplug volume and that volume
+        is then unplugged (persist=True), the virt-launcher/QEMU process still has
+        the virtio-scsi bus address reserved for the removed device.  Any subsequent
+        addvolume call for a different PVC silently fails because the SCSI slot appears
+        occupied to QEMU.
+
+        Restarting the VM forces virt-launcher to spawn a fresh QEMU process with a
+        clean virtio-scsi controller, so the next addvolume correctly claims the free
+        slot and surfaces in the guest.
 
         Args:
-            vm_obj: The VM object.
-            known_disks_after_unplug (set): Disk names visible right after unplug
-                (used as the stable baseline to wait for).
-            timeout (int): Maximum seconds to wait for the disk to disappear from lsblk.
-            settle_time (int): Additional seconds to sleep after the disk is confirmed
-                gone, allowing virt-launcher to fully acknowledge the removal at the
-                QEMU level before the next addvolume call is issued.
+            vm_obj: The VM object to restart.
+
+        Returns:
+            str: Raw output of 'lsblk -o NAME,SIZE,MOUNTPOINT -P' captured after the
+                 VM is back up and SSH is available — ready to use as the
+                 disks_before_hotplug baseline for verify_hotplug().
         """
-
-        def _disks_match():
-            raw = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
-            current = set(re.findall(r'NAME="([^"]+)"', raw))
-            extra = current - known_disks_after_unplug
-            if extra:
-                logger.info(
-                    f"Waiting for guest disk slot to clear on '{vm_obj.name}': "
-                    f"extra devices still visible: {extra}"
-                )
-                return False
-            return True
-
-        sample = TimeoutSampler(
-            timeout=timeout,
-            sleep=5,
-            func=_disks_match,
-        )
-        sample.wait_for_func_value(value=True)
         logger.info(
-            f"Guest disk slot cleared in lsblk on '{vm_obj.name}'; "
-            f"waiting {settle_time}s for virt-launcher to quiesce before next hotplug."
+            f"Restarting VM '{vm_obj.name}' to reset virtio-scsi bus after unplug "
+            f"before attaching clone"
         )
-        time.sleep(settle_time)
+        vm_obj.restart()
         logger.info(
-            f"Settle period complete on '{vm_obj.name}'; safe to hotplug next volume."
+            f"VM '{vm_obj.name}' restarted successfully; capturing disk baseline"
         )
+        baseline = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
+        logger.info(f"Disk baseline on VM '{vm_obj.name}' after restart:\n{baseline}")
+        return baseline
 
     def test_vm_hotpl_unplg_snap_clone(
         self,
@@ -269,47 +246,29 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 f"'{dvt_obj.name}' -> '{clone_obj_dvt.name}'"
             )
 
-            # Unplug the original hotplugged PVCs before cross-attaching clones.
-            # kubevirt/virt-launcher cannot reliably surface a second concurrent
-            # hotplugged block device inside the guest without freeing the slot first.
+            # Unplug the original hotplugged PVCs from each VM.
+            # After the earlier reboot with persist=True, virt-launcher's QEMU process
+            # has the virtio-scsi slot permanently reserved for the original PVC.
+            # A simple removevolume() only clears the kubevirt spec; the SCSI address
+            # remains occupied inside QEMU and any subsequent addvolume for the clone
+            # is silently dropped.  Restarting the VM forces a fresh QEMU process with
+            # a clean virtio-scsi controller so the clone hotplug succeeds.
             logger.info(
                 f"Unplugging original PVC '{pvc_obj.name}' from VM '{vm_obj_pvc.name}' "
                 f"before attaching clone"
             )
             self.unplug_disks_and_verify(vm_obj_pvc, pvc_obj)
-            # Capture the post-unplug baseline disk set.  Then poll lsblk until
-            # the guest confirms no extra block device remains: removevolume()
-            # only clears the kubevirt spec; QEMU/virt-launcher may still hold
-            # the virtio-scsi slot open for several seconds afterwards, causing a
-            # subsequent addvolume event to be silently dropped inside the guest.
-            before_disks_pvc_raw = vm_obj_pvc.run_ssh_cmd(
-                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
-            )
-            before_disks_pvc = before_disks_pvc_raw
-            logger.info(
-                f"Disk state on VM '{vm_obj_pvc.name}' after unplug (used as "
-                f"baseline for clone hotplug detection):\n{before_disks_pvc}"
-            )
-            baseline_set_pvc = set(re.findall(r'NAME="([^"]+)"', before_disks_pvc_raw))
-            self._wait_for_disk_gone_in_guest(vm_obj_pvc, baseline_set_pvc)
+            before_disks_pvc = self._restart_and_get_disk_baseline(vm_obj_pvc)
 
             logger.info(
                 f"Unplugging original PVC '{dvt_obj.name}' from VM '{vm_obj_dvt.name}' "
                 f"before attaching clone"
             )
             self.unplug_disks_and_verify(vm_obj_dvt, dvt_obj)
-            before_disks_dvt_raw = vm_obj_dvt.run_ssh_cmd(
-                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
-            )
-            before_disks_dvt = before_disks_dvt_raw
-            logger.info(
-                f"Disk state on VM '{vm_obj_dvt.name}' after unplug (used as "
-                f"baseline for clone hotplug detection):\n{before_disks_dvt}"
-            )
-            baseline_set_dvt = set(re.findall(r'NAME="([^"]+)"', before_disks_dvt_raw))
-            self._wait_for_disk_gone_in_guest(vm_obj_dvt, baseline_set_dvt)
+            before_disks_dvt = self._restart_and_get_disk_baseline(vm_obj_dvt)
 
-            # Attach clones to opposite VMs (now the only hotplugged device on each)
+            # Attach clones to opposite VMs — each VM now has a fresh QEMU process
+            # with no previously hotplugged devices, so addvolume will succeed.
             logger.info(
                 f"Attaching clone '{clone_obj_dvt.name}' to VM '{vm_obj_pvc.name}'"
             )
