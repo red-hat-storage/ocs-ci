@@ -41,7 +41,7 @@ POST_ROTATION_PVC_SIZE = 5
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @green_squad
 class TestCephXKeyRotation:
     @pytest.mark.polarion_id("OCS-8128")
@@ -388,7 +388,7 @@ class TestCephXKeyRotation:
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @green_squad
 class TestCephXKeyRotationIdempotency:
     @pytest.mark.polarion_id("OCS-8131")
@@ -463,7 +463,7 @@ class TestCephXKeyRotationIdempotency:
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @green_squad
 class TestCephXKeyRotationIOContinuity:
     @pytest.mark.polarion_id("OCS-8132")

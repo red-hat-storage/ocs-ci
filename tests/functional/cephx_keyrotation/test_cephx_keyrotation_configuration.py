@@ -28,7 +28,7 @@ EXPECTED_INITIAL_GENERATION = 2
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @skipif_ibm_hci_platform
 @green_squad
 @pytest.mark.order("first")
@@ -110,7 +110,7 @@ class TestCephXKeyRotationPolicyDisabled:
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @skipif_ibm_hci_platform
 @green_squad
 class TestCephXAllowedCiphers:

@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 
 @skipif_external_mode
-@skipif_ocs_version(["<4.21", ">=4.23"])
+@skipif_ocs_version("<4.21")
 @green_squad
 class TestCephXMetricsExporterRotation:
     @pytest.mark.polarion_id("OCS-8136")
