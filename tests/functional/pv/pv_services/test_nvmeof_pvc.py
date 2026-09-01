@@ -44,7 +44,7 @@ class TestNvmeofPvc(ManageTest):
             f"NVMe-oF StorageClass {constants.CEPH_NVMEOF_SC} does not exist. "
             "Ensure the StorageCluster was deployed with nvmeof enabled."
         )
-        logger.info("NVMe-oF StorageClass %s exists", constants.CEPH_NVMEOF_SC)
+        logger.assertion("NVMe-oF StorageClass %s exists", constants.CEPH_NVMEOF_SC)
 
         # NVMe-oF Gateway pods must be deployed and healthy
         gateway_pods = pod.get_pods_having_label(
@@ -59,7 +59,7 @@ class TestNvmeofPvc(ManageTest):
         assert pod.wait_for_pods_to_be_running(
             namespace=namespace, pod_names=gateway_pod_names, timeout=300
         ), "NVMe-oF Gateway pods are not in Running state"
-        logger.info("All NVMe-oF Gateway pods are healthy (Running)")
+        logger.assertion("All NVMe-oF Gateway pods are healthy (Running)")
 
     @pytest.fixture()
     def nvmeof_storageclass(self):
@@ -95,8 +95,8 @@ class TestNvmeofPvc(ManageTest):
 
         """
         # Step 1: Create a RWO PVC using the NVMe-oF StorageClass
-        logger.info(
-            "Creating a RWO PVC using StorageClass %s", constants.CEPH_NVMEOF_SC
+        logger.test_step(
+            "Create a RWO PVC using StorageClass %s", constants.CEPH_NVMEOF_SC
         )
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
@@ -105,7 +105,7 @@ class TestNvmeofPvc(ManageTest):
             access_mode=constants.ACCESS_MODE_RWO,
             status=constants.STATUS_BOUND,
         )
-        logger.info("PVC %s reached Bound state", pvc_obj.name)
+        logger.assertion("PVC %s reached Bound state", pvc_obj.name)
 
         # Capture PV details and reclaim policy before deletion
         pv_obj = pvc_obj.backed_pv_obj
@@ -119,6 +119,10 @@ class TestNvmeofPvc(ManageTest):
         )
 
         # Step 2: Create a pod mounting the PVC, run IO and verify data integrity
+        logger.test_step(
+            "Create a pod mounting PVC %s, run IO and verify data integrity",
+            pvc_obj.name,
+        )
         pod_obj = pod_factory(
             interface=constants.CEPHBLOCKPOOL,
             pvc=pvc_obj,
@@ -144,14 +148,13 @@ class TestNvmeofPvc(ManageTest):
 
         # Calculate md5sum of the written file and verify data integrity on re-read
         original_md5sum = pod.cal_md5sum(pod_obj, file_name)
-        logger.info("Verifying data integrity on pod %s", pod_obj.name)
         assert pod.verify_data_integrity(
             pod_obj, file_name, original_md5sum
         ), f"Data integrity check failed for file {file_name} on pod {pod_obj.name}"
-        logger.info("Data integrity verified on pod %s", pod_obj.name)
+        logger.assertion("Data integrity verified on pod %s", pod_obj.name)
 
         # Step 3: Delete the pod, then the PVC
-        logger.info("Deleting pod %s", pod_obj.name)
+        logger.test_step("Delete pod %s and PVC %s", pod_obj.name, pvc_obj.name)
         pod_obj.delete()
         pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
 
@@ -160,18 +163,19 @@ class TestNvmeofPvc(ManageTest):
         pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
 
         # Step 4: Verify the PV is reclaimed according to its reclaim policy
+        logger.test_step(
+            "Verify PV %s is reclaimed according to its %s reclaim policy",
+            pv_name,
+            reclaim_policy,
+        )
         if reclaim_policy == constants.RECLAIM_POLICY_DELETE:
-            logger.info("Reclaim policy is Delete, verifying PV %s is deleted", pv_name)
             pv_obj.ocp.wait_for_delete(resource_name=pv_name, timeout=180)
-            logger.info("PV %s deleted as per Delete reclaim policy", pv_name)
+            logger.assertion("PV %s deleted as per Delete reclaim policy", pv_name)
         elif reclaim_policy == constants.RECLAIM_POLICY_RETAIN:
-            logger.info(
-                "Reclaim policy is Retain, verifying PV %s is Released", pv_name
-            )
             helpers.wait_for_resource_state(
                 pv_obj, constants.STATUS_RELEASED, timeout=180
             )
-            logger.info("PV %s is Released as per Retain reclaim policy", pv_name)
+            logger.assertion("PV %s is Released as per Retain reclaim policy", pv_name)
             # Cleanup the retained PV so no leftovers remain. Switch the reclaim
             # policy to Delete so the controller removes the backing volume too,
             # then wait for controller-driven deletion (pvc_factory_fixture pattern).
