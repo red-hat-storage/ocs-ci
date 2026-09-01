@@ -11,7 +11,9 @@ Reference:
     https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html-single/operate/index
 """
 
+import base64
 import logging
+import time
 
 import requests
 import urllib3
@@ -63,13 +65,21 @@ class OpenShiftLightspeed:
     """
 
     # (connect_timeout, read_timeout) in seconds for every OLS HTTP call.
-    # LLM responses can be slow (60–120 s) — read timeout is generous but
-    # bounded so a hung route cannot block the test runner indefinitely.
-    _REQUEST_TIMEOUT = (10, 180)
+    # LLM responses can be slow (60–180 s) depending on model and prompt size;
+    # read timeout is generous but bounded so a hung route cannot block the
+    # test runner indefinitely.
+    _REQUEST_TIMEOUT = (10, 300)
 
     def __init__(self, namespace=None, route_name=None, verify_tls=False):
         """
         Initialize the OLS client.
+
+        On construction, :meth:`ensure_working_model` is called automatically:
+        it reads the live OLSConfig, probes each model in the provider's
+        ``models`` list via the LiteMaaS ``/v1/models`` endpoint, and patches
+        ``spec.ols.defaultModel`` to the first healthy model if the current
+        default is unavailable.  This means tests never need to manually
+        switch models after a LiteMaaS outage.
 
         Args:
             namespace (str): Namespace where OLS is installed.
@@ -84,6 +94,127 @@ class OpenShiftLightspeed:
         self.verify_tls = verify_tls
         self._token = None
         self._base_url = None
+        self.ensure_working_model()
+
+    def ensure_working_model(self):
+        """
+        Auto-failover: read the live OLSConfig and switch ``defaultModel`` to
+        the first healthy model if the current default is unavailable.
+
+        Steps:
+        1. Read ``spec.llm.providers[0]`` from the OLSConfig CR.
+        2. Probe each model by sending a minimal ``/v1/chat/completions``
+           request to the provider URL using the token from the OLS Secret.
+        3. If the current ``defaultModel`` is unhealthy (non-2xx response) and
+           a healthy alternative is found in the ``models`` list, patch the
+           OLSConfig CR to set the new ``defaultModel``.
+
+        Failures are non-fatal: if the OLSConfig cannot be read or all models
+        fail the probe, a warning is logged and the method returns silently so
+        that the normal ``is_authorized()`` / ``query()`` call flow can surface
+        the real error to the test.
+        """
+        try:
+            olsconfig_ocp = OCP(
+                kind="OLSConfig",
+                namespace=self.namespace,
+                resource_name="cluster",
+            )
+            olsconfig = olsconfig_ocp.get()
+        except Exception as exc:
+            logger.warning(f"ensure_working_model: could not read OLSConfig: {exc}")
+            return
+
+        try:
+            provider = olsconfig["spec"]["llm"]["providers"][0]
+            provider_url = provider.get("url", "")
+            secret_name = provider["credentialsSecretRef"]["name"]
+            models = [m["name"] for m in provider.get("models", [])]
+            current_default = olsconfig["spec"]["ols"].get("defaultModel", "")
+            provider_name = olsconfig["spec"]["ols"].get("defaultProvider", "")
+        except (KeyError, IndexError) as exc:
+            logger.warning(f"ensure_working_model: unexpected OLSConfig shape: {exc}")
+            return
+
+        if not models or not provider_url:
+            logger.warning(
+                "ensure_working_model: no models or provider URL in OLSConfig"
+            )
+            return
+
+        # Read the API token from the OLS Secret
+        try:
+            secret_ocp = OCP(kind="Secret", namespace=self.namespace)
+            secret = secret_ocp.get(resource_name=secret_name)
+            api_token = base64.b64decode(secret["data"].get("apitoken", "")).decode()
+        except Exception as exc:
+            logger.warning(
+                f"ensure_working_model: could not read Secret '{secret_name}': {exc}"
+            )
+            return
+
+        # Probe each model — send a tiny chat request directly to the provider
+        def _probe(model_name):
+            try:
+                resp = requests.post(
+                    f"{provider_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_token}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model_name,
+                        "messages": [{"role": "user", "content": "ping"}],
+                        "max_tokens": 1,
+                    },
+                    verify=self.verify_tls,
+                    timeout=(10, 30),
+                )
+                return resp.status_code < 500
+            except Exception:
+                return False
+
+        # Check if the current default is healthy
+        if _probe(current_default):
+            logger.info(
+                f"ensure_working_model: default model '{current_default}' is healthy"
+            )
+            return
+
+        logger.warning(
+            f"ensure_working_model: default model '{current_default}' is unhealthy — "
+            "probing fallback models"
+        )
+
+        # Find the first healthy alternative
+        for model in models:
+            if model == current_default:
+                continue
+            if _probe(model):
+                logger.warning(
+                    f"ensure_working_model: switching defaultModel "
+                    f"'{current_default}' → '{model}'"
+                )
+                try:
+                    olsconfig_ocp.patch(
+                        resource_name="cluster",
+                        params={"spec": {"ols": {"defaultModel": model}}},
+                        format_type="merge",
+                    )
+                    logger.info(
+                        f"ensure_working_model: OLSConfig patched — "
+                        f"defaultModel is now '{model}' (provider: {provider_name})"
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"ensure_working_model: failed to patch OLSConfig: {exc}"
+                    )
+                return
+
+        logger.warning(
+            "ensure_working_model: all models are unhealthy — "
+            "proceeding anyway, queries will likely fail"
+        )
 
     def _ensure_test_sa(self):
         """
@@ -242,9 +373,16 @@ class OpenShiftLightspeed:
         provider=None,
         model=None,
         attachments=None,
+        max_retries=3,
+        retry_backoff=15,
     ):
         """
         Send a question to the OLS service (``POST /v1/query``).
+
+        Transient 5xx errors and read timeouts from the LLM backend are
+        retried automatically up to ``max_retries`` times with a
+        ``retry_backoff``-second pause between attempts.  4xx errors are
+        never retried (they indicate a bad request).
 
         Args:
             query_text (str): The question or prompt to send.
@@ -256,9 +394,11 @@ class OpenShiftLightspeed:
             model (str): Optional model name to override the OLSConfig
                 default.
             attachments (list): Optional list of attachment dicts, each
-                containing ``content_type`` and ``content`` keys.  Use
-                ``text/plain`` for logs and ``application/yaml`` for
-                Kubernetes resource manifests.
+                containing ``attachment_type``, ``content_type`` and
+                ``content`` keys.
+            max_retries (int): Maximum number of retry attempts on 5xx /
+                timeout (default 3).
+            retry_backoff (int): Seconds to wait between retries (default 15).
 
         Returns:
             dict: Parsed JSON response from OLS, typically containing a
@@ -266,7 +406,9 @@ class OpenShiftLightspeed:
                 ``conversation_id`` key.
 
         Raises:
-            requests.HTTPError: On HTTP 4xx/5xx responses.
+            requests.HTTPError: On HTTP 4xx responses or when all retries
+                are exhausted on 5xx responses.
+            requests.ReadTimeout: When all retries are exhausted on timeouts.
         """
         url = f"{self.base_url}/v1/query"
         payload = {"query": query_text}
@@ -279,20 +421,57 @@ class OpenShiftLightspeed:
         if attachments:
             payload["attachments"] = attachments
 
-        logger.info(f"Sending OLS query: {query_text[:120]!r}...")
-        response = requests.post(
-            url,
-            json=payload,
-            headers=self._headers(),
-            verify=self.verify_tls,
-            timeout=self._REQUEST_TIMEOUT,
-        )
+        last_exc = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(
+                    f"Sending OLS query (attempt {attempt}/{max_retries}): "
+                    f"{query_text[:120]!r}..."
+                )
+                response = requests.post(
+                    url,
+                    json=payload,
+                    headers=self._headers(),
+                    verify=self.verify_tls,
+                    timeout=self._REQUEST_TIMEOUT,
+                )
+            except requests.Timeout as exc:
+                last_exc = exc
+                logger.warning(
+                    f"OLS query timed out (attempt {attempt}/{max_retries}): {exc}"
+                )
+                if attempt < max_retries:
+                    time.sleep(retry_backoff)
+                continue
+
+            if not response.ok:
+                logger.error(
+                    f"OLS query failed — HTTP {response.status_code} "
+                    f"(attempt {attempt}/{max_retries}): {response.text[:2000]}"
+                )
+                # 4xx = bad request, no point retrying
+                if response.status_code < 500:
+                    response.raise_for_status()
+                last_exc = None
+                if attempt < max_retries:
+                    logger.info(f"Retrying in {retry_backoff}s...")
+                    time.sleep(retry_backoff)
+                    # Re-mint token in case it expired during the backoff
+                    self._token = None
+                    continue
+                response.raise_for_status()
+
+            result = response.json()
+            logger.info(
+                f"OLS response received "
+                f"(conversation_id={result.get('conversation_id')})"
+            )
+            return result
+
+        # All retries exhausted — re-raise the last timeout exception if any
+        if last_exc:
+            raise last_exc
         response.raise_for_status()
-        result = response.json()
-        logger.info(
-            f"OLS response received (conversation_id={result.get('conversation_id')})"
-        )
-        return result
 
     def list_conversations(self):
         """

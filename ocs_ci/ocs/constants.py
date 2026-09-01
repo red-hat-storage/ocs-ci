@@ -3850,7 +3850,8 @@ OLS_TEST_SA_NAME = "ols-test-user"
 OLS_DEFAULT_PROVIDER_NAME = "rhoai-qwen"
 OLS_DEFAULT_PROVIDER_TYPE = "rhoai_vllm"
 OLS_DEFAULT_PROVIDER_URL = "https://litemaas.rhoai.rh-aiservices-bu.com/v1"
-OLS_DEFAULT_MODEL_NAME = "Qwen3.6-35B-A3B"
+OLS_DEFAULT_MODEL_NAME = "Qwen3.8-27B"
+OLS_DEFAULT_FALLBACK_MODEL_NAME = "Qwen3.6-35B-A3B"
 OLS_DEFAULT_SECRET_NAME = "qwen-creds"
 
 # Paths to OLS deployment YAML templates

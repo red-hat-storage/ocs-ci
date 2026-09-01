@@ -5237,6 +5237,10 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                     secret_name=secret_name,
                     api_token=api_token,
                     rag_images=config.ENV_DATA.get("ols_rag_images"),
+                    fallback_model_name=config.ENV_DATA.get(
+                        "ols_fallback_model_name",
+                        constants.OLS_DEFAULT_FALLBACK_MODEL_NAME,
+                    ),
                     username=config.ENV_DATA.get("ols_grant_user"),
                     service_account=config.ENV_DATA.get("ols_grant_sa"),
                     sa_namespace=config.ENV_DATA.get("ols_grant_sa_namespace"),
