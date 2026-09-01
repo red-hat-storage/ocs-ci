@@ -67,17 +67,19 @@ class TestVirtualMachineLifecycle(ManageTest):
 
         Steps:
         1. Check via CLI if any filesystem exists in ibm-spectrum-scale.
-           If none found, skip to step 2.  If found, delete it via CLI.
-        2. Wait 60 s then delete the LocalDisk associated with the LUN group
-           from the CLI.
-        3. Wait 60 s then delete the IBM Spectrum Scale cluster resource.
+           - If not found (already cleaned up by UI in test_clone_virtualmachine),
+             skip gracefully to step 2.
+           - If found: patch out finalizers first, then delete, then poll until gone.
+        2. Delete the LocalDisk associated with the LUN group from the CLI.
+        3. Poll until all LocalDisks are gone, then delete the IBM Spectrum Scale
+           cluster resource.
         """
 
         def cleanup():
 
             logger.info("teardown_lungroup: starting class-level cleanup")
 
-            # Step 1 — Check filesystem exists and delete via CLI
+            # Step 1 — Patch finalizers and delete filesystem if it still exists
             lungroup_name = None
             try:
                 ocp_fs = OCP(
@@ -92,7 +94,7 @@ class TestVirtualMachineLifecycle(ManageTest):
                 if not fs_out or not fs_out.strip():
                     logger.info(
                         f"No {constants.IBM_STORAGE_SCALE_FILESYSTEM} found in "
-                        f"{constants.IBM_STORAGE_SCALE_NAMESPACE} — skipping LUN group deletion"
+                        f"{constants.IBM_STORAGE_SCALE_NAMESPACE} — skipping filesystem deletion"
                     )
                 else:
                     for line in fs_out.splitlines():
@@ -101,12 +103,44 @@ class TestVirtualMachineLifecycle(ManageTest):
                             lungroup_name = line.split()[0]
                             break
                     if lungroup_name:
-                        ocp_fs.exec_oc_cmd(
-                            f"delete {constants.IBM_STORAGE_SCALE_FILESYSTEM} {lungroup_name}"
-                            f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
-                            out_yaml_format=False,
+                        logger.info(
+                            f"Patching finalizers on filesystem '{lungroup_name}'..."
                         )
-                        logger.info(f"Deleted filesystem '{lungroup_name}' via CLI")
+                        try:
+                            ocp_fs.exec_oc_cmd(
+                                f"patch {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
+                                f" {lungroup_name}"
+                                f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+                                " --type=merge -p "
+                                '\'{"metadata":{"finalizers":null}}\'',
+                                out_yaml_format=False,
+                            )
+                            logger.info(
+                                f"Finalizers removed from filesystem '{lungroup_name}'"
+                            )
+                        except CommandFailed as patch_err:
+                            logger.warning(
+                                f"Could not patch finalizers on filesystem"
+                                f" '{lungroup_name}' (may already be gone): {patch_err}"
+                            )
+
+                        # Delete the filesystem
+                        try:
+                            ocp_fs.exec_oc_cmd(
+                                f"delete {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
+                                f" {lungroup_name}"
+                                f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+                                f" --ignore-not-found",
+                                out_yaml_format=False,
+                            )
+                            logger.info(
+                                f"Delete issued for filesystem '{lungroup_name}'"
+                            )
+                        except CommandFailed as del_err:
+                            logger.warning(
+                                f"Could not delete filesystem '{lungroup_name}': {del_err}"
+                            )
+
                         logger.info(
                             f"Waiting for filesystem '{lungroup_name}' to disappear..."
                         )
@@ -126,7 +160,7 @@ class TestVirtualMachineLifecycle(ManageTest):
                                 logger.info(f"Filesystem '{lungroup_name}' is gone")
                                 break
             except CommandFailed as e:
-                logger.warning(f"Could not delete filesystem via CLI: {e}")
+                logger.warning(f"Could not process filesystem cleanup: {e}")
 
             # Step 2 — Delete LocalDisk from CLI
             if lungroup_name:

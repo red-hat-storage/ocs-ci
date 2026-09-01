@@ -4091,7 +4091,7 @@ virtualmachine = {
         By.XPATH,
     ),
     "add_volume_storageclass_vm_option": (
-        "//li[ends-with(@data-test-id,'-vm')]//button[@role='option']",
+        "//li[@data-test-id[substring(.,string-length(.)-2)='-vm']]//button[@role='option']",
         By.XPATH,
     ),
     "add_volume_preference_dropdown": (
