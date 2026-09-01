@@ -10,6 +10,7 @@ spec:
           name: PLACEHOLDER_SECRET_NAME
         models:
           - name: PLACEHOLDER_MODEL
+          - name: PLACEHOLDER_FALLBACK_MODEL
         name: PLACEHOLDER_PROVIDER_NAME
         type: PLACEHOLDER_PROVIDER_TYPE
         url: PLACEHOLDER_PROVIDER_URL
