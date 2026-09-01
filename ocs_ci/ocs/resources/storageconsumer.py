@@ -1118,7 +1118,15 @@ def check_consumer_rns(consumer_name, pool_list, rns_list):
 
     """
     log.info(f"Verifying Rados namespaces for consumer {consumer_name}")
-    excluded_pools = {"builtin-mgr", "ocs-storagecluster-cephnfs-builtin-pool"}
+    # Pools that do not get a per-consumer Rados namespace for remote clients.
+    # NVMeoF pools exist when NVMeoF is enabled on the provider, but consumer
+    # RNS is only created for ocs-storagecluster-cephblockpool.
+    excluded_pools = {
+        "builtin-mgr",
+        "builtin-nvmeof",
+        "ocs-storagecluster-cephnfs-builtin-pool",
+        "ocs-storagecluster-nvmeof",
+    }
     consumer_rns_valid = {}
 
     for pool in pool_list:
