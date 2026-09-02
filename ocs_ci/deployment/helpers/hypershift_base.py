@@ -611,12 +611,14 @@ class HyperShiftBase:
                 f"Using configured hcp_version: {raw_version} (branch release-{hcp_version})."
             )
 
+        hcp_branch_version = hcp_version.split("-")[0] if hcp_version else hcp_version
+
         logger.info("Downloading hcp binary from git")
 
         temp_dir = tempfile.mkdtemp()
 
         exec_cmd(
-            f"git clone --single-branch --branch release-{hcp_version} "
+            f"git clone --single-branch --branch release-{hcp_branch_version} "
             f"--depth 1 {constants.HCP_REPOSITORY} {temp_dir}"
         )
 
