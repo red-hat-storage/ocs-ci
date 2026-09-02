@@ -1,13 +1,15 @@
-from ocs_ci.ocs import constants
+import time
+
+from selenium.common.exceptions import TimeoutException
+from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ui.base_ui import logger, wait_for_element_to_be_clickable
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     DataFoundationDefaultTab,
 )
 from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
-from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs import ocp
-from selenium.common.exceptions import TimeoutException
 
 
 class ExternalSystems(ResourceList):
@@ -21,7 +23,7 @@ class ExternalSystems(ResourceList):
     """
 
     def __init__(self):
-        ResourceList.__init__(self)
+        super().__init__()
 
     def nav_to_external_storage_cluster(
         self, esc_name=constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
@@ -129,8 +131,8 @@ class ExternalSystems(ResourceList):
         self.do_click(locator=self.external_systems["connect_flash"])
         self.do_click(locator=self.external_systems["next_button"])
         logger.info("Fill in the required fields")
-        self.do_send_keys(self.external_systems[""], ip_address)
-        self.do_click(locator=self.external_systems[""])
+        self.do_send_keys(self.external_systems["ip_address_input"], ip_address)
+        self.do_click(locator=self.external_systems["next_button"])
 
     def connect_scale(
         self,
@@ -155,7 +157,7 @@ class ExternalSystems(ResourceList):
         self.connect_external_system()
         logger.info("Choose Scale option")
         self.do_click(locator=self.external_systems["connect_scale"])
-        self.do_click(locator=self.external_systems["next_button"])
+        self.do_click(locator=self.external_systems["scale_next_button"])
         logger.info("Fill in the required fields")
         self.do_send_keys(self.external_systems["scale_name"], system_name)
         self.do_send_keys(self.external_systems["mandatory_endpoit"], endpoint)
@@ -169,10 +171,48 @@ class ExternalSystems(ResourceList):
             locator=self.external_systems["connect_scale_final"], enable_screenshot=True
         )
         logger.info("Connect Scale button clicked")
-        self.wait_for_element_to_be_present(
-            locator=self.external_systems["breadcrumb-link"]
-        )
-        self.do_click(locator=self.external_systems["breadcrumb-link"])
+
+        # do_click only waits for the click itself, not for the server response.
+        # The breadcrumb is already present on the form page, so navigating away
+        # immediately would race the connection creation. Poll until the connect
+        # reaches a definitive state: either an error alert appears (failure), or
+        # the console navigates to the newly created system's dashboard
+        # (URL/link contains 'scale.spectrum.ibm', or the Connect button leaves
+        # the form) which confirms the connection was actually created.
+        connected = False
+        for _ in range(30):
+            if self.get_elements(self.external_systems["modal_error_alert"]):
+                error_msg = self.get_element_text(
+                    self.external_systems["modal_error_alert"]
+                )
+                raise CommandFailed(
+                    f"Failed to connect scale system '{system_name}': {error_msg}"
+                )
+            if "scale.spectrum.ibm" in self.driver.current_url or self.get_elements(
+                self.external_systems["scale_dashboard_link"]
+            ):
+                connected = True
+                break
+            # Connect button gone from the form also indicates the submit went through
+            if not self.get_elements(self.external_systems["connect_scale_final"]):
+                connected = True
+                break
+            time.sleep(2)
+
+        if not connected:
+            raise CommandFailed(
+                f"Scale system '{system_name}' was not created within the expected time."
+            )
+
+        # Navigate back to the External Systems list only after the connection
+        # is confirmed created.
+        if self.get_elements(self.external_systems["breadcrumb-link"]):
+            self.do_click(locator=self.external_systems["breadcrumb-link"])
+        else:
+            from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+
+            PageNavigator().nav_external_systems_page()
+        self.page_has_loaded(retries=10)
 
     def scale_present_on_page(self, scale_name):
         """
@@ -195,10 +235,16 @@ class ExternalSystems(ResourceList):
             logger.info(f"{scale_name} not found on External Systems page")
             return False
 
-    def disconnect_scale(self, scale_name):
+    def disconnect_scale(self, scale_name, filesystem_names):
         """
-        Removing a connection to scale is going to be possible in UI
-        but now it's only done via CLI
+        Disconnecting a Storage Scale cluster is currently only supported via the CLI,
+        which removes the connection, associated secrets, and filesystems.
+        UI support for this action will be added in a future release.
+
+        Args:
+            scale_name (str): name of the scale connection
+            filesystem_names (list): names of all filesystems associated with the
+                connection that must be deleted (e.g. ["fs1", "fs2"])
         """
         logger.info(f"Deleting connection to {scale_name}")
         delete_cmd = "delete clusters.scale.spectrum.ibm.com ibm-spectrum-scale"
@@ -207,6 +253,13 @@ class ExternalSystems(ResourceList):
             f"delete secret {scale_name}-user-details-secret -n ibm-spectrum-scale"
         )
         ocp.OCP().exec_oc_cmd(delete_secret_cmd)
+        for filesystem_name in filesystem_names:
+            logger.info(f"Deleting filesystem {scale_name}-{filesystem_name}")
+            delete_file_system = (
+                f"delete filesystem {scale_name}-{filesystem_name} "
+                "-n ibm-spectrum-scale"
+            )
+            ocp.OCP().exec_oc_cmd(delete_file_system)
 
     def scale_status_ok(self, scale_name):
         """
@@ -231,19 +284,14 @@ class ExternalSystems(ResourceList):
             locator=self.external_systems["scale_connection_health"]
         )
         logger.info(f"Scale connection status: {connection_status}")
-        if operator_status == "Healthy" and connection_status == "Healthy":
-            return True
-        return False
+        return operator_status == "Healthy" and connection_status == "Healthy"
 
     def connect_scale_filesystem(self, scale_name, filesystem_name):
         """
         Connect an additional scale filesystem
-
-        Args:
-            scale_name (str): name of the scale cluster
-            filesystem_name (str): name of the additional filesystem
         """
         logger.info(f"Filtering connections to find {scale_name}")
+        self.wait_for_element_to_be_visible(self.external_systems["filter"], timeout=15)
         self.do_clear(self.external_systems["filter"])
         self.do_send_keys(self.external_systems["filter"], scale_name)
         self.do_click(locator=self.external_systems["actions_button"])
@@ -252,23 +300,65 @@ class ExternalSystems(ResourceList):
         self.do_send_keys(
             self.external_systems["filesystem_name_input"], filesystem_name
         )
-        self.do_click(locator=self.external_systems["add_button"])
+        self.do_click(locator=self.external_systems["scale_add_button"])
+
+        # do_click only waits for the click itself, not for the server response.
+        # Poll until the add operation reaches a definitive state: either the
+        # error modal appears, or the modal closes (Add button gone) on success.
+        error_present = False
+        for _ in range(15):
+            if self.get_elements(self.external_systems["modal_error_alert"]):
+                error_present = True
+                break
+            # Modal dismissed (Add button no longer present) indicates success
+            if not self.get_elements(self.external_systems["scale_add_button"]):
+                break
+            time.sleep(2)
+
+        # Check specifically if an error alert popped up inside the modal
+        if error_present:
+            error_msg = self.get_element_text(
+                self.external_systems["modal_error_alert"]
+            )
+            logger.warning(
+                f"Filesystem creation returned an error modal: {error_msg}; dismissing modal"
+            )
+            if self.get_elements(self.external_systems["modal_cancel_button"]):
+                self.do_click(self.external_systems["modal_cancel_button"])
+            raise CommandFailed(
+                f"Failed to add scale filesystem '{filesystem_name}': {error_msg}"
+            )
+
+        self.page_has_loaded(retries=10)
 
     def delete_scale_filesystem(self, scale_name, filesystem_name):
-        """
-        Delete a scale filesystem
-
-        Args:
-            scale_name (str): name of the scale cluster
-            filesystem_name (str): name of the  filesystem
-        """
         logger.info(f"Filtering connections to find {scale_name}")
-        self.do_clear(self.external_systems["filter"])
+
+        # Ensure modal overlay is dismissed if present using stored locator
+        if self.get_elements(self.external_systems["modal_cancel_button"]):
+            self.do_click(self.external_systems["modal_cancel_button"])
+
+        if (
+            "/odf/external-systems" not in self.driver.current_url
+            or "scale.spectrum.ibm.com" in self.driver.current_url
+        ):
+            from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+
+            PageNavigator().nav_external_systems_page()
+
         wait_for_element_to_be_clickable(self.external_systems["filter"])
+
+        self.do_clear(self.external_systems["filter"])
         self.do_send_keys(self.external_systems["filter"], scale_name)
+
+        # Stored views.py locator formatted without '|' OR-operator
+        resource_locator = format_locator(
+            self.external_systems["scale_connection_name_link"], scale_name
+        )
         logger.info(f"Clicking on {scale_name} to go to Scale dashboard")
-        wait_for_element_to_be_clickable(self.external_systems["scale_dashboard_link"])
-        self.do_click(self.external_systems["scale_dashboard_link"])
+        wait_for_element_to_be_clickable(resource_locator)
+        self.do_click(resource_locator)
+
         logger.info(f"Clicking on {filesystem_name}")
         self.do_click(
             format_locator(self.external_systems["filesystem_link"], filesystem_name)
@@ -299,5 +389,4 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
         is_default = self.is_block_and_file_tab()
         if not is_default:
             logger.warning("Block and File tab is not active")
-
         return is_default

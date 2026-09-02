@@ -18,6 +18,7 @@ import inspect
 import stat
 import platform
 import ipaddress
+import pytest
 
 from urllib.parse import urlparse, urlunparse
 from concurrent.futures import ThreadPoolExecutor
@@ -67,7 +68,7 @@ from ocs_ci.utility.utils import (
     get_ocs_build_number,
 )
 from ocs_ci.utility.utils import convert_device_size
-
+from ocs_ci.utility.templating import dump_data_to_temp_yaml
 
 logger = logging.getLogger(__name__)
 DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
@@ -7874,6 +7875,246 @@ def verify_file_ownership(pod_obj, file_path, expected_uid, expected_gid):
         file_gid == expected_gid
     ), f"File GID {file_gid} != expected {expected_gid} for {file_path}"
     return file_uid, file_gid
+
+
+def create_custom_secret_for_cnsa_rm(name, namespace, data_dict, secret_type="Opaque"):
+    """
+    Helper to create a Kubernetes Secret using OCP class and temporary YAML files.
+
+    Args:
+        name (str): Name of the Secret
+        namespace (str): Namespace in which the Secret is created
+        data_dict (dict): Mapping of Secret keys to values
+        secret_type (str): Kubernetes Secret type
+
+    Returns:
+        dict: Result of the Secret creation
+    """
+    # Base64-encode every value so it can be placed under the Secret's `data`
+    # field (which requires base64-encoded strings). Dict values are first
+    # serialized to a JSON string before encoding.
+    encoded_data = {}
+    for k, v in data_dict.items():
+        val_str = json.dumps(v) if isinstance(v, dict) else str(v)
+        encoded_data[k] = base64.b64encode(val_str.encode()).decode()
+
+    manifest = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {"name": name, "namespace": namespace},
+        "type": secret_type,
+        "data": encoded_data,
+    }
+    fd, temp_path = tempfile.mkstemp(suffix=".yaml")
+    try:
+        dump_data_to_temp_yaml(manifest, temp_path, log=False)
+        secret_ocp = OCP(kind="Secret", namespace=namespace)
+        return secret_ocp.create(yaml_file=temp_path)
+    finally:
+        os.close(fd)
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+def _apply_mco():
+    """
+    Apply the IBM Storage Scale MCO (Meta Cluster Operator) manifest using a
+    pinned commit URL. Isolated in its own function because the URL is not
+    stable and is expected to change over time.
+
+    Raises:
+        CommandFailed: if applying the MCO manifest fails
+    """
+    mco_url = (
+        "https://raw.githubusercontent.com/IBM/ibm-spectrum-scale-container-native/"
+        "502fbcbe968651d2c94bd6b8419958c835383696/generated/scale/mco/mco.yaml"
+    )
+    try:
+        exec_cmd(f"oc apply -f {mco_url}")
+    except CommandFailed as e:
+        raise CommandFailed(f"Scale operator deployment failed: {e}") from e
+
+
+def setup_scale_cluster_infrastructure_for_cnsa_rm(
+    namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
+    tracked_resources=None,
+):
+    """
+    Deploys core Scale operator (MCO), Entitlement key, and local IBM Scale Cluster CR.
+
+    Args:
+        namespace (str): Target namespace
+        tracked_resources (list): Optional list to record created resources for cleanup
+    """
+    logger.info("--- Setup: IBM Storage Scale Infrastructure ---")
+
+    # Validate required AUTH parameters early before mutating cluster state
+    ent_key = config.AUTH.get("ibm_entitlement_key")
+    if not ent_key:
+        pytest.skip("ibm_entitlement_key not configured in config.AUTH")
+
+    host_aliases = config.AUTH.get("scale_host_aliases")
+    if not host_aliases:
+        pytest.skip("scale_host_aliases not configured in config.AUTH")
+
+    cluster_name = constants.IBM_STORAGE_SCALE_CLUSTER_NAME
+
+    # 1. Apply MCO (Operator) using pinned commit URL
+    _apply_mco()
+
+    # 2. Check and Create Entitlement Secret
+    secret_name = "ibm-entitlement-key"
+    secret_ocp = OCP(kind="Secret", namespace=namespace)
+    try:
+        secret_ocp.get(resource_name=secret_name)
+        logger.info(f"Secret '{secret_name}' already exists.")
+    except exceptions.CommandFailed:
+        logger.info(f"Secret '{secret_name}' not found. Creating...")
+        auth_b64 = base64.b64encode(f"cp:{ent_key}".encode()).decode()
+        docker_config = {
+            "auths": {
+                "cp.icr.io": {
+                    "username": "cp",
+                    "password": ent_key,
+                    "auth": auth_b64,
+                }
+            }
+        }
+        create_custom_secret_for_cnsa_rm(
+            name=secret_name,
+            namespace=namespace,
+            data_dict={".dockerconfigjson": docker_config},
+            secret_type="kubernetes.io/dockerconfigjson",
+        )
+        if tracked_resources is not None:
+            tracked_resources.append(("Secret", secret_name, namespace))
+
+    # 3. Create Cluster CR
+    scale_cluster_kind = constants.IBM_STORAGE_SCALE_CLUSTER_KIND
+    scale_cluster_ocp = OCP(kind=scale_cluster_kind, namespace=namespace)
+
+    try:
+        scale_cluster_ocp.get(resource_name=cluster_name)
+        logger.info(f"Scale Cluster CR '{cluster_name}' already exists.")
+    except exceptions.CommandFailed:
+        logger.info(f"Creating local IBM Scale Cluster CR '{cluster_name}'...")
+        cluster_manifest = {
+            "apiVersion": "scale.spectrum.ibm.com/v1beta1",
+            "kind": "Cluster",
+            "metadata": {"name": cluster_name, "namespace": namespace},
+            "spec": {
+                "license": {"accept": True, "license": "data-management"},
+                "daemon": {
+                    "roles": [],
+                    "hostAliases": host_aliases,
+                    "nodeSelector": {"scale.spectrum.ibm.com/daemon-selector": ""},
+                    "resources": {"requests": {"cpu": "2", "memory": "6Gi"}},
+                },
+            },
+        }
+
+        fd, temp_path = tempfile.mkstemp(suffix=".yaml")
+        try:
+            os.close(fd)
+            dump_data_to_temp_yaml(cluster_manifest, temp_path)
+            exec_cmd(f"oc create -f {temp_path}")
+            if tracked_resources is not None:
+                tracked_resources.append(
+                    (
+                        constants.IBM_STORAGE_SCALE_CLUSTER_KIND,
+                        cluster_name,
+                        namespace,
+                    )
+                )
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        logger.info(f"Successfully created Cluster {cluster_name}")
+
+
+def setup_scale_remote_connection(
+    rc_name,
+    user_secret_name,
+    namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
+    tracked_resources=None,
+):
+    """
+    Creates authentication secrets and RemoteCluster resource, then waits for it to reach Ready state.
+
+    Args:
+        rc_name (str): RemoteCluster name
+        user_secret_name (str): Secret name for user details
+        namespace (str): Target namespace
+        tracked_resources (list): Optional tracking handle for cleanup
+    """
+    gui_user = config.AUTH.get("scale_gui_user")
+    gui_password = config.AUTH.get("scale_gui_password")
+    gui_hosts = config.AUTH.get("scale_gui_hosts")
+
+    if not gui_user or not gui_password:
+        pytest.skip("Scale GUI Auth credentials not configured.")
+    if not gui_hosts:
+        pytest.skip("scale_gui_hosts target endpoint mapping not configured.")
+
+    create_custom_secret_for_cnsa_rm(
+        name=user_secret_name,
+        namespace=namespace,
+        data_dict={
+            "username": gui_user,
+            "password": gui_password,
+        },
+    )
+    if tracked_resources is not None:
+        tracked_resources.append(("Secret", user_secret_name, namespace))
+
+    rc_data = {
+        "apiVersion": "scale.spectrum.ibm.com/v1beta1",
+        "kind": "RemoteCluster",
+        "metadata": {"name": rc_name, "namespace": namespace},
+        "spec": {
+            "gui": {
+                "hosts": gui_hosts,
+                "insecureSkipVerify": True,
+                "port": 443,
+                "scheme": "https",
+                "secretName": user_secret_name,
+            }
+        },
+    }
+
+    fd, temp_path = tempfile.mkstemp(suffix=".yaml")
+    try:
+        os.close(fd)
+        dump_data_to_temp_yaml(rc_data, temp_path)
+        exec_cmd(f"oc create -f {temp_path}")
+        if tracked_resources is not None:
+            tracked_resources.append(
+                (
+                    constants.IBM_STORAGE_SCALE_REMOTECLUSTER_KIND,
+                    rc_name,
+                    namespace,
+                )
+            )
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+    rc_ocp = OCP(
+        kind=constants.IBM_STORAGE_SCALE_REMOTECLUSTER_KIND,
+        namespace=namespace,
+        resource_name=rc_name,
+    )
+    sampler = TimeoutSampler(
+        timeout=600,
+        sleep=15,
+        func=lambda: any(
+            c.get("type") == "Ready" and c.get("status") == "True"
+            for c in rc_ocp.get().get("status", {}).get("conditions", [])
+        ),
+    )
+    assert sampler.wait_for_func_status(
+        True
+    ), "RemoteCluster failed to reach Ready state."
 
 
 def assert_pvc_volume_health_event(pvc_obj, reason, event_type, message_substr):
