@@ -28,20 +28,19 @@ class DRPC(OCP):
             resource_name (str): Name of DRPC
 
         """
-        with config.RunWithConfigContext(
-            switch_ctx if switch_ctx is not None else config.get_active_acm_index()
-        ):
-            super(DRPC, self).__init__(
-                namespace=namespace,
-                resource_name=(
-                    resource_name
-                    if resource_name
-                    else get_drpc_name(namespace, switch_ctx=switch_ctx)
-                ),
-                kind=constants.DRPC,
-                *args,
-                **kwargs,
-            )
+        config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+
+        super(DRPC, self).__init__(
+            namespace=namespace,
+            resource_name=(
+                resource_name
+                if resource_name
+                else get_drpc_name(namespace, switch_ctx=switch_ctx)
+            ),
+            kind=constants.DRPC,
+            *args,
+            **kwargs,
+        )
 
     @property
     def drpolicy(self):
