@@ -107,13 +107,20 @@ class CephFSStressTestManager:
         """
         sc_name = constants.CEPHFILESYSTEM_SC_SELINUX
         logger.info(f"Creating SELinux CephFS storageclass: {sc_name}")
-        sc_obj = storageclass_factory(
-            sc_name=sc_name,
-            interface=constants.CEPHFILESYSTEM,
-            kernelMountOptions='context="system_u:object_r:container_file_t:s0"',
-        )
+        try:
+            sc_obj = storageclass_factory(
+                sc_name=sc_name,
+                interface=constants.CEPHFILESYSTEM,
+                kernelMountOptions='context="system_u:object_r:container_file_t:s0"',
+            )
+            logger.info(f"Created SELinux CephFS StorageClass: {sc_name}")
+        except CommandFailed as e:
+            if "(AlreadyExists)" not in str(e):
+                raise
+            logger.warning(f"StorageClass '{sc_name}' already exists — reusing it")
+            sc_data = ocp.OCP(kind=constants.STORAGECLASS).get(resource_name=sc_name)
+            sc_obj = OCS(**sc_data)
         self.created_resources.append(sc_obj)
-        logger.info(f"Created SELinux CephFS StorageClass: {sc_name}")
 
         pvc_obj = create_pvc(
             sc_name=sc_name,

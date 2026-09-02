@@ -117,6 +117,8 @@ spec:
     volumeMounts:
     - mountPath: /mnt
       name: mypvc
+  securityContext:
+    fsGroupChangePolicy: OnRootMismatch
   restartPolicy: Never
   volumes:
   - name: mypvc
