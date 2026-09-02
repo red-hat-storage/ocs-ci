@@ -346,37 +346,6 @@ ENV_DATA:
     }
   ]
 
-  # RHSTOR-8082: VM static IP translation during DR failover/failback
-  dr_cnv_discovered_apps_static_ip: [
-    {
-      name: "vm-static-ip-1", workload_dir: "rdr/cnv-workload/vm-pvc/vm-static-ip/vm-workload-1",
-      pod_count: 1, pvc_count: 1,
-      dr_workload_app_pod_selector_key: "appname",
-      dr_workload_app_pod_selector_value: "kubevirt",
-      dr_workload_app_pvc_selector_key: "appname",
-      dr_workload_app_pvc_selector_value: "kubevirt",
-      workload_namespace: "cnv-static-ip-1",
-      dr_workload_app_placement_name: "cnv-static-ip-1",
-      vm_name: "vm-static-ip-workload-1",
-      vm_secret: "vm-secret-1", vm_username: "cirros",
-    }
-  ]
-
-  dr_cnv_discovered_apps_static_ip_shared: [
-    {
-      name: "vm-static-ip-2", workload_dir: "rdr/cnv-workload/vm-pvc/vm-static-ip/vm-workload-2",
-      pod_count: 1, pvc_count: 1,
-      dr_workload_app_pod_selector_key: "appname",
-      dr_workload_app_pod_selector_value: "kubevirt",
-      dr_workload_app_pvc_selector_key: "appname",
-      dr_workload_app_pvc_selector_value: "kubevirt",
-      workload_namespace: "cnv-static-ip-1",
-      dr_workload_app_placement_name: "cnv-static-ip-1",
-      vm_name: "vm-static-ip-workload-2",
-      vm_secret: "vm-secret-1", vm_username: "cirros",
-    }
-  ]
-
   dr_workload_discovered_apps_filebrowser_rbd: [
     { name: "filebrowser-dict-1-rbd", workload_dir: "rdr/file-browser/rbd/workloads/app-filebrowser-1/",
       pod_count: 2, pvc_count: 1,

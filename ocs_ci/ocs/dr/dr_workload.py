@@ -15,6 +15,7 @@ from subprocess import TimeoutExpired
 from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers, helpers
+from ocs_ci.helpers import dr_helpers_vm_ip_translation as vm_ip_translation
 from ocs_ci.helpers.cnv_helpers import create_vm_secret, cal_md5sum_vm
 from ocs_ci.helpers.dr_helpers import (
     create_cdi_cert_configmap,
@@ -2388,3 +2389,76 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 ocp_obj = ocp.OCP()
                 ocp_obj.delete_project(project_name=self.workload_namespace)
                 log.info(f"Project {self.workload_namespace} deleted successfully")
+
+
+class CnvWorkloadDiscoveredAppsStaticIP(CnvWorkloadDiscoveredApps):
+    """
+    CNV Discovered Apps workload variant for VM static IP translation testing
+    (RHSTOR-8082).
+
+    Reuses the regression CNV discovered-apps workload but, at deploy time,
+    copies it to a temp directory and patches the VirtualMachine manifest to
+    wire it onto the namespace's Primary UDN with a pinned static IP (via the
+    ``network.kubevirt.io/addresses`` annotation), without modifying the
+    original regression workload files. The workload is deployed into a
+    pre-existing namespace that already carries the primary-UDN label and a
+    Primary UserDefinedNetwork (created by the ``setup_udn_nad`` fixture).
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Args:
+            static_ip (str): static IP to pin on the primary cluster,
+                e.g. "192.168.1.11"
+            interface_name (str): VM interface name on the Primary UDN; kept
+                equal to the NAD name so the IPAMClaim name (<vm>.<iface>)
+                matches the lookups in the test.
+
+        """
+        self.static_ip = kwargs.pop("static_ip")
+        self.interface_name = kwargs.pop(
+            "interface_name", vm_ip_translation.VM_NETWORK_INTERFACE_NAME
+        )
+        super().__init__(**kwargs)
+
+    def deploy_workload(self, shared_drpc_protection=False, dr_protect=True):
+        """
+        Deploy the CNV workload with a static IP on the Primary UDN.
+
+        The namespace is assumed to already exist (labeled + UDN created by the
+        setup_udn_nad fixture); only the SSH secret is created here. The VM
+        manifest is patched in a temp copy before ``oc create -k``.
+
+        Args:
+            shared_drpc_protection (bool): False by default, another workload in an
+                existing namespace will share the DRPC and be DR protected via UI
+            dr_protect (bool): True by default where workload will be DR protected
+                via CLI, else the test case handles it (via UI)
+
+        """
+        self._deploy_prereqs()
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+        self.manage_dr_vm_secrets(shared_drpc_protection=shared_drpc_protection)
+        config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        # Copy the regression workload to a temp dir and patch the VM manifest
+        # for static IP on the Primary UDN, then deploy from the temp dir.
+        self.workload_path = vm_ip_translation.prepare_static_ip_vm_manifest(
+            source_workload_dir=self.cnv_workload_dir,
+            static_ip=self.static_ip,
+            interface_name=self.interface_name,
+        )
+        run_cmd(  # IgnoreDeprecation
+            f"oc create -k {self.workload_path} -n {self.workload_namespace} "
+        )
+        self.check_pod_pvc_status(skip_replication_resources=True)
+        # Wait for temporary resources to be cleaned up before DRPC creation
+        time.sleep(10)
+        config.switch_acm_ctx()
+        if dr_protect:
+            self.create_placement()
+            self.create_drpc()
+            self.verify_workload_deployment()
+        self.vm_obj = VirtualMachine(
+            vm_name=self.vm_name, namespace=self.workload_namespace
+        )

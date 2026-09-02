@@ -21,7 +21,10 @@ API schema confirmed from manual testing on ammahapa-21a RDR (Aug 2026):
   - VRG condition: NetworkMappingLoaded=True once mapping is active
 """
 
+import json
 import logging
+import os
+import shutil
 import tempfile
 
 import pytest
@@ -74,6 +77,15 @@ DRCLUSTERCONFIG_NAD_STATUS_FIELD = "networkAttachments"
 # UDN and NAD names used across IP translation tests
 VM_NETWORK_UDN_NAME = "vm-network"
 VM_NETWORK_NAD_NAME = "vm-network"
+
+# VM interface name on the Primary UDN. The IPAMClaim is named
+# <vm-name>.<interface-name>, so this must match the interface_name passed to
+# get_ipamclaim_ip / get_vm_ip_from_vmi (kept equal to the NAD name).
+VM_NETWORK_INTERFACE_NAME = VM_NETWORK_NAD_NAME
+
+# Host octet appended to the primary cluster subnet prefix to pin the VM's
+# static IP (e.g. subnet 192.168.1.0/24 -> static IP 192.168.1.11).
+VM_STATIC_IP_HOST_OCTET = "11"
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +275,95 @@ def get_vm_ip_from_vmi(cluster_name, namespace, vm_name, interface_name=None):
                 return iface.get("ipAddress", "")
         return ""
     return interfaces[0].get("ipAddress", "") if interfaces else ""
+
+
+def static_ip_from_subnet(subnet, host_octet=VM_STATIC_IP_HOST_OCTET):
+    """
+    Build a static IP in the given subnet by replacing the last octet.
+
+    Args:
+        subnet (str): CIDR subnet, e.g. "192.168.1.0/24"
+        host_octet (str): host octet to pin, e.g. "11"
+
+    Returns:
+        str: static IP address, e.g. "192.168.1.11"
+    """
+    network_prefix = subnet.split("/")[0].rsplit(".", 1)[0]
+    return f"{network_prefix}.{host_octet}"
+
+
+def prepare_static_ip_vm_manifest(
+    source_workload_dir,
+    static_ip,
+    interface_name=VM_NETWORK_INTERFACE_NAME,
+):
+    """
+    Copy an existing CNV workload directory to a temp location and patch its
+    VirtualMachine manifest for static IP translation testing (RHSTOR-8082),
+    without modifying the original regression workload files.
+
+    The patched VM is wired onto the namespace's Primary UDN:
+      - single interface named ``interface_name`` with bridge binding, backed by
+        the pod network (a Primary UDN replaces the default pod network)
+      - annotation ``network.kubevirt.io/addresses`` pinning ``static_ip`` on that
+        interface, so OVN-K8s IPAM allocates the requested address and creates an
+        IPAMClaim named ``<vm-name>.<interface_name>``
+
+    Args:
+        source_workload_dir (str): absolute path to the cloned workload directory
+            (kustomize dir containing the VM manifest)
+        static_ip (str): static IP to pin on the primary cluster, e.g. "192.168.1.11"
+        interface_name (str): VM interface name (kept equal to the NAD name so the
+            IPAMClaim name matches get_ipamclaim_ip lookups)
+
+    Returns:
+        str: absolute path to the temp directory holding the patched manifests
+    """
+    temp_dir = tempfile.mkdtemp(prefix="static-ip-vm-")
+    # Copy the whole kustomize dir so `oc create -k` still finds kustomization.yaml
+    shutil.copytree(source_workload_dir, temp_dir, dirs_exist_ok=True)
+
+    patched_vm = False
+    for root, _, files in os.walk(temp_dir):
+        for fname in files:
+            if not fname.endswith((".yaml", ".yml")):
+                continue
+            fpath = os.path.join(root, fname)
+            with open(fpath) as f:
+                docs = list(yaml.safe_load_all(f))
+
+            changed = False
+            for doc in docs:
+                if not doc or doc.get("kind") != "VirtualMachine":
+                    continue
+                template = doc.setdefault("spec", {}).setdefault("template", {})
+                # Pin the static IP via annotation on the VM template
+                annotations = template.setdefault("metadata", {}).setdefault(
+                    "annotations", {}
+                )
+                annotations["network.kubevirt.io/addresses"] = json.dumps(
+                    {interface_name: [static_ip]}
+                )
+                # Wire the single interface onto the Primary UDN (pod network)
+                domain = template.setdefault("spec", {}).setdefault("domain", {})
+                domain.setdefault("devices", {})["interfaces"] = [
+                    {"name": interface_name, "bridge": {}}
+                ]
+                template["spec"]["networks"] = [{"name": interface_name, "pod": {}}]
+                changed = True
+                patched_vm = True
+
+            if changed:
+                with open(fpath, "w") as f:
+                    yaml.safe_dump_all(docs, f, default_flow_style=False)
+                logger.info(f"Patched VM manifest for static IP {static_ip}: {fpath}")
+
+    if not patched_vm:
+        raise ValueError(
+            f"No VirtualMachine manifest found under {source_workload_dir} to patch "
+            "for static IP translation"
+        )
+    return temp_dir
 
 
 def wait_for_drpolicy_network_peers(drpolicy_name, timeout=120):
