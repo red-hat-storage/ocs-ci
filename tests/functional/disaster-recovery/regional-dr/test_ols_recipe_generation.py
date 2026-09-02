@@ -890,10 +890,20 @@ class TestOLSRecipeFailoverAndRelocate:
         from ocs_ci.ocs import constants as _constants
 
         # ------------------------------------------------------------------ #
+        # Step 0: Verify OLS is responsive before spending time on workload  #
+        # deploy — skip early if the LLM backend is unreachable.             #
+        # ------------------------------------------------------------------ #
+        config.switch_acm_ctx()
+        try:
+            ols.query("ping", max_retries=5)
+        except Exception as exc:
+            pytest.skip(f"OLS is not responding, skipping test: {exc}")
+
+        # ------------------------------------------------------------------ #
         # Step 1: Deploy workload for OLS recipe protection (no DRPC yet)    #
         # ------------------------------------------------------------------ #
         rdr_workloads = discovered_apps_dr_workload(
-            pvc_interface=pvc_interface, ols_recipe=1
+            pvc_interface=pvc_interface, kubeobject=0, ols_recipe=1
         )
         workload = rdr_workloads[0]
 
