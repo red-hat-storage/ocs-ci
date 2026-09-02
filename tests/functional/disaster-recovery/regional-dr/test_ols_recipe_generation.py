@@ -890,10 +890,10 @@ class TestOLSRecipeFailoverAndRelocate:
         from ocs_ci.ocs import constants as _constants
 
         # ------------------------------------------------------------------ #
-        # Step 1: Deploy workload without recipe (we create it via OLS next)  #
+        # Step 1: Deploy workload for OLS recipe protection (no DRPC yet)    #
         # ------------------------------------------------------------------ #
         rdr_workloads = discovered_apps_dr_workload(
-            pvc_interface=pvc_interface, kubeobject=1, recipe=0
+            pvc_interface=pvc_interface, ols_recipe=1
         )
         workload = rdr_workloads[0]
 
@@ -904,8 +904,8 @@ class TestOLSRecipeFailoverAndRelocate:
         recipe_name = self._generate_and_apply_ols_recipe(workload, ols)
 
         # ------------------------------------------------------------------ #
-        # Step 4: Create DRPC with recipeRef                                  #
-        # (_generate_and_apply_ols_recipe already left context on ACM hub)   #
+        # Step 4: Create recipe-based DRPC (first and only DRPC for this     #
+        # workload — no label-selector DRPC was created in step 1)           #
         # ------------------------------------------------------------------ #
         workload.create_drpc_for_apps_with_recipe(recipe_name=recipe_name)
 
