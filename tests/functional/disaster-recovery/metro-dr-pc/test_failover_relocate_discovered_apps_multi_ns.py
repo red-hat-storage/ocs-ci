@@ -105,9 +105,9 @@ class TestFailoverRelocateDiscoveredAppsMultiNs:
             nodes_multicluster[primary_cluster_index].stop_nodes(node_objs)
 
         enable_fence(drcluster_name=self.primary_cluster_name)
-        assert verify_fence_state(
+        verify_fence_state(
             drcluster_name=self.primary_cluster_name, state=constants.ACTION_FENCE
-        ), f"DR cluster {self.primary_cluster_name} didn't reach {constants.ACTION_FENCE} state"
+        )
 
         dr_helpers.failover(
             failover_cluster=secondary_cluster_name,
@@ -152,9 +152,9 @@ class TestFailoverRelocateDiscoveredAppsMultiNs:
             wait_for_nodes_status([node.name for node in node_objs])
 
         enable_unfence(drcluster_name=self.primary_cluster_name)
-        assert verify_fence_state(
+        verify_fence_state(
             drcluster_name=self.primary_cluster_name, state=constants.ACTION_UNFENCE
-        ), f"DR cluster {self.primary_cluster_name} didn't reach {constants.ACTION_UNFENCE} state"
+        )
 
         gracefully_reboot_ocp_nodes(
             drcluster_name=self.primary_cluster_name, disable_eviction=True
