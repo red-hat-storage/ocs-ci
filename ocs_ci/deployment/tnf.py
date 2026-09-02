@@ -38,6 +38,87 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label
 logger = logging.getLogger(__name__)
 
 
+def _configure_dns(public_ip):
+    """
+    Create Route53 DNS records for the TNF cluster so it is
+    accessible via VPN without a proxy, same as baremetal clusters.
+
+    Creates:
+      - api.<cluster_name>.<base_domain> -> hypervisor public IP
+      - api-int.<cluster_name>.<base_domain> -> hypervisor public IP
+      - *.apps.<cluster_name>.<base_domain> -> hypervisor public IP
+      - NS delegation from base_domain zone
+    """
+    from ocs_ci.utility.aws import AWS
+
+    cluster_name = config.ENV_DATA.get("cluster_name")
+    base_domain = config.ENV_DATA.get("base_domain")
+    if not base_domain:
+        logger.warning("base_domain not set in ENV_DATA, skipping DNS setup")
+        return
+
+    aws = AWS()
+    zone_id = aws.create_hosted_zone(cluster_name=cluster_name)
+    logger.info(f"Created hosted zone for {cluster_name}.{base_domain}")
+
+    for record_name in (
+        f"api.{cluster_name}",
+        f"api-int.{cluster_name}",
+    ):
+        aws.update_hosted_zone_record(
+            zone_id=zone_id,
+            record_name=record_name,
+            data=public_ip,
+            type="A",
+            operation_type="Add",
+        )
+    aws.update_hosted_zone_record(
+        zone_id=zone_id,
+        record_name=f"*.apps.{cluster_name}",
+        data=public_ip,
+        type="A",
+        operation_type="Add",
+    )
+
+    base_domain_zone_id = aws.get_hosted_zone_id_for_domain(domain=base_domain)
+    ns_list = aws.get_ns_for_hosted_zone(zone_id)
+    ns_values = [{"Value": ns} for ns in ns_list]
+    aws.update_hosted_zone_record(
+        zone_id=base_domain_zone_id,
+        record_name=cluster_name,
+        data=ns_values,
+        type="NS",
+        operation_type="Add",
+        ttl=300,
+        raw_data=True,
+    )
+    logger.info(
+        f"DNS records created: api.{cluster_name}.{base_domain} "
+        f"and *.apps.{cluster_name}.{base_domain} -> {public_ip}"
+    )
+
+
+def _delete_dns():
+    """
+    Delete Route53 DNS records created during deployment.
+    """
+    from ocs_ci.utility.aws import AWS
+
+    cluster_name = config.ENV_DATA.get("cluster_name")
+    base_domain = config.ENV_DATA.get("base_domain")
+    if not base_domain:
+        return
+
+    aws = AWS()
+    try:
+        zone_id = aws.get_hosted_zone_id(cluster_name)
+        if zone_id:
+            aws.delete_hosted_zone(zone_id)
+            logger.info(f"Deleted hosted zone for {cluster_name}")
+    except Exception as e:
+        logger.warning(f"Failed to delete DNS records: {e}")
+
+
 class TNFBASE(Deployment):
     """
     Base class for Two-Node Fencing deployments
@@ -81,34 +162,14 @@ class TNF(TNFBASE):
             self.hypervisor = TNFHypervisor(
                 hypervisor_config=hypervisor_config,
                 dev_scripts_config=self.tnf_config.get("dev_scripts", {}),
-                proxy_config=self.tnf_config.get("proxy"),
             )
             logger.info("TNF hypervisor provisioning enabled (AWS EC2)")
-            self._setup_proxy_env()
         elif not config.ENV_DATA.get("skip_ocp_deployment"):
             raise UnexpectedDeploymentConfiguration(
                 "TNF OCP deployment requires hypervisor configuration "
                 "(tnf.hypervisor in config). For pre-existing clusters, "
                 "set skip_ocp_deployment: true."
             )
-
-    def _setup_proxy_env(self):
-        """
-        Set proxy env vars from existing hypervisor metadata.
-        Needed for skip_ocp_deployment (ODF-only) and teardown flows
-        where _deploy_via_hypervisor() doesn't run.
-        """
-        proxy_config = self.tnf_config.get("proxy", {})
-        if not proxy_config.get("enabled", True):
-            return
-
-        cluster_path = config.ENV_DATA.get("cluster_path", "")
-        if cluster_path and self.hypervisor.load_instance_info(cluster_path):
-            proxy_url = self.hypervisor.get_proxy_url()
-            os.environ["HTTPS_PROXY"] = proxy_url
-            os.environ["HTTP_PROXY"] = proxy_url
-            os.environ["NO_PROXY"] = "localhost,127.0.0.1,.svc,.cluster.local"
-            logger.info(f"Proxy configured from metadata: {proxy_url}")
 
     class OCPDeployment(object):
         """
@@ -135,9 +196,9 @@ class TNF(TNFBASE):
             1. Launch EC2 bare-metal instance
             2. Configure host as KVM hypervisor
             3. Clone and run dev-scripts
-            4. Set up proxy and retrieve kubeconfig
+            4. Configure DNS and retrieve kubeconfig
             """
-            from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
+            from ocs_ci.ocs.openshift_ops import OCP
 
             hypervisor = self._get_hypervisor()
 
@@ -158,13 +219,8 @@ class TNF(TNFBASE):
                 logger.info("Step 5: Generating dev-scripts config...")
                 pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
                 with open(pull_secret_path, "r") as f:
-                    import json as json_mod
-
-                    pull_secret = json.dumps(json_mod.load(f))
-                ocp_version = config.RUN.get("client_version", "").split("-")[0]
-                hypervisor.generate_dev_scripts_config(
-                    pull_secret, ocp_version=ocp_version
-                )
+                    pull_secret = json.dumps(json.loads(f.read()))
+                hypervisor.generate_dev_scripts_config(pull_secret)
 
                 logger.info("Step 6: Running dev-scripts (45-90 minutes)...")
                 hypervisor.run_dev_scripts()
@@ -172,22 +228,23 @@ class TNF(TNFBASE):
                 logger.info("Step 6b: Resizing OSD disks on VMs...")
                 hypervisor.resize_vm_disks()
 
-                proxy_config = self.tnf_config.get("proxy", {})
-                if proxy_config.get("enabled", True):
-                    logger.info("Step 7: Setting up proxy...")
-                    hypervisor.setup_proxy()
-                    proxy_url = hypervisor.get_proxy_url()
-                    os.environ["HTTPS_PROXY"] = proxy_url
-                    os.environ["HTTP_PROXY"] = proxy_url
-                    os.environ["NO_PROXY"] = "localhost,127.0.0.1,.svc,.cluster.local"
+                logger.info("Step 7: Setting up port forwarding...")
+                hypervisor.setup_port_forwarding()
 
-                logger.info("Step 8: Retrieving kubeconfig...")
+                logger.info("Step 8: Configuring DNS records...")
+                _configure_dns(hypervisor.public_ip)
+
+                logger.info("Step 9: Retrieving kubeconfig...")
                 auth_dir = os.path.join(self.cluster_path, "auth")
                 hypervisor.retrieve_kubeconfig(auth_dir)
 
-                logger.info("Step 9: Testing cluster connectivity...")
-                base_ocp = BaseOCPDeployment()
-                base_ocp.test_cluster()
+                logger.info("Step 10: Testing cluster connectivity...")
+                kubeconfig = os.path.join(
+                    self.cluster_path,
+                    config.RUN.get("kubeconfig_location"),
+                )
+                if not OCP.set_kubeconfig(kubeconfig):
+                    raise Exception("Cluster is not accessible via kubeconfig")
 
                 logger.info("OCP cluster deployed via dev-scripts on EC2 hypervisor")
             except Exception:
@@ -210,7 +267,6 @@ class TNF(TNFBASE):
             return TNFHypervisor(
                 hypervisor_config=hypervisor_config,
                 dev_scripts_config=tnf_config.get("dev_scripts", {}),
-                proxy_config=tnf_config.get("proxy"),
             )
 
         def destroy(self, log_level=""):
@@ -456,6 +512,8 @@ class TNF(TNFBASE):
         For pre-existing clusters, delegates to parent.
         """
         if self.hypervisor:
+            logger.info("Cleaning up DNS records...")
+            _delete_dns()
             logger.info("Terminating TNF hypervisor EC2 instance...")
             if not self.hypervisor.instance_id:
                 self.hypervisor.load_instance_info(self.cluster_path)

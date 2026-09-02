@@ -11,6 +11,7 @@ import tempfile
 
 import boto3
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.connection import Connection
@@ -46,10 +47,9 @@ class TNFHypervisor:
     a KVM hypervisor for TNF two-node OCP clusters via dev-scripts.
     """
 
-    def __init__(self, hypervisor_config, dev_scripts_config, proxy_config=None):
+    def __init__(self, hypervisor_config, dev_scripts_config):
         self.config = hypervisor_config
         self.dev_scripts_config = dev_scripts_config
-        self.proxy_config = proxy_config or {}
 
         self.region = self.config.get("region", constants.DEFAULT_AWS_REGION)
         self.ec2_client = boto3.client("ec2", region_name=self.region)
@@ -311,7 +311,8 @@ class TNFHypervisor:
         security_group_ids = self.config.get("security_group_ids", [])
         root_volume_size = self.config.get("root_volume_size", 200)
         root_volume_type = self.config.get("root_volume_type", "gp3")
-        name_prefix = self.config.get("instance_name_prefix", "tnf-hypervisor")
+        cluster_name = config.ENV_DATA.get("cluster_name", "tnf")
+        name_prefix = self.config.get("instance_name_prefix", cluster_name)
 
         with open(self.ssh_pub_key, "r") as f:
             pub_key_content = f.read().strip()
@@ -498,7 +499,8 @@ class TNFHypervisor:
         Returns:
             str: security group ID
         """
-        name_prefix = self.config.get("instance_name_prefix", "tnf-hypervisor")
+        cluster_name = config.ENV_DATA.get("cluster_name", "tnf")
+        name_prefix = self.config.get("instance_name_prefix", cluster_name)
         sg_name = f"{constants.TNF_HYPERVISOR_SG_NAME_PREFIX}-{name_prefix}"
 
         logger.info(f"Creating security group '{sg_name}' in VPC {vpc_id}...")
@@ -630,8 +632,11 @@ class TNFHypervisor:
         logger.info("Hypervisor host configuration complete")
 
     def _set_hostname(self):
-        name_prefix = self.config.get("instance_name_prefix", "tnf-hypervisor")
-        base_domain = self.dev_scripts_config.get("base_domain", "tnf.testing")
+        cluster_name = config.ENV_DATA.get("cluster_name", "tnf")
+        name_prefix = self.config.get("instance_name_prefix", cluster_name)
+        base_domain = self.dev_scripts_config.get(
+            "base_domain", config.ENV_DATA.get("base_domain", "qe.rh-ocs.com")
+        )
         hostname = f"{name_prefix}.{base_domain}"
         logger.info(f"Setting hostname to {hostname}...")
         self._ssh_cmd(f"hostnamectl set-hostname {hostname}")
@@ -688,43 +693,48 @@ class TNFHypervisor:
         )
         logger.info("dev-scripts cloned successfully")
 
-    def _resolve_ocp_release_image(self, ocp_version):
+    def _get_release_image(self):
         """
-        Resolve OCP version to a GA release image from mirror.openshift.com.
+        Get OCP release image using existing ocs-ci utilities.
 
-        Args:
-            ocp_version (str): OCP version like "4.22" or "4.22.8"
+        For nightly builds: uses get_nightly_release_info() to get pullSpec.
+        For GA builds: uses get_ocp_release_image() (from openshift-install).
 
         Returns:
-            str: Release image (quay.io/openshift-release-dev/ocp-release:X.Y.Z-x86_64)
-                 or empty string if resolution fails
+            str: Release image or empty string if resolution fails
         """
-        import urllib.request
+        from ocs_ci.utility.utils import get_nightly_release_info
 
-        major_minor = ".".join(ocp_version.split(".")[:2])
-        url = (
-            f"https://mirror.openshift.com/pub/openshift-v4/clients/"
-            f"ocp/stable-{major_minor}/release.txt"
-        )
-        logger.info(f"Resolving OCP release image from {url}")
+        client_version = config.RUN.get("client_version", "")
+        if "nightly" in client_version:
+            release_info = get_nightly_release_info(client_version)
+            if release_info and release_info.get("pullSpec"):
+                logger.info(
+                    f"Resolved nightly release image: {release_info['pullSpec']}"
+                )
+                return release_info["pullSpec"]
+
         try:
-            with urllib.request.urlopen(url, timeout=30) as resp:
-                content = resp.read().decode()
-            for line in content.splitlines():
-                if "quay.io/openshift-release-dev/ocp-release" in line:
-                    image = line.strip().split()[-1]
-                    logger.info(f"Resolved OCP release image: {image}")
-                    return image
+            from ocs_ci.utility.deployment import get_ocp_release_image
+
+            image = get_ocp_release_image()
+            if image:
+                logger.info(f"Resolved release image from installer: {image}")
+                return image
         except Exception as e:
-            logger.warning(f"Failed to resolve OCP release image: {e}")
+            logger.warning(f"Could not get release image from installer: {e}")
+
+        logger.warning("Could not resolve OCP release image")
         return ""
 
-    def generate_dev_scripts_config(self, pull_secret_content, ocp_version=""):
+    def generate_dev_scripts_config(self, pull_secret_content):
         """
         Generate dev-scripts config file and upload pull secret.
         """
         dev_scripts_dir = constants.TNF_DEV_SCRIPTS_DIR
-        cluster_name = self.dev_scripts_config.get("cluster_name", "tnf-cluster")
+        cluster_name = self.dev_scripts_config.get(
+            "cluster_name", config.ENV_DATA.get("cluster_name", "tnf")
+        )
         remote_ps_path = f"{dev_scripts_dir}/pull_secret.json"
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -762,7 +772,8 @@ class TNFHypervisor:
             f"export MASTER_DISK={self.dev_scripts_config.get('master_disk', 120)}",
             f"export NETWORK_TYPE={self.dev_scripts_config.get('network_type', 'OVNKubernetes')}",
             f"export CLUSTER_NAME={cluster_name}",
-            f"export BASE_DOMAIN={self.dev_scripts_config.get('base_domain', 'tnf.testing')}",
+            f"export BASE_DOMAIN="
+            f"{self.dev_scripts_config.get('base_domain', config.ENV_DATA.get('base_domain', 'qe.rh-ocs.com'))}",
         ]
 
         if extra_disks:
@@ -776,14 +787,15 @@ class TNFHypervisor:
             )
 
         ocp_release = self.dev_scripts_config.get("ocp_release_image")
-        if not ocp_release and ocp_version:
-            ocp_release = self._resolve_ocp_release_image(ocp_version)
+        if not ocp_release:
+            ocp_release = self._get_release_image()
         if ocp_release:
             config_lines.append(f"export OPENSHIFT_RELEASE_IMAGE={ocp_release}")
 
+        client_version = config.RUN.get("client_version", "")
         config_lines.append("export OPENSHIFT_CI=true")
-        if ocp_version:
-            major_minor = ".".join(ocp_version.split(".")[:2])
+        if client_version:
+            major_minor = ".".join(client_version.split(".")[:2])
             config_lines.append(f"export OPENSHIFT_VERSION={major_minor}")
 
         topology = self.dev_scripts_config.get("topology", "fencing-ipi")
@@ -809,31 +821,37 @@ class TNFHypervisor:
         """
         Execute 'make' in the dev-scripts directory.
         This is the long-running step (~45-90 minutes).
+
+        Launches dev-scripts via a detached SSH channel (fire-and-forget)
+        so exec_cmd does not block. Polls for completion by opening a
+        fresh SSH connection each time to avoid stale-transport errors.
         """
         timeout = timeout or constants.TNF_DEV_SCRIPTS_TIMEOUT
         dev_scripts_dir = constants.TNF_DEV_SCRIPTS_DIR
-        cluster_name = self.dev_scripts_config.get("cluster_name", "tnf-cluster")
-
-        transport = self.ssh_conn.client.get_transport()
-        if transport:
-            transport.set_keepalive(60)
+        cluster_name = self.dev_scripts_config.get(
+            "cluster_name", config.ENV_DATA.get("cluster_name", "tnf")
+        )
 
         logger.info(f"Running dev-scripts (timeout: {timeout}s, ~45-90 min)...")
 
         config_file = f"config_{cluster_name}.sh"
         completion_marker = "/tmp/dev-scripts-complete"
-        self._ssh_cmd(
-            f"nohup bash -c '"
+        bg_cmd = (
+            f"sudo bash -c 'nohup bash -c \""
             f"export PATH=/usr/local/bin:$PATH && "
             f"cd {dev_scripts_dir} && "
             f"export CONFIG={config_file} && "
             f"make >> /tmp/dev-scripts.log 2>&1; "
-            f"echo $? > {completion_marker}"
-            f"' &",
-            ignore_error=True,
+            f"echo \\$? > {completion_marker}"
+            f"\" </dev/null >/dev/null 2>&1 &'"
         )
+        transport = self.ssh_conn.client.get_transport()
+        channel = transport.open_session()
+        channel.exec_command(bg_cmd)
+        channel.close()
+        logger.info("dev-scripts launched in background")
 
-        logger.info("dev-scripts started in background, polling for completion...")
+        logger.info("Polling for completion...")
         for sample in TimeoutSampler(
             timeout=timeout,
             sleep=60,
@@ -842,7 +860,7 @@ class TNFHypervisor:
         ):
             if sample is not None:
                 if sample != 0:
-                    retcode, log_tail, _ = self._ssh_cmd(
+                    _, log_tail, _ = self._ssh_cmd(
                         "tail -50 /tmp/dev-scripts.log",
                         ignore_error=True,
                     )
@@ -853,10 +871,33 @@ class TNFHypervisor:
                 logger.info("dev-scripts completed successfully")
                 return
 
-    def _check_dev_scripts_done(self, completion_marker):
-        retcode, stdout, _ = self.ssh_conn.exec_cmd(
-            f"cat {completion_marker} 2>/dev/null"
+    def _reconnect_ssh(self):
+        """Re-establish SSH connection to the hypervisor."""
+        try:
+            self.ssh_conn.client.close()
+        except Exception:
+            pass
+        self.ssh_conn = Connection(
+            host=self.public_ip,
+            user=self.ssh_user,
+            private_key=self.ssh_key,
         )
+
+    def _check_dev_scripts_done(self, completion_marker):
+        """
+        Check if dev-scripts completed by reading the marker file.
+        Uses a fresh SSH connection each time to avoid stale transports.
+        """
+        try:
+            retcode, stdout, _ = self.ssh_conn.exec_cmd(
+                f"cat {completion_marker} 2>/dev/null"
+            )
+        except Exception:
+            logger.info("SSH connection stale, reconnecting...")
+            self._reconnect_ssh()
+            retcode, stdout, _ = self.ssh_conn.exec_cmd(
+                f"cat {completion_marker} 2>/dev/null"
+            )
         if retcode == 0 and stdout.strip():
             return int(stdout.strip())
         return None
@@ -874,7 +915,9 @@ class TNFHypervisor:
             logger.info("No disk resizing needed")
             return
 
-        cluster_name = self.dev_scripts_config.get("cluster_name", "tnf-cluster")
+        cluster_name = self.dev_scripts_config.get(
+            "cluster_name", config.ENV_DATA.get("cluster_name", "tnf")
+        )
         num_masters = self.dev_scripts_config.get("num_masters", 2)
 
         for i in range(num_masters):
@@ -885,37 +928,13 @@ class TNFHypervisor:
 
         logger.info("VM disk resize complete")
 
-    def setup_proxy(self):
-        """
-        Set up squid HTTP proxy on the hypervisor for external
-        access to the OCP cluster API on the private libvirt network.
-        """
-        port = self.proxy_config.get("port", constants.TNF_HYPERVISOR_PROXY_PORT)
-        logger.info(f"Setting up squid proxy on port {port}...")
-
-        commands = [
-            "dnf install -y squid",
-            "sed -i 's/http_access deny all/http_access allow all/' /etc/squid/squid.conf",
-            f"sed -i 's/^http_port .*/http_port {port}/' /etc/squid/squid.conf",
-            "sed -i '/^acl SSL_ports/a acl SSL_ports port 6443' /etc/squid/squid.conf",
-            f"firewall-cmd --permanent --add-port={port}/tcp",
-            "firewall-cmd --reload",
-            "systemctl enable --now squid",
-        ]
-        for cmd in commands:
-            self._ssh_cmd(cmd, ignore_error=True)
-
-        logger.info(f"Squid proxy running on {self.public_ip}:{port}")
-
-    def get_proxy_url(self):
-        port = self.proxy_config.get("port", constants.TNF_HYPERVISOR_PROXY_PORT)
-        return f"http://{self.public_ip}:{port}"
-
     def retrieve_kubeconfig(self, local_auth_dir):
         """
         Download kubeconfig and kubeadmin-password from hypervisor.
         """
-        cluster_name = self.dev_scripts_config.get("cluster_name", "tnf-cluster")
+        cluster_name = self.dev_scripts_config.get(
+            "cluster_name", config.ENV_DATA.get("cluster_name", "tnf")
+        )
         remote_base = f"{constants.TNF_DEV_SCRIPTS_OCP_DIR}/{cluster_name}"
 
         files_to_download = {
@@ -933,3 +952,73 @@ class TNFHypervisor:
             self._ssh_cmd(f"cp {remote_path} {tmp_path} && chmod 644 {tmp_path}")
             self.ssh_conn.download_file(tmp_path, local_path)
             logger.info(f"Downloaded {remote_path} -> {local_path}")
+
+    def setup_port_forwarding(self):
+        """
+        Set up iptables DNAT to forward API (6443) and ingress (443, 80)
+        from the hypervisor's public IP to the internal OCP VIPs.
+
+        Dev-scripts creates the OCP cluster on a private libvirt network.
+        The API/ingress VIPs are only accessible from the hypervisor.
+        This bridges the public IP to the internal VIPs so the cluster
+        is accessible externally (via VPN + Route53 DNS).
+        """
+        cluster_name = self.dev_scripts_config.get(
+            "cluster_name", config.ENV_DATA.get("cluster_name", "tnf")
+        )
+        install_config = (
+            f"{constants.TNF_DEV_SCRIPTS_OCP_DIR}/{cluster_name}"
+            f"/install-config.yaml"
+        )
+
+        _, raw, _ = self._ssh_cmd(
+            f"grep -E 'apiVIPs|ingressVIPs' {install_config} -A1"
+            f" | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+'",
+            ignore_error=True,
+        )
+        vips = [ip.strip() for ip in raw.strip().splitlines() if ip.strip()]
+        if len(vips) < 2:
+            _, raw, _ = self._ssh_cmd(
+                f"grep -E 'apiVIP|ingressVIP' {install_config}"
+                f" | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+'",
+                ignore_error=True,
+            )
+            vips = [ip.strip() for ip in raw.strip().splitlines() if ip.strip()]
+
+        if len(vips) < 2:
+            logger.warning(
+                "Could not determine API/Ingress VIPs from install-config. "
+                "Port forwarding not configured — cluster may not be "
+                "accessible externally."
+            )
+            return
+
+        api_vip = vips[0]
+        ingress_vip = vips[1]
+        logger.info(
+            f"Setting up port forwarding: API VIP={api_vip}, "
+            f"Ingress VIP={ingress_vip}"
+        )
+
+        rules = [
+            (6443, api_vip, 6443),
+            (443, ingress_vip, 443),
+            (80, ingress_vip, 80),
+        ]
+        for src_port, dest_ip, dest_port in rules:
+            self._ssh_cmd(
+                f"iptables -t nat -A PREROUTING -p tcp --dport {src_port} "
+                f"-j DNAT --to-destination {dest_ip}:{dest_port}",
+                ignore_error=True,
+            )
+            self._ssh_cmd(
+                f"iptables -A FORWARD -d {dest_ip} -p tcp "
+                f"--dport {dest_port} -j ACCEPT",
+                ignore_error=True,
+            )
+
+        self._ssh_cmd(
+            "iptables -t nat -A POSTROUTING -o baremetal -j MASQUERADE",
+            ignore_error=True,
+        )
+        logger.info("Port forwarding configured")

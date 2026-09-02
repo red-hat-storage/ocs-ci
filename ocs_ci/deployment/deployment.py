@@ -234,8 +234,9 @@ def get_expected_mon_count():
     Return the expected number of ready MON pods for deployment consumers.
 
     Validates DEPLOYMENT.mon_count when present. Defaults to 3 only when the
-    setting is absent. Used by StorageCluster monCount setup and the
-    deploy_ocs MON readiness wait_for_resource() call.
+    setting is absent. For TNF clusters, returns 2 because the third monitor
+    (floating mon-c) uses the ``app=rook-ceph-floating-mon`` label instead
+    of ``app=rook-ceph-mon``.
 
     Returns:
         int: Validated MON count (3 or 5)
@@ -245,6 +246,9 @@ def get_expected_mon_count():
             other than 3 or 5
 
     """
+    if "tnf" in config.ENV_DATA:
+        return 2
+
     if "mon_count" not in config.DEPLOYMENT:
         return 3
 
@@ -2426,7 +2430,8 @@ class Deployment(object):
                 config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
                 and config.ENV_DATA["deployment_type"] == "managed"
             )
-            if managed_ibmcloud:
+            tnf_cluster = "tnf" in config.ENV_DATA
+            if managed_ibmcloud or tnf_cluster:
                 mon_pod_timeout = 1800
             else:
                 mon_pod_timeout = 900
@@ -2437,6 +2442,13 @@ class Deployment(object):
                 resource_count=expected_mon_count,
                 timeout=mon_pod_timeout,
             )
+            if tnf_cluster:
+                assert pod.wait_for_resource(
+                    condition="Running",
+                    selector="app=rook-ceph-floating-mon",
+                    resource_count=1,
+                    timeout=mon_pod_timeout,
+                )
             assert pod.wait_for_resource(
                 condition="Running",
                 selector="app=rook-ceph-mgr",

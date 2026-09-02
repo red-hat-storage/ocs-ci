@@ -3,40 +3,7 @@
 #
 # Provisions EC2 bare-metal instance, runs dev-scripts to create
 # a 2-node OCP cluster (fencing-ipi), then deploys ODF with DRBD.
-#
-# Prerequisites:
-#   1. AWS credentials configured (~/.aws/credentials or environment)
-#   2. Pull secret at data/pull-secret (from console.redhat.com)
-#   3. SSH key pair at ~/.ssh/id_ed25519 or ~/.ssh/id_rsa (auto-detected)
-#
-# Step 1 - Deploy OCP:
-#   run-ci -m deployment --deploy \
-#     --ocsci-conf conf/deployment/aws/ipi_1az_rhcos_tnf_2m_0w.yaml \
-#     --ocsci-conf conf/ocsci/skip_ocs_deploy.yaml \
-#     --cluster-name my-tnf-cluster \
-#     --cluster-path /tmp/tnf-cluster \
-#     --ocp-version 4.22 \
-#     --ocs-version 4.22 \
-#     tests/functional/tnf/test_tnf_deployment.py
-#
-# Step 2 - Deploy ODF:
-#   run-ci -m deployment --deploy \
-#     --ocsci-conf conf/deployment/aws/ipi_1az_rhcos_tnf_2m_0w.yaml \
-#     --ocsci-conf conf/ocsci/skip_ocp_deploy.yaml \
-#     --cluster-name my-tnf-cluster \
-#     --cluster-path /tmp/tnf-cluster \
-#     --ocp-version 4.22 \
-#     --ocs-version 4.22 \
-#     tests/functional/tnf/test_tnf_deployment.py
-#
-# Teardown:
-#   run-ci -m deployment --teardown \
-#     --ocsci-conf conf/deployment/aws/ipi_1az_rhcos_tnf_2m_0w.yaml \
-#     --cluster-name my-tnf-cluster \
-#     --cluster-path /tmp/tnf-cluster \
-#     --ocp-version 4.22 \
-#     --ocs-version 4.22 \
-#     tests/functional/tnf/test_tnf_deployment.py
+
 DEPLOYMENT:
   allow_lower_instance_requirements: false
   local_storage: true
@@ -47,6 +14,7 @@ ENV_DATA:
   deployment_type: 'ipi'
   worker_replicas: 0
   master_replicas: 2
+  base_domain: 'qe.rh-ocs.com'
   device_class: 'ssd'
   skip_nfs_deployment: true
   region: 'us-east-2'
@@ -58,7 +26,6 @@ ENV_DATA:
       root_volume_size: 200
       root_volume_type: 'gp3'
       ssh_user: 'ec2-user'
-      instance_name_prefix: 'tnf-hypervisor'
     dev_scripts:
       topology: 'fencing-ipi'
       num_masters: 2
@@ -71,8 +38,3 @@ ENV_DATA:
         - size: 500                   # GB, OSD (>= 500 GB required)
       ocp_release_image: ''
       network_type: 'OVNKubernetes'
-      cluster_name: 'tnf-cluster'
-      base_domain: 'tnf.testing'
-    proxy:
-      enabled: true
-      port: 8213
