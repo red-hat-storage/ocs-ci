@@ -1887,10 +1887,21 @@ class BusyboxDiscoveredApps(DRWorkload):
         log.info("Creating DRPC")
         run_cmd(f"oc create -f {drcp_data_yaml.name}")
 
-    def create_drpc_for_apps_with_recipe(self):
+    def create_drpc_for_apps_with_recipe(self, recipe_name=None):
         """
-        Create drpc for discovered apps with recipe
+        Create drpc for discovered apps with recipe.
+
+        Args:
+            recipe_name (str): Name of the Recipe CR to set in
+                ``recipeRef.name``.  Defaults to ``self.workload_namespace``,
+                which matches the name assigned by
+                ``create_recipe_with_checkhooks``.  Pass the OLS-generated
+                recipe name when the Recipe was created externally (e.g. via
+                OLS) and has a different name.
         """
+        _recipe_name = (
+            recipe_name if recipe_name is not None else self.workload_namespace
+        )
 
         drpc_yaml_data = templating.load_yaml(self.drpc_recipe_yaml_file)
         drpc_yaml_data["spec"].setdefault("kubeObjectProtection", {})
@@ -1906,23 +1917,25 @@ class BusyboxDiscoveredApps(DRWorkload):
             self.discovered_apps_placement_name + "-plmnt-1"
         )
         drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESPACE
-        drpc_data_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="drpc", delete=False
-        )
-        templating.dump_data_to_temp_yaml(drpc_yaml_data, drpc_data_yaml.name)
-        log.info(drpc_data_yaml.name)
-        log.info("Deploying workload with recipe")
         drpc_yaml_data["spec"]["kubeObjectProtection"][
             "captureInterval"
         ] = self.kubeobject_capture_interval
         drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"][
             "name"
-        ] = self.workload_namespace
+        ] = _recipe_name
         drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"][
             "namespace"
         ] = self.workload_namespace
+        drpc_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="drpc", delete=False
+        )
         templating.dump_data_to_temp_yaml(drpc_yaml_data, drpc_data_yaml.name)
-        log.info("Creating DRPC")
+        log.info(drpc_data_yaml.name)
+        log.info(
+            "Creating DRPC with recipeRef name=%r namespace=%r",
+            _recipe_name,
+            self.workload_namespace,
+        )
         run_cmd(f"oc create -f {drpc_data_yaml.name}")
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
