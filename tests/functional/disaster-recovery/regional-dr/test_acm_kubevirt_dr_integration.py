@@ -116,7 +116,7 @@ class TestACMKubevirtDRIntergration:
         logger.info("Deploy 1st CNV workload")
         if static_vm_ip:
             cnv_workloads = cnv_workload_with_static_ip(
-                pvc_vm=1, dr_protect=False, shared_drpc_protection=False
+                setup_udn_nad, pvc_vm=1, dr_protect=False, shared_drpc_protection=False
             )
         else:
             cnv_workloads = discovered_apps_dr_workload_cnv(
@@ -128,7 +128,10 @@ class TestACMKubevirtDRIntergration:
             logger.info("Deploy 2nd CNV workload in the existing namespace")
             if static_vm_ip:
                 cnv_workloads = cnv_workload_with_static_ip(
-                    pvc_vm=1, dr_protect=False, shared_drpc_protection=True
+                    setup_udn_nad,
+                    pvc_vm=1,
+                    dr_protect=False,
+                    shared_drpc_protection=True,
                 )
             else:
                 cnv_workloads = discovered_apps_dr_workload_cnv(
