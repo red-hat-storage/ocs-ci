@@ -7,11 +7,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_ocs_version,
 )
-from ocs_ci.framework.testlib import ManageTest, tier1, polarion_id
+from ocs_ci.framework.testlib import ManageTest, tier1, tier2, polarion_id
 from ocs_ci.ocs import constants, node
 from ocs_ci.helpers.helpers import (
     create_userns_project,
     create_userns_pod,
+    create_pod,
     verify_file_ownership,
     wait_for_resource_state,
 )
@@ -23,7 +24,6 @@ SUPPLEMENTAL_GROUPS_BASE = 10000
 USERNS_UID_RANGE = "10000/1000"
 
 
-@tier1
 @green_squad
 @skipif_ocs_version("<4.23")
 class TestUserNamespaceCephFS(ManageTest):
@@ -32,6 +32,7 @@ class TestUserNamespaceCephFS(ManageTest):
     with UID remapping and data persistence.
     """
 
+    @tier1
     @polarion_id("OCS-8224")
     def test_user_namespace_shared_io_and_uid_remapping(
         self,
@@ -145,6 +146,7 @@ class TestUserNamespaceCephFS(ManageTest):
         )
         logger.info("User namespace shared I/O and UID remapping " "test passed")
 
+    @tier1
     @polarion_id("OCS-8225")
     def test_user_namespace_rwo_ownership_and_persistence(
         self,
@@ -256,3 +258,107 @@ class TestUserNamespaceCephFS(ManageTest):
             SUPPLEMENTAL_GROUPS_BASE,
         )
         logger.info(f"Ownership persisted: {CONTAINER_UID}:{SUPPLEMENTAL_GROUPS_BASE}")
+
+    @tier2
+    @polarion_id("OCS-8238")
+    def test_no_userns_no_uid_remapping(
+        self,
+        project_factory,
+        pvc_factory,
+        teardown_factory,
+    ):
+        """
+        Steps:
+            1. Create a project with default annotations (no
+               uid-range lowering).
+            2. Create a CephFS RWX PVC (1Gi).
+            3. Deploy a restricted-v2 pod WITHOUT hostUsers=false.
+            4. Write and read a file on the CephFS mount.
+            5. Verify the file is owned by the namespace-assigned UID.
+            6. Verify NO UID remapping on the host
+               (container UID == host UID).
+        """
+        logger.test_step("Step 1: Create project with default annotations")
+        project_obj = project_factory()
+        ns_name = project_obj.namespace
+
+        logger.test_step("Step 2: Create CephFS RWX PVC (1Gi)")
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            project=project_obj,
+            size=1,
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+        logger.info(f"PVC {pvc_obj.name} created and Bound")
+        logger.test_step("Step 3: Deploy restricted-v2 pod without hostUsers")
+        worker_nodes = node.get_worker_nodes()
+        logger.assertion(
+            f"Worker nodes available: expected >= 1, actual={len(worker_nodes)}"
+        )
+        assert len(worker_nodes) >= 1, "No worker nodes"
+        target_node = worker_nodes[0]
+        pod_obj = create_pod(
+            interface_type=constants.CEPHFILESYSTEM,
+            pvc_name=pvc_obj.name,
+            namespace=ns_name,
+            node_name=target_node,
+            command=["sh", "-c", "sleep infinity"],
+            security_context={
+                "allowPrivilegeEscalation": False,
+                "capabilities": {"drop": ["ALL"]},
+                "seccompProfile": {
+                    "type": "RuntimeDefault",
+                },
+            },
+            scc={
+                "runAsNonRoot": True,
+            },
+            volumemounts=[
+                {"mountPath": "/mnt/test", "name": "mypvc"},
+            ],
+        )
+        teardown_factory(pod_obj)
+        wait_for_resource_state(
+            resource=pod_obj,
+            state=constants.STATUS_RUNNING,
+            timeout=300,
+        )
+        pod_node = pod_obj.get()["spec"]["nodeName"]
+        logger.info(f"Pod {pod_obj.name} running on {pod_node}")
+
+        logger.test_step("Step 4: Write/read file, read container UID and fsGroup")
+        out = pod_obj.exec_sh_cmd_on_pod(
+            "id -u && echo control > /mnt/test/file1 && sync"
+        )
+        logger.info(f"Container id / write output: {out}")
+        container_uid = int(out.split()[0])
+        fs_group = pod_obj.get()["spec"]["securityContext"]["fsGroup"]
+        read_back = pod_obj.exec_sh_cmd_on_pod("cat /mnt/test/file1")
+        logger.assertion(f"File readback contains 'control': actual={read_back!r}")
+        assert "control" in read_back, f"File content mismatch: {read_back}"
+
+        logger.test_step("Step 5: Verify file owned by namespace-assigned UID")
+        verify_file_ownership(
+            pod_obj,
+            "/mnt/test/file1",
+            container_uid,
+            fs_group,
+        )
+        logger.info(
+            "File owned by namespace-assigned UID/fsGroup "
+            f"{container_uid}:{fs_group}"
+        )
+        logger.test_step("Step 6: Verify NO UID remapping on host")
+        host_uid = node.get_host_uid_for_pod(pod_node, pod_obj.name)
+        logger.assertion(
+            f"Host UID: expected == container UID {container_uid}, "
+            f"actual={host_uid}"
+        )
+        assert host_uid == container_uid, (
+            f"Host UID {host_uid} != container UID {container_uid} — "
+            f"unexpected remapping without hostUsers=false"
+        )
+        logger.info(
+            f"No remapping confirmed: host UID {host_uid} == "
+            f"container UID {container_uid}"
+        )
