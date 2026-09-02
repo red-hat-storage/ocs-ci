@@ -180,17 +180,28 @@ def _extract_yaml_from_response(response_text):
     Returns:
         dict: Parsed YAML document, or ``None`` if no valid YAML was found.
     """
-    # Try to extract a fenced YAML block — only process blocks that are
-    # explicitly tagged as yaml (```yaml ... ```) to avoid mistakenly
-    # parsing prose preambles that yaml.safe_load returns as plain strings.
+    # Try to extract a fenced YAML block.  OLS may use ```yaml, ```yml, or
+    # an untagged ``` fence.  Accept any block whose content parses as a dict.
+    # Skip blocks whose first token is a known non-yaml language tag.
+    _SKIP_TAGS = {"python", "json", "bash", "sh", "text", "markdown"}
     if "```" in response_text:
         for block in response_text.split("```"):
             block = block.strip()
-            if not block.startswith("yaml"):
+            if not block:
                 continue
-            block = block[4:].strip()
+            # Strip a leading language tag (word chars only, no whitespace)
+            first_line, _, rest = block.partition("\n")
+            tag = first_line.strip().lower()
+            if tag and " " not in tag:
+                if tag in _SKIP_TAGS:
+                    continue
+                content = rest.strip()
+            else:
+                content = block
+            if not content:
+                continue
             try:
-                parsed = yaml.safe_load(block)
+                parsed = yaml.safe_load(content)
                 if isinstance(parsed, dict):
                     return parsed
             except yaml.YAMLError:
@@ -243,6 +254,31 @@ def _assert_recipe_structure(recipe_yaml):
     workflow_names = [w["name"] for w in workflows]
     assert "backup" in workflow_names, "Recipe must have a 'backup' workflow"
     assert "restore" in workflow_names, "Recipe must have a 'restore' workflow"
+
+    # Validate spec.volumes: the CRD requires an object (single volumes
+    # section), not a list.  OLS occasionally generates a YAML list here.
+    if "volumes" in spec:
+        assert isinstance(spec["volumes"], dict), (
+            "Recipe spec.volumes must be a mapping (object), got: "
+            f"{type(spec['volumes']).__name__!r} — OLS generated an invalid type"
+        )
+
+    # Validate spec.hooks: each hook op's command must be a string, not a list.
+    for hi, hook in enumerate(spec.get("hooks", [])):
+        assert isinstance(hook, dict), (
+            f"Recipe spec.hooks[{hi}] must be a mapping, got: "
+            f"{type(hook).__name__!r}"
+        )
+        for oi, op in enumerate(hook.get("ops", [])):
+            assert isinstance(
+                op, dict
+            ), f"Recipe spec.hooks[{hi}].ops[{oi}] must be a mapping"
+            if "command" in op:
+                assert isinstance(op["command"], str), (
+                    f"Recipe spec.hooks[{hi}].ops[{oi}].command must be a string, "
+                    f"got: {type(op['command']).__name__!r} — "
+                    f"OLS generated an invalid type"
+                )
 
 
 # ---------------------------------------------------------------------------
