@@ -14,6 +14,7 @@ cluster when executed.
 """
 
 import logging
+import shlex
 
 import pytest
 import yaml
@@ -270,7 +271,9 @@ def _assert_recipe_structure(recipe_yaml):
             f"{type(spec['volumes']).__name__!r}"
         )
 
-    # Validate spec.hooks: each hook op's command must be a string, not a list.
+    # Validate spec.hooks: each hook op's command must be a string per the CRD.
+    # OLS consistently generates it as an exec-style list; coerce to a
+    # shell-quoted string with shlex.join so the manifest is API-server-valid.
     for hi, hook in enumerate(spec.get("hooks", [])):
         assert isinstance(hook, dict), (
             f"Recipe spec.hooks[{hi}] must be a mapping, got: "
@@ -280,11 +283,17 @@ def _assert_recipe_structure(recipe_yaml):
             assert isinstance(
                 op, dict
             ), f"Recipe spec.hooks[{hi}].ops[{oi}] must be a mapping"
+            if "command" in op and isinstance(op["command"], list):
+                joined = shlex.join(op["command"])
+                logger.warning(
+                    f"OLS generated hooks[{hi}].ops[{oi}].command as a list; "
+                    f"coercing to string: {joined!r}"
+                )
+                op["command"] = joined
             if "command" in op:
                 assert isinstance(op["command"], str), (
-                    f"Recipe spec.hooks[{hi}].ops[{oi}].command must be a string, "
-                    f"got: {type(op['command']).__name__!r} — "
-                    f"OLS generated an invalid type"
+                    f"Recipe spec.hooks[{hi}].ops[{oi}].command must be a string "
+                    f"after coercion, got: {type(op['command']).__name__!r}"
                 )
 
 
