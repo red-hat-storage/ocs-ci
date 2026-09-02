@@ -26,7 +26,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
     """
 
     def hotplug_and_run_io(
-        self, vm_obj, pvc, file_paths, before_disks, cross_pvc=False
+        self, vm_obj, pvc, file_paths, before_disks, cross_pvc=False, persist=True
     ):
         """
         Hotplugs a PVC to a VM and runs I/O operations.
@@ -41,6 +41,12 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             before_disks (str): The output of 'lsblk -o NAME,SIZE,MOUNTPOINT -P' before hotplugging.
             cross_pvc (bool, optional): If True, indicates that the I/O operation is for a pvc of pvc
                                         based vm to dvt based VM and vice a versa. Defaults to False.
+            persist (bool, optional): If True, the hotplug is persisted in the VM spec.  Set to False
+                                      when attaching a clone to an already-restarted VM so that the
+                                      addvolume command targets the live VMI directly, avoiding a
+                                      KubeVirt race where ``--persist`` updates the spec but does
+                                      not trigger the live hotplug after a recent restart.
+                                      Defaults to True.
 
         Returns:
             str: The MD5 checksum of the source file after I/O operation if cross_pvc is False.
@@ -49,7 +55,11 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             Exception: If there is an error during hotplugging or I/O operation.
         """
         logger.info(f"Hotplugging PVC '{pvc.name}' to VM '{vm_obj.name}'")
-        vm_obj.addvolume(volume_name=pvc.name)
+        # When persist=False the volume is added only to the live VMI (not the VM spec),
+        # so verifyvolume() (which inspects vm.spec.template.spec.volumes) would not find
+        # it.  Skip the spec-level verify in that case; verify_hotplug below confirms the
+        # disk actually appears inside the guest.
+        vm_obj.addvolume(volume_name=pvc.name, persist=persist, verify=persist)
         sample = TimeoutSampler(
             timeout=600,
             sleep=5,
@@ -70,19 +80,22 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             )
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1], verify=True)
 
-    def unplug_disks_and_verify(self, vm_obj, pvc):
+    def unplug_disks_and_verify(self, vm_obj, pvc, persist=True):
         """
         Removes a PVC from the specified VM and verifies its detachment.
 
         Args:
             vm_obj (CnvWorkload): The VM object from which to remove the PVC.
             pvc (Pvc): The PVC object to be removed from the VM.
+            persist (bool, optional): If True, removes the volume from the persistent VM spec.
+                                      Must match the persist value used during addvolume.
+                                      Defaults to True.
 
         Returns:
             None
         """
         logger.info(f"Unplugging PVC '{pvc.name}' from VM '{vm_obj.name}'")
-        vm_obj.removevolume(volume_name=pvc.name, persist=True, verify=True)
+        vm_obj.removevolume(volume_name=pvc.name, persist=persist, verify=True)
         logger.info(f"PVC '{pvc.name}' unplugged and verified for VM '{vm_obj.name}'")
 
     def _restart_and_get_disk_baseline(self, vm_obj):
@@ -273,14 +286,24 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 f"Attaching clone '{clone_obj_dvt.name}' to VM '{vm_obj_pvc.name}'"
             )
             self.hotplug_and_run_io(
-                vm_obj_pvc, clone_obj_dvt, file_paths, before_disks_pvc, cross_pvc=True
+                vm_obj_pvc,
+                clone_obj_dvt,
+                file_paths,
+                before_disks_pvc,
+                cross_pvc=True,
+                persist=False,
             )
 
             logger.info(
                 f"Attaching clone '{clone_obj_pvc.name}' to VM '{vm_obj_dvt.name}'"
             )
             self.hotplug_and_run_io(
-                vm_obj_dvt, clone_obj_pvc, file_paths, before_disks_dvt, cross_pvc=True
+                vm_obj_dvt,
+                clone_obj_pvc,
+                file_paths,
+                before_disks_dvt,
+                cross_pvc=True,
+                persist=False,
             )
 
         except Exception as e:
@@ -290,8 +313,9 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         logger.test_step("Unplug all hotplugged disks and verify detachment")
         try:
             # Original PVCs were already unplugged above; only unplug the clones here.
-            self.unplug_disks_and_verify(vm_obj_pvc, clone_obj_dvt)
-            self.unplug_disks_and_verify(vm_obj_dvt, clone_obj_pvc)
+            # The clones were attached with persist=False, so remove them the same way.
+            self.unplug_disks_and_verify(vm_obj_pvc, clone_obj_dvt, persist=False)
+            self.unplug_disks_and_verify(vm_obj_dvt, clone_obj_pvc, persist=False)
             logger.info("All hotplugged disks unplugged and verified")
         except Exception as e:
             logger.exception(f"PVC unplug failed: {e}")
