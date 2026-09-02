@@ -1364,7 +1364,19 @@ def storageclass_factory_fixture(
                     else:
                         interface_name = pool_name
             elif interface == constants.CEPHFILESYSTEM:
-                interface_name = helpers.get_cephfs_data_pool_name()
+                if erasure_coded:
+                    from ocs_ci.ocs.cluster import get_ec_profile
+
+                    data_chunks, coding_chunks = get_ec_profile()
+                    ec_pool_short = sc_name or f"ec-fs-{len(instances)}"
+                    interface_name = helpers.create_cephfs_ec_pool(
+                        ec_pool_short, data_chunks, coding_chunks
+                    )
+                    request.addfinalizer(
+                        lambda n=ec_pool_short: helpers.delete_cephfs_ec_pool(n)
+                    )
+                else:
+                    interface_name = helpers.get_cephfs_data_pool_name()
 
             sc_obj = helpers.create_storage_class(
                 interface_type=interface,
