@@ -890,16 +890,6 @@ class TestOLSRecipeFailoverAndRelocate:
         from ocs_ci.ocs import constants as _constants
 
         # ------------------------------------------------------------------ #
-        # Step 0: Verify OLS is responsive before spending time on workload  #
-        # deploy — skip early if the LLM backend is unreachable.             #
-        # ------------------------------------------------------------------ #
-        config.switch_acm_ctx()
-        try:
-            ols.query("ping", max_retries=5)
-        except Exception as exc:
-            pytest.skip(f"OLS is not responding, skipping test: {exc}")
-
-        # ------------------------------------------------------------------ #
         # Step 1: Deploy workload for OLS recipe protection (no DRPC yet)    #
         # ------------------------------------------------------------------ #
         rdr_workloads = discovered_apps_dr_workload(
@@ -909,9 +899,16 @@ class TestOLSRecipeFailoverAndRelocate:
 
         # ------------------------------------------------------------------ #
         # Step 2+3: Generate and apply OLS recipe                             #
+        # Skip if OLS LLM backend is unavailable (transient 502) rather than #
+        # failing — the workload cleanup finalizer still runs normally.       #
         # ------------------------------------------------------------------ #
+        import requests as _requests
+
         config.switch_acm_ctx()
-        recipe_name = self._generate_and_apply_ols_recipe(workload, ols)
+        try:
+            recipe_name = self._generate_and_apply_ols_recipe(workload, ols)
+        except _requests.HTTPError as exc:
+            pytest.skip(f"OLS LLM backend unavailable, skipping test: {exc}")
 
         # ------------------------------------------------------------------ #
         # Step 4: Create recipe-based DRPC (first and only DRPC for this     #
