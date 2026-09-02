@@ -88,6 +88,10 @@ class CephFSStressTestManager:
         # Reuse PrometheusAPI instance to prevent memory leaks from creating new instances
         self.prometheus_api = PrometheusAPI(threading_lock=self.verification_lock)
         self.pod_restart_baseline = {}
+        # Mirrors the ENABLE_FS_MONITORING env-var set in the pod/job YAML.
+        # Updated by create_cephfs_stress_pod / create_cephfs_stress_job so that
+        # the watchdog skips filesystem hang checks when monitoring is disabled.
+        self.fs_monitoring_enabled = True
 
     def setup_stress_test_environment(self, pvc_size, storageclass_factory):
         """
@@ -180,6 +184,18 @@ class CephFSStressTestManager:
         ] = pvc_name
         logger.info("Set environment variables in the pod template")
         self._set_env_vars(cephfs_stress_pod_data, env_vars, type=constants.POD)
+        self.fs_monitoring_enabled = (
+            self._read_env_var_from_spec(
+                cephfs_stress_pod_data["spec"]["containers"][0].get("env", []),
+                "ENABLE_FS_MONITORING",
+                default="true",
+            ).lower()
+            == "true"
+        )
+        logger.info(
+            f"Filesystem monitoring {'enabled' if self.fs_monitoring_enabled else 'DISABLED'} "
+            "(ENABLE_FS_MONITORING)"
+        )
         cephfs_stress_pod_obj = pod.Pod(**cephfs_stress_pod_data)
         logger.info(f"Creating CephFS stress pod with PVC: {pvc_name}")
         created_resource = cephfs_stress_pod_obj.create()
@@ -247,8 +263,22 @@ class CephFSStressTestManager:
             cephfs_stress_job_data["spec"]["parallelism"] = parallelism
         if completions:
             cephfs_stress_job_data["spec"]["completions"] = completions
-        logger.info("Set environment variables in the pod template")
+        logger.info("Set environment variables in the job template")
         self._set_env_vars(cephfs_stress_job_data, env_vars, type=constants.JOB)
+        self.fs_monitoring_enabled = (
+            self._read_env_var_from_spec(
+                cephfs_stress_job_data["spec"]["template"]["spec"]["containers"][0].get(
+                    "env", []
+                ),
+                "ENABLE_FS_MONITORING",
+                default="true",
+            ).lower()
+            == "true"
+        )
+        logger.info(
+            f"Filesystem monitoring {'enabled' if self.fs_monitoring_enabled else 'DISABLED'} "
+            "(ENABLE_FS_MONITORING)"
+        )
         job_name = cephfs_stress_job_data["metadata"]["name"]
         job_ocs_obj = OCS(**cephfs_stress_job_data)
         created_resource = job_ocs_obj.create()
@@ -285,6 +315,24 @@ class CephFSStressTestManager:
 
         """
         wait_for_resource_state(resource, state=state, timeout=timeout)
+
+    def _read_env_var_from_spec(self, env_list, name, default=""):
+        """
+        Return the value of an env variable from a container env list.
+
+        Args:
+            env_list (list): The ``env`` list from the container spec.
+            name (str): The env variable name to look up.
+            default (str): Value to return when the variable is not found.
+
+        Returns:
+            str: The value string, or *default* if not present.
+
+        """
+        for item in env_list:
+            if item.get("name") == name:
+                return str(item.get("value", default))
+        return default
 
     def _set_env_vars(self, resource_data, env_vars, type):
         """
@@ -493,8 +541,14 @@ class CephFSStressTestManager:
         verifications_to_run = [
             check_ceph_health,
             verify_openshift_storage_ns_pods_in_running_state,
-            verify_no_filesystem_hangs,
         ]
+        if self.fs_monitoring_enabled:
+            verifications_to_run.append(verify_no_filesystem_hangs)
+        else:
+            logger.info(
+                "Skipping filesystem hang verification - "
+                "ENABLE_FS_MONITORING is disabled"
+            )
         try:
             for verification_func in verifications_to_run:
                 if self.stop_event.is_set():
