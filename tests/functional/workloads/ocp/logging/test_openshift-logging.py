@@ -153,7 +153,9 @@ class Testopenshiftloggingonocs(E2ETest):
 
         try:
             curl_output_str = exec_cmd(curl_command).stdout.decode("utf-8")
-            logger.debug(f"Curl command output: {curl_output_str[:200]}...")
+            logger.info(
+                f"Loki query raw response (first 500 chars): {curl_output_str[:500]}"
+            )
         except Exception as e:
             logger.exception(f"Failed to fetch logs from Loki for project: {project}")
             raise AssertionError(f"Curl command failed to fetch logs: {e}")
@@ -174,15 +176,17 @@ class Testopenshiftloggingonocs(E2ETest):
             )
 
         # Check if any results were returned — transient, safe to retry
-        if not curl_output.get("data", {}).get("result"):
+        result = curl_output.get("data", {}).get("result")
+        if not result:
             raise LokiEmptyResultError(
                 f"No logs found for namespace {project} in LokiStack. "
                 f"Query may need more time for log collection/indexing. "
                 f"Full response: {curl_output_str}"
             )
 
-        log_type = curl_output["data"]["result"][0]["stream"]["openshift_log_type"]
-        logger.assertion(
+        logger.info(f"Loki returned {len(result)} stream(s) for namespace: {project}")
+        log_type = result[0]["stream"]["openshift_log_type"]
+        logger.info(
             f"Log type validation: project={project}, expected='application', actual='{log_type}'"
         )
         assert log_type == "application", "not able to access project in logs"
