@@ -116,11 +116,15 @@ class OLSInstaller:
     # ------------------------------------------------------------------
 
     def _switch(self):
-        """Switch cluster context when an index was provided."""
+        """Switch cluster context when an index was provided.
+
+        When ``switch_ctx`` is ``None`` (the default) the current cluster
+        context is preserved; no switch is performed.  Pass an explicit
+        cluster index to target a specific cluster, or pass
+        ``config.get_active_acm_index()`` to target the ACM hub.
+        """
         if self.switch_ctx is not None:
             config.switch_ctx(self.switch_ctx)
-        else:
-            config.switch_acm_ctx()
 
     # ------------------------------------------------------------------
     # Existence helpers

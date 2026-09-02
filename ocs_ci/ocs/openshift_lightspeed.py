@@ -267,7 +267,40 @@ class OpenShiftLightspeed:
                 out_yaml_format=False,
             )
         else:
-            logger.info(f"ClusterRoleBinding '{crb_name}' already exists — skipping")
+            # Validate that the existing binding targets the expected role and SA
+            expected_role = constants.OLS_QUERY_ACCESS_ROLE
+            expected_subject = f"{self.namespace}:{sa_name}"
+            crb_data = ocp.exec_oc_cmd(
+                f"get clusterrolebinding {crb_name}"
+                ' -o jsonpath=\'{.roleRef.name}{"\\n"}'
+                '{.subjects[0].namespace}{":"}{.subjects[0].name}\'',
+                out_yaml_format=False,
+            ).strip()
+            crb_lines = crb_data.splitlines()
+            actual_role = crb_lines[0] if crb_lines else ""
+            actual_subject = crb_lines[1] if len(crb_lines) > 1 else ""
+            if actual_role != expected_role or actual_subject != expected_subject:
+                logger.warning(
+                    f"ClusterRoleBinding '{crb_name}' has unexpected role/subject "
+                    f"(role={actual_role!r}, subject={actual_subject!r}); "
+                    f"expected role={expected_role!r}, subject={expected_subject!r}. "
+                    f"Replacing the binding."
+                )
+                ocp.exec_oc_cmd(
+                    f"delete clusterrolebinding {crb_name}",
+                    out_yaml_format=False,
+                )
+                ocp.exec_oc_cmd(
+                    f"create clusterrolebinding {crb_name}"
+                    f" --clusterrole={constants.OLS_QUERY_ACCESS_ROLE}"
+                    f" --serviceaccount={self.namespace}:{sa_name}",
+                    out_yaml_format=False,
+                )
+            else:
+                logger.info(
+                    f"ClusterRoleBinding '{crb_name}' already exists with correct "
+                    f"role and subject — skipping"
+                )
 
         return sa_name
 
@@ -358,8 +391,14 @@ class OpenShiftLightspeed:
         if response.status_code == 200:
             logger.info("OLS authorization check passed")
             return True
+        if response.status_code in (401, 403):
+            logger.warning(
+                f"OLS authorization check failed: {response.status_code} {response.text}"
+            )
+            return False
         logger.warning(
-            f"OLS authorization check failed: {response.status_code} {response.text}"
+            f"OLS authorization check unexpected status: "
+            f"{response.status_code} {response.text}"
         )
         response.raise_for_status()
 
@@ -407,6 +446,8 @@ class OpenShiftLightspeed:
                 are exhausted on 5xx responses.
             requests.ReadTimeout: When all retries are exhausted on timeouts.
         """
+        if max_retries < 1:
+            raise ValueError(f"max_retries must be at least 1, got {max_retries!r}")
         url = f"{self.base_url}/v1/query"
         payload = {"query": query_text}
         if conversation_id:
