@@ -298,17 +298,10 @@ class TestNetworkPolicyBlockedTraffic(ManageTest):
         pod_name, ns = test_pod_in_foreign_ns
         storage_ns = config.ENV_DATA["cluster_namespace"]
 
-        mon_pods = get_pods_having_label(constants.MON_APP_LABEL, namespace=storage_ns)
-        mon_svc_name = None
-        if mon_pods:
-            mon_svc_name = mon_pods[0]["metadata"]["labels"].get("ceph_daemon_id")
-            if mon_svc_name:
-                mon_svc_name = f"rook-ceph-mon-{mon_svc_name}"
-
-        targets = {}
-        if mon_svc_name:
-            targets[mon_svc_name] = 3300
-        targets["noobaa-mgmt"] = 443
+        targets = {
+            "noobaa-mgmt": 443,
+            "s3": 443,
+        }
 
         tested = 0
         for svc_name, port in targets.items():

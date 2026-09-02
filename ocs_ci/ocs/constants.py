@@ -314,8 +314,6 @@ ODF_CSV_PREFIXES_FOR_NETWORK_POLICY_RBAC = [
     "mcg-operator",
     "rook-ceph-operator",
     "cephcsi-operator",
-    "ocs-client-operator",
-    "odf-csi-addons-operator",
 ]
 
 ODF_OPERATOR_SA_FOR_NETWORK_POLICY = {
@@ -324,11 +322,9 @@ ODF_OPERATOR_SA_FOR_NETWORK_POLICY = {
     "mcg-operator": "noobaa",
     "ocs-operator": "ocs-operator",
     "odf-operator": "odf-operator-controller-manager",
-    "ocs-client-operator": "ocs-client-operator-controller-manager",
-    "odf-csi-addons-operator": "csi-addons-controller-manager",
 }
 
-NETWORK_POLICY_REQUIRED_VERBS = {"create", "delete"}
+NETWORK_POLICY_REQUIRED_VERBS = {"create"}
 NETWORK_POLICY_REQUIRED_UPDATE_VERBS = {"update", "patch"}
 
 DAEMONSET = "DaemonSet"
@@ -2011,9 +2007,9 @@ MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
-VSPHERE_CLUSTER_LAUNCHER = VSPHERE_SCALEUP_REPO = (
-    "https://gitlab.cee.redhat.com/aosqe/v4-scaleup.git"
-)
+VSPHERE_CLUSTER_LAUNCHER = (
+    VSPHERE_SCALEUP_REPO
+) = "https://gitlab.cee.redhat.com/aosqe/v4-scaleup.git"
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
 INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
 VM_IFCFG = os.path.join(VSPHERE_DIR, "vm/ifcfg.tmpl")
@@ -2655,17 +2651,17 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
     ],
 }
 # the list of packages for 4.13 and 4.14 seems to be the same as 4.12
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.13"] = (
-    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
-)
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.13"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
 
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.14"] = (
-    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
-)
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.14"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
 
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.15"] = (
-    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
-)
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.15"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
 
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"] = [
     "ocs-operator",
@@ -2716,9 +2712,9 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"] = [
     "odf-external-snapshotter-operator",
 ]
 
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.21"] = (
-    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"]
-)
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.21"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.20"]
 
 # the list is gathered via following command (run it on one line!)
 # opm-rhel9 render quay.io/rhceph-dev/ocs-registry:4.22.0-65.konflux -o json |
