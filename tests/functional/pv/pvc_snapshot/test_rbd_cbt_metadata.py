@@ -15,6 +15,8 @@ import logging
 import re
 
 import pytest
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -497,8 +499,13 @@ class TestRbdCBTInfrastructure(ManageTest):
         ports = svc["spec"].get("ports", [])
         port_6443 = next((p for p in ports if p["port"] == 6443), None)
         assert port_6443 is not None, (
-            f"Service {svc_name} does not expose port 6443/TCP. "
-            f"Found ports: {ports}"
+            f"Service {svc_name} does not expose port 6443. " f"Found ports: {ports}"
+        )
+
+        # Verify the port uses TCP protocol
+        protocol = port_6443.get("protocol", "TCP")
+        assert protocol == "TCP", (
+            f"Service {svc_name} port 6443 uses protocol {protocol}, " f"expected TCP"
         )
         log.info(
             "Service %s exposes port 6443/TCP",
@@ -620,4 +627,18 @@ class TestRbdCBTInfrastructure(ManageTest):
         assert ca_cert.strip().endswith(
             "-----END CERTIFICATE-----"
         ), "caCert does not end with PEM footer"
-        log.info("caCert is a valid PEM-encoded certificate")
+
+        # Parse the certificate to verify it's valid
+        try:
+            cert = x509.load_pem_x509_certificate(
+                ca_cert.encode("utf-8"), default_backend()
+            )
+            log.info(
+                "caCert is a valid PEM-encoded certificate (Subject: %s)",
+                cert.subject.rfc4514_string(),
+            )
+        except Exception as e:
+            raise AssertionError(
+                f"caCert has valid PEM delimiters but failed to parse as "
+                f"X.509 certificate: {e}"
+            )
