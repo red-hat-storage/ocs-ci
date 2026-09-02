@@ -25,7 +25,10 @@ from ocs_ci.framework.testlib import (
     tier1,
 )
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.resources.cbt_metadata import VerifierTool
+from ocs_ci.ocs.resources.cbt_metadata import (
+    VerifierTool,
+    validate_snapshot_metadata_sidecar,
+)
 from ocs_ci.ocs.resources.snapshots import (
     restore_snapshot_to_block_pvc,
     write_data_to_pvc,
@@ -475,50 +478,21 @@ class TestRbdCBTInfrastructure(ManageTest):
         log.test_step("Check each pod for a container named csi-snapshot-metadata")
         pod_ips = []
         for pod in controller_pods:
-            pod_name = pod["metadata"]["name"]
-            pod_ip = pod["status"]["podIP"]
+            pod_name, pod_ip = validate_snapshot_metadata_sidecar(pod)
             pod_ips.append(pod_ip)
-
-            containers = pod["spec"]["containers"]
-            container_names = [c["name"] for c in containers]
-            assert "csi-snapshot-metadata" in container_names, (
-                f"Pod {pod_name} does not have a csi-snapshot-metadata "
-                f"container. Found containers: {container_names}"
-            )
-
-            container_statuses = pod["status"].get("containerStatuses", [])
-            sidecar_status = next(
-                (
-                    cs
-                    for cs in container_statuses
-                    if cs["name"] == "csi-snapshot-metadata"
-                ),
-                None,
-            )
-            assert sidecar_status is not None, (
-                f"Pod {pod_name} has no containerStatus for " f"csi-snapshot-metadata"
-            )
-            assert sidecar_status["ready"] is True, (
-                f"Pod {pod_name} sidecar container is not ready: " f"{sidecar_status}"
-            )
-            log.info(
-                "Pod %s has csi-snapshot-metadata container ready (IP: %s)",
-                pod_name,
-                pod_ip,
-            )
 
         log.test_step("Get the Service openshift-storage-rbd-snapshot-metadata")
         svc_ocp = OCP(
             kind="Service",
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
-        svc_name = "openshift-storage-rbd-snapshot-metadata"
+        svc_name = constants.CBT_SERVICE_NAME
         svc = svc_ocp.get(resource_name=svc_name)
 
         assert svc is not None, f"Service {svc_name} not found"
         log.info("Service %s exists", svc_name)
 
-        ports = svc["spec"]["ports"]
+        ports = svc["spec"].get("ports", [])
         port_6443 = next((p for p in ports if p["port"] == 6443), None)
         assert port_6443 is not None, (
             f"Service {svc_name} does not expose port 6443/TCP. "
