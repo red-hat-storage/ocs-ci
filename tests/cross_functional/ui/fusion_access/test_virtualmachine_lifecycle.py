@@ -641,8 +641,6 @@ class TestVirtualMachineLifecycle(ManageTest):
         logger.info(f"VM data md5sum checksum stored: {md5sum}")
         logger.info("VM data write and md5sum checksum: PASS")
 
-        self._delete_lungroup_via_ui()
-
     @pytest.mark.polarion_id("OCS-8223")
     def test_virtualmachine_snapshot_and_restore(self):
         """
@@ -809,8 +807,6 @@ class TestVirtualMachineLifecycle(ManageTest):
         logger.info(
             "Restored md5sum matches original — snapshot restore verified: PASS"
         )
-
-        self._delete_lungroup_via_ui()
 
     @pytest.mark.polarion_id("OCS-8091")
     def test_clone_virtualmachine(self):
