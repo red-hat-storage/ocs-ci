@@ -79,7 +79,7 @@ class TestVirtualMachineLifecycle(ManageTest):
 
             logger.info("teardown_lungroup: starting class-level cleanup")
 
-            # Step 1 — Patch finalizers and delete filesystem if it still exists
+            # Step 1 — Verify filesystem was deleted by the UI step in each test.
             lungroup_name = None
             try:
                 ocp_fs = OCP(
@@ -94,7 +94,7 @@ class TestVirtualMachineLifecycle(ManageTest):
                 if not fs_out or not fs_out.strip():
                     logger.info(
                         f"No {constants.IBM_STORAGE_SCALE_FILESYSTEM} found in "
-                        f"{constants.IBM_STORAGE_SCALE_NAMESPACE} — skipping filesystem deletion"
+                        f"{constants.IBM_STORAGE_SCALE_NAMESPACE} — UI cleanup succeeded"
                     )
                 else:
                     for line in fs_out.splitlines():
@@ -103,64 +103,15 @@ class TestVirtualMachineLifecycle(ManageTest):
                             lungroup_name = line.split()[0]
                             break
                     if lungroup_name:
-                        logger.info(
-                            f"Patching finalizers on filesystem '{lungroup_name}'..."
+                        raise AssertionError(
+                            f"Filesystem '{lungroup_name}' still exists in "
+                            f"{constants.IBM_STORAGE_SCALE_NAMESPACE} after UI deletion — "
+                            "LUN group UI cleanup FAILED"
                         )
-                        try:
-                            ocp_fs.exec_oc_cmd(
-                                f"patch {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
-                                f" {lungroup_name}"
-                                f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
-                                " --type=merge -p "
-                                '\'{"metadata":{"finalizers":null}}\'',
-                                out_yaml_format=False,
-                            )
-                            logger.info(
-                                f"Finalizers removed from filesystem '{lungroup_name}'"
-                            )
-                        except CommandFailed as patch_err:
-                            logger.warning(
-                                f"Could not patch finalizers on filesystem"
-                                f" '{lungroup_name}' (may already be gone): {patch_err}"
-                            )
-
-                        # Delete the filesystem
-                        try:
-                            ocp_fs.exec_oc_cmd(
-                                f"delete {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
-                                f" {lungroup_name}"
-                                f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
-                                f" --ignore-not-found",
-                                out_yaml_format=False,
-                            )
-                            logger.info(
-                                f"Delete issued for filesystem '{lungroup_name}'"
-                            )
-                        except CommandFailed as del_err:
-                            logger.warning(
-                                f"Could not delete filesystem '{lungroup_name}': {del_err}"
-                            )
-
-                        logger.info(
-                            f"Waiting for filesystem '{lungroup_name}' to disappear..."
-                        )
-                        for fs_check in TimeoutSampler(
-                            timeout=120,
-                            sleep=10,
-                            func=ocp_fs.exec_oc_cmd,
-                            command=(
-                                f"get {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
-                                f" {lungroup_name}"
-                                f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
-                                f" --ignore-not-found --no-headers"
-                            ),
-                            out_yaml_format=False,
-                        ):
-                            if not fs_check or not fs_check.strip():
-                                logger.info(f"Filesystem '{lungroup_name}' is gone")
-                                break
             except CommandFailed as e:
-                logger.warning(f"Could not process filesystem cleanup: {e}")
+                raise AssertionError(
+                    f"Could not verify filesystem deletion — oc get failed: {e}"
+                ) from e
 
             # Step 2 — Delete LocalDisk from CLI
             if lungroup_name:
@@ -576,6 +527,18 @@ class TestVirtualMachineLifecycle(ManageTest):
 
         return vm_name, namespace
 
+    def _delete_lungroup_via_ui(self):
+        """
+        Delete the LUN group via the UI (Storage > External systems > SAN_Storage).
+        """
+        logger.info("\nDelete LUN group via UI")
+        logger.info("-" * 80)
+        try:
+            lungroup_name = self.vm_ui.delete_lungroup_via_ui()
+            logger.info(f"LUN group '{lungroup_name}' deletion initiated via UI")
+        except WebDriverException as e:
+            logger.warning(f"Could not delete LUN group via UI (browser error): {e}")
+
     def _fetch_vm_credentials(self, vm_name, namespace):
         """
         Retrieve the cloud-init username and password from the VM's YAML spec.
@@ -677,6 +640,8 @@ class TestVirtualMachineLifecycle(ManageTest):
         assert md5sum, "md5sum value is empty — data write or checksum failed"
         logger.info(f"VM data md5sum checksum stored: {md5sum}")
         logger.info("VM data write and md5sum checksum: PASS")
+
+        self._delete_lungroup_via_ui()
 
     @pytest.mark.polarion_id("OCS-8223")
     def test_virtualmachine_snapshot_and_restore(self):
@@ -845,6 +810,8 @@ class TestVirtualMachineLifecycle(ManageTest):
             "Restored md5sum matches original — snapshot restore verified: PASS"
         )
 
+        self._delete_lungroup_via_ui()
+
     @pytest.mark.polarion_id("OCS-8091")
     def test_clone_virtualmachine(self):
         """
@@ -978,13 +945,6 @@ class TestVirtualMachineLifecycle(ManageTest):
         )
         logger.info("md5sum matches original — data integrity verified: PASS")
 
-        # Initiating Ui deletion for lungroup and verification of lungorup deletion
-        # will be taken care in teardown part
-
         logger.info("\nStep 9: Delete LUN group via UI")
         logger.info("-" * 80)
-        try:
-            lungroup_name = self.vm_ui.delete_lungroup_via_ui()
-            logger.info(f"LUN group '{lungroup_name}' deletion initiated via UI")
-        except WebDriverException as e:
-            logger.warning(f"Could not delete LUN group via UI (browser error): {e}")
+        self._delete_lungroup_via_ui()
