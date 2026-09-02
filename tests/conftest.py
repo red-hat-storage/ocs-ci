@@ -8664,6 +8664,102 @@ def discovered_apps_dr_workload_cnv(request):
 
 
 @pytest.fixture()
+def cnv_workload_with_static_ip(request):
+    """
+    Deploys a CNV Discovered App workload with a UDN secondary network interface
+    and static IP via IPAMClaim for DR static IP translation testing (RHSTOR-8082).
+    """
+
+    instances = []
+
+    def factory(
+        pvc_vm=1,
+        dr_protect=False,
+        shared_drpc_protection=False,
+        dr_policy_name=None,
+    ):
+        """
+        Args:
+            pvc_vm (int): Number of workload instances to create
+            dr_protect (bool): When True, DR-protects via CLI immediately after deploy
+            shared_drpc_protection (bool): When True, additional instances share the
+                namespace and DRPC of the first instance
+            dr_policy_name (str): DRPolicy name override; if None uses the default
+
+        Returns:
+            list: objects of workload class
+        """
+        total_pvc_count = 0
+        workload_key = (
+            "dr_cnv_discovered_apps_static_ip_shared"
+            if shared_drpc_protection
+            else "dr_cnv_discovered_apps_static_ip"
+        )
+
+        for index in range(pvc_vm):
+            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload_namespace = create_unique_resource_name("wrkld-vm", "dist")[:20]
+            if shared_drpc_protection and instances:
+                workload_details["workload_namespace"] = instances[0].workload_namespace
+                workload_namespace = instances[0].workload_namespace
+            wl_kwargs = dict(
+                workload_dir=workload_details["workload_dir"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+                workload_namespace=workload_namespace,
+                discovered_apps_pvc_selector_key=workload_details[
+                    "dr_workload_app_pvc_selector_key"
+                ],
+                discovered_apps_pvc_selector_value=workload_details[
+                    "dr_workload_app_pvc_selector_value"
+                ],
+                discovered_apps_pod_selector_key=workload_details[
+                    "dr_workload_app_pod_selector_key"
+                ],
+                discovered_apps_pod_selector_value=workload_details[
+                    "dr_workload_app_pod_selector_value"
+                ],
+                workload_placement_name=workload_details[
+                    "dr_workload_app_placement_name"
+                ],
+                vm_secret=workload_details["vm_secret"],
+                vm_username=workload_details["vm_username"],
+                workload_name=workload_details["name"],
+                vm_name=workload_details["vm_name"],
+            )
+            if dr_policy_name:
+                wl_kwargs["dr_policy_name"] = dr_policy_name
+            workload = CnvWorkloadDiscoveredApps(**wl_kwargs)
+
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload(
+                dr_protect=dr_protect, shared_drpc_protection=shared_drpc_protection
+            )
+            if dr_protect:
+                dr_helpers.validate_application_odf_cli(
+                    drpc_name=workload.discovered_apps_placement_name,
+                    namespace=constants.DR_OPS_NAMESPACE,
+                )
+
+        return instances
+
+    def teardown():
+        if "shared" in request.node.nodeid:
+            instances[0].delete_workload(skip_resource_deletion_verification=True)
+            instances[1].delete_workload(shared_drpc_protection=True)
+        else:
+            for instance in instances:
+                try:
+                    instance.delete_workload()
+                except ResourceNotDeleted:
+                    raise ResourceNotDeleted("Workload deletion was unsuccessful")
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
 def all_dr_workloads(
     dr_workload, discovered_apps_dr_workload, discovered_apps_dr_workload_cnv
 ):
