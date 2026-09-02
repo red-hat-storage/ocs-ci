@@ -73,16 +73,19 @@ class TestCephfsStressCleanUp(E2ETest):
 
         teardown_factory(pods_list)
         try:
-            stress_mgr.start_background_checks(
-                interval_minutes=CHECKS_RUNNER_INTERVAL_MINUTES
-            )
-
             cephfs_stress_job_obj = stress_mgr.create_cephfs_stress_job(
                 pvc_name=pvc_obj.name,
                 multiplication_factors=m_factor,
                 parallelism=parallelism,
                 completions=completions,
                 base_file_count=100,
+            )
+
+            # Start the watchdog only after resource creation so that
+            # fs_monitoring_enabled already reflects the ENABLE_FS_MONITORING
+            # value resolved from the job template.
+            stress_mgr.start_background_checks(
+                interval_minutes=CHECKS_RUNNER_INTERVAL_MINUTES
             )
             logger.info(
                 f"The CephFS-stress Job {cephfs_stress_job_obj.name} has been submitted"

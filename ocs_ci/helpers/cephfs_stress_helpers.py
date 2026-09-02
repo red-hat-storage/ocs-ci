@@ -316,7 +316,9 @@ class CephFSStressTestManager:
         """
         wait_for_resource_state(resource, state=state, timeout=timeout)
 
-    def _read_env_var_from_spec(self, env_list, name, default=""):
+    def _read_env_var_from_spec(
+        self, env_list: list, name: str, default: str = ""
+    ) -> str:
         """
         Return the value of an env variable from a container env list.
 
