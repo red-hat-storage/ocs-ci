@@ -91,6 +91,7 @@ def _build_prompt(user_request):
     Returns:
         str: Full prompt with schema context embedded.
     """
+    logger.info(f"OLS query:\n{user_request}")
     return f"{_RECIPE_SCHEMA_STUB}\n\n{user_request}"
 
 
@@ -563,6 +564,7 @@ class TestOLSRecipeGeneration:
             "the finance-container container of the Deployment. Show the "
             "complete updated Recipe YAML."
         )
+        logger.info(f"OLS query (turn 2):\n{prompt_2}")
         result_2 = ols_client.query(prompt_2, conversation_id=conversation_id)
         response_text = result_2.get("response", "")
         logger.info(f"Turn 2 OLS response:\n{response_text}")
