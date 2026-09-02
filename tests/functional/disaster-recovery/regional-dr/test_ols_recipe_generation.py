@@ -877,7 +877,7 @@ class TestOLSRecipeFailoverAndRelocate:
         # Step 4: Create DRPC with recipeRef                                  #
         # (_generate_and_apply_ols_recipe already left context on ACM hub)   #
         # ------------------------------------------------------------------ #
-        workload.create_drpc_for_apps_with_recipe()
+        workload.create_drpc_for_apps_with_recipe(recipe_name=recipe_name)
 
         drpc_obj = DRPC(
             namespace=_constants.DR_OPS_NAMESPACE,
