@@ -91,6 +91,7 @@ class TestCSISnapshotMetadataTLSProfile(ManageTest):
 
         request.addfinalizer(_cleanup)
 
+    @pytest.mark.polarion_id("OCS-8247")
     def test_csi_snapshot_metadata_tls_profile_version_lifecycle(self):
         """
         csi-snapshot-metadata TLSProfile: TLS 1.3 then TLS 1.2 on port 50051.

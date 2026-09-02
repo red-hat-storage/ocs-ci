@@ -111,6 +111,7 @@ class TestClusterTLSSecurityProfile(ManageTest):
     plaintext).
     """
 
+    @pytest.mark.polarion_id("OCS-8250")
     def test_metrics_exporter_cluster_modern_tls_profile(
         self, cluster_modern_tls_profile
     ):
@@ -189,6 +190,7 @@ class TestClusterTLSSecurityProfile(ManageTest):
             namespace, "metrics-exporter", since=f"{elapsed_s}s"
         )
 
+    @pytest.mark.polarion_id("OCS-8251")
     def test_csi_addons_cluster_modern_tls_profile(self, cluster_modern_tls_profile):
         """
         CSI-Addons sidecar gRPC follows the cluster Modern TLS profile when

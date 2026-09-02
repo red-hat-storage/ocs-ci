@@ -92,6 +92,7 @@ class TestOCSClientOperatorTLSProfile(ManageTest):
 
         request.addfinalizer(_cleanup)
 
+    @pytest.mark.polarion_id("OCS-8246")
     def test_ocs_client_operator_tls_profile_version_lifecycle(self):
         """
         ocs-client-operator TLSProfile: TLS 1.3 then TLS 1.2 on webhook and

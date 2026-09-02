@@ -93,6 +93,7 @@ class TestMetricsExporterTLSProfile(ManageTest):
 
         request.addfinalizer(_cleanup)
 
+    @pytest.mark.polarion_id("OCS-8248")
     def test_metrics_exporter_tls_profile_version_lifecycle(self):
         """
         ocs-metrics-exporter TLSProfile: version toggle (1.3 / 1.2 / 1.3), scan,
@@ -254,6 +255,7 @@ class TestMetricsExporterTLSProfile(ManageTest):
             namespace, _METRICS_EXPORTER_COMPONENT, since=f"{elapsed_s}s"
         )
 
+    @pytest.mark.polarion_id("OCS-8249")
     def test_metrics_exporter_tls_cli_flags(self):
         """
         ocs-metrics-exporter applies TLSProfile on 8443/9443 as an exclusive
