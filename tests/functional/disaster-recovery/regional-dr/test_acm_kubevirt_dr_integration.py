@@ -15,6 +15,12 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.cnv_helpers import run_dd_io
 from ocs_ci.helpers.dr_helpers import wait_for_all_resources_deletion
+from ocs_ci.helpers.dr_helpers_vm_ip_translation import (
+    VM_NETWORK_NAD_NAME,
+    get_ipamclaim_ip,
+    get_vm_ip_from_vmi,
+    wait_for_drpolicy_network_peers,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.helpers.dr_helpers_ui import (
@@ -42,12 +48,34 @@ class TestACMKubevirtDRIntergration:
     """
 
     @pytest.mark.parametrize(
-        argnames=["protection_type"],
+        argnames=["protection_type", "static_vm_ip"],
         argvalues=[
             pytest.param(
-                False, id="standalone", marks=pytest.mark.polarion_id("OCS-xxxx")
+                False, False, id="standalone", marks=pytest.mark.polarion_id("OCS-xxxx")
             ),
-            pytest.param(True, id="shared", marks=pytest.mark.polarion_id("OCS-yyyy")),
+            pytest.param(
+                True, False, id="shared", marks=pytest.mark.polarion_id("OCS-yyyy")
+            ),
+            # Static VM IP translation — standalone DRPC, requires OCS >= 4.23 (RHSTOR-8082)
+            pytest.param(
+                False,
+                True,
+                id="standalone_static-ip",
+                marks=[
+                    pytest.mark.polarion_id("OCS-XXXX"),
+                    skipif_ocs_version("<4.23"),
+                ],
+            ),
+            # Static VM IP translation — shared DRPC, requires OCS >= 4.23 (RHSTOR-8082)
+            pytest.param(
+                True,
+                True,
+                id="shared_static-ip",
+                marks=[
+                    pytest.mark.polarion_id("OCS-XXXX"),
+                    skipif_ocs_version("<4.23"),
+                ],
+            ),
         ],
     )
     # TODO: Add Polarion ID when available
@@ -55,7 +83,11 @@ class TestACMKubevirtDRIntergration:
         self,
         setup_acm_ui,
         protection_type,
+        static_vm_ip,
+        setup_udn_nad,
+        network_mapping_configmap,
         discovered_apps_dr_workload_cnv,
+        cnv_workload_with_static_ip,
         nodes_multicluster,
         node_restart_teardown,
     ):
@@ -82,16 +114,26 @@ class TestACMKubevirtDRIntergration:
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
 
         logger.info("Deploy 1st CNV workload")
-        cnv_workloads = discovered_apps_dr_workload_cnv(
-            pvc_vm=1, dr_protect=False, shared_drpc_protection=False
-        )
+        if static_vm_ip:
+            cnv_workloads = cnv_workload_with_static_ip(
+                pvc_vm=1, dr_protect=False, shared_drpc_protection=False
+            )
+        else:
+            cnv_workloads = discovered_apps_dr_workload_cnv(
+                pvc_vm=1, dr_protect=False, shared_drpc_protection=False
+            )
 
         if protection_type:
             # Deploy second workload for Shared protection (uses same namespace as first)
             logger.info("Deploy 2nd CNV workload in the existing namespace")
-            cnv_workloads = discovered_apps_dr_workload_cnv(
-                pvc_vm=1, dr_protect=False, shared_drpc_protection=True
-            )
+            if static_vm_ip:
+                cnv_workloads = cnv_workload_with_static_ip(
+                    pvc_vm=1, dr_protect=False, shared_drpc_protection=True
+                )
+            else:
+                cnv_workloads = discovered_apps_dr_workload_cnv(
+                    pvc_vm=1, dr_protect=False, shared_drpc_protection=True
+                )
 
         assert cnv_workloads, "No discovered VM found"
         config.switch_acm_ctx()
@@ -106,17 +148,42 @@ class TestACMKubevirtDRIntergration:
         logger.info(
             f"Primary managed cluster name is {cnv_workloads[0].preferred_primary_cluster}"
         )
-        assert navigate_using_fleet_virtualization(acm_obj)
-        for i, vm in enumerate(cnv_workloads):
-            standalone_flag = (not protection_type) or (i == 0)
-            assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-                acm_obj,
-                vms=[vm],
-                managed_cluster_name=primary_cluster_name,
-                standalone=standalone_flag,
-                protection_name=protection_name,
-                namespace=cnv_workloads[0].workload_namespace,
+
+        if not static_vm_ip:
+            # DR protection via ACM UI fleet virtualization page
+            assert navigate_using_fleet_virtualization(acm_obj)
+            for i, vm in enumerate(cnv_workloads):
+                standalone_flag = (not protection_type) or (i == 0)
+                assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
+                    acm_obj,
+                    vms=[vm],
+                    managed_cluster_name=primary_cluster_name,
+                    standalone=standalone_flag,
+                    protection_name=protection_name,
+                    namespace=cnv_workloads[0].workload_namespace,
+                )
+        else:
+            # Static IP: DR protection done via CLI (dr_protect=True above).
+            # Set up network mapping ConfigMap on hub and link to DRPolicy.
+            # ACM UI protection for static-IP discovered VMs is not supported.
+            config.switch_acm_ctx()
+            existing_policies = dr_helpers.get_all_drpolicy()
+            assert existing_policies, "No DRPolicy found on hub"
+            drpolicy_name = existing_policies[0]["metadata"]["name"]
+
+            cluster_names = setup_udn_nad["cluster_names"]
+            cluster_subnets = setup_udn_nad["cluster_subnets"]
+            network_mapping_configmap(
+                "vm-ip-map-kubevirt-static",
+                cluster1_name=cluster_names[0],
+                cluster2_name=cluster_names[1],
+                nad_namespace=setup_udn_nad["workload_namespace"],
+                nad_name=VM_NETWORK_NAD_NAME,
+                cluster1_cidr=cluster_subnets[cluster_names[0]],
+                cluster2_cidr=cluster_subnets[cluster_names[1]],
+                drpolicy_name=drpolicy_name,
             )
+            wait_for_drpolicy_network_peers(drpolicy_name)
 
         logger.info(
             f'Placement name is "{cnv_workloads[0].discovered_apps_placement_name}"'
@@ -154,6 +221,33 @@ class TestACMKubevirtDRIntergration:
             namespace=cnv_workloads[0].workload_namespace,
             phase=constants.STATUS_RUNNING,
         )
+
+        # Record VM IP on primary before failover (static IP path only)
+        if static_vm_ip:
+            config.switch_to_cluster_by_name(primary_cluster_name)
+            vm_ip_primary = get_vm_ip_from_vmi(
+                primary_cluster_name,
+                cnv_workloads[0].workload_namespace,
+                cnv_workloads[0].vm_name,
+                VM_NETWORK_NAD_NAME,
+            )
+            assert (
+                vm_ip_primary
+            ), f"Could not read IP from VMI {cnv_workloads[0].vm_name} on primary"
+            ipam_ip_primary = get_ipamclaim_ip(
+                primary_cluster_name,
+                cnv_workloads[0].workload_namespace,
+                cnv_workloads[0].vm_name,
+                VM_NETWORK_NAD_NAME,
+            )
+            assert ipam_ip_primary == vm_ip_primary, (
+                f"IPAMClaim IP {ipam_ip_primary} does not match VMI IP {vm_ip_primary} "
+                f"on primary before failover"
+            )
+            logger.info(
+                f"VM {cnv_workloads[0].vm_name} IP on primary before failover: "
+                f"{vm_ip_primary} (IPAMClaim confirmed)"
+            )
 
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             cnv_workloads[0].workload_namespace,
@@ -227,6 +321,34 @@ class TestACMKubevirtDRIntergration:
             cnv_workloads, vm_filepaths[0], md5sum_original, "Failover"
         )
 
+        # Verify IP translation on secondary after failover (static IP path only)
+        if static_vm_ip:
+            vm_ip_secondary = get_vm_ip_from_vmi(
+                secondary_cluster_name,
+                cnv_workloads[0].workload_namespace,
+                cnv_workloads[0].vm_name,
+                VM_NETWORK_NAD_NAME,
+            )
+            assert (
+                vm_ip_secondary
+            ), f"Could not read IP from VMI {cnv_workloads[0].vm_name} on secondary after failover"
+            ipam_ip_secondary = get_ipamclaim_ip(
+                secondary_cluster_name,
+                cnv_workloads[0].workload_namespace,
+                cnv_workloads[0].vm_name,
+                VM_NETWORK_NAD_NAME,
+            )
+            assert ipam_ip_secondary == vm_ip_secondary, (
+                f"IPAMClaim IP {ipam_ip_secondary} does not match VMI IP {vm_ip_secondary} "
+                f"on secondary after failover"
+            )
+            assert (
+                vm_ip_secondary != vm_ip_primary
+            ), f"VM IP was not translated after failover: still {vm_ip_secondary}"
+            logger.info(
+                f"IP translation verified after failover: {vm_ip_primary} -> {vm_ip_secondary}"
+            )
+
         # Creating a file (file2) post failover
         for cnv_wl in cnv_workloads:
             md5sum_failover.append(
@@ -274,15 +396,16 @@ class TestACMKubevirtDRIntergration:
         )
         drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
-        logger.info("On UI, check if VM is running after failover or not")
-        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj,
-            vms=cnv_workloads,
-            protection_name=protection_name,
-            namespace=cnv_workloads[0].workload_namespace,
-            managed_cluster_name=secondary_cluster_name,
-            assign_policy=False,
-        )
+        if not static_vm_ip:
+            logger.info("On UI, check if VM is running after failover or not")
+            assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
+                acm_obj,
+                vms=cnv_workloads,
+                protection_name=protection_name,
+                namespace=cnv_workloads[0].workload_namespace,
+                managed_cluster_name=secondary_cluster_name,
+                assign_policy=False,
+            )
         config.switch_to_cluster_by_name(secondary_cluster_name)
 
         # Doing Relocate in below code
@@ -328,17 +451,47 @@ class TestACMKubevirtDRIntergration:
             phase=constants.STATUS_RUNNING,
         )
 
+        # Verify IP restored to original on primary after relocate (static IP path only)
+        if static_vm_ip:
+            vm_ip_after_relocate = get_vm_ip_from_vmi(
+                primary_cluster_name,
+                cnv_workloads[0].workload_namespace,
+                cnv_workloads[0].vm_name,
+                VM_NETWORK_NAD_NAME,
+            )
+            assert (
+                vm_ip_after_relocate
+            ), f"Could not read IP from VMI {cnv_workloads[0].vm_name} on primary after relocate"
+            ipam_ip_after_relocate = get_ipamclaim_ip(
+                primary_cluster_name,
+                cnv_workloads[0].workload_namespace,
+                cnv_workloads[0].vm_name,
+                VM_NETWORK_NAD_NAME,
+            )
+            assert ipam_ip_after_relocate == vm_ip_after_relocate, (
+                f"IPAMClaim IP {ipam_ip_after_relocate} does not match VMI IP "
+                f"{vm_ip_after_relocate} on primary after relocate"
+            )
+            assert vm_ip_after_relocate == vm_ip_primary, (
+                f"VM IP {vm_ip_after_relocate} was not restored to original "
+                f"{vm_ip_primary} after relocate"
+            )
+            logger.info(
+                f"IP restoration verified after relocate: {vm_ip_secondary} -> {vm_ip_after_relocate}"
+            )
+
         config.switch_acm_ctx()
-        logger.info("On UI, check if VM is running after relocate or not")
-        acm_obj.refresh_page()
-        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-            acm_obj,
-            vms=cnv_workloads,
-            protection_name=protection_name,
-            namespace=cnv_workloads[0].workload_namespace,
-            managed_cluster_name=primary_cluster_name,
-            assign_policy=False,
-        )
+        if not static_vm_ip:
+            logger.info("On UI, check if VM is running after relocate or not")
+            acm_obj.refresh_page()
+            assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
+                acm_obj,
+                vms=cnv_workloads,
+                protection_name=protection_name,
+                namespace=cnv_workloads[0].workload_namespace,
+                managed_cluster_name=primary_cluster_name,
+                assign_policy=False,
+            )
         config.switch_to_cluster_by_name(primary_cluster_name)
 
         # Validating data integrity (file1) after relocating VMs back to primary managed cluster
