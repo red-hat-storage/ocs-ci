@@ -21,6 +21,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
+    polarion_id,
     skipif_ocs_version,
     tier1,
 )
@@ -437,6 +438,7 @@ class TestRbdCBTInfrastructure(ManageTest):
     the metadata API operations themselves.
     """
 
+    @polarion_id("OCS-8239")
     def test_cbt_sidecar_running(self):
         """
         Verify that the CBT sidecar container is running and healthy
