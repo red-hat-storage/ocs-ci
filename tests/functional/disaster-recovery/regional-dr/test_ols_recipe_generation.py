@@ -20,7 +20,7 @@ import pytest
 import yaml
 
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
-from ocs_ci.framework.testlib import tier1, skipif_ocs_version
+from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.openshift_lightspeed import OpenShiftLightspeed, is_ols_available
 
@@ -306,7 +306,7 @@ def _assert_recipe_structure(recipe_yaml):
 @rdr
 @tier1
 @turquoise_squad
-@skipif_ocs_version("<4.16")
+@skipif_ocs_version("<4.23")
 @pytest.mark.usefixtures("skip_if_ols_not_available")
 class TestOLSRecipeGeneration:
     """
@@ -647,7 +647,7 @@ class TestOLSRecipeGeneration:
 @rdr
 @tier1
 @turquoise_squad
-@skipif_ocs_version("<4.16")
+@skipif_ocs_version("<4.23")
 @pytest.mark.usefixtures("skip_if_ols_not_available")
 class TestOLSRecipeFailoverAndRelocate:
     """
@@ -677,9 +677,28 @@ class TestOLSRecipeFailoverAndRelocate:
 
     params = [
         pytest.param(
+            False,
             constants.CEPHBLOCKPOOL,
-            marks=[pytest.mark.polarion_id("OCS-8231")],
-            id="rbd",
+            marks=[pytest.mark.polarion_id("OCS-8231"), acceptance],
+            id="primary_up-rbd",
+        ),
+        pytest.param(
+            True,
+            constants.CEPHBLOCKPOOL,
+            marks=[pytest.mark.polarion_id("OCS-8232")],
+            id="primary_down-rbd",
+        ),
+        pytest.param(
+            False,
+            constants.CEPHFILESYSTEM,
+            marks=[pytest.mark.polarion_id("OCS-8233"), acceptance],
+            id="primary_up-cephfs",
+        ),
+        pytest.param(
+            True,
+            constants.CEPHFILESYSTEM,
+            marks=[pytest.mark.polarion_id("OCS-8234")],
+            id="primary_down-cephfs",
         ),
     ]
 
@@ -832,11 +851,14 @@ class TestOLSRecipeFailoverAndRelocate:
         logger.info(f"OLS Recipe '{recipe_name}' applied to all managed clusters")
         return recipe_name
 
-    @pytest.mark.parametrize("pvc_interface", params)
+    @pytest.mark.parametrize("primary_cluster_down, pvc_interface", params)
     def test_failover_and_relocate_with_ols_recipe(
         self,
+        primary_cluster_down,
         pvc_interface,
         discovered_apps_dr_workload,
+        nodes_multicluster,
+        node_restart_teardown,
         ols,
         request,
     ):
@@ -845,17 +867,25 @@ class TestOLSRecipeFailoverAndRelocate:
         apply the recipe, then perform failover and relocate to prove the
         OLS-generated Recipe is operationally correct.
 
+        Parametrized over PVC interface (RBD / CephFS) and whether the
+        primary cluster is powered off before failover (power-off / power-on).
+
         Test steps:
-            1. Deploy one RBD BusyboxDiscoveredApps workload (random namespace).
+            1. Deploy workload (random namespace).
             2. Generate the DR Recipe for that workload via OLS.
             3. Validate Recipe structure and apply it to managed clusters.
             4. Create the DRPC with ``recipeRef`` pointing at the OLS Recipe.
             5. Wait for initial sync.
-            6. Failover to the secondary cluster; verify workload is running.
-            7. Relocate back to the primary cluster; verify workload is running.
+            6. Optionally power off the primary cluster nodes.
+            7. Failover to the secondary cluster; verify workload is running.
+            8. Optionally power the primary cluster back on.
+            9. Relocate back to the primary cluster; verify workload is running.
         """
+        from time import sleep
+
         from ocs_ci.framework import config
         from ocs_ci.helpers import dr_helpers
+        from ocs_ci.ocs.node import get_node_objs
         from ocs_ci.ocs.resources.drpc import DRPC
         from ocs_ci.ocs import constants as _constants
 
@@ -909,13 +939,33 @@ class TestOLSRecipeFailoverAndRelocate:
         )
 
         # ------------------------------------------------------------------ #
-        # Step 6: Failover (primary cluster stays up)                         #
+        # Step 6: Optionally power off primary cluster before failover        #
+        # ------------------------------------------------------------------ #
+        config.switch_to_cluster_by_name(primary_cluster)
+        primary_cluster_index = config.cur_index
+        primary_cluster_nodes = get_node_objs()
+
+        wait_time = 2 * scheduling_interval  # minutes
+        logger.info(f"Waiting {wait_time}m before failover")
+        sleep(wait_time * 60)
+
+        if primary_cluster_down:
+            config.switch_to_cluster_by_name(primary_cluster)
+            logger.info(f"Stopping nodes of primary cluster: {primary_cluster}")
+            nodes_multicluster[primary_cluster_index].stop_nodes(primary_cluster_nodes)
+
+        # ------------------------------------------------------------------ #
+        # Step 7: Failover to secondary cluster                               #
         # ------------------------------------------------------------------ #
         logger.info(f"Starting failover to {secondary_cluster}")
         dr_helpers.failover(
-            secondary_cluster,
-            workload.workload_namespace,
-            workload.workload_type,
+            failover_cluster=secondary_cluster,
+            namespace=workload.workload_namespace,
+            workload_type=workload.workload_type,
+            workload_placement_name=workload.discovered_apps_placement_name,
+            old_primary=primary_cluster,
+            skip_odf_cli_validation=primary_cluster_down,
+            discovered_apps=True,
         )
         config.switch_to_cluster_by_name(secondary_cluster)
         dr_helpers.wait_for_all_resources_creation(
@@ -928,13 +978,32 @@ class TestOLSRecipeFailoverAndRelocate:
         logger.info("Workload running on secondary cluster after failover")
 
         # ------------------------------------------------------------------ #
-        # Step 7: Relocate back to primary                                    #
+        # Step 8: Power primary cluster back on if it was stopped             #
+        # ------------------------------------------------------------------ #
+        if primary_cluster_down:
+            logger.info(
+                f"Waiting {wait_time}m before starting nodes of primary cluster"
+            )
+            sleep(wait_time * 60)
+            nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
+            config.switch_to_cluster_by_name(primary_cluster)
+            dr_helpers.wait_for_all_resources_creation(
+                workload.workload_pvc_count,
+                workload.workload_pod_count,
+                workload.workload_namespace,
+                skip_replication_resources=True,
+            )
+
+        # ------------------------------------------------------------------ #
+        # Step 9: Relocate back to primary                                    #
         # ------------------------------------------------------------------ #
         logger.info(f"Starting relocate back to {primary_cluster}")
         dr_helpers.relocate(
-            primary_cluster,
-            workload.workload_namespace,
-            workload.workload_type,
+            preferred_cluster=primary_cluster,
+            namespace=workload.workload_namespace,
+            workload_type=workload.workload_type,
+            workload_placement_name=workload.discovered_apps_placement_name,
+            discovered_apps=True,
         )
         config.switch_to_cluster_by_name(primary_cluster)
         dr_helpers.wait_for_all_resources_creation(
