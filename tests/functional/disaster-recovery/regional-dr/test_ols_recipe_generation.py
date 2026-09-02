@@ -255,12 +255,19 @@ def _assert_recipe_structure(recipe_yaml):
     assert "backup" in workflow_names, "Recipe must have a 'backup' workflow"
     assert "restore" in workflow_names, "Recipe must have a 'restore' workflow"
 
-    # Validate spec.volumes: the CRD requires an object (single volumes
-    # section), not a list.  OLS occasionally generates a YAML list here.
+    # Validate spec.volumes: the CRD requires a single object, not a list.
+    # OLS occasionally generates a YAML list; coerce it to the first element
+    # so downstream serialisation and validation work against a valid manifest.
     if "volumes" in spec:
+        if isinstance(spec["volumes"], list):
+            assert spec["volumes"], "Recipe spec.volumes list must not be empty"
+            logger.warning(
+                "OLS generated spec.volumes as a list; coercing to first element"
+            )
+            spec["volumes"] = spec["volumes"][0]
         assert isinstance(spec["volumes"], dict), (
-            "Recipe spec.volumes must be a mapping (object), got: "
-            f"{type(spec['volumes']).__name__!r} — OLS generated an invalid type"
+            "Recipe spec.volumes must be a mapping (object) after coercion, got: "
+            f"{type(spec['volumes']).__name__!r}"
         )
 
     # Validate spec.hooks: each hook op's command must be a string, not a list.
