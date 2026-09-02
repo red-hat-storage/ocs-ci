@@ -20,6 +20,8 @@ import json
 import logging
 import os
 import re
+import subprocess
+import time
 import uuid
 
 from ocs_ci.framework import config
@@ -2638,7 +2640,14 @@ def restore_apiserver_tls_security_profile(original):
         log.info("Restored APIServer/cluster tlsSecurityProfile to Intermediate")
 
 
-def _cluster_operator_conditions(name):
+_KUBE_APISERVER_STATUS_EXCEPTIONS = (
+    CommandFailed,
+    TimeoutExpiredError,
+    subprocess.TimeoutExpired,
+)
+
+
+def _cluster_operator_conditions(name, timeout=60):
     """Return {type: status} for a ClusterOperator without dumping full JSON."""
     raw = _tls_scan_run_oc(
         [
@@ -2648,7 +2657,7 @@ def _cluster_operator_conditions(name):
             "-o",
             "jsonpath={range .status.conditions[*]}{.type}={.status};{end}",
         ],
-        timeout=30,
+        timeout=timeout,
     )
     conditions = {}
     for part in (raw or "").split(";"):
@@ -2669,29 +2678,188 @@ def _apiserver_tls_profile_type():
             "-o",
             "jsonpath={.spec.tlsSecurityProfile.type}",
         ],
-        timeout=30,
+        timeout=60,
     )
     return (raw or "").strip() or None
 
 
-def wait_for_kube_apiserver_stable(timeout=1800, sleep=15):
-    """Wait until ClusterOperator kube-apiserver is Available and not Progressing."""
+def _kube_apiserver_rollout_snapshot():
+    """
+    Return ClusterOperator plus per-node installer revision state.
 
-    def _stable():
-        try:
-            cond = _cluster_operator_conditions(
-                constants.OPENSHIFT_API_CLUSTER_OPERATOR
+    kube-apiserver TLS profile changes roll static pods one master at a time.
+    ClusterOperator Progressing can stay True across installer retries; the
+    kubeapiserver operator CR is the source for per-node currentRevision.
+    """
+    cond = _cluster_operator_conditions(constants.OPENSHIFT_API_CLUSTER_OPERATOR)
+    raw = _tls_scan_run_oc(
+        ["get", "kubeapiserver.operator.openshift.io", "cluster", "-o", "json"],
+        timeout=60,
+    )
+    data = json.loads(raw) if raw else {}
+    status = data.get("status") or {}
+    nodes = []
+    for node_status in status.get("nodeStatuses") or []:
+        nodes.append(
+            {
+                "node": node_status.get("nodeName"),
+                "current": node_status.get("currentRevision"),
+                "target": node_status.get("targetRevision") or 0,
+                "last_failed_revision": node_status.get("lastFailedRevision"),
+                "last_failed_reason": node_status.get("lastFailedReason"),
+                "last_failed_time": node_status.get("lastFailedTime"),
+            }
+        )
+    latest = status.get("latestAvailableRevision")
+    all_at_latest = (
+        bool(nodes)
+        and latest is not None
+        and all(node["current"] == latest and not node["target"] for node in nodes)
+    )
+    return {
+        "available": cond.get("Available") == "True",
+        "progressing": cond.get("Progressing") == "True",
+        "degraded": cond.get("Degraded") == "True",
+        "latest_revision": latest,
+        "nodes": nodes,
+        "all_nodes_at_latest": all_at_latest,
+    }
+
+
+def _kube_apiserver_rollout_signature(snapshot):
+    """Comparable tuple that changes when installer revision progress happens."""
+    nodes = tuple(
+        (
+            node.get("node"),
+            node.get("current"),
+            node.get("target"),
+            node.get("last_failed_revision"),
+            node.get("last_failed_time"),
+        )
+        for node in snapshot.get("nodes") or []
+    )
+    return (
+        snapshot.get("latest_revision"),
+        snapshot.get("progressing"),
+        snapshot.get("available"),
+        snapshot.get("degraded"),
+        nodes,
+    )
+
+
+def _kube_apiserver_rollout_is_complete(snapshot):
+    """True when HA kube-apiserver is serving the latest revision on every master."""
+    return (
+        snapshot.get("available")
+        and not snapshot.get("degraded")
+        and not snapshot.get("progressing")
+        and snapshot.get("all_nodes_at_latest")
+    )
+
+
+def _kube_apiserver_node_progress(snapshot):
+    """Installer fields that change while a static-pod revision is rolling."""
+    return [
+        (
+            node.get("node"),
+            node.get("current"),
+            node.get("target"),
+            node.get("last_failed_revision"),
+            node.get("last_failed_time"),
+        )
+        for node in snapshot.get("nodes") or []
+    ]
+
+
+def _kube_apiserver_rollout_has_started(initial, snapshot):
+    """True when Progressing, a new revision, or installer node state changed."""
+    if snapshot.get("progressing"):
+        return True
+    if initial is None:
+        return False
+    if snapshot.get("latest_revision") != initial.get("latest_revision"):
+        return True
+    return _kube_apiserver_node_progress(snapshot) != _kube_apiserver_node_progress(
+        initial
+    )
+
+
+def _format_kube_apiserver_rollout(snapshot):
+    """Short one-line kube-apiserver rollout status for logs."""
+    node_bits = []
+    for node in snapshot.get("nodes") or []:
+        bit = f"{node.get('node')}={node.get('current')}"
+        if node.get("target"):
+            bit += f"->{node['target']}"
+        if node.get("last_failed_reason"):
+            bit += (
+                f"(failed:{node.get('last_failed_revision')}/"
+                f"{node['last_failed_reason']})"
             )
-        except CommandFailed:
-            return False
-        if cond.get("Degraded") == "True":
-            return False
-        if cond.get("Progressing") == "True":
-            return False
-        return cond.get("Available") == "True"
+        node_bits.append(bit)
+    return (
+        f"Available={snapshot.get('available')} "
+        f"Progressing={snapshot.get('progressing')} "
+        f"Degraded={snapshot.get('degraded')} "
+        f"latest={snapshot.get('latest_revision')} "
+        f"nodes=[{', '.join(node_bits)}]"
+    )
 
-    TimeoutSampler(timeout, sleep, _stable).wait_for_func_value(True)
-    log.info("kube-apiserver ClusterOperator is Available and not Progressing")
+
+def wait_for_kube_apiserver_stable(timeout=1800, sleep=15):
+    """
+    Wait until kube-apiserver is Available, not Degraded, and every master is
+    on latestAvailableRevision.
+
+    The stall clock resets when installer revision state changes (including
+    InstallerFailed retries). A fixed clock from Progressing=True expires
+    mid-roll on 3-master clouds when one installer pod hits API timeouts.
+    """
+    last_progress = time.time()
+    last_sig = None
+    last_status_log = 0
+    while True:
+        now = time.time()
+        try:
+            snapshot = _kube_apiserver_rollout_snapshot()
+        except _KUBE_APISERVER_STATUS_EXCEPTIONS as ex:
+            log.info(
+                "kube-apiserver status query failed (%s); retrying",
+                type(ex).__name__,
+            )
+            if now - last_progress > timeout:
+                raise TimeoutExpiredError(
+                    f"Timed out after {timeout}s querying kube-apiserver status "
+                    f"({type(ex).__name__}: {ex})"
+                ) from ex
+            time.sleep(sleep)
+            continue
+        sig = _kube_apiserver_rollout_signature(snapshot)
+        if sig != last_sig:
+            log.info(
+                "kube-apiserver rollout: %s",
+                _format_kube_apiserver_rollout(snapshot),
+            )
+            last_sig = sig
+            last_progress = now
+            last_status_log = now
+        elif now - last_status_log >= 60:
+            log.info(
+                "Still waiting for kube-apiserver stable: %s (stall %ss/%ss)",
+                _format_kube_apiserver_rollout(snapshot),
+                int(now - last_progress),
+                timeout,
+            )
+            last_status_log = now
+        if _kube_apiserver_rollout_is_complete(snapshot):
+            log.info("kube-apiserver ClusterOperator is Available and not Progressing")
+            return
+        if now - last_progress > timeout:
+            raise TimeoutExpiredError(
+                f"Timed out after {timeout}s with no kube-apiserver revision "
+                f"progress ({_format_kube_apiserver_rollout(snapshot)})"
+            )
+        time.sleep(sleep)
 
 
 def wait_for_kube_apiserver_tls_profile_rollout(
@@ -2703,11 +2871,20 @@ def wait_for_kube_apiserver_tls_profile_rollout(
     OpenShift does not set Progressing in the same second as the patch.
     Sampling Available once races the rollout and leaves operands on the
     previous (usually Intermediate) listener.
+
+    After Progressing (or a revision bump) is observed, wait for every master
+    to reach latestAvailableRevision. Installer retries count as progress so
+    a serial 3-master roll with one failed installer does not hit a fixed
+    1800s clock started at Progressing=True. If the operator never starts a
+    roll and remains complete, treat the change as a no-op.
     """
     expected = (expected_type or "").strip() or None
 
     def _spec_matches():
-        actual = _apiserver_tls_profile_type()
+        try:
+            actual = _apiserver_tls_profile_type()
+        except _KUBE_APISERVER_STATUS_EXCEPTIONS:
+            return False
         if expected is None:
             return actual in (None, "", "Intermediate")
         return actual == expected
@@ -2715,22 +2892,62 @@ def wait_for_kube_apiserver_tls_profile_rollout(
     TimeoutSampler(timeout, sleep, _spec_matches).wait_for_func_value(True)
     log.info("APIServer/cluster tlsSecurityProfile.type=%s", expected or "(unset)")
 
-    def _progressing():
-        try:
-            cond = _cluster_operator_conditions(
-                constants.OPENSHIFT_API_CLUSTER_OPERATOR
-            )
-        except CommandFailed:
-            return False
-        return cond.get("Progressing") == "True"
+    try:
+        initial = _kube_apiserver_rollout_snapshot()
+    except _KUBE_APISERVER_STATUS_EXCEPTIONS:
+        initial = None
+    if initial:
+        log.info(
+            "kube-apiserver snapshot after TLS spec change: %s",
+            _format_kube_apiserver_rollout(initial),
+        )
 
+    rollout_started = False
+    phase1_deadline = time.time() + progressing_timeout
     log.info(
-        "Waiting up to %ss for kube-apiserver Progressing=True after TLS "
-        "profile change",
+        "Waiting up to %ss for kube-apiserver Progressing or a revision bump "
+        "after TLS profile change",
         progressing_timeout,
     )
-    TimeoutSampler(progressing_timeout, sleep, _progressing).wait_for_func_value(True)
-    log.info("kube-apiserver ClusterOperator is Progressing (TLS profile rollout)")
+    while time.time() < phase1_deadline:
+        try:
+            snapshot = _kube_apiserver_rollout_snapshot()
+        except _KUBE_APISERVER_STATUS_EXCEPTIONS as ex:
+            log.info(
+                "kube-apiserver status query failed (%s); retrying",
+                type(ex).__name__,
+            )
+            time.sleep(sleep)
+            continue
+        if _kube_apiserver_rollout_has_started(initial, snapshot):
+            rollout_started = True
+            log.info(
+                "kube-apiserver TLS profile rollout started: %s",
+                _format_kube_apiserver_rollout(snapshot),
+            )
+            break
+        time.sleep(sleep)
+
+    if not rollout_started:
+        try:
+            snapshot = _kube_apiserver_rollout_snapshot()
+        except _KUBE_APISERVER_STATUS_EXCEPTIONS as ex:
+            raise TimeoutExpiredError(
+                "kube-apiserver did not start a TLS profile rollout and status "
+                f"could not be read ({type(ex).__name__}: {ex})"
+            ) from ex
+        if _kube_apiserver_rollout_is_complete(snapshot):
+            log.info(
+                "kube-apiserver did not Progress after TLS profile change; "
+                "already complete (%s)",
+                _format_kube_apiserver_rollout(snapshot),
+            )
+            return
+        raise TimeoutExpiredError(
+            "kube-apiserver did not start Progressing within "
+            f"{progressing_timeout}s ({_format_kube_apiserver_rollout(snapshot)})"
+        )
+
     wait_for_kube_apiserver_stable(timeout=timeout, sleep=sleep)
 
 
