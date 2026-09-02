@@ -1974,21 +1974,17 @@ class BusyboxDiscoveredApps(DRWorkload):
         current_test = (
             os.environ.get("PYTEST_CURRENT_TEST").split("::")[-1].split(" ")[0]
         )
-        ignore_not_found_param = ""
-        if self.discovered_apps_multi_ns:
-            ignore_not_found_param = "--ignore-not-found=true"
-
         if "test_disable_dr" not in current_test:
             log.info("Deleting DRPC")
             config.switch_acm_ctx()
             run_cmd(
                 f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} {drpc_name or self.discovered_apps_placement_name} "
-                f"{ignore_not_found_param}"
+                f"--ignore-not-found=true"
             )
             log.info("Deleting Placement")
             run_cmd(
                 f"oc delete placement -n {constants.DR_OPS_NAMESPACE} "
-                f"{self.discovered_apps_placement_name}-plmnt-1 {ignore_not_found_param}"
+                f"{self.discovered_apps_placement_name}-plmnt-1 --ignore-not-found=true"
             )
 
         dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
