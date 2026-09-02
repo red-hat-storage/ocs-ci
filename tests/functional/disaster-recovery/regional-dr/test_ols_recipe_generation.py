@@ -218,11 +218,28 @@ def _assert_recipe_structure(recipe_yaml):
     assert (
         recipe_yaml.get("kind") == "Recipe"
     ), f"Expected kind 'Recipe', got: {recipe_yaml.get('kind')}"
+    assert isinstance(recipe_yaml.get("metadata"), dict), (
+        "Recipe must have a metadata mapping, got: " f"{recipe_yaml.get('metadata')!r}"
+    )
+    assert "name" in recipe_yaml["metadata"], (
+        "Recipe metadata must include 'name', got: " f"{recipe_yaml['metadata']!r}"
+    )
     spec = recipe_yaml.get("spec", {})
     assert "groups" in spec, "Recipe spec must contain 'groups'"
     assert "workflows" in spec, "Recipe spec must contain 'workflows'"
 
     workflows = spec["workflows"]
+    assert isinstance(
+        workflows, list
+    ), f"Recipe spec.workflows must be a list, got: {type(workflows).__name__!r}"
+    for i, workflow in enumerate(workflows):
+        assert isinstance(workflow, dict), (
+            f"Recipe spec.workflows[{i}] must be a mapping, got: "
+            f"{type(workflow).__name__!r}"
+        )
+        assert (
+            "name" in workflow
+        ), f"Recipe spec.workflows[{i}] must contain a 'name' key, got: {workflow!r}"
     workflow_names = [w["name"] for w in workflows]
     assert "backup" in workflow_names, "Recipe must have a 'backup' workflow"
     assert "restore" in workflow_names, "Recipe must have a 'restore' workflow"
@@ -621,7 +638,7 @@ class TestOLSRecipeFailoverAndRelocate:
         """
         return ols_client
 
-    def _generate_and_apply_ols_recipe(self, workload, ols_client, request):
+    def _generate_and_apply_ols_recipe(self, workload, ols_client):
         """
         Ask OLS to generate a DR Recipe for the given workload, validate the
         returned YAML, apply it to **both** managed clusters (primary and
@@ -639,13 +656,10 @@ class TestOLSRecipeFailoverAndRelocate:
             ols_client: An authenticated
                 :class:`~ocs_ci.ocs.openshift_lightspeed.OpenShiftLightspeed`
                 instance.
-            request: The pytest ``request`` fixture — used to register cleanup
-                finalizers for the temp file and applied Recipe objects.
 
         Returns:
             str: Name of the applied Recipe.
         """
-        import os
         import re
         import tempfile
 
@@ -692,6 +706,9 @@ class TestOLSRecipeFailoverAndRelocate:
         spec = recipe["spec"]
         recipe_name = recipe["metadata"]["name"]
         recipe_namespace = namespace
+        # Ensure the serialised manifest carries the correct namespace so that
+        # apply, delete, and validation all operate on the same namespace.
+        recipe["metadata"]["namespace"] = recipe_namespace
 
         # Validate that OLS returned a legal k8s name (RFC-1123 label) for both
         # the Recipe name and its namespace before we use them in oc commands.
@@ -729,23 +746,13 @@ class TestOLSRecipeFailoverAndRelocate:
             f"got: {vol_namespaces}"
         )
 
-        # Serialise Recipe to a temp file
+        # Serialise Recipe to a temp file — namespace is now set in the manifest.
         recipe_yaml_str = yaml.dump(recipe)
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=False, prefix="ols-recipe-"
         ) as tmp:
             tmp.write(recipe_yaml_str)
             tmp_path = tmp.name
-
-        # Register tmpfile cleanup — runs even when the test fails or errors out.
-        def _remove_tmpfile():
-            try:
-                os.unlink(tmp_path)
-                logger.info(f"Removed temp Recipe file: {tmp_path}")
-            except OSError as exc:
-                logger.warning(f"Could not remove temp Recipe file {tmp_path}: {exc}")
-
-        request.addfinalizer(_remove_tmpfile)
 
         # Mirror the cluster-selection logic from BusyboxDiscoveredApps.deploy_workload:
         # use the provider-aware variant when dr_cluster_relations is configured.
@@ -765,35 +772,6 @@ class TestOLSRecipeFailoverAndRelocate:
             )
             exec_cmd(["oc", "apply", "-f", tmp_path, "-n", namespace])
             logger.info(f"Recipe '{recipe_name}' applied to '{cluster_name}'")
-
-            # Register Recipe deletion on this cluster as a finalizer so it is
-            # removed even when the test fails mid-way.
-            def _delete_recipe(
-                _idx=cluster_index,
-                _name=recipe_name,
-                _ns=recipe_namespace,
-                _cname=cluster_name,
-            ):
-                try:
-                    config.switch_ctx(_idx)
-                    exec_cmd(
-                        [
-                            "oc",
-                            "delete",
-                            "recipe",
-                            _name,
-                            "-n",
-                            _ns,
-                            "--ignore-not-found",
-                        ]
-                    )
-                    logger.info(f"Deleted Recipe '{_name}' from cluster '{_cname}'")
-                except Exception as exc:
-                    logger.warning(
-                        f"Failed to delete Recipe '{_name}' from '{_cname}': {exc}"
-                    )
-
-            request.addfinalizer(_delete_recipe)
 
         # Leave context on ACM hub for the caller
         config.switch_acm_ctx()
@@ -839,7 +817,7 @@ class TestOLSRecipeFailoverAndRelocate:
         # Step 2+3: Generate and apply OLS recipe                             #
         # ------------------------------------------------------------------ #
         config.switch_acm_ctx()
-        recipe_name = self._generate_and_apply_ols_recipe(workload, ols, request)
+        recipe_name = self._generate_and_apply_ols_recipe(workload, ols)
 
         # ------------------------------------------------------------------ #
         # Step 4: Create DRPC with recipeRef                                  #
