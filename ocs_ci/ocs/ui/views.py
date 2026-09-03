@@ -898,50 +898,37 @@ page_nav_4_20 = {
 }
 
 # FDF SAN UI Locators
+
 FDF_SAN_LOCATORS = {
-    # Connect to external storage button on External Systems page
     "connect_external_storage_button": (
-        "//button[@data-test='configure-external-systems' or contains(text(), 'Connect external systems')]",
+        "//button[@data-test='configure-external-systems']",
         By.XPATH,
     ),
-    # Storage Area Network card clickable button (radio input is hidden behind the card)
-    "san_radio_button": ("//button[@id='san-storage']", By.XPATH),
-    # Next button in wizard
+    "san_radio_button": ("//div[@id='setup-san-storage']", By.XPATH),
     "next_button": (
-        "//button[contains(text(), 'Next') or .//span[contains(text(), 'Next')]]",
+        "//footer[contains(@class,'c-modal-box__footer')]//button[contains(@class,'pf-m-primary')]",
         By.XPATH,
     ),
-    # Image registry URL input field
     "image_registry_url_input": (
-        "//input["
-        "@id='imageRegistryURL' or @name='imageRegistryURL'"
-        " or @aria-label='Image registry URL'"
-        " or @data-test='image-registry-url']",
+        "//input[@data-test='image-registry-url']",
         By.XPATH,
     ),
-    # Image repository name input field
     "image_repository_name_input": (
-        "//input["
-        "@id='imageRepositoryName' or @name='imageRepositoryName'"
-        " or @aria-label='Image repository name'"
-        " or @data-test='image-repository-name']",
+        "//input[@data-test='image-repository-name']",
         By.XPATH,
     ),
-    # Secret key dropdown toggle button
     "secret_key_dropdown": (
         "//button[@data-test='secret-key-dropdown']",
         By.XPATH,
     ),
-    # All enabled options inside the Secret key dropdown.
     "secret_key_dropdown_options": (
         "//ul[@role='listbox' or @role='menu']"
         "//li[not(@aria-disabled='true')]"
         "//button",
         By.XPATH,
     ),
-    # All nodes radio button
     "all_nodes_radio": ("//input[@id='use-all-nodes']", By.XPATH),
-    # LUN table checkbox for row i — use @aria-label to anchor the table,
+    # LUN table checkbox for row i — anchored by table aria-label
     "lun_table_checkbox": (
         "//table[@aria-label='LUNs table']//tbody//tr[{i}]//input[@type='checkbox']",
         By.XPATH,
@@ -951,19 +938,14 @@ FDF_SAN_LOCATORS = {
         "//table[@aria-label='LUNs table']//tbody//tr[{i}]//td[2]",
         By.XPATH,
     ),
-    # LUN group name input field
     "lun_group_name_input": (
-        "//input[@id='lunGroupName' or @name='lunGroupName' or @placeholder='Enter LUN group name']",
+        "//input[@data-test='lun-group-name']",
         By.XPATH,
     ),
-    # Connect and create button
     "connect_and_create_button": (
-        "//button[@data-test='connect-and-create-san-system' "
-        "or contains(text(), 'Connect and create') "
-        "or contains(text(), 'Connect and Create')]",
+        "//button[@data-test='connect-and-create-san-system']",
         By.XPATH,
     ),
-    # SAN storage page
     "san_storage_link": (
         "//a[normalize-space(text())='SAN_Storage' "
         "and contains(@href, '/odf/external-systems/scale.spectrum.ibm.com')]",

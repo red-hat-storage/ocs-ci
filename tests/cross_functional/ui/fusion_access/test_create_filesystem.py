@@ -1,5 +1,7 @@
 import logging
 import re
+import base64
+import json
 import pytest
 from time import sleep
 
@@ -9,12 +11,12 @@ from ocs_ci.framework.testlib import (
     ManageTest,
 )
 from ocs_ci.framework.pytest_customization.marks import (
-    magenta_squad,
+    yellow_squad,
     fusion_access_required,
     ignore_leftovers,
 )
 from ocs_ci.framework import config
-from ocs_ci.ocs import ocp
+from ocs_ci.ocs import ocp, constants
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
 )
@@ -23,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 @ui
-@magenta_squad
+@yellow_squad
 @fusion_access_required
 @ignore_leftovers
 class TestFDFSANConnection(ManageTest):
@@ -38,17 +40,77 @@ class TestFDFSANConnection(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup_lun_discovery(self):
+    def setup_san_cluster(self):
         """
-        Run LUN discovery on all worker nodes before test execution.
+        Pre-setup for SAN cluster creation.
 
-        Discovers and logs in to the iSCSI target on every worker node so that
-        the LUNs are visible on the UI when the test runs.
+        Performs the following steps before test execution:
+        1. Sets the target namespace.
+        2. Reads the entitlement key.
+        3. Builds a base64-encoded auth string for cp.icr.io.
+        4. Constructs the docker config JSON.
+        5. Creates/updates the dockerconfigjson secret and
+           verifies it exists.
+        6. Runs iSCSI LUN discovery on all worker nodes so that LUNs are visible
+           on the UI when the test runs.
 
-        Reads the following keys from ENV_DATA (set in your private cluster config):
-            san_iscsi_ip:  IP of the iSCSI target portal, e.g. "192.168.1.100"
-            san_iscsi_iqn: IQN of the iSCSI target, e.g. "iqn.2023-01.com.example:storage"
         """
+        # Set target namespace
+        ns = constants.IBM_STORAGE_SCALE_NAMESPACE
+
+        # Fetch IBM entitlement key from config.AUTH
+        ent_key = config.AUTH.get("ibm_entitlement_key")
+
+        if not ent_key:
+            raise ValueError(
+                "ibm_entitlement_key is not set in config.AUTH. "
+                "Cannot create IBM entitlement secret."
+            )
+
+        # Build base64-encoded auth string
+        auth_b64 = base64.b64encode(f"cp:{ent_key}".encode()).decode()
+
+        # Build docker config JSON
+        docker_config = json.dumps(
+            {
+                "auths": {
+                    "cp.icr.io": {
+                        "username": "cp",
+                        "password": ent_key,  # pragma: allowlist secret
+                        "auth": auth_b64,
+                    }
+                }
+            }
+        )
+
+        # Create / update the entitlement-key secret
+        secret_name = constants.IBM_ENTITLEMENT_SECRET_NAME
+        logger.info(f"Creating/updating secret '{secret_name}' in namespace '{ns}'")
+        secret_data_b64 = base64.b64encode(docker_config.encode()).decode()
+        secret_manifest = {
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "metadata": {"name": secret_name, "namespace": ns},
+            "type": "kubernetes.io/dockerconfigjson",
+            "data": {".dockerconfigjson": secret_data_b64},
+        }
+        secret_yaml = json.dumps(secret_manifest)
+        ocp_obj = ocp.OCP(kind="Secret", namespace=ns)
+        ocp_obj.exec_oc_cmd(
+            f"apply -f - <<'EOF'\n{secret_yaml}\nEOF",
+            shell=True,
+            out_yaml_format=False,
+            secrets=[ent_key, auth_b64, secret_data_b64],
+        )
+        logger.info(f"Verifying secret '{secret_name}' exists in namespace '{ns}'...")
+        ocp_obj.wait_for_resource(
+            condition="kubernetes.io/dockerconfigjson",
+            resource_name=secret_name,
+            column="TYPE",
+            timeout=60,
+        )
+        logger.info(f"Secret '{secret_name}' verified successfully in namespace '{ns}'")
+
         iscsi_ip = config.ENV_DATA.get("san_iscsi_ip")
         iscsi_iqn = config.ENV_DATA.get("san_iscsi_iqn")
 
@@ -59,10 +121,7 @@ class TestFDFSANConnection(ManageTest):
         if not re.fullmatch(r"iqn\.\d{4}-\d{2}\.[a-zA-Z0-9.\-:]+", iscsi_iqn or ""):
             raise ValueError(f"san_iscsi_iqn '{iscsi_iqn}' is not a valid IQN")
 
-        logger.info(
-            f"Starting LUN discovery on all worker nodes "
-            f"(portal: {iscsi_ip}, iqn: {iscsi_iqn})"
-        )
+        logger.info("Starting LUN discovery on all worker nodes")
         ocp_obj = ocp.OCP()
         ocp_obj.exec_oc_cmd(
             f"get nodes -l node-role.kubernetes.io/worker --no-headers -o name "
@@ -71,6 +130,8 @@ class TestFDFSANConnection(ManageTest):
             f'chroot /host iscsiadm --mode node --target "{iscsi_iqn}" '
             f'--portal "{iscsi_ip}" -l\' 2> /dev/null',
             shell=True,
+            out_yaml_format=False,
+            secrets=[iscsi_ip, iscsi_iqn],
         )
         logger.info("LUN discovery completed on all worker nodes")
         logger.info("Waiting 2 minute for LUNs to become visible on the UI...")
@@ -162,7 +223,7 @@ class TestFDFSANConnection(ManageTest):
         fusion_access.take_screenshot("image_repository_name_entered")
 
         # Step 4c: Create docker-registry secret in ibm-spectrum-scale namespace
-        secret_name = "quayio-secret"
+        secret_name = constants.IBM_QUAYIO_SECRET_NAME
         quay_server = config.ENV_DATA.get("san_quay_server")
         quay_username = config.ENV_DATA.get("san_quay_username")
         quay_password = config.ENV_DATA.get("san_quay_password")
