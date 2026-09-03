@@ -1171,6 +1171,14 @@ def import_clusters_via_cli(clusters, max_retries=3):
                     f"on attempt {attempt}"
                 )
                 break
+            except ResourceNotFoundError:
+                log.error(
+                    f"Configuration error for cluster '{cluster[0]}': "
+                    f"missing KlusterletConfig for MCE import. "
+                    f"Cleaning up and failing without retry."
+                )
+                _cleanup_failed_cluster_import(cluster[0])
+                raise
             except Exception as ex:
                 log.error(
                     f"Import attempt {attempt}/{max_retries} failed for "
