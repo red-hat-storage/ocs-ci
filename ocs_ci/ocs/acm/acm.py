@@ -977,9 +977,13 @@ def _cleanup_failed_cluster_import(cluster_name):
 
     Deletes the managed cluster resource and its namespace from the ACM hub,
     then waits for the namespace to be fully removed so the retry starts clean.
+    Uses extended polling with backoff to handle stuck namespace deletions.
 
     Args:
         cluster_name (str): Name of the cluster whose import resources should be cleaned up
+
+    Raises:
+        TimeoutError: If namespace is not deleted after extended polling (1200s total)
 
     """
     config.switch_acm_ctx()
@@ -995,17 +999,39 @@ def _cleanup_failed_cluster_import(cluster_name):
             log.warning(
                 f"Failed to delete {kind} '{cluster_name}' during cleanup: {ex}"
             )
+
+    # Poll for namespace deletion with increasing timeouts and backoff
+    # Total wait: 300s + 300s + 600s = 1200s (20 minutes)
+    # Only proceed with retry after confirmed deletion
     log.info(f"Waiting for namespace '{cluster_name}' to be fully removed")
-    try:
-        OCP(kind="namespace").wait_for_delete(
-            resource_name=cluster_name, timeout=300, sleep=15
-        )
-        log.info(f"Namespace '{cluster_name}' fully removed")
-    except (CommandFailed, TimeoutError):
-        log.warning(
-            f"Namespace '{cluster_name}' not fully removed after 300s, "
-            f"proceeding with retry"
-        )
+    timeouts = [300, 300, 600]
+    namespace_obj = OCP(kind="namespace")
+
+    for attempt, timeout in enumerate(timeouts, start=1):
+        try:
+            namespace_obj.wait_for_delete(
+                resource_name=cluster_name, timeout=timeout, sleep=15
+            )
+            log.info(
+                f"Namespace '{cluster_name}' fully removed after "
+                f"{sum(timeouts[:attempt])}s"
+            )
+            return
+        except (CommandFailed, TimeoutError) as ex:
+            elapsed = sum(timeouts[:attempt])
+            if attempt < len(timeouts):
+                log.warning(
+                    f"Namespace '{cluster_name}' not deleted after {elapsed}s, "
+                    f"extending wait by {timeouts[attempt]}s more..."
+                )
+            else:
+                log.error(
+                    f"Namespace '{cluster_name}' still not deleted after {elapsed}s. "
+                    f"It may be stuck with finalizers. Cannot proceed with retry."
+                )
+                raise TimeoutError(
+                    f"Namespace '{cluster_name}' deletion timed out after {elapsed}s"
+                ) from ex
 
 
 def import_clusters_via_cli(clusters, max_retries=3):
@@ -1021,9 +1047,13 @@ def import_clusters_via_cli(clusters, max_retries=3):
         max_retries (int): Maximum number of import attempts per cluster (default: 3)
 
     Raises:
+        ValueError: If max_retries is less than 1
         ResourceNotFoundError: If the managed cluster is MCE cluster and applicable KlusterletConfig is not found
 
     """
+    if max_retries < 1:
+        raise ValueError("max_retries must be at least 1")
+
     for cluster in clusters:
         for attempt in range(1, max_retries + 1):
             try:
