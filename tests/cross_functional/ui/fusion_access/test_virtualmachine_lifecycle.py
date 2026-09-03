@@ -68,11 +68,10 @@ class TestVirtualMachineLifecycle(ManageTest):
         Steps:
         1. Check via CLI if any filesystem exists in ibm-spectrum-scale.
            - If not found (already cleaned up by UI in test_clone_virtualmachine),
-             skip gracefully to step 2.
-           - If found: patch out finalizers first, then delete, then poll until gone.
-        2. Delete the LocalDisk associated with the LUN group from the CLI.
-        3. Poll until all LocalDisks are gone, then delete the IBM Spectrum Scale
-           cluster resource.
+             log success and skip to step 3.
+           - If found: raise AssertionError immediately — LUN group UI cleanup failed.
+        2. Poll until all LocalDisks are gone.
+        3. Delete the IBM Spectrum Scale cluster resource.
         """
 
         def cleanup():
@@ -351,7 +350,7 @@ class TestVirtualMachineLifecycle(ManageTest):
             vm_name (str): Name of the VirtualMachineInstance (same as the VM).
             namespace (str): Namespace the VMI lives in.
             timeout (int): Maximum seconds to wait across both phases
-                (default 600 = 10 minutes).
+                (default 1200 = 20 minutes).
 
         Raises:
             ocs_ci.ocs.exceptions.TimeoutExpiredError: If the VMI does not
@@ -594,7 +593,7 @@ class TestVirtualMachineLifecycle(ManageTest):
         Test Steps:
         1. Create a test namespace and navigate to Workloads > Pods in left nav.
            Open "All Projects" dropdown at the top and select the test namespace.
-        2. Navigate to Virtualization > VirtualMachines, dismiss welcome modal.
+        2. Navigate to Virtualization > VirtualMachines.
         3. Click Create, enter a unique VM name, click Next (Deployment details).
         4. Guest OS page: select "Other Linux" (3rd card), open Guest operating
            system type dropdown and pick the latest centos.stream* version, click Next.
@@ -605,7 +604,8 @@ class TestVirtualMachineLifecycle(ManageTest):
            click Next.
         6. Compute resources page: select small size, click Next.
         7. Customization page: no changes needed — click Next.
-        8. Review and create page: click Create VirtualMachine.
+        8. Review and create page: click Create VirtualMachine. Dismiss welcome
+           modal if present.
         9. Wait for VM status: Provisioning → Running.
         10. Fetch VM credentials (username/password) from the VM YAML,
             login to the VM console via virtctl console using pexpect,
@@ -654,20 +654,20 @@ class TestVirtualMachineLifecycle(ManageTest):
            data, and compute its md5sum.
         4. Open Actions dropdown, click Take snapshot; a popup opens with the
            snapshot name auto-filled — click Save.
-        5. Navigate to the Snapshots tab, wait for the snapshot
-           status to reach Succeeded, then sleep 30 s.  Modify existing data on vm
-           by appending to the existing test file via the VM console.
+        5. Navigate to the Snapshots tab, wait for the snapshot status to reach
+           Succeeded. Wait for guest agent to be ready, then modify existing data
+           by appending to the test file via the VM console.
         6. Power off the VM via Actions > Control > Stop and wait for the VM
            status to change to Stopped in the overview page.
         7. Navigate back to the Snapshots tab, click the kebab menu for the
            snapshot, select 'Restore VirtualMachine from snapshot', then click
            Restore in the confirmation popup.
-        8. Navigate to the Overview page and wait up to 10 minutes for the VM
-           status to reach Stopped, then start the VM via Actions > Control >
-           Start and wait for Running.
-        9. SSH to the VM and verify the file modification made in step 5 is
-           absent — the file content should match the original md5sum from
-           step 3.
+        8. Navigate to the Overview page and wait for the VM status to reach
+           Stopped, then start the VM via Actions > Control > Start and wait
+           for Running.
+        9. Log in to the VM console and verify the file modification made in
+           step 5 is absent — the file content should match the original md5sum
+           from step 3.
         """
         logger.info("=" * 80)
         logger.info("Starting VirtualMachine Snapshot and Restore Test")
@@ -824,10 +824,12 @@ class TestVirtualMachineLifecycle(ManageTest):
         5. Open Actions dropdown, click Clone; the Clone VirtualMachine popup
            opens with the clone name pre-filled. Read the clone name, tick
            'Start VirtualMachine once created', then click Clone.
-        6. Wait for the page to finish loading after clone — Verify status is Running.
+        6. Wait for the clone detail page to load (30 s settle time); ensure
+           cloned VM is Running — start via Actions > Control > Start if Stopped.
         7. Log in to the cloned VM console, confirm the file exists, compute
            its md5sum without writing anything.
         8. Assert the md5sum of the cloned file matches the original checksum.
+        9. Delete the LUN group via the UI (Storage > External systems > SAN_Storage).
         """
         logger.info("=" * 80)
         logger.info("Starting VirtualMachine Clone Test")
