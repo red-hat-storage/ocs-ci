@@ -14,7 +14,6 @@ cluster when executed.
 """
 
 import logging
-import shlex
 
 import pytest
 import yaml
@@ -50,7 +49,7 @@ spec:
       labelSelector:
         matchLabels:
           <key>: <value>
-  volumes:                       # omit entirely when the app has no PVCs
+  volumes:                       # ALWAYS include when the app has PVCs; omit only when there are no PVCs
     name: <vol-group-name>       # IMPORTANT: volumes is a single object, NOT a list
     type: volume
     includedNamespaces: [<ns>]
@@ -100,6 +99,8 @@ IMPORTANT RULES:
 5. ops[].command must be a plain string, never a YAML list.
 6. For type: check hooks, use 'selectResource' and 'nameSelector' (with a wildcard suffix,
    e.g. busybox-*) instead of labelSelector to target the deployment by name.
+7. ALWAYS include spec.volumes when the app has PVCs. Use labelSelector matching the PVC
+   label from the user request. Never omit volumes just because a hooks section is present.
 
 Respond with ONLY a ```yaml``` code block containing the complete Recipe manifest.
 Do not search for documentation. Do not include explanatory text outside the code block.\
@@ -282,18 +283,17 @@ def _assert_recipe_structure(recipe_yaml):
     assert "backup" in workflow_names, "Recipe must have a 'backup' workflow"
     assert "restore" in workflow_names, "Recipe must have a 'restore' workflow"
 
-    # Validate spec.volumes: the CRD requires a single object, not a list.
-    # OLS occasionally generates a YAML list; coerce it to the first element
-    # so downstream serialisation and validation work against a valid manifest.
+    # Validate spec.volumes: the CRD requires a single object (mapping), not a list.
     if "volumes" in spec:
-        if isinstance(spec["volumes"], list):
-            assert spec["volumes"], "Recipe spec.volumes list must not be empty"
-            logger.warning(
-                "OLS generated spec.volumes as a list; coercing to first element"
+        if not isinstance(spec["volumes"], dict):
+            logger.error(
+                "OLS generated spec.volumes as %s instead of a mapping object: %r",
+                type(spec["volumes"]).__name__,
+                spec["volumes"],
             )
-            spec["volumes"] = spec["volumes"][0]
         assert isinstance(spec["volumes"], dict), (
-            "Recipe spec.volumes must be a mapping (object) after coercion, got: "
+            "Recipe spec.volumes must be a single mapping object, not a list. "
+            "OLS generated an invalid volumes structure: "
             f"{type(spec['volumes']).__name__!r}"
         )
 
@@ -310,13 +310,24 @@ def _assert_recipe_structure(recipe_yaml):
         hook_type = hook.get("type", "")
 
         if hook_type == "check":
-            # check hooks must use 'chks', not 'ops'
-            if "ops" in hook and "chks" not in hook:
-                logger.warning(
-                    f"OLS generated hooks[{hi}] (type: check) with 'ops' instead of "
-                    f"'chks'; renaming key to 'chks'"
+            # check hooks must use 'chks', not 'ops' — no silent renaming
+            if "ops" in hook:
+                logger.error(
+                    "OLS generated check hook '%s' with 'ops' instead of 'chks'. "
+                    "Hook keys: %s",
+                    hook.get("name"),
+                    list(hook.keys()),
                 )
-                hook["chks"] = hook.pop("ops")
+            assert "ops" not in hook, (
+                f"Recipe spec.hooks[{hi}] (type: check) must not use 'ops'; "
+                f"use 'chks' instead. OLS generated the wrong key."
+            )
+            if "chks" not in hook:
+                logger.error(
+                    "OLS generated check hook '%s' without 'chks'. " "Hook keys: %s",
+                    hook.get("name"),
+                    list(hook.keys()),
+                )
             assert "chks" in hook, (
                 f"Recipe spec.hooks[{hi}] (type: check) must contain a 'chks' key, "
                 f"got keys: {list(hook.keys())}"
@@ -339,32 +350,41 @@ def _assert_recipe_structure(recipe_yaml):
                 assert isinstance(
                     op, dict
                 ), f"Recipe spec.hooks[{hi}].ops[{oi}] must be a mapping"
-                if "command" in op and isinstance(op["command"], list):
-                    joined = shlex.join(op["command"])
-                    logger.warning(
-                        f"OLS generated hooks[{hi}].ops[{oi}].command as a list; "
-                        f"coercing to string: {joined!r}"
-                    )
-                    op["command"] = joined
                 if "command" in op:
+                    if not isinstance(op["command"], str):
+                        logger.error(
+                            "OLS generated hooks[%d].ops[%d].command as %s "
+                            "instead of a string: %r",
+                            hi,
+                            oi,
+                            type(op["command"]).__name__,
+                            op["command"],
+                        )
                     assert isinstance(op["command"], str), (
-                        f"Recipe spec.hooks[{hi}].ops[{oi}].command must be a string "
-                        f"after coercion, got: {type(op['command']).__name__!r}"
+                        f"Recipe spec.hooks[{hi}].ops[{oi}].command must be a plain "
+                        f"string, not a list. OLS generated: {op['command']!r}"
                     )
 
-    # Validate workflow sequence entries that reference hooks use slash notation
-    # (hook: <hook-name>/<op-or-chk-name>).  Log a warning for bare references
-    # so failures surface clearly during debugging.
+    # Validate workflow sequence entries use slash notation for hook references
+    # (hook: <hook-name>/<op-or-chk-name>) — required by the Recipe CRD.
     for workflow in spec.get("workflows", []):
         for step in workflow.get("sequence", []):
             if "hook" in step:
                 hook_ref = step["hook"]
                 if "/" not in str(hook_ref):
-                    logger.warning(
-                        f"Workflow '{workflow.get('name')}' references hook "
-                        f"'{hook_ref}' without slash notation "
-                        f"(expected '<hook-name>/<op-or-chk-name>')"
+                    logger.error(
+                        "OLS generated workflow '%s' with bare hook reference '%s' "
+                        "(expected '<hook-name>/<op-or-chk-name>'). "
+                        "Full sequence: %s",
+                        workflow.get("name"),
+                        hook_ref,
+                        workflow.get("sequence"),
                     )
+                assert "/" in str(hook_ref), (
+                    f"Workflow '{workflow.get('name')}' hook reference '{hook_ref}' "
+                    f"must use slash notation '<hook-name>/<op-or-chk-name>'. "
+                    f"OLS generated a bare hook name."
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -466,13 +486,22 @@ class TestOLSRecipeGeneration:
             "volumes" in spec
         ), "Recipe must contain a volumes section for an app with PVCs"
         volumes = spec["volumes"]
-        # volumes can be a list or a single dict depending on the OLS output
-        vol_list = volumes if isinstance(volumes, list) else [volumes]
-        all_namespaces = []
-        for vol in vol_list:
-            all_namespaces.extend(vol.get("includedNamespaces", []))
+        if not volumes.get("includedNamespaces"):
+            logger.error(
+                "OLS omitted volumes.includedNamespaces. Full volumes section: %r",
+                volumes,
+            )
+        assert volumes.get("includedNamespaces"), (
+            "Recipe spec.volumes must include 'includedNamespaces'. "
+            "OLS omitted the field."
+        )
+        if "my-app" not in volumes["includedNamespaces"]:
+            logger.error(
+                "OLS volumes.includedNamespaces does not contain 'my-app': %r",
+                volumes["includedNamespaces"],
+            )
         assert (
-            "my-app" in all_namespaces
+            "my-app" in volumes["includedNamespaces"]
         ), "Volumes section must include the 'my-app' namespace"
 
     def test_recipe_exec_hook_before_backup(self, ols_client):
@@ -856,6 +885,9 @@ class TestOLSRecipeFailoverAndRelocate:
             f"The application has one Deployment with pods labeled "
             f"{pod_key}: {pod_value}. "
             f"It has {pvc_count} PVC(s) labeled {pvc_key}: {pvc_value}. "
+            f"Include a spec.volumes section (single object, NOT a list) with "
+            f"labelSelector matchLabels {pvc_key}: {pvc_value} targeting the "
+            f"{namespace} namespace. "
             f"Include a check hook named check-{app_name}-ready of type check. "
             f"The check hook must have selectResource: deployment and "
             f"nameSelector: {name_selector} (NOT labelSelector). "
@@ -906,18 +938,33 @@ class TestOLSRecipeFailoverAndRelocate:
             f"got: {all_namespaces}"
         )
 
-        # Assert volumes section targets the correct namespace
+        # Assert volumes section is present and targets the correct namespace.
+        # Both fields are required by the CRD — fail the test if OLS omitted either.
         assert (
             "volumes" in spec
         ), "OLS Recipe must contain a volumes section for a workload with PVCs"
         volumes = spec["volumes"]
-        vol_list = volumes if isinstance(volumes, list) else [volumes]
-        vol_namespaces = []
-        for v in vol_list:
-            vol_namespaces.extend(v.get("includedNamespaces", []))
-        assert namespace in vol_namespaces, (
-            f"OLS Recipe volumes must target namespace '{namespace}', "
-            f"got: {vol_namespaces}"
+        if not volumes.get("includedNamespaces"):
+            logger.error(
+                "OLS omitted volumes.includedNamespaces for namespace '%s'. "
+                "Full volumes section: %r",
+                namespace,
+                volumes,
+            )
+        assert volumes.get("includedNamespaces"), (
+            "OLS Recipe spec.volumes must include 'includedNamespaces'. "
+            "OLS omitted the field."
+        )
+        if namespace not in volumes["includedNamespaces"]:
+            logger.error(
+                "OLS volumes.includedNamespaces %r does not contain expected "
+                "namespace '%s'",
+                volumes["includedNamespaces"],
+                namespace,
+            )
+        assert namespace in volumes["includedNamespaces"], (
+            f"OLS Recipe volumes.includedNamespaces must contain '{namespace}', "
+            f"got: {volumes['includedNamespaces']}"
         )
 
         # Assert check hooks use selectResource + nameSelector (not labelSelector)
