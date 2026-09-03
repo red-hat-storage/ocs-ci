@@ -51,30 +51,50 @@ spec:
         matchLabels:
           <key>: <value>
   volumes:                       # omit entirely when the app has no PVCs
-    - name: <vol-group-name>
-      type: volume
-      includedNamespaces: [<ns>]
-      labelSelector:
-        matchLabels:
-          <key>: <value>
+    name: <vol-group-name>       # IMPORTANT: volumes is a single object, NOT a list
+    type: volume
+    includedNamespaces: [<ns>]
+    labelSelector:
+      matchLabels:
+        <key>: <value>
   hooks:                         # omit when no hooks are needed
-    - name: <hook-name>
-      type: exec                 # or: scale, check
+    # exec/scale hook -- use 'ops' for type: exec and type: scale
+    - name: <exec-hook-name>
+      type: exec                 # or: scale
       namespace: <ns>
       labelSelector:
         matchLabels:
           <key>: <value>
       ops:
         - name: <op-name>
-          command: [<cmd>]
+          command: '<shell-command-string>'  # must be a single string, NOT a list
           container: <container>
+    # check hook -- use 'chks' (NOT 'ops') for type: check
+    - name: <check-hook-name>
+      type: check
+      namespace: <ns>
+      labelSelector:
+        matchLabels:
+          <key>: <value>
+      chks:
+        - name: <chk-name>
+          condition: '{$.spec.replicas} == {$.status.readyReplicas}'
   workflows:
     - name: backup
       sequence:
-        - group: <group-name>    # or hook: <hook-name>
+        - group: <group-name>             # reference a resource/volume group
+        - hook: <hook-name>/<op-name>     # always use slash notation: hook-name/op-or-chk-name
     - name: restore
       sequence:
         - group: <group-name>
+        - hook: <hook-name>/<chk-name>    # slash notation required for check hooks too
+
+IMPORTANT RULES:
+1. For type: check hooks, use 'chks' (NOT 'ops').  For type: exec/scale, use 'ops'.
+2. Check conditions use JSONPath: condition: '{$.spec.replicas} == {$.status.readyReplicas}'
+3. Workflow sequences MUST use slash notation: hook: <hook-name>/<op-or-chk-name>
+4. spec.volumes is a single mapping object, never a YAML list.
+5. ops[].command must be a plain string, never a YAML list.
 
 Respond with ONLY a ```yaml``` code block containing the complete Recipe manifest.
 Do not search for documentation. Do not include explanatory text outside the code block.\
@@ -272,30 +292,74 @@ def _assert_recipe_structure(recipe_yaml):
             f"{type(spec['volumes']).__name__!r}"
         )
 
-    # Validate spec.hooks: each hook op's command must be a string per the CRD.
-    # OLS consistently generates it as an exec-style list; coerce to a
-    # shell-quoted string with shlex.join so the manifest is API-server-valid.
+    # Validate spec.hooks per hook type:
+    #   - type: exec / scale  -> 'ops' list; command must be a string
+    #   - type: check         -> 'chks' list; condition must be a string
+    # OLS sometimes uses 'ops' for check hooks (wrong) or generates command as
+    # a list (wrong); coerce/warn where possible and assert correctness.
     for hi, hook in enumerate(spec.get("hooks", [])):
         assert isinstance(hook, dict), (
             f"Recipe spec.hooks[{hi}] must be a mapping, got: "
             f"{type(hook).__name__!r}"
         )
-        for oi, op in enumerate(hook.get("ops", [])):
-            assert isinstance(
-                op, dict
-            ), f"Recipe spec.hooks[{hi}].ops[{oi}] must be a mapping"
-            if "command" in op and isinstance(op["command"], list):
-                joined = shlex.join(op["command"])
+        hook_type = hook.get("type", "")
+
+        if hook_type == "check":
+            # check hooks must use 'chks', not 'ops'
+            if "ops" in hook and "chks" not in hook:
                 logger.warning(
-                    f"OLS generated hooks[{hi}].ops[{oi}].command as a list; "
-                    f"coercing to string: {joined!r}"
+                    f"OLS generated hooks[{hi}] (type: check) with 'ops' instead of "
+                    f"'chks'; renaming key to 'chks'"
                 )
-                op["command"] = joined
-            if "command" in op:
-                assert isinstance(op["command"], str), (
-                    f"Recipe spec.hooks[{hi}].ops[{oi}].command must be a string "
-                    f"after coercion, got: {type(op['command']).__name__!r}"
+                hook["chks"] = hook.pop("ops")
+            assert "chks" in hook, (
+                f"Recipe spec.hooks[{hi}] (type: check) must contain a 'chks' key, "
+                f"got keys: {list(hook.keys())}"
+            )
+            for ci, chk in enumerate(hook["chks"]):
+                assert isinstance(
+                    chk, dict
+                ), f"Recipe spec.hooks[{hi}].chks[{ci}] must be a mapping"
+                assert "condition" in chk, (
+                    f"Recipe spec.hooks[{hi}].chks[{ci}] must contain a 'condition' key, "
+                    f"got: {chk!r}"
                 )
+                assert isinstance(chk["condition"], str), (
+                    f"Recipe spec.hooks[{hi}].chks[{ci}].condition must be a string, "
+                    f"got: {type(chk['condition']).__name__!r}"
+                )
+        else:
+            # exec / scale hooks use 'ops'; command must be a string
+            for oi, op in enumerate(hook.get("ops", [])):
+                assert isinstance(
+                    op, dict
+                ), f"Recipe spec.hooks[{hi}].ops[{oi}] must be a mapping"
+                if "command" in op and isinstance(op["command"], list):
+                    joined = shlex.join(op["command"])
+                    logger.warning(
+                        f"OLS generated hooks[{hi}].ops[{oi}].command as a list; "
+                        f"coercing to string: {joined!r}"
+                    )
+                    op["command"] = joined
+                if "command" in op:
+                    assert isinstance(op["command"], str), (
+                        f"Recipe spec.hooks[{hi}].ops[{oi}].command must be a string "
+                        f"after coercion, got: {type(op['command']).__name__!r}"
+                    )
+
+    # Validate workflow sequence entries that reference hooks use slash notation
+    # (hook: <hook-name>/<op-or-chk-name>).  Log a warning for bare references
+    # so failures surface clearly during debugging.
+    for workflow in spec.get("workflows", []):
+        for step in workflow.get("sequence", []):
+            if "hook" in step:
+                hook_ref = step["hook"]
+                if "/" not in str(hook_ref):
+                    logger.warning(
+                        f"Workflow '{workflow.get('name')}' references hook "
+                        f"'{hook_ref}' without slash notation "
+                        f"(expected '<hook-name>/<op-or-chk-name>')"
+                    )
 
 
 # ---------------------------------------------------------------------------
@@ -483,23 +547,29 @@ class TestOLSRecipeGeneration:
     def test_recipe_check_hook_after_restore(self, ols_client):
         """
         OLS generates a Recipe with a check hook that validates readiness
-        after restore.
+        after restore, using the correct 'chks' field and slash-notation
+        workflow reference.
 
         Test steps:
             1. Send the prompt for ``orders-app`` with a post-restore check
-               that validates Deployment readiness.
+               that validates Deployment readiness using chks/condition syntax.
             2. Extract and validate the YAML.
-            3. Assert a hook with ``type: check`` is present.
-            4. Assert the restore workflow references the check hook after
-               the resource group.
+            3. Assert a hook with ``type: check`` and a ``chks`` list is present.
+            4. Assert the restore workflow references the check hook (with slash
+               notation) after the resource group.
         """
         prompt = _build_prompt(
             "Generate an ODF Disaster Recovery Recipe for an application named "
             "orders-app deployed in the orders namespace. The application "
             "consists of one Deployment labeled app: orders-app and one PVC "
-            "labeled app: orders-app. After restore, validate that the "
-            "Deployment named orders-deployment is ready by checking that "
-            "spec.replicas equals status.readyReplicas. Generate the complete Recipe."
+            "labeled app: orders-app. After restore, add a check hook named "
+            "check-orders-ready of type check. "
+            "The check hook must use a 'chks' list (NOT 'ops') with one entry "
+            "named check-deployment-ready whose condition is "
+            "'{$.spec.replicas} == {$.status.readyReplicas}'. "
+            "In the restore workflow sequence, reference the check hook using "
+            "slash notation: hook: check-orders-ready/check-deployment-ready. "
+            "Generate the complete Recipe."
         )
         result = ols_client.query(prompt)
         response_text = result.get("response", "")
@@ -513,6 +583,13 @@ class TestOLSRecipeGeneration:
         check_hooks = [h for h in spec["hooks"] if h.get("type") == "check"]
         assert check_hooks, "At least one hook must have type 'check'"
 
+        # check hooks must use 'chks', not 'ops'
+        for ch in check_hooks:
+            assert "chks" in ch, (
+                f"Check hook '{ch.get('name')}' must use 'chks' key, "
+                f"got keys: {list(ch.keys())}"
+            )
+
         # The restore workflow sequence must reference the check hook last
         restore_workflow = next(w for w in spec["workflows"] if w["name"] == "restore")
         sequence = restore_workflow.get("sequence", [])
@@ -521,6 +598,13 @@ class TestOLSRecipeGeneration:
         assert (
             "hook" in last_step
         ), "Last step of restore workflow must be a hook (post-restore check)"
+
+        # The hook reference must use slash notation (hook-name/chk-name)
+        hook_ref = last_step["hook"]
+        assert "/" in str(hook_ref), (
+            f"Restore workflow hook reference must use slash notation "
+            f"'<hook-name>/<chk-name>', got: {hook_ref!r}"
+        )
 
     def test_recipe_multi_turn_conversation(self, ols_client, request):
         """
@@ -763,9 +847,15 @@ class TestOLSRecipeFailoverAndRelocate:
             f"The application has one Deployment with pods labeled "
             f"{pod_key}: {pod_value}. "
             f"It has {pvc_count} PVC(s) labeled {pvc_key}: {pvc_value}. "
-            f"Include a check hook that verifies the Deployment named {app_name} "
-            f"is ready (spec.replicas == status.readyReplicas) before backup and "
-            f"after restore. "
+            f"Include a check hook named check-{app_name}-ready of type check. "
+            f"The check hook must use a 'chks' list (NOT 'ops') with one entry "
+            f"named check-deployment-ready whose condition is "
+            f"'{{$.spec.replicas}} == {{$.status.readyReplicas}}'. "
+            f"In both the backup and restore workflow sequences, reference the "
+            f"check hook using slash notation: "
+            f"hook: check-{app_name}-ready/check-deployment-ready. "
+            f"Place the check hook before the resource group in backup and "
+            f"after the resource group in restore. "
             f"Generate the complete Recipe."
         )
 
