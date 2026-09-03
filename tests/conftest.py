@@ -8481,6 +8481,9 @@ def discovered_apps_dr_workload(request):
                     workload_placement_name=workload_details[
                         "dr_workload_app_placement_name"
                     ],
+                    discovered_apps_name_selector_value=workload_details.get(
+                        "dr_workload_app_recipe_name_selector_value"
+                    ),
                 )
                 instances.append(workload)
                 total_pvc_count += workload_details["pvc_count"]
