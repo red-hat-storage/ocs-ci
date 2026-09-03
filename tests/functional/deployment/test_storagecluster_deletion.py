@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     brown_squad,
     skipif_ocs_version,
+    post_upgrade,
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -24,6 +25,7 @@ class TestStorageClusterDeletionGuard(ManageTest):
 
     @tier1
     @skipif_ocs_version("<4.23")
+    @post_upgrade
     @pytest.mark.polarion_id("OCS-8218")
     def test_storagecluster_delete_blocked_without_annotation(self, request):
         """
