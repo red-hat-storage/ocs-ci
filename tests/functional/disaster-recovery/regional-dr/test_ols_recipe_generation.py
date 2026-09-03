@@ -73,12 +73,15 @@ spec:
     - name: <check-hook-name>
       type: check
       namespace: <ns>
-      labelSelector:
-        matchLabels:
-          <key>: <value>
+      selectResource: deployment
+      nameSelector: <app-name>-*    # use a wildcard suffix to match generated deployment names
+      timeout: 120
+      onError: fail
       chks:
         - name: <chk-name>
-          condition: '{$.spec.replicas} == {$.status.readyReplicas}'
+          timeout: 300
+          onError: fail
+          condition: "{$.spec.replicas} == {$.status.readyReplicas}"
   workflows:
     - name: backup
       sequence:
@@ -95,6 +98,8 @@ IMPORTANT RULES:
 3. Workflow sequences MUST use slash notation: hook: <hook-name>/<op-or-chk-name>
 4. spec.volumes is a single mapping object, never a YAML list.
 5. ops[].command must be a plain string, never a YAML list.
+6. For type: check hooks, use 'selectResource' and 'nameSelector' (with a wildcard suffix,
+   e.g. busybox-*) instead of labelSelector to target the deployment by name.
 
 Respond with ONLY a ```yaml``` code block containing the complete Recipe manifest.
 Do not search for documentation. Do not include explanatory text outside the code block.\
@@ -834,11 +839,15 @@ class TestOLSRecipeFailoverAndRelocate:
         pod_value = workload.discovered_apps_pod_selector_value
         app_name = workload.workload_name  # "busybox"
         pvc_count = workload.workload_pvc_count
+        # name_selector comes from dr_workload_app_recipe_name_selector_value in the
+        # workload config (e.g. "busybox-*").  Fall back to "<app_name>-*" if unset.
+        name_selector = workload.discovered_apps_name_selector_value or f"{app_name}-*"
 
         logger.info(
             f"Generating OLS Recipe for workload — namespace: {namespace}, "
             f"pvc_selector: {pvc_key}={pvc_value}, "
-            f"pod_selector: {pod_key}={pod_value}"
+            f"pod_selector: {pod_key}={pod_value}, "
+            f"name_selector: {name_selector}"
         )
 
         prompt = _build_prompt(
@@ -848,9 +857,11 @@ class TestOLSRecipeFailoverAndRelocate:
             f"{pod_key}: {pod_value}. "
             f"It has {pvc_count} PVC(s) labeled {pvc_key}: {pvc_value}. "
             f"Include a check hook named check-{app_name}-ready of type check. "
+            f"The check hook must have selectResource: deployment and "
+            f"nameSelector: {name_selector} (NOT labelSelector). "
             f"The check hook must use a 'chks' list (NOT 'ops') with one entry "
-            f"named check-deployment-ready whose condition is "
-            f"'{{$.spec.replicas}} == {{$.status.readyReplicas}}'. "
+            f"named check-deployment-ready, timeout: 300, onError: fail, "
+            f"and condition: '{{$.spec.replicas}} == {{$.status.readyReplicas}}'. "
             f"In both the backup and restore workflow sequences, reference the "
             f"check hook using slash notation: "
             f"hook: check-{app_name}-ready/check-deployment-ready. "
@@ -908,6 +919,24 @@ class TestOLSRecipeFailoverAndRelocate:
             f"OLS Recipe volumes must target namespace '{namespace}', "
             f"got: {vol_namespaces}"
         )
+
+        # Assert check hooks use selectResource + nameSelector (not labelSelector)
+        # and that nameSelector matches the expected wildcard value.
+        check_hooks = [h for h in spec.get("hooks", []) if h.get("type") == "check"]
+        assert check_hooks, "OLS Recipe must contain at least one check hook"
+        for ch in check_hooks:
+            assert "selectResource" in ch, (
+                f"Check hook '{ch.get('name')}' must have 'selectResource', "
+                f"got keys: {list(ch.keys())}"
+            )
+            assert "nameSelector" in ch, (
+                f"Check hook '{ch.get('name')}' must have 'nameSelector', "
+                f"got keys: {list(ch.keys())}"
+            )
+            assert ch["nameSelector"] == name_selector, (
+                f"Check hook '{ch.get('name')}' nameSelector must be "
+                f"'{name_selector}', got: {ch['nameSelector']!r}"
+            )
 
         # Serialise Recipe to a temp file — namespace is now set in the manifest.
         recipe_yaml_str = yaml.dump(recipe)
