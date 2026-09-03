@@ -62,16 +62,28 @@ def pytest_collection_modifyitems(items):
 
 
 @pytest.fixture(autouse=True, scope="session")
-def setup_odf_cli_binary():
+def setup_odf_cli_binary(request):
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
         return
+    if request.session.items:
+        for item in request.session.items:
+            if "test_deploy_rdr" in item.nodeid:
+                log.info("Skipping setup_odf_cli_binary fixture for test_deploy_rdr")
+                return
     odf_cli_setup_helper()
 
 
 @pytest.fixture(autouse=True, scope="session")
-def update_odf_cli_dr_kubeconfigs(setup_odf_cli_binary):
+def update_odf_cli_dr_kubeconfigs(request, setup_odf_cli_binary):
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
         return
+    if request.session.items:
+        for item in request.session.items:
+            if "test_deploy_rdr" in item.nodeid:
+                log.info(
+                    "Skipping update_odf_cli_dr_kubeconfigs fixture for test_deploy_rdr"
+                )
+                return
     update_odf_cli_dr_config_kubeconfigs()
 
 
@@ -104,6 +116,12 @@ def rdr_health_check(request):
 
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
         return
+
+    if request.session.items:
+        for item in request.session.items:
+            if "test_deploy_rdr" in item.nodeid:
+                log.info("Skipping rdr_health_check fixture for test_deploy_rdr")
+                return
 
     if config.RUN["cli_params"].get("dev_mode"):
         log.info("Skipping RDR health checks for development mode")
