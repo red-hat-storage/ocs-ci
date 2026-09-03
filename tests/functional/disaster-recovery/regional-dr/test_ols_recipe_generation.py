@@ -1137,7 +1137,9 @@ class TestOLSRecipeFailoverAndRelocate:
             workload_type=workload.workload_type,
             workload_placement_name=workload.discovered_apps_placement_name,
             old_primary=primary_cluster,
-            skip_odf_cli_validation=primary_cluster_down,
+            # Skip odf-cli validation inside failover() — workload pods are not
+            # yet up at that point; we validate below after resources are ready.
+            skip_odf_cli_validation=True,
             discovered_apps=True,
         )
         config.switch_to_cluster_by_name(secondary_cluster)
@@ -1149,6 +1151,13 @@ class TestOLSRecipeFailoverAndRelocate:
             vrg_name=workload.discovered_apps_placement_name,
         )
         logger.info("Workload running on secondary cluster after failover")
+        # Validate after workload is confirmed running on secondary.
+        if not primary_cluster_down:
+            dr_helpers.validate_application_odf_cli(
+                drpc_name=workload.discovered_apps_placement_name,
+                namespace=_constants.DR_OPS_NAMESPACE,
+                dr_action="app-failover",
+            )
 
         # ------------------------------------------------------------------ #
         # Step 8: Power primary cluster back on if it was stopped             #
@@ -1177,6 +1186,9 @@ class TestOLSRecipeFailoverAndRelocate:
             workload_type=workload.workload_type,
             workload_placement_name=workload.discovered_apps_placement_name,
             discovered_apps=True,
+            # Skip odf-cli validation inside relocate() — workload pods are not
+            # yet up at that point; we validate below after resources are ready.
+            skip_odf_cli_validation=True,
         )
         config.switch_to_cluster_by_name(primary_cluster)
         dr_helpers.wait_for_all_resources_creation(
@@ -1189,4 +1201,10 @@ class TestOLSRecipeFailoverAndRelocate:
         logger.info(
             "Workload running on primary cluster after relocate — "
             f"OLS Recipe '{recipe_name}' successfully used for DR protection"
+        )
+        # Validate after workload is confirmed running on primary.
+        dr_helpers.validate_application_odf_cli(
+            drpc_name=workload.discovered_apps_placement_name,
+            namespace=_constants.DR_OPS_NAMESPACE,
+            dr_action="app-relocate",
         )
