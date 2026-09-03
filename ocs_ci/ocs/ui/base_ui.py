@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from pathlib import Path
 import datetime
 import logging
@@ -682,6 +683,53 @@ class BaseUI:
 
         """
         self.driver.refresh()
+
+    @contextmanager
+    def run_in_new_tab(self, locator, timeout=15):
+        """
+        Click a locator that opens a new browser tab, switch to it, and
+        guarantee cleanup on exit.
+
+        Usage::
+
+            with self.run_in_new_tab(some_locator):
+                content = self.driver.find_element(By.TAG_NAME, "pre").text
+
+        Args:
+            locator: Selenium locator tuple that triggers a new tab on click.
+            timeout (int): Seconds to wait for the new tab to appear.
+
+        Yields:
+            The WebDriver instance, now focused on the new tab.
+
+        Raises:
+            TimeoutException: If no new tab opens within ``timeout`` seconds.
+
+        """
+        driver = SeleniumDriver()
+        parent_handle = driver.current_window_handle
+        original_handles = set(driver.window_handles)
+
+        self.do_click(locator, enable_screenshot=True)
+
+        try:
+            WebDriverWait(driver, timeout).until(
+                lambda d: len(d.window_handles) > len(original_handles)
+            )
+        except TimeoutException as err:
+            raise TimeoutException(
+                f"No new tab opened within {timeout}s after clicking {locator}"
+            ) from err
+
+        new_handle = (set(driver.window_handles) - original_handles).pop()
+        driver.switch_to.window(new_handle)
+        try:
+            yield driver
+        finally:
+            if new_handle in driver.window_handles:
+                driver.switch_to.window(new_handle)
+                driver.close()
+            driver.switch_to.window(parent_handle)
 
     def navigate_backward(self):
         """
@@ -1576,10 +1624,18 @@ def proceed_to_login_console():
 
 def navigate_to_local_cluster(**kwargs):
     """
-    Navigate to Local Cluster page, if not already there
+    Navigate to Local Cluster page, if not already there.
+
+    On multicluster-hub (MCE/ACM) consoles the perspective switcher is a real
+    dropdown, while on single-cluster consoles it is a static title. In both cases
+    its title reflects the currently selected perspective, so the current
+    perspective is read from that title to decide whether navigation is needed.
+    This avoids probing for absent elements, which would otherwise emit failure
+    screenshots and DOM dumps for the common "already local" case.
+
     :param kwargs: acm_page locators dict, timeout
 
-    :raises TimeoutException: if timeout occurs, and local clusters page is not loaded
+    :raises TimeoutException: if the perspective switcher is not found
     """
     if "acm_page" in kwargs:
         acm_page_loc = kwargs["acm_page"]
@@ -1590,32 +1646,42 @@ def navigate_to_local_cluster(**kwargs):
     else:
         timeout = 30
 
-    all_clusters_dropdown = acm_page_loc["all-clusters_dropdown"]
-    try:
-        logger.info("Navigate to Local Cluster page. Click all clusters dropdown")
-        acm_dropdown = wait_for_element_to_be_visible(all_clusters_dropdown, timeout)
-        acm_dropdown.click()
-        local_cluster_item = wait_for_element_to_be_visible(
-            acm_page_loc["local-cluster_dropdown_item"], timeout
-        )
-        logger.info("Navigate to Local Cluster page. Click local cluster item")
-        local_cluster_item.click()
-    except TimeoutException:
-        current_url = SeleniumDriver().current_url
-        logger.warning(
-            f"'All Clusters' dropdown not found within {timeout}s "
-            f"(current URL: {current_url}). "
-            "Checking whether local-cluster page is already loaded."
-        )
-        wait_for_element_to_be_visible(acm_page_loc["local-cluster_dropdown"], timeout)
+    switcher = wait_for_element_to_be_visible(
+        acm_page_loc["perspective-switcher-toggle"], timeout
+    )
+    current_perspective = switcher.text.strip()
+    logger.info(f"Current perspective switcher title: '{current_perspective}'")
+
+    if any(
+        title in current_perspective for title in ("Core platform", "local-cluster")
+    ):
+        logger.info("Already on local cluster — skipping cluster navigation.")
+        return
+
+    logger.info(
+        f"Perspective '{current_perspective}' is not the local cluster. "
+        "Opening the perspective switcher to select the local cluster."
+    )
+    switcher.click()
+    local_cluster_item = wait_for_element_to_be_visible(
+        acm_page_loc["local-cluster_dropdown_item"], timeout
+    )
+    logger.info("Selecting the local cluster from the perspective switcher")
+    local_cluster_item.click()
 
 
 def navigate_to_all_clusters(**kwargs):
     """
-    Navigate to All Clusters page, if not already there
+    Navigate to All Clusters (Fleet management) page, if not already there.
+
+    Mirrors navigate_to_local_cluster: the currently selected perspective is read
+    from the perspective switcher title before deciding whether to switch, so no
+    absent elements are searched (and no failure screenshots emitted) when the
+    page is already on the all-clusters view.
+
     :param kwargs: acm_page locators dict, timeout
 
-    :raises TimeoutException: if timeout occurs, and All clusters acm page is not loaded
+    :raises TimeoutException: if the perspective switcher is not found
     """
     if "acm_page" in kwargs:
         acm_page = kwargs["acm_page"]
@@ -1626,13 +1692,25 @@ def navigate_to_all_clusters(**kwargs):
     else:
         timeout = 30
 
-    local_clusters_dropdown = acm_page["local-cluster_dropdown"]
-    try:
-        acm_dropdown = wait_for_element_to_be_visible(local_clusters_dropdown, timeout)
-        acm_dropdown.click()
-        all_clusters_item = wait_for_element_to_be_visible(
-            acm_page["all-clusters_dropdown_item"]
-        )
-        all_clusters_item.click()
-    except TimeoutException:
-        wait_for_element_to_be_visible(acm_page["all-clusters_dropdown"])
+    switcher = wait_for_element_to_be_visible(
+        acm_page["perspective-switcher-toggle"], timeout
+    )
+    current_perspective = switcher.text.strip()
+    logger.info(f"Current perspective switcher title: '{current_perspective}'")
+
+    if any(
+        title in current_perspective for title in ("Fleet management", "All Clusters")
+    ):
+        logger.info("Already on all clusters — skipping cluster navigation.")
+        return
+
+    logger.info(
+        f"Perspective '{current_perspective}' is not all clusters. "
+        "Opening the perspective switcher to select all clusters."
+    )
+    switcher.click()
+    all_clusters_item = wait_for_element_to_be_visible(
+        acm_page["all-clusters_dropdown_item"], timeout
+    )
+    logger.info("Selecting all clusters from the perspective switcher")
+    all_clusters_item.click()

@@ -350,3 +350,57 @@ class StoragePools(CreateResourceForm, EditLabelForm, ResourceList):
         has_ec = "Erasure coding" in replicas_text
         has_scheme = expected_scheme in replicas_text
         return has_ec and has_scheme
+
+    def get_displayed_pools(self):
+        """
+        Return the names of the pools currently displayed in the Storage Pools
+        list, read from the 'Data protection policy' column cells.
+
+        Returns:
+            list[str]: Pool names, e.g. ['ocs-storagecluster-cephblockpool', ...]
+        """
+        suffix = "-replicas"
+        spans = self.get_elements(self.bp_loc["pool_replicas_all_in_list"])
+        pool_names = []
+        for span in spans:
+            data_test = span.get_attribute("data-test") or ""
+            if data_test.endswith(suffix):
+                pool_names.append(data_test[: -len(suffix)])
+        logger.info(f"Pools displayed in Storage Pools list: {pool_names}")
+        return pool_names
+
+    def verify_existing_pools(self):
+        """
+        Verify the 'Data protection policy' column for every pool shown in the
+        Storage Pools list matches the pool's actual scheme (replicated or
+        erasure coded) read from the cluster CRs.
+
+        Works for both replicated and erasure coded clusters: replicated pools
+        must display 'Replication' and 'Replica <size>', erasure coded pools
+        must display 'Erasure coding' and the '<k>+<m>' scheme.
+
+        Returns:
+            dict: Mapping of pool_name -> bool, True when the displayed policy
+                matches the actual pool scheme.
+        """
+        from ocs_ci.helpers.helpers import get_pool_data_protection_scheme
+
+        results = {}
+        for pool_name in self.get_displayed_pools():
+            replicas_locator = format_locator(
+                self.bp_loc["pool_replicas_in_list"], pool_name
+            )
+            displayed_text = self.get_element_text(replicas_locator)
+            scheme = get_pool_data_protection_scheme(pool_name)
+            if scheme["type"] == "erasure_coded":
+                expected_tokens = ["Erasure coding", scheme["scheme"]]
+            else:
+                expected_tokens = ["Replication", f"Replica {scheme['replica']}"]
+            match = all(token in displayed_text for token in expected_tokens)
+            logger.info(
+                f"Pool '{pool_name}': displayed='{displayed_text}', "
+                f"actual scheme={scheme}, expected tokens={expected_tokens}, "
+                f"match={match}"
+            )
+            results[pool_name] = match
+        return results
