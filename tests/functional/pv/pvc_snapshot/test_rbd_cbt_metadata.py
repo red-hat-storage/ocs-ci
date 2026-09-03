@@ -549,6 +549,7 @@ class TestRbdCBTInfrastructure(ManageTest):
             len(endpoint_ips),
         )
 
+    @polarion_id("OCS-8252")
     def test_cbt_configmap_connection_details(self):
         """
         Verify that the CBT service ConfigMap contains correct
@@ -633,12 +634,12 @@ class TestRbdCBTInfrastructure(ManageTest):
             cert = x509.load_pem_x509_certificate(
                 ca_cert.encode("utf-8"), default_backend()
             )
-            log.info(
-                "caCert is a valid PEM-encoded certificate (Subject: %s)",
-                cert.subject.rfc4514_string(),
-            )
-        except Exception as e:
+        except ValueError as e:
             raise AssertionError(
                 f"caCert has valid PEM delimiters but failed to parse as "
                 f"X.509 certificate: {e}"
-            )
+            ) from e
+        log.info(
+            "caCert is a valid PEM-encoded certificate (Subject: %s)",
+            cert.subject.rfc4514_string(),
+        )
