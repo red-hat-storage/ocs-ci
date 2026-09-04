@@ -15,7 +15,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
 )
 from ocs_ci.framework.pytest_customization.marks import (
-    magenta_squad,
+    yellow_squad,
     ignore_leftovers,
 )
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_project
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 @ui
-@magenta_squad
+@yellow_squad
 @ignore_leftovers
 class TestVirtualMachineLifecycle(ManageTest):
     """
