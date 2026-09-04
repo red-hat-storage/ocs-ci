@@ -3242,11 +3242,18 @@ def cld_mgr(request):
     cld_mgr = CloudManager()
 
     def finalizer():
-        for client in vars(cld_mgr):
+        for client_name in vars(cld_mgr):
             try:
-                getattr(cld_mgr, client).secret.delete()
+                client_obj = getattr(cld_mgr, client_name)
+                if getattr(client_obj, "keep_secret_post_teardown", False):
+                    log.info(
+                        f"Skipping secret deletion for {client_name} "
+                        "(keep_secret_post_teardown is set)"
+                    )
+                    continue
+                client_obj.secret.delete()
             except AttributeError:
-                log.info(f"{client} secret not found")
+                log.info(f"{client_name} secret not found")
 
     request.addfinalizer(finalizer)
 
@@ -10087,10 +10094,26 @@ def override_default_backingstore_session(
 
 @pytest.fixture(scope="session")
 def override_default_backingstore_session_no_teardown(
+    cld_mgr,
     mcg_obj_session,
     backingstore_factory_session,
     allow_default_backingstore_override,
 ):
+    bs_dict = clone_bs_dict_from_backingstore(constants.DEFAULT_NOOBAA_BACKINGSTORE)
+    cloud_type = next(iter(bs_dict))
+
+    client_map = {
+        "aws": "aws_client",
+        "azure": "azure_client",
+        "gcp": "gcp_client",
+        "ibmcos": "ibmcos_client",
+    }
+    client_attr = client_map.get(cloud_type)
+    if client_attr:
+        client = getattr(cld_mgr, client_attr, None)
+        if client:
+            client.keep_secret_post_teardown = True
+
     return override_default_backingstore_fixture(
         None, mcg_obj_session, backingstore_factory_session
     )
