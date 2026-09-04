@@ -69,40 +69,34 @@ class TNFHypervisor:
 
     def _resolve_ssh_keys(self):
         """
-        Resolve SSH key pair. If ssh_key_private is set in config, use it.
-        Otherwise auto-detect from common locations (~/.ssh/).
-        Returns (private_key_path, public_key_path) tuple.
+        Resolve SSH key pair from standard DEPLOYMENT config parameters.
+
+        Uses DEPLOYMENT["ssh_key_private"] and DEPLOYMENT["ssh_key"]
+        (same as baremetal, vmware, flexy deployments).
+
+        Returns:
+            tuple: (private_key_path, public_key_path)
         """
-        configured_private = self.config.get("ssh_key_private")
-        if configured_private:
-            private_path = os.path.expanduser(configured_private)
-            pub_path = private_path + ".pub"
-            if not os.path.exists(private_path):
-                raise FileNotFoundError(
-                    f"Configured SSH private key not found: {private_path}"
-                )
-            if not os.path.exists(pub_path):
-                pub_path = private_path.rsplit(".", 1)[0] + ".pub"
-            return private_path, pub_path
+        private_key = config.DEPLOYMENT.get("ssh_key_private")
+        public_key = config.DEPLOYMENT.get("ssh_key")
 
-        search_order = [
-            "~/.ssh/id_ed25519_tnf",
-            "~/.ssh/id_ed25519",
-            "~/.ssh/id_rsa",
-            "~/.ssh/id_ecdsa",
-        ]
-        for key_path in search_order:
-            private_path = os.path.expanduser(key_path)
-            pub_path = private_path + ".pub"
-            if os.path.exists(private_path) and os.path.exists(pub_path):
-                logger.info(f"Auto-detected SSH key: {private_path}")
-                return private_path, pub_path
+        if not private_key:
+            raise FileNotFoundError(
+                "DEPLOYMENT['ssh_key_private'] not configured. "
+                "Set ssh_key_private in the deployment config."
+            )
 
-        raise FileNotFoundError(
-            "No SSH key found. Provide ssh_key_private in config or "
-            "ensure a key exists at ~/.ssh/id_ed25519, ~/.ssh/id_rsa, "
-            "or ~/.ssh/id_ecdsa"
-        )
+        private_path = os.path.expanduser(private_key)
+        if not os.path.exists(private_path):
+            raise FileNotFoundError(f"SSH private key not found: {private_path}")
+
+        pub_path = ""
+        if public_key:
+            pub_path = os.path.expanduser(public_key)
+        if not pub_path or not os.path.exists(pub_path):
+            pub_path = private_path + ".pub"
+
+        return private_path, pub_path
 
     def _get_rhel_ami(self, architecture="x86_64", rhel_version="9"):
         """
@@ -786,7 +780,7 @@ class TNFHypervisor:
                 ]
             )
 
-        ocp_release = self.dev_scripts_config.get("ocp_release_image")
+        ocp_release = config.DEPLOYMENT.get("custom_ocp_image")
         if not ocp_release:
             ocp_release = self._get_release_image()
         if ocp_release:
