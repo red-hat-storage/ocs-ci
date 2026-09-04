@@ -7242,9 +7242,12 @@ def nsfs_bucket_factory_fixture(
             "chmod -R 777 /nsfs"
         )
 
+        account_name = f"nsfs-integrity-test-{random.randrange(100)}"
+        nsfs_obj.account_name = account_name
+
         # Create a new MCG account and get its credentials
         nsfs_obj.s3_creds = mcg_account_factory(
-            name=f"nsfs-integrity-test-{random.randrange(100)}",
+            name=nsfs_obj.account_name,
             default_resource=nsfs_obj.nss.name,
             nsfs_account_config=True,
             nsfs_only=nsfs_obj.nsfs_only,
