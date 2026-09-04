@@ -40,6 +40,7 @@ TEMPLATE_DEPLOYMENT_DIR_NMSTATE = os.path.join(TEMPLATE_DIR, "nmstate-deployment
 TEMPLATE_DEPLOYMENT_DIR_INF = os.path.join(
     TEMPLATE_DIR, "ingress-node-firewall-deployment"
 )
+TEMPLATE_DEPLOYMENT_DIR_TNF = os.path.join(TEMPLATE_DIR, "tnf-deployment")
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_LVM_DIR = os.path.join(TEMPLATE_CSI_DIR, "lvm")
@@ -722,10 +723,57 @@ HCP_REGISTRY = "quay.io/hypershift/hypershift-operator"
 HCP_REPOSITORY = "https://github.com/openshift/hypershift.git"
 AVAILABILITY_POLICY_HA = "HighlyAvailable"
 AVAILABILITY_POLICY_SINGLE = "SingleReplica"
+AVAILABILITY_POLICY_DUAL = "DualReplica"
 AVAILABILITY_POLICIES = [
     AVAILABILITY_POLICY_SINGLE,
     AVAILABILITY_POLICY_HA,
+    AVAILABILITY_POLICY_DUAL,
 ]
+
+# Two-Node Fencing (TNF) / Two-Node Cluster Constants
+TNF_CONTROL_PLANE_TOPOLOGY = "DualReplica"
+TNF_DRBD_PORT = 7794
+TNF_DRBD_RESOURCE_NAME = "r0"
+TNF_DRBD_CONF_PATH = "/etc/drbd.conf"
+TNF_DRBD_DIR_PATH = "/etc/drbd.d"
+TNF_DRBD_CONFIGURE_CM = "drbd-configure"
+TNF_DRBD_SETUP_SCRIPT_CM = "rook-ceph-drbd-setup-script"
+TNF_LOCALBLOCK_SC = "localblock"
+
+# TNF Hypervisor (AWS EC2 bare-metal for dev-scripts)
+TNF_HYPERVISOR_DEFAULT_INSTANCE_TYPE = "c5n.metal"
+TNF_HYPERVISOR_DEFAULT_SSH_USER = "ec2-user"
+TNF_HYPERVISOR_SSH_TIMEOUT = 600
+TNF_DEV_SCRIPTS_REPO = "https://github.com/openshift-metal3/dev-scripts.git"
+TNF_DEV_SCRIPTS_BRANCH = "master"
+TNF_DEV_SCRIPTS_DIR = "/root/dev-scripts"
+TNF_DEV_SCRIPTS_OCP_DIR = "/root/dev-scripts/ocp"
+TNF_DEV_SCRIPTS_TIMEOUT = 7200
+TNF_HYPERVISOR_SG_NAME_PREFIX = "tnf-hypervisor-sg"
+TNF_HYPERVISOR_SG_PORTS = [
+    {"port": 22, "protocol": "tcp", "description": "SSH"},
+    {"port": 80, "protocol": "tcp", "description": "HTTP"},
+    {"port": 443, "protocol": "tcp", "description": "HTTPS"},
+    {"port": 5353, "protocol": "tcp", "description": "mDNS"},
+    {"port": 5678, "protocol": "tcp", "description": "dev-scripts"},
+    {"port": 6443, "protocol": "tcp", "description": "OCP API"},
+    {"port": 8080, "protocol": "tcp", "description": "HTTP alt"},
+    {"port": 8213, "protocol": "tcp", "description": "Squid proxy"},
+    {"port": 9090, "protocol": "tcp", "description": "Cockpit"},
+    {
+        "port": 30000,
+        "protocol": "tcp",
+        "to_port": 32767,
+        "description": "NodePort TCP range",
+    },
+    {
+        "port": 30000,
+        "protocol": "udp",
+        "to_port": 32767,
+        "description": "NodePort UDP range",
+    },
+]
+
 DISABLE_DEFAULT_SOURCES = True
 AUTO_REPAIR = True
 
