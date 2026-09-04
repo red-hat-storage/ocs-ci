@@ -14,7 +14,6 @@ from ocs_ci.deployment.helpers.lso_helpers import (
     add_disks_lso,
     cleanup_nodes_for_lso_install,
 )
-from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.framework import config
 
 from ocs_ci.helpers.helpers import create_lvs_resource
@@ -49,6 +48,7 @@ class FusionDataFoundationDeployment:
         self.live_deployment = config.DEPLOYMENT.get("live_deployment", False)
         self.kubeconfig = config.RUN["kubeconfig"]
         self.lso_enabled = config.DEPLOYMENT.get("local_storage", False)
+        self.disconnected = config.DEPLOYMENT.get("disconnected", False)
         self.fdf_skip_storage_setup = config.DEPLOYMENT.get(
             "fdf_skip_storage_setup", False
         )
@@ -102,10 +102,37 @@ class FusionDataFoundationDeployment:
         lso_operator = LocalStorageOperator(create_catalog=True)
         lso_operator.deploy()
 
+    def _is_mirror_already_configured(self):
+        """
+        Check whether mirroring has already been completed externally.
+
+        Returns True when both ``DEPLOYMENT.disconnected`` and
+        ``DEPLOYMENT.disconnected_mirror_completed`` are set to True, meaning
+        the mirror registry is already configured and IDMS/ITMS resources must
+        not be re-created.
+
+        Returns:
+            bool: True if mirroring is already done and should be skipped.
+
+        """
+        return config.DEPLOYMENT.get("disconnected") and config.DEPLOYMENT.get(
+            "disconnected_mirror_completed"
+        )
+
     def create_image_tag_mirror_set(self):
         """
         Create or update ImageTagMirrorSet.
+
+        Skipped when ``DEPLOYMENT.disconnected`` and
+        ``DEPLOYMENT.disconnected_mirror_completed`` are both True (mirroring
+        was completed externally, e.g. via fdf-mirror entrypoint).
         """
+        if self._is_mirror_already_configured():
+            logger.info(
+                "Skipping ImageTagMirrorSet creation: disconnected mirror already configured"
+            )
+            return
+
         logger.info("Creating or Updating FDF ImageTagMirrorSet")
 
         imagetag_file = constants.FDF_IMAGE_TAG_MIRROR_SET
@@ -118,11 +145,21 @@ class FusionDataFoundationDeployment:
         """
         Create or update ImageDigestMirrorSet.
 
+        Skipped when ``DEPLOYMENT.disconnected`` and
+        ``DEPLOYMENT.disconnected_mirror_completed`` are both True (mirroring
+        was completed externally, e.g. via fdf-mirror entrypoint).
+
         Args:
             upgrade (bool): If True, use upgrade-specific config values for
                 registry and image tag. Default is False.
 
         """
+        if self._is_mirror_already_configured():
+            logger.info(
+                "Skipping ImageDigestMirrorSet creation: disconnected mirror already configured"
+            )
+            return
+
         logger.info("Creating FDF ImageDigestMirrorSet")
         image_digest_mirror_set = extract_image_digest_mirror_set(upgrade=upgrade)
 
@@ -142,9 +179,9 @@ class FusionDataFoundationDeployment:
             fdf_service_data = yaml.safe_load(f.read())
 
         backing_storage_type = config.DEPLOYMENT.get("backing_storage_type")
+        platform = config.ENV_DATA.get("platform", "").lower()
 
         if not backing_storage_type:
-            platform = config.ENV_DATA.get("platform", "").lower()
             local_platforms = [
                 constants.VSPHERE_PLATFORM,
                 constants.BAREMETAL_PLATFORM,
@@ -160,6 +197,13 @@ class FusionDataFoundationDeployment:
                 if param["name"] == "backingStorageType":
                     param["value"] = backing_storage_type
                     break
+
+        if platform == constants.IBM_HCI_PLATFORM:
+            logger.info(
+                "IBM HCI platform detected, setting creator=Fusion and enableLVMStorage=true"
+            )
+            fdf_service_data["spec"]["creator"] = "Fusion"
+            fdf_service_data["spec"]["enableLVMStorage"] = True
 
         fdf_service_cr_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="fdf_service_cr", delete=False
@@ -188,6 +232,11 @@ class FusionDataFoundationDeployment:
                 (fdf_upgrade_registry and fdf_upgrade_image_tag). Default is False.
 
         """
+        if self._is_mirror_already_configured():
+            logger.info(
+                "Skipping FusionServiceDefinition patching, disconnected env does'nt required it"
+            )
+            return
         if upgrade:
             fdf_registry = config.DEPLOYMENT.get(
                 "fdf_upgrade_registry"
@@ -370,12 +419,12 @@ class FusionDataFoundationDeployment:
         """
 
         logger.info("Creating OdfCluster CR")
-        storageclass = get_storageclass()
+        # storageclass = get_storageclass()
         worker_nodes = node.get_worker_nodes()
         with open(constants.FDF_ODFCLUSTER_CR, "r") as f:
             odfcluster_data = yaml.safe_load(f.read())
 
-        odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
+        # odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
         odfcluster_data["spec"]["storageNodes"] = worker_nodes
 
         odfcluster_data_yaml = tempfile.NamedTemporaryFile(
@@ -539,7 +588,15 @@ def storagecluster_health_check():
 def wait_for_storageclusters_crd():
     """
     Wait for the storageclusters CRD to exist.
+    On IBM HCI platform storage is managed via OdfCluster CR, not
+    StorageCluster, so the storageclusters CRD is not expected to exist.
     """
+    if config.ENV_DATA.get("platform", "").lower() == constants.IBM_HCI_PLATFORM:
+        logger.info(
+            "IBM HCI platform detected, storage managed by OdfCluster CR, "
+            "skipping StorageClusters CRD wait"
+        )
+        return
     logger.info("Waiting for the StorageClusters CRD to exist")
 
     @retry((CommandFailed, AssertionError, KeyError), 30, 30, backoff=1)
