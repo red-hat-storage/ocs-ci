@@ -35,6 +35,9 @@ class TestGetCommands:
         self.validate_running_pods(output)
         self.validate_pg_status(output)
         self.validate_mgr_pods(output)
+        self.validate_cluster_capacity(output)
+        self.validate_node_pressure(output)
+        self.validate_noobaa(output)
 
     @skipif_external_mode
     @runs_on_provider
@@ -79,70 +82,47 @@ class TestGetCommands:
             ), f"Invalid port number in endpoint: {endpoint}"
 
     def validate_mon_pods(self, output):
-        mon_pods = [
-            line
-            for line in output.stdout.decode().split("\n")
-            if "rook-ceph-mon-" in line
-        ]
+        mon_status = re.search(
+            r"(\d+) mon pods running on (\d+) different nodes",
+            output.stdout.decode(),
+        )
+        assert mon_status, "Mon distribution status not found in output"
+        pod_count, node_count = int(mon_status.group(1)), int(mon_status.group(2))
+        assert pod_count >= 3, f"Expected at least 3 mon pods, found {pod_count}"
         assert (
-            len(mon_pods) >= 3
-        ), f"Expected at least 3 mon pods, found {len(mon_pods)}"
-        nodes = set()
-        for pod in mon_pods:
-            assert "Running" in pod, f"Mon pod not in Running state: {pod}"
-            node = pod.split()[-1]
-            nodes.add(node)
-        assert (
-            len(nodes) >= 3
-        ), f"Mon pods should be on at least 3 different nodes, found {len(nodes)}"
+            node_count >= 3
+        ), f"Mon pods should be on at least 3 different nodes, found {node_count}"
 
     def validate_mon_quorum_and_health(self, output):
-        health_ok = "Info: HEALTH_OK" in output.stderr.decode()
+        health_ok = "HEALTH_OK" in output.stdout.decode()
         assert health_ok, "Ceph health is not OK"
 
     def validate_osd_pods(self, output):
-        osd_pods = [
-            line
-            for line in output.stdout.decode().split("\n")
-            if "rook-ceph-osd-" in line
-            and "prepare" not in line
-            and "key-rotation" not in line
-        ]
+        osd_status = re.search(
+            r"(\d+) osd pods running on (\d+) different nodes",
+            output.stdout.decode(),
+        )
+        assert osd_status, "OSD distribution status not found in output"
+        pod_count, node_count = int(osd_status.group(1)), int(osd_status.group(2))
+        assert pod_count >= 3, f"Expected at least 3 OSD pods, found {pod_count}"
         assert (
-            len(osd_pods) >= 3
-        ), f"Expected at least 3 OSD pods, found {len(osd_pods)}"
-        nodes = set()
-        for pod in osd_pods:
-            assert "Running" in pod, f"OSD pod not in Running state: {pod}"
-            node = pod.split()[-1]
-            nodes.add(node)
-        assert (
-            len(nodes) >= 3
-        ), f"OSD pods should be on at least 3 different nodes, found {len(nodes)}"
+            node_count >= 3
+        ), f"OSD pods should be on at least 3 different nodes, found {node_count}"
 
     def validate_running_pods(self, output):
-        pod_lines = output.stdout.decode().strip().split("\n")
-        running_pods = [
-            line
-            for line in pod_lines
-            if "\tRunning\t" in line or "\tSucceeded\t" in line
-        ]
-
-        assert running_pods, "No running or succeeded pods found in output"
-
-        for pod in running_pods:
-            pod_name, status, namespace, node = pod.split("\t")
-            assert status in [
-                "Running",
-                "Succeeded",
-            ], f"Pod {pod_name} not in Running or Succeeded state: {status}"
-
-        log.info(f"Found {len(running_pods)} running or succeeded pods")
+        pods_status = re.search(
+            r"All (\d+) pods are Running/Succeeded",
+            output.stdout.decode(),
+        )
+        assert pods_status, "Running pods status not found in output"
+        pod_count = int(pods_status.group(1))
+        assert pod_count > 0, f"Expected positive pod count, found {pod_count}"
+        log.info(f"Found {pod_count} running or succeeded pods")
 
     def validate_pg_status(self, output):
         pg_status = re.search(
-            r"Info: Checking placement group status\nInfo:\s+PgState: (.*?), PgCount: (\d+)",
-            output.stderr.decode(),
+            r"PgState: (.*?), PgCount: (\d+)",
+            output.stdout.decode(),
         )
         assert pg_status, "Placement group status not found in output"
         pg_state, pg_count = pg_status.groups()
@@ -152,27 +132,30 @@ class TestGetCommands:
         assert int(pg_count) > 0, f"Expected positive PG count, found {pg_count}"
 
     def validate_mgr_pods(self, output):
-        mgr_pods = [
-            line
-            for line in output.stdout.decode().split("\n")
-            if "rook-ceph-mgr-" in line
-        ]
-
-        assert mgr_pods, "No MGR pods found in output"
-
-        for pod in mgr_pods:
-            assert "Running" in pod, f"MGR pod not in Running state: {pod}"
-
-        nodes = set(pod.split()[-1] for pod in mgr_pods)
-
-        log.info(f"Found {len(mgr_pods)} running MGR pods on {len(nodes)} nodes")
-
-        mgr_section = re.search(
-            r"Info: Checking if at least one mgr pod is running\n(.*?)$",
-            output.stderr.decode(),
-            re.DOTALL,
+        mgr_status = re.search(
+            r"(\d+) mgr pod\(s\) running",
+            output.stdout.decode(),
         )
-        if mgr_section:
-            log.info("MGR pod check found in stderr")
-        else:
-            log.warning("MGR pod check not found in stderr")
+        assert mgr_status, "MGR status not found in output"
+        mgr_count = int(mgr_status.group(1))
+        assert mgr_count >= 1, f"Expected at least 1 MGR pod, found {mgr_count}"
+        log.info(f"Found {mgr_count} running MGR pods")
+
+    def validate_cluster_capacity(self, output):
+        capacity_match = re.search(
+            r"Cluster capacity [\d.]+% used",
+            output.stdout.decode(),
+        )
+        assert capacity_match, "Cluster capacity not found in output"
+
+    def validate_node_pressure(self, output):
+        assert (
+            "[OK] Node Resource Pressure [OK]" in output.stdout.decode()
+        ), "Node resource pressure check did not pass"
+
+    def validate_noobaa(self, output):
+        stdout = output.stdout.decode()
+        if "NooBaa" not in stdout:
+            log.info("NooBaa not present in health output, skipping validation")
+            return
+        assert "[OK] NooBaa" in stdout, "NooBaa health check did not pass"
