@@ -11,7 +11,6 @@ from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.ocs import check_if_cluster_was_upgraded
 from ocs_ci.utility import version
 from ocs_ci.utility.rgwutils import get_rgw_count
 
@@ -48,9 +47,7 @@ class TestRGWPodExistence:
             config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS
             and not config.ENV_DATA["mcg_only_deployment"]
         ):
-            rgw_count = get_rgw_count(
-                config.ENV_DATA["ocs_version"], check_if_cluster_was_upgraded(), None
-            )
+            rgw_count = get_rgw_count()
             logger.info(
                 f'Checking for RGW pod/s on {config.ENV_DATA.get("platform")} platform'
             )
