@@ -85,38 +85,35 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         vm_obj.removevolume(volume_name=pvc.name, persist=True, verify=True)
         logger.info(f"PVC '{pvc.name}' unplugged and verified for VM '{vm_obj.name}'")
 
-    def _restart_and_get_disk_baseline(self, vm_obj):
+    def _restart_vm(self, vm_obj):
         """
-        Restarts the VM and returns a fresh lsblk baseline after it comes back up.
+        Restarts the VM and waits for SSH to become available.
 
-        After a VM has been rebooted with a persisted hotplug volume and that volume
-        is then unplugged (persist=True), the virt-launcher/QEMU process still has
-        the virtio-scsi bus address reserved for the removed device.  Any subsequent
-        addvolume call for a different PVC silently fails because the SCSI slot appears
-        occupied to QEMU.
-
-        Restarting the VM forces virt-launcher to spawn a fresh QEMU process with a
-        clean virtio-scsi controller, so the next addvolume correctly claims the free
-        slot and surfaces in the guest.
+        After a VM that has a persisted hotplug volume is restarted, virt-launcher
+        spawns a fresh QEMU process and the hotplug attachment pods for any volumes
+        that were in the spec are re-created from scratch.  This clears any stale
+        QEMU virtio-scsi slot state from a previous hotplug cycle.
 
         Args:
             vm_obj: The VM object to restart.
+        """
+        logger.info(f"Restarting VM '{vm_obj.name}' to clear hotplug attachment state")
+        vm_obj.restart()
+        logger.info(f"VM '{vm_obj.name}' restarted successfully")
+
+    def _get_disk_baseline(self, vm_obj):
+        """
+        Captures and returns the current lsblk output from the VM guest.
+
+        Args:
+            vm_obj: The VM object to query.
 
         Returns:
-            str: Raw output of 'lsblk -o NAME,SIZE,MOUNTPOINT -P' captured after the
-                 VM is back up and SSH is available — ready to use as the
-                 disks_before_hotplug baseline for verify_hotplug().
+            str: Raw output of 'lsblk -o NAME,SIZE,MOUNTPOINT -P', suitable for use
+                 as the disks_before_hotplug baseline in verify_hotplug().
         """
-        logger.info(
-            f"Restarting VM '{vm_obj.name}' to reset virtio-scsi bus after unplug "
-            f"before attaching clone"
-        )
-        vm_obj.restart()
-        logger.info(
-            f"VM '{vm_obj.name}' restarted successfully; capturing disk baseline"
-        )
         baseline = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
-        logger.info(f"Disk baseline on VM '{vm_obj.name}' after restart:\n{baseline}")
+        logger.info(f"Disk baseline on VM '{vm_obj.name}':\n{baseline}")
         return baseline
 
     def test_vm_hotpl_unplg_snap_clone(
@@ -246,29 +243,47 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 f"'{dvt_obj.name}' -> '{clone_obj_dvt.name}'"
             )
 
-            # Unplug the original hotplugged PVCs from each VM.
-            # After the earlier reboot with persist=True, virt-launcher's QEMU process
-            # has the virtio-scsi slot permanently reserved for the original PVC.
-            # A simple removevolume() only clears the kubevirt spec; the SCSI address
-            # remains occupied inside QEMU and any subsequent addvolume for the clone
-            # is silently dropped.  Restarting the VM forces a fresh QEMU process with
-            # a clean virtio-scsi controller so the clone hotplug succeeds.
+            # Prepare each VM to accept a new clone hotplug.
+            #
+            # After Step 2, each VM has a persisted hotplug volume (--persist) and a
+            # live KubeVirt attachment pod coordinating that volume.  Calling
+            # removevolume --persist on the *running* VM races with the attachment pod
+            # teardown; the spec entry is removed but QEMU retains the virtio-scsi
+            # slot, so any subsequent addvolume for the clone is silently dropped.
+            #
+            # Fix: restart the VM first — virt-launcher kills QEMU and the attachment
+            # pod is torn down cleanly.  Then call removevolume --persist on the freshly
+            # booted VM (no live attachment pod) to clear the spec entry.  Finally,
+            # capture the disk baseline *after* the unplug so verify_hotplug sees the
+            # clone disk as a net-new device rather than a re-appearance of the removed
+            # original.
+            logger.info(
+                f"Restarting VM '{vm_obj_pvc.name}' to clear attachment pod for "
+                f"original PVC '{pvc_obj.name}'"
+            )
+            self._restart_vm(vm_obj_pvc)
             logger.info(
                 f"Unplugging original PVC '{pvc_obj.name}' from VM '{vm_obj_pvc.name}' "
-                f"before attaching clone"
+                f"after restart (no live attachment pod)"
             )
             self.unplug_disks_and_verify(vm_obj_pvc, pvc_obj)
-            before_disks_pvc = self._restart_and_get_disk_baseline(vm_obj_pvc)
+            before_disks_pvc = self._get_disk_baseline(vm_obj_pvc)
 
             logger.info(
+                f"Restarting VM '{vm_obj_dvt.name}' to clear attachment pod for "
+                f"original PVC '{dvt_obj.name}'"
+            )
+            self._restart_vm(vm_obj_dvt)
+            logger.info(
                 f"Unplugging original PVC '{dvt_obj.name}' from VM '{vm_obj_dvt.name}' "
-                f"before attaching clone"
+                f"after restart (no live attachment pod)"
             )
             self.unplug_disks_and_verify(vm_obj_dvt, dvt_obj)
-            before_disks_dvt = self._restart_and_get_disk_baseline(vm_obj_dvt)
+            before_disks_dvt = self._get_disk_baseline(vm_obj_dvt)
 
-            # Attach clones to opposite VMs — each VM now has a fresh QEMU process
-            # with no previously hotplugged devices, so addvolume will succeed.
+            # Attach clones to opposite VMs.  Each VM has a fresh QEMU process, a
+            # clean VM spec (no hotplug entry), and the baseline reflects the current
+            # disk state — addvolume will surface the clone disk as a new device.
             logger.info(
                 f"Attaching clone '{clone_obj_dvt.name}' to VM '{vm_obj_pvc.name}'"
             )
