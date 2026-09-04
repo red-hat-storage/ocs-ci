@@ -4551,6 +4551,20 @@ def validate_application_odf_cli(
             )
             return None
 
+    config_path = constants.ODF_CLI_DR_CONFIG_PATH
+    with open(config_path, "r") as f:
+        cli_config = yaml.safe_load(f)
+
+    with config.RunWithAcmConfigContext():
+        drpc_data = OCP(
+            kind=constants.DRPC, namespace=namespace, resource_name=drpc_name
+        ).get()
+        drpolicy_name = drpc_data["spec"]["drPolicyRef"]["name"]
+        cli_config["drPolicy"] = drpolicy_name
+
+    with open(config_path, "w") as f:
+        yaml.dump(cli_config, f, default_flow_style=False)
+
     dir_label = dr_action or f"{action}-app"
     output_dir = os.path.join(
         os.path.expanduser(config.RUN["log_dir"]),
