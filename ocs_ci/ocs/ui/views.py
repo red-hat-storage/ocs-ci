@@ -2165,6 +2165,11 @@ block_pool_4_22 = {
         'span[data-test="{}-replicas"]',
         By.CSS_SELECTOR,
     ),
+    "block_pool_replica": (
+        "//dt[normalize-space()='Data protection policy']"
+        "/following-sibling::dd[@data-test='detail-item-value']",
+        By.XPATH,
+    ),
 }
 
 storageclass = {
