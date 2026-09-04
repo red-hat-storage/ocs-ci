@@ -402,9 +402,7 @@ def ocs_install_verification(
     rgw_count = None
     if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
         if not disable_rgw:
-            rgw_count = get_rgw_count(
-                f"{ocs_version}", post_upgrade_verification, version_before_upgrade
-            )
+            rgw_count = get_rgw_count()
 
     min_eps = constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
 
