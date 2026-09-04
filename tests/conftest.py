@@ -231,6 +231,7 @@ from ocs_ci.helpers.helpers import (
     storagecluster_independent_check,
     get_schedule_precedance_value_from_csi_addons_configmap,
     set_schedule_precedence,
+    get_cephfs_name,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -1290,6 +1291,7 @@ def storageclass_factory_fixture(
         mounter=None,
         erasure_coded=False,
         data_pool_name=None,
+        new_cephfs_pool=False,
     ):
         """
         Args:
@@ -1323,6 +1325,7 @@ def storageclass_factory_fixture(
                 metadata pool and dataPool set to the new EC data pool.
             data_pool_name (str): Explicit EC data pool name to set as dataPool in the StorageClass.
                 Use when sharing an existing EC pool across multiple SCs without creating a new one.
+            new_cephfs_pool (bool): True if user wants to create new cephfs pool for SC
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -1373,7 +1376,23 @@ def storageclass_factory_fixture(
                     else:
                         interface_name = pool_name
             elif interface == constants.CEPHFILESYSTEM:
-                interface_name = helpers.get_cephfs_data_pool_name()
+                if ocsci_config.ENV_DATA.get("new_cephfs_pool") or new_cephfs_pool:
+                    if erasure_coded:
+                        full_pool_name = helpers.create_cephfs_data_pool(
+                            pool_name=constants.CUSTOM_CEPHFS_POOL,
+                            erasure_coded=erasure_coded,
+                        )
+                    else:
+                        full_pool_name = helpers.create_cephfs_data_pool(
+                            pool_name=constants.CUSTOM_CEPHFS_POOL,
+                            compression=ocsci_config.ENV_DATA.get("compression")
+                            or compression,
+                            replica=ocsci_config.ENV_DATA.get("replica") or replica,
+                        )
+                    interface_name = full_pool_name
+                else:
+                    if pool_name is None:
+                        interface_name = helpers.get_cephfs_data_pool_name()
 
             sc_obj = helpers.create_storage_class(
                 interface_type=interface,
@@ -1402,6 +1421,7 @@ def storageclass_factory_fixture(
     def finalizer():
         """
         Delete the storageclass by deregistering from StorageConsumer first
+        Removes any CephFS additional data pools if available.
         """
         from ocs_ci.ocs.resources.storage_cluster import (
             delete_storageclass_and_deregister,
@@ -1414,6 +1434,12 @@ def storageclass_factory_fixture(
                     sc_name=instance.name,
                     sc_ocp=instance.ocp,
                 )
+                cephfs_name = get_cephfs_name()
+                if cephfs_name in instance.interface_name:
+                    pool_short_name = instance.interface_name.removeprefix(
+                        f"{cephfs_name}-"
+                    )
+                    helpers.delete_cephfs_data_pool(pool_short_name)
             except Exception as e:
                 log.error(f"Failed to delete storageclass {instance.name}: {e}")
                 teardown_errors.append((instance.name, e))
@@ -7965,6 +7991,7 @@ def create_workload_factory():
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
         skip_mirroring_validation=False,
+        custom_sc=False,
     ):
         """
         Args:
@@ -7977,6 +8004,7 @@ def create_workload_factory():
             switch_ctx (int): The cluster index by the cluster name
             skip_mirroring_validation (bool): If True, skip mirroring status validation after deployment.
                 Useful when deploying multiple workloads and validation will be done later.
+            custom_sc (bool): True to create and use custom Pool and Storage Class
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -8027,6 +8055,10 @@ def create_workload_factory():
         for index in range(num_of_appset):
             workload_key = "dr_workload_appset"
             is_mdr_specific = ocsci_config.ENV_DATA.get(workload_key, False)
+            if pvc_interface == constants.CEPHFILESYSTEM and custom_sc:
+                workload_key = "dr_workload_appset_with_custom_pool"
+            else:
+                workload_key = "dr_workload_appset"
             if (
                 ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
             ) or (not is_mdr_specific):
@@ -8081,6 +8113,7 @@ def create_workload_factory():
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
         skip_mirroring_validation=False,
+        custom_sc=False,
     ):
         return _create_resources(
             num_of_subscription,
@@ -8089,6 +8122,7 @@ def create_workload_factory():
             pvc_interface,
             switch_ctx,
             skip_mirroring_validation,
+            custom_sc,
         )
 
     return factory, _teardown
@@ -8367,6 +8401,7 @@ def discovered_apps_dr_workload(request):
         pvc_interface=constants.CEPHBLOCKPOOL,
         multi_ns=False,
         workloads=None,
+        custom_sc=False,
     ):
         """
         Args:
@@ -8375,6 +8410,8 @@ def discovered_apps_dr_workload(request):
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
             multi_ns (bool): True for Multi Namespace
+            custom_sc (bool): False by default, will create and use custom Pool and Storage Class
+                when set to True for discovered apps workload
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -8390,7 +8427,10 @@ def discovered_apps_dr_workload(request):
         if multi_ns and kubeobject <= 1:
             raise UnsupportedWorkloadError("kubeobject count should be more than 2")
         if pvc_interface == constants.CEPHFILESYSTEM:
-            workload_key = "dr_workload_discovered_apps_cephfs"
+            if custom_sc:
+                workload_key = "dr_workload_discovered_apps_cephfs_custom_pool_and_sc"
+            else:
+                workload_key = "dr_workload_discovered_apps_cephfs"
         if workloads == "filebrowser":
             if pvc_interface == constants.CEPHFILESYSTEM:
                 workload_key = "dr_workload_discovered_apps_filebrowser_cephfs"
