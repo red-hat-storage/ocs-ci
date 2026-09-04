@@ -5,7 +5,14 @@ metadata:
   namespace: ibm-spectrum-fusion-ns
 spec:
   taintNode: false
+  storageClient:
+    enable: true
   creator: CreatedByFusion
+  erasureCoding:
+    codingChunks: 2
+    dataChunks: 4
+    enable: true
+  autoScaleUp: true
   deviceSets:
   - capacity: 1Ti
     count: 1
