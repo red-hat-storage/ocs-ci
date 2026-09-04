@@ -527,17 +527,24 @@ def pytest_collection_modifyitems(session, config, items):
                     )
                     items.remove(item)
             if skipif_no_kms_marker:
-                try:
+                # Skip KMS check if ODF is not deployed (OCP-only upgrade or skip_ocs_deployment)
+                if not ocsci_config.ENV_DATA.get(
+                    "skip_ocs_deployment", False
+                ) and not ocsci_config.DEPLOYMENT.get("ocp_only_upgrade", False):
+                    # is_kms_enabled(dont_raise=True) is safe and won't crash pytest
                     if not is_kms_enabled(dont_raise=True):
                         log.debug(
                             f"Test: {item} it will be skipped because the OCS cluster"
                             " has not configured cluster-wide encryption with KMS"
                         )
                         items.remove(item)
-                except KeyError:
-                    log.warning(
-                        "Cluster is not yet installed. Skipping skipif_no_kms check."
+                else:
+                    # ODF not deployed, skip all KMS-requiring tests
+                    log.debug(
+                        f"Test: {item} will be skipped (ODF not deployed, "
+                        "skip_ocs_deployment or ocp_only_upgrade is set)"
                     )
+                    items.remove(item)
             if skipif_no_nvmeof_marker:
                 if not ocsci_config.DEPLOYMENT.get("nvmeof_enable"):
                     log.debug(
@@ -2277,11 +2284,20 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
     ceph_health_recovered_exception = None
     dev_mode = ocsci_config.RUN["cli_params"].get("dev_mode")
     mcg_only_deployment = ocsci_config.ENV_DATA["mcg_only_deployment"]
+    skip_ocs = ocsci_config.ENV_DATA.get(
+        "skip_ocs_deployment", False
+    ) or ocsci_config.DEPLOYMENT.get("ocp_only_upgrade", False)
+
     if mcg_only_deployment:
         log.info("Skipping health checks for MCG only mode")
         return
     if dev_mode:
         log.info("Skipping health checks for development mode")
+        return
+    if skip_ocs:
+        log.info(
+            "Skipping health checks (ODF not deployed: skip_ocs_deployment or ocp_only_upgrade)"
+        )
         return
 
     if ocsci_config.multicluster:
