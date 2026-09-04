@@ -4215,6 +4215,7 @@ FILL_POOL_PVC_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_pvc.yaml")
 CBT_LISTER_POD_YAML = os.path.join(TEMPLATE_CBT_DIR, "lister_pod.yaml")
 CBT_VERIFIER_POD_YAML = os.path.join(TEMPLATE_CBT_DIR, "verifier_pod.yaml")
 CBT_CONFIGMAP_NAME = "openshift-storage.rbd.csi.ceph.com"
+CBT_SERVICE_NAME = "openshift-storage-rbd-snapshot-metadata"
 
 # KEDA and RGW HA
 KEDACORE_REPO_URL = "https://kedacore.github.io/charts"
