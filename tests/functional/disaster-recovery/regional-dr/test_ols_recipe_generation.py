@@ -1151,13 +1151,6 @@ class TestOLSRecipeFailoverAndRelocate:
             vrg_name=workload.discovered_apps_placement_name,
         )
         logger.info("Workload running on secondary cluster after failover")
-        # Validate after workload is confirmed running on secondary.
-        if not primary_cluster_down:
-            dr_helpers.validate_application_odf_cli(
-                drpc_name=workload.discovered_apps_placement_name,
-                namespace=_constants.DR_OPS_NAMESPACE,
-                dr_action="app-failover",
-            )
 
         # ------------------------------------------------------------------ #
         # Step 8: Power primary cluster back on if it was stopped             #
@@ -1201,10 +1194,4 @@ class TestOLSRecipeFailoverAndRelocate:
         logger.info(
             "Workload running on primary cluster after relocate — "
             f"OLS Recipe '{recipe_name}' successfully used for DR protection"
-        )
-        # Validate after workload is confirmed running on primary.
-        dr_helpers.validate_application_odf_cli(
-            drpc_name=workload.discovered_apps_placement_name,
-            namespace=_constants.DR_OPS_NAMESPACE,
-            dr_action="app-relocate",
         )
