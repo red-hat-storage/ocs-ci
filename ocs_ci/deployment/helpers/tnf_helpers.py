@@ -4,6 +4,7 @@ Helper functions for Two-Node Fencing (TNF) cluster deployment
 
 import base64
 import logging
+import os
 import tempfile
 
 from ocs_ci.ocs import constants
@@ -176,7 +177,6 @@ def configure_drbd(node_0_info, node_1_info, monitor_disk_node_0, monitor_disk_n
     """
     Configure DRBD for the floating monitor.
 
-    Follows ODF 4.22 documentation section 2.2:
     1. Fetch drbd-setup script from the rook-ceph-drbd-setup-script ConfigMap
        (created by the ODF operator after installation)
     2. Run with -d/-d0/-d1 flags for the floating monitor disk
@@ -309,13 +309,18 @@ def _fix_rotational_flag_if_virtual(node_name, device_path):
         node_name (str): Node name
         device_path (str): Device path (e.g. /dev/vda, /dev/sdb)
     """
-    import os
 
-    dev_name = os.path.basename(device_path)
-    rotational_path = f"/sys/block/{dev_name}/queue/rotational"
     try:
+        resolved = exec_cmd(
+            f"oc debug -q node/{node_name} -- chroot /host "
+            f"readlink -f {device_path}",
+            shell=True,
+            timeout=60,
+        )
+        dev_name = os.path.basename(resolved.stdout.decode().strip())
+        rotational_path = f"/sys/block/{dev_name}/queue/rotational"
         result = exec_cmd(
-            f"oc debug -q node/{node_name} -- chroot /host " f"cat {rotational_path}",
+            f"oc debug -q node/{node_name} -- chroot /host cat {rotational_path}",
             shell=True,
             timeout=60,
         )
@@ -351,7 +356,6 @@ def _ensure_disk_by_id_symlink(node_name, device_path):
         node_name (str): Node name
         device_path (str): Device path (e.g. /dev/vda)
     """
-    import os
 
     dev_name = os.path.basename(device_path)
 
@@ -442,7 +446,7 @@ def _fetch_drbd_setup_script():
     """
     Fetch the drbd-setup script from the ODF operator ConfigMap.
 
-    The ODF 4.22 operator creates a ConfigMap 'rook-ceph-drbd-setup-script'
+    The ODF operator creates a ConfigMap 'rook-ceph-drbd-setup-script'
     in openshift-storage namespace with the script in .data.script (base64).
 
     Returns:
@@ -607,8 +611,6 @@ def verify_port_connectivity(source_node, target_ip, port=constants.TNF_DRBD_POR
     Returns:
         bool: True if port is reachable
 
-    Raises:
-        CommandFailed: If connectivity check fails
     """
     logger.info(
         f"Verifying port {port} connectivity from {source_node} to {target_ip}..."
@@ -618,7 +620,7 @@ def verify_port_connectivity(source_node, target_ip, port=constants.TNF_DRBD_POR
             f"oc debug -q node/{source_node} -- chroot /host "
             f"nc -zv {target_ip} {port}"
         )
-        exec_cmd(cmd, shell=True, timeout=10)
+        exec_cmd(cmd, shell=True, timeout=120)
         logger.info(f"Port {port} connectivity verified")
         return True
 

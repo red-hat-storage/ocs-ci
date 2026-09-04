@@ -306,12 +306,13 @@ class TNF(TNFBASE):
         Deploy ODF on TNF cluster via operator.
 
         Follows ODF 4.22 documentation order:
-        1. Create StorageClass + PVs (Chapter 1 - before operator)
+        1. Create StorageClass + PVs (Before operator)
         2. Install ODF operator (parent handles catalog, subscription, CSV)
-        3. Configure DRBD for floating monitor (Section 2.2 - after operator)
-        4. Create StorageCluster (Section 2.3 - parent handles)
+        3. Configure DRBD for floating monitor (After operator)
+        4. Create StorageCluster
 
-        The parent's deploy_ocs_via_operator is monolithic. We:
+        The parent's deploy_ocs_via_operator is monolithic. We
+
         - Create SC + PVs first so the parent skips LSO auto-discovery
           (it checks if 'localblock' SC exists and skips LSO if so)
         - Monkey-patch setup_storage_cluster to inject DRBD config
@@ -466,7 +467,7 @@ class TNF(TNFBASE):
         Configure DRBD for the floating monitor.
 
         Fetches and runs the drbd-setup script from the ODF operator's
-        rook-ceph-drbd-setup-script ConfigMap (ODF 4.22 section 2.2).
+        rook-ceph-drbd-setup-script ConfigMap.
         """
         monitor_disk_node_0 = self.tnf_config.get("monitor_disk_node_0")
         monitor_disk_node_1 = self.tnf_config.get("monitor_disk_node_1")
