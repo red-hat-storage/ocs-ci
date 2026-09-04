@@ -1120,6 +1120,53 @@ SCALE_DASHBOARD_LOCATORS = {
     ),
 }
 
+# Fusion Access for SAN — Storage Cluster creation locators
+FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS = {
+    # Left nav: Storage > Fusion Access for SAN
+    "fusion_access_for_san_nav": (
+        "//a[normalize-space()='Fusion Access for SAN']",
+        By.XPATH,
+    ),
+    # "Create storage cluster" button on the empty-state page (no cluster yet)
+    "create_storage_cluster_btn": (
+        "//button[normalize-space()='Create storage cluster']"
+        " | //button[contains(@data-test,'create-storage-cluster')]",
+        By.XPATH,
+    ),
+    # Per-row node checkboxes — id="node-<uuid>", class="pf-v6-c-check__input".
+    # There is no "Select all" header checkbox on this page; each row must be
+    # clicked individually.
+    "node_row_checkboxes": (
+        "//tbody//tr//input[@type='checkbox' and contains(@id,'node-')]"
+        " | //tbody//tr//input[@type='checkbox' and contains(@class,'pf-v6-c-check__input')]"
+        " | //tbody//tr//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    # Summary text below the table, e.g. "3 nodes were selected, sharing 9 disks between them"
+    "nodes_selected_summary": (
+        "//p[contains(text(), 'nodes were selected')]"
+        " | //span[contains(text(), 'nodes were selected')]"
+        " | //*[contains(text(), 'nodes were selected')]",
+        By.XPATH,
+    ),
+    # Summary text that confirms at least 1 disk is shared (non-zero disk count).
+    # The disk count is loaded asynchronously after node selection; we wait for
+    # this before proceeding to the submit button to avoid "0 disks" races.
+    "nodes_selected_with_disks": (
+        "//*[contains(text(), 'nodes were selected') "
+        "and not(contains(text(), 'sharing 0 disks'))]",
+        By.XPATH,
+    ),
+    # Final "Create storage cluster" submit button at the bottom of the node list
+    "submit_create_storage_cluster_btn": (
+        "//button[normalize-space()='Create storage cluster'"
+        " and not(@data-test='create-storage-cluster')]"
+        " | //button[@data-test='submit-create-storage-cluster']"
+        " | (//button[normalize-space()='Create storage cluster'])[last()]",
+        By.XPATH,
+    ),
+}
+
 acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
