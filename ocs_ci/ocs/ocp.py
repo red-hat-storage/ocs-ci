@@ -409,7 +409,7 @@ class OCP(object):
         command = "create "
         if yaml_file:
             command += f"-f {yaml_file}"
-            if config.RUN["resource_checker"]:
+            if config.RUN.get("resource_checker"):
                 yaml_dct = load_yaml(yaml_file)
                 kind = yaml_dct["kind"]
                 if kind == "PersistentVolume":
@@ -448,7 +448,7 @@ class OCP(object):
         elif resource_name:
             # e.g "oc namespace my-project"
             command += f"{self.kind} {resource_name}"
-            if config.RUN["resource_checker"]:
+            if config.RUN.get("resource_checker"):
                 config.RUN["RESOURCE_DICT_TEST"][self.kind] = resource_name
         if out_yaml_format:
             command += " -o yaml"
