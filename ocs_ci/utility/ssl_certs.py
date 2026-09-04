@@ -276,7 +276,7 @@ class LetsEncryptCertificate(Certificate):
             f"-n --no-autorenew --key-path {key_file} --csr {csr_file} --cert-path {cert_file} "
             f"--fullchain-path {fullchain_file} --chain-path {chain_file} "
             f"--config-dir {conf_dir} --work-dir {work_dir} --logs-dir {logs_dir} "
-            f"--{self.dns_plugin} "
+            f"--dns-{self.dns_plugin} "
         )
         result = exec_cmd(cmd)
         if result.returncode != 0:
