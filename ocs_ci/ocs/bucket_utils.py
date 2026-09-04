@@ -3785,7 +3785,7 @@ def get_noobaa_bucket_replication_metrics_in_prometheus(
         logger.info(f"Metrics {metric_name} : {got_metrics_value}")
         return got_metrics_value
     else:
-        raise Exception(
+        raise UnexpectedBehaviour(
             f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
         )
 
@@ -4047,7 +4047,7 @@ def get_noobaa_bucket_tagging_metric_results(
     logger.info(f"Prometheus query: {query}")
     resp = api.get("query", payload={"query": query}, timeout=timeout)
     if not resp.ok:
-        raise Exception(
+        raise UnexpectedBehaviour(
             f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
         )
     metrics_output = json.loads(resp.text)
