@@ -69,6 +69,10 @@ class Initializer(object):
         """
         framework.config.init_cluster_configs()
         load_config(args.conf)
+
+        # Updating resource_checker to False since it's not needed
+        config.RUN["resource_checker"] = False
+
         logger.debug("Verifying cluster_name and cluster_path")
         cluster_name = args.cluster_name
         cluster_path = os.path.expanduser(args.cluster_path)
