@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
@@ -218,8 +219,15 @@ class BlockPoolUI(PageNavigator):
         self.navigate_storage_pools_page()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
         block_pool_replica = self.get_element_text(self.bp_loc["block_pool_replica"])
-        logger.info(f"Pool name {pool_name} existence is {block_pool_replica}")
-        return int(block_pool_replica)
+        logger.info(
+            f"Pool name {pool_name} replicas field value is {block_pool_replica}"
+        )
+        match = re.search(r"\d+", block_pool_replica)
+        if not match:
+            raise ValueError(
+                f"Could not extract replica count from '{block_pool_replica}'"
+            )
+        return int(match.group())
 
     def check_pool_used_capacity(self, pool_name):
         """
