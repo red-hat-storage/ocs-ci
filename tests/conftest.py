@@ -423,25 +423,37 @@ def pytest_generate_tests(metafunc):
     """
     # For now we are only dealing with multicluster scenarios in this hook
     if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
-        if (
-            ocsci_config.ENV_DATA.get("platform", "").lower()
-            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        if ocsci_config.ENV_DATA.get(
+            "platform", ""
+        ).lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS and not (
+            ocsci_config.MULTICLUSTER.get("multicluster_mode", "") == "rdr-provider"
         ):
             # Skipping multicluster upgrade parametrization for Hosted Control Plane platforms
             # Sequence and handling of OCP and ODF upgrades are different for Hosted Control Plane multicluster upgrade
             return
-        upgrade_parametrizer = get_multicluster_upgrade_parametrizer()
-        # for various roles which are applicable to current test wrt multicluster, for ex: ACM, primary, secondary etc
-        roles = None
-        roles = upgrade_parametrizer.get_roles(metafunc)
-        if roles:
-            upgrade_parametrizer.config_init()
-            params = upgrade_parametrizer.generate_pytest_parameters(metafunc, roles)
-            log.debug(f"upgrade params = {params}")
-            for marker in metafunc.definition.iter_markers():
-                if marker.name in upgrade_parametrizer.MULTICLUSTER_UPGRADE_MARKERS:
-                    log.debug(f"Parametrizing the test: {metafunc.function.__name__}")
-                    metafunc.parametrize("zone_rank, role_rank, config_index", params)
+        if any(
+            dr_scenario in ocsci_config.MULTICLUSTER.get("multicluster_mode")
+            for dr_scenario in ["regional-dr", "metro-dr", "rdr-provider"]
+        ):
+            upgrade_parametrizer = get_multicluster_upgrade_parametrizer()
+            # for various roles which are applicable to current test wrt multicluster,
+            # for ex: ACM, primary, secondary etc
+            roles = None
+            roles = upgrade_parametrizer.get_roles(metafunc)
+            if roles:
+                upgrade_parametrizer.config_init()
+                params = upgrade_parametrizer.generate_pytest_parameters(
+                    metafunc, roles
+                )
+                log.debug(f"upgrade params = {params}")
+                for marker in metafunc.definition.iter_markers():
+                    if marker.name in upgrade_parametrizer.MULTICLUSTER_UPGRADE_MARKERS:
+                        log.debug(
+                            f"Parametrizing the test: {metafunc.function.__name__}"
+                        )
+                        metafunc.parametrize(
+                            "zone_rank, role_rank, config_index", params
+                        )
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -605,10 +617,10 @@ def pytest_collection_modifyitems(session, config, items):
                         # determines the order in which tests need to be executed
                         # Lower the sum, higher the rank hence it gets prioritized early
                         # in the test execution sequence
-                        if (
-                            ocsci_config.MULTICLUSTER.get("multicluster_mode", "")
-                            == "regional-dr"
-                        ):
+                        if ocsci_config.MULTICLUSTER.get("multicluster_mode", "") in [
+                            "regional-dr",
+                            "rdr-provider",
+                        ]:
                             upgrade_parametrizer = (
                                 get_multicluster_upgrade_parametrizer()
                             )
@@ -7540,16 +7552,36 @@ def switch_to_provider_for_test(request):
             in constants.HCI_PC_OR_MS_PLATFORM
         )
     ):
-        for cluster in ocsci_config.clusters:
-            if cluster.ENV_DATA.get("cluster_type") == "provider":
-                provider_cluster = cluster
-                log.debug("Switching to the provider cluster context")
-                # TODO: Use 'switch_to_provider' function introduced in PR 5541
-                ocsci_config.switch_ctx(
-                    provider_cluster.MULTICLUSTER["multicluster_index"]
+        # If the test is parameterized with config_index and that index
+        # already points to a provider cluster, honour it instead of
+        # always picking the first provider in the list.  This is
+        # critical for multi-provider setups (e.g. RDR with two
+        # provider clusters) where blindly selecting the first provider
+        # causes the second provider's upgrade test to run on the wrong
+        # cluster.
+        callspec = getattr(request.node, "callspec", None)
+        parameterized_index = callspec.params.get("config_index") if callspec else None
+        if parameterized_index is not None:
+            target = ocsci_config.clusters[parameterized_index]
+            if target.ENV_DATA.get("cluster_type") == "provider":
+                log.debug(
+                    f"Switching to parameterized provider cluster context "
+                    f"(config_index={parameterized_index})"
                 )
+                ocsci_config.switch_ctx(parameterized_index)
                 switched_to_provider = True
-                break
+
+        if not switched_to_provider:
+            for cluster in ocsci_config.clusters:
+                if cluster.ENV_DATA.get("cluster_type") == "provider":
+                    provider_cluster = cluster
+                    log.debug("Switching to the provider cluster context")
+                    # TODO: Use 'switch_to_provider' function introduced in PR 5541
+                    ocsci_config.switch_ctx(
+                        provider_cluster.MULTICLUSTER["multicluster_index"]
+                    )
+                    switched_to_provider = True
+                    break
 
     def finalizer():
         """

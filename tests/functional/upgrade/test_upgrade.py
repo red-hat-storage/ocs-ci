@@ -156,7 +156,7 @@ def test_dr_hub_upgrade(zone_rank, role_rank, config_index):
 
 @purple_squad
 @dr_cluster_operator_upgrade
-@multicluster_roles(["mdr-all-odf", "rdr-all-odf"])
+@multicluster_roles(["mdr-all-odf", "rdr-provider-all-providers"])
 def test_dr_cluster_upgrade(zone_rank, role_rank, config_index):
     """
     Test upgrade procedure for DR cluster operator
@@ -172,6 +172,7 @@ def test_dr_cluster_upgrade(zone_rank, role_rank, config_index):
 
 @yellow_squad
 @provider_operator_upgrade
+@multicluster_roles(["rdr-provider-all-providers"])
 @runs_on_provider
 def test_provider_cluster_upgrade(zone_rank, role_rank, config_index):
     """
@@ -209,6 +210,7 @@ def test_mce_upgrade(zone_rank, role_rank, config_index):
 
 @yellow_squad
 @kubevirt_cluster_upgrade
+@multicluster_roles(["rdr-provider-all-clients"])
 @runs_on_provider
 def test_upgrade_kubevirt_clusters(zone_rank, role_rank, config_index):
     """
