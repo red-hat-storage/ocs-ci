@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -285,6 +286,12 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         Raises:
             NoSuchElementException: If UI elements are not found.
         """
+        # Wait for Monaco editor to be fully loaded (containerized Chrome needs more time)
+        self._wait_for_monaco_ready()
+
+        # Small delay before clicking to ensure rendering is complete in containers
+        time.sleep(1)
+
         try:
             self.do_click(
                 self.bucket_tab["policy_code_editor"],
@@ -294,17 +301,52 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         except TimeoutException:
             pass
 
+        # Wait a bit after click for editor to be interactive
+        time.sleep(0.5)
+
         self._set_content_via_javascript(policy_json)
 
-    def _set_content_via_javascript(self, content: str) -> None:
+    def _wait_for_monaco_ready(self, timeout: int = 30) -> None:
+        """
+        Wait for Monaco editor to be fully loaded and ready.
+
+        Args:
+            timeout (int): Maximum time to wait in seconds.
+
+        Raises:
+            TimeoutException: If Monaco doesn't load within timeout.
+        """
+        check_monaco_js = """
+        return (window.monaco && window.monaco.editor &&
+                (window.monaco.editor.getEditors().length > 0 ||
+                 document.querySelector('textarea.inputarea')));
+        """
+
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                if self.driver.execute_script(check_monaco_js):
+                    logger.info("Monaco editor is ready")
+                    return
+            except WebDriverException:
+                pass
+            time.sleep(0.5)
+
+        raise TimeoutException(
+            f"Monaco editor not ready after {timeout} seconds. "
+            "The editor may not have loaded or Chrome may have issues rendering it."
+        )
+
+    def _set_content_via_javascript(self, content: str, retry_count: int = 3) -> None:
         """
         Set content using JavaScript with Monaco and textarea fallbacks.
 
         Args:
             content (str): Content to set in the editor.
+            retry_count (int): Number of retries if setting fails.
 
         Raises:
-            TimeoutException: If all fallback strategies fail.
+            TimeoutException: If all fallback strategies fail after retries.
         """
         js_code = """
         // Try Monaco editor API first
@@ -328,22 +370,45 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         return 'failed';
         """
 
-        try:
-            result = self.driver.execute_script(js_code, content)
-            if result == "failed":
-                error_msg = (
-                    "Failed to set policy JSON in Monaco editor using JavaScript approach. "
-                    "Check if Monaco editor is properly loaded and accessible."
-                )
-                raise TimeoutException(error_msg)
+        for attempt in range(retry_count):
+            try:
+                result = self.driver.execute_script(js_code, content)
+                if result == "monaco_success":
+                    logger.info("Successfully set content via Monaco editor API")
+                    return
+                elif result == "textarea_success":
+                    logger.info("Successfully set content via textarea fallback")
+                    return
+                else:
+                    logger.warning(
+                        f"Attempt {attempt + 1}/{retry_count}: "
+                        "Monaco/textarea not found, retrying..."
+                    )
+                    if attempt < retry_count - 1:
+                        time.sleep(1)
 
-        except WebDriverException as e:
-            error_msg = (
-                "Failed to set policy JSON in Monaco editor using JavaScript approach. "
-                "Check if Monaco editor is properly loaded and accessible."
-            )
-            logger.exception(error_msg)
-            raise TimeoutException(error_msg) from e
+            except WebDriverException as e:
+                logger.warning(
+                    f"Attempt {attempt + 1}/{retry_count}: "
+                    f"WebDriver exception: {str(e)}"
+                )
+                if attempt < retry_count - 1:
+                    time.sleep(1)
+                else:
+                    error_msg = (
+                        "Failed to set policy JSON in Monaco editor using JavaScript "
+                        f"approach after {retry_count} attempts. "
+                        "Check if Monaco editor is properly loaded and accessible."
+                    )
+                    logger.exception(error_msg)
+                    raise TimeoutException(error_msg) from e
+
+        error_msg = (
+            "Failed to set policy JSON in Monaco editor using JavaScript approach "
+            f"after {retry_count} attempts. "
+            "Check if Monaco editor is properly loaded and accessible."
+        )
+        raise TimeoutException(error_msg)
 
     def _check_for_policy_error_dialog(self) -> tuple[bool, str]:
         """
