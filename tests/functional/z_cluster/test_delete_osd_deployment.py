@@ -58,12 +58,16 @@ class TestDeleteOSDDeployment(ManageTest):
                 if "NotFound" not in str(err):
                     raise
 
-            # Wait for new OSD deployment to be Ready
+            # Wait for new OSD deployment to be Ready.
+            # The replacement pod's "expand-bluefs" init container has been observed
+            # to stall for several minutes (up to ~4m) while re-reading the device
+            # labels of the underlying block PVC right after it is remapped from the
+            # deleted pod, so a generous timeout is needed to avoid false failures.
             deployment_obj.wait_for_resource(
                 condition="1/1",
                 resource_name=osd_deployment_name,
                 column="READY",
-                timeout=120,
+                timeout=420,
             )
 
             # Check if a new OSD pod is created
