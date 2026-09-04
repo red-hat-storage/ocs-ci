@@ -852,3 +852,15 @@ class NodeBMCUnreachableError(Exception):
     """
 
     pass
+
+
+class ConfigMapDataNotAvailable(Exception):
+    """Raised when a ConfigMap exists but required data keys are not yet populated."""
+
+    pass
+
+
+class LokiEmptyResultError(Exception):
+    """Raised when a Loki query returns no results (transient; safe to retry)."""
+
+    pass
