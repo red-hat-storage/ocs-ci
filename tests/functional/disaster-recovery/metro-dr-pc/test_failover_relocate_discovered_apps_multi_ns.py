@@ -50,6 +50,7 @@ class TestFailoverRelocateDiscoveredAppsMultiNs:
                     drcluster_name=self.primary_cluster_name, disable_eviction=True
                 )
 
+        self.primary_cluster_name = None
         request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
@@ -74,7 +75,6 @@ class TestFailoverRelocateDiscoveredAppsMultiNs:
         multiple namespaces using the MDR workflow.
 
         """
-        self.primary_cluster_name = None
 
         workloads = discovered_apps_dr_workload(
             kubeobject=2, multi_ns=True, pvc_interface=pvc_interface
@@ -143,6 +143,7 @@ class TestFailoverRelocateDiscoveredAppsMultiNs:
             resource_name=workloads[0].discovered_apps_placement_name,
         )
 
+        config.switch_to_cluster_by_name(self.primary_cluster_name)
         if primary_cluster_down:
             nodes_multicluster[primary_cluster_index].start_nodes(node_objs)
             logger.info(
