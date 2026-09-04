@@ -9651,9 +9651,11 @@ def setup_logwriter_workload(request, teardown_factory):
         dc_data = templating.load_yaml(logwriter_path)
         dc_data["metadata"]["namespace"] = pvc.namespace
         dc_data["spec"]["replicas"] = 4
-        dc_data["spec"]["template"]["spec"]["containers"][0][
-            "image"
-        ] = "quay.io/ocsci/logwriter:latest"
+        dc_data["spec"]["template"]["spec"]["containers"][0]["image"] = (
+            ocsci_config.ENV_DATA.get(
+                "logwriter_image", "quay.io/ocsci/logwriter:latest"
+            )
+        )
         dc_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
             "claimName"
         ] = pvc.name
@@ -9715,9 +9717,11 @@ def setup_logreader_workload(request, teardown_factory):
         job_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
             "claimName"
         ] = pvc.name
-        job_data["spec"]["template"]["spec"]["containers"][0][
-            "image"
-        ] = "quay.io/ocsci/logwriter:latest"
+        job_data["spec"]["template"]["spec"]["containers"][0]["image"] = (
+            ocsci_config.ENV_DATA.get(
+                "logwriter_image", "quay.io/ocsci/logwriter:latest"
+            )
+        )
         job_data["spec"]["template"]["spec"]["containers"][0]["command"][
             2
         ] = f"/opt/logreader.py -t {duration} *.log -d"
