@@ -198,7 +198,13 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 "Verify RBD images exist only in custom pool"
                 " on both managed clusters"
             )
-            verify_custom_pool_image_isolation(pool_name=constants.RDR_CUSTOM_RBD_POOL)
+            verify_custom_pool_image_isolation(
+                pool_name=(
+                    "replicated-metadata-pool"
+                    if erasure_coding
+                    else constants.RDR_CUSTOM_RBD_POOL
+                )
+            )
 
             logger.test_step("Verify mirroring status for custom pool")
             logger.assertion(
