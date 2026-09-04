@@ -23,7 +23,10 @@ from ocs_ci.ocs.node import (
     label_nodes,
 )
 from ocs_ci.utility.operators import LocalStorageOperator
-from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import (
+    ElementClickInterceptedException,
+    WebDriverException,
+)
 from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
@@ -439,8 +442,18 @@ class DeploymentUI(PageNavigator):
         self.create_storage_cluster()
 
     def wait_next_button_lso(self):
+        next_loc = self.dep_loc.get("next_button_element", self.dep_loc["next"])
         try:
-            self.do_click(self.dep_loc["next"], enable_screenshot=True, timeout=20)
+            self.do_click(next_loc, enable_screenshot=True, copy_dom=True, timeout=20)
+        except ElementClickInterceptedException:
+            logger.warning(
+                "Next button click intercepted, retrying with JavaScript click"
+            )
+            try:
+                self.click_with_script(next_loc)
+            except Exception as e:
+                logger.error(f"JavaScript click on Next button also failed: {e}")
+                return False
         except Exception as e:
             logger.error(f"Next button on LSO error: {e}")
             return False
