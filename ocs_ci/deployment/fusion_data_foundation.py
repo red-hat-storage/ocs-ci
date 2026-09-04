@@ -14,7 +14,6 @@ from ocs_ci.deployment.helpers.lso_helpers import (
     add_disks_lso,
     cleanup_nodes_for_lso_install,
 )
-from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.framework import config
 
 from ocs_ci.helpers.helpers import create_lvs_resource
@@ -49,6 +48,7 @@ class FusionDataFoundationDeployment:
         self.live_deployment = config.DEPLOYMENT.get("live_deployment", False)
         self.kubeconfig = config.RUN["kubeconfig"]
         self.lso_enabled = config.DEPLOYMENT.get("local_storage", False)
+        self.disconnected = config.DEPLOYMENT.get("disconnected", False)
         self.fdf_skip_storage_setup = config.DEPLOYMENT.get(
             "fdf_skip_storage_setup", False
         )
@@ -232,6 +232,11 @@ class FusionDataFoundationDeployment:
                 (fdf_upgrade_registry and fdf_upgrade_image_tag). Default is False.
 
         """
+        if self._is_mirror_already_configured():
+            logger.info(
+                "Skipping FusionServiceDefinition patching, disconnected env does'nt required it"
+            )
+            return
         if upgrade:
             fdf_registry = config.DEPLOYMENT.get(
                 "fdf_upgrade_registry"
@@ -414,12 +419,12 @@ class FusionDataFoundationDeployment:
         """
 
         logger.info("Creating OdfCluster CR")
-        storageclass = get_storageclass()
+        # storageclass = get_storageclass()
         worker_nodes = node.get_worker_nodes()
         with open(constants.FDF_ODFCLUSTER_CR, "r") as f:
             odfcluster_data = yaml.safe_load(f.read())
 
-        odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
+        # odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
         odfcluster_data["spec"]["storageNodes"] = worker_nodes
 
         odfcluster_data_yaml = tempfile.NamedTemporaryFile(
