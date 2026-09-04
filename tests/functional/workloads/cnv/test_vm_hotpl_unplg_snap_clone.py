@@ -1,4 +1,5 @@
 import logging
+
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
@@ -48,7 +49,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             Exception: If there is an error during hotplugging or I/O operation.
         """
         logger.info(f"Hotplugging PVC '{pvc.name}' to VM '{vm_obj.name}'")
-        vm_obj.addvolume(volume_name=pvc.name)
+        vm_obj.addvolume(volume_name=pvc.name, persist=True, verify=True)
         sample = TimeoutSampler(
             timeout=600,
             sleep=5,
@@ -83,6 +84,37 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         logger.info(f"Unplugging PVC '{pvc.name}' from VM '{vm_obj.name}'")
         vm_obj.removevolume(volume_name=pvc.name, persist=True, verify=True)
         logger.info(f"PVC '{pvc.name}' unplugged and verified for VM '{vm_obj.name}'")
+
+    def _restart_vm(self, vm_obj):
+        """
+        Restarts the VM and waits for SSH to become available.
+
+        After a VM that has a persisted hotplug volume is restarted, virt-launcher
+        spawns a fresh QEMU process and the hotplug attachment pods for any volumes
+        that were in the spec are re-created from scratch.  This clears any stale
+        QEMU virtio-scsi slot state from a previous hotplug cycle.
+
+        Args:
+            vm_obj: The VM object to restart.
+        """
+        logger.info(f"Restarting VM '{vm_obj.name}' to clear hotplug attachment state")
+        vm_obj.restart()
+        logger.info(f"VM '{vm_obj.name}' restarted successfully")
+
+    def _get_disk_baseline(self, vm_obj):
+        """
+        Captures and returns the current lsblk output from the VM guest.
+
+        Args:
+            vm_obj: The VM object to query.
+
+        Returns:
+            str: Raw output of 'lsblk -o NAME,SIZE,MOUNTPOINT -P', suitable for use
+                 as the disks_before_hotplug baseline in verify_hotplug().
+        """
+        baseline = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
+        logger.info(f"Disk baseline on VM '{vm_obj.name}':\n{baseline}")
+        return baseline
 
     def test_vm_hotpl_unplg_snap_clone(
         self,
@@ -211,26 +243,67 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 f"'{dvt_obj.name}' -> '{clone_obj_dvt.name}'"
             )
 
+            # Prepare each VM to accept a new clone hotplug.
+            #
+            # After Step 2, each VM has a persisted hotplug volume (--persist) and a
+            # live KubeVirt attachment pod coordinating that volume.  Calling
+            # removevolume --persist on the *running* VM races with the attachment pod
+            # teardown; the spec entry is removed but QEMU retains the virtio-scsi
+            # slot, so any subsequent addvolume for the clone is silently dropped.
+            #
+            # Fix: restart the VM first — virt-launcher kills QEMU and the attachment
+            # pod is torn down cleanly.  Then call removevolume --persist on the freshly
+            # booted VM (no live attachment pod) to clear the spec entry.  Finally,
+            # capture the disk baseline *after* the unplug so verify_hotplug sees the
+            # clone disk as a net-new device rather than a re-appearance of the removed
+            # original.
+            logger.info(
+                f"Restarting VM '{vm_obj_pvc.name}' to clear attachment pod for "
+                f"original PVC '{pvc_obj.name}'"
+            )
+            self._restart_vm(vm_obj_pvc)
+            logger.info(
+                f"Unplugging original PVC '{pvc_obj.name}' from VM '{vm_obj_pvc.name}' "
+                f"after restart (no live attachment pod)"
+            )
+            self.unplug_disks_and_verify(vm_obj_pvc, pvc_obj)
+            before_disks_pvc = self._get_disk_baseline(vm_obj_pvc)
+
+            logger.info(
+                f"Restarting VM '{vm_obj_dvt.name}' to clear attachment pod for "
+                f"original PVC '{dvt_obj.name}'"
+            )
+            self._restart_vm(vm_obj_dvt)
+            logger.info(
+                f"Unplugging original PVC '{dvt_obj.name}' from VM '{vm_obj_dvt.name}' "
+                f"after restart (no live attachment pod)"
+            )
+            self.unplug_disks_and_verify(vm_obj_dvt, dvt_obj)
+            before_disks_dvt = self._get_disk_baseline(vm_obj_dvt)
+
+            # Attach clones to opposite VMs.  Each VM has a fresh QEMU process, a
+            # clean VM spec (no hotplug entry), and the baseline reflects the current
+            # disk state — addvolume will surface the clone disk as a new device.
             logger.info(
                 f"Attaching clone '{clone_obj_dvt.name}' to VM '{vm_obj_pvc.name}'"
             )
-            before_disks_pvc = vm_obj_pvc.run_ssh_cmd(
-                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
-            )
-
             self.hotplug_and_run_io(
-                vm_obj_pvc, clone_obj_dvt, file_paths, before_disks_pvc, cross_pvc=True
+                vm_obj_pvc,
+                clone_obj_dvt,
+                file_paths,
+                before_disks_pvc,
+                cross_pvc=True,
             )
 
             logger.info(
                 f"Attaching clone '{clone_obj_pvc.name}' to VM '{vm_obj_dvt.name}'"
             )
-            before_disks_dvt = vm_obj_dvt.run_ssh_cmd(
-                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
-            )
-
             self.hotplug_and_run_io(
-                vm_obj_dvt, clone_obj_pvc, file_paths, before_disks_dvt, cross_pvc=True
+                vm_obj_dvt,
+                clone_obj_pvc,
+                file_paths,
+                before_disks_dvt,
+                cross_pvc=True,
             )
 
         except Exception as e:
@@ -239,11 +312,9 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
 
         logger.test_step("Unplug all hotplugged disks and verify detachment")
         try:
+            # Original PVCs were already unplugged above; only unplug the clones here.
             self.unplug_disks_and_verify(vm_obj_pvc, clone_obj_dvt)
             self.unplug_disks_and_verify(vm_obj_dvt, clone_obj_pvc)
-
-            for i, (vm_obj, pvc) in enumerate(vms_pvc):
-                self.unplug_disks_and_verify(vm_obj, pvc)
             logger.info("All hotplugged disks unplugged and verified")
         except Exception as e:
             logger.exception(f"PVC unplug failed: {e}")
