@@ -4042,6 +4042,19 @@ FDF_STANDALONE_OPERATOR_SELECTOR = f"catalog={FDF_STANDALONE_CATALOG_SOURCE_NAME
 FDF_STANDALONE_CATSRC_YAML = os.path.join(
     FDF_TEMPLATE_DIR, "fdf_standalone_catsrc.yaml"
 )
+FDF_STANDALONE_IBM_PROVIDER = "IBM"
+FDF_STANDALONE_REBRANDED_CSV_PREFIXES = (
+    "odf-operator",
+    "ocs-operator",
+    "odf-csi-addons-operator",
+    "ocs-client-operator",
+    "recipe",
+)
+FDF_STANDALONE_EXPECTED_OLM_DEPS = (
+    "rook-ceph-operator",
+    "mcg-operator",
+    "odf-csi-addons-operator",
+)
 
 CREATE = "create"
 EDIT = "edit"
