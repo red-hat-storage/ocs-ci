@@ -16,7 +16,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.resources.pod import Pod
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @orange_squad
@@ -45,14 +45,12 @@ class TestVolumeAttributesClassQoS(ManageTest):
 
         tmp_silver = None
         tmp_gold = None
-        tmp_unthrottled = None
 
         def cleanup():
-            log.info("Scrubbing VolumeAttributesClass operational configurations...")
+            logger.info("Deleting VolumeAttributesClass resources")
             for vac_name in (
                 request.cls.silver_vac_name,
                 request.cls.gold_vac_name,
-                request.cls.unthrottled_vac_name,
             ):
                 try:
                     exec_cmd(
@@ -60,14 +58,14 @@ class TestVolumeAttributesClassQoS(ManageTest):
                         ignore_error=True,
                     )
                 except Exception as ex:
-                    log.warning(f"Failed to delete VAC {vac_name}: {ex}")
+                    logger.warning(f"Failed to delete VAC {vac_name}: {ex}")
 
-            for tmp_file in (tmp_silver, tmp_gold, tmp_unthrottled):
+            for tmp_file in (tmp_silver, tmp_gold):
                 if tmp_file and os.path.exists(tmp_file):
                     try:
                         os.remove(tmp_file)
                     except OSError as ex:
-                        log.warning(f"Failed to remove {tmp_file}: {ex}")
+                        logger.warning(f"Failed to remove {tmp_file}: {ex}")
 
         # Register finalizer immediately before any manifest file creation or apply operations
         request.addfinalizer(cleanup)
@@ -98,9 +96,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
             },
         }
 
-        log.info(
-            "Writing clean VolumeAttributesClass payload manifests via tempfile..."
-        )
+        logger.info("Writing VolumeAttributesClass manifests to temp files")
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as sf:
             json.dump(silver_manifest, sf)
             tmp_silver = sf.name
@@ -109,7 +105,6 @@ class TestVolumeAttributesClassQoS(ManageTest):
             json.dump(gold_manifest, gf)
             tmp_gold = gf.name
 
-        log.info("Injecting class structures into cluster context...")
         exec_cmd(f"oc apply -f {tmp_silver}")
         exec_cmd(f"oc apply -f {tmp_gold}")
 
@@ -119,46 +114,43 @@ class TestVolumeAttributesClassQoS(ManageTest):
         resources = {"pods": [], "pvcs": [], "snapshots": []}
 
         def resource_teardown():
-            log.info("Cleaning up remaining test case allocations...")
+            logger.info("Cleaning up test pods, PVCs, and snapshots")
             cleanup_errors = (CommandFailed, TimeoutError, TimeoutExpiredError)
 
             for pod in resources["pods"]:
                 try:
                     pod.delete()
                 except cleanup_errors as ex:
-                    log.warning(
+                    logger.warning(
                         f"Handled expected deletion failure for pod {getattr(pod, 'name', 'unknown')}: {ex}"
                     )
                 except Exception as ex:
-                    log.error(
-                        f"Unexpected error deleting pod {getattr(pod, 'name', 'unknown')}: {ex}",
-                        exc_info=True,
+                    logger.exception(
+                        f"Unexpected error deleting pod {getattr(pod, 'name', 'unknown')}: {ex}"
                     )
 
             for pvc in resources["pvcs"]:
                 try:
                     pvc.delete()
                 except cleanup_errors as ex:
-                    log.warning(
+                    logger.warning(
                         f"Handled expected deletion failure for PVC {getattr(pvc, 'name', 'unknown')}: {ex}"
                     )
                 except Exception as ex:
-                    log.error(
-                        f"Unexpected error deleting PVC {getattr(pvc, 'name', 'unknown')}: {ex}",
-                        exc_info=True,
+                    logger.exception(
+                        f"Unexpected error deleting PVC {getattr(pvc, 'name', 'unknown')}: {ex}"
                     )
 
             for snap in resources["snapshots"]:
                 try:
                     snap.delete()
                 except cleanup_errors as ex:
-                    log.warning(
+                    logger.warning(
                         f"Handled expected deletion failure for snapshot {getattr(snap, 'name', 'unknown')}: {ex}"
                     )
                 except Exception as ex:
-                    log.error(
-                        f"Unexpected error deleting snapshot {getattr(snap, 'name', 'unknown')}: {ex}",
-                        exc_info=True,
+                    logger.exception(
+                        f"Unexpected error deleting snapshot {getattr(snap, 'name', 'unknown')}: {ex}"
                     )
 
         request.addfinalizer(resource_teardown)
@@ -173,8 +165,8 @@ class TestVolumeAttributesClassQoS(ManageTest):
         pod_uid = pod_data["metadata"]["uid"]
         pod_cgroup_uid = pod_uid.replace("-", "_")
 
-        log.info(
-            f"Target Pod is active on worker node: {node_name}. Polling cgroup io.max for limits..."
+        logger.info(
+            f"Pod {pod_obj.name} scheduled on node {node_name}; polling cgroup io.max for limits"
         )
 
         find_cmd = (
@@ -186,20 +178,19 @@ class TestVolumeAttributesClassQoS(ManageTest):
         def _check_cgroup_limits():
             res = exec_cmd(find_cmd, shell=True, ignore_error=True)
             output = res.stdout.decode() if res.stdout else ""
+
             if not output.strip():
                 return False
 
-            # Check if all expected limit strings (e.g. 'rbps=52428800') exist in the CGroup output
             for key, val in expected_limits.items():
                 expected_str = f"{key}={val}"
                 if expected_str not in output:
-                    log.debug(
+                    logger.debug(
                         f"Threshold '{expected_str}' not yet visible in CGroup output. Retrying..."
                     )
                     return False
             return output
 
-        # Iterate over TimeoutSampler generator directly
         matched_output = None
         sample = TimeoutSampler(
             timeout=timeout,
@@ -221,10 +212,10 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 f"Final CGroup Output:\n{final_output}"
             )
 
-        log.info(
-            f"Successfully verified active io.max cgroup configurations:\n{matched_output}"
+        logger.info(
+            "Verified active io.max cgroup configurations match expected limits"
         )
-
+        logger.debug(f"Matched cgroup io.max output:\n{matched_output}")
         # =========================================================================
         # PARAMETRIZED TEST MATRIX (QOS-TC-01 through QOS-TC-06)
         # =========================================================================
@@ -409,7 +400,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
 
         proj = project_factory()
 
-        # 1. Provision PVC
+        logger.test_step(f"[{test_id}] Provision {access_mode}/{volume_mode} PVC")
         pvc_obj = helpers.create_pvc(
             sc_name=constants.DEFAULT_STORAGECLASS_RBD,
             size="10Gi",
@@ -418,26 +409,25 @@ class TestVolumeAttributesClassQoS(ManageTest):
             volume_mode=volume_mode,
         )
         test_resources_cleanup["pvcs"].append(pvc_obj)
-
-        log.info(
-            f"[{test_id}] Waiting for PVC {pvc_obj.name} to transition to Bound phase..."
-        )
         helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=180)
 
-        # 2. Patch PVC with target VolumeAttributesClass via OCP API
-        log.info(
-            f"[{test_id}] Patching PVC {pvc_obj.name} with VolumeAttributesClass: {vac_name}"
+        logger.test_step(
+            f"[{test_id}] Patch PVC {pvc_obj.name} with VolumeAttributesClass {vac_name}"
         )
         patch_payload = json.dumps({"spec": {"volumeAttributesClassName": vac_name}})
         pvc_obj.ocp.patch(
             resource_name=pvc_obj.name, params=patch_payload, format_type="merge"
         )
 
-        # 3. Create Pod
+        logger.test_step(f"[{test_id}] Create pod {pod_name} and wait for Running")
         pvc_spec = {"claimName": pvc_obj.name}
         if is_read_only:
             pvc_spec["readOnly"] = True
 
+        # Pods are built explicitly (not via pod_factory/helpers.create_pod) because
+        # these tests need precise control over per-container resources to force a
+        # specific QoS class (Guaranteed/Burstable/BestEffort), multi-container specs,
+        # and raw block volumeDevices — none of which the factory path can express.
         pod_dict = {
             "apiVersion": "v1",
             "kind": "Pod",
@@ -454,66 +444,73 @@ class TestVolumeAttributesClassQoS(ManageTest):
 
         helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=420)
 
-        # 4. Verify Pod QoS Class
+        logger.test_step(f"[{test_id}] Verify pod QoS class")
         actual_qos = pod_obj.get()["status"]["qosClass"]
+        logger.assertion(
+            f"[{test_id}] Pod QoS class: expected={expected_qos_class}, actual={actual_qos}"
+        )
         assert (
             actual_qos == expected_qos_class
         ), f"[{test_id}] Pod {pod_name} QoS mismatch: expected {expected_qos_class}, got {actual_qos}"
 
-        # 5. Verify Node Kernel cgroup Throttling
+        logger.test_step(f"[{test_id}] Verify node cgroup io.max throttling")
         self.verify_node_cgroup_throttling(pod_obj, expected_limits)
 
-        # 6. Perform Active I/O Path Validation
+        logger.test_step(f"[{test_id}] Validate active I/O path on volume")
         if is_read_only:
-            log.info(
-                f"[{test_id}] Verifying write protection and read access on ROX block volume..."
-            )
-            # Verify Write Protection (Must fail)
-            dd_cmd = f"oc exec {pod_obj.name} -n {proj.namespace} -- dd if=/dev/zero of=/dev/rbdblock bs=1M count=1"
-            res = exec_cmd(dd_cmd, shell=True, ignore_error=True)
-            write_output = res.stderr.decode() if res.stderr else res.stdout.decode()
+            # Write must be rejected on a read-only block device. exec_cmd_on_pod
+            # raises CommandFailed on non-zero exit, so a successful call here means
+            # the write was (wrongly) allowed.
+            write_rejected = False
+            write_output = ""
+            try:
+                pod_obj.exec_cmd_on_pod(
+                    "dd if=/dev/zero of=/dev/rbdblock bs=1M count=1",
+                    out_yaml_format=False,
+                )
+            except CommandFailed as ex:
+                write_rejected = True
+                write_output = str(ex)
 
-            assert res.returncode != 0 and (
+            logger.assertion(
+                f"[{test_id}] Write to read-only block device rejected: {write_rejected}"
+            )
+            assert write_rejected and (
                 "Operation not permitted" in write_output or "Read-only" in write_output
             ), (
-                f"[{test_id}] Expected write to fail with a read-only error on block device, "
-                f"but got exit code {res.returncode}: {write_output}"
+                f"[{test_id}] Expected write to fail with a read-only error on block "
+                f"device: {write_output}"
             )
 
-            # Verify Read Path Workload
-            read_dd = (
-                f"oc exec {pod_obj.name} -n {proj.namespace} -- "
-                f"dd if=/dev/rbdblock of=/dev/null bs=1M count=10 status=progress"
+            # Read path must succeed on the read-only volume.
+            logger.assertion(
+                f"[{test_id}] Read from read-only volume expected to succeed"
             )
-            read_res = exec_cmd(read_dd, shell=True, ignore_error=True)
-            assert (
-                read_res.returncode == 0
-            ), f"[{test_id}] Read I/O workload failed on read-only volume: {read_res.stderr}"
+            pod_obj.exec_cmd_on_pod(
+                "dd if=/dev/rbdblock of=/dev/null bs=1M count=10 status=progress",
+                out_yaml_format=False,
+            )
         else:
-            log.info(
-                f"[{test_id}] Executing active write & read I/O workload on volume..."
-            )
             if volume_mode == constants.VOLUME_MODE_FILESYSTEM:
                 io_target = "/mnt/storage/test_io.img"
             else:
                 io_target = "/dev/rbdblock"
 
-            # Execute sequential write I/O through Ceph-CSI mounted volume path
-            write_dd = (
-                f"oc exec {pod_obj.name} -n {proj.namespace} -- "
-                f"dd if=/dev/zero of={io_target} bs=1M count=20 conv=fsync status=progress"
+            # Sequential write I/O through the Ceph-CSI mounted volume path.
+            # exec_cmd_on_pod raises CommandFailed on non-zero exit, failing the test.
+            logger.assertion(
+                f"[{test_id}] Write I/O to {io_target} expected to succeed"
             )
-            write_res = exec_cmd(write_dd, shell=True, ignore_error=True)
-            assert (
-                write_res.returncode == 0
-            ), f"[{test_id}] Write I/O workload failed on target {io_target}: {write_res.stderr}"
+            pod_obj.exec_cmd_on_pod(
+                f"dd if=/dev/zero of={io_target} bs=1M count=20 conv=fsync status=progress",
+                out_yaml_format=False,
+            )
 
-            # Execute sequential read I/O through Ceph-CSI mounted volume path
-            read_dd = (
-                f"oc exec {pod_obj.name} -n {proj.namespace} -- "
-                f"dd if={io_target} of=/dev/null bs=1M count=20 status=progress"
+            # Sequential read I/O through the Ceph-CSI mounted volume path.
+            logger.assertion(
+                f"[{test_id}] Read I/O from {io_target} expected to succeed"
             )
-            read_res = exec_cmd(read_dd, shell=True, ignore_error=True)
-            assert (
-                read_res.returncode == 0
-            ), f"[{test_id}] Read I/O workload failed on target {io_target}: {read_res.stderr}"
+            pod_obj.exec_cmd_on_pod(
+                f"dd if={io_target} of=/dev/null bs=1M count=20 status=progress",
+                out_yaml_format=False,
+            )
