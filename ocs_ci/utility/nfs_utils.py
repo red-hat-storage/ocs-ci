@@ -7,6 +7,7 @@ import json
 import logging
 import yaml
 import pytest
+import time
 from ocs_ci.ocs import constants, resources, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
@@ -217,7 +218,12 @@ def create_nfs_load_balancer_service(
             configure_nfs_lb_security_group,
         )
 
+        log.info("Configuring IBM Cloud security group for NFS LoadBalancer...")
         configure_nfs_lb_security_group()
+        log.info(
+            "Security group configured. Waiting 60 seconds for rules to propagate..."
+        )
+        time.sleep(60)
 
     return hostname_add
 
@@ -850,3 +856,48 @@ def fetch_nfs_server_details_on_client_cluster(default_server=False):
                 server,
             )
             return server
+
+
+def frame_deployment_config(deployment_name, pvc_name, node_name=None):
+    """
+    Frame a deployment configuration for an app pod that mounts a given PVC.
+
+    The returned dict can be passed directly to ``helpers.create_resource``.
+    Pass ``node_name`` to pin the pod to a specific worker node — use this to
+    guarantee the pod never lands on a node that will be rebooted during the
+    test (e.g. the node hosting the NFS server pod).
+
+    Args:
+        deployment_name (str): Name for the Deployment and its pod label.
+        pvc_name (str): Name of the PVC to mount at ``/mnt``.
+        node_name (str): Optional worker node hostname. When provided,
+            ``spec.template.spec.nodeName`` is set so Kubernetes schedules the
+            pod directly onto that node.
+
+    Returns:
+        dict: Deployment manifest ready for creation.
+    """
+    from ocs_ci.utility import templating
+
+    # Load base deployment template
+    deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
+
+    # Set deployment name
+    deployment_data["metadata"]["name"] = deployment_name
+
+    # Set label values (used in multiple places for pod selection)
+    deployment_data["metadata"]["labels"]["app"] = deployment_name
+    deployment_data["spec"]["selector"]["matchLabels"]["name"] = deployment_name
+    deployment_data["spec"]["template"]["metadata"]["labels"]["name"] = deployment_name
+
+    # Set PVC claimName
+    deployment_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+        "claimName"
+    ] = pvc_name
+
+    # Pin the pod to a specific node so it never lands on the node being rebooted
+    if node_name:
+        deployment_data["spec"]["template"]["spec"]["nodeName"] = node_name
+        log.info(f"Deployment '{deployment_name}': nodeName set to '{node_name}'")
+
+    return deployment_data
