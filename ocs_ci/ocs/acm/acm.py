@@ -971,117 +971,231 @@ def get_clusters_env():
     return clusters_env
 
 
-def import_clusters_via_cli(clusters):
+def _cleanup_failed_cluster_import(cluster_name):
     """
-    Import clusters via cli
+    Clean up resources from a failed cluster import attempt before retrying.
+
+    Deletes the managed cluster resource and its namespace from the ACM hub,
+    then waits for the namespace to be fully removed so the retry starts clean.
+    Uses extended polling with backoff to handle stuck namespace deletions.
 
     Args:
-        clusters (list): list of tuples (cluster name, kubeconfig path)
+        cluster_name (str): Name of the cluster whose import resources should be cleaned up
 
     Raises:
-        ResourceNotFoundError: If the managed cluster is MCE cluster and applicable KlusterletConfig is not found
+        TimeoutError: If namespace is not deleted after extended polling (1200s total)
+
     """
-    for cluster in clusters:
-        log.info("Importing clusters via CLI method")
-        log.info(f"**** clustername={cluster[0]}")
-        log.info(f"**** kubeconfig={cluster[1]}")
-        create_project(cluster[0])
-
-        log.info("Create and apply managed-cluster.yaml")
-        managed_cluster = templating.load_yaml(
-            "ocs_ci/templates/acm-deployment/managed-cluster.yaml"
-        )
-        managed_cluster["metadata"]["name"] = cluster[0]
-
-        # TODO: This check is based on current requirements of RDR in provider mode. Change the condition and add
-        #  additional check to verify whether Multicluster Engine (MCE) is installed in the managedcluster
-        if config.ENV_DATA.get("configure_acm_to_import_mce"):
-            # Find the klusterletconfig to import MCE cluster
-            klusterletconfig_obj = OCP(kind=constants.KLUSTERLET_CONFIG)
-            klusterletconfigs = klusterletconfig_obj.get().get("items", [])
-            klusterletconfig_name = ""
-            for klusterletconfig in klusterletconfigs:
-                if (
-                    klusterletconfig.get("spec", {})
-                    .get("installMode", {})
-                    .get("noOperator", {})
-                    .get("postfix")
-                    == "mce-import"
-                ):
-                    klusterletconfig_name = klusterletconfig.get("metadata").get("name")
-                    break
-            if klusterletconfig_name:
-                managed_cluster["metadata"]["annotations"] = {
-                    "agent.open-cluster-management.io/klusterlet-config": klusterletconfig_name
-                }
-            else:
-                raise ResourceNotFoundError(
-                    "No KlusterletConfig found to import MCE clusters"
-                )
-            # Add 'leaseDurationSeconds' obtained from ACM documentation
-            managed_cluster["spec"]["leaseDurationSeconds"] = 60
-
-        managed_cluster_obj = OCS(**managed_cluster)
-        managed_cluster_obj.apply(**managed_cluster)
-
-        log.info("Create and Apply the auto-import-secret.yaml")
-        auto_import_secret = templating.load_yaml(
-            "ocs_ci/templates/acm-deployment/auto-import-secret.yaml"
-        )
-        auto_import_secret["metadata"]["namespace"] = cluster[0]
-        auto_import_secret["stringData"]["kubeconfig"] = cluster[1]
-        auto_import_secret_obj = OCS(**auto_import_secret)
+    config.switch_acm_ctx()
+    log.info(f"Cleaning up failed import resources for cluster '{cluster_name}'")
+    for kind in [constants.ACM_MANAGEDCLUSTER, "namespace"]:
         try:
-            auto_import_secret_obj.apply(**auto_import_secret)
-        except CommandFailed as ex:
-            if (
-                'Error is Error from server (NotFound): secrets "auto-import-secret" not found'
-                in str(ex)
-            ):
-                pass
+            exec_cmd(
+                f"oc delete {kind} {cluster_name} --ignore-not-found --wait=false",
+                timeout=120,
+            )
+            log.info(f"Initiated deletion of {kind} '{cluster_name}'")
+        except Exception as ex:
+            log.warning(
+                f"Failed to delete {kind} '{cluster_name}' during cleanup: {ex}"
+            )
+
+    # Poll for namespace deletion with increasing timeouts and backoff
+    # Total wait: 300s + 300s + 600s = 1200s (20 minutes)
+    # Only proceed with retry after confirmed deletion
+    log.info(f"Waiting for namespace '{cluster_name}' to be fully removed")
+    timeouts = [300, 300, 600]
+    namespace_obj = OCP(kind="namespace")
+
+    for attempt, timeout in enumerate(timeouts, start=1):
+        try:
+            namespace_obj.wait_for_delete(
+                resource_name=cluster_name, timeout=timeout, sleep=15
+            )
+            log.info(
+                f"Namespace '{cluster_name}' fully removed after "
+                f"{sum(timeouts[:attempt])}s"
+            )
+            return
+        except (CommandFailed, TimeoutError) as ex:
+            elapsed = sum(timeouts[:attempt])
+            if attempt < len(timeouts):
+                log.warning(
+                    f"Namespace '{cluster_name}' not deleted after {elapsed}s, "
+                    f"extending wait by {timeouts[attempt]}s more..."
+                )
             else:
+                log.error(
+                    f"Namespace '{cluster_name}' still not deleted after {elapsed}s. "
+                    f"It may be stuck with finalizers. Cannot proceed with retry."
+                )
+                raise TimeoutError(
+                    f"Namespace '{cluster_name}' deletion timed out after {elapsed}s"
+                ) from ex
+
+
+def import_clusters_via_cli(clusters, max_retries=3):
+    """
+    Import clusters via CLI with retry logic for transient failures.
+
+    Each cluster import is attempted up to ``max_retries`` times. On failure
+    the managed cluster resource and namespace are cleaned up before the next
+    attempt so that the retry starts from a clean state.
+
+    Args:
+        clusters (list): list of tuples (cluster name, kubeconfig content)
+        max_retries (int): Maximum number of import attempts per cluster (default: 3)
+
+    Raises:
+        ValueError: If max_retries is less than 1
+        ResourceNotFoundError: If the managed cluster is MCE cluster and applicable KlusterletConfig is not found
+
+    """
+    if max_retries < 1:
+        raise ValueError("max_retries must be at least 1")
+
+    for cluster in clusters:
+        for attempt in range(1, max_retries + 1):
+            try:
+                log.info(
+                    f"Importing cluster '{cluster[0]}' "
+                    f"(attempt {attempt}/{max_retries})"
+                )
+                log.info("Importing clusters via CLI method")
+                log.info(f"**** clustername={cluster[0]}")
+                log.info(f"**** kubeconfig={cluster[1]}")
+                create_project(cluster[0])
+
+                log.info("Create and apply managed-cluster.yaml")
+                managed_cluster = templating.load_yaml(
+                    "ocs_ci/templates/acm-deployment/managed-cluster.yaml"
+                )
+                managed_cluster["metadata"]["name"] = cluster[0]
+
+                # TODO: This check is based on current requirements of RDR in provider mode.
+                # Change the condition and add additional check to verify whether Multicluster
+                # Engine is installed in the managedcluster
+                if config.ENV_DATA.get("configure_acm_to_import_mce"):
+                    # Find the klusterletconfig to import MCE cluster
+                    klusterletconfig_obj = OCP(kind=constants.KLUSTERLET_CONFIG)
+                    klusterletconfigs = klusterletconfig_obj.get().get("items", [])
+                    klusterletconfig_name = ""
+                    for klusterletconfig in klusterletconfigs:
+                        if (
+                            klusterletconfig.get("spec", {})
+                            .get("installMode", {})
+                            .get("noOperator", {})
+                            .get("postfix")
+                            == "mce-import"
+                        ):
+                            klusterletconfig_name = klusterletconfig.get(
+                                "metadata"
+                            ).get("name")
+                            break
+                    if klusterletconfig_name:
+                        managed_cluster["metadata"]["annotations"] = {
+                            "agent.open-cluster-management.io/klusterlet-config": klusterletconfig_name
+                        }
+                    else:
+                        raise ResourceNotFoundError(
+                            "No KlusterletConfig found to import MCE clusters"
+                        )
+                    # Add 'leaseDurationSeconds' obtained from ACM documentation
+                    managed_cluster["spec"]["leaseDurationSeconds"] = 60
+
+                managed_cluster_obj = OCS(**managed_cluster)
+                managed_cluster_obj.apply(**managed_cluster)
+
+                log.info("Create and Apply the auto-import-secret.yaml")
+                auto_import_secret = templating.load_yaml(
+                    "ocs_ci/templates/acm-deployment/auto-import-secret.yaml"
+                )
+                auto_import_secret["metadata"]["namespace"] = cluster[0]
+                auto_import_secret["stringData"]["kubeconfig"] = cluster[1]
+                auto_import_secret_obj = OCS(**auto_import_secret)
+                try:
+                    auto_import_secret_obj.apply(**auto_import_secret)
+                except CommandFailed as ex:
+                    if (
+                        'Error is Error from server (NotFound): secrets "auto-import-secret" not found'
+                        in str(ex)
+                    ):
+                        pass
+                    else:
+                        raise
+
+                log.info("Wait managedcluster move to Available state")
+                time.sleep(60)
+                ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
+                ocp_obj.wait_for_resource(
+                    timeout=2000,
+                    condition="True",
+                    column="AVAILABLE",
+                    resource_name=cluster[0],
+                )
+                ocp_obj.wait_for_resource(
+                    timeout=1200,
+                    condition="True",
+                    column="JOINED",
+                    resource_name=cluster[0],
+                )
+
+                log.info("Creating klusterlet addon configuration")
+                klusterlet_config = templating.load_yaml(
+                    constants.ACM_HUB_KLUSTERLET_YAML
+                )
+                klusterlet_config["metadata"]["name"] = cluster[0]
+                klusterlet_config["metadata"]["namespace"] = cluster[0]
+                klusterlet_config_obj = OCS(**klusterlet_config)
+                klusterlet_config_obj.create()
+
+                log.info("Waiting for addon pods to be in running state")
+                config.switch_to_cluster_by_name(cluster[0])
+
+                wait_for_pods_to_be_running(
+                    namespace=constants.ACM_ADDONS_NAMESPACE,
+                    timeout=300,
+                    sleep=15,
+                    skip_for_status=[constants.STATUS_COMPLETED],
+                )
+
+                config.switch_acm_ctx()
+                ocp_obj.wait_for_resource(
+                    timeout=1200,
+                    condition="true",
+                    column="HUB ACCEPTED",
+                    resource_name=cluster[0],
+                )
+                log.info(
+                    f"Cluster '{cluster[0]}' imported successfully "
+                    f"on attempt {attempt}"
+                )
+                break
+            except ResourceNotFoundError:
+                log.error(
+                    f"Configuration error for cluster '{cluster[0]}': "
+                    f"missing KlusterletConfig for MCE import. "
+                    f"Cleaning up and failing without retry."
+                )
+                _cleanup_failed_cluster_import(cluster[0])
                 raise
-
-        log.info("Wait managedcluster move to Available state")
-        time.sleep(60)
-        ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
-        ocp_obj.wait_for_resource(
-            timeout=2000,
-            condition="True",
-            column="AVAILABLE",
-            resource_name=cluster[0],
-        )
-        ocp_obj.wait_for_resource(
-            timeout=1200,
-            condition="True",
-            column="JOINED",
-            resource_name=cluster[0],
-        )
-
-        log.info("Creating klusterlet addon configuration")
-        klusterlet_config = templating.load_yaml(constants.ACM_HUB_KLUSTERLET_YAML)
-        klusterlet_config["metadata"]["name"] = cluster[0]
-        klusterlet_config["metadata"]["namespace"] = cluster[0]
-        klusterlet_config_obj = OCS(**klusterlet_config)
-        klusterlet_config_obj.create()
-
-        log.info("Waiting for addon pods to be in running state")
-        config.switch_to_cluster_by_name(cluster[0])
-
-        wait_for_pods_to_be_running(
-            namespace=constants.ACM_ADDONS_NAMESPACE,
-            timeout=300,
-            sleep=15,
-            skip_for_status=[constants.STATUS_COMPLETED],
-        )
-
-        config.switch_acm_ctx()
-        ocp_obj.wait_for_resource(
-            timeout=1200,
-            condition="true",
-            column="HUB ACCEPTED",
-            resource_name=cluster[0],
-        )
+            except Exception as ex:
+                log.error(
+                    f"Import attempt {attempt}/{max_retries} failed for "
+                    f"cluster '{cluster[0]}': {ex}"
+                )
+                if attempt < max_retries:
+                    log.info(
+                        f"Retrying import of cluster '{cluster[0]}' "
+                        f"after cleanup..."
+                    )
+                    _cleanup_failed_cluster_import(cluster[0])
+                else:
+                    log.error(
+                        f"All {max_retries} import attempts exhausted for "
+                        f"cluster '{cluster[0]}'"
+                    )
+                    raise
 
 
 def import_clusters_with_acm():
