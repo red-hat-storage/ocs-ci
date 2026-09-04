@@ -1,0 +1,1197 @@
+"""
+Tests for ODF DR Recipe generation using OpenShift Lightspeed (OLS)
+
+JIRA: RHSTOR-8222 - DR Recipe creation using OCP Lightspeed
+
+These tests verify that the OLS service, configured with the DR recipe RAG
+content image, can generate syntactically correct ODF Disaster Recovery
+Recipes from natural-language prompts.
+
+OLS is deployed automatically as part of the RDR deployment flow
+(``RDRMultiClusterDROperatorsDeploy.deploy()`` in ``deployment.py``) for
+ODF >= 5.0.  These tests assume the service is already running on the hub
+cluster when executed.
+"""
+
+import logging
+
+import pytest
+import yaml
+
+from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
+from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.openshift_lightspeed import OpenShiftLightspeed, is_ols_available
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Prompt helpers
+# ---------------------------------------------------------------------------
+
+# Minimal inline schema stub embedded in every prompt so the model never needs
+# to search for it.  This avoids the model spending its entire response budget
+# on RAG / CRD-fetch tool calls when the doc search returns off-topic results.
+_RECIPE_SCHEMA_STUB = """\
+The ODF DR Recipe uses this schema (ramendr.openshift.io/v1alpha1):
+
+apiVersion: ramendr.openshift.io/v1alpha1
+kind: Recipe
+metadata:
+  name: <name>
+  namespace: <app-namespace>
+spec:
+  appType: <app-name>
+  groups:                        # resource groups (type: resource) or volume groups (type: volume)
+    - name: <group-name>
+      type: resource             # or: volume
+      includedNamespaces: [<ns>]
+      labelSelector:
+        matchLabels:
+          <key>: <value>
+  volumes:                       # ALWAYS include when the app has PVCs; omit only when there are no PVCs
+    name: <vol-group-name>       # IMPORTANT: volumes is a single object, NOT a list
+    type: volume
+    includedNamespaces: [<ns>]
+    labelSelector:
+      matchLabels:
+        <key>: <value>
+  hooks:                         # omit when no hooks are needed
+    # exec/scale hook -- use 'ops' for type: exec and type: scale
+    - name: <exec-hook-name>
+      type: exec                 # or: scale
+      namespace: <ns>
+      labelSelector:
+        matchLabels:
+          <key>: <value>
+      ops:
+        - name: <op-name>
+          command: '<shell-command-string>'  # must be a single string, NOT a list
+          container: <container>
+    # check hook -- use 'chks' (NOT 'ops') for type: check
+    - name: <check-hook-name>
+      type: check
+      namespace: <ns>
+      selectResource: deployment
+      nameSelector: <app-name>-*    # use a wildcard suffix to match generated deployment names
+      timeout: 120
+      onError: fail
+      chks:
+        - name: <chk-name>
+          timeout: 300
+          onError: fail
+          condition: "{$.spec.replicas} == {$.status.readyReplicas}"
+  workflows:
+    - name: backup
+      sequence:
+        - group: <group-name>             # reference a resource/volume group
+        - hook: <hook-name>/<op-name>     # always use slash notation: hook-name/op-or-chk-name
+    - name: restore
+      sequence:
+        - group: <group-name>
+        - hook: <hook-name>/<chk-name>    # slash notation required for check hooks too
+
+IMPORTANT RULES:
+1. For type: check hooks, use 'chks' (NOT 'ops').  For type: exec/scale, use 'ops'.
+2. Check conditions use JSONPath: condition: '{$.spec.replicas} == {$.status.readyReplicas}'
+3. Workflow sequences MUST use slash notation: hook: <hook-name>/<op-or-chk-name>
+4. spec.volumes is a single mapping object, never a YAML list.
+5. ops[].command must be a plain string, never a YAML list.
+6. For type: check hooks, use 'selectResource' and 'nameSelector' (with a wildcard suffix,
+   e.g. busybox-*) instead of labelSelector to target the deployment by name.
+7. ALWAYS include spec.volumes when the app has PVCs. Use labelSelector matching the PVC
+   label from the user request. Never omit volumes just because a hooks section is present.
+
+Respond with ONLY a ```yaml``` code block containing the complete Recipe manifest.
+Do not search for documentation. Do not include explanatory text outside the code block.\
+"""
+
+
+def _build_prompt(user_request):
+    """
+    Prepend the inline Recipe schema stub to a user request string.
+
+    Args:
+        user_request (str): The natural-language recipe request.
+
+    Returns:
+        str: Full prompt with schema context embedded.
+    """
+    logger.info(f"OLS query:\n{user_request}")
+    return f"{_RECIPE_SCHEMA_STUB}\n\n{user_request}"
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session", autouse=False)
+def skip_if_ols_not_available():
+    """
+    Skip the requesting test/class when OLS is not installed on the hub
+    cluster (i.e. the ``lightspeed-app-server`` Route does not exist).
+
+    The check must run against the ACM hub context because OLS is only
+    deployed there, not on the managed clusters.
+
+    Use via ``usefixtures`` on a class or request directly in a fixture::
+
+        @pytest.mark.usefixtures("skip_if_ols_not_available")
+        class TestSomething: ...
+    """
+    from ocs_ci.framework import config
+
+    saved_index = config.cur_index
+    config.switch_acm_ctx()
+    try:
+        if not is_ols_available():
+            pytest.skip(
+                "OpenShift Lightspeed is not installed on this cluster "
+                "(route 'lightspeed-app-server' not found in 'openshift-lightspeed'). "
+                "Deploy OLS or set skip_ols_deployment=false to enable these tests."
+            )
+    finally:
+        config.switch_ctx(saved_index)
+
+
+@pytest.fixture(scope="class")
+def ols_client(skip_if_ols_not_available, request):
+    """
+    Provide an authenticated :class:`~ocs_ci.ocs.openshift_lightspeed.OpenShiftLightspeed`
+    client for the test class.
+
+    Skips the entire class when OLS is not installed (via
+    ``skip_if_ols_not_available``).  Fails with a clear message when OLS is
+    installed but the authorization check returns a non-200 response.
+
+    Always switches to the ACM hub context before constructing the client and
+    restores the original context afterward.
+    """
+    from ocs_ci.framework import config
+
+    saved_index = config.cur_index
+    config.switch_acm_ctx()
+
+    def _restore():
+        config.switch_ctx(saved_index)
+
+    request.addfinalizer(_restore)
+
+    client = OpenShiftLightspeed()
+    client.ensure_working_model()
+    if not client.is_authorized():
+        pytest.fail(
+            "OLS authorization check failed. "
+            "Verify that lightspeed-operator-query-access is bound and OLS pods are running."
+        )
+    return client
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _extract_yaml_from_response(response_text):
+    """
+    Extract the first YAML block from an OLS response string.
+
+    OLS typically wraps the generated YAML in a markdown code fence
+    (```yaml ... ```) or returns it inline.  This helper tries the fenced
+    form first and falls back to parsing the full response body.
+
+    Args:
+        response_text (str): Raw text from the ``response`` key of an OLS
+            query result.
+
+    Returns:
+        dict: Parsed YAML document, or ``None`` if no valid YAML was found.
+    """
+    # Try to extract a fenced YAML block.  OLS may use ```yaml, ```yml, or
+    # an untagged ``` fence.  Accept any block whose content parses as a dict.
+    # Skip blocks whose first token is a known non-yaml language tag.
+    _SKIP_TAGS = {"python", "json", "bash", "sh", "text", "markdown"}
+    if "```" in response_text:
+        for block in response_text.split("```"):
+            block = block.strip()
+            if not block:
+                continue
+            # Strip a leading language tag (word chars only, no whitespace)
+            first_line, _, rest = block.partition("\n")
+            tag = first_line.strip().lower()
+            if tag and " " not in tag:
+                if tag in _SKIP_TAGS:
+                    continue
+                content = rest.strip()
+            else:
+                content = block
+            if not content:
+                continue
+            try:
+                parsed = yaml.safe_load(content)
+                if isinstance(parsed, dict):
+                    return parsed
+            except yaml.YAMLError:
+                continue
+
+    # Fall back to parsing the whole response (only accept dicts, not bare strings)
+    try:
+        parsed = yaml.safe_load(response_text)
+        return parsed if isinstance(parsed, dict) else None
+    except yaml.YAMLError:
+        return None
+
+
+def _assert_recipe_structure(recipe_yaml):
+    """
+    Assert that a parsed Recipe YAML has the minimum required structure.
+
+    Args:
+        recipe_yaml (dict): Parsed Recipe manifest.
+    """
+    assert recipe_yaml is not None, "OLS response did not contain valid YAML"
+    assert (
+        recipe_yaml.get("apiVersion") == "ramendr.openshift.io/v1alpha1"
+    ), f"Unexpected apiVersion: {recipe_yaml.get('apiVersion')}"
+    assert (
+        recipe_yaml.get("kind") == "Recipe"
+    ), f"Expected kind 'Recipe', got: {recipe_yaml.get('kind')}"
+    assert isinstance(recipe_yaml.get("metadata"), dict), (
+        "Recipe must have a metadata mapping, got: " f"{recipe_yaml.get('metadata')!r}"
+    )
+    assert "name" in recipe_yaml["metadata"], (
+        "Recipe metadata must include 'name', got: " f"{recipe_yaml['metadata']!r}"
+    )
+    spec = recipe_yaml.get("spec", {})
+    assert "groups" in spec, "Recipe spec must contain 'groups'"
+    assert "workflows" in spec, "Recipe spec must contain 'workflows'"
+
+    workflows = spec["workflows"]
+    assert isinstance(
+        workflows, list
+    ), f"Recipe spec.workflows must be a list, got: {type(workflows).__name__!r}"
+    for i, workflow in enumerate(workflows):
+        assert isinstance(workflow, dict), (
+            f"Recipe spec.workflows[{i}] must be a mapping, got: "
+            f"{type(workflow).__name__!r}"
+        )
+        assert (
+            "name" in workflow
+        ), f"Recipe spec.workflows[{i}] must contain a 'name' key, got: {workflow!r}"
+    workflow_names = [w["name"] for w in workflows]
+    assert "backup" in workflow_names, "Recipe must have a 'backup' workflow"
+    assert "restore" in workflow_names, "Recipe must have a 'restore' workflow"
+
+    # Validate spec.volumes: the CRD requires a single object (mapping), not a list.
+    if "volumes" in spec:
+        if not isinstance(spec["volumes"], dict):
+            logger.error(
+                "OLS generated spec.volumes as %s instead of a mapping object: %r",
+                type(spec["volumes"]).__name__,
+                spec["volumes"],
+            )
+        assert isinstance(spec["volumes"], dict), (
+            "Recipe spec.volumes must be a single mapping object, not a list. "
+            "OLS generated an invalid volumes structure: "
+            f"{type(spec['volumes']).__name__!r}"
+        )
+
+    # Validate spec.hooks per hook type:
+    #   - type: exec / scale  -> 'ops' list; command must be a string
+    #   - type: check         -> 'chks' list; condition must be a string
+    # OLS sometimes uses 'ops' for check hooks (wrong) or generates command as
+    # a list (wrong); coerce/warn where possible and assert correctness.
+    for hi, hook in enumerate(spec.get("hooks", [])):
+        assert isinstance(hook, dict), (
+            f"Recipe spec.hooks[{hi}] must be a mapping, got: "
+            f"{type(hook).__name__!r}"
+        )
+        hook_type = hook.get("type", "")
+
+        if hook_type == "check":
+            # check hooks must use 'chks', not 'ops' — no silent renaming
+            if "ops" in hook:
+                logger.error(
+                    "OLS generated check hook '%s' with 'ops' instead of 'chks'. "
+                    "Hook keys: %s",
+                    hook.get("name"),
+                    list(hook.keys()),
+                )
+            assert "ops" not in hook, (
+                f"Recipe spec.hooks[{hi}] (type: check) must not use 'ops'; "
+                f"use 'chks' instead. OLS generated the wrong key."
+            )
+            if "chks" not in hook:
+                logger.error(
+                    "OLS generated check hook '%s' without 'chks'. " "Hook keys: %s",
+                    hook.get("name"),
+                    list(hook.keys()),
+                )
+            assert "chks" in hook, (
+                f"Recipe spec.hooks[{hi}] (type: check) must contain a 'chks' key, "
+                f"got keys: {list(hook.keys())}"
+            )
+            for ci, chk in enumerate(hook["chks"]):
+                assert isinstance(
+                    chk, dict
+                ), f"Recipe spec.hooks[{hi}].chks[{ci}] must be a mapping"
+                assert "condition" in chk, (
+                    f"Recipe spec.hooks[{hi}].chks[{ci}] must contain a 'condition' key, "
+                    f"got: {chk!r}"
+                )
+                assert isinstance(chk["condition"], str), (
+                    f"Recipe spec.hooks[{hi}].chks[{ci}].condition must be a string, "
+                    f"got: {type(chk['condition']).__name__!r}"
+                )
+        else:
+            # exec / scale hooks use 'ops'; command must be a string
+            for oi, op in enumerate(hook.get("ops", [])):
+                assert isinstance(
+                    op, dict
+                ), f"Recipe spec.hooks[{hi}].ops[{oi}] must be a mapping"
+                if "command" in op:
+                    if not isinstance(op["command"], str):
+                        logger.error(
+                            "OLS generated hooks[%d].ops[%d].command as %s "
+                            "instead of a string: %r",
+                            hi,
+                            oi,
+                            type(op["command"]).__name__,
+                            op["command"],
+                        )
+                    assert isinstance(op["command"], str), (
+                        f"Recipe spec.hooks[{hi}].ops[{oi}].command must be a plain "
+                        f"string, not a list. OLS generated: {op['command']!r}"
+                    )
+
+    # Validate workflow sequence entries use slash notation for hook references
+    # (hook: <hook-name>/<op-or-chk-name>) — required by the Recipe CRD.
+    for workflow in spec.get("workflows", []):
+        for step in workflow.get("sequence", []):
+            if "hook" in step:
+                hook_ref = step["hook"]
+                if "/" not in str(hook_ref):
+                    logger.error(
+                        "OLS generated workflow '%s' with bare hook reference '%s' "
+                        "(expected '<hook-name>/<op-or-chk-name>'). "
+                        "Full sequence: %s",
+                        workflow.get("name"),
+                        hook_ref,
+                        workflow.get("sequence"),
+                    )
+                assert "/" in str(hook_ref), (
+                    f"Workflow '{workflow.get('name')}' hook reference '{hook_ref}' "
+                    f"must use slash notation '<hook-name>/<op-or-chk-name>'. "
+                    f"OLS generated a bare hook name."
+                )
+
+
+# ---------------------------------------------------------------------------
+# Test class
+# ---------------------------------------------------------------------------
+
+
+@rdr
+@tier1
+@turquoise_squad
+@skipif_ocs_version("<4.23")
+@pytest.mark.usefixtures("skip_if_ols_not_available")
+class TestOLSRecipeGeneration:
+    """
+    Verify OLS can generate ODF DR Recipes from natural-language prompts.
+
+    All tests use the shared ``ols_client`` fixture and rely on a single
+    conversation to keep context between related prompts where needed.
+    Each test is independent and starts a fresh conversation unless
+    otherwise stated.
+    """
+
+    def test_ols_authorization(self, ols_client):
+        """
+        Verify the OLS service is reachable and the test user is authorized.
+
+        Test steps:
+            1. Call the OLS ``/authorized`` endpoint.
+            2. Expect HTTP 200 (already asserted by the fixture).
+        """
+        # Authorization is already asserted by the fixture.
+        # This test documents the requirement explicitly.
+        logger.info("OLS authorization verified via fixture")
+
+    def test_recipe_simple_deployment_no_pvc(self, ols_client):
+        """
+        OLS generates a valid Recipe for a Deployment with no PVCs.
+
+        Prompt taken from RHSTOR-8222 happy-path test cases.
+
+        Test steps:
+            1. Send the prompt for ``web-app`` in the ``web`` namespace.
+            2. Extract the YAML from the response.
+            3. Assert required Recipe fields are present.
+            4. Assert no ``volumes`` section (app has no PVCs).
+        """
+        prompt = _build_prompt(
+            "Generate an ODF Disaster Recovery Recipe for an application named "
+            "web-app deployed in the web namespace. The application consists of "
+            "one Deployment labeled app: web-app and does not use any "
+            "PersistentVolumeClaims. Generate the complete Recipe."
+        )
+        result = ols_client.query(prompt)
+        response_text = result.get("response", "")
+        logger.info(f"OLS response:\n{response_text}")
+
+        recipe = _extract_yaml_from_response(response_text)
+        _assert_recipe_structure(recipe)
+
+        spec = recipe["spec"]
+        assert (
+            spec.get("appType") == "web-app"
+        ), f"Expected appType 'web-app', got: {spec.get('appType')}"
+        assert (
+            "volumes" not in spec
+        ), "Recipe should not contain a volumes section for a PVC-less app"
+        groups = spec["groups"]
+        assert any(
+            g.get("includedNamespaces", []) == ["web"] for g in groups
+        ), "At least one group must target the 'web' namespace"
+
+    def test_recipe_deployment_with_pvc(self, ols_client):
+        """
+        OLS generates a valid Recipe for a Deployment with one PVC.
+
+        Test steps:
+            1. Send the prompt for ``my-app`` with a PVC in the ``my-app``
+               namespace.
+            2. Extract and validate the YAML.
+            3. Assert the ``volumes`` section is present and targets the
+               correct namespace.
+        """
+        prompt = _build_prompt(
+            "Generate an ODF Disaster Recovery Recipe for an application named "
+            "my-app deployed in the my-app namespace. The application consists "
+            "of one Deployment and one PVC. The Deployment is labeled app: "
+            "my-app, and the PVC is also labeled app: my-app. Generate the "
+            "complete Recipe."
+        )
+        result = ols_client.query(prompt)
+        response_text = result.get("response", "")
+        logger.info(f"OLS response:\n{response_text}")
+
+        recipe = _extract_yaml_from_response(response_text)
+        _assert_recipe_structure(recipe)
+
+        spec = recipe["spec"]
+        assert (
+            "volumes" in spec
+        ), "Recipe must contain a volumes section for an app with PVCs"
+        volumes = spec["volumes"]
+        if not volumes.get("includedNamespaces"):
+            logger.error(
+                "OLS omitted volumes.includedNamespaces. Full volumes section: %r",
+                volumes,
+            )
+        assert volumes.get("includedNamespaces"), (
+            "Recipe spec.volumes must include 'includedNamespaces'. "
+            "OLS omitted the field."
+        )
+        if "my-app" not in volumes["includedNamespaces"]:
+            logger.error(
+                "OLS volumes.includedNamespaces does not contain 'my-app': %r",
+                volumes["includedNamespaces"],
+            )
+        assert (
+            "my-app" in volumes["includedNamespaces"]
+        ), "Volumes section must include the 'my-app' namespace"
+
+    def test_recipe_exec_hook_before_backup(self, ols_client):
+        """
+        OLS generates a Recipe with an exec hook that runs before backup.
+
+        Test steps:
+            1. Send the prompt for ``postgres-app`` with a pre-backup exec
+               hook (psql CHECKPOINT command).
+            2. Extract and validate the YAML.
+            3. Assert a ``hooks`` section with ``type: exec`` is present.
+            4. Assert the backup workflow references the hook before the
+               resource group.
+        """
+        prompt = _build_prompt(
+            "Generate an ODF Disaster Recovery Recipe for an application named "
+            "postgres-app deployed in the postgres namespace. The application "
+            "consists of one Deployment labeled app: postgres-app and one PVC "
+            "labeled app: postgres-app. Before backup, run an exec hook in "
+            "container postgres that executes the command "
+            '["psql","-U","postgres","-c","CHECKPOINT"]. '
+            "The Deployment name is postgres-deployment. Generate the complete Recipe."
+        )
+        result = ols_client.query(prompt)
+        response_text = result.get("response", "")
+        logger.info(f"OLS response:\n{response_text}")
+
+        recipe = _extract_yaml_from_response(response_text)
+        _assert_recipe_structure(recipe)
+
+        spec = recipe["spec"]
+        assert "hooks" in spec, "Recipe must contain a hooks section"
+        hooks = spec["hooks"]
+        exec_hooks = [h for h in hooks if h.get("type") == "exec"]
+        assert exec_hooks, "At least one hook must have type 'exec'"
+
+        # The backup workflow sequence must reference the hook before the group
+        backup_workflow = next(w for w in spec["workflows"] if w["name"] == "backup")
+        sequence = backup_workflow.get("sequence", [])
+        assert sequence, "Backup workflow must have a non-empty sequence"
+        first_step = sequence[0]
+        assert (
+            "hook" in first_step
+        ), "First step of backup workflow must be a hook (pre-backup exec)"
+
+    def test_recipe_scale_hook(self, ols_client):
+        """
+        OLS generates a Recipe with a scale hook for backup and restore.
+
+        Test steps:
+            1. Send the prompt for ``minio-app`` with scale-down before
+               backup and scale-up after restore.
+            2. Extract and validate the YAML.
+            3. Assert a ``hooks`` section with ``type: scale`` is present.
+        """
+        prompt = _build_prompt(
+            "Generate an ODF Disaster Recovery Recipe for an application named "
+            "minio-app deployed in the minio namespace. The application consists "
+            "of one Deployment named minio labeled app: minio-app and one PVC "
+            "labeled app: minio-app. Before backup, scale the Deployment down to "
+            "0 replicas. After restore, scale it back to its original replica "
+            "count and wait for the scaling operation to complete. "
+            "Generate the complete Recipe."
+        )
+        result = ols_client.query(prompt)
+        response_text = result.get("response", "")
+        logger.info(f"OLS response:\n{response_text}")
+
+        recipe = _extract_yaml_from_response(response_text)
+        _assert_recipe_structure(recipe)
+
+        spec = recipe["spec"]
+        assert "hooks" in spec, "Recipe must contain a hooks section"
+        scale_hooks = [h for h in spec["hooks"] if h.get("type") == "scale"]
+        assert scale_hooks, "At least one hook must have type 'scale'"
+
+    def test_recipe_check_hook_after_restore(self, ols_client):
+        """
+        OLS generates a Recipe with a check hook that validates readiness
+        after restore, using the correct 'chks' field and slash-notation
+        workflow reference.
+
+        Test steps:
+            1. Send the prompt for ``orders-app`` with a post-restore check
+               that validates Deployment readiness using chks/condition syntax.
+            2. Extract and validate the YAML.
+            3. Assert a hook with ``type: check`` and a ``chks`` list is present.
+            4. Assert the restore workflow references the check hook (with slash
+               notation) after the resource group.
+        """
+        prompt = _build_prompt(
+            "Generate an ODF Disaster Recovery Recipe for an application named "
+            "orders-app deployed in the orders namespace. The application "
+            "consists of one Deployment labeled app: orders-app and one PVC "
+            "labeled app: orders-app. After restore, add a check hook named "
+            "check-orders-ready of type check. "
+            "The check hook must use a 'chks' list (NOT 'ops') with one entry "
+            "named check-deployment-ready whose condition is "
+            "'{$.spec.replicas} == {$.status.readyReplicas}'. "
+            "In the restore workflow sequence, reference the check hook using "
+            "slash notation: hook: check-orders-ready/check-deployment-ready. "
+            "Generate the complete Recipe."
+        )
+        result = ols_client.query(prompt)
+        response_text = result.get("response", "")
+        logger.info(f"OLS response:\n{response_text}")
+
+        recipe = _extract_yaml_from_response(response_text)
+        _assert_recipe_structure(recipe)
+
+        spec = recipe["spec"]
+        assert "hooks" in spec, "Recipe must contain a hooks section"
+        check_hooks = [h for h in spec["hooks"] if h.get("type") == "check"]
+        assert check_hooks, "At least one hook must have type 'check'"
+
+        # check hooks must use 'chks', not 'ops'
+        for ch in check_hooks:
+            assert "chks" in ch, (
+                f"Check hook '{ch.get('name')}' must use 'chks' key, "
+                f"got keys: {list(ch.keys())}"
+            )
+
+        # The restore workflow sequence must reference the check hook last
+        restore_workflow = next(w for w in spec["workflows"] if w["name"] == "restore")
+        sequence = restore_workflow.get("sequence", [])
+        assert sequence, "Restore workflow must have a non-empty sequence"
+        last_step = sequence[-1]
+        assert (
+            "hook" in last_step
+        ), "Last step of restore workflow must be a hook (post-restore check)"
+
+        # The hook reference must use slash notation (hook-name/chk-name)
+        hook_ref = last_step["hook"]
+        assert "/" in str(hook_ref), (
+            f"Restore workflow hook reference must use slash notation "
+            f"'<hook-name>/<chk-name>', got: {hook_ref!r}"
+        )
+
+    def test_recipe_multi_turn_conversation(self, ols_client, request):
+        """
+        OLS uses conversation history to refine a Recipe over multiple turns.
+
+        Test steps:
+            1. First turn: Generate a basic Recipe for ``finance-app``.
+            2. Second turn (same conversation_id): Ask OLS to add a pre-backup
+               exec hook.
+            3. Assert the final Recipe contains both a hooks section and the
+               backup workflow references the hook.
+        """
+        # Turn 1 — basic recipe
+        prompt_1 = _build_prompt(
+            "Generate an ODF Disaster Recovery Recipe for an application named "
+            "finance-app deployed in the finance namespace. The application "
+            "consists of one Deployment labeled app: finance-app and one PVC "
+            "labeled app: finance-app. Generate the complete Recipe."
+        )
+        result_1 = ols_client.query(prompt_1)
+        conversation_id = result_1.get("conversation_id")
+        assert conversation_id, "OLS must return a conversation_id for multi-turn tests"
+        logger.info(f"Turn 1 conversation_id: {conversation_id}")
+
+        # Register cleanup immediately so it runs even if later assertions fail
+        def _delete_conversation():
+            try:
+                ols_client.delete_conversation(conversation_id)
+                logger.info(f"Conversation {conversation_id} deleted")
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to delete conversation {conversation_id}: {exc}"
+                )
+
+        request.addfinalizer(_delete_conversation)
+
+        # Turn 2 — add a pre-backup exec hook in the same conversation
+        prompt_2 = (
+            "Update the Recipe to add a pre-backup exec hook in the finance "
+            'namespace that runs the command ["echo", "pre-backup"] in '
+            "the finance-container container of the Deployment. Show the "
+            "complete updated Recipe YAML."
+        )
+        logger.info(f"OLS query (turn 2):\n{prompt_2}")
+        result_2 = ols_client.query(prompt_2, conversation_id=conversation_id)
+        response_text = result_2.get("response", "")
+        logger.info(f"Turn 2 OLS response:\n{response_text}")
+
+        recipe = _extract_yaml_from_response(response_text)
+        _assert_recipe_structure(recipe)
+        spec = recipe["spec"]
+        assert (
+            "hooks" in spec
+        ), "Updated Recipe must contain a hooks section after the follow-up prompt"
+
+    def test_recipe_attachment_yaml_context(self, ols_client):
+        """
+        OLS uses an attached Kubernetes resource YAML as context to generate
+        a tailored Recipe.
+
+        Test steps:
+            1. Build a minimal Deployment YAML as an attachment.
+            2. Send a query with the attachment asking for a DR Recipe.
+            3. Extract and validate the generated Recipe.
+            4. Assert the namespace from the attached Deployment is reflected
+               in the generated Recipe.
+        """
+        deployment_yaml = (
+            "apiVersion: apps/v1\n"
+            "kind: Deployment\n"
+            "metadata:\n"
+            "  name: sample-app\n"
+            "  namespace: sample-ns\n"
+            "  labels:\n"
+            "    app: sample-app\n"
+            "spec:\n"
+            "  replicas: 1\n"
+            "  selector:\n"
+            "    matchLabels:\n"
+            "      app: sample-app\n"
+            "  template:\n"
+            "    metadata:\n"
+            "      labels:\n"
+            "        app: sample-app\n"
+            "    spec:\n"
+            "      containers:\n"
+            "        - name: sample-app\n"
+            "          image: registry.k8s.io/busybox:latest\n"
+        )
+        attachments = [
+            {
+                "attachment_type": "configuration",
+                "content_type": "application/yaml",
+                "content": deployment_yaml,
+            }
+        ]
+
+        prompt = _build_prompt(
+            "Using the attached Deployment manifest, generate a complete ODF "
+            "Disaster Recovery Recipe for this application. The app does not use PVCs."
+        )
+        result = ols_client.query(prompt, attachments=attachments)
+        response_text = result.get("response", "")
+        logger.info(f"OLS response with attachment:\n{response_text}")
+
+        recipe = _extract_yaml_from_response(response_text)
+        _assert_recipe_structure(recipe)
+
+        spec = recipe["spec"]
+        groups = spec.get("groups", [])
+        all_namespaces = []
+        for g in groups:
+            all_namespaces.extend(g.get("includedNamespaces", []))
+        assert (
+            "sample-ns" in all_namespaces
+        ), "Generated Recipe must target the namespace from the attached Deployment"
+
+
+# ---------------------------------------------------------------------------
+# Real-workload test class — OLS-generated Recipe + DR failover/relocate
+# ---------------------------------------------------------------------------
+
+
+@rdr
+@tier1
+@turquoise_squad
+@skipif_ocs_version("<4.23")
+@pytest.mark.usefixtures("skip_if_ols_not_available")
+class TestOLSRecipeFailoverAndRelocate:
+    """
+    Deploy a real busybox Discovered App workload, ask OLS to generate its
+    DR Recipe using the live namespace and PVC labels, apply that Recipe to
+    the primary cluster, then perform a full failover → relocate cycle to
+    verify the OLS-generated Recipe is operationally correct.
+
+    This replaces the static ``recipe_with_checkhooks.yaml`` template with
+    an OLS-generated Recipe so the entire Recipe content is validated end-to-end
+    against the real DR protection flow.
+
+    Flow
+    ----
+    1. Deploy a ``BusyboxDiscoveredApps`` workload (random namespace + RBD PVCs).
+    2. Ask OLS to generate the DR Recipe using the real namespace, PVC label
+       key/value, and pod label key/value from the deployed workload.
+    3. Validate the generated Recipe structure and assert it targets the correct
+       namespace and labels.
+    4. Apply the OLS-generated Recipe to each managed cluster.
+    5. Create the DRPC with ``recipeRef`` pointing to the applied Recipe.
+    6. Perform failover to the secondary cluster and verify workload comes up.
+    7. Relocate back to the primary cluster and verify workload comes up.
+    8. Teardown: delete the workload; the ``discovered_apps_dr_workload``
+       fixture handles full cleanup.
+    """
+
+    params = [
+        pytest.param(
+            False,
+            constants.CEPHBLOCKPOOL,
+            marks=[pytest.mark.polarion_id("OCS-8231"), acceptance],
+            id="primary_up-rbd",
+        ),
+        pytest.param(
+            True,
+            constants.CEPHBLOCKPOOL,
+            marks=[pytest.mark.polarion_id("OCS-8232")],
+            id="primary_down-rbd",
+        ),
+        pytest.param(
+            False,
+            constants.CEPHFILESYSTEM,
+            marks=[pytest.mark.polarion_id("OCS-8233"), acceptance],
+            id="primary_up-cephfs",
+        ),
+        pytest.param(
+            True,
+            constants.CEPHFILESYSTEM,
+            marks=[pytest.mark.polarion_id("OCS-8234")],
+            id="primary_down-cephfs",
+        ),
+    ]
+
+    @pytest.fixture(scope="class")
+    def ols(self, ols_client):
+        """
+        Authenticated OLS client (hub cluster) — delegates to the module-level
+        ``ols_client`` fixture which handles context switching, authorization
+        checks, and teardown.
+        """
+        return ols_client
+
+    def _generate_and_apply_ols_recipe(self, workload, ols_client):
+        """
+        Ask OLS to generate a DR Recipe for the given workload, validate the
+        returned YAML, apply it to **both** managed clusters (primary and
+        secondary), and return the recipe name.
+
+        The cluster-selection logic mirrors ``BusyboxDiscoveredApps.deploy_workload``:
+        uses ``get_non_acm_cluster_and_non_provider_cluster_config`` when
+        ``dr_cluster_relations`` is set (standard RDR), otherwise falls back to
+        ``get_non_acm_cluster_config``.
+
+        Args:
+            workload: A :class:`~ocs_ci.ocs.dr.dr_workload.BusyboxDiscoveredApps`
+                instance that has already been deployed (so namespace and labels
+                are known).
+            ols_client: An authenticated
+                :class:`~ocs_ci.ocs.openshift_lightspeed.OpenShiftLightspeed`
+                instance.
+
+        Returns:
+            str: Name of the applied Recipe.
+        """
+        import re
+        import tempfile
+
+        from ocs_ci.framework import config
+        from ocs_ci.ocs.utils import (
+            get_non_acm_cluster_and_non_provider_cluster_config,
+            get_non_acm_cluster_config,
+        )
+        from ocs_ci.utility.utils import exec_cmd
+
+        namespace = workload.workload_namespace
+        pvc_key = workload.discovered_apps_pvc_selector_key
+        pvc_value = workload.discovered_apps_pvc_selector_value
+        pod_key = workload.discovered_apps_pod_selector_key
+        pod_value = workload.discovered_apps_pod_selector_value
+        app_name = workload.workload_name  # "busybox"
+        pvc_count = workload.workload_pvc_count
+        # name_selector comes from dr_workload_app_recipe_name_selector_value in the
+        # workload config (e.g. "busybox-*").  Fall back to "<app_name>-*" if unset.
+        name_selector = workload.discovered_apps_name_selector_value or f"{app_name}-*"
+
+        logger.info(
+            f"Generating OLS Recipe for workload — namespace: {namespace}, "
+            f"pvc_selector: {pvc_key}={pvc_value}, "
+            f"pod_selector: {pod_key}={pod_value}, "
+            f"name_selector: {name_selector}"
+        )
+
+        prompt = _build_prompt(
+            f"Generate an ODF Disaster Recovery Recipe for an application named "
+            f"{app_name} deployed in the {namespace} namespace. "
+            f"The application has one Deployment with pods labeled "
+            f"{pod_key}: {pod_value}. "
+            f"It has {pvc_count} PVC(s) labeled {pvc_key}: {pvc_value}. "
+            f"Include a spec.volumes section (single object, NOT a list) with "
+            f"labelSelector matchLabels {pvc_key}: {pvc_value} targeting the "
+            f"{namespace} namespace. "
+            f"Include a check hook named check-{app_name}-ready of type check. "
+            f"The check hook must have selectResource: deployment and "
+            f"nameSelector: {name_selector} (NOT labelSelector). "
+            f"The check hook must use a 'chks' list (NOT 'ops') with one entry "
+            f"named check-deployment-ready, timeout: 300, onError: fail, "
+            f"and condition: '{{$.spec.replicas}} == {{$.status.readyReplicas}}'. "
+            f"In both the backup and restore workflow sequences, reference the "
+            f"check hook using slash notation: "
+            f"hook: check-{app_name}-ready/check-deployment-ready. "
+            f"Place the check hook before the resource group in backup and "
+            f"after the resource group in restore. "
+            f"Generate the complete Recipe."
+        )
+
+        result = ols_client.query(prompt)
+        response_text = result.get("response", "")
+        logger.info(f"OLS response:\n{response_text}")
+
+        recipe = _extract_yaml_from_response(response_text)
+        _assert_recipe_structure(recipe)
+
+        spec = recipe["spec"]
+        recipe_name = recipe["metadata"]["name"]
+        recipe_namespace = namespace
+        # Ensure the serialised manifest carries the correct namespace so that
+        # apply, delete, and validation all operate on the same namespace.
+        recipe["metadata"]["namespace"] = recipe_namespace
+
+        # Validate that OLS returned a legal k8s name (RFC-1123 label) for both
+        # the Recipe name and its namespace before we use them in oc commands.
+        _k8s_name_re = re.compile(r"^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?$")
+        for field, value in (
+            ("metadata.name", recipe_name),
+            ("metadata.namespace", recipe_namespace),
+        ):
+            assert _k8s_name_re.match(value), (
+                f"OLS Recipe field '{field}' is not a valid Kubernetes identifier: "
+                f"{value!r}. Must match [a-z0-9][a-z0-9-]{{0,61}}[a-z0-9]."
+            )
+
+        # Assert namespace is in resource groups
+        groups = spec.get("groups", [])
+        all_namespaces = []
+        for g in groups:
+            all_namespaces.extend(g.get("includedNamespaces", []))
+        assert namespace in all_namespaces, (
+            f"OLS Recipe groups must target namespace '{namespace}', "
+            f"got: {all_namespaces}"
+        )
+
+        # Assert volumes section is present and targets the correct namespace.
+        # Both fields are required by the CRD — fail the test if OLS omitted either.
+        assert (
+            "volumes" in spec
+        ), "OLS Recipe must contain a volumes section for a workload with PVCs"
+        volumes = spec["volumes"]
+        if not volumes.get("includedNamespaces"):
+            logger.error(
+                "OLS omitted volumes.includedNamespaces for namespace '%s'. "
+                "Full volumes section: %r",
+                namespace,
+                volumes,
+            )
+        assert volumes.get("includedNamespaces"), (
+            "OLS Recipe spec.volumes must include 'includedNamespaces'. "
+            "OLS omitted the field."
+        )
+        if namespace not in volumes["includedNamespaces"]:
+            logger.error(
+                "OLS volumes.includedNamespaces %r does not contain expected "
+                "namespace '%s'",
+                volumes["includedNamespaces"],
+                namespace,
+            )
+        assert namespace in volumes["includedNamespaces"], (
+            f"OLS Recipe volumes.includedNamespaces must contain '{namespace}', "
+            f"got: {volumes['includedNamespaces']}"
+        )
+
+        # Assert check hooks use selectResource + nameSelector (not labelSelector)
+        # and that nameSelector matches the expected wildcard value.
+        check_hooks = [h for h in spec.get("hooks", []) if h.get("type") == "check"]
+        assert check_hooks, "OLS Recipe must contain at least one check hook"
+        for ch in check_hooks:
+            assert "selectResource" in ch, (
+                f"Check hook '{ch.get('name')}' must have 'selectResource', "
+                f"got keys: {list(ch.keys())}"
+            )
+            assert "nameSelector" in ch, (
+                f"Check hook '{ch.get('name')}' must have 'nameSelector', "
+                f"got keys: {list(ch.keys())}"
+            )
+            assert ch["nameSelector"] == name_selector, (
+                f"Check hook '{ch.get('name')}' nameSelector must be "
+                f"'{name_selector}', got: {ch['nameSelector']!r}"
+            )
+
+        # Serialise Recipe to a temp file — namespace is now set in the manifest.
+        recipe_yaml_str = yaml.dump(recipe)
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, prefix="ols-recipe-"
+        ) as tmp:
+            tmp.write(recipe_yaml_str)
+            tmp_path = tmp.name
+
+        # Mirror the cluster-selection logic from BusyboxDiscoveredApps.deploy_workload:
+        # use the provider-aware variant when dr_cluster_relations is configured.
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            managed_clusters = get_non_acm_cluster_and_non_provider_cluster_config()
+        else:
+            managed_clusters = get_non_acm_cluster_config()
+
+        for cluster in managed_clusters:
+            cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+            config.switch_ctx(cluster_index)
+            cluster_name = config.ENV_DATA.get("cluster_name", "unknown")
+            logger.info(
+                f"Applying OLS Recipe '{recipe_name}' to cluster "
+                f"'{cluster_name}' in namespace '{namespace}'"
+            )
+            exec_cmd(["oc", "apply", "-f", tmp_path, "-n", namespace])
+            logger.info(f"Recipe '{recipe_name}' applied to '{cluster_name}'")
+
+        # Leave context on ACM hub for the caller
+        config.switch_acm_ctx()
+        logger.info(f"OLS Recipe '{recipe_name}' applied to all managed clusters")
+        return recipe_name
+
+    @pytest.mark.parametrize("primary_cluster_down, pvc_interface", params)
+    def test_failover_and_relocate_with_ols_recipe(
+        self,
+        primary_cluster_down,
+        pvc_interface,
+        discovered_apps_dr_workload,
+        nodes_multicluster,
+        node_restart_teardown,
+        ols,
+        request,
+    ):
+        """
+        Deploy a discovered-app workload, generate its DR Recipe via OLS,
+        apply the recipe, then perform failover and relocate to prove the
+        OLS-generated Recipe is operationally correct.
+
+        Parametrized over PVC interface (RBD / CephFS) and whether the
+        primary cluster is powered off before failover (power-off / power-on).
+
+        Test steps:
+            1. Deploy workload (random namespace).
+            2. Generate the DR Recipe for that workload via OLS.
+            3. Validate Recipe structure and apply it to managed clusters.
+            4. Create the DRPC with ``recipeRef`` pointing at the OLS Recipe.
+            5. Wait for initial sync.
+            6. Optionally power off the primary cluster nodes.
+            7. Failover to the secondary cluster; verify workload is running.
+            8. Optionally power the primary cluster back on.
+            9. Relocate back to the primary cluster; verify workload is running.
+        """
+        from time import sleep
+
+        from ocs_ci.framework import config
+        from ocs_ci.helpers import dr_helpers
+        from ocs_ci.ocs.node import get_node_objs
+        from ocs_ci.ocs.resources.drpc import DRPC
+        from ocs_ci.ocs import constants as _constants
+
+        # ------------------------------------------------------------------ #
+        # Step 1: Deploy workload for OLS recipe protection (no DRPC yet)    #
+        # ------------------------------------------------------------------ #
+        rdr_workloads = discovered_apps_dr_workload(
+            pvc_interface=pvc_interface, kubeobject=0, ols_recipe=1
+        )
+        workload = rdr_workloads[0]
+
+        # ------------------------------------------------------------------ #
+        # Step 2+3: Generate and apply OLS recipe                             #
+        # Skip if OLS LLM backend is unavailable (transient 502) rather than #
+        # failing — the workload cleanup finalizer still runs normally.       #
+        # ------------------------------------------------------------------ #
+        import requests as _requests
+
+        config.switch_acm_ctx()
+        try:
+            recipe_name = self._generate_and_apply_ols_recipe(workload, ols)
+        except _requests.HTTPError as exc:
+            pytest.skip(f"OLS LLM backend unavailable, skipping test: {exc}")
+
+        # ------------------------------------------------------------------ #
+        # Step 4: Create recipe-based DRPC (first and only DRPC for this     #
+        # workload — no label-selector DRPC was created in step 1)           #
+        # ------------------------------------------------------------------ #
+        workload.create_drpc_for_apps_with_recipe(recipe_name=recipe_name)
+
+        drpc_obj = DRPC(
+            namespace=_constants.DR_OPS_NAMESPACE,
+            resource_name=workload.discovered_apps_placement_name,
+        )
+
+        # ------------------------------------------------------------------ #
+        # Step 5: Wait for initial sync                                       #
+        # ------------------------------------------------------------------ #
+        primary_cluster = dr_helpers.get_current_primary_cluster_name(
+            workload.workload_namespace,
+            discovered_apps=True,
+            resource_name=workload.discovered_apps_placement_name,
+        )
+        secondary_cluster = dr_helpers.get_current_secondary_cluster_name(
+            workload.workload_namespace,
+            discovered_apps=True,
+            resource_name=workload.discovered_apps_placement_name,
+        )
+        scheduling_interval = dr_helpers.get_scheduling_interval(
+            workload.workload_namespace,
+            discovered_apps=True,
+            resource_name=workload.discovered_apps_placement_name,
+        )
+        dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
+        logger.info(
+            f"Initial sync verified — primary: {primary_cluster}, "
+            f"secondary: {secondary_cluster}, recipe: {recipe_name}"
+        )
+
+        # ------------------------------------------------------------------ #
+        # Step 6: Optionally power off primary cluster before failover        #
+        # ------------------------------------------------------------------ #
+        config.switch_to_cluster_by_name(primary_cluster)
+        primary_cluster_index = config.cur_index
+        primary_cluster_nodes = get_node_objs()
+
+        wait_time = 2 * scheduling_interval  # minutes
+        logger.info(f"Waiting {wait_time}m before failover")
+        sleep(wait_time * 60)
+
+        if primary_cluster_down:
+            config.switch_to_cluster_by_name(primary_cluster)
+            logger.info(f"Stopping nodes of primary cluster: {primary_cluster}")
+            nodes_multicluster[primary_cluster_index].stop_nodes(primary_cluster_nodes)
+
+        # ------------------------------------------------------------------ #
+        # Step 7: Failover to secondary cluster                               #
+        # ------------------------------------------------------------------ #
+        logger.info(f"Starting failover to {secondary_cluster}")
+        dr_helpers.failover(
+            failover_cluster=secondary_cluster,
+            namespace=workload.workload_namespace,
+            workload_type=workload.workload_type,
+            workload_placement_name=workload.discovered_apps_placement_name,
+            old_primary=primary_cluster,
+            # Skip odf-cli validation inside failover() — workload pods are not
+            # yet up at that point; we validate below after resources are ready.
+            skip_odf_cli_validation=True,
+            discovered_apps=True,
+        )
+        config.switch_to_cluster_by_name(secondary_cluster)
+        dr_helpers.wait_for_all_resources_creation(
+            workload.workload_pvc_count,
+            workload.workload_pod_count,
+            workload.workload_namespace,
+            discovered_apps=True,
+            vrg_name=workload.discovered_apps_placement_name,
+        )
+        logger.info("Workload running on secondary cluster after failover")
+
+        # ------------------------------------------------------------------ #
+        # Step 8: Power primary cluster back on if it was stopped             #
+        # ------------------------------------------------------------------ #
+        if primary_cluster_down:
+            logger.info(
+                f"Waiting {wait_time}m before starting nodes of primary cluster"
+            )
+            sleep(wait_time * 60)
+            nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
+            config.switch_to_cluster_by_name(primary_cluster)
+            dr_helpers.wait_for_all_resources_creation(
+                workload.workload_pvc_count,
+                workload.workload_pod_count,
+                workload.workload_namespace,
+                skip_replication_resources=True,
+            )
+
+        # ------------------------------------------------------------------ #
+        # Step 9: Relocate back to primary                                    #
+        # ------------------------------------------------------------------ #
+        logger.info(f"Starting relocate back to {primary_cluster}")
+        dr_helpers.relocate(
+            preferred_cluster=primary_cluster,
+            namespace=workload.workload_namespace,
+            workload_type=workload.workload_type,
+            workload_placement_name=workload.discovered_apps_placement_name,
+            discovered_apps=True,
+            # Skip odf-cli validation inside relocate() — workload pods are not
+            # yet up at that point; we validate below after resources are ready.
+            skip_odf_cli_validation=True,
+        )
+        config.switch_to_cluster_by_name(primary_cluster)
+        dr_helpers.wait_for_all_resources_creation(
+            workload.workload_pvc_count,
+            workload.workload_pod_count,
+            workload.workload_namespace,
+            discovered_apps=True,
+            vrg_name=workload.discovered_apps_placement_name,
+        )
+        logger.info(
+            "Workload running on primary cluster after relocate — "
+            f"OLS Recipe '{recipe_name}' successfully used for DR protection"
+        )

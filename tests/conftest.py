@@ -8367,14 +8367,22 @@ def discovered_apps_dr_workload(request):
         pvc_interface=constants.CEPHBLOCKPOOL,
         multi_ns=False,
         workloads=None,
+        ols_recipe=0,
     ):
         """
         Args:
-            kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
-            recipe (int): Number if Discovered Apps workload with recipe protection to be created
+            kubeobject (int): Number of Discovered Apps workloads with kube
+                object protection to be created.
+            recipe (int): Number of Discovered Apps workloads with template
+                recipe protection to be created.
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
-                This decides whether a RBD based or CephFS based resource is created. RBD is default.
+                This decides whether a RBD based or CephFS based resource is
+                created. RBD is default.
             multi_ns (bool): True for Multi Namespace
+            ols_recipe (int): Number of Discovered Apps workloads to deploy
+                for OLS recipe-based protection.  The workload is deployed
+                without a DRPC so the caller can generate a Recipe via OLS
+                and create the DRPC itself.
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -8453,6 +8461,44 @@ def discovered_apps_dr_workload(request):
                         drpc_name=workload.discovered_apps_placement_name,
                         namespace=constants.DR_OPS_NAMESPACE,
                     )
+
+        if bool(ols_recipe):
+            for index in range(ols_recipe):
+                workload_details = workload_details_list[index]
+                workload_namespace = (
+                    create_unique_resource_name("workload", "dist")[:20]
+                    + "-"
+                    + pvc_type
+                )
+                workload = BusyboxDiscoveredApps(
+                    workload_dir=workload_details["workload_dir"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                    workload_namespace=workload_namespace,
+                    discovered_apps_pvc_selector_key=workload_details[
+                        "dr_workload_app_pvc_selector_key"
+                    ],
+                    discovered_apps_pvc_selector_value=workload_details[
+                        "dr_workload_app_pvc_selector_value"
+                    ],
+                    discovered_apps_pod_selector_key=workload_details[
+                        "dr_workload_app_pod_selector_key"
+                    ],
+                    discovered_apps_pod_selector_value=workload_details[
+                        "dr_workload_app_pod_selector_value"
+                    ],
+                    workload_placement_name=workload_details[
+                        "dr_workload_app_placement_name"
+                    ],
+                    discovered_apps_name_selector_value=workload_details.get(
+                        "dr_workload_app_recipe_name_selector_value"
+                    ),
+                )
+                instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                # Deploy without DRPC — caller will generate a Recipe via OLS
+                # and create the DRPC itself.
+                workload.deploy_workload(recipe=False, skip_drpc=True)
 
         if multi_ns:
             if pvc_interface == constants.CEPHBLOCKPOOL:
