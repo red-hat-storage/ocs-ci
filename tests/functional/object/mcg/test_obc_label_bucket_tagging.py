@@ -5,11 +5,14 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
+    jira,
     mcg,
     red_squad,
     runs_on_provider,
     tier2,
 )
+from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     get_bucket_tagging,
     get_noobaa_bucket_tagging_metric_results,
@@ -22,7 +25,6 @@ from ocs_ci.ocs.resources.objectbucket import OBC
 
 logger = logging.getLogger(__name__)
 
-NOOBAA_BUCKET_TAGGING_METRIC = "NooBaa_bucket_tagging"
 OBC_LABEL_KEY = "test-label"
 OBC_LABEL_VALUE = "verified"
 # NooBaa stats aggregator refreshes bucket metrics about every 5 minutes.
@@ -33,8 +35,10 @@ NOOBAA_BUCKET_TAGGING_METRIC_SLEEP = 15
 @tier2
 @mcg
 @red_squad
+@jira("DFBUGS-1615")
 @runs_on_provider
-class TestOBCLabelBucketTagging:
+@pytest.mark.polarion_id("OCS-8254")
+class TestOBCLabelBucketTagging(MCGTest):
     """
     Verify OBC labels are propagated as S3 bucket tags and reflected in
     NooBaa bucket tagging metrics.
@@ -74,7 +78,7 @@ class TestOBCLabelBucketTagging:
             "Verify NooBaa_bucket_tagging metric is absent before label update"
         )
         metric_before = get_noobaa_bucket_tagging_metric_results(
-            NOOBAA_BUCKET_TAGGING_METRIC,
+            constants.NOOBAA_BUCKET_TAGGING_METRIC,
             bucket_name,
             threading_lock,
         )
@@ -83,11 +87,11 @@ class TestOBCLabelBucketTagging:
             f"results_count={len(metric_before)}, expected=0"
         )
         assert not metric_before, (
-            f"Expected no {NOOBAA_BUCKET_TAGGING_METRIC} results before labeling, "
+            f"Expected no {constants.NOOBAA_BUCKET_TAGGING_METRIC} results before labeling, "
             f"got {metric_before}"
         )
         logger.info(
-            f"Confirmed no {NOOBAA_BUCKET_TAGGING_METRIC} results for bucket '{bucket_name}'"
+            f"Confirmed no {constants.NOOBAA_BUCKET_TAGGING_METRIC} results for bucket '{bucket_name}'"
         )
 
         logger.test_step("Add labels to OBC")
@@ -134,7 +138,7 @@ class TestOBCLabelBucketTagging:
             f"(timeout: {NOOBAA_BUCKET_TAGGING_METRIC_TIMEOUT}s)"
         )
         metric_after = verify_noobaa_bucket_tagging_metric(
-            NOOBAA_BUCKET_TAGGING_METRIC,
+            constants.NOOBAA_BUCKET_TAGGING_METRIC,
             bucket_name,
             expected_labels,
             threading_lock,
@@ -142,6 +146,6 @@ class TestOBCLabelBucketTagging:
             sleep=NOOBAA_BUCKET_TAGGING_METRIC_SLEEP,
         )
         logger.info(
-            f"{NOOBAA_BUCKET_TAGGING_METRIC} after label update: {metric_after} "
+            f"{constants.NOOBAA_BUCKET_TAGGING_METRIC} after label update: {metric_after} "
             f"(before: {metric_before})"
         )

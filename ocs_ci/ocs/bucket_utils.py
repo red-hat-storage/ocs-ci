@@ -3998,24 +3998,33 @@ def verify_bucket_tagging_matches_labels(
     Raises:
         TimeoutExpiredError: If tags do not match within the timeout
     """
-    for response in TimeoutSampler(
-        timeout=timeout,
-        sleep=sleep,
-        func=get_bucket_tagging,
-        s3_obj=s3_obj,
-        bucket_name=bucket_name,
-    ):
-        bucket_tags = tag_set_to_dict(response.get("TagSet", []))
-        if all(bucket_tags.get(key) == value for key, value in expected_labels.items()):
-            logger.info(
-                f"Bucket {bucket_name} tags {bucket_tags} match expected labels "
-                f"{expected_labels}"
-            )
-            return response
-    raise TimeoutExpiredError(
-        f"Bucket {bucket_name} tags did not match expected labels {expected_labels} "
-        f"within {timeout}s"
-    )
+    last_bucket_tags = {}
+    try:
+        for response in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_bucket_tagging,
+            s3_obj=s3_obj,
+            bucket_name=bucket_name,
+        ):
+            bucket_tags = tag_set_to_dict(response.get("TagSet", []))
+            last_bucket_tags = bucket_tags
+            if all(
+                bucket_tags.get(key) == value for key, value in expected_labels.items()
+            ):
+                logger.info(
+                    f"Bucket {bucket_name} tags {bucket_tags} match expected labels "
+                    f"{expected_labels}"
+                )
+                return response
+    except TimeoutExpiredError as e:
+        err_msg = (
+            f"Bucket {bucket_name} tags did not match expected labels "
+            f"{expected_labels} within {timeout}s. "
+            f"Last observed tags: {last_bucket_tags}"
+        )
+        logger.error(err_msg)
+        raise TimeoutExpiredError(f"{str(e)}\n\n{err_msg}") from e
 
 
 def get_noobaa_bucket_tagging_metric_results(
@@ -4088,28 +4097,35 @@ def verify_noobaa_bucket_tagging_metric(
     Raises:
         TimeoutExpiredError: If the metric does not match within the timeout
     """
-    for results in TimeoutSampler(
-        timeout=timeout,
-        sleep=sleep,
-        func=get_noobaa_bucket_tagging_metric_results,
-        metric_name=metric_name,
-        bucket_name=bucket_name,
-        threading_lock=threading_lock,
-    ):
-        matching_results = [
-            result
-            for result in results
-            if _noobaa_tagging_label_contains_labels(
-                result.get("metric", {}).get("tagging", ""), expected_labels
-            )
-        ]
-        if matching_results:
-            logger.info(
-                f"Metric {metric_name} for bucket {bucket_name} reflects "
-                f"expected labels {expected_labels}: {matching_results}"
-            )
-            return matching_results
-    raise TimeoutExpiredError(
-        f"Metric {metric_name} for bucket {bucket_name} did not reflect "
-        f"expected labels {expected_labels} within {timeout}s"
-    )
+    last_results = []
+    try:
+        for results in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_noobaa_bucket_tagging_metric_results,
+            metric_name=metric_name,
+            bucket_name=bucket_name,
+            threading_lock=threading_lock,
+        ):
+            last_results = results
+            matching_results = [
+                result
+                for result in results
+                if _noobaa_tagging_label_contains_labels(
+                    result.get("metric", {}).get("tagging", ""), expected_labels
+                )
+            ]
+            if matching_results:
+                logger.info(
+                    f"Metric {metric_name} for bucket {bucket_name} reflects "
+                    f"expected labels {expected_labels}: {matching_results}"
+                )
+                return matching_results
+    except TimeoutExpiredError as e:
+        err_msg = (
+            f"Metric {metric_name} for bucket {bucket_name} did not reflect "
+            f"expected labels {expected_labels} within {timeout}s. "
+            f"Last observed results: {last_results}"
+        )
+        logger.error(err_msg)
+        raise TimeoutExpiredError(f"{str(e)}\n\n{err_msg}") from e

@@ -993,6 +993,7 @@ NOOBAA_S3_SERVING_CERT = "noobaa-s3-serving-cert"
 
 # Noobaa metrics secret
 NOOBAA_METRICS_AUTH_SECRET = "noobaa-metrics-auth-secret"
+NOOBAA_BUCKET_TAGGING_METRIC = "NooBaa_bucket_tagging"
 
 # NooBaa DB CNPG
 NB_DB_PRIMARY_POD_LABEL = "cnpg.io/instanceRole=primary"
