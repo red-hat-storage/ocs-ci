@@ -1,0 +1,39 @@
+Verify the following JIRA issue on the ODF cluster and determine whether the issue
+can be reproduced.
+
+## Issue
+- **Issue ID:** {issue_id}
+- **Summary:** {issue_summary}
+- **Components:** {components}
+
+## Cluster
+- **Cluster name:** {cluster_name}
+- **ODF version:** {ocs_version}
+- **OCP version:** {ocp_version}
+- **Topology:** {topology}
+- **Kubeconfig:** {kubeconfig_path}
+- **oc command:** {oc_command_path}
+
+## Environment requirements
+{environment_requirements}
+
+## Reproduction steps
+{reproduction_steps}
+
+## Expected result
+{expected_result}
+
+## Verification steps
+{verification_steps}
+
+## Instructions
+
+1. Export `KUBECONFIG={kubeconfig_path}` and use `{oc_command_path}` for all commands.
+2. Run preflight checks (cluster access, ODF health, version alignment).
+3. Execute all reproduction steps exactly as written.
+4. Run verification steps and validate the expected result.
+5. Collect relevant logs, events, and resource status.
+6. Track all resources created during execution.
+7. Clean up all test resources after verification.
+8. Write command output and observations to: {output_log_path}
+9. Produce the verification report described in your system instructions.
