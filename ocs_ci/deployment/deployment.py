@@ -160,6 +160,9 @@ from ocs_ci.ocs.utils import (
     is_acm_cluster,
     is_recovery_cluster,
 )
+from ocs_ci.ocs.must_gather.report_generator_hook import (
+    trigger_reports_after_collect_ocs_logs,
+)
 from ocs_ci.utility.deployment import (
     create_external_secret,
     get_and_apply_idms_from_catalog,
@@ -643,6 +646,17 @@ class Deployment(object):
                 if config.REPORTING["collect_logs_on_success_run"]:
                     try:
                         collect_ocs_logs("deployment", ocp=False, status_failure=False)
+                        mg_report_infos = trigger_reports_after_collect_ocs_logs(
+                            dir_name="deployment",
+                            status_failure=False,
+                            cluster_configs=(
+                                config.clusters if config.multicluster else [config]
+                            ),
+                        )
+                        for info in mg_report_infos:
+                            config.RUN.setdefault(
+                                "deployment_mg_report_urls", []
+                            ).append(info["text_url"])
                     except Exception as e:
                         logger.error(
                             f"Failed to collect OCS logs: {e}, but ignoring it as deployment is successful"
@@ -668,6 +682,17 @@ class Deployment(object):
                         ocp=False,
                         timeout=defaults.MUST_GATHER_TIMEOUT,
                     )
+                    mg_report_infos = trigger_reports_after_collect_ocs_logs(
+                        dir_name="deployment",
+                        status_failure=True,
+                        cluster_configs=(
+                            config.clusters if config.multicluster else [config]
+                        ),
+                    )
+                    for info in mg_report_infos:
+                        config.RUN.setdefault("deployment_mg_report_urls", []).append(
+                            info["text_url"]
+                        )
                 except Exception as e:
                     logger.error(f"Failed to collect OCS logs: {e}")
             raise
