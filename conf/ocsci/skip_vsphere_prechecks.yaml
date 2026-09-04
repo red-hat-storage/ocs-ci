@@ -1,0 +1,4 @@
+# use this config only if you are confident that vSphere has enough resources for deployments.
+---
+ENV_DATA:
+  skip_vsphere_prechecks: true
