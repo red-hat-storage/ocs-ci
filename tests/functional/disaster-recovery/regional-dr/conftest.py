@@ -6,6 +6,7 @@ from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.utility import templating
 import pytest
 
+from ocs_ci.ocs.cluster import get_ec_metadata_pool_name
 from ocs_ci.framework import config
 from ocs_ci.helpers.virtctl import get_virtctl_tool
 from ocs_ci.ocs import constants
@@ -239,13 +240,15 @@ def cnv_custom_storage_class(
 
     """
 
-    def factory(replica, compression):
+    def factory(replica, compression, erasure_coded=False):
         """
         Create custom pool, SC, and DRPolicy on both managed clusters.
 
         Args:
             replica (int): Replica count for the CephBlockPool
             compression (str): Compression type for the pool, or None
+            erasure_coded (bool): True to create an erasure coded pool instead of replicated.
+                If True, arguments that are not related to erasure coding will be invalidated.
 
         Returns:
             str: Name of the newly created DRPolicy
@@ -272,9 +275,9 @@ def cnv_custom_storage_class(
                 resource_name=pool_name,
             )
             if pool_ocp.is_exist(resource_name=pool_name):
-                log.info(
-                    f"Pool {pool_name} already exists on {cluster_name},"
-                    f" skipping creation"
+                log.warning(
+                    f"CephBlockPool {pool_name} already exists on the cluster {cluster_name}. "
+                    f"CephBlockPool configuration is not validated"
                 )
             else:
                 log.info(
@@ -286,6 +289,7 @@ def cnv_custom_storage_class(
                     replica=replica,
                     compression=compression,
                     pool_name=pool_name,
+                    erasure_coded=erasure_coded,
                 )
                 for sample in TimeoutSampler(600, 10, pool_ocp.get):
                     phase = sample.get("status", {}).get("phase") if sample else None
@@ -298,10 +302,13 @@ def cnv_custom_storage_class(
         log.test_step(
             "Wait for CephBlockPoolRadosNamespace to reach Ready" " on both clusters"
         )
-        radosns_name = f"{pool_name}-builtin-implicit"
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             cluster_name = config.ENV_DATA.get("cluster_name")
+            if erasure_coded:
+                radosns_name = f"{get_ec_metadata_pool_name()}-builtin-implicit"
+            else:
+                radosns_name = f"{pool_name}-builtin-implicit"
             existing_sc_list = get_all_storageclass()
             if sc_name in existing_sc_list:
                 continue
@@ -311,6 +318,13 @@ def cnv_custom_storage_class(
                 namespace=namespace,
                 resource_name=radosns_name,
             )
+            radosns_created = radosns_ocp.check_resource_existence(
+                should_exist=True, timeout=120, resource_name=radosns_name
+            )
+            if not radosns_created:
+                raise ResourceNotFoundError(
+                    f"CephBlockPoolRadosNamespace {radosns_name} is not created."
+                )
             radosns_data = radosns_ocp.get()
             radosns_phase = (
                 radosns_data.get("status", {}).get("phase") if radosns_data else None
@@ -349,13 +363,18 @@ def cnv_custom_storage_class(
             cluster_name = config.ENV_DATA.get("cluster_name")
             existing_sc_list = get_all_storageclass()
             if sc_name in existing_sc_list:
-                log.info(f"Storage class {sc_name} already exists on {cluster_name}")
+                log.warning(
+                    f"Storage class {sc_name} already exists on {cluster_name}. "
+                    f"StorageClass configuration is not validated."
+                )
                 continue
             try:
                 sc_obj = storageclass_factory(
                     sc_name=sc_name,
                     pool_name=pool_name,
                     mapOptions="krbd:rxbounce",
+                    new_rbd_pool=False,
+                    erasure_coded=erasure_coded,
                 )
                 if sc_obj is None or sc_obj.name != sc_name:
                     log.error(

@@ -48,11 +48,12 @@ class DRPC(OCP):
 
     @property
     def drpolicy_obj(self):
-        return OCP(
-            kind=constants.DRPOLICY,
-            namespace=self.namespace,
-            resource_name=self.drpolicy,
-        )
+        with config.RunWithConfigContext(self.cluster_context):
+            return OCP(
+                kind=constants.DRPOLICY,
+                namespace=self.namespace,
+                resource_name=self.drpolicy,
+            )
 
     def get_peer_ready_status(self):
         current_conditions = self.get()["status"]["conditions"]
