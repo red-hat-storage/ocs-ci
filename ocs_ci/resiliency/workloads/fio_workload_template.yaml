@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ fio_name }}
-  namespace: {{ namespace }}
+  name: "{{ fio_name }}"
+  namespace: "{{ namespace }}"
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: {{ fio_name }}
+      app: "{{ fio_name }}"
   template:
     metadata:
       labels:
-        app: {{ fio_name }}
+        app: "{{ fio_name }}"
     spec:
       containers:
         - name: fio
-          image: quay.io/ocsci/nginx:fio
+          image: quay.io/ocsci/nginx:fio_new
           command:
             - fio
           args:
@@ -31,24 +31,24 @@ spec:
             - "--time_based"
             - "--ioengine=libaio"
             - "--output={{ fio_output_file }}"
-            {%- if volume_mode == "Block" %}
+            # {% if volume_mode == "Block" %}
             - "--filename=/dev/rbdblock"
-            {%- else %}
+            # {% else %}
             - "--filename=/mnt/fio_file_workload"
-            {%- endif %}
-          {%- if volume_mode == "Block" %}
+            # {% endif %}
+          # {% if volume_mode == "Block" %}
           volumeDevices:
             - name: fio-volume
               devicePath: /dev/rbdblock
-          {%- else %}
+          # {% else %}
           volumeMounts:
             - name: fio-volume
               mountPath: /mnt
-          {%- endif %}
+          # {% endif %}
       restartPolicy: Always
       volumes:
         - name: fio-volume
           persistentVolumeClaim:
-            claimName: {{ pvc_claim_name }}
+            claimName: "{{ pvc_claim_name }}"
   strategy:
     type: Recreate
