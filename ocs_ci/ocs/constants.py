@@ -949,6 +949,12 @@ CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL = (
     "app=ceph-object-controller-detect-version"
 )
 CSI_ADDONS_CONTROLLER_MANAGER_LABEL = "app.kubernetes.io/name=csi-addons"
+# CSI-Addons sidecar gRPC. TLS only when the sidecar is started with
+# --enable-auth. Ports differ by plugin: RBD ctrlplugin 9070, RBD/CephFS
+# nodeplugin 9071, CephFS ctrlplugin 9080.
+CSI_ADDONS_GRPC_PORT = 9070
+CSI_ADDONS_NODEPLUGIN_GRPC_PORT = 9071
+CSI_ADDONS_CEPHFS_CTRLPLUGIN_GRPC_PORT = 9080
 CEPH_CSI_CONTROLLER_MANAGER_LABEL = "control-plane=ceph-csi-op-controller-manager"
 OCS_CLIENT_OPERATOR_LABEL = "app=ocs-client-operator"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
@@ -960,6 +966,14 @@ ROOK_CEPH_MON_PVC_LABEL = "pvc_name"
 PGSQL_APP_LABEL = "app=postgres"
 HOSTNAME_LABEL = "kubernetes.io/hostname"
 OCS_METRICS_EXPORTER = "app.kubernetes.io/name=ocs-metrics-exporter"
+CSI_SNAPSHOT_METADATA = "app=csi-snapshot-metadata"
+CSI_SNAPSHOT_METADATA_NAME_SUBSTRING = "snapshot-metadata"
+CSI_SNAPSHOT_METADATA_PORT = 50051
+# ocs-client-operator HTTPS listeners (controller-runtime). Metrics is bound
+# with --metrics-bind-address=:8443; webhook default flag is --webhook-port=7443.
+# Do not confuse these with ocs-metrics-exporter 8443/9443.
+OCS_CLIENT_OPERATOR_METRICS_PORT = 8443
+OCS_CLIENT_OPERATOR_WEBHOOK_PORT = 7443
 MANAGED_PROMETHEUS_LABEL = "prometheus=managed-ocs-prometheus"
 MANAGED_ALERTMANAGER_LABEL = "alertmanager=managed-ocs-alertmanager"
 MANAGED_CONTROLLER_LABEL = "control-plane=controller-manager"
