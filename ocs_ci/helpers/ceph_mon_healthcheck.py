@@ -12,6 +12,7 @@ from ocs_ci.ocs.resources.pod import (
     get_operator_pods,
     wait_for_pods_to_be_in_statuses,
     get_mon_pod_by_id,
+    get_pod_node,
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
@@ -357,17 +358,40 @@ def wait_for_mon_pod_restart(mon_id, timeout=300, sleep=20) -> None:
 
 def select_mon_id_and_node() -> tuple[str, str]:
     """
-    Select a monitor ID and its corresponding node name.
+    Select a monitor ID and its corresponding node name for drain.
+
+    The node running rook-ceph-operator is excluded. Draining that node
+    with disable_eviction=True deletes the operator, which restarts it
+    and wipes in-memory mon healthcheck timeout state. The caller then
+    cannot find the "waiting for timeout" log it asserts on.
 
     Returns:
         tuple: A tuple containing the monitor ID (str) and node name (str).
+
+    Raises:
+        ValueError: If no monitor nodes are found, rook-ceph-operator is
+            missing, or every monitor node also runs the operator.
 
     """
     mon_nodes = get_mon_running_nodes()
     if not mon_nodes:
         raise ValueError("No monitor nodes found in the cluster")
 
-    node_name = random.choice(mon_nodes)
+    operator_pods = get_operator_pods()
+    if not operator_pods:
+        raise ValueError("Rook Ceph Operator pod not found.")
+    operator_nodes = {get_pod_node(operator_pod).name for operator_pod in operator_pods}
+    logger.info(f"rook-ceph-operator is running on node(s): {sorted(operator_nodes)}")
+    eligible_nodes = [
+        node_name for node_name in mon_nodes if node_name not in operator_nodes
+    ]
+    if not eligible_nodes:
+        raise ValueError(
+            "Cannot select a mon node for drain: every monitor node also "
+            f"runs rook-ceph-operator ({sorted(operator_nodes)})."
+        )
+
+    node_name = random.choice(eligible_nodes)
     logger.info(f"Selected mon node for drain: {node_name}")
     mon_id = get_node_mon_ids(node_name)[0]
     logger.info(f"Selected mon id for drain: '{mon_id}'")
