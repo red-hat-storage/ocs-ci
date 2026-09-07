@@ -12402,12 +12402,13 @@ def fill_job_factory(request):
 
         Args:
             name (str): Name of the Pod to create.
-            block_size (str): Block size for the dd command.
+            block_size (str): Block size for the fill command.
             cpu_request (str): CPU request for the Pod.
             mem_request (str): Memory request for the Pod.
             cpu_limit (str): CPU limit for the Pod.
             mem_limit (str): Memory limit for the Pod.
-            fill_mode (str): Mode of filling data, either 'zero' or 'random'.
+            fill_mode (str): Data generator: 'zero', 'random', or 'incompressible'.
+                Use 'incompressible' to increase Ceph used-raw capacity on RBD.
             base_yaml_path (str): Path to the base Job YAML manifest.
             pvc_name (str): Name of the PVC to create and attach to the Pod.
             sc_name (str): StorageClass name for the PVC.

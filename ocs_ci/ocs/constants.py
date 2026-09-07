@@ -3214,6 +3214,7 @@ LOGICALVOLUME = "logicalvolume"
 
 PERF_IMAGE = "quay.io/ocsci/perf:latest"
 NGINX_FIO_IMAGE = "quay.io/ocsci/nginx:fio"
+FEDORA_FIO_IMAGE = "quay.io/ocsci/fedora:fio"
 
 ROOK_CEPH_CONFIG_VALUES = """
 [global]
