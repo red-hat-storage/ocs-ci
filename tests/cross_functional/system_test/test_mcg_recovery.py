@@ -26,6 +26,7 @@ DB_CAPACITY_CRITICAL_THRESHOLD = 90
 DB_FILL_WARNING_THRESHOLD = 80
 PRIMARY_DB_POD = constants.NOOBAA_DB_PVC_NAME
 SECONDARY_DB_POD = constants.NOOBAA_DB_SECONDARY_PVC_NAME
+NOOBAA_PODS_RUNNING_TIMEOUT_AFTER_DB_FILL = 1800
 
 
 def verify_noobaa_db_capacity_alert(
@@ -104,15 +105,15 @@ def get_firing_alerts_for_pod(api, alert_name, pod_name):
 @skipif_ocs_version("<4.19")
 class TestMCGRecovery(E2ETest):
     """
-    Test MCG system recovery with dual NooBaa DB instances
+    Test MCG system recovery with dual NooBaa DB instances and db fill alert
 
     """
 
     @pytest.mark.parametrize(
         argnames=["bucket_amount", "object_amount"],
-        argvalues=[pytest.param(2, 2)],
+        argvalues=[pytest.param(5, 5)],
     )
-    def test_mcg_db_backup_recovery(
+    def test_mcg_recovery_with_dual_noobaa_db_fill_alerts(
         self,
         setup_mcg_bg_features,
         bucket_amount,
@@ -219,7 +220,9 @@ class TestMCGRecovery(E2ETest):
         logger.info("Primary instance 80% warning alert verified successfully")
 
         logger.test_step("Perform NooBaa DB backup and recovery")
-        noobaa_db_backup_and_recovery_locally()
+        noobaa_db_backup_and_recovery_locally(
+            noobaa_pods_running_timeout=NOOBAA_PODS_RUNNING_TIMEOUT_AFTER_DB_FILL
+        )
 
         obj_count_post_backup = len(
             list_objects_from_bucket(
@@ -250,7 +253,9 @@ class TestMCGRecovery(E2ETest):
         logger.info("Secondary instance 90% critical alert verified successfully")
 
         logger.test_step("Perform second NooBaa DB backup and recovery")
-        noobaa_db_backup_and_recovery_locally()
+        noobaa_db_backup_and_recovery_locally(
+            noobaa_pods_running_timeout=NOOBAA_PODS_RUNNING_TIMEOUT_AFTER_DB_FILL
+        )
 
         logger.test_step("Verify alert behavior after backup")
         alert_list = api.wait_for_alert(
