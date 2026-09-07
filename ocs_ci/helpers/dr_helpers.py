@@ -1637,6 +1637,299 @@ def wait_for_backend_volume_deletion(backend_volumes, timeout=600):
         raise TimeoutExpiredError(error_msg)
 
 
+def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
+    """
+    Force-delete all resources belonging to a Discovered Apps workload when the
+    normal deletion path has timed out (e.g. DRPC or VRG stuck in Deleting due
+    to finalizers or a blocked rbd-mirror group sync).
+
+    The function is intentionally best-effort: every step is wrapped so that a
+    failure in one step never prevents subsequent steps from running.  It should
+    be called only after the normal ``delete_workload`` flow has already raised a
+    timeout exception.
+
+    Steps (in order):
+        1. Strip finalizers from DRPC (hub).
+        2. Strip finalizers from Placement (hub).
+        3. On each managed cluster:
+           a. Strip finalizers from VolumeReplicationGroup.
+           b. Strip finalizers from every VolumeReplication in the workload namespace.
+           c. If CG is enabled, strip finalizers from every VolumeGroupReplication
+              in the workload namespace and disable the rbd mirror group via toolbox.
+        4. On each managed cluster, delete workload resources and PVCs; strip
+           finalizers from any PVC/PV that is stuck in Terminating.
+        5. On each managed cluster, delete the workload namespace.
+
+    Args:
+        workload_namespace (str): Namespace the workload is deployed in.
+        vrg_name (str): Name of the VolumeReplicationGroup / DRPC / Placement
+            (all share the same name for discovered-apps workloads).
+    """
+    logger.warning(
+        f"Force-deleting discovered apps workload: namespace={workload_namespace}, "
+        f"vrg_name={vrg_name}"
+    )
+    _PATCH = '{"metadata":{"finalizers":null}}'
+
+    # ------------------------------------------------------------------ #
+    # Step 1 & 2 – hub cluster: strip DRPC and Placement finalizers       #
+    # ------------------------------------------------------------------ #
+    config.switch_acm_ctx()
+    logger.info(f"[force-cleanup] Stripping finalizers from DRPC {vrg_name}")
+    run_cmd(  # IgnoreDeprecation
+        f"oc patch drpc {vrg_name} -n {constants.DR_OPS_NAMESPACE} "
+        f"--type=merge -p '{_PATCH}' --ignore-not-found=true",
+        ignore_error=True,
+    )
+
+    placement_name = f"{vrg_name}-plmnt-1"
+    logger.info(f"[force-cleanup] Stripping finalizers from Placement {placement_name}")
+    run_cmd(  # IgnoreDeprecation
+        f"oc patch placement {placement_name} -n {constants.DR_OPS_NAMESPACE} "
+        f"--type=merge -p '{_PATCH}' --ignore-not-found=true",
+        ignore_error=True,
+    )
+
+    # ------------------------------------------------------------------ #
+    # Steps 3 & 4 – each managed cluster                                  #
+    # ------------------------------------------------------------------ #
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        non_acm_clusters = get_non_acm_cluster_and_non_provider_cluster_config()
+    else:
+        non_acm_clusters = get_non_acm_cluster_config()
+
+    for cluster in non_acm_clusters:
+        cluster_name = cluster.ENV_DATA["cluster_name"]
+        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+        logger.info(f"[force-cleanup] Processing cluster {cluster_name}")
+
+        # -- 3a: VRG ---------------------------------------------------- #
+        logger.info(
+            f"[force-cleanup] Stripping finalizers from VRG {vrg_name} "
+            f"in {constants.DR_OPS_NAMESPACE} on {cluster_name}"
+        )
+        run_cmd(  # IgnoreDeprecation
+            f"oc patch volumereplicationgroup {vrg_name} "
+            f"-n {constants.DR_OPS_NAMESPACE} "
+            f"--type=merge -p '{_PATCH}' --ignore-not-found=true",
+            ignore_error=True,
+        )
+
+        # -- 3b: VolumeReplication resources ----------------------------- #
+        try:
+            vr_items = (
+                ocp.OCP(
+                    kind=constants.VOLUME_REPLICATION,
+                    namespace=workload_namespace,
+                )
+                .get()
+                .get("items", [])
+            )
+            for vr in vr_items:
+                vr_name = vr["metadata"]["name"]
+                logger.info(
+                    f"[force-cleanup] Stripping finalizers from VolumeReplication "
+                    f"{vr_name} on {cluster_name}"
+                )
+                run_cmd(  # IgnoreDeprecation
+                    f"oc patch volumereplication {vr_name} "
+                    f"-n {workload_namespace} "
+                    f"--type=merge -p '{_PATCH}'",
+                    ignore_error=True,
+                )
+        except Exception:
+            logger.warning(
+                f"[force-cleanup] Could not list VolumeReplication resources in "
+                f"{workload_namespace} on {cluster_name}",
+                exc_info=True,
+            )
+
+        # -- 3c: VolumeGroupReplication + mirror group (CG only) --------- #
+        if is_cg_enabled():
+            try:
+                vgr_items = (
+                    ocp.OCP(
+                        kind=constants.VOLUME_GROUP_REPLICATION,
+                        namespace=workload_namespace,
+                    )
+                    .get()
+                    .get("items", [])
+                )
+                for vgr in vgr_items:
+                    vgr_name = vgr["metadata"]["name"]
+                    logger.info(
+                        f"[force-cleanup] Stripping finalizers from "
+                        f"VolumeGroupReplication {vgr_name} on {cluster_name}"
+                    )
+                    run_cmd(  # IgnoreDeprecation
+                        f"oc patch volumegroupreplication {vgr_name} "
+                        f"-n {workload_namespace} "
+                        f"--type=merge -p '{_PATCH}'",
+                        ignore_error=True,
+                    )
+            except Exception:
+                logger.warning(
+                    f"[force-cleanup] Could not list VolumeGroupReplication "
+                    f"resources in {workload_namespace} on {cluster_name}",
+                    exc_info=True,
+                )
+
+            # Disable rbd mirror group via toolbox so the VRG finalizer
+            # loop is not waiting for a final snapshot sync that will
+            # never complete.
+            try:
+                # Derive pool name from the StorageClass of any PVC in
+                # the workload namespace.
+                pvc_list = get_all_pvc_objs(namespace=workload_namespace)
+                sc_name = pvc_list[0].backed_sc
+                sc_data = ocp.OCP(
+                    kind=constants.STORAGECLASS,
+                    resource_name=sc_name,
+                ).get()
+                pool_name = sc_data.get("parameters", {}).get(
+                    "pool", constants.DEFAULT_CEPHBLOCKPOOL
+                )
+
+                # Build optional --namespace argument from the rados
+                # namespace (HCI / provider-mode clusters only).
+                namespace_param = ""
+                if is_hci_cluster() and (
+                    is_cluster_y_version_upgraded()
+                    or cluster.ENV_DATA.get("cluster_type") == constants.HCI_CLIENT
+                ):
+                    try:
+                        rados_ns = find_radosnamespace()
+                        if rados_ns:
+                            namespace_param = f"--namespace {rados_ns}"
+                    except Exception:
+                        logger.warning(
+                            "[force-cleanup] Could not determine rados namespace; "
+                            "proceeding without --namespace",
+                            exc_info=True,
+                        )
+
+                ct_pod = get_ceph_tools_pod()
+
+                logger.info(
+                    f"[force-cleanup] Removing mirror group snapshot schedule "
+                    f"for {pool_name}/{vrg_name} on {cluster_name}"
+                )
+                try:
+                    ct_pod.exec_ceph_cmd(
+                        f"rbd mirror group snapshot schedule remove "
+                        f"{pool_name}/{vrg_name} {namespace_param}",
+                        format=None,
+                    )
+                except CommandFailed:
+                    logger.warning(
+                        f"[force-cleanup] rbd mirror group snapshot schedule "
+                        f"remove failed on {cluster_name} (group may not exist)",
+                        exc_info=True,
+                    )
+
+                logger.info(
+                    f"[force-cleanup] Disabling mirror group "
+                    f"{pool_name}/{vrg_name} with --force on {cluster_name}"
+                )
+                try:
+                    ct_pod.exec_ceph_cmd(
+                        f"rbd mirror group disable --force "
+                        f"{pool_name}/{vrg_name} {namespace_param}",
+                        format=None,
+                    )
+                except CommandFailed:
+                    logger.warning(
+                        f"[force-cleanup] rbd mirror group disable failed "
+                        f"on {cluster_name} (group may not exist)",
+                        exc_info=True,
+                    )
+
+            except Exception:
+                logger.warning(
+                    f"[force-cleanup] rbd mirror group disable step failed "
+                    f"on {cluster_name}",
+                    exc_info=True,
+                )
+
+        # -- 4: delete workload resources and PVCs ----------------------- #
+        logger.info(
+            f"[force-cleanup] Deleting workload resources and PVCs in "
+            f"{workload_namespace} on {cluster_name}"
+        )
+
+        # Collect PVC names before the kustomize delete wipes the namespace
+        try:
+            all_pvcs = get_all_pvc_objs(namespace=workload_namespace)
+        except Exception:
+            all_pvcs = []
+            logger.warning(
+                f"[force-cleanup] Could not list PVCs in {workload_namespace} "
+                f"on {cluster_name}",
+                exc_info=True,
+            )
+
+        # Non-blocking delete of all PVCs
+        for pvc_obj in all_pvcs:
+            try:
+                pvc_obj.delete(wait=False)
+            except Exception:
+                logger.warning(
+                    f"[force-cleanup] Could not delete PVC {pvc_obj.name} "
+                    f"on {cluster_name}",
+                    exc_info=True,
+                )
+
+        # Wait briefly; strip finalizers from anything still Terminating
+        for pvc_obj in all_pvcs:
+            try:
+                pvc_obj.ocp.wait_for_delete(
+                    resource_name=pvc_obj.name, timeout=30, sleep=5
+                )
+            except (TimeoutExpiredError, Exception):
+                logger.warning(
+                    f"[force-cleanup] PVC {pvc_obj.name} stuck in Terminating "
+                    f"— stripping PVC and PV finalizers on {cluster_name}"
+                )
+                run_cmd(  # IgnoreDeprecation
+                    f"oc patch pvc {pvc_obj.name} -n {workload_namespace} "
+                    f"--type=merge -p '{_PATCH}'",
+                    ignore_error=True,
+                )
+                try:
+                    pv_name = pvc_obj.backed_pv
+                    if pv_name:
+                        run_cmd(  # IgnoreDeprecation
+                            f"oc patch pv {pv_name} --type=merge -p '{_PATCH}'",
+                            ignore_error=True,
+                        )
+                except Exception:
+                    logger.warning(
+                        f"[force-cleanup] Could not strip PV finalizers for "
+                        f"PVC {pvc_obj.name} on {cluster_name}",
+                        exc_info=True,
+                    )
+
+        # -- 5: delete namespace ----------------------------------------- #
+        logger.info(
+            f"[force-cleanup] Deleting namespace {workload_namespace} "
+            f"on {cluster_name}"
+        )
+        try:
+            ocp.OCP().delete_project(project_name=workload_namespace)
+        except Exception:
+            logger.warning(
+                f"[force-cleanup] Could not delete namespace "
+                f"{workload_namespace} on {cluster_name}",
+                exc_info=True,
+            )
+
+    logger.info(
+        f"[force-cleanup] Completed force-cleanup for namespace "
+        f"{workload_namespace}, vrg={vrg_name}"
+    )
+
+
 def get_all_drpolicy():
     """
     Gets all DRPolicy from hub cluster

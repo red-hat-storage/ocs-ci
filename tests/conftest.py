@@ -8554,20 +8554,34 @@ def discovered_apps_dr_workload(request):
         return instances
 
     def teardown():
+        failed_namespaces = []
         for index, instance in enumerate(instances):
+            log.info(
+                f"Deleting discovered apps workload: "
+                f"namespace={instance.workload_namespace}, "
+                f"placement={instance.discovered_apps_placement_name}"
+            )
+            drpc_name = None
+            if instance.discovered_apps_multi_ns:
+                is_last = index == len(instances) - 1
+                drpc_name = instance.discovered_apps_placement_name
+            else:
+                is_last = False
             try:
-                log.info(instance.__dict__)
-                drpc_name = None
-                if instance.discovered_apps_multi_ns:
-                    is_last = index == len(instances) - 1
-                    drpc_name = instance.discovered_apps_placement_name
-                else:
-                    is_last = False
                 instance.delete_workload(
                     skip_vrg_check=not is_last, drpc_name=drpc_name
                 )
             except ResourceNotDeleted:
-                raise ResourceNotDeleted("Workload deletion was unsuccessful")
+                log.exception(
+                    f"Failed to delete workload in namespace "
+                    f"{instance.workload_namespace}"
+                )
+                failed_namespaces.append(instance.workload_namespace)
+
+        if failed_namespaces:
+            raise ResourceNotDeleted(
+                f"Workload deletion failed for namespaces: {failed_namespaces}"
+            )
 
     request.addfinalizer(teardown)
     return factory
