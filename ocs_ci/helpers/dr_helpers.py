@@ -1669,7 +1669,11 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
         f"Force-deleting discovered apps workload: namespace={workload_namespace}, "
         f"vrg_name={vrg_name}"
     )
-    _PATCH = '{"metadata":{"finalizers":null}}'
+    # JSON patch — removes the entire finalizers array regardless of how many
+    # entries it has, and works on resources that already have deletionTimestamp
+    # set (unlike --type=merge which can be rejected on terminating objects).
+    _PATCH = '[{"op":"remove","path":"/metadata/finalizers"}]'
+    _PATCH_TYPE = "json"
 
     # ------------------------------------------------------------------ #
     # Step 1 & 2 – hub cluster: strip DRPC and Placement finalizers       #
@@ -1678,7 +1682,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
     logger.info(f"[force-cleanup] Stripping finalizers from DRPC {vrg_name}")
     run_cmd(  # IgnoreDeprecation
         f"oc patch drpc {vrg_name} -n {constants.DR_OPS_NAMESPACE} "
-        f"--type=merge -p '{_PATCH}' --ignore-not-found=true",
+        f"--type={_PATCH_TYPE} -p '{_PATCH}' --ignore-not-found=true",
         ignore_error=True,
     )
 
@@ -1686,7 +1690,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
     logger.info(f"[force-cleanup] Stripping finalizers from Placement {placement_name}")
     run_cmd(  # IgnoreDeprecation
         f"oc patch placement {placement_name} -n {constants.DR_OPS_NAMESPACE} "
-        f"--type=merge -p '{_PATCH}' --ignore-not-found=true",
+        f"--type={_PATCH_TYPE} -p '{_PATCH}' --ignore-not-found=true",
         ignore_error=True,
     )
 
@@ -1712,7 +1716,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
         run_cmd(  # IgnoreDeprecation
             f"oc patch volumereplicationgroup {vrg_name} "
             f"-n {constants.DR_OPS_NAMESPACE} "
-            f"--type=merge -p '{_PATCH}' --ignore-not-found=true",
+            f"--type={_PATCH_TYPE} -p '{_PATCH}' --ignore-not-found=true",
             ignore_error=True,
         )
 
@@ -1735,7 +1739,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                 run_cmd(  # IgnoreDeprecation
                     f"oc patch volumereplication {vr_name} "
                     f"-n {workload_namespace} "
-                    f"--type=merge -p '{_PATCH}'",
+                    f"--type={_PATCH_TYPE} -p '{_PATCH}'",
                     ignore_error=True,
                 )
         except Exception:
@@ -1765,7 +1769,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                     run_cmd(  # IgnoreDeprecation
                         f"oc patch volumegroupreplication {vgr_name} "
                         f"-n {workload_namespace} "
-                        f"--type=merge -p '{_PATCH}'",
+                        f"--type={_PATCH_TYPE} -p '{_PATCH}'",
                         ignore_error=True,
                     )
             except Exception:
@@ -1778,6 +1782,14 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
             # Disable rbd mirror group via toolbox so the VRG finalizer
             # loop is not waiting for a final snapshot sync that will
             # never complete.
+            #
+            # Lookup chain:
+            #   VGR  → spec.volumeGroupReplicationContentName
+            #     → VGRContent → spec.volumeGroupReplicationHandle
+            #       e.g. "0001-0011-openshift-storage-0000000000000002-<uuid>"
+            #         → rbd group name = "csi-vol-group-<uuid>"
+            #           where <uuid> is the last 5 dash-separated segments
+            #           (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).
             try:
                 # Derive pool name from the StorageClass of any PVC in
                 # the workload namespace.
@@ -1811,39 +1823,74 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
 
                 ct_pod = get_ceph_tools_pod()
 
-                logger.info(
-                    f"[force-cleanup] Removing mirror group snapshot schedule "
-                    f"for {pool_name}/{vrg_name} on {cluster_name}"
-                )
-                try:
-                    ct_pod.exec_ceph_cmd(
-                        f"rbd mirror group snapshot schedule remove "
-                        f"{pool_name}/{vrg_name} {namespace_param}",
-                        format=None,
+                # Resolve every rbd group name from VGR → VGRContent
+                rbd_group_names = []
+                for vgr in vgr_items:
+                    vgr_name_local = vgr["metadata"]["name"]
+                    vgrcontent_name = vgr.get("spec", {}).get(
+                        "volumeGroupReplicationContentName", ""
                     )
-                except CommandFailed:
-                    logger.warning(
-                        f"[force-cleanup] rbd mirror group snapshot schedule "
-                        f"remove failed on {cluster_name} (group may not exist)",
-                        exc_info=True,
-                    )
+                    if not vgrcontent_name:
+                        logger.warning(
+                            f"[force-cleanup] VGR {vgr_name_local} has no "
+                            f"volumeGroupReplicationContentName — skipping"
+                        )
+                        continue
 
-                logger.info(
-                    f"[force-cleanup] Disabling mirror group "
-                    f"{pool_name}/{vrg_name} with --force on {cluster_name}"
-                )
-                try:
-                    ct_pod.exec_ceph_cmd(
-                        f"rbd mirror group disable --force "
-                        f"{pool_name}/{vrg_name} {namespace_param}",
-                        format=None,
+                    logger.info(
+                        f"[force-cleanup] Fetching VGRContent "
+                        f"{vgrcontent_name} for VGR {vgr_name_local}"
                     )
-                except CommandFailed:
-                    logger.warning(
-                        f"[force-cleanup] rbd mirror group disable failed "
-                        f"on {cluster_name} (group may not exist)",
-                        exc_info=True,
+                    try:
+                        vgrcontent_data = ocp.OCP(
+                            kind="VolumeGroupReplicationContent",
+                            resource_name=vgrcontent_name,
+                        ).get()
+                        handle = vgrcontent_data.get("spec", {}).get(
+                            "volumeGroupReplicationHandle", ""
+                        )
+                        if not handle:
+                            logger.warning(
+                                f"[force-cleanup] VGRContent {vgrcontent_name} "
+                                f"has no volumeGroupReplicationHandle — skipping"
+                            )
+                            continue
+
+                        # handle = "<prefix>-<8>-<4>-<4>-<4>-<12>"
+                        # UUID = last 5 dash-separated segments
+                        parts = handle.split("-")
+                        uuid = "-".join(parts[-5:])
+                        rbd_group_name = f"csi-vol-group-{uuid}"
+                        logger.info(
+                            f"[force-cleanup] Resolved rbd group name: "
+                            f"{rbd_group_name} (handle={handle})"
+                        )
+                        rbd_group_names.append(rbd_group_name)
+                    except Exception:
+                        logger.warning(
+                            f"[force-cleanup] Could not fetch VGRContent "
+                            f"{vgrcontent_name}",
+                            exc_info=True,
+                        )
+
+                for rbd_group_name in rbd_group_names:
+                    logger.info(
+                        f"[force-cleanup] Disabling mirror group "
+                        f"{pool_name}/{rbd_group_name} with --force on {cluster_name}"
                     )
+                    try:
+                        ct_pod.exec_ceph_cmd(
+                            f"rbd mirror group disable --force "
+                            f"{pool_name}/{rbd_group_name} {namespace_param}",
+                            format=None,
+                        )
+                    except CommandFailed:
+                        logger.warning(
+                            f"[force-cleanup] rbd mirror group disable failed "
+                            f"for {rbd_group_name} on {cluster_name} "
+                            f"(group may not exist)",
+                            exc_info=True,
+                        )
 
             except Exception:
                 logger.warning(
@@ -1893,14 +1940,14 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                 )
                 run_cmd(  # IgnoreDeprecation
                     f"oc patch pvc {pvc_obj.name} -n {workload_namespace} "
-                    f"--type=merge -p '{_PATCH}'",
+                    f"--type={_PATCH_TYPE} -p '{_PATCH}'",
                     ignore_error=True,
                 )
                 try:
                     pv_name = pvc_obj.backed_pv
                     if pv_name:
                         run_cmd(  # IgnoreDeprecation
-                            f"oc patch pv {pv_name} --type=merge -p '{_PATCH}'",
+                            f"oc patch pv {pv_name} --type={_PATCH_TYPE} -p '{_PATCH}'",
                             ignore_error=True,
                         )
                 except Exception:

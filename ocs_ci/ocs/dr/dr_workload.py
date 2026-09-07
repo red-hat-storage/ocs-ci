@@ -2065,6 +2065,7 @@ class BusyboxDiscoveredApps(DRWorkload):
                     workload_namespace=self.workload_namespace,
                     vrg_name=resolved_drpc_name,
                 )
+            raise ResourceNotDeleted(err_msg)
 
 
 def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
