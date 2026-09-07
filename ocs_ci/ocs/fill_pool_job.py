@@ -1,4 +1,5 @@
 import logging
+import re
 
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -8,7 +9,7 @@ from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
-from ocs_ci.utility.utils import convert_device_size, exec_cmd
+from ocs_ci.utility.utils import exec_cmd
 
 
 log = logging.getLogger(__name__)
@@ -24,6 +25,12 @@ INCOMPRESSIBLE_MIN_CPU_REQUEST = "500m"
 INCOMPRESSIBLE_MIN_CPU_LIMIT = "2"
 INCOMPRESSIBLE_MIN_MEM_REQUEST = "512Mi"
 INCOMPRESSIBLE_MIN_MEM_LIMIT = "2Gi"
+_MEMORY_UNIT_BYTES = {
+    "Ki": 1024,
+    "Mi": 1024**2,
+    "Gi": 1024**3,
+    "Ti": 1024**4,
+}
 
 
 def _fio_size_from_pvc_storage(storage):
@@ -44,11 +51,24 @@ def _cpu_millicores(quantity):
 
 
 def _memory_bytes(quantity):
-    """Convert a Kubernetes binary memory quantity (Ki/Mi/Gi/Ti) to bytes."""
-    return convert_device_size(str(quantity).strip(), "BY", convert_size=1024)
+    """
+    Convert a Kubernetes binary memory quantity (Ki/Mi/Gi/Ti) to bytes.
+
+    Accepts fractional values such as 1.5Gi. convert_device_size() cannot,
+    because it parses the number with int().
+    """
+    memory_quantity_regex = re.compile(
+        r"^(?P<value>\d+(?:\.\d+)?)(?P<unit>Ki|Mi|Gi|Ti)$"
+    )
+    match = memory_quantity_regex.fullmatch(str(quantity).strip())
+    if not match:
+        raise ValueError(
+            f"incompressible memory expects a Ki/Mi/Gi/Ti quantity, got {quantity!r}"
+        )
+    return float(match.group("value")) * _MEMORY_UNIT_BYTES[match.group("unit")]
 
 
-def _at_least(value, floor, to_number):
+def _raise_to_floor(value, floor, to_number):
     """Return value when it already meets the floor; otherwise return floor."""
     return value if to_number(value) >= to_number(floor) else floor
 
@@ -62,12 +82,16 @@ def _apply_incompressible_resource_floors(
     Callers may pass larger values; those are kept. If a floored request would
     exceed its limit, the limit is raised to match so the pod spec stays valid.
     """
-    cpu_request = _at_least(
+    cpu_request = _raise_to_floor(
         cpu_request, INCOMPRESSIBLE_MIN_CPU_REQUEST, _cpu_millicores
     )
-    cpu_limit = _at_least(cpu_limit, INCOMPRESSIBLE_MIN_CPU_LIMIT, _cpu_millicores)
-    mem_request = _at_least(mem_request, INCOMPRESSIBLE_MIN_MEM_REQUEST, _memory_bytes)
-    mem_limit = _at_least(mem_limit, INCOMPRESSIBLE_MIN_MEM_LIMIT, _memory_bytes)
+    cpu_limit = _raise_to_floor(
+        cpu_limit, INCOMPRESSIBLE_MIN_CPU_LIMIT, _cpu_millicores
+    )
+    mem_request = _raise_to_floor(
+        mem_request, INCOMPRESSIBLE_MIN_MEM_REQUEST, _memory_bytes
+    )
+    mem_limit = _raise_to_floor(mem_limit, INCOMPRESSIBLE_MIN_MEM_LIMIT, _memory_bytes)
     if _cpu_millicores(cpu_request) > _cpu_millicores(cpu_limit):
         cpu_limit = cpu_request
     if _memory_bytes(mem_request) > _memory_bytes(mem_limit):
