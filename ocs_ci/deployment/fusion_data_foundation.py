@@ -203,7 +203,10 @@ class FusionDataFoundationDeployment:
                 "IBM HCI platform detected, setting creator=Fusion and enableLVMStorage=true"
             )
             fdf_service_data["spec"]["creator"] = "Fusion"
-            fdf_service_data["spec"]["enableLVMStorage"] = True
+            for param in fdf_service_data["spec"]["parameters"]:
+                if param["name"] == "enableLVMStorage":
+                    param["value"] = "true"
+                    break
 
         fdf_service_cr_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="fdf_service_cr", delete=False
