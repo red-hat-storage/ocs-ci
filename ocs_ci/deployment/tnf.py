@@ -19,6 +19,7 @@ import os
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.ocs import constants
 from ocs_ci.deployment.helpers.tnf_helpers import (
+    _parse_size_gb,
     verify_tnf_cluster_topology,
     get_tnf_node_info,
     create_local_storage_class,
@@ -31,9 +32,16 @@ from ocs_ci.deployment.helpers.tnf_helpers import (
     discover_available_disks,
     resolve_disk_by_id_path,
 )
+from ocs_ci.utility.utils import (
+    is_cluster_running,
+    TimeoutSampler,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import UnexpectedDeploymentConfiguration
 from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.utility.aws import AWS
+from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
+from ocs_ci.utility.tnf_hypervisor import TNFHypervisor
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +57,6 @@ def _configure_dns(public_ip):
       - *.apps.<cluster_name>.<base_domain> -> hypervisor public IP
       - NS delegation from base_domain zone
     """
-    from ocs_ci.utility.aws import AWS
 
     cluster_name = config.ENV_DATA.get("cluster_name")
     base_domain = config.ENV_DATA.get("base_domain")
@@ -102,7 +109,6 @@ def _delete_dns():
     """
     Delete Route53 DNS records created during deployment.
     """
-    from ocs_ci.utility.aws import AWS
 
     cluster_name = config.ENV_DATA.get("cluster_name")
     base_domain = config.ENV_DATA.get("base_domain")
@@ -157,8 +163,6 @@ class TNF(TNFBASE):
         self.hypervisor = None
         hypervisor_config = self.tnf_config.get("hypervisor")
         if hypervisor_config:
-            from ocs_ci.utility.tnf_hypervisor import TNFHypervisor
-
             self.hypervisor = TNFHypervisor(
                 hypervisor_config=hypervisor_config,
                 dev_scripts_config=self.tnf_config.get("dev_scripts", {}),
@@ -198,8 +202,6 @@ class TNF(TNFBASE):
             3. Clone and run dev-scripts
             4. Configure DNS and retrieve kubeconfig
             """
-            from ocs_ci.ocs.openshift_ops import OCP
-
             hypervisor = self._get_hypervisor()
 
             try:
@@ -239,46 +241,14 @@ class TNF(TNFBASE):
                 hypervisor.retrieve_kubeconfig(auth_dir)
 
                 logger.info("Step 10: Testing cluster connectivity...")
-                kubeconfig = os.path.join(
-                    self.cluster_path,
-                    config.RUN.get("kubeconfig_location"),
-                )
-                cluster_name = config.ENV_DATA.get("cluster_name")
-                base_domain = config.ENV_DATA.get("base_domain")
-                api_host = f"api.{cluster_name}.{base_domain}"
-                logger.info(f"Waiting for DNS propagation of {api_host}...")
-                from ocs_ci.utility.utils import TimeoutSampler
-
-                dns_resolved = False
                 for sample in TimeoutSampler(
-                    timeout=300,
-                    sleep=30,
-                    func=self._check_dns,
-                    hostname=api_host,
+                    timeout=600,
+                    sleep=60,
+                    func=is_cluster_running,
+                    cluster_path=self.cluster_path,
                 ):
                     if sample:
-                        dns_resolved = True
                         break
-
-                if not dns_resolved:
-                    logger.warning(
-                        f"DNS for {api_host} did not resolve within timeout, "
-                        f"attempting connectivity anyway..."
-                    )
-
-                connected = False
-                for sample in TimeoutSampler(
-                    timeout=300,
-                    sleep=30,
-                    func=OCP.set_kubeconfig,
-                    kubeconfig_path=kubeconfig,
-                ):
-                    if sample:
-                        connected = True
-                        break
-
-                if not connected:
-                    raise Exception("Cluster is not accessible via kubeconfig")
 
                 logger.info("OCP cluster deployed via dev-scripts on EC2 hypervisor")
             except Exception:
@@ -288,19 +258,6 @@ class TNF(TNFBASE):
                 )
                 raise
 
-        @staticmethod
-        def _check_dns(hostname):
-            """Check if a hostname resolves via DNS."""
-            import socket
-
-            try:
-                ip = socket.gethostbyname(hostname)
-                logger.info(f"DNS resolved {hostname} -> {ip}")
-                return True
-            except socket.gaierror:
-                logger.info(f"DNS not yet resolved for {hostname}, waiting...")
-                return False
-
         def _get_hypervisor(self):
             """Get the TNFHypervisor instance from the outer TNF class."""
             tnf_config = config.ENV_DATA.get("tnf") or {}
@@ -309,8 +266,6 @@ class TNF(TNFBASE):
                 raise UnexpectedDeploymentConfiguration(
                     "Hypervisor mode but no hypervisor config found"
                 )
-            from ocs_ci.utility.tnf_hypervisor import TNFHypervisor
-
             return TNFHypervisor(
                 hypervisor_config=hypervisor_config,
                 dev_scripts_config=tnf_config.get("dev_scripts", {}),
@@ -365,8 +320,6 @@ class TNF(TNFBASE):
         - Monkey-patch setup_storage_cluster to inject DRBD config
           between operator install and StorageCluster creation
         """
-        from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
-
         logger.info("Deploying ODF on TNF cluster...")
 
         # Initialize node info
@@ -399,7 +352,7 @@ class TNF(TNFBASE):
                 "PVs must be created manually before StorageCluster creation."
             )
 
-        # Step 2+3: Monkey-patch to inject DRBD config between
+        # Monkey-patch to inject DRBD config between
         # operator install and StorageCluster creation
         original_setup = StorageClusterSetup.setup_storage_cluster
         tnf_instance = self
@@ -458,8 +411,6 @@ class TNF(TNFBASE):
                 f"Add disks to the nodes or set disk paths in config "
                 f"(tnf.monitor_disk_node_0/1, tnf.osd_device_mappings)."
             )
-
-        from ocs_ci.deployment.helpers.tnf_helpers import _parse_size_gb
 
         # Sort by size: smallest first
         n0_sorted = sorted(all_n0, key=lambda d: _parse_size_gb(d["size"]))
