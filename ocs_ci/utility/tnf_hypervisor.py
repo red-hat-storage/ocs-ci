@@ -729,6 +729,7 @@ class TNFHypervisor:
         cluster_name = self.dev_scripts_config.get(
             "cluster_name", config.ENV_DATA.get("cluster_name", "tnf")
         )
+
         remote_ps_path = f"{dev_scripts_dir}/pull_secret.json"
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -957,23 +958,26 @@ class TNFHypervisor:
         This bridges the public IP to the internal VIPs so the cluster
         is accessible externally (via VPN + Route53 DNS).
         """
+        self._reconnect_ssh()
+
         cluster_name = self.dev_scripts_config.get(
             "cluster_name", config.ENV_DATA.get("cluster_name", "tnf")
         )
-        install_config = (
-            f"{constants.TNF_DEV_SCRIPTS_OCP_DIR}/{cluster_name}"
-            f"/install-config.yaml"
-        )
+        cluster_dir = f"{constants.TNF_DEV_SCRIPTS_OCP_DIR}/{cluster_name}"
+        install_config = f"{cluster_dir}/install-config.yaml"
+        install_config_save = f"{cluster_dir}/install-config.yaml.save"
 
         _, raw, _ = self._ssh_cmd(
-            f"grep -E 'apiVIPs|ingressVIPs' {install_config} -A1"
+            f"grep -E 'apiVIPs|ingressVIPs' "
+            f"{install_config} {install_config_save} -A1 2>/dev/null"
             f" | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+'",
             ignore_error=True,
         )
         vips = [ip.strip() for ip in raw.strip().splitlines() if ip.strip()]
         if len(vips) < 2:
             _, raw, _ = self._ssh_cmd(
-                f"grep -E 'apiVIP|ingressVIP' {install_config}"
+                f"grep -E 'apiVIP|ingressVIP' "
+                f"{install_config} {install_config_save} 2>/dev/null"
                 f" | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+'",
                 ignore_error=True,
             )
@@ -989,9 +993,18 @@ class TNFHypervisor:
 
         api_vip = vips[0]
         ingress_vip = vips[1]
+        bridge_name = f"{cluster_name}bm"
+
+        _, ext_iface, _ = self._ssh_cmd(
+            "ip route show default | awk '{print $5}' | head -1",
+            ignore_error=True,
+        )
+        ext_iface = ext_iface.strip() or "eth0"
+
         logger.info(
             f"Setting up port forwarding: API VIP={api_vip}, "
-            f"Ingress VIP={ingress_vip}"
+            f"Ingress VIP={ingress_vip}, bridge={bridge_name}, "
+            f"external_iface={ext_iface}"
         )
 
         rules = [
@@ -1001,18 +1014,23 @@ class TNFHypervisor:
         ]
         for src_port, dest_ip, dest_port in rules:
             self._ssh_cmd(
-                f"iptables -t nat -A PREROUTING -p tcp --dport {src_port} "
+                f"firewall-cmd --direct --add-rule ipv4 nat PREROUTING 0 "
+                f"-i {ext_iface} -p tcp --dport {src_port} "
                 f"-j DNAT --to-destination {dest_ip}:{dest_port}",
                 ignore_error=True,
             )
             self._ssh_cmd(
-                f"iptables -A FORWARD -d {dest_ip} -p tcp "
-                f"--dport {dest_port} -j ACCEPT",
+                f"firewall-cmd --direct --add-rule ipv4 filter FORWARD 0 "
+                f"-d {dest_ip} -p tcp --dport {dest_port} -j ACCEPT",
                 ignore_error=True,
             )
 
         self._ssh_cmd(
-            "iptables -t nat -A POSTROUTING -o baremetal -j MASQUERADE",
+            f"firewall-cmd --direct --add-rule ipv4 nat POSTROUTING 0 "
+            f"-o {bridge_name} -j MASQUERADE",
             ignore_error=True,
         )
+
+        self._ssh_cmd("firewall-cmd --add-masquerade", ignore_error=True)
+
         logger.info("Port forwarding configured")

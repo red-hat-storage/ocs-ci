@@ -243,7 +243,41 @@ class TNF(TNFBASE):
                     self.cluster_path,
                     config.RUN.get("kubeconfig_location"),
                 )
-                if not OCP.set_kubeconfig(kubeconfig):
+                cluster_name = config.ENV_DATA.get("cluster_name")
+                base_domain = config.ENV_DATA.get("base_domain")
+                api_host = f"api.{cluster_name}.{base_domain}"
+                logger.info(f"Waiting for DNS propagation of {api_host}...")
+                from ocs_ci.utility.utils import TimeoutSampler
+
+                dns_resolved = False
+                for sample in TimeoutSampler(
+                    timeout=300,
+                    sleep=30,
+                    func=self._check_dns,
+                    hostname=api_host,
+                ):
+                    if sample:
+                        dns_resolved = True
+                        break
+
+                if not dns_resolved:
+                    logger.warning(
+                        f"DNS for {api_host} did not resolve within timeout, "
+                        f"attempting connectivity anyway..."
+                    )
+
+                connected = False
+                for sample in TimeoutSampler(
+                    timeout=300,
+                    sleep=30,
+                    func=OCP.set_kubeconfig,
+                    kubeconfig_path=kubeconfig,
+                ):
+                    if sample:
+                        connected = True
+                        break
+
+                if not connected:
                     raise Exception("Cluster is not accessible via kubeconfig")
 
                 logger.info("OCP cluster deployed via dev-scripts on EC2 hypervisor")
@@ -253,6 +287,19 @@ class TNF(TNFBASE):
                     "preserved for debugging. Run --teardown to clean up."
                 )
                 raise
+
+        @staticmethod
+        def _check_dns(hostname):
+            """Check if a hostname resolves via DNS."""
+            import socket
+
+            try:
+                ip = socket.gethostbyname(hostname)
+                logger.info(f"DNS resolved {hostname} -> {ip}")
+                return True
+            except socket.gaierror:
+                logger.info(f"DNS not yet resolved for {hostname}, waiting...")
+                return False
 
         def _get_hypervisor(self):
             """Get the TNFHypervisor instance from the outer TNF class."""
