@@ -5,7 +5,7 @@ import time
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    system,
+    system_test,
     ignore_leftovers,
     polarion_id,
     skipif_ocs_version,
@@ -99,7 +99,7 @@ def get_firing_alerts_for_pod(api, alert_name, pod_name):
 
 
 @magenta_squad
-@system
+@system_test  # IgnoreDeprecation
 @ignore_leftovers
 @polarion_id("OCS-2716")
 @skipif_ocs_version("<4.19")
