@@ -6,6 +6,10 @@ import logging
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_ocs_version,
+    skipif_rosa_hcp,
+    skipif_mcg_only,
+    skipif_cephfs_disabled,
+    skipif_managed_service,
 )
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2, polarion_id
 from ocs_ci.ocs import constants, node
@@ -26,6 +30,10 @@ USERNS_UID_RANGE = "10000/1000"
 
 @green_squad
 @skipif_ocs_version("<4.23")
+@skipif_cephfs_disabled
+@skipif_managed_service
+@skipif_rosa_hcp
+@skipif_mcg_only
 class TestUserNamespaceCephFS(ManageTest):
     """
     Verify CephFS I/O under user namespaces (hostUsers=false)
