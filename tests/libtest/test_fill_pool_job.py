@@ -10,6 +10,10 @@ from ocs_ci.helpers.ceph_helpers import (
     wait_for_ceph_used_capacity_reached,
 )
 from ocs_ci.ocs.cluster import CephCluster, get_ceph_used_capacity
+from ocs_ci.ocs.fill_pool_job import (
+    _apply_incompressible_resource_floors,
+    _memory_bytes,
+)
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +24,21 @@ class TestFillPoolJob(ManageTest):
     """
     Test the Fill Pool Job functionalities
     """
+
+    def test_memory_bytes_fractional_binary_units(self):
+        """_memory_bytes must parse fractional Ki/Mi/Gi/Ti quantities."""
+        assert _memory_bytes("1.5Ki") == 1.5 * 1024
+        assert _memory_bytes("1.5Mi") == 1.5 * 1024**2
+        assert _memory_bytes("1.5Gi") == 1.5 * 1024**3
+        assert _memory_bytes("1.5Ti") == 1.5 * 1024**4
+        assert _memory_bytes("512Mi") == 512 * 1024**2
+        assert _memory_bytes("2Gi") == 2 * 1024**3
+
+        _, _, mem_request, mem_limit = _apply_incompressible_resource_floors(
+            "100m", "500m", "1.5Gi", "1.5Gi"
+        )
+        assert mem_request == "1.5Gi"
+        assert mem_limit == "2Gi"
 
     def test_fill_pool_job_incompressible(self, fill_job_factory):
         """
