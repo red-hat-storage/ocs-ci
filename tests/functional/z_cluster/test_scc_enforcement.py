@@ -93,7 +93,8 @@ class TestSCCEnforcement(ManageTest):
 
     # --- Category tests ---
     # NooBaa SCC values confirmed by noobaa-operator team (PRs 2000, 2004, 2035).
-    # TODO: Confirm Rook-Ceph, CSI, and operator SCC values against design doc.
+    # Remaining values verified against a 4.23/ODF 5.0 cluster and the
+    # RHSTOR-8757 child stories (RHSTOR-9412/9413/9414/9415/9423/9424).
 
     @tier1
     @polarion_id("OCS-8070")
@@ -127,7 +128,7 @@ class TestSCCEnforcement(ManageTest):
     @polarion_id("OCS-8069")
     def test_csi_plugins_scc(self):
         """
-        Verify all CSI plugin pods are pinned to rook-ceph SCC.
+        Verify all CSI plugin pods are pinned to ceph-csi-op-scc.
 
         Checks CephFS and RBD nodeplugin and controller plugin pods.
 
@@ -136,22 +137,22 @@ class TestSCCEnforcement(ManageTest):
             (
                 constants.CSI_CEPHFSPLUGIN_LABEL_419,
                 "cephfs-nodeplugin",
-                constants.SCC_ROOK_CEPH,
+                constants.SCC_CEPH_CSI_OP,
             ),
             (
                 constants.CSI_RBDPLUGIN_LABEL_419,
                 "rbd-nodeplugin",
-                constants.SCC_ROOK_CEPH,
+                constants.SCC_CEPH_CSI_OP,
             ),
             (
                 constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419,
                 "cephfs-ctrlplugin",
-                constants.SCC_ROOK_CEPH,
+                constants.SCC_CEPH_CSI_OP,
             ),
             (
                 constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
                 "rbd-ctrlplugin",
-                constants.SCC_ROOK_CEPH,
+                constants.SCC_CEPH_CSI_OP,
             ),
         ]
         self._verify_components_scc(components, "CSI")
@@ -207,8 +208,10 @@ class TestSCCEnforcement(ManageTest):
         """
         Verify all ODF operator pods are pinned to their expected SCCs.
 
-        Most operators use restricted-v2. The ceph-csi-operator uses
-        ceph-csi-op-scc due to elevated CSI controller requirements.
+        All ODF operator controllers run under restricted-v2 - they are
+        plain reconcilers with no elevated host requirements. The elevated
+        ceph-csi-op-scc applies to the CSI operands, not the operator
+        (see test_csi_plugins_scc).
 
         """
         components = [
@@ -221,7 +224,7 @@ class TestSCCEnforcement(ManageTest):
             (
                 constants.CEPH_CSI_CONTROLLER_MANAGER_LABEL,
                 "ceph-csi-op",
-                constants.SCC_CEPH_CSI_OP,
+                constants.SCC_RESTRICTED_V2,
             ),
             (
                 constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
@@ -324,12 +327,12 @@ class TestSCCEnforcement(ManageTest):
             (
                 constants.CSI_CEPHFSPLUGIN_LABEL_419,
                 "cephfs-nodeplugin",
-                constants.SCC_ROOK_CEPH,
+                constants.SCC_CEPH_CSI_OP,
             ),
             (
                 constants.CSI_RBDPLUGIN_LABEL_419,
                 "rbd-nodeplugin",
-                constants.SCC_ROOK_CEPH,
+                constants.SCC_CEPH_CSI_OP,
             ),
         ]
 
