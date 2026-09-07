@@ -719,6 +719,77 @@ def get_pool_size_factor(pool_name):
     return factor
 
 
+def get_pool_data_protection_scheme(pool_name):
+    """
+    Return the data protection scheme of a Ceph pool, matching what the ODF
+    Storage Pools list shows in the "Data protection policy" column.
+
+    The scheme is read from the ``CephBlockPool`` CR (RBD pools) or, when no
+    such CR exists, from the matching entry in a ``CephFilesystem`` CR's
+    ``spec.dataPools`` (CephFS pools). CephFS data pools without an explicit
+    ``name`` follow Rook's ``<filesystem>-data<index>`` naming, while named
+    pools follow ``<filesystem>-<name>``. No Ceph toolbox commands are required.
+
+    Args:
+        pool_name (str): Full pool name as shown in the UI, e.g.
+            'ocs-storagecluster-cephblockpool' or
+            'ocs-storagecluster-cephfilesystem-data0'.
+
+    Returns:
+        dict: For an erasure coded pool
+              ``{"type": "erasure_coded", "data_chunks": k, "coding_chunks": m,
+              "scheme": "k+m"}``; for a replicated pool
+              ``{"type": "replicated", "replica": size}``.
+
+    Raises:
+        ResourceNotFoundError: if the pool is not found in any CephBlockPool or
+            CephFilesystem CR.
+    """
+    namespace = config.ENV_DATA["cluster_namespace"]
+
+    def _scheme_from_spec(spec):
+        ec_spec = spec.get("erasureCoded", {}) or {}
+        k = ec_spec.get("dataChunks", 0)
+        m = ec_spec.get("codingChunks", 0)
+        if k:
+            return {
+                "type": "erasure_coded",
+                "data_chunks": k,
+                "coding_chunks": m,
+                "scheme": f"{k}+{m}",
+            }
+        replica = spec.get("replicated", {}).get("size", 0)
+        return {"type": "replicated", "replica": int(replica)}
+
+    block_pools = (
+        ocp.OCP(kind=constants.CEPHBLOCKPOOL, namespace=namespace)
+        .get()
+        .get("items", [])
+    )
+    for pool in block_pools:
+        if pool["metadata"]["name"] == pool_name:
+            return _scheme_from_spec(pool.get("spec", {}))
+
+    filesystems = (
+        ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=namespace)
+        .get()
+        .get("items", [])
+    )
+    for filesystem in filesystems:
+        fs_name = filesystem["metadata"]["name"]
+        for index, data_pool in enumerate(
+            filesystem.get("spec", {}).get("dataPools", [])
+        ):
+            data_pool_name = data_pool.get("name") or f"data{index}"
+            if f"{fs_name}-{data_pool_name}" == pool_name:
+                return _scheme_from_spec(data_pool)
+
+    raise exceptions.ResourceNotFoundError(
+        f"Pool '{pool_name}' not found in any CephBlockPool or CephFilesystem "
+        f"CR in namespace '{namespace}'"
+    )
+
+
 def create_ceph_block_pool(
     pool_name=None,
     replica=3,

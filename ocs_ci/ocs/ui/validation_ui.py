@@ -4,16 +4,22 @@ import pytest
 import time
 import pandas as pd
 from ocs_ci.framework import config
-from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs.cluster import (
     get_used_and_total_capacity_in_gibibytes,
     get_age_of_cluster_in_days,
 )
-from ocs_ci.ocs.exceptions import UnexpectedODFAccessException, CephHealthException
+from ocs_ci.ocs.exceptions import (
+    UnexpectedODFAccessException,
+    CephHealthException,
+    ResourceNotFoundError,
+)
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.base_ui import navigate_to_local_cluster
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.defaults import ODF_OPERATOR_NAME
+from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 from ocs_ci.utility.utils import TimeoutSampler
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.by import By
@@ -241,7 +247,30 @@ class ValidationUI(PageNavigator):
             logger.info(
                 "Storage plugin is disabled, navigate to Operator details page further confirmation"
             )
-            self.do_click(self.validation_loc["odf-operator"])
+            # The ODF operator display name differs by product (e.g. it is
+            # 'IBM Storage Fusion Data Foundation' on FDF clusters), so read it
+            # from the operator CSV instead of hard-coding 'OpenShift Data Foundation'.
+            odf_csvs = get_csvs_start_with_prefix(
+                ODF_OPERATOR_NAME, config.ENV_DATA["cluster_namespace"]
+            )
+            odf_operator_display_name = (
+                odf_csvs[0].get("spec", {}).get("displayName") if odf_csvs else None
+            )
+            if not odf_operator_display_name:
+                raise ResourceNotFoundError(
+                    f"Could not resolve ODF operator display name from a "
+                    f"'{ODF_OPERATOR_NAME}' CSV in namespace "
+                    f"'{config.ENV_DATA['cluster_namespace']}'"
+                )
+            logger.info(
+                f"ODF operator display name from CSV: '{odf_operator_display_name}'"
+            )
+            self.do_click(
+                format_locator(
+                    self.validation_loc["odf-operator-by-display-name"],
+                    odf_operator_display_name,
+                )
+            )
             self.page_has_loaded(retries=15, sleep_time=5)
             console_plugin_status = self.get_element_text(
                 self.validation_loc["console_plugin_option"]
@@ -286,6 +315,8 @@ class ValidationUI(PageNavigator):
             - Verify that **Overview** navigates to the **Storage Cluster** page.
             - Ensure the **Used Raw Capacity** string is visible in the **System Capacity** card.
             - Verify that the **Block and File** tab is active.
+            - Verify that the **Data protection policy** of every existing storage
+              pool matches its actual scheme (replicated or erasure coded).
             - Verify that utilization is good in the **Block and File** tab.
             - Verify that resiliency is OK in the **Block and File** tab.
             - Verify that **CephBlockPool** status is **Ready**.
@@ -331,30 +362,32 @@ class ValidationUI(PageNavigator):
         storage_on_cluster = not external_mode
         multi_storagecluster = config.ENV_DATA.get("multi_storagecluster", False)
 
-        log_step("Validate ODF console plugin is enabled, if not enable it")
+        logger.test_step("Validate ODF console plugin is enabled, if not enable it")
         self.odf_console_plugin_check()
 
-        log_step(
+        logger.test_step(
             "Navigate to Data Foundation page via PageNavigator and Data Foundation"
         )
         overview_page = self.nav_storage_data_foundation_overview_page()
 
         if storage_on_cluster or multi_storagecluster:
-            log_step("Validate if legend for Available vs Used capacity is present")
+            logger.test_step(
+                "Validate if legend for Available vs Used capacity is present"
+            )
             overview_page.available_vs_used_capacity_present()
 
-            log_step("Verify if Overview navigates to Storage Cluster page")
+            logger.test_step("Verify if Overview navigates to Storage Cluster page")
             storage_cluster_page = overview_page.navigate_to_view_storage()
             res_dict["block_and_file_tab_is_active_1"] = (
                 storage_cluster_page.validate_block_and_file_tab_active()
             )
 
-            log_step("Ensure used raw capacity string in System Capacity card")
+            logger.test_step("Ensure used raw capacity string in System Capacity card")
             res_dict["system_raw_capacity_check_bz_2185042"] = self.check_element_text(
                 "Raw capacity"
             )
 
-            log_step("Verify if Block and File tab is active")
+            logger.test_step("Verify if Block and File tab is active")
             storage_cluster_page.validate_block_and_file_tab_active()
 
             block_and_file_tab = storage_cluster_page
@@ -368,7 +401,21 @@ class ValidationUI(PageNavigator):
 
             storage_pools_tab = storage_cluster_page.nav_storage_pools_tab()
 
-            log_step("Verify CephBlockPool status is Ready")
+            logger.test_step(
+                "Verify Data protection policy of every existing storage pool "
+                "matches its actual scheme (replicated or erasure coded)"
+            )
+            pools_verification = storage_pools_tab.verify_existing_pools()
+            res_dict["storage_pools_data_protection_policy_match"] = all(
+                pools_verification.values()
+            )
+            if not all(pools_verification.values()):
+                logger.error(
+                    "Data protection policy mismatch in the Storage Pools list "
+                    f"(pool -> matches actual scheme): {pools_verification}"
+                )
+
+            logger.test_step("Verify CephBlockPool status is Ready")
             try:
                 storage_pools_tab.verify_cephblockpool_status()
                 res_dict["cephblockpool_status_ready"] = True
@@ -377,7 +424,7 @@ class ValidationUI(PageNavigator):
                 self.take_screenshot("cephblockpool_status_not_ready")
                 res_dict["cephblockpool_status_ready"] = False
 
-            log_step("Verify cephfs data pool status is Ready")
+            logger.test_step("Verify cephfs data pool status is Ready")
             try:
                 storage_pools_tab.verify_cephfs_status()
                 res_dict["cephfs_data_pool_status_ready"] = True
@@ -386,7 +433,7 @@ class ValidationUI(PageNavigator):
                 self.take_screenshot("cephfs_data_pool_status_not_ready")
                 res_dict["cephfs_data_pool_status_ready"] = False
 
-            log_step("Navigate to default cephblockpool using searching filter")
+            logger.test_step("Navigate to default cephblockpool using searching filter")
             ceph_block_pool_page = storage_pools_tab.navigate_to_block_pool(
                 constants.DEFAULT_CEPHBLOCKPOOL
             )
@@ -394,7 +441,7 @@ class ValidationUI(PageNavigator):
                 ceph_block_pool_page.block_pool_ready()
             )
 
-            log_step("Verify if Performance Card is present")
+            logger.test_step("Verify if Performance Card is present")
             # BlockPoolUI is not a POM class, but helper class
             block_pool_helper = BlockPoolUI()
             res_dict["performance_card_header_present"] = (
@@ -404,11 +451,11 @@ class ValidationUI(PageNavigator):
             ceph_block_pool_page.navigate_storage_pools_via_breadcrumb()
             res_dict["block_pool_navigation_works"] = True
 
-            log_step(
+            logger.test_step(
                 "Navigate ODF Backing store tab via Object Storage tab or PageNavigator"
             )
 
-            log_step("Verify all tabs are working")
+            logger.test_step("Verify all tabs are working")
             try:
                 storage_cluster_page.nav_object_tab()
                 storage_cluster_page.nav_storage_pools_tab()
@@ -419,13 +466,15 @@ class ValidationUI(PageNavigator):
                 res_dict["storage_cluster_tabs_work"] = False
 
         if external_mode or multi_storagecluster:
-            log_step("Navigate to External Systems")
+            logger.test_step("Navigate to External Systems")
             storage_cluster_page = (
                 overview_page.navigate_to_external_storage_systems().nav_to_external_storage_cluster()
             )
-            log_step("Verify if Block and File tab is active")
+            logger.test_step("Verify if Block and File tab is active")
             storage_cluster_page.validate_block_and_file_tab_active()
-            log_step("verify content of External Storage Cluster / Block and File tab")
+            logger.test_step(
+                "verify content of External Storage Cluster / Block and File tab"
+            )
 
             logger.info(
                 "Check if PersistentVolumeClaims capacity breakdown is available"
@@ -457,31 +506,33 @@ class ValidationUI(PageNavigator):
         backing_store_tab = buckets_tab.nav_backing_store_tab()
         backing_store_tab.nav_to_backing_store(constants.DEFAULT_NOOBAA_BACKINGSTORE)
 
-        log_step(
+        logger.test_step(
             "Verify if Backing Store is present and link to Backing Store resource works"
         )
         res_dict["backing_store_status_ready"] = (
             backing_store_tab.validate_backing_store_ready()
         )
 
-        log_step("Navigate to Backing Store tab via breadcrumb")
+        logger.test_step("Navigate to Backing Store tab via breadcrumb")
         backing_store_tab.nav_backing_store_list_breadcrumb()
 
-        log_step("Navigate to Bucket class tab")
+        logger.test_step("Navigate to Bucket class tab")
         bucket_class_tab = backing_store_tab.nav_bucket_class_tab()
 
-        log_step("Navigate to the default Bucket Class details via Bucket Class tab")
+        logger.test_step(
+            "Navigate to the default Bucket Class details via Bucket Class tab"
+        )
         bucket_class_tab.nav_to_bucket_class(constants.DEFAULT_NOOBAA_BUCKETCLASS)
 
-        log_step(
+        logger.test_step(
             f"Verify the status of a default bucket class: '{constants.DEFAULT_NOOBAA_BUCKETCLASS}'"
         )
         res_dict["bucket_class_status"] = bucket_class_tab.validate_bucket_class_ready()
 
-        log_step("Navigate to Bucket class via breadcrumb")
+        logger.test_step("Navigate to Bucket class via breadcrumb")
         bucket_class_tab.nav_bucket_class_breadcrumb()
 
-        log_step(
+        logger.test_step(
             "Navigate to Namespace Store tab via Bucket Class tab, verify if it works"
         )
 
@@ -491,7 +542,7 @@ class ValidationUI(PageNavigator):
         )
 
         if storage_on_cluster or multi_storagecluster:
-            log_step("Navigate to ODF Storage Cluster via Page navigator")
+            logger.test_step("Navigate to ODF Storage Cluster via Page navigator")
             storage_cluster_page = PageNavigator().nav_storage_cluster_default_page()
             logger.info(f"Web Page title: {self.driver.title}")
             res_dict["block_and_file_tab_is_active_2"] = (
@@ -509,7 +560,7 @@ class ValidationUI(PageNavigator):
                 res_dict["external_systems_page_OK"] = False
 
         self.take_screenshot("summary_of_odf_ui_checks")
-        log_step("Process results")
+        logger.test_step("Process results")
         res_pd = pd.DataFrame.from_dict(res_dict, orient="index", columns=["check"])
         logger.info(res_pd.to_markdown(headers="keys", index=True, tablefmt="grid"))
 

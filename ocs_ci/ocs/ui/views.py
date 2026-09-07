@@ -210,7 +210,11 @@ deployment_4_9 = {
         By.CSS_SELECTOR,
     ),
     "choose_openshift-storage_project": (
-        "//span[text()='" + config.ENV_DATA["cluster_namespace"] + "']",
+        "//span[text()='" + config.ENV_DATA["cluster_namespace"] + "'] | "
+        "//a[@data-test='" + config.ENV_DATA["cluster_namespace"] + "'] | "
+        "//button[@role='menuitem'][normalize-space()='"
+        + config.ENV_DATA["cluster_namespace"]
+        + "']",
         By.XPATH,
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
@@ -383,6 +387,10 @@ deployment_4_21 = {
 }
 
 deployment_4_22 = {
+    "advanced_settings_step": (
+        "//*[contains(text(), 'Advanced settings')]",
+        By.XPATH,
+    ),
     "enable_forceful_deployment": (
         "input#enable-forceful-deployment",
         By.CSS_SELECTOR,
@@ -417,6 +425,10 @@ deployment_4_22 = {
         By.XPATH,
     ),
     # MCO operator locators for rebranding validation
+    "mco_search_operators": (
+        "//input[@data-test='name-filter-input']",
+        By.XPATH,
+    ),
     "mco_operator_row": (
         "//a[@data-test-operator-row='DF Multicluster Orchestrator']",
         By.XPATH,
@@ -652,11 +664,19 @@ mcg_stores = {
         "//label[@for='region']/../following-sibling::*",
         By.XPATH,
     ),
-    "store_secret_dropdown": (
-        "//span[@class='text-muted' and text()='Select Secret']/../..",
+    "store_switch_to_secret": (
+        "//*[normalize-space()='Switch to Secret']",
         By.XPATH,
     ),
-    "store_target_bucket_input": ("//input[@id='target-bucket']", By.XPATH),
+    "store_secret_dropdown": (
+        "//label[normalize-space()='Secret Key']/../following-sibling::*//button[contains(@class, 'c-menu-toggle')] | "
+        "//span[normalize-space()='Select Secret']/ancestor::button[contains(@class, 'c-menu-toggle')]",
+        By.XPATH,
+    ),
+    "store_target_bucket_input": (
+        "//input[@id='target-bucket']|//input[@aria-label='Target Bucket']",
+        By.XPATH,
+    ),
     "create_store_btn": (
         "//button[@type='submit']",
         By.XPATH,
@@ -1863,16 +1883,23 @@ acm_configuration_4_21 = {
 }
 
 acm_configuration_4_22 = {
-    "all-clusters_dropdown": (
-        "//button[@data-test-id='perspective-switcher-toggle']",
+    "perspective-switcher-toggle": (
+        "//*[@data-test-id='perspective-switcher-toggle']",
+        By.XPATH,
+    ),
+    "all-clusters_dropdown_item": (
+        "//button[@role='option'][normalize-space()='Fleet management'] | "
+        "//button[@role='option'][normalize-space()='All Clusters']",
         By.XPATH,
     ),
     "local-cluster_dropdown_item": (
-        "//button[@data-test-id='perspective-switcher-toggle']//*[normalize-space()='local-cluster']",
+        "//button[@role='option'][normalize-space()='local-cluster'] | "
+        "//button[@role='option'][normalize-space()='Core platform']",
         By.XPATH,
     ),
     "local-cluster_dropdown": (
-        "//h2[normalize-space()='Administrator']",
+        "//h2[normalize-space()='Administrator'] | "
+        "//*[@data-test-id='perspective-switcher-toggle']//h2[normalize-space()='Core platform']",
         By.XPATH,
     ),
     "click-local-cluster": (
@@ -2163,6 +2190,10 @@ block_pool_4_22 = {
     ),
     "pool_replicas_in_list": (
         'span[data-test="{}-replicas"]',
+        By.CSS_SELECTOR,
+    ),
+    "pool_replicas_all_in_list": (
+        'span[data-test$="-replicas"]',
         By.CSS_SELECTOR,
     ),
 }
@@ -2500,7 +2531,11 @@ validation_4_9 = {
         "//button[normalize-space()='Refresh web console']",
         By.XPATH,
     ),
-    "odf-operator": ("//h1[normalize-space()='OpenShift Data Foundation']", By.XPATH),
+    "odf-operator": (
+        "//h1[normalize-space()='OpenShift Data Foundation']",
+        By.XPATH,
+    ),
+    "odf-operator-by-display-name": ("//h1[normalize-space()='{}']", By.XPATH),
     # project-dropdown is different for Storage pages and generic such as Operators/Installed Operators
     "project-dropdown": (
         "//span[contains(@class, 'menu-toggle__text') and contains(text(), 'Project:')] | "
@@ -2958,6 +2993,14 @@ validation_4_22 = {
         "//div[@role='dialog'"
         " and .//header[normalize-space(.)='Related pods']]"
         "//a[normalize-space(.)='View all']",
+        By.XPATH,
+    ),
+    # {0} = namespace
+    "cephfs_subvolume_row_name_button_by_namespace": (
+        f"//div[contains(text(),'{constants.CEPHFS_SUBVOLUME_METRICS_CARD_TITLE}')]"
+        "/following::table[1]/tbody/tr"
+        "[.//td[@data-label='Namespace']//a[normalize-space(text())='{0}']]"
+        "//button[@aria-label='Show related pods']",
         By.XPATH,
     ),
     "cephfs_subvolume_row_by_namespace": (
@@ -3684,6 +3727,24 @@ bucket_tab = {
     ),
     "s3_login_selected_secret": (
         "//span[text()='Secret name']/ancestor::div[contains(@class, 'form__group')]//span[@class='odf-resource-item']",
+        By.XPATH,
+    ),
+    # Object row actions (object browser)
+    "object_row_kebab": (
+        "//tr[.//td[@data-label='Name' and contains(normalize-space(),'{}')]]"
+        "//button[@aria-label='Kebab toggle']",
+        By.XPATH,
+    ),
+    "object_action_preview": (
+        "//button[normalize-space()='Preview']",
+        By.XPATH,
+    ),
+    "folder_link_by_name": (
+        "//td[@data-label='Name']//a[contains(., '{}')]",
+        By.XPATH,
+    ),
+    "refresh_objects_button": (
+        "//button[.//span[text()='Refresh']]",
         By.XPATH,
     ),
 }
