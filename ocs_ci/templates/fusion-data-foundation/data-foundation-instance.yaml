@@ -22,5 +22,8 @@ spec:
   - name: installPlanApproval
     provided: true
     value: Automatic
+  - name: enableLVMStorage
+    provided: true
+    value: 'false'
   serviceDefinition: data-foundation-service
   triggerUpdate: false
