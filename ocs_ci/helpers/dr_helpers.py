@@ -1649,16 +1649,23 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
     timeout exception.
 
     Steps (in order):
-        1. Strip finalizers from DRPC (hub).
-        2. Strip finalizers from Placement (hub).
-        3. On each managed cluster:
-           a. Strip finalizers from VolumeReplicationGroup.
-           b. Strip finalizers from every VolumeReplication in the workload namespace.
-           c. If CG is enabled, strip finalizers from every VolumeGroupReplication
-              in the workload namespace and disable the rbd mirror group via toolbox.
-        4. On each managed cluster, delete workload resources and PVCs; strip
-           finalizers from any PVC/PV that is stuck in Terminating.
-        5. On each managed cluster, delete the workload namespace.
+
+    1. Strip finalizers from DRPC (hub) and delete it; wait up to 120s for it
+       to leave etcd before proceeding.
+    2. Strip finalizers from Placement (hub) and delete it.
+    3. On each managed cluster:
+
+       a. Strip finalizers from VolumeReplicationGroup and delete it.
+       b. Strip finalizers from every VolumeReplication in the workload namespace.
+       c. If CG is enabled, strip finalizers from every VolumeGroupReplication
+          in the workload namespace and disable the rbd mirror group via toolbox.
+       d. Wait up to 60s for the VRG to disappear; if still present, re-strip
+          finalizers and wait up to 120s more.
+
+    4. On each managed cluster, strip finalizers from PVCs and their backing PVs,
+       then delete the PVCs.  If any PVC is still stuck after 60s, re-strip both
+       PVC and PV finalizers and wait 30s more.
+    5. On each managed cluster, delete the workload namespace.
 
     Args:
         workload_namespace (str): Namespace the workload is deployed in.
@@ -1676,21 +1683,49 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
     _PATCH_TYPE = "json"
 
     # ------------------------------------------------------------------ #
-    # Step 1 & 2 – hub cluster: strip DRPC and Placement finalizers       #
+    # Step 1 – hub cluster: strip + delete DRPC, wait for it to be gone   #
     # ------------------------------------------------------------------ #
     config.switch_acm_ctx()
     logger.info(f"[force-cleanup] Stripping finalizers from DRPC {vrg_name}")
-    run_cmd(  # IgnoreDeprecation
+    exec_cmd(
         f"oc patch drpc {vrg_name} -n {constants.DR_OPS_NAMESPACE} "
-        f"--type={_PATCH_TYPE} -p '{_PATCH}' --ignore-not-found=true",
+        f"--type={_PATCH_TYPE} -p '{_PATCH}'",
         ignore_error=True,
     )
+    logger.info(f"[force-cleanup] Deleting DRPC {vrg_name}")
+    exec_cmd(
+        f"oc delete drpc {vrg_name} -n {constants.DR_OPS_NAMESPACE} "
+        f"--wait=false --ignore-not-found=true",
+        ignore_error=True,
+    )
+    logger.info(f"[force-cleanup] Waiting up to 120s for DRPC {vrg_name} to disappear")
+    try:
+        ocp.OCP(
+            kind=constants.DRPC,
+            namespace=constants.DR_OPS_NAMESPACE,
+        ).wait_for_delete(resource_name=vrg_name, timeout=120, sleep=5)
+        logger.info(f"[force-cleanup] DRPC {vrg_name} is gone")
+    except Exception:
+        logger.warning(
+            f"[force-cleanup] DRPC {vrg_name} still present after 120s — "
+            f"ramen may still be reconciling VRGs",
+            exc_info=True,
+        )
 
+    # ------------------------------------------------------------------ #
+    # Step 2 – hub cluster: strip + delete Placement                      #
+    # ------------------------------------------------------------------ #
     placement_name = f"{vrg_name}-plmnt-1"
     logger.info(f"[force-cleanup] Stripping finalizers from Placement {placement_name}")
-    run_cmd(  # IgnoreDeprecation
+    exec_cmd(
         f"oc patch placement {placement_name} -n {constants.DR_OPS_NAMESPACE} "
-        f"--type={_PATCH_TYPE} -p '{_PATCH}' --ignore-not-found=true",
+        f"--type={_PATCH_TYPE} -p '{_PATCH}'",
+        ignore_error=True,
+    )
+    logger.info(f"[force-cleanup] Deleting Placement {placement_name}")
+    exec_cmd(
+        f"oc delete placement {placement_name} -n {constants.DR_OPS_NAMESPACE} "
+        f"--wait=false --ignore-not-found=true",
         ignore_error=True,
     )
 
@@ -1713,17 +1748,17 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
             f"[force-cleanup] Stripping finalizers from VRG {vrg_name} "
             f"in {constants.DR_OPS_NAMESPACE} on {cluster_name}"
         )
-        run_cmd(  # IgnoreDeprecation
+        exec_cmd(
             f"oc patch volumereplicationgroup {vrg_name} "
             f"-n {constants.DR_OPS_NAMESPACE} "
-            f"--type={_PATCH_TYPE} -p '{_PATCH}' --ignore-not-found=true",
+            f"--type={_PATCH_TYPE} -p '{_PATCH}'",
             ignore_error=True,
         )
         logger.info(
             f"[force-cleanup] Deleting VRG {vrg_name} "
             f"in {constants.DR_OPS_NAMESPACE} on {cluster_name}"
         )
-        run_cmd(  # IgnoreDeprecation
+        exec_cmd(
             f"oc delete volumereplicationgroup {vrg_name} "
             f"-n {constants.DR_OPS_NAMESPACE} --wait=false --ignore-not-found=true",
             ignore_error=True,
@@ -1742,7 +1777,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                     f"[force-cleanup] Stripping finalizers from VolumeReplication "
                     f"{vr_name} on {cluster_name}"
                 )
-                run_cmd(  # IgnoreDeprecation
+                exec_cmd(
                     f"oc patch volumereplication {vr_name} "
                     f"-n {workload_namespace} "
                     f"--type={_PATCH_TYPE} -p '{_PATCH}'",
@@ -1753,7 +1788,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                     f"[force-cleanup] Deleting all VolumeReplication resources "
                     f"in {workload_namespace} on {cluster_name}"
                 )
-                run_cmd(  # IgnoreDeprecation
+                exec_cmd(
                     f"oc delete volumereplication --all "
                     f"-n {workload_namespace} --wait=false",
                     ignore_error=True,
@@ -1793,7 +1828,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                         f"[force-cleanup] Stripping finalizers from "
                         f"VolumeGroupReplication {vgr_name} on {cluster_name}"
                     )
-                    run_cmd(  # IgnoreDeprecation
+                    exec_cmd(
                         f"oc patch volumegroupreplication {vgr_name} "
                         f"-n {workload_namespace} "
                         f"--type={_PATCH_TYPE} -p '{_PATCH}'",
@@ -1804,7 +1839,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                         f"[force-cleanup] Deleting all VolumeGroupReplication "
                         f"resources in {workload_namespace} on {cluster_name}"
                     )
-                    run_cmd(  # IgnoreDeprecation
+                    exec_cmd(
                         f"oc delete volumegroupreplication --all "
                         f"-n {workload_namespace} --wait=false",
                         ignore_error=True,
@@ -1954,22 +1989,51 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
         # -- 3d: wait for VRG to be fully gone before touching PVCs ------ #
         # The VRG controller re-adds PVC finalizers as long as the VRG object
         # exists in etcd.  We must wait for it to disappear completely.
+        # Strategy: wait 60s; if still present, re-strip + re-delete and wait
+        # another 120s.  Total budget: ~3 minutes.
         logger.info(
             f"[force-cleanup] Waiting for VRG {vrg_name} to be fully deleted "
             f"in {constants.DR_OPS_NAMESPACE} on {cluster_name}"
         )
+        vrg_ocp = ocp.OCP(
+            kind=constants.VOLUME_REPLICATION_GROUP,
+            namespace=constants.DR_OPS_NAMESPACE,
+        )
+        vrg_gone = False
         try:
-            ocp.OCP(
-                kind=constants.VOLUME_REPLICATION_GROUP,
-                namespace=constants.DR_OPS_NAMESPACE,
-            ).wait_for_delete(resource_name=vrg_name, timeout=60, sleep=5)
+            vrg_ocp.wait_for_delete(resource_name=vrg_name, timeout=60, sleep=5)
+            vrg_gone = True
             logger.info(f"[force-cleanup] VRG {vrg_name} is gone on {cluster_name}")
         except Exception:
             logger.warning(
-                f"[force-cleanup] VRG {vrg_name} may still exist on "
-                f"{cluster_name} — proceeding with PVC cleanup anyway",
-                exc_info=True,
+                f"[force-cleanup] VRG {vrg_name} still present after 60s on "
+                f"{cluster_name} — re-stripping finalizers and retrying"
             )
+        if not vrg_gone:
+            logger.info(
+                f"[force-cleanup] Re-stripping finalizers from VRG {vrg_name} "
+                f"on {cluster_name}"
+            )
+            exec_cmd(
+                f"oc patch volumereplicationgroup {vrg_name} "
+                f"-n {constants.DR_OPS_NAMESPACE} "
+                f"--type={_PATCH_TYPE} -p '{_PATCH}'",
+                ignore_error=True,
+            )
+            exec_cmd(
+                f"oc delete volumereplicationgroup {vrg_name} "
+                f"-n {constants.DR_OPS_NAMESPACE} --wait=false --ignore-not-found=true",
+                ignore_error=True,
+            )
+            try:
+                vrg_ocp.wait_for_delete(resource_name=vrg_name, timeout=120, sleep=5)
+                logger.info(f"[force-cleanup] VRG {vrg_name} is gone on {cluster_name}")
+            except Exception:
+                logger.warning(
+                    f"[force-cleanup] VRG {vrg_name} still exists after 3 min on "
+                    f"{cluster_name} — proceeding with PVC cleanup anyway",
+                    exc_info=True,
+                )
 
         # -- 4: delete PVCs ---------------------------------------------- #
         logger.info(
@@ -1994,20 +2058,19 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                 pv_name = pvc_obj.backed_pv
             except Exception:
                 pv_name = None
-            run_cmd(  # IgnoreDeprecation
+            exec_cmd(
                 f"oc patch pvc {pvc_obj.name} -n {workload_namespace} "
-                f"--type={_PATCH_TYPE} -p '{_PATCH}' --ignore-not-found=true",
+                f"--type={_PATCH_TYPE} -p '{_PATCH}'",
                 ignore_error=True,
             )
             if pv_name:
-                run_cmd(  # IgnoreDeprecation
-                    f"oc patch pv {pv_name} "
-                    f"--type={_PATCH_TYPE} -p '{_PATCH}' --ignore-not-found=true",
+                exec_cmd(
+                    f"oc patch pv {pv_name} " f"--type={_PATCH_TYPE} -p '{_PATCH}'",
                     ignore_error=True,
                 )
 
         if all_pvcs:
-            run_cmd(  # IgnoreDeprecation
+            exec_cmd(
                 f"oc delete pvc --all -n {workload_namespace} --wait=false",
                 ignore_error=True,
             )
@@ -2028,13 +2091,23 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                     f"re-stripping finalizers",
                     exc_info=True,
                 )
-                # Re-strip in case something briefly re-added a finalizer
+                # Re-strip PVC and PV finalizers in case something re-added them
                 for pvc_obj in all_pvcs:
-                    run_cmd(  # IgnoreDeprecation
+                    exec_cmd(
                         f"oc patch pvc {pvc_obj.name} -n {workload_namespace} "
-                        f"--type={_PATCH_TYPE} -p '{_PATCH}' --ignore-not-found=true",
+                        f"--type={_PATCH_TYPE} -p '{_PATCH}'",
                         ignore_error=True,
                     )
+                    try:
+                        pv_name = pvc_obj.backed_pv
+                    except Exception:
+                        pv_name = None
+                    if pv_name:
+                        exec_cmd(
+                            f"oc patch pv {pv_name} "
+                            f"--type={_PATCH_TYPE} -p '{_PATCH}'",
+                            ignore_error=True,
+                        )
 
         # -- 5: delete namespace ----------------------------------------- #
         logger.info(
