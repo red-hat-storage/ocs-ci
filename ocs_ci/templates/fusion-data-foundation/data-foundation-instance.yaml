@@ -23,7 +23,7 @@ spec:
     provided: true
     value: Automatic
   - name: enableLVMStorage
-    provided: true
+    provided: false
     value: 'false'
   serviceDefinition: data-foundation-service
   triggerUpdate: false
