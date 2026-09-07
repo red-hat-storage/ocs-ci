@@ -5827,7 +5827,7 @@ def configure_chrony_and_wait_for_machineconfig_status(
         wait_for_machineconfigpool_status(role, timeout=timeout)
 
 
-def modify_csv(csv, replace_from, replace_to):
+def modify_csv(csv, replace_from, replace_to, namespace=None):
     """
     Modify the CSV
 
@@ -5835,10 +5835,13 @@ def modify_csv(csv, replace_from, replace_to):
         csv (str): The CSV name
         replace_from (str): The pattern to replace from in the CSV
         replace_to (str): The pattern to replace to in the CSV
+        namespace (str): Namespace of the CSV. Defaults to the cluster
+            namespace configured in ENV_DATA.
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     data = (
-        f"oc -n openshift-storage get csv {csv} -o yaml | sed"
+        f"oc -n {namespace} get csv {csv} -o yaml | sed"
         f" 's,{replace_from},{replace_to},g' | oc replace -f -"
     )
     log.info(

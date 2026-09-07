@@ -43,6 +43,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
 )
 from ocs_ci.deployment.helpers.odf_deployment_helpers import (
     get_required_csvs,
+    modify_csv_images,
     set_ceph_config,
     is_storage_system_needed,
 )
@@ -1990,7 +1991,16 @@ class Deployment(object):
                             csv=_csv["metadata"]["name"],
                             replace_from=csv_change_from,
                             replace_to=csv_change_to,
+                            namespace=self.namespace,
                         )
+
+        # Override images in specific CSV fields, if required. Done here so
+        # that the custom images are already in place when the StorageCluster
+        # is created below.
+        csv_image_overrides = config.DEPLOYMENT.get("csv_image_overrides")
+        if csv_image_overrides:
+            logger.test_step("Overriding images in the ODF CSVs")
+            modify_csv_images(csv_image_overrides, namespace=self.namespace)
 
         # Create custom storage class early for Azure Performance Plus feature
         # This needs to be done before StorageSystem/StorageCluster creation

@@ -584,6 +584,43 @@ def get_cli_param(config, name_of_param, default=None):
     return cli_param
 
 
+def store_csv_changes(csv_changes):
+    """
+    Store the CSV changes passed via the --csv-change cli parameter in the
+    DEPLOYMENT section of the config, appending them to the changes which are
+    already configured there.
+
+    Args:
+        csv_changes (list): Values of the --csv-change cli parameter, each one
+            in the '<replace-from>::<replace-to>' format
+
+    Raises:
+        ValueError: If any of the values is not in the expected format
+
+    """
+    csv_change_from = ocsci_config.DEPLOYMENT.get("csv_change_from") or []
+    csv_change_to = ocsci_config.DEPLOYMENT.get("csv_change_to") or []
+    # The values can be configured as a plain string when only one image needs
+    # to be changed, normalize them before appending the cli values.
+    if isinstance(csv_change_from, str):
+        csv_change_from = [csv_change_from]
+    if isinstance(csv_change_to, str):
+        csv_change_to = [csv_change_to]
+    for csv_change in csv_changes:
+        if "::" not in csv_change:
+            raise ValueError(
+                f"Invalid --csv-change value: '{csv_change}'. The expected "
+                "format is '<replace-from>::<replace-to>'."
+            )
+        change_from, change_to = csv_change.split("::", 1)
+        csv_change_from.append(change_from)
+        csv_change_to.append(change_to)
+    # The values have to be stored back, otherwise the changes are lost when
+    # the keys are not defined in any of the loaded config files.
+    ocsci_config.DEPLOYMENT["csv_change_from"] = csv_change_from
+    ocsci_config.DEPLOYMENT["csv_change_to"] = csv_change_to
+
+
 def set_cli_param(config, name_of_param, value):
     """
     This is helper function which set cli parameter in RUN section in
@@ -800,12 +837,7 @@ def process_cluster_cli_params(config):
         ocsci_config.RUN["client_version"] = ocp_installer_version
     csv_changes = get_cli_param(config, "--csv-change")
     if csv_changes:
-        csv_change_from = ocsci_config.DEPLOYMENT.get("csv_change_from", [])
-        csv_change_to = ocsci_config.DEPLOYMENT.get("csv_change_to", [])
-        for csv_change in csv_changes:
-            csv_change = csv_change.split("::")
-            csv_change_from.append(csv_change[0])
-            csv_change_to.append(csv_change[1])
+        store_csv_changes(csv_changes)
 
     collect_logs_on_success_run = get_cli_param(config, "collect_logs_on_success_run")
     if collect_logs_on_success_run:
