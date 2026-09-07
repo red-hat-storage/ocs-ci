@@ -74,7 +74,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
                 0,
                 None,
                 True,
-                # marks=pytest.mark.polarion_id("OCS-XXXX"),
+                marks=pytest.mark.polarion_id("OCS-8255"),
                 id="custom_pool_erasure_coding_without_compression",
             ),
             # TODO: ADD Polarion ID for Custom SC test
