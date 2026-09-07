@@ -8,7 +8,7 @@ from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.utils import convert_device_size, exec_cmd
 
 
 log = logging.getLogger(__name__)
@@ -18,6 +18,13 @@ log = logging.getLogger(__name__)
 # as real used capacity and can issue multiple outstanding IOs.
 FILL_MODES = ("zero", "random", "incompressible")
 
+# fio 3.21 in fedora:fio is OOMKilled at 1Gi. incompressible mode raises the
+# caller-supplied resources to at least these values; larger requests are kept.
+INCOMPRESSIBLE_MIN_CPU_REQUEST = "500m"
+INCOMPRESSIBLE_MIN_CPU_LIMIT = "2"
+INCOMPRESSIBLE_MIN_MEM_REQUEST = "512Mi"
+INCOMPRESSIBLE_MIN_MEM_LIMIT = "2Gi"
+
 
 def _fio_size_from_pvc_storage(storage):
     """92% of a Gi PVC, so fio --size fits on the filesystem (fill_fs OOMs this image)."""
@@ -26,6 +33,46 @@ def _fio_size_from_pvc_storage(storage):
         raise ValueError(f"incompressible fill expects storage in Gi, got {storage!r}")
     gib = float(text[:-2])
     return f"{max(1, int(gib * 1024 * 0.92))}M"
+
+
+def _cpu_millicores(quantity):
+    """Convert a Kubernetes CPU quantity to millicores."""
+    text = str(quantity).strip().lower()
+    if text.endswith("m"):
+        return float(text[:-1])
+    return float(text) * 1000
+
+
+def _memory_bytes(quantity):
+    """Convert a Kubernetes binary memory quantity (Ki/Mi/Gi/Ti) to bytes."""
+    return convert_device_size(str(quantity).strip(), "BY", convert_size=1024)
+
+
+def _at_least(value, floor, to_number):
+    """Return value when it already meets the floor; otherwise return floor."""
+    return value if to_number(value) >= to_number(floor) else floor
+
+
+def _apply_incompressible_resource_floors(
+    cpu_request, cpu_limit, mem_request, mem_limit
+):
+    """
+    Raise incompressible FillPoolJob CPU/memory to the measured fio floors.
+
+    Callers may pass larger values; those are kept. If a floored request would
+    exceed its limit, the limit is raised to match so the pod spec stays valid.
+    """
+    cpu_request = _at_least(
+        cpu_request, INCOMPRESSIBLE_MIN_CPU_REQUEST, _cpu_millicores
+    )
+    cpu_limit = _at_least(cpu_limit, INCOMPRESSIBLE_MIN_CPU_LIMIT, _cpu_millicores)
+    mem_request = _at_least(mem_request, INCOMPRESSIBLE_MIN_MEM_REQUEST, _memory_bytes)
+    mem_limit = _at_least(mem_limit, INCOMPRESSIBLE_MIN_MEM_LIMIT, _memory_bytes)
+    if _cpu_millicores(cpu_request) > _cpu_millicores(cpu_limit):
+        cpu_limit = cpu_request
+    if _memory_bytes(mem_request) > _memory_bytes(mem_limit):
+        mem_limit = mem_request
+    return cpu_request, cpu_limit, mem_request, mem_limit
 
 
 class FillPoolJob(object):
@@ -66,6 +113,14 @@ class FillPoolJob(object):
                 'random' - dd from /dev/urandom (slow; CPU-bound).
                 'incompressible' - fio libaio write (queue depth 16). Prefer this
                 to increase Ceph used-raw capacity on RBD.
+            cpu_request (str): CPU request. Incompressible mode raises this to
+                at least 500m.
+            cpu_limit (str): CPU limit. Incompressible mode raises this to
+                at least 2.
+            mem_request (str): Memory request (Ki/Mi/Gi/Ti). Incompressible
+                mode raises this to at least 512Mi.
+            mem_limit (str): Memory limit (Ki/Mi/Gi/Ti). Incompressible mode
+                raises this to at least 2Gi (fio 3.21 OOMKills below that).
         """
         self.name = name or create_unique_resource_name("fill-pool", "job")
         sc_name = sc_name or constants.DEFAULT_STORAGECLASS_RBD
@@ -75,14 +130,17 @@ class FillPoolJob(object):
         if fill_mode not in FILL_MODES:
             raise ValueError(f"fill_mode must be one of {FILL_MODES}")
 
-        # fio 3.21 in fedora:fio is OOMKilled at 1Gi; 2Gi is the measured floor.
         if fill_mode == "incompressible":
-            cpu_request, cpu_limit = "500m", "2"
-            mem_request, mem_limit = "512Mi", "2Gi"
+            cpu_request, cpu_limit, mem_request, mem_limit = (
+                _apply_incompressible_resource_floors(
+                    cpu_request, cpu_limit, mem_request, mem_limit
+                )
+            )
 
         log.info(
             f"Creating FillPoolJob {self.name} fill_mode={fill_mode} "
-            f"storage={storage} block_size={block_size}"
+            f"storage={storage} block_size={block_size} "
+            f"cpu={cpu_request}/{cpu_limit} memory={mem_request}/{mem_limit}"
         )
 
         # Load Job manifest and apply metadata
