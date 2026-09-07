@@ -1708,7 +1708,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
         config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
         logger.info(f"[force-cleanup] Processing cluster {cluster_name}")
 
-        # -- 3a: VRG ---------------------------------------------------- #
+        # -- 3a: VRG — strip finalizers then delete ---------------------- #
         logger.info(
             f"[force-cleanup] Stripping finalizers from VRG {vrg_name} "
             f"in {constants.DR_OPS_NAMESPACE} on {cluster_name}"
@@ -1719,17 +1719,23 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
             f"--type={_PATCH_TYPE} -p '{_PATCH}' --ignore-not-found=true",
             ignore_error=True,
         )
+        logger.info(
+            f"[force-cleanup] Deleting VRG {vrg_name} "
+            f"in {constants.DR_OPS_NAMESPACE} on {cluster_name}"
+        )
+        run_cmd(  # IgnoreDeprecation
+            f"oc delete volumereplicationgroup {vrg_name} "
+            f"-n {constants.DR_OPS_NAMESPACE} --wait=false --ignore-not-found=true",
+            ignore_error=True,
+        )
 
-        # -- 3b: VolumeReplication resources ----------------------------- #
+        # -- 3b: VolumeReplication — strip finalizers then delete --------- #
         try:
-            vr_items = (
-                ocp.OCP(
-                    kind=constants.VOLUME_REPLICATION,
-                    namespace=workload_namespace,
-                )
-                .get()
-                .get("items", [])
+            vr_ocp = ocp.OCP(
+                kind=constants.VOLUME_REPLICATION,
+                namespace=workload_namespace,
             )
+            vr_items = vr_ocp.get().get("items", [])
             for vr in vr_items:
                 vr_name = vr["metadata"]["name"]
                 logger.info(
@@ -1742,9 +1748,33 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                     f"--type={_PATCH_TYPE} -p '{_PATCH}'",
                     ignore_error=True,
                 )
+            if vr_items:
+                logger.info(
+                    f"[force-cleanup] Deleting all VolumeReplication resources "
+                    f"in {workload_namespace} on {cluster_name}"
+                )
+                run_cmd(  # IgnoreDeprecation
+                    f"oc delete volumereplication --all "
+                    f"-n {workload_namespace} --wait=false",
+                    ignore_error=True,
+                )
+                # Wait for VRs to be fully gone before touching PVCs so the
+                # replication controller stops re-adding PVC finalizers.
+                try:
+                    vr_ocp.wait_for_delete(
+                        resource_name="",
+                        timeout=60,
+                        sleep=5,
+                    )
+                except Exception:
+                    logger.warning(
+                        f"[force-cleanup] Some VolumeReplication resources may "
+                        f"still exist in {workload_namespace} on {cluster_name}",
+                        exc_info=True,
+                    )
         except Exception:
             logger.warning(
-                f"[force-cleanup] Could not list VolumeReplication resources in "
+                f"[force-cleanup] Could not process VolumeReplication resources in "
                 f"{workload_namespace} on {cluster_name}",
                 exc_info=True,
             )
@@ -1752,14 +1782,11 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
         # -- 3c: VolumeGroupReplication + mirror group (CG only) --------- #
         if is_cg_enabled():
             try:
-                vgr_items = (
-                    ocp.OCP(
-                        kind=constants.VOLUME_GROUP_REPLICATION,
-                        namespace=workload_namespace,
-                    )
-                    .get()
-                    .get("items", [])
+                vgr_ocp = ocp.OCP(
+                    kind=constants.VOLUME_GROUP_REPLICATION,
+                    namespace=workload_namespace,
                 )
+                vgr_items = vgr_ocp.get().get("items", [])
                 for vgr in vgr_items:
                     vgr_name = vgr["metadata"]["name"]
                     logger.info(
@@ -1772,9 +1799,34 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                         f"--type={_PATCH_TYPE} -p '{_PATCH}'",
                         ignore_error=True,
                     )
+                if vgr_items:
+                    logger.info(
+                        f"[force-cleanup] Deleting all VolumeGroupReplication "
+                        f"resources in {workload_namespace} on {cluster_name}"
+                    )
+                    run_cmd(  # IgnoreDeprecation
+                        f"oc delete volumegroupreplication --all "
+                        f"-n {workload_namespace} --wait=false",
+                        ignore_error=True,
+                    )
+                    # Wait for VGRs to vanish before the rbd-disable step reads
+                    # VGRContent (still accessible cluster-scoped).
+                    try:
+                        vgr_ocp.wait_for_delete(
+                            resource_name="",
+                            timeout=60,
+                            sleep=5,
+                        )
+                    except Exception:
+                        logger.warning(
+                            f"[force-cleanup] Some VolumeGroupReplication "
+                            f"resources may still exist in {workload_namespace} "
+                            f"on {cluster_name}",
+                            exc_info=True,
+                        )
             except Exception:
                 logger.warning(
-                    f"[force-cleanup] Could not list VolumeGroupReplication "
+                    f"[force-cleanup] Could not process VolumeGroupReplication "
                     f"resources in {workload_namespace} on {cluster_name}",
                     exc_info=True,
                 )
@@ -1899,13 +1951,32 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                     exc_info=True,
                 )
 
-        # -- 4: delete workload resources and PVCs ----------------------- #
+        # -- 3d: wait for VRG to be fully gone before touching PVCs ------ #
+        # The VRG controller re-adds PVC finalizers as long as the VRG object
+        # exists in etcd.  We must wait for it to disappear completely.
         logger.info(
-            f"[force-cleanup] Deleting workload resources and PVCs in "
-            f"{workload_namespace} on {cluster_name}"
+            f"[force-cleanup] Waiting for VRG {vrg_name} to be fully deleted "
+            f"in {constants.DR_OPS_NAMESPACE} on {cluster_name}"
+        )
+        try:
+            ocp.OCP(
+                kind=constants.VOLUME_REPLICATION_GROUP,
+                namespace=constants.DR_OPS_NAMESPACE,
+            ).wait_for_delete(resource_name=vrg_name, timeout=60, sleep=5)
+            logger.info(f"[force-cleanup] VRG {vrg_name} is gone on {cluster_name}")
+        except Exception:
+            logger.warning(
+                f"[force-cleanup] VRG {vrg_name} may still exist on "
+                f"{cluster_name} — proceeding with PVC cleanup anyway",
+                exc_info=True,
+            )
+
+        # -- 4: delete PVCs ---------------------------------------------- #
+        logger.info(
+            f"[force-cleanup] Deleting PVCs in {workload_namespace} "
+            f"on {cluster_name}"
         )
 
-        # Collect PVC names before the kustomize delete wipes the namespace
         try:
             all_pvcs = get_all_pvc_objs(namespace=workload_namespace)
         except Exception:
@@ -1916,45 +1987,53 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                 exc_info=True,
             )
 
-        # Non-blocking delete of all PVCs
+        # Strip PVC and PV finalizers upfront, then issue a non-blocking delete.
+        # The VRG/VGR/VR controllers are now gone so finalizers won't be re-added.
         for pvc_obj in all_pvcs:
             try:
-                pvc_obj.delete(wait=False)
+                pv_name = pvc_obj.backed_pv
             except Exception:
-                logger.warning(
-                    f"[force-cleanup] Could not delete PVC {pvc_obj.name} "
-                    f"on {cluster_name}",
-                    exc_info=True,
-                )
-
-        # Wait briefly; strip finalizers from anything still Terminating
-        for pvc_obj in all_pvcs:
-            try:
-                pvc_obj.ocp.wait_for_delete(
-                    resource_name=pvc_obj.name, timeout=30, sleep=5
-                )
-            except (TimeoutExpiredError, Exception):
-                logger.warning(
-                    f"[force-cleanup] PVC {pvc_obj.name} stuck in Terminating "
-                    f"— stripping PVC and PV finalizers on {cluster_name}"
-                )
+                pv_name = None
+            run_cmd(  # IgnoreDeprecation
+                f"oc patch pvc {pvc_obj.name} -n {workload_namespace} "
+                f"--type={_PATCH_TYPE} -p '{_PATCH}' --ignore-not-found=true",
+                ignore_error=True,
+            )
+            if pv_name:
                 run_cmd(  # IgnoreDeprecation
-                    f"oc patch pvc {pvc_obj.name} -n {workload_namespace} "
-                    f"--type={_PATCH_TYPE} -p '{_PATCH}'",
+                    f"oc patch pv {pv_name} "
+                    f"--type={_PATCH_TYPE} -p '{_PATCH}' --ignore-not-found=true",
                     ignore_error=True,
                 )
-                try:
-                    pv_name = pvc_obj.backed_pv
-                    if pv_name:
-                        run_cmd(  # IgnoreDeprecation
-                            f"oc patch pv {pv_name} --type={_PATCH_TYPE} -p '{_PATCH}'",
-                            ignore_error=True,
-                        )
-                except Exception:
-                    logger.warning(
-                        f"[force-cleanup] Could not strip PV finalizers for "
-                        f"PVC {pvc_obj.name} on {cluster_name}",
-                        exc_info=True,
+
+        if all_pvcs:
+            run_cmd(  # IgnoreDeprecation
+                f"oc delete pvc --all -n {workload_namespace} --wait=false",
+                ignore_error=True,
+            )
+
+        # Poll until all PVCs are gone (up to 60s).
+        if all_pvcs:
+            pvc_ocp = ocp.OCP(kind=constants.PVC, namespace=workload_namespace)
+            try:
+                pvc_ocp.wait_for_delete(resource_name="", timeout=60, sleep=5)
+                logger.info(
+                    f"[force-cleanup] All PVCs deleted in {workload_namespace} "
+                    f"on {cluster_name}"
+                )
+            except Exception:
+                logger.warning(
+                    f"[force-cleanup] Some PVCs still present in "
+                    f"{workload_namespace} on {cluster_name} after 60s — "
+                    f"re-stripping finalizers",
+                    exc_info=True,
+                )
+                # Re-strip in case something briefly re-added a finalizer
+                for pvc_obj in all_pvcs:
+                    run_cmd(  # IgnoreDeprecation
+                        f"oc patch pvc {pvc_obj.name} -n {workload_namespace} "
+                        f"--type={_PATCH_TYPE} -p '{_PATCH}' --ignore-not-found=true",
+                        ignore_error=True,
                     )
 
         # -- 5: delete namespace ----------------------------------------- #
