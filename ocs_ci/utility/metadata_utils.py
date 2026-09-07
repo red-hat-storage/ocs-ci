@@ -106,7 +106,7 @@ def iter_ctrlplugin_containers(pod_obj):
     and rbd CSI ctrlplugin (or provisioner) pods.
 
     Args:
-        pod_obj (OCP): Pod OCP object in the storage namespace.
+        pod_obj (ocs_ci.ocs.ocp.OCP): Pod OCP object in the storage namespace.
 
     Yields:
         tuple: pod name, container name, args list (may be empty).
@@ -143,7 +143,7 @@ def check_setmetadata_availability(pod_obj):
     not treated as "metadata disabled".
 
     Args:
-        pod_obj (OCP): Pod OCP object in the storage namespace.
+        pod_obj (ocs_ci.ocs.ocp.OCP): Pod OCP object in the storage namespace.
 
     Returns:
         bool: True if metadata is enabled (flag present, or always-on).
@@ -187,7 +187,7 @@ def get_csi_cluster_name(pod_obj):
     Return the CSI cluster name from ctrlplugin ``--clustername`` or OperatorConfig.
 
     Args:
-        pod_obj (OCP): Pod OCP object used to run ``oc get``.
+        pod_obj (ocs_ci.ocs.ocp.OCP): Pod OCP object used to run ``oc get``.
 
     Returns:
         str | None: Cluster name, or None if it cannot be determined.
