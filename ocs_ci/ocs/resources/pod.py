@@ -4779,6 +4779,48 @@ def get_ocs_client_operator_controller_manager(
     return [Pod(**pod) for pod in ocs_client_operator_controller_manager]
 
 
+def wait_for_ocs_client_operator_ready(
+    namespace=None, timeout=600, sleep=15, previous_fingerprints=None
+):
+    """
+    Wait until ocs-client-operator manager is Running and ready.
+
+    A TLS 1.3 apply typically restarts the manager in place (same pod UID,
+    new startedAt). A later TLS 1.2 patch may reload in-process with no
+    fingerprint change. When ``previous_fingerprints`` is set, wait until
+    those fingerprints are gone; omit it when a roll is not required.
+
+    Args:
+        namespace (str): Namespace of the operator pod.
+        timeout (int): Seconds to wait.
+        sleep (int): Seconds between polls.
+        previous_fingerprints: Optional fingerprints from before a TLSProfile
+            apply; when set, wait until none remain.
+    """
+    from ocs_ci.helpers.tlsprofile_helper import _wait_for_tls_workload_ready
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    def _list_pods():
+        return (
+            get_pods_having_label(
+                constants.OCS_CLIENT_OPERATOR_LABEL,
+                namespace=namespace,
+                statuses=[constants.STATUS_RUNNING],
+            )
+            or []
+        )
+
+    _wait_for_tls_workload_ready(
+        _list_pods,
+        previous_fingerprints,
+        container_name_substr="manager",
+        workload_name="ocs-client-operator",
+        timeout=timeout,
+        sleep=sleep,
+    )
+
+
 def get_csi_addons_controller_manager_pod():
     """
     Get  csi_addons_controller_manager_pod pod
