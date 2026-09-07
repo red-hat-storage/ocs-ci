@@ -52,7 +52,15 @@ from ocs_ci.helpers.odf_cli import ODFCliRunner
 
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.helpers.virtctl import get_virtctl_tool
-from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
+from ocs_ci.ocs import (
+    constants,
+    defaults,
+    fio_artefacts,
+    md_blow,
+    node,
+    ocp,
+    platform_nodes,
+)
 from ocs_ci.ocs.constants import (
     RECLAIMSPACE_SCHEDULE_ANNOTATION,
     KEYROTATION_SCHEDULE_ANNOTATION,
@@ -10554,6 +10562,25 @@ def scale_noobaa_db_pod_pv_size(request):
     return scale_noobaa_db_pv(request)
 
 
+@pytest.fixture()
+def md_blow_factory(request):
+    """
+    Returns MdBlow object with increased noobaa-core resources for faster IO.
+    Restores default noobaa-core resources on teardown.
+    """
+    blow_io = md_blow.MdBlow()
+    blow_io.increase_core_pod_cpu_memory()
+
+    def teardown():
+        try:
+            blow_io.reduce_core_pod_cpu_memory()
+        except Exception as exc:
+            log.warning(f"Failed to restore noobaa-core resources: {exc}")
+
+    request.addfinalizer(teardown)
+    return blow_io
+
+
 def scale_noobaa_db_pv(request):
     """
     This fixtue helps to scale the noobaa db pv size.
@@ -10576,19 +10603,31 @@ def scale_noobaa_db_pv(request):
     ]
     nb_pvcs = get_all_pvc_objs(selector=constants.NOOBAA_DB_LABEL_419_AND_ABOVE)
 
-    def factory(pv_size="50"):
+    def factory(pv_size="50", pvc_names=None):
         """
         Args:
             pv_size(int): Size in GB
+            pvc_names(list): Optional list of PVC names to resize. When omitted,
+                all NooBaa DB PVCs are resized.
 
         """
         pods = []
+        pvcs_to_resize = nb_pvcs
+        if pvc_names:
+            pvc_names_set = set(pvc_names)
+            pvcs_to_resize = [
+                nb_pvc for nb_pvc in nb_pvcs if nb_pvc.name in pvc_names_set
+            ]
+            assert pvcs_to_resize, (
+                f"No NooBaa DB PVCs matched pvc_names={pvc_names}. "
+                f"Available PVCs: {[nb_pvc.name for nb_pvc in nb_pvcs]}"
+            )
 
         for operator in operators:
             modify_deployment_replica_count(deployment_name=operator, replica_count=0)
         log.info(f"Scaled down operators: {operators}")
 
-        for nb_pvc in nb_pvcs:
+        for nb_pvc in pvcs_to_resize:
             nb_pvc.resize_pvc(new_size=pv_size)
             log.info(f"{nb_pvc.name} is resized to {pv_size}")
 
