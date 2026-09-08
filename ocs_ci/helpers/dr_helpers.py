@@ -1664,7 +1664,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
 
     4. On each managed cluster, strip finalizers from PVCs and their backing PVs,
        then delete the PVCs.  If any PVC is still stuck after 60s, re-strip both
-       PVC and PV finalizers and wait 30s more.
+       PVC and PV finalizers and return to namespace deletion.
     5. On each managed cluster, delete the workload namespace.
 
     Args:
@@ -1672,6 +1672,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
         vrg_name (str): Name of the VolumeReplicationGroup / DRPC / Placement
             (all share the same name for discovered-apps workloads).
     """
+    restore_index = config.cur_index
     logger.warning(
         f"Force-deleting discovered apps workload: namespace={workload_namespace}, "
         f"vrg_name={vrg_name}"
@@ -1796,10 +1797,11 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                 # Wait for VRs to be fully gone before touching PVCs so the
                 # replication controller stops re-adding PVC finalizers.
                 try:
-                    vr_ocp.wait_for_delete(
-                        resource_name="",
+                    wait_for_resource_count(
+                        kind=constants.VOLUME_REPLICATION,
+                        namespace=workload_namespace,
+                        expected_count=0,
                         timeout=60,
-                        sleep=5,
                     )
                 except Exception:
                     logger.warning(
@@ -1816,6 +1818,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
 
         # -- 3c: VolumeGroupReplication + mirror group (CG only) --------- #
         if is_cg_enabled():
+            vgr_items = []
             try:
                 vgr_ocp = ocp.OCP(
                     kind=constants.VOLUME_GROUP_REPLICATION,
@@ -1847,10 +1850,11 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                     # Wait for VGRs to vanish before the rbd-disable step reads
                     # VGRContent (still accessible cluster-scoped).
                     try:
-                        vgr_ocp.wait_for_delete(
-                            resource_name="",
+                        wait_for_resource_count(
+                            kind=constants.VOLUME_GROUP_REPLICATION,
+                            namespace=workload_namespace,
+                            expected_count=0,
                             timeout=60,
-                            sleep=5,
                         )
                     except Exception:
                         logger.warning(
@@ -2161,9 +2165,13 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
 
         # Poll until all PVCs are gone (up to 60s).
         if all_pvcs:
-            pvc_ocp = ocp.OCP(kind=constants.PVC, namespace=workload_namespace)
             try:
-                pvc_ocp.wait_for_delete(resource_name="", timeout=60, sleep=5)
+                wait_for_resource_count(
+                    kind=constants.PVC,
+                    namespace=workload_namespace,
+                    expected_count=0,
+                    timeout=60,
+                )
                 logger.info(
                     f"[force-cleanup] All PVCs deleted in {workload_namespace} "
                     f"on {cluster_name}"
@@ -2207,6 +2215,7 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                 exc_info=True,
             )
 
+    config.switch_ctx(restore_index)
     logger.info(
         f"[force-cleanup] Completed force-cleanup for namespace "
         f"{workload_namespace}, vrg={vrg_name}"
