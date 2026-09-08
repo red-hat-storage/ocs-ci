@@ -1172,6 +1172,14 @@ class TestOLSRecipeFailoverAndRelocate:
         logger.info(f"Waiting {wait_time}m before relocate")
         sleep(wait_time * 60)
 
+        logger.info("Checking for lastKubeObjectProtectionTime")
+        dr_helpers.verify_last_kubeobject_protection_time(
+            drpc_obj, workload.kubeobject_capture_interval_int
+        )
+
+        logger.info("Checking for lastGroupSyncTime")
+        dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
+
         # ------------------------------------------------------------------ #
         # Step 9: Relocate back to primary                                    #
         # ------------------------------------------------------------------ #
