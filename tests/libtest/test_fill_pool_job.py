@@ -27,18 +27,32 @@ class TestFillPoolJob(ManageTest):
 
     def test_memory_bytes_fractional_binary_units(self):
         """_memory_bytes must parse fractional Ki/Mi/Gi/Ti quantities."""
-        assert _memory_bytes("1.5Ki") == 1.5 * 1024
-        assert _memory_bytes("1.5Mi") == 1.5 * 1024**2
-        assert _memory_bytes("1.5Gi") == 1.5 * 1024**3
-        assert _memory_bytes("1.5Ti") == 1.5 * 1024**4
-        assert _memory_bytes("512Mi") == 512 * 1024**2
-        assert _memory_bytes("2Gi") == 2 * 1024**3
+        quantity_per_expected_bytes = {
+            "1.5Ki": 1.5 * 1024,
+            "1.5Mi": 1.5 * 1024**2,
+            "1.5Gi": 1.5 * 1024**3,
+            "1.5Ti": 1.5 * 1024**4,
+            "512Mi": 512 * 1024**2,
+            "2Gi": 2 * 1024**3,
+        }
+        for quantity, expected_bytes in quantity_per_expected_bytes.items():
+            actual_bytes = _memory_bytes(quantity)
+            assert actual_bytes == expected_bytes, (
+                f"_memory_bytes must parse {quantity} as {expected_bytes} bytes; "
+                f"got {actual_bytes}"
+            )
 
         _, _, mem_request, mem_limit = _apply_incompressible_resource_floors(
             "100m", "500m", "1.5Gi", "1.5Gi"
         )
-        assert mem_request == "1.5Gi"
-        assert mem_limit == "2Gi"
+        assert mem_request == "1.5Gi", (
+            "incompressible mem_request of 1.5Gi already exceeds the 512Mi floor "
+            f"and must be kept; got {mem_request}"
+        )
+        assert mem_limit == "2Gi", (
+            "incompressible mem_limit of 1.5Gi is below the 2Gi floor "
+            f"and must be raised to 2Gi; got {mem_limit}"
+        )
 
     def test_fill_pool_job_incompressible(self, fill_job_factory):
         """
