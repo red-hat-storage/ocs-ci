@@ -480,8 +480,7 @@ def create_itms_from_idms(idms_content, itms_name, output_file):
     the mirror registry.
 
     The generated ITMS reuses the same source->mirrors mappings from the IDMS,
-    only changing the kind and spec field name:
-        imageDigestMirrors  ->  imageTagMirrors
+    only changing the kind and spec field name.
 
     Args:
         idms_content (dict): Parsed IDMS yaml content (already loaded).
