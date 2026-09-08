@@ -1955,6 +1955,61 @@ acm_configuration_4_22 = {
     ),
 }
 
+acm_configuration_5_0 = {
+    "dr-policies-tab": ("a[data-test='horizontal-link-Policies']", By.CSS_SELECTOR),
+    "dr-create-policy-btn": ("//button[.//span[text()='Create DRPolicy']]", By.XPATH),
+    "dr-cluster-checkbox": (
+        "//tr[.//td[@data-label='Managed Cluster'][normalize-space(.)='{0}']]//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "dr-prerequisites-met": (
+        "//h4[contains(text(),'All disaster recovery prerequisites met')]",
+        By.XPATH,
+    ),
+    "dr-submariner-healthy": (
+        "//span[@data-test='status-text'][contains(text(),'Submariner is healthy')]",
+        By.XPATH,
+    ),
+    "dr-globalnet-enabled": (
+        "//*[contains(text(),'Globalnet')]/following-sibling::*//*[contains(text(),'Enabled')]",
+        By.XPATH,
+    ),
+    "dr-policy-name-input": (
+        "//input[contains(@id,'policy-name')]",
+        By.XPATH,
+    ),
+    "dr-replication-interval-input": (
+        "//input[@type='number' and ancestor::*[contains(.,'Replication interval')]]",
+        By.XPATH,
+    ),
+    "dr-review-cluster-pair-configured": (
+        "//span[@data-test='status-text'][contains(.,'Configured')]",
+        By.XPATH,
+    ),
+    "dr-back-btn": ("//button[.//span[text()='Back']]", By.XPATH),
+    "dr-create-btn": ("//button[.//span[text()='Create']]", By.XPATH),
+    "dr-cancel-btn": ("//button[.//span[text()='Cancel']]", By.XPATH),
+    "dr-pairing-in-progress": (
+        "//h2[contains(text(),'Cluster pairing in progress')]",
+        By.XPATH,
+    ),
+    "dr-clusters-paired-success": (
+        "//h2[contains(text(),'Clusters paired successfully')]",
+        By.XPATH,
+    ),
+    "dr-view-policy-btn": ("//button[.//span[text()='View policy']]", By.XPATH),
+    "dr-close-btn": ("//button[.//span[text()='Close']]", By.XPATH),
+    "dr-policy-row-name": (
+        "//td[@data-label='name'][normalize-space(.)='{0}']",
+        By.XPATH,
+    ),
+    "dr-policy-status-validated": (
+        "//tr[.//td[@data-label='name'][normalize-space(.)='{0}']]"
+        "//td[@data-label='status'][normalize-space(.)='Validated']",
+        By.XPATH,
+    ),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -4240,6 +4295,7 @@ locators = {
             **acm_configuration_4_20,
             **acm_configuration_4_21,
             **acm_configuration_4_22,
+            **acm_configuration_5_0,
         },
         "validation": {
             **validation,
