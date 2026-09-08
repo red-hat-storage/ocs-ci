@@ -126,6 +126,8 @@ class TestFailoverAndRelocate:
 
         This test will run twice both via CLI and UI
 
+        If custom_sc, subscription apps will use default storageclass and appset apps will use custom storageclass.
+        This is to cover DFBUGS-8114 in application level.
         """
         if via_ui:
             acm_obj = AcmAddClusters()
