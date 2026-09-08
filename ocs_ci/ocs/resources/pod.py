@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import logging
 import os
 import re
+import shlex
 import yaml
 import tempfile
 import time
@@ -47,7 +48,6 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     exec_cmd,
 )
-from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.constants import CSI_RBD_ADDON_NODEPLUGIN_LABEL_420
 
@@ -594,9 +594,9 @@ class Pod(OCS):
         if isinstance(packages, list):
             packages = " ".join(packages)
 
-        # Detect OS inside pod
+        # oc rsh does not invoke a shell, so compound commands need bash -c.
         os_release = self.exec_cmd_on_pod(
-            "cat /etc/os-release || true", out_yaml_format=False
+            "bash -c 'cat /etc/os-release || true'", out_yaml_format=False
         )
 
         os_release_lower = os_release.lower() if os_release else ""
@@ -621,7 +621,7 @@ class Pod(OCS):
                 f"Unsupported OS for package install. /etc/os-release:\n{os_release}"
             )
 
-        self.exec_cmd_on_pod(cmd, out_yaml_format=False)
+        self.exec_cmd_on_pod(f"bash -c {shlex.quote(cmd)}", out_yaml_format=False)
 
     def copy_to_server(self, server, authkey, localpath, remotepath, user=None):
         """
@@ -1363,7 +1363,7 @@ def list_ceph_images(pool_name="rbd"):
     return ct_pod.exec_ceph_cmd(ceph_cmd=f"rbd ls {pool_name}", format="json")
 
 
-@retry(TypeError, tries=5, delay=2, backoff=1)
+@retry((TypeError, CommandFailed), tries=5, delay=2, backoff=1)
 def check_file_existence(pod_obj, file_path):
     """
     Check if file exists inside the pod
@@ -1376,14 +1376,14 @@ def check_file_existence(pod_obj, file_path):
     Returns:
         bool: True if the file exist, False otherwise
     """
-    try:
-        check_if_executable_in_path(pod_obj.exec_cmd_on_pod("which find"))
-    except CommandFailed:
-        pod_obj.install_packages("findutils")
-    ret = pod_obj.exec_cmd_on_pod(f'bash -c "find {file_path}"')
-    if re.search(file_path, ret):
-        return True
-    return False
+    existence_script = (
+        f"if [ -e {shlex.quote(file_path)} ]; then echo EXISTS; else echo MISSING; fi"
+    )
+    ret = pod_obj.exec_cmd_on_pod(
+        f"bash -c {shlex.quote(existence_script)}",
+        out_yaml_format=False,
+    )
+    return "EXISTS" in str(ret)
 
 
 def get_file_path(pod_obj, file_name):
