@@ -1,3 +1,4 @@
+import json
 import os
 import platform
 import xattr
@@ -245,6 +246,73 @@ class ODFCliRunner:
         return self.run_command(
             f" set ceph log-level {service} {subsystem} {log_level}"
         )
+
+    def run_ceph_config(self, args: Union[str, list]) -> str:
+        """
+        Run a `ceph config` subcommand through the ODF CLI passthrough.
+
+        Args:
+            args (Union[str, list]): `ceph config` arguments, e.g.
+                "set global osd_mclock_max_capacity_iops_hdd 80000".
+
+        Returns:
+            str: The command output.
+
+        """
+        args_str = args if isinstance(args, str) else " ".join(args)
+        return self.run_command(f" ceph config {args_str}")
+
+    def get_ceph_config_value(self, who: str, option: str) -> str:
+        """
+        Read the effective value of a Ceph config option via the ODF CLI.
+
+        Args:
+            who (str): Ceph entity, e.g. "osd", "global", "osd.0".
+            option (str): Ceph config option name.
+
+        Returns:
+            str: The value reported by `ceph config get`.
+
+        """
+        output = self.run_ceph_config(f"get {who} {option}")
+        return output.stdout.decode().strip().split()[-1]
+
+    def get_osd_bdev_type(self, osd_id: Union[str, int]) -> str:
+        """
+        Get the bluestore device type of an OSD via the ODF CLI.
+
+        Ceph mClock selects `osd_mclock_max_capacity_iops_{ssd,hdd}` by this
+        value, which can differ from the OSD's CRUSH device class.
+
+        Args:
+            osd_id (Union[str, int]): OSD id, e.g. 0 or "0".
+
+        Returns:
+            str: The bluestore device type, "ssd" or "hdd".
+
+        """
+        output = self.run_command(f" ceph osd metadata {osd_id}")
+        return json.loads(output.stdout.decode())["bluestore_bdev_type"]
+
+    def get_ceph_config_dump_entries(self, option: str) -> list:
+        """
+        List the `ceph config dump` entries for a Ceph config option.
+
+        Args:
+            option (str): Ceph config option name.
+
+        Returns:
+            list: (who, value) tuples, e.g. [("global", "80000.000000")].
+                Empty when the option has no entry set.
+
+        """
+        dump = self.run_ceph_config("dump").stdout.decode()
+        entries = []
+        for line in dump.splitlines():
+            fields = line.split()
+            if option in fields:
+                entries.append((fields[0], fields[fields.index(option) + 1]))
+        return entries
 
     def get_recovery_profile(self):
         """
