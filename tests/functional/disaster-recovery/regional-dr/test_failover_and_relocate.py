@@ -92,7 +92,7 @@ class TestFailoverAndRelocate:
             False,  # via_ui = True
             True,
             True,
-            # TODO: marks=pytest.mark.polarion_id("OCS-*"),
+            marks=pytest.mark.polarion_id("OCS-8260"),
             id="primary_up-cephfs-cli-custom_sc-ec",
         ),
     ]
@@ -370,6 +370,7 @@ class TestFailoverAndRelocate:
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
+                timeout=2400 if erasure_coding else 1800,
                 performed_dr_action=True,
             )
 
