@@ -17,11 +17,20 @@ import logging
 
 import pytest
 import yaml
+from semantic_version import Version
 
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
+from ocs_ci.helpers.dr_helpers_ui import (
+    verify_pending_cleanup_alert_firing,
+    verify_pending_cleanup_alert_resolved,
+)
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.ocs.openshift_lightspeed import OpenShiftLightspeed, is_ols_available
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.version import get_semantic_ocs_version_from_config
 
 logger = logging.getLogger(__name__)
 
@@ -1043,7 +1052,8 @@ class TestOLSRecipeFailoverAndRelocate:
             4. Create the DRPC with ``recipeRef`` pointing at the OLS Recipe.
             5. Wait for initial sync.
             6. Optionally power off the primary cluster nodes.
-            7. Failover to the secondary cluster; verify workload is running.
+            7. Failover to the secondary cluster; run discovered-apps cleanup
+               on old primary; verify workload is running.
             8. Optionally power the primary cluster back on.
             9. Relocate back to the primary cluster; verify workload is running.
         """
@@ -1051,7 +1061,7 @@ class TestOLSRecipeFailoverAndRelocate:
 
         from ocs_ci.framework import config
         from ocs_ci.helpers import dr_helpers
-        from ocs_ci.ocs.node import get_node_objs
+        from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
         from ocs_ci.ocs.resources.drpc import DRPC
         from ocs_ci.ocs import constants as _constants
 
@@ -1142,15 +1152,70 @@ class TestOLSRecipeFailoverAndRelocate:
             skip_odf_cli_validation=True,
             discovered_apps=True,
         )
+        # Verify ApplicationCleanupPending alert fire/resolve around cleanup (OCS 4.22+)
+        if get_semantic_ocs_version_from_config() >= Version("4.22", partial=True):
+            wait_time_for_alert = (
+                constants.ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD + 180
+            )
+            logger.info(
+                f"Waiting {wait_time_for_alert}s for ApplicationCleanupPending "
+                "alert to fire after failover"
+            )
+            sleep(wait_time_for_alert)
+            acm_obj = AcmAddClusters()
+            verify_pending_cleanup_alert_firing(
+                acm_obj,
+                "Failover",
+                drpc_name=workload.discovered_apps_placement_name,
+            )
+            logger.info("Doing cleanup operations after failover")
+            dr_helpers.do_discovered_apps_cleanup(
+                drpc_name=workload.discovered_apps_placement_name,
+                old_primary=primary_cluster,
+                workload_namespace=workload.workload_namespace,
+                workload_dir=workload.workload_dir,
+                vrg_name=workload.discovered_apps_placement_name,
+            )
+            verify_pending_cleanup_alert_resolved(
+                acm_obj,
+                "Failover",
+                drpc_name=workload.discovered_apps_placement_name,
+            )
+        else:
+            logger.info("Doing cleanup operations after failover")
+            dr_helpers.do_discovered_apps_cleanup(
+                drpc_name=workload.discovered_apps_placement_name,
+                old_primary=primary_cluster,
+                workload_namespace=workload.workload_namespace,
+                workload_dir=workload.workload_dir,
+                vrg_name=workload.discovered_apps_placement_name,
+            )
+
         config.switch_to_cluster_by_name(secondary_cluster)
         dr_helpers.wait_for_all_resources_creation(
             workload.workload_pvc_count,
             workload.workload_pod_count,
             workload.workload_namespace,
+            timeout=1200,
             discovered_apps=True,
             vrg_name=workload.discovered_apps_placement_name,
+            performed_dr_action=True,
         )
         logger.info("Workload running on secondary cluster after failover")
+
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            # Verify deletion of ReplicationDestination resources on the old
+            # secondary cluster (now acting as secondary after failover)
+            config.switch_to_cluster_by_name(secondary_cluster)
+            dr_helpers.wait_for_replication_destinations_deletion(
+                workload.workload_namespace
+            )
+            # Verify creation of ReplicationDestination resources on the new
+            # secondary cluster (old primary)
+            config.switch_to_cluster_by_name(primary_cluster)
+            dr_helpers.wait_for_replication_destinations_creation(
+                workload.workload_pvc_count, workload.workload_namespace
+            )
 
         # ------------------------------------------------------------------ #
         # Step 8: Power primary cluster back on if it was stopped             #
@@ -1161,16 +1226,24 @@ class TestOLSRecipeFailoverAndRelocate:
             )
             sleep(wait_time * 60)
             nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
-            config.switch_to_cluster_by_name(primary_cluster)
-            dr_helpers.wait_for_all_resources_creation(
-                workload.workload_pvc_count,
-                workload.workload_pod_count,
-                workload.workload_namespace,
-                skip_replication_resources=True,
-            )
+            wait_for_nodes_status([node.name for node in primary_cluster_nodes])
+            logger.info("Wait for all pods in openshift-storage to be in running state")
+            assert wait_for_pods_to_be_running(
+                timeout=720
+            ), "Not all the pods reached running state"
+            logger.info("Checking for Ceph Health OK")
+            ceph_health_check()
 
         logger.info(f"Waiting {wait_time}m before relocate")
         sleep(wait_time * 60)
+
+        logger.info("Checking for lastKubeObjectProtectionTime after failover")
+        dr_helpers.verify_last_kubeobject_protection_time(
+            drpc_obj, workload.kubeobject_capture_interval_int
+        )
+
+        logger.info("Checking for lastGroupSyncTime after failover")
+        dr_helpers.verify_last_group_sync_time(drpc_obj, scheduling_interval)
 
         # ------------------------------------------------------------------ #
         # Step 9: Relocate back to primary                                    #
@@ -1182,18 +1255,77 @@ class TestOLSRecipeFailoverAndRelocate:
             workload_type=workload.workload_type,
             workload_placement_name=workload.discovered_apps_placement_name,
             discovered_apps=True,
+            old_primary=secondary_cluster,
+            workload_instance=workload,
             # Skip odf-cli validation inside relocate() — workload pods are not
             # yet up at that point; we validate below after resources are ready.
             skip_odf_cli_validation=True,
         )
+
+        # Verify ApplicationCleanupPending alert firing after relocate (OCS 4.22+)
+        if get_semantic_ocs_version_from_config() >= Version("4.22", partial=True):
+            wait_time_for_alert = (
+                constants.ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD + 180
+            )
+            logger.info(
+                f"Waiting {wait_time_for_alert}s for ApplicationCleanupPending "
+                "alert to fire after relocate"
+            )
+            sleep(wait_time_for_alert)
+            # Create a fresh ACM UI session as the previous may have expired
+            acm_obj = AcmAddClusters()
+            verify_pending_cleanup_alert_firing(
+                acm_obj,
+                "Relocate",
+                drpc_name=workload.discovered_apps_placement_name,
+            )
+
+            logger.info("Doing cleanup operations after relocate")
+            dr_helpers.do_discovered_apps_cleanup(
+                drpc_name=workload.discovered_apps_placement_name,
+                old_primary=secondary_cluster,
+                workload_namespace=workload.workload_namespace,
+                workload_dir=workload.workload_dir,
+                vrg_name=workload.discovered_apps_placement_name,
+            )
+
+            verify_pending_cleanup_alert_resolved(
+                acm_obj,
+                "Relocate",
+                drpc_name=workload.discovered_apps_placement_name,
+            )
+
         config.switch_to_cluster_by_name(primary_cluster)
         dr_helpers.wait_for_all_resources_creation(
             workload.workload_pvc_count,
             workload.workload_pod_count,
             workload.workload_namespace,
+            timeout=1200,
             discovered_apps=True,
             vrg_name=workload.discovered_apps_placement_name,
+            performed_dr_action=True,
         )
+
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            # Verify deletion of ReplicationDestination resources on the old
+            # secondary cluster (primary before failover, now acting as secondary
+            # after relocate back)
+            config.switch_to_cluster_by_name(primary_cluster)
+            dr_helpers.wait_for_replication_destinations_deletion(
+                workload.workload_namespace
+            )
+            # Verify creation of ReplicationDestination resources on the current
+            # secondary cluster
+            config.switch_to_cluster_by_name(secondary_cluster)
+            dr_helpers.wait_for_replication_destinations_creation(
+                workload.workload_pvc_count, workload.workload_namespace
+            )
+
+        logger.info("Checking for lastKubeObjectProtectionTime after relocate")
+        dr_helpers.verify_last_kubeobject_protection_time(
+            drpc_obj, workload.kubeobject_capture_interval_int
+        )
+
         logger.info(
             "Workload running on primary cluster after relocate — "
             f"OLS Recipe '{recipe_name}' successfully used for DR protection"
