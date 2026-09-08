@@ -446,6 +446,8 @@ def pytest_generate_tests(metafunc):
                     metafunc, roles
                 )
                 log.debug(f"upgrade params = {params}")
+                if not params:
+                    return
                 for marker in metafunc.definition.iter_markers():
                     if marker.name in upgrade_parametrizer.MULTICLUSTER_UPGRADE_MARKERS:
                         log.debug(
