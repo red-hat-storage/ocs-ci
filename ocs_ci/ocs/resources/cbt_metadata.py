@@ -259,6 +259,50 @@ def _delete_tracked_resources(resources):
     resources.clear()
 
 
+def validate_snapshot_metadata_sidecar(pod):
+    """
+    Validate that a pod has a ready csi-snapshot-metadata container.
+
+    Args:
+        pod (dict): Pod resource dictionary
+
+    Returns:
+        tuple: (pod_name, pod_ip) if validation succeeds
+
+    Raises:
+        AssertionError: If the pod does not have the sidecar or
+            if the sidecar is not ready
+    """
+    pod_name = pod["metadata"]["name"]
+    pod_ip = pod["status"]["podIP"]
+
+    containers = pod["spec"]["containers"]
+    container_names = [c["name"] for c in containers]
+    assert "csi-snapshot-metadata" in container_names, (
+        f"Pod {pod_name} does not have a csi-snapshot-metadata "
+        f"container. Found containers: {container_names}"
+    )
+
+    container_statuses = pod["status"].get("containerStatuses", [])
+    sidecar_status = next(
+        (cs for cs in container_statuses if cs["name"] == "csi-snapshot-metadata"),
+        None,
+    )
+    assert (
+        sidecar_status is not None
+    ), f"Pod {pod_name} has no containerStatus for csi-snapshot-metadata"
+    assert (
+        sidecar_status["ready"] is True
+    ), f"Pod {pod_name} sidecar container is not ready: {sidecar_status}"
+    logger.info(
+        "Pod %s has csi-snapshot-metadata container ready (IP: %s)",
+        pod_name,
+        pod_ip,
+    )
+
+    return pod_name, pod_ip
+
+
 # ---- ListerTool ---------------------------------------------------
 
 
@@ -289,7 +333,7 @@ class ListerTool:
         self.tools_repo = (
             "https://github.com/red-hat-storage/external-snapshot-metadata.git"
         )
-        self.tools_ref = "main"
+        self.tools_ref = "tools/v1"
         self.golang_image = "golang:1.26"
         self.service_account = "cbt-client"
         self.ca_cert_cm_name = "cbt-ca-cert"
