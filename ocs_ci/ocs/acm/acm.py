@@ -439,9 +439,10 @@ class AcmAddClusters(AcmPageNavigator):
         for cluster_nr in range(1, 3):
             if azure_ipi_clusters_indices:
                 try:
-                    azure_page = self.get_element_text(
-                        self.page_nav["submariner_addon_azure_page"]
-                    )
+                    locator_azure = self.page_nav["submariner_addon_azure_page"]
+                    azure_page = self.driver.find_element(
+                        by=locator_azure[1], value=locator_azure[0]
+                    ).text
                     found_azure_page = True
                     azure_index = [
                         cluster_index
