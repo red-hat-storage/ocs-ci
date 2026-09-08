@@ -566,7 +566,6 @@ def cephfs_custom_storage_class(request, storageclass_factory):
                         replica=replica,
                         compression=compression,
                         erasure_coded=erasure_coded,
-                        new_cephfs_pool=True,  # True because the requirement of new SC in DR is with non default pool
                     )
                     if sc_obj is None or sc_obj.name != cephfs_sc_name:
                         log.error(
