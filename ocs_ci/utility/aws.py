@@ -2240,6 +2240,59 @@ class AWS(object):
             else:
                 logger.error(f"Error deleting OIDC provider: {e}")
 
+    def cleanup_oidc_providers_by_prefix(self, url_prefix):
+        """
+        Delete all OIDC providers whose URL starts with the given prefix.
+
+        AWS has a hard limit of 100 OpenID Connect providers per account.
+        When HCP cluster deployments fail or are aborted without proper
+        cleanup, their OIDC providers remain and accumulate until the limit
+        is hit, blocking all new deployments.
+
+        This method lists all OIDC providers in the account and deletes
+        those whose issuer URL starts with the given prefix (typically
+        the cluster's OIDC bucket name). This safely scopes the cleanup
+        to a single cluster's providers without affecting other clusters.
+
+        Args:
+            url_prefix (str): URL prefix to match, e.g.
+                ``"mycluster-oidc-bucket.s3.us-west-2.amazonaws.com"``
+
+        Returns:
+            int: Number of OIDC providers deleted.
+        """
+        try:
+            response = self.iam_client.list_open_id_connect_providers()
+        except Exception as e:
+            logger.error(f"Failed to list OIDC providers: {e}")
+            return 0
+
+        providers = response.get("OpenIDConnectProviderList", [])
+        deleted_count = 0
+        for provider in providers:
+            arn = provider["Arn"]
+            url = (
+                arn.split(":oidc-provider/", 1)[-1] if ":oidc-provider/" in arn else ""
+            )
+            if not url.startswith(url_prefix):
+                continue
+
+            logger.info(f"Deleting OIDC provider matching prefix '{url_prefix}': {arn}")
+            try:
+                self.iam_client.delete_open_id_connect_provider(
+                    OpenIDConnectProviderArn=arn
+                )
+                deleted_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete OIDC provider {arn}: {e}")
+
+        if deleted_count:
+            logger.info(
+                f"Deleted {deleted_count} OIDC provider(s) "
+                f"matching prefix '{url_prefix}'"
+            )
+        return deleted_count
+
     def get_caller_identity(self):
         """
         Get STS Caller Identity Account ID

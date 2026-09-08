@@ -21,7 +21,10 @@ from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil, delete_sts_iam_roles, delete_subnet_tags
-from ocs_ci.utility.deployment import create_openshift_install_log_file
+from ocs_ci.utility.deployment import (
+    create_openshift_install_log_file,
+    deploy_roks_icsp_daemonset,
+)
 from ocs_ci.utility.rosa import (
     get_associated_oidc_config_id,
     delete_account_roles,
@@ -308,11 +311,21 @@ class ROSA(CloudDeploymentBase):
 
         # rosa hcp is self-managed and doesn't support ODF addon
         if rosa_hcp:
+            if config.DEPLOYMENT.get("konflux_build"):
+                log_step(
+                    "ROSA HCP + Konflux: deploying roks-icsp DaemonSet "
+                    "for worker filesystem-based mirror configuration"
+                )
+                deploy_roks_icsp_daemonset()
             super(ROSA, self).deploy_ocs()
         else:
             rosa.install_odf_addon(self.cluster_name)
 
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
+
+        # ROSA HCP ODF deployment is slower due to worker filesystem mirror
+        # configuration and image pull via registries.conf.d mirrors — double timeouts
+        timeout_multiplier = 2 if rosa_hcp else 1
 
         if config.ENV_DATA.get("cluster_type") != "consumer":
             # Check for Ceph pods
@@ -320,16 +333,18 @@ class ROSA(CloudDeploymentBase):
                 condition="Running",
                 selector=constants.MON_APP_LABEL,
                 resource_count=3,
-                timeout=600,
+                timeout=600 * timeout_multiplier,
             )
             assert pod.wait_for_resource(
-                condition="Running", selector=constants.MGR_APP_LABEL, timeout=600
+                condition="Running",
+                selector=constants.MGR_APP_LABEL,
+                timeout=600 * timeout_multiplier,
             )
             assert pod.wait_for_resource(
                 condition="Running",
                 selector=constants.OSD_APP_LABEL,
                 resource_count=3,
-                timeout=600,
+                timeout=600 * timeout_multiplier,
             )
 
         if config.DEPLOYMENT.get("pullsecret_workaround") or config.DEPLOYMENT.get(
@@ -344,7 +359,9 @@ class ROSA(CloudDeploymentBase):
             )()
 
         # Verify health of ceph cluster
-        ceph_health_check(namespace=self.namespace, tries=60, delay=10)
+        ceph_health_check(
+            namespace=self.namespace, tries=60 * timeout_multiplier, delay=10
+        )
 
         # Workaround for the bug 2166900
         if config.ENV_DATA.get("cluster_type") == "consumer":
