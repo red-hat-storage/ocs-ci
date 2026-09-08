@@ -1275,12 +1275,17 @@ def wait_for_replication_resources_deletion(
             )
 
         if "cephfs" in namespace and workload_cleanup:
-            wait_for_resource_count(
-                kind=constants.VOLUMESNAPSHOT,
-                namespace=namespace,
-                expected_count=0,
-                timeout=timeout,
-            )
+            if config.ENV_DATA.get("skip_vs_check"):
+                logger.warning(
+                    "Skipping VolumeSnapshot count check (skip_vs_check is set)"
+                )
+            else:
+                wait_for_resource_count(
+                    kind=constants.VOLUMESNAPSHOT,
+                    namespace=namespace,
+                    expected_count=0,
+                    timeout=timeout,
+                )
 
 
 def wait_for_all_resources_creation(
