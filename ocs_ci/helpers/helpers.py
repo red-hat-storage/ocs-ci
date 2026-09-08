@@ -1510,11 +1510,10 @@ def delete_storageclasses(sc_objs):
     Returns:
         bool: True if deletion is successful
     """
-    from ocs_ci.ocs.resources.storage_cluster import delete_storageclass_and_deregister
 
     for sc in sc_objs:
         logger.info("Deleting StorageClass with name %s", sc.name)
-        delete_storageclass_and_deregister(sc_name=sc.name, sc_ocp=sc.ocp)
+        sc.delete()
     return True
 
 
