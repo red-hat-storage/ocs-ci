@@ -7641,13 +7641,13 @@ def wait_for_osds_down(osd_ids: list[str], timeout: int = 300, sleep: int = 10) 
     log.info(f"All OSDs {osd_ids} are now marked as 'down'")
 
 
-def create_cephfs_data_pool(
+def create_cephfs_ec_pool(
     pool_name,
-    replica=3,
-    compression="none",
-    erasure_coded=False,
     data_chunks=None,
     coding_chunks=None,
+    replica=3,
+    compression="none",
+    erasure_coded=True,
 ):
     """
     Add an EC data pool to the CephFilesystem via StorageCluster patch.
@@ -7657,16 +7657,19 @@ def create_cephfs_data_pool(
 
     Args:
         pool_name (str): Short pool name (e.g. "test-ec-fs")
+        data_chunks (int): Number of data chunks (k)
+        coding_chunks (int): Number of coding chunks (m)
         replica (int): Number of replicas for the pool
         compression (str): Compression mode (none, passive, aggressive, force)
         erasure_coded (bool): True to create an erasure coded pool instead of replicated.
             If True, arguments not related to erasure coding will be invalidated.
-        data_chunks (int): Number of data chunks (k)
-        coding_chunks (int): Number of coding chunks (m)
 
     Returns:
         str: Full pool name (e.g. "ocs-storagecluster-cephfilesystem-test-ec-fs")
     """
+
+    # TODO: Change the name of the function to create_cephfs_data_pool and make erasure_coded=False as default.
+    # TODO: This function can handle replica pool as well.
     from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
 
     allowed = {"none", "passive", "aggressive", "force", ""}
@@ -7739,7 +7742,7 @@ def create_cephfs_data_pool(
     return full_pool_name
 
 
-def delete_cephfs_data_pool(pool_name):
+def delete_cephfs_ec_pool(pool_name):
     """
     Remove an EC data pool from CephFilesystem via StorageCluster patch.
 

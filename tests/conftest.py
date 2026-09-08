@@ -1379,6 +1379,7 @@ def storageclass_factory_fixture(
 
                     data_chunks, coding_chunks = get_ec_profile()
                     ec_pool_short = sc_name or f"ec-fs-{len(instances)}"
+                    # TODO: Update deletion logic in finalizer when the the fixture can use existing CephFS pool
                     interface_name = helpers.create_cephfs_ec_pool(
                         ec_pool_short, data_chunks, coding_chunks
                     )
@@ -1408,6 +1409,7 @@ def storageclass_factory_fixture(
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
             sc_obj.interface_name = interface_name
+            sc_obj.erasure_coded = erasure_coded
 
         instances.append(sc_obj)
         return sc_obj
@@ -1428,12 +1430,14 @@ def storageclass_factory_fixture(
                     sc_name=instance.name,
                     sc_ocp=instance.ocp,
                 )
-                cephfs_name = get_cephfs_name()
-                if cephfs_name in instance.interface_name:
-                    pool_short_name = instance.interface_name.removeprefix(
-                        f"{cephfs_name}-"
-                    )
-                    helpers.delete_cephfs_data_pool(pool_short_name)
+                if instance.erasure_coded:
+                    cephfs_name = get_cephfs_name()
+                    if cephfs_name in instance.interface_name:
+                        pool_short_name = instance.interface_name.removeprefix(
+                            f"{cephfs_name}-"
+                        )
+                        # TODO: Update deletion logic when the fixture can use existing CephFS pool
+                        helpers.delete_cephfs_ec_pool(pool_short_name)
             except Exception as e:
                 log.error(f"Failed to delete storageclass {instance.name}: {e}")
                 teardown_errors.append((instance.name, e))
