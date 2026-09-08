@@ -78,7 +78,6 @@ from ocs_ci.ocs.dr.dr_workload import (
     CnvWorkload,
     BusyboxDiscoveredApps,
     CnvWorkloadDiscoveredApps,
-    CnvWorkloadDiscoveredAppsStaticIP,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -218,11 +217,6 @@ from ocs_ci.utility.utils import (
 )
 
 from ocs_ci.helpers import dr_helpers, helpers
-from ocs_ci.helpers.dr_helpers_vm_ip_translation import (
-    static_ip_from_subnet,
-    VM_NETWORK_INTERFACE_NAME,
-)
-from ocs_ci.ocs.utils import get_primary_cluster_config
 from ocs_ci.helpers.helpers import (
     add_scc_policy,
     ceph_health_check_with_toolbox_recovery,
@@ -8675,58 +8669,45 @@ def cnv_workload_with_static_ip(request):
     Deploys a CNV Discovered App workload wired onto a Primary UDN with a pinned
     static IP for DR static IP translation testing (RHSTOR-8082).
 
-    Reuses the regression CNV discovered-apps workload entries
-    (``dr_cnv_discovered_apps`` / ``dr_cnv_discovered_apps_shared``) but patches
-    the VM manifest at deploy time (via a temp copy) to attach the Primary UDN
-    interface and pin a static IP. The workload is deployed into the namespace
-    prepared by the ``setup_udn_nad`` fixture (already labeled for the primary
-    UDN and carrying the UserDefinedNetwork on both managed clusters), so the
-    caller must pass that fixture's yielded dict as ``udn_nad``.
+    The VM manifests (``dr_cnv_discovered_apps_static_ip`` /
+    ``..._static_ip_shared``) already carry the Primary UDN interface and the
+    ``network.kubevirt.io/addresses`` annotation pinning the static IP. They
+    deploy into ``constants.VM_IP_TRANSLATION_WORKLOAD_NS`` - the namespace the
+    ``setup_udn_nad`` fixture prepares with the primary-UDN label and the
+    "vm-network" UserDefinedNetwork on both managed clusters - so that fixture
+    must be active for this one to work.
     """
 
     instances = []
 
     def factory(
-        udn_nad,
         pvc_vm=1,
         dr_protect=False,
         shared_drpc_protection=False,
         dr_policy_name=None,
-        interface_name=VM_NETWORK_INTERFACE_NAME,
     ):
         """
         Args:
-            udn_nad (dict): the dict yielded by the ``setup_udn_nad`` fixture,
-                providing ``workload_namespace`` and per-cluster ``cluster_subnets``
             pvc_vm (int): Number of workload instances to create
             dr_protect (bool): When True, DR-protects via CLI immediately after deploy
             shared_drpc_protection (bool): When True, additional instances share the
                 namespace and DRPC of the first instance
             dr_policy_name (str): DRPolicy name override; if None uses the default
-            interface_name (str): VM interface name on the Primary UDN; kept equal
-                to the NAD name so the IPAMClaim name matches lookups in the test
 
         Returns:
             list: objects of workload class
         """
         total_pvc_count = 0
         workload_key = (
-            "dr_cnv_discovered_apps_shared"
+            "dr_cnv_discovered_apps_static_ip_shared"
             if shared_drpc_protection
-            else "dr_cnv_discovered_apps"
-        )
-
-        # The workload namespace is the one prepared by setup_udn_nad (labeled +
-        # Primary UDN on both clusters). Pin the static IP in the primary
-        # cluster's subnet.
-        workload_namespace = udn_nad["workload_namespace"]
-        primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
-        static_ip = static_ip_from_subnet(
-            udn_nad["cluster_subnets"][primary_cluster_name]
+            else "dr_cnv_discovered_apps_static_ip"
         )
 
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            # Deploy into the namespace that already holds the Primary UDN
+            workload_namespace = workload_details["workload_namespace"]
             wl_kwargs = dict(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
@@ -8751,12 +8732,10 @@ def cnv_workload_with_static_ip(request):
                 vm_username=workload_details["vm_username"],
                 workload_name=workload_details["name"],
                 vm_name=workload_details["vm_name"],
-                static_ip=static_ip,
-                interface_name=interface_name,
             )
             if dr_policy_name:
                 wl_kwargs["dr_policy_name"] = dr_policy_name
-            workload = CnvWorkloadDiscoveredAppsStaticIP(**wl_kwargs)
+            workload = CnvWorkloadDiscoveredApps(**wl_kwargs)
 
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
