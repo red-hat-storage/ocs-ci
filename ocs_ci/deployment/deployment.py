@@ -2422,6 +2422,8 @@ class Deployment(object):
             mgr_count = constants.MGR_COUNT_415
             if ocs_version < version.VERSION_4_15:
                 mgr_count = constants.MGR_COUNT
+            if "tnf" in config.ENV_DATA:
+                mgr_count = constants.MGR_COUNT
 
             pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
             cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
@@ -2445,7 +2447,7 @@ class Deployment(object):
             if tnf_cluster:
                 assert pod.wait_for_resource(
                     condition="Running",
-                    selector="app=rook-ceph-floating-mon",
+                    selector=constants.FLOATING_MON_APP_LABEL,
                     resource_count=1,
                     timeout=mon_pod_timeout,
                 )

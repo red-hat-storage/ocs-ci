@@ -824,6 +824,7 @@ STATUS_REPORTER = "status-reporter"
 
 # Pod label
 MON_APP_LABEL = "app=rook-ceph-mon"
+FLOATING_MON_APP_LABEL = "app=rook-ceph-floating-mon"
 MDS_APP_LABEL = "app=rook-ceph-mds"
 CRASHCOLLECTOR_APP_LABEL = "app=rook-ceph-crashcollector"
 TOOL_APP_LABEL = "app=rook-ceph-tools"

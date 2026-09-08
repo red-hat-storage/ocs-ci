@@ -520,7 +520,14 @@ def ocs_install_verification(
                 }
             )
 
-    if config.DEPLOYMENT.get("arbiter_deployment"):
+    if "tnf" in config.ENV_DATA:
+        resources_dict.update(
+            {
+                constants.MON_APP_LABEL: 2,
+                constants.FLOATING_MON_APP_LABEL: 1,
+            }
+        )
+    elif config.DEPLOYMENT.get("arbiter_deployment"):
         resources_dict.update(
             {
                 constants.MON_APP_LABEL: 5,
