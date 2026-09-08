@@ -1517,6 +1517,7 @@ def get_backend_volumes_for_pvcs(namespace):
             elif pvc_obj.backed_sc in [
                 constants.DEFAULT_STORAGECLASS_CEPHFS,
                 constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS,
+                constants.CUSTOM_CEPHFS_STORAGECLASS,
             ]:
                 backend_volume = pvc_obj.get_cephfs_subvolume_name
 
