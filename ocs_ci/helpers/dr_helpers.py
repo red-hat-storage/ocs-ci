@@ -2035,7 +2035,91 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                     exc_info=True,
                 )
 
-        # -- 4: delete PVCs ---------------------------------------------- #
+        # -- 3e: re-strip VR/VGR finalizers now that VRG is gone ---------- #
+        # The VGR controller may have re-added the replication finalizer to VRs
+        # while the VGR object was still alive during step 3d.  Now that the VRG
+        # is gone (or we have given up waiting), do a final sweep so the
+        # replication controller no longer blocks PVC deletion.
+        try:
+            vr_ocp_recheck = ocp.OCP(
+                kind=constants.VOLUME_REPLICATION,
+                namespace=workload_namespace,
+            )
+            vr_items_recheck = vr_ocp_recheck.get().get("items", [])
+            for vr in vr_items_recheck:
+                vr_name = vr["metadata"]["name"]
+                logger.info(
+                    f"[force-cleanup] Re-stripping finalizers from VolumeReplication "
+                    f"{vr_name} on {cluster_name}"
+                )
+                exec_cmd(
+                    f"oc patch volumereplication {vr_name} "
+                    f"-n {workload_namespace} "
+                    f"--type={_PATCH_TYPE} -p '{_PATCH}'",
+                    ignore_error=True,
+                )
+            if vr_items_recheck:
+                exec_cmd(
+                    f"oc delete volumereplication --all "
+                    f"-n {workload_namespace} --wait=false",
+                    ignore_error=True,
+                )
+        except Exception:
+            logger.warning(
+                f"[force-cleanup] Could not re-strip VolumeReplication "
+                f"finalizers in {workload_namespace} on {cluster_name}",
+                exc_info=True,
+            )
+
+        if is_cg_enabled():
+            try:
+                vgr_ocp_recheck = ocp.OCP(
+                    kind=constants.VOLUME_GROUP_REPLICATION,
+                    namespace=workload_namespace,
+                )
+                vgr_items_recheck = vgr_ocp_recheck.get().get("items", [])
+                for vgr in vgr_items_recheck:
+                    vgr_name = vgr["metadata"]["name"]
+                    logger.info(
+                        f"[force-cleanup] Re-stripping finalizers from "
+                        f"VolumeGroupReplication {vgr_name} on {cluster_name}"
+                    )
+                    exec_cmd(
+                        f"oc patch volumegroupreplication {vgr_name} "
+                        f"-n {workload_namespace} "
+                        f"--type={_PATCH_TYPE} -p '{_PATCH}'",
+                        ignore_error=True,
+                    )
+                if vgr_items_recheck:
+                    exec_cmd(
+                        f"oc delete volumegroupreplication --all "
+                        f"-n {workload_namespace} --wait=false",
+                        ignore_error=True,
+                    )
+            except Exception:
+                logger.warning(
+                    f"[force-cleanup] Could not re-strip VolumeGroupReplication "
+                    f"finalizers in {workload_namespace} on {cluster_name}",
+                    exc_info=True,
+                )
+
+        # -- 4: delete pods and PVCs -------------------------------------- #
+        # Delete all workload pods / controllers first so the
+        # kubernetes.io/pvc-protection finalizer is released before we try to
+        # remove the PVCs.
+        logger.info(
+            f"[force-cleanup] Deleting pods and workload controllers in "
+            f"{workload_namespace} on {cluster_name}"
+        )
+        for kind in ("deployment", "statefulset", "replicaset", "pod"):
+            exec_cmd(
+                f"oc delete {kind} --all -n {workload_namespace} "
+                f"--wait=false --ignore-not-found=true",
+                ignore_error=True,
+            )
+        # Give the kubelet a moment to detach volumes and drop pvc-protection
+        time.sleep(5)
+
         logger.info(
             f"[force-cleanup] Deleting PVCs in {workload_namespace} "
             f"on {cluster_name}"
