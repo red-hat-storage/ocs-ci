@@ -2049,10 +2049,10 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                     )
 
             # -- 3e: re-strip VR/VGR finalizers now that VRG is gone ---------- #
-            # The VGR controller may have re-added the replication finalizer to VRs
-            # while the VGR object was still alive during step 3d.  Now that the VRG
-            # is gone (or we have given up waiting), do a final sweep so the
-            # replication controller no longer blocks PVC deletion.
+            # The VGR/VR controllers may have re-added finalizers while the VRG
+            # was still alive during step 3d.  Now that the VRG is gone (or we
+            # have given up waiting), do a final sweep and wait for the objects
+            # to actually leave etcd before moving on to PVC deletion.
             try:
                 vr_ocp_recheck = ocp.OCP(
                     kind=constants.VOLUME_REPLICATION,
@@ -2077,6 +2077,20 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                         f"-n {workload_namespace} --wait=false",
                         ignore_error=True,
                     )
+                    try:
+                        wait_for_resource_count(
+                            kind=constants.VOLUME_REPLICATION,
+                            namespace=workload_namespace,
+                            expected_count=0,
+                            timeout=60,
+                        )
+                    except Exception:
+                        logger.warning(
+                            f"[force-cleanup] Some VolumeReplication resources may "
+                            f"still exist in {workload_namespace} on {cluster_name} "
+                            f"after re-strip",
+                            exc_info=True,
+                        )
             except Exception:
                 logger.warning(
                     f"[force-cleanup] Could not re-strip VolumeReplication "
@@ -2109,6 +2123,20 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                             f"-n {workload_namespace} --wait=false",
                             ignore_error=True,
                         )
+                        try:
+                            wait_for_resource_count(
+                                kind=constants.VOLUME_GROUP_REPLICATION,
+                                namespace=workload_namespace,
+                                expected_count=0,
+                                timeout=60,
+                            )
+                        except Exception:
+                            logger.warning(
+                                f"[force-cleanup] Some VolumeGroupReplication resources "
+                                f"may still exist in {workload_namespace} on "
+                                f"{cluster_name} after re-strip",
+                                exc_info=True,
+                            )
                 except Exception:
                     logger.warning(
                         f"[force-cleanup] Could not re-strip VolumeGroupReplication "
@@ -2210,19 +2238,19 @@ def force_delete_discovered_apps_workload(workload_namespace, vrg_name):
                                 ignore_error=True,
                             )
 
-            # -- 5: delete namespace ----------------------------------------- #
+            # -- 5: delete namespace (best-effort) ----------------------------- #
+            # Resources are gone at this point; issue a non-blocking delete and
+            # move on.  If the namespace is still terminating it will eventually
+            # be reclaimed by the API server — we do not block or patch it.
             logger.info(
                 f"[force-cleanup] Deleting namespace {workload_namespace} "
                 f"on {cluster_name}"
             )
-            try:
-                ocp.OCP().delete_project(project_name=workload_namespace)
-            except Exception:
-                logger.warning(
-                    f"[force-cleanup] Could not delete namespace "
-                    f"{workload_namespace} on {cluster_name}",
-                    exc_info=True,
-                )
+            exec_cmd(
+                f"oc delete namespace {workload_namespace} "
+                f"--wait=false --ignore-not-found=true",
+                ignore_error=True,
+            )
 
     finally:
         config.switch_ctx(restore_index)
