@@ -321,7 +321,6 @@ def ocs_install_verification(
     skip_osd_distribution_check=False,
     ocs_registry_image=None,
     post_upgrade_verification=False,
-    version_before_upgrade=None,
 ):
     """
     Perform steps necessary to verify a successful OCS installation
@@ -335,7 +334,6 @@ def ocs_install_verification(
             properly.
         post_upgrade_verification (bool): Set to True if this function is
             called after upgrade.
-        version_before_upgrade (float): Set to OCS version before upgrade
 
     """
     from ocs_ci.ocs.node import get_nodes
@@ -402,9 +400,7 @@ def ocs_install_verification(
     rgw_count = None
     if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
         if not disable_rgw:
-            rgw_count = get_rgw_count(
-                f"{ocs_version}", post_upgrade_verification, version_before_upgrade
-            )
+            rgw_count = get_rgw_count()
 
     min_eps = constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
 

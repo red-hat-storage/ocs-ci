@@ -1127,12 +1127,27 @@ class OCP(object):
                 # Only 1 resource expected to be returned
                 if resource_name:
                     retry = int(timeout / sleep if sleep else timeout / 1)
-                    status = self.get_resource(
-                        resource_name,
-                        column,
-                        retry=retry,
-                        wait=sleep,
-                    )
+                    try:
+                        status = self.get_resource(
+                            resource_name,
+                            column,
+                            retry=retry,
+                            wait=sleep,
+                        )
+                    except IndexError:
+                        # The column header may be present while the row has no
+                        # value for it yet (e.g. a freshly created
+                        # ManagedCluster whose AVAILABLE/JOINED columns are
+                        # still empty during import). Treat this as "not ready
+                        # yet" and keep waiting until the real timeout instead
+                        # of aborting early.
+                        log.info(
+                            f"status of {resource_name} at column {column} is "
+                            "not populated yet, but we were waiting for "
+                            f"{condition}"
+                        )
+                        actual_status = None
+                        continue
                     if status == condition:
                         log.info(
                             f"status of {resource_name} at column {column}"

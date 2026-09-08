@@ -1247,9 +1247,38 @@ class SeleniumDriver(WebDriver):
                         "Unable to configure authenticated proxy in headless browser mode!"
                     )
             else:
-                logger.info("No proxy configuration for browser")
-                # to bypass http_proxy / https_proxy env variables and connect directly to internal WebDriver endpoint
-                chrome_options.add_argument("--no-proxy-server")
+                # Check for proxy configuration from config or environment variables
+                # Config settings have higher precedence than environment variables
+                http_proxy = (
+                    config.ENV_DATA.get("http_proxy")
+                    or os.getenv("HTTP_PROXY")
+                    or os.getenv("http_proxy")
+                )
+                https_proxy = (
+                    config.ENV_DATA.get("https_proxy")
+                    or os.getenv("HTTPS_PROXY")
+                    or os.getenv("https_proxy")
+                )
+                no_proxy = (
+                    config.ENV_DATA.get("no_proxy")
+                    or os.getenv("NO_PROXY")
+                    or os.getenv("no_proxy")
+                )
+
+                if http_proxy or https_proxy:
+                    # Use HTTPS proxy if available, otherwise HTTP proxy
+                    proxy_server = https_proxy if https_proxy else http_proxy
+                    logger.info(f"Configuring proxy ({proxy_server}) for browser")
+                    chrome_options.add_argument(f"--proxy-server={proxy_server}")
+
+                    # Configure proxy bypass list for local/cluster addresses
+                    if no_proxy:
+                        logger.info(f"Configuring proxy bypass list: {no_proxy}")
+                        chrome_options.add_argument(f"--proxy-bypass-list={no_proxy}")
+                else:
+                    logger.info("No proxy configuration for browser")
+                    # Bypass http_proxy/https_proxy env vars and connect directly to WebDriver
+                    chrome_options.add_argument("--no-proxy-server")
 
             chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
             chrome_service = Service(
