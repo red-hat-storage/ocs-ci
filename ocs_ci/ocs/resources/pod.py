@@ -594,9 +594,11 @@ class Pod(OCS):
         if isinstance(packages, list):
             packages = " ".join(packages)
 
-        # oc rsh does not invoke a shell, so compound commands need bash -c.
+        # oc rsh does not invoke a shell, so compound commands need sh -c.
+        # Use POSIX sh (not bash) so Alpine/busybox images can still run this.
         os_release = self.exec_cmd_on_pod(
-            "bash -c 'cat /etc/os-release || true'", out_yaml_format=False
+            f"sh -c {shlex.quote('cat /etc/os-release || true')}",
+            out_yaml_format=False,
         )
 
         os_release_lower = os_release.lower() if os_release else ""
@@ -621,7 +623,7 @@ class Pod(OCS):
                 f"Unsupported OS for package install. /etc/os-release:\n{os_release}"
             )
 
-        self.exec_cmd_on_pod(f"bash -c {shlex.quote(cmd)}", out_yaml_format=False)
+        self.exec_cmd_on_pod(f"sh -c {shlex.quote(cmd)}", out_yaml_format=False)
 
     def copy_to_server(self, server, authkey, localpath, remotepath, user=None):
         """
