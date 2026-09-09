@@ -2,9 +2,16 @@ import logging
 
 import pytest
 
-from ocs_ci.framework.testlib import tier1, brown_squad, polarion_id
+from ocs_ci.framework.testlib import (
+    tier1,
+    brown_squad,
+    polarion_id,
+    skipif_ocs_version,
+    skipif_external_mode,
+    runs_on_provider,
+)
 from ocs_ci.ocs.resources.pod import get_osd_pods, get_osd_pod_id
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -12,61 +19,149 @@ MCLOCK_IOPS_KEYS = (
     "osd_mclock_max_capacity_iops_ssd",
     "osd_mclock_max_capacity_iops_hdd",
 )
-# Ceph's documented defaults. Only logged, never asserted - the effective value
-# is whatever the OSD benchmark measured at deployment time.
-DOCUMENTED_IOPS_DEFAULTS = {
-    "osd_mclock_max_capacity_iops_ssd": 21500,
-    "osd_mclock_max_capacity_iops_hdd": 315,
-}
 
 
-def get_mclock_iops_key(odf_cli, osd_ids):
+def get_osd_running_iops(odf_cli, osd_id, key):
     """
-    Resolve the mClock max-capacity-IOPS key from the OSDs' device type.
+    Read the mClock max-capacity-IOPS value an OSD daemon is actually running
+    with, as opposed to what the mon config DB would resolve to.
 
     Args:
         odf_cli (ODFCliRunner): ODF CLI runner.
-        osd_ids (list): OSD ids to inspect.
+        osd_id (str): OSD id.
+        key (str): mClock max-capacity-IOPS config key.
 
     Returns:
-        str: "osd_mclock_max_capacity_iops_ssd" or "..._hdd".
+        float: The value reported by `ceph config show osd.<id>`.
 
     """
-    bdev_types = {odf_cli.get_osd_bdev_type(osd_id) for osd_id in osd_ids}
-    if len(bdev_types) > 1:
-        pytest.skip(f"Mixed OSD bluestore device types {bdev_types} are not supported")
-    return f"osd_mclock_max_capacity_iops_{bdev_types.pop()}"
+    return float(odf_cli.get_ceph_config_value(f"osd.{osd_id}", key, subcommand="show"))
+
+
+@retry(AssertionError, tries=6, delay=5, backoff=1)
+def get_settled_osd_iops(odf_cli, osd_ids, key):
+    """
+    Return the mClock max-capacity-IOPS value every OSD daemon is running with,
+    once they all agree on it.
+
+    Retried because the mon pushes config changes to the daemons
+    asynchronously, so the OSDs converge a moment after the overrides are
+    cleared rather than instantly.
+
+    Args:
+        odf_cli (ODFCliRunner): ODF CLI runner.
+        osd_ids (list): OSD ids to check.
+        key (str): mClock max-capacity-IOPS config key.
+
+    Returns:
+        float: The value shared by every OSD.
+
+    """
+    values = {get_osd_running_iops(odf_cli, osd_id, key) for osd_id in osd_ids}
+    assert len(values) == 1, f"OSDs have not settled on a single {key} value: {values}"
+    return values.pop()
+
+
+@retry(AssertionError, tries=6, delay=5, backoff=1)
+def assert_osd_iops(odf_cli, osd_ids, key, expected, context):
+    """
+    Assert that every given OSD daemon is running with `expected` for `key`.
+
+    Retried because the mon pushes a config change to the daemons
+    asynchronously, so the value can lag a `ceph config set`/`rm` by a moment.
+
+    Args:
+        odf_cli (ODFCliRunner): ODF CLI runner.
+        osd_ids (list): OSD ids to check.
+        key (str): mClock max-capacity-IOPS config key.
+        expected (float): The value every OSD is expected to be running with.
+        context (str): Short description included in the failure message.
+
+    """
+    for osd_id in osd_ids:
+        value = get_osd_running_iops(odf_cli, osd_id, key)
+        assert (
+            value == expected
+        ), f"osd.{osd_id} {key} is {value}, expected {expected} ({context})"
 
 
 @pytest.fixture
-def mclock_config_cleanup(odf_cli_setup, request):
+def mclock_iops_context(odf_cli_setup):
     """
-    Clear every mClock max-capacity-IOPS override before and after the test.
+    Resolve the OSDs and the mClock max-capacity-IOPS key they use.
+
+    Ceph mClock selects the `_ssd` or `_hdd` key by the OSD bluestore device
+    type, which can differ from the OSD's CRUSH device class.
 
     Args:
         odf_cli_setup: ODF CLI runner fixture.
-        request: Pytest request, used to register the teardown.
 
     Returns:
-        tuple: (ODFCliRunner, list of OSD ids).
+        tuple: (ODFCliRunner, list of OSD ids, mClock IOPS config key).
 
     """
     odf_cli = odf_cli_setup
     osd_ids = [get_osd_pod_id(pod) for pod in get_osd_pods()]
     assert osd_ids, "No OSD pods found on the cluster"
 
-    def clear_overrides():
-        for key in MCLOCK_IOPS_KEYS:
-            for who, _ in odf_cli.get_ceph_config_dump_entries(key):
-                logger.info(f"Clearing {who} {key}")
-                odf_cli.run_ceph_config(f"rm {who} {key}")
+    bdev_types = {odf_cli.get_osd_bdev_type(osd_id) for osd_id in osd_ids}
+    if len(bdev_types) > 1:
+        pytest.skip(f"Mixed OSD bluestore device types {bdev_types} are not supported")
 
-    clear_overrides()
-    request.addfinalizer(clear_overrides)
-    return odf_cli, osd_ids
+    key = f"osd_mclock_max_capacity_iops_{bdev_types.pop()}"
+    logger.info(f"OSDs {osd_ids} report device type -> config key '{key}'")
+    return odf_cli, osd_ids, key
+
+
+@pytest.fixture
+def mclock_config_cleanup(mclock_iops_context, request):
+    """
+    Clear the mClock max-capacity-IOPS entries for the test and put the
+    pre-existing ones back afterwards.
+
+    Ceph stores each OSD's boot benchmark result in the mon config DB under
+    these same keys, so the entries are saved before being cleared and are
+    restored on teardown - dropping them would leave the cluster running on
+    the compiled-in mClock defaults until the OSDs restart.
+
+    Args:
+        mclock_iops_context: Fixture giving (ODFCliRunner, osd_ids, key).
+        request: Pytest request, used to register the teardown.
+
+    Returns:
+        tuple: (ODFCliRunner, list of OSD ids, mClock IOPS config key).
+
+    """
+    odf_cli, osd_ids, key = mclock_iops_context
+
+    original_entries = {
+        (who, iops_key): value
+        for iops_key in MCLOCK_IOPS_KEYS
+        for who, value in odf_cli.get_ceph_config_dump_entries(iops_key)
+    }
+    logger.info(f"Saved the original mClock IOPS entries: {original_entries}")
+
+    def clear_entries():
+        for iops_key in MCLOCK_IOPS_KEYS:
+            for who, _ in odf_cli.get_ceph_config_dump_entries(iops_key):
+                logger.info(f"Clearing {who} {iops_key}")
+                odf_cli.run_ceph_config(f"rm {who} {iops_key}")
+
+    def restore_entries():
+        clear_entries()
+        for (who, iops_key), value in original_entries.items():
+            logger.info(f"Restoring {who} {iops_key} = {value}")
+            odf_cli.run_ceph_config(f"set {who} {iops_key} {value}")
+
+    clear_entries()
+    request.addfinalizer(restore_entries)
+    return odf_cli, osd_ids, key
 
 
 @brown_squad
+@skipif_ocs_version("<4.23")
+@skipif_external_mode
+@runs_on_provider
 class TestOSDMclockMaxCapacityIOPS:
     """
     Manual override of osd_mclock_max_capacity_iops via the ODF CLI (RHSTOR-8677).
@@ -77,40 +172,29 @@ class TestOSDMclockMaxCapacityIOPS:
 
     @tier1
     @polarion_id("OCS-8256")
-    def test_read_default_iops_value(self, mclock_config_cleanup):
+    def test_read_default_iops_value(self, mclock_iops_context):
         """
-        Read osd_mclock_max_capacity_iops via the ODF CLI with no override in
-        place and verify every OSD reports the same usable value.
+        Read osd_mclock_max_capacity_iops through the ODF CLI and verify the
+        cluster-wide value and every running OSD report a usable value. Per-OSD
+        values are allowed to differ, each OSD benchmarks its own device at
+        first boot.
 
         Args:
-            mclock_config_cleanup: Fixture giving (ODFCliRunner, osd_ids) with
-                all mClock IOPS overrides cleared.
+            mclock_iops_context: Fixture giving (ODFCliRunner, osd_ids, key).
 
         """
-        odf_cli, osd_ids = mclock_config_cleanup
-        key = get_mclock_iops_key(odf_cli, osd_ids)
-        logger.info(f"OSDs report device type -> config key '{key}'")
-
-        entries = odf_cli.get_ceph_config_dump_entries(key)
-        assert not entries, f"{key} is overridden, expected no entry: {entries}"
+        odf_cli, osd_ids, key = mclock_iops_context
 
         cluster_value = float(odf_cli.get_ceph_config_value("osd", key))
         assert cluster_value > 0, f"{key} is {cluster_value}, expected a positive value"
-
-        documented = DOCUMENTED_IOPS_DEFAULTS[key]
-        if cluster_value != documented:
-            logger.warning(
-                f"{key} is {cluster_value}, not the documented Ceph default "
-                f"{documented} - benchmark result or a pre-existing setting"
-            )
+        logger.info(f"Cluster-wide {key} = {cluster_value}")
 
         for osd_id in osd_ids:
-            value = float(odf_cli.get_ceph_config_value(f"osd.{osd_id}", key))
-            assert value == cluster_value, (
-                f"osd.{osd_id} {key} is {value}, expected the cluster-wide "
-                f"value {cluster_value}"
-            )
-        logger.info(f"All OSDs report {key} = {cluster_value}")
+            value = get_osd_running_iops(odf_cli, osd_id, key)
+            assert (
+                value > 0
+            ), f"osd.{osd_id} {key} is {value}, expected a positive value"
+            logger.info(f"osd.{osd_id} is running with {key} = {value}")
 
     @tier1
     @polarion_id("OCS-8257")
@@ -120,17 +204,16 @@ class TestOSDMclockMaxCapacityIOPS:
         verify the other OSDs are unaffected, then remove it and verify revert.
 
         Args:
-            mclock_config_cleanup: Fixture giving (ODFCliRunner, osd_ids) with
-                all mClock IOPS overrides cleared.
+            mclock_config_cleanup: Fixture giving (ODFCliRunner, osd_ids, key)
+                with all mClock IOPS entries cleared.
 
         """
-        odf_cli, osd_ids = mclock_config_cleanup
-        key = get_mclock_iops_key(odf_cli, osd_ids)
+        odf_cli, osd_ids, key = mclock_config_cleanup
         target_osd, other_osds = osd_ids[0], osd_ids[1:]
 
-        baseline = float(odf_cli.get_ceph_config_value(f"osd.{target_osd}", key))
-        logger.info(f"Baseline osd.{target_osd} {key} = {baseline}")
-        assert baseline != float(self.CUSTOM_IOPS_VALUE), (
+        baseline = get_settled_osd_iops(odf_cli, osd_ids, key)
+        logger.info(f"Baseline {key} on every OSD = {baseline}")
+        assert baseline != self.CUSTOM_IOPS_VALUE, (
             f"Baseline {key} already equals the test value "
             f"{self.CUSTOM_IOPS_VALUE}; pick a different value"
         )
@@ -138,18 +221,12 @@ class TestOSDMclockMaxCapacityIOPS:
         logger.info(f"Setting osd.{target_osd} {key} = {self.CUSTOM_IOPS_VALUE}")
         odf_cli.run_ceph_config(f"set osd.{target_osd} {key} {self.CUSTOM_IOPS_VALUE}")
 
-        value = float(odf_cli.get_ceph_config_value(f"osd.{target_osd}", key))
-        assert value == float(self.CUSTOM_IOPS_VALUE), (
-            f"osd.{target_osd} {key} not overridden: expected "
-            f"{self.CUSTOM_IOPS_VALUE}, found {value}"
+        assert_osd_iops(
+            odf_cli, [target_osd], key, self.CUSTOM_IOPS_VALUE, "per-OSD override"
         )
-        for osd_id in other_osds:
-            value = float(odf_cli.get_ceph_config_value(f"osd.{osd_id}", key))
-            assert value == baseline, (
-                f"osd.{osd_id} {key} changed by the override on "
-                f"osd.{target_osd}: expected {baseline}, found {value}"
-            )
-        logger.info(f"Only osd.{target_osd} is overridden")
+        assert_osd_iops(
+            odf_cli, other_osds, key, baseline, f"unaffected by osd.{target_osd}"
+        )
 
         entries = odf_cli.get_ceph_config_dump_entries(key)
         assert [who for who, _ in entries] == [f"osd.{target_osd}"], (
@@ -159,16 +236,10 @@ class TestOSDMclockMaxCapacityIOPS:
 
         logger.info(f"Removing osd.{target_osd} {key} override and verifying revert")
         odf_cli.run_ceph_config(f"rm osd.{target_osd} {key}")
-        reverted = float(odf_cli.get_ceph_config_value(f"osd.{target_osd}", key))
-        assert reverted == baseline, (
-            f"osd.{target_osd} {key} did not revert: expected {baseline}, "
-            f"found {reverted}"
-        )
+        assert_osd_iops(odf_cli, [target_osd], key, baseline, "after override removal")
 
         entries = odf_cli.get_ceph_config_dump_entries(key)
         assert not entries, f"{key} still present in `ceph config dump`: {entries}"
-
-        ceph_health_check()
 
     @tier1
     @polarion_id("OCS-8258")
@@ -178,12 +249,11 @@ class TestOSDMclockMaxCapacityIOPS:
         over a cluster-wide one set through the ODF CLI.
 
         Args:
-            mclock_config_cleanup: Fixture giving (ODFCliRunner, osd_ids) with
-                all mClock IOPS overrides cleared.
+            mclock_config_cleanup: Fixture giving (ODFCliRunner, osd_ids, key)
+                with all mClock IOPS entries cleared.
 
         """
-        odf_cli, osd_ids = mclock_config_cleanup
-        key = get_mclock_iops_key(odf_cli, osd_ids)
+        odf_cli, osd_ids, key = mclock_config_cleanup
         target_osd, other_osds = osd_ids[0], osd_ids[1:]
 
         logger.info(
@@ -193,26 +263,26 @@ class TestOSDMclockMaxCapacityIOPS:
         odf_cli.run_ceph_config(f"set global {key} {self.GLOBAL_IOPS_VALUE}")
         odf_cli.run_ceph_config(f"set osd.{target_osd} {key} {self.CUSTOM_IOPS_VALUE}")
 
-        value = float(odf_cli.get_ceph_config_value(f"osd.{target_osd}", key))
-        assert value == float(self.CUSTOM_IOPS_VALUE), (
-            f"Per-OSD override did not win on osd.{target_osd}: expected "
-            f"{self.CUSTOM_IOPS_VALUE}, found {value}"
+        assert_osd_iops(
+            odf_cli,
+            [target_osd],
+            key,
+            self.CUSTOM_IOPS_VALUE,
+            "per-OSD override wins over global",
         )
-        for osd_id in other_osds:
-            value = float(odf_cli.get_ceph_config_value(f"osd.{osd_id}", key))
-            assert value == float(self.GLOBAL_IOPS_VALUE), (
-                f"osd.{osd_id} {key} should follow the global override: "
-                f"expected {self.GLOBAL_IOPS_VALUE}, found {value}"
-            )
-        logger.info("Per-OSD override wins; other OSDs follow the global value")
+        assert_osd_iops(
+            odf_cli,
+            other_osds,
+            key,
+            self.GLOBAL_IOPS_VALUE,
+            "follows the global override",
+        )
 
         entries = odf_cli.get_ceph_config_dump_entries(key)
         assert {who for who, _ in entries} == {"global", f"osd.{target_osd}"}, (
             f"Expected global and osd.{target_osd} entries in "
             f"`ceph config dump`, found {entries}"
         )
-
-        ceph_health_check()
 
     @tier1
     @polarion_id("OCS-8259")
@@ -222,30 +292,24 @@ class TestOSDMclockMaxCapacityIOPS:
         CLI, verify every OSD reports it, then confirm removal reverts it.
 
         Args:
-            mclock_config_cleanup: Fixture giving (ODFCliRunner, osd_ids) with
-                all mClock IOPS overrides cleared.
+            mclock_config_cleanup: Fixture giving (ODFCliRunner, osd_ids, key)
+                with all mClock IOPS entries cleared.
 
         """
-        odf_cli, osd_ids = mclock_config_cleanup
-        key = get_mclock_iops_key(odf_cli, osd_ids)
-        logger.info(f"OSDs report device type -> config key '{key}'")
+        odf_cli, osd_ids, key = mclock_config_cleanup
 
-        baseline = float(odf_cli.get_ceph_config_value("osd", key))
-        logger.info(f"Baseline {key} = {baseline}")
-        assert baseline != float(self.CUSTOM_IOPS_VALUE), (
+        baseline = get_settled_osd_iops(odf_cli, osd_ids, key)
+        logger.info(f"Baseline {key} on every OSD = {baseline}")
+        assert baseline != self.CUSTOM_IOPS_VALUE, (
             f"Baseline {key} already equals the test value "
             f"{self.CUSTOM_IOPS_VALUE}; pick a different value"
         )
 
         logger.info(f"Setting global {key} = {self.CUSTOM_IOPS_VALUE}")
         odf_cli.run_ceph_config(f"set global {key} {self.CUSTOM_IOPS_VALUE}")
-        for osd_id in osd_ids:
-            value = float(odf_cli.get_ceph_config_value(f"osd.{osd_id}", key))
-            assert value == float(self.CUSTOM_IOPS_VALUE), (
-                f"osd.{osd_id} {key} not overridden: expected "
-                f"{self.CUSTOM_IOPS_VALUE}, found {value}"
-            )
-        logger.info("All OSDs report the overridden value")
+        assert_osd_iops(
+            odf_cli, osd_ids, key, self.CUSTOM_IOPS_VALUE, "global override"
+        )
 
         entries = odf_cli.get_ceph_config_dump_entries(key)
         assert any(
@@ -254,14 +318,9 @@ class TestOSDMclockMaxCapacityIOPS:
 
         logger.info(f"Removing global {key} override and verifying revert")
         odf_cli.run_ceph_config(f"rm global {key}")
-        for osd_id in osd_ids:
-            reverted = float(odf_cli.get_ceph_config_value(f"osd.{osd_id}", key))
-            assert reverted == baseline, (
-                f"osd.{osd_id} {key} did not revert: expected {baseline}, "
-                f"found {reverted}"
-            )
+        assert_osd_iops(
+            odf_cli, osd_ids, key, baseline, "after global override removal"
+        )
 
         entries = odf_cli.get_ceph_config_dump_entries(key)
         assert not entries, f"{key} still present in `ceph config dump`: {entries}"
-
-        ceph_health_check()

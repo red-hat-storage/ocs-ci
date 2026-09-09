@@ -4,9 +4,10 @@ import platform
 import xattr
 from stat import S_IEXEC
 from logging import getLogger
+from subprocess import CompletedProcess
 from typing import Union
 
-from ocs_ci.ocs.exceptions import NotSupportedException
+from ocs_ci.ocs.exceptions import NotSupportedException, UnexpectedBehaviour
 from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_15
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
@@ -189,7 +190,9 @@ class ODFCliRunner:
     def __init__(self) -> None:
         self.binary_name = os.path.join(config.RUN["bin_dir"], "odf")
 
-    def run_command(self, command_args: Union[str, list], timeout=600) -> str:
+    def run_command(
+        self, command_args: Union[str, list], timeout=600
+    ) -> CompletedProcess:
         # by default Operator namespace is set to 'openshift-storage' in ODF CLI,
         # when -n <storage_ns> is not passed the command will fail if the namespace is not 'openshift-storage'
         args_str = (
@@ -247,35 +250,49 @@ class ODFCliRunner:
             f" set ceph log-level {service} {subsystem} {log_level}"
         )
 
-    def run_ceph_config(self, args: Union[str, list]) -> str:
+    def run_ceph_config(self, args: str) -> CompletedProcess:
         """
         Run a `ceph config` subcommand through the ODF CLI passthrough.
 
         Args:
-            args (Union[str, list]): `ceph config` arguments, e.g.
+            args (str): `ceph config` arguments, e.g.
                 "set global osd_mclock_max_capacity_iops_hdd 80000".
 
         Returns:
-            str: The command output.
+            CompletedProcess: result from exec_cmd.
 
         """
-        args_str = args if isinstance(args, str) else " ".join(args)
-        return self.run_command(f" ceph config {args_str}")
+        return self.run_command(f" ceph config {args}")
 
-    def get_ceph_config_value(self, who: str, option: str) -> str:
+    def get_ceph_config_value(
+        self, who: str, option: str, subcommand: str = "get"
+    ) -> str:
         """
-        Read the effective value of a Ceph config option via the ODF CLI.
+        Read the value of a Ceph config option via the ODF CLI.
 
         Args:
-            who (str): Ceph entity, e.g. "osd", "global", "osd.0".
+            who (str): Ceph entity. With "get" it can be any section, e.g.
+                "osd", "global", "osd.0". With "show" it must name a running
+                daemon, e.g. "osd.0".
             option (str): Ceph config option name.
+            subcommand (str): "get" resolves the value from the mon config DB,
+                "show" asks the running daemon what it is actually using.
 
         Returns:
-            str: The value reported by `ceph config get`.
+            str: The value reported by the CLI.
+
+        Raises:
+            UnexpectedBehaviour: If the CLI returns no value.
 
         """
-        output = self.run_ceph_config(f"get {who} {option}")
-        return output.stdout.decode().strip().split()[-1]
+        output = (
+            self.run_ceph_config(f"{subcommand} {who} {option}").stdout.decode().strip()
+        )
+        if not output:
+            raise UnexpectedBehaviour(
+                f"ODF CLI returned no value for `ceph config {subcommand} {who} {option}`"
+            )
+        return output.split()[-1]
 
     def get_osd_bdev_type(self, osd_id: Union[str, int]) -> str:
         """
@@ -303,15 +320,20 @@ class ODFCliRunner:
 
         Returns:
             list: (who, value) tuples, e.g. [("global", "80000.000000")].
-                Empty when the option has no entry set.
+                `who` carries the entry's mask when it has one, e.g.
+                "osd/class:hdd", so it can be passed straight back to
+                `ceph config set`/`rm`. Empty when the option has no entry set.
 
         """
-        dump = self.run_ceph_config("dump").stdout.decode()
+        dump = json.loads(self.run_ceph_config("dump -f json").stdout.decode())
         entries = []
-        for line in dump.splitlines():
-            fields = line.split()
-            if option in fields:
-                entries.append((fields[0], fields[fields.index(option) + 1]))
+        for entry in dump:
+            if entry["name"] != option:
+                continue
+            who = entry["section"]
+            if entry["mask"]:
+                who = f"{who}/{entry['mask']}"
+            entries.append((who, entry["value"]))
         return entries
 
     def get_recovery_profile(self):
