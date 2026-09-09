@@ -420,6 +420,13 @@ class FusionDataFoundationDeployment:
         # odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
         odfcluster_data["spec"]["storageNodes"] = worker_nodes
 
+        if config.ENV_DATA.get("erasureCoding"):
+            odfcluster_data["spec"]["erasureCoding"] = {
+                "codingChunks": 2,
+                "dataChunks": 4,
+                "enable": True,
+            }
+
         odfcluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="odfcluster", delete=False
         )
