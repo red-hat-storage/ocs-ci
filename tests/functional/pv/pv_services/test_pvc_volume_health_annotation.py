@@ -477,7 +477,20 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
         for node_name in pod_node_names:
             uid = ocp.OCP(kind="node", resource_name=node_name).get()["metadata"]["uid"]
             key = f"{constants.VOLUME_HEALTH_ANNOTATION_PREFIX}{uid}"
-            healthy_since[key] = json.loads(health_annotations[key]).get("since", "")
+            logger.assertion(
+                f"Healthy annotation key present for node {node_name} (uid={uid})"
+            )
+            assert key in health_annotations, (
+                f"No volume health annotation for node {node_name} (key {key}). "
+                f"Present keys: {list(health_annotations.keys())}"
+            )
+            parsed = json.loads(health_annotations[key])
+            since = parsed.get("since")
+            logger.assertion(
+                f"'since' field present for annotation key {key}: actual={since}"
+            )
+            assert since, f"Annotation {key} has no 'since' field: {parsed}"
+            healthy_since[key] = since
         logger.info(f"Healthy 'since' snapshot: {healthy_since}")
 
         logger.test_step("Scale down both MDS deployments (a & b) to 0 replicas")
@@ -489,13 +502,18 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
         def finalizer():
             logger.info("Finalizer: restore both MDS deployments to 1")
             for dep in mds_deployments:
-                modify_deployment_replica_count(dep, 1)
+                assert modify_deployment_replica_count(
+                    dep, 1
+                ), f"Failed to restore deployment {dep} to 1 replica"
             ceph_health_check(tries=20, delay=30)
 
         request.addfinalizer(finalizer)
 
         for dep in mds_deployments:
-            modify_deployment_replica_count(dep, 0)
+            logger.assertion(f"Deployment {dep} scaled to 0 replicas")
+            assert modify_deployment_replica_count(
+                dep, 0
+            ), f"Failed to scale deployment {dep} to 0 replicas"
             logger.info(f"Scaled deployment {dep} to 0")
 
         logger.test_step(
@@ -554,6 +572,20 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
                 f"PVC {pvc_obj.name} within {ANNOTATION_POLL_TIMEOUT}s"
             )
 
+        logger.test_step("Capture pre-recovery healthy event count")
+        pre_recovery_healthy_count = len(
+            assert_pvc_volume_health_event(
+                pvc_obj,
+                reason="VolumeConditionHealthy",
+                event_type="Normal",
+                message_substr="volume is in a healthy condition",
+            )
+        )
+        logger.info(
+            f"Pre-recovery VolumeConditionHealthy event count: "
+            f"{pre_recovery_healthy_count}"
+        )
+
         logger.test_step("Restore both MDS deployments to 1 replica")
         for dep in mds_deployments:
             modify_deployment_replica_count(dep, 1)
@@ -567,11 +599,35 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
             expected_count=2,
         )
 
-        logger.test_step("Assert VolumeConditionHealthy Normal event")
-        assert_pvc_volume_health_event(
-            pvc_obj,
-            reason="VolumeConditionHealthy",
-            event_type="Normal",
-            message_substr="volume is in a healthy condition",
+        logger.test_step(
+            "Poll for a new VolumeConditionHealthy event after recovery "
+            "(event count must increase)"
         )
+
+        def new_healthy_event():
+            return (
+                len(
+                    assert_pvc_volume_health_event(
+                        pvc_obj,
+                        reason="VolumeConditionHealthy",
+                        event_type="Normal",
+                        message_substr="volume is in a healthy condition",
+                    )
+                )
+                > pre_recovery_healthy_count
+            )
+
+        try:
+            for is_new in TimeoutSampler(
+                timeout=RECOVERY_POLL_TIMEOUT,
+                sleep=ANNOTATION_POLL_INTERVAL,
+                func=new_healthy_event,
+            ):
+                if is_new:
+                    break
+        except TimeoutExpiredError:
+            pytest.fail(
+                "No new VolumeConditionHealthy event for "
+                f"PVC {pvc_obj.name} within {RECOVERY_POLL_TIMEOUT}s"
+            )
         logger.info("PVC health unhealthy via MDS scale-down test passed")
