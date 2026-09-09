@@ -7903,7 +7903,7 @@ def count_pvc_volume_health_events(pvc_obj, reason, event_type, message_substr):
         field_selector=f"involvedObject.name={pvc_obj.name}",
     )["items"]
     return sum(
-        1
+        e.get("count", 1)
         for e in events
         if (
             e.get("reason") == reason
