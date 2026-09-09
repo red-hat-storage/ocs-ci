@@ -57,8 +57,8 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             vm_obj=vm_obj,
             disks_before_hotplug=before_disks,
         )
-        assert sample.wait_for_func_value(
-            value=True
+        assert sample.wait_for_func_status(
+            result=True
         ), f"Hotplug verification failed for PVC '{pvc.name}' on VM '{vm_obj.name}'"
         volume_attached = verifyvolume(
             vm_obj.name, volume_name=pvc.name, namespace=vm_obj.namespace
