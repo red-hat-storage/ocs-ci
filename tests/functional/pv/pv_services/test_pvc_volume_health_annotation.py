@@ -13,20 +13,26 @@ from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_ocs_version,
     jira,
+    skipif_mcg_only,
+    skipif_managed_service,
+    skipif_rosa_hcp,
+    skipif_external_mode,
 )
-from ocs_ci.framework.testlib import ManageTest, tier1
+from ocs_ci.framework.testlib import ManageTest, tier1, tier2
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
     assert_pvc_volume_health_event,
     blocklist_cephfs_client,
     remove_cephfs_client_blocklist,
+    modify_deployment_replica_count,
 )
 from ocs_ci.ocs import constants, ocp, node
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.csi_addons import (
     get_csi_addon_pod_on_node,
 )
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +45,10 @@ RECOVERY_POLL_TIMEOUT = 300
 
 @tier1
 @green_squad
+@skipif_mcg_only
+@skipif_managed_service
+@skipif_rosa_hcp
+@skipif_external_mode
 @skipif_ocs_version("<4.23")
 @jira("DFBUGS-9421", run=False)
 @pytest.mark.parametrize(
@@ -237,9 +247,12 @@ class TestPVCVolumeHealthAnnotation(ManageTest):
         logger.info(f"{driver.upper()} PVC volume health annotation test passed")
 
 
-@tier1
 @green_squad
 @skipif_ocs_version("<4.23")
+@skipif_mcg_only
+@skipif_managed_service
+@skipif_rosa_hcp
+@skipif_external_mode
 @jira("DFBUGS-9421", run=False)
 class TestPVCVolumeHealthUnhealthy(ManageTest):
     """
@@ -280,6 +293,27 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
         logger.info("FIO I/O completed")
         return pvc_obj, pod_obj
 
+    def _restart_cephfs_nodeplugin_on_nodes(self, node_names):
+        """
+        Restart the CephFS RPC nodeplugin pods on the given nodes for unhealthy
+        transition to happen quickly.
+
+        Args:
+            node_names (list): Node names whose CephFS nodeplugin pods to
+                restart.
+        """
+        plugin_pods = pod.get_plugin_pods(constants.CEPHFILESYSTEM)
+        targets = set(node_names)
+        for plugin_pod in plugin_pods:
+            plugin_node = plugin_pod.get()["spec"]["nodeName"]
+            if plugin_node in targets:
+                logger.info(
+                    f"Restarting CephFS nodeplugin pod {plugin_pod.name} "
+                    f"on node {plugin_node} to force the health-check probe"
+                )
+                plugin_pod.delete(wait=True)
+
+    @tier1
     @pytest.mark.polarion_id("OCS-8228")
     def test_pvc_health_unhealthy_via_ceph_blocklist(
         self, pvc_factory, pod_factory, request
@@ -359,3 +393,185 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
             message_substr="volume is in a healthy condition",
         )
         logger.info("PVC health unhealthy via ceph blocklist test passed")
+
+    @tier2
+    @pytest.mark.polarion_id("OCS-8261")
+    def test_pvc_health_unhealthy_via_mds_scaledown(
+        self, pvc_factory, pod_factory, request
+    ):
+        """
+        Verify RWX PVC per-node health transitions to unhealthy when both
+        CephFS MDS daemons are scaled down, and recovers when restored.
+
+        Steps:
+            1. Create CephFS RWX PVC, 2 pods on different nodes, run I/O.
+            2. Wait for reporter tick; assert 2 per-node annotation keys are
+               healthy and snapshot 'since' per key
+            3. Scale down both MDS deployments (a & b) to 0, then restart the
+               CephFS nodeplugin pods on the pod nodes to trigger the probe.
+            4. Assert both per-node keys report state == 'unhealthy'.
+            5. Assert 'since' timestamp advanced vs the healthy snapshot.
+            6. Assert VolumeConditionAbnormal Warning event fired.
+            7. Restore both MDS deployments to replicas=1.
+            8. Assert both keys return to state == 'healthy'.
+            9. Assert new VolumeConditionHealthy Normal event on recovery.
+        """
+        logger.test_step("Verify Ceph health is HEALTH_OK")
+        ceph_health_check(tries=3, delay=10)
+
+        logger.test_step("Create CephFS RWX PVC (5Gi)")
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            size=5,
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+        logger.info(f"PVC {pvc_obj.name} created and Bound")
+
+        logger.test_step("Create 2 pods on different nodes")
+        worker_nodes = node.get_worker_nodes()
+        logger.assertion(
+            f"Worker node count: expected >= 2, actual={len(worker_nodes)}"
+        )
+        assert (
+            len(worker_nodes) >= 2
+        ), f"Need >= 2 worker nodes, found {len(worker_nodes)}"
+        pod_objs = []
+        for i in range(2):
+            p = pod_factory(
+                pvc=pvc_obj,
+                interface=constants.CEPHFILESYSTEM,
+                node_name=worker_nodes[i],
+            )
+            pod_objs.append(p)
+        pod_node_names = [p.get()["spec"]["nodeName"] for p in pod_objs]
+        logger.info(
+            f"Pod {pod_objs[0].name} on {pod_node_names[0]}, "
+            f"Pod {pod_objs[1].name} on {pod_node_names[1]}"
+        )
+        logger.assertion(
+            f"Pods on different nodes: {pod_node_names[0]} != {pod_node_names[1]}"
+        )
+        assert (
+            pod_node_names[0] != pod_node_names[1]
+        ), f"Both pods on same node: {pod_node_names[0]}"
+
+        logger.test_step("Run FIO I/O on both pods")
+        for p in pod_objs:
+            p.run_io(
+                storage_type="fs",
+                size="512M",
+                fio_filename=p.name,
+            )
+        for p in pod_objs:
+            pod.get_fio_rw_iops(p)
+        logger.info("FIO I/O completed")
+
+        logger.test_step("Poll for 2 healthy per-node annotation keys")
+        health_annotations = pvc_obj.wait_for_volume_health_state(
+            expected_state="healthy",
+            timeout=ANNOTATION_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+            expected_count=2,
+        )
+        healthy_since = {}
+        for node_name in pod_node_names:
+            uid = ocp.OCP(kind="node", resource_name=node_name).get()["metadata"]["uid"]
+            key = f"{constants.VOLUME_HEALTH_ANNOTATION_PREFIX}{uid}"
+            healthy_since[key] = json.loads(health_annotations[key]).get("since", "")
+        logger.info(f"Healthy 'since' snapshot: {healthy_since}")
+
+        logger.test_step("Scale down both MDS deployments (a & b) to 0 replicas")
+        mds_deployments = [
+            constants.MDS_DAEMON_DEPLOYMENT_ONE,
+            constants.MDS_DAEMON_DEPLOYMENT_TWO,
+        ]
+
+        def finalizer():
+            logger.info("Finalizer: restore both MDS deployments to 1")
+            for dep in mds_deployments:
+                modify_deployment_replica_count(dep, 1)
+            ceph_health_check(tries=20, delay=30)
+
+        request.addfinalizer(finalizer)
+
+        for dep in mds_deployments:
+            modify_deployment_replica_count(dep, 0)
+            logger.info(f"Scaled deployment {dep} to 0")
+
+        logger.test_step(
+            "Restart CephFS nodeplugin pods on the pod nodes to trigger the "
+            "unhealthy probe"
+        )
+        self._restart_cephfs_nodeplugin_on_nodes(pod_node_names)
+
+        logger.test_step("Assert both per-node keys report 'unhealthy'")
+        unhealthy_annotations = pvc_obj.wait_for_volume_health_state(
+            expected_state="unhealthy",
+            timeout=UNHEALTHY_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+            expected_count=2,
+        )
+
+        logger.test_step("Assert 'since' timestamp advanced for both keys")
+        for key, healthy_ts in healthy_since.items():
+            logger.assertion(f"Annotation key {key} present while unhealthy")
+            assert key in unhealthy_annotations, (
+                f"Key {key} missing from unhealthy annotations: "
+                f"{list(unhealthy_annotations.keys())}"
+            )
+            parsed = json.loads(unhealthy_annotations[key])
+            logger.assertion(
+                f"Annotation state for {key}: expected='unhealthy', "
+                f"actual='{parsed.get('state')}'"
+            )
+            assert (
+                parsed.get("state") == "unhealthy"
+            ), f"Expected 'unhealthy' for {key}, got '{parsed.get('state')}'"
+            new_ts = parsed.get("since", "")
+            dt_healthy = datetime.fromisoformat(healthy_ts.replace("Z", "+00:00"))
+            dt_unhealthy = datetime.fromisoformat(new_ts.replace("Z", "+00:00"))
+            logger.assertion(f"'since' advanced for {key}: {new_ts} > {healthy_ts}")
+            assert dt_unhealthy > dt_healthy, (
+                f"'since' did not advance for {key}: "
+                f"healthy={healthy_ts}, unhealthy={new_ts}"
+            )
+
+        logger.test_step("Assert VolumeConditionAbnormal Warning event fired")
+        try:
+            for _ in TimeoutSampler(
+                timeout=ANNOTATION_POLL_TIMEOUT,
+                sleep=ANNOTATION_POLL_INTERVAL,
+                func=assert_pvc_volume_health_event,
+                pvc_obj=pvc_obj,
+                reason="VolumeConditionAbnormal",
+                event_type="Warning",
+                message_substr="health-check has not responded",
+            ):
+                break
+        except TimeoutExpiredError:
+            pytest.fail(
+                "VolumeConditionAbnormal event not found for "
+                f"PVC {pvc_obj.name} within {ANNOTATION_POLL_TIMEOUT}s"
+            )
+
+        logger.test_step("Restore both MDS deployments to 1 replica")
+        for dep in mds_deployments:
+            modify_deployment_replica_count(dep, 1)
+            logger.info(f"Scaled deployment {dep} to 1")
+
+        logger.test_step("Assert both per-node keys return to 'healthy'")
+        pvc_obj.wait_for_volume_health_state(
+            expected_state="healthy",
+            timeout=RECOVERY_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+            expected_count=2,
+        )
+
+        logger.test_step("Assert VolumeConditionHealthy Normal event")
+        assert_pvc_volume_health_event(
+            pvc_obj,
+            reason="VolumeConditionHealthy",
+            event_type="Normal",
+            message_substr="volume is in a healthy condition",
+        )
+        logger.info("PVC health unhealthy via MDS scale-down test passed")
