@@ -276,15 +276,28 @@ class ProviderClusterOperatorUpgrade(ProviderUpgrade):
         """
         Upgrade all operators on the provider cluster, routing between ODF and
         FDF paths based on product_type config or runtime detection.
+        """
+        try:
+            log.info("Starting the operator upgrade process...")
+            operator_upgrade = OperatorUpgrade()
 
-        ODF path (existing behaviour, unchanged):
-            1. Prune old IDMS
-            2. Bump OCS catalog on clients
-            3. OCS upgrade on provider
-            4. Propagate IDMS to hosted clusters
-            5. Upgrade supporting operators (MetalLB, CNV, ACM, LSO)
+            if _is_fdf_upgrade():
+                log.info("FDF detected -- running FDF provider upgrade path")
+                self._run_fdf_provider_upgrade(operator_upgrade)
+            else:
+                self._run_odf_provider_upgrade(operator_upgrade)
 
-        FDF path:
+            # Common to both paths: upgrade supporting operators (MetalLB, CNV, ACM, LSO).
+            operator_upgrade.run_operators_upgrade()
+            log.info("Operator upgrade completed successfully.")
+        except Exception as e:
+            log.error(f"Operator upgrade failed: {e}")
+            raise
+
+    def _run_fdf_provider_upgrade(self, operator_upgrade):
+        """
+        FDF provider upgrade path.
+
             1. Upgrade Fusion + FDF operator on provider (ITMS/IDMS handled
                inside FDFUpgrade.run_upgrade() for offline racks)
             2. Invalidate the cached FDF catalog image
@@ -292,62 +305,54 @@ class ProviderClusterOperatorUpgrade(ProviderUpgrade):
                image for offline racks)
             4. Propagate IDMS mirror config to hosted clusters
             5. Verify FDF auto-upgraded on all client clusters
-            6. Upgrade supporting operators (MetalLB, CNV, ACM, LSO)
         """
-        try:
-            log.info("Starting the operator upgrade process...")
-            operator_upgrade = OperatorUpgrade()
-            is_fdf = _is_fdf_upgrade()
+        from ocs_ci.deployment.fusion_data_foundation import (
+            FusionDataFoundationDeployment,
+        )
+        from ocs_ci.ocs.fdf_upgrade import FDFUpgrade
 
-            if is_fdf:
-                log.info("FDF detected -- running FDF provider upgrade path")
+        # Step 1: Upgrade Fusion + FDF operator on the provider.
+        # For offline racks this also creates ITMS/IDMS, waits for
+        # MCP, and patches FusionServiceDefinition.
+        namespace = config.ENV_DATA["cluster_namespace"]
+        fdf_deployment = FusionDataFoundationDeployment()
+        fdf_version = fdf_deployment.get_installed_version()
+        if fdf_version.startswith("v"):
+            fdf_version = fdf_version[1:]
+        FDFUpgrade(
+            namespace=namespace,
+            version_before_upgrade=fdf_version,
+        ).run_upgrade()
 
-                from ocs_ci.deployment.fusion_data_foundation import (
-                    FusionDataFoundationDeployment,
-                )
-                from ocs_ci.ocs.fdf_upgrade import FDFUpgrade
+        # Step 2: Invalidate cached catalog image so clients get the
+        # post-upgrade image from the provider on the next fetch.
+        clear_fdf_catalog_image_cache()
 
-                # Step 1: Upgrade Fusion + FDF operator on the provider.
-                # For offline racks this also creates ITMS/IDMS, waits for
-                # MCP, and patches FusionServiceDefinition.
-                namespace = config.ENV_DATA["cluster_namespace"]
-                fdf_deployment = FusionDataFoundationDeployment()
-                fdf_version = fdf_deployment.get_installed_version()
-                if fdf_version.startswith("v"):
-                    fdf_version = fdf_version[1:]
-                FDFUpgrade(
-                    namespace=namespace,
-                    version_before_upgrade=fdf_version,
-                ).run_upgrade()
+        # Step 3: Push updated FDF catalog to client clusters.
+        # For offline racks the image is resolved through the
+        # provider's ITMS before being sent to clients.
+        operator_upgrade.bump_ocs_version_on_clients()
 
-                # Step 2: Invalidate cached catalog image so clients get the
-                # post-upgrade image from the provider on the next fetch.
-                clear_fdf_catalog_image_cache()
+        # Step 4: Propagate IDMS mirror config to hosted clusters so
+        # client nodes can pull FDF operator images from local mirrors.
+        hosted_clients = HostedClients()
+        hosted_clients.apply_idms_to_hosted_clusters()
 
-                # Step 3: Push updated FDF catalog to client clusters.
-                # For offline racks the image is resolved through the
-                # provider's ITMS before being sent to clients.
-                operator_upgrade.bump_ocs_version_on_clients()
+        # Step 5: Verify FDF auto-upgraded on all client clusters.
+        operator_upgrade.verify_fdf_clients_upgraded()
 
-                # Step 4: Propagate IDMS mirror config to hosted clusters so
-                # client nodes can pull FDF operator images from local mirrors.
-                hosted_clients = HostedClients()
-                hosted_clients.apply_idms_to_hosted_clusters()
+    def _run_odf_provider_upgrade(self, operator_upgrade):
+        """
+        ODF provider upgrade path.
 
-                # Step 5: Verify FDF auto-upgraded on all client clusters.
-                operator_upgrade.verify_fdf_clients_upgraded()
-            else:
-                # ODF path (existing logic, unchanged)
-                prune_old_df_repo_idms(force_delete_pods=True)
-                operator_upgrade.bump_ocs_version_on_clients()
-                ocs_upgrade.run_ocs_upgrade()
+            1. Prune old IDMS
+            2. Bump OCS catalog on clients
+            3. OCS upgrade on provider
+            4. Propagate IDMS to hosted clusters
+        """
+        prune_old_df_repo_idms(force_delete_pods=True)
+        operator_upgrade.bump_ocs_version_on_clients()
+        ocs_upgrade.run_ocs_upgrade()
 
-                hosted_clients = HostedClients()
-                hosted_clients.apply_idms_to_hosted_clusters()
-
-            # Step 6: Upgrade supporting operators (common to both paths).
-            operator_upgrade.run_operators_upgrade()
-            log.info("Operator upgrade completed successfully.")
-        except Exception as e:
-            log.error(f"Operator upgrade failed: {e}")
-            raise
+        hosted_clients = HostedClients()
+        hosted_clients.apply_idms_to_hosted_clusters()
