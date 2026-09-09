@@ -12,7 +12,6 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_ocs_version,
-    jira,
     skipif_mcg_only,
     skipif_managed_service,
     skipif_rosa_hcp,
@@ -51,7 +50,6 @@ RECOVERY_POLL_TIMEOUT = 300
 @skipif_rosa_hcp
 @skipif_external_mode
 @skipif_ocs_version("<4.23")
-@jira("DFBUGS-9421", run=False)
 @pytest.mark.parametrize(
     argnames=["interface"],
     argvalues=[
@@ -254,7 +252,6 @@ class TestPVCVolumeHealthAnnotation(ManageTest):
 @skipif_managed_service
 @skipif_rosa_hcp
 @skipif_external_mode
-@jira("DFBUGS-9421", run=False)
 class TestPVCVolumeHealthUnhealthy(ManageTest):
     """
     Test PVC volume health annotation transitions to unhealthy state
