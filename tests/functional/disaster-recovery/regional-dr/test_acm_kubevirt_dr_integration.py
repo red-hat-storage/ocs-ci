@@ -113,42 +113,33 @@ class TestACMKubevirtDRIntergration:
         md5sum_failover = []
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
 
+        # The static IP VMs come from dedicated workload dirs that pin an address
+        # inside the UDN subnet; everything else about them is deployed and DR
+        # protected exactly like the regular discovered VMs.
+        deploy_cnv_workload = (
+            cnv_workload_with_static_ip
+            if static_vm_ip
+            else discovered_apps_dr_workload_cnv
+        )
+
         logger.info("Deploy 1st CNV workload")
-        if static_vm_ip:
-            # Static IP VMs must be DR protected via the discovered apps CLI;
-            # ACM UI protection is not supported for them.
-            cnv_workloads = cnv_workload_with_static_ip(
-                pvc_vm=1, dr_protect=True, shared_drpc_protection=False
-            )
-        else:
-            cnv_workloads = discovered_apps_dr_workload_cnv(
-                pvc_vm=1, dr_protect=False, shared_drpc_protection=False
-            )
+        cnv_workloads = deploy_cnv_workload(
+            pvc_vm=1, dr_protect=False, shared_drpc_protection=False
+        )
 
         if protection_type:
             # Deploy second workload for Shared protection (uses same namespace as first)
             logger.info("Deploy 2nd CNV workload in the existing namespace")
-            if static_vm_ip:
-                # No second DRPC: the DRPC created above protects the whole
-                # namespace and its selectors (appname=kubevirt) already match
-                # this VM, which is what Shared protection means here.
-                cnv_workloads = cnv_workload_with_static_ip(
-                    pvc_vm=1, dr_protect=False, shared_drpc_protection=True
-                )
-            else:
-                cnv_workloads = discovered_apps_dr_workload_cnv(
-                    pvc_vm=1, dr_protect=False, shared_drpc_protection=True
-                )
+            cnv_workloads = deploy_cnv_workload(
+                pvc_vm=1, dr_protect=False, shared_drpc_protection=True
+            )
 
         assert cnv_workloads, "No discovered VM found"
         config.switch_acm_ctx()
         protection_name = cnv_workloads[0].workload_namespace
         logger.info(f"Protection name is {protection_name}")
-        # DRPCs created via the CLI are named after the placement, while the ACM
-        # UI appends a "-drpc" suffix to it.
-        resource_name = cnv_workloads[0].discovered_apps_placement_name
-        if not static_vm_ip:
-            resource_name += "-drpc"
+        # The DRPC created by the ACM UI appends a "-drpc" suffix to the placement
+        resource_name = cnv_workloads[0].discovered_apps_placement_name + "-drpc"
 
         logger.info(f"CNV workloads instance is {cnv_workloads}")
 
@@ -158,24 +149,10 @@ class TestACMKubevirtDRIntergration:
             f"Primary managed cluster name is {cnv_workloads[0].preferred_primary_cluster}"
         )
 
-        if not static_vm_ip:
-            # DR protection via ACM UI fleet virtualization page
-            assert navigate_using_fleet_virtualization(acm_obj)
-            for i, vm in enumerate(cnv_workloads):
-                standalone_flag = (not protection_type) or (i == 0)
-                assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-                    acm_obj,
-                    vms=[vm],
-                    managed_cluster_name=primary_cluster_name,
-                    standalone=standalone_flag,
-                    protection_name=protection_name,
-                    namespace=cnv_workloads[0].workload_namespace,
-                )
-        else:
-            # Static IP: the workload is already DR protected via the CLI at
-            # deploy time. What remains is the network mapping ConfigMap on the
-            # hub, linked to the DRPolicy, which drives the IP translation.
-            config.switch_acm_ctx()
+        if static_vm_ip:
+            # The network mapping ConfigMap must be linked to the DRPolicy before
+            # the VMs are protected, so the DRPC picks the mapping up when it is
+            # created and can translate the pinned IPs on failover.
             existing_policies = dr_helpers.get_all_drpolicy()
             assert existing_policies, "No DRPolicy found on hub"
             drpolicy_name = existing_policies[0]["metadata"]["name"]
@@ -193,6 +170,19 @@ class TestACMKubevirtDRIntergration:
                 drpolicy_name=drpolicy_name,
             )
             wait_for_drpolicy_network_peers(drpolicy_name)
+
+        # DR protection via ACM UI fleet virtualization page
+        assert navigate_using_fleet_virtualization(acm_obj)
+        for i, vm in enumerate(cnv_workloads):
+            standalone_flag = (not protection_type) or (i == 0)
+            assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
+                acm_obj,
+                vms=[vm],
+                managed_cluster_name=primary_cluster_name,
+                standalone=standalone_flag,
+                protection_name=protection_name,
+                namespace=cnv_workloads[0].workload_namespace,
+            )
 
         logger.info(
             f'Placement name is "{cnv_workloads[0].discovered_apps_placement_name}"'
@@ -405,16 +395,15 @@ class TestACMKubevirtDRIntergration:
         )
         drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
-        if not static_vm_ip:
-            logger.info("On UI, check if VM is running after failover or not")
-            assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-                acm_obj,
-                vms=cnv_workloads,
-                protection_name=protection_name,
-                namespace=cnv_workloads[0].workload_namespace,
-                managed_cluster_name=secondary_cluster_name,
-                assign_policy=False,
-            )
+        logger.info("On UI, check if VM is running after failover or not")
+        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
+            acm_obj,
+            vms=cnv_workloads,
+            protection_name=protection_name,
+            namespace=cnv_workloads[0].workload_namespace,
+            managed_cluster_name=secondary_cluster_name,
+            assign_policy=False,
+        )
         config.switch_to_cluster_by_name(secondary_cluster_name)
 
         # Doing Relocate in below code
@@ -490,17 +479,16 @@ class TestACMKubevirtDRIntergration:
             )
 
         config.switch_acm_ctx()
-        if not static_vm_ip:
-            logger.info("On UI, check if VM is running after relocate or not")
-            acm_obj.refresh_page()
-            assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
-                acm_obj,
-                vms=cnv_workloads,
-                protection_name=protection_name,
-                namespace=cnv_workloads[0].workload_namespace,
-                managed_cluster_name=primary_cluster_name,
-                assign_policy=False,
-            )
+        logger.info("On UI, check if VM is running after relocate or not")
+        acm_obj.refresh_page()
+        assert check_or_assign_drpolicy_for_discovered_vms_via_ui(
+            acm_obj,
+            vms=cnv_workloads,
+            protection_name=protection_name,
+            namespace=cnv_workloads[0].workload_namespace,
+            managed_cluster_name=primary_cluster_name,
+            assign_policy=False,
+        )
         config.switch_to_cluster_by_name(primary_cluster_name)
 
         # Validating data integrity (file1) after relocating VMs back to primary managed cluster
