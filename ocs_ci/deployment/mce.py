@@ -383,8 +383,7 @@ class MCEInstaller(object):
         if not self.mce_installed():
             logger.info("Installing mce")
             # Check if using released or unreleased MCE
-            use_released_mce = not config.ENV_DATA.get("mce_unreleased_image")
-
+            use_released_mce = not config.ENV_DATA.get("unreleased_mce")
             if use_released_mce:
                 logger.info("Deploying released MCE from default catalog")
                 # For released MCE, no custom catalog source needed
