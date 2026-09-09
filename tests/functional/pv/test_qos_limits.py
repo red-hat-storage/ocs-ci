@@ -18,6 +18,72 @@ from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
+# Container image and resource presets shared across the QoS test matrix.
+QOS_TEST_IMAGE = "quay.io/centos/centos:stream9"
+QOS_SLEEP_CMD = ["sleep", "3600"]
+GUARANTEED_RESOURCES = {
+    "requests": {"cpu": "200m", "memory": "256Mi"},
+    "limits": {"cpu": "200m", "memory": "256Mi"},
+}
+BURSTABLE_RESOURCES = {
+    "requests": {"cpu": "100m", "memory": "128Mi"},
+    "limits": {"cpu": "500m", "memory": "512Mi"},
+}
+FS_VOLUME_MOUNTS = [{"name": "vol-data", "mountPath": "/mnt/storage"}]
+BLOCK_VOLUME_DEVICES = [{"name": "vol-data", "devicePath": "/dev/rbdblock"}]
+
+# Per-scenario container specs referenced by the parametrized test matrix below.
+GUARANTEED_FS_CONTAINERS = [
+    {
+        "name": "worker",
+        "image": QOS_TEST_IMAGE,
+        "command": QOS_SLEEP_CMD,
+        "resources": GUARANTEED_RESOURCES,
+        "volumeMounts": FS_VOLUME_MOUNTS,
+    }
+]
+BURSTABLE_FS_CONTAINERS = [
+    {
+        "name": "worker",
+        "image": QOS_TEST_IMAGE,
+        "command": QOS_SLEEP_CMD,
+        "resources": BURSTABLE_RESOURCES,
+        "volumeMounts": FS_VOLUME_MOUNTS,
+    }
+]
+BESTEFFORT_BLOCK_CONTAINERS = [
+    {
+        "name": "container-1",
+        "image": QOS_TEST_IMAGE,
+        "command": QOS_SLEEP_CMD,
+        "volumeDevices": BLOCK_VOLUME_DEVICES,
+    },
+    {
+        "name": "container-2",
+        "image": QOS_TEST_IMAGE,
+        "command": QOS_SLEEP_CMD,
+        "volumeDevices": BLOCK_VOLUME_DEVICES,
+    },
+]
+GUARANTEED_BLOCK_CONTAINERS = [
+    {
+        "name": "worker",
+        "image": QOS_TEST_IMAGE,
+        "command": QOS_SLEEP_CMD,
+        "resources": GUARANTEED_RESOURCES,
+        "volumeDevices": BLOCK_VOLUME_DEVICES,
+    }
+]
+BURSTABLE_BLOCK_CONTAINERS = [
+    {
+        "name": "worker",
+        "image": QOS_TEST_IMAGE,
+        "command": QOS_SLEEP_CMD,
+        "resources": BURSTABLE_RESOURCES,
+        "volumeDevices": BLOCK_VOLUME_DEVICES,
+    }
+]
+
 
 @orange_squad
 @tier1
@@ -108,54 +174,6 @@ class TestVolumeAttributesClassQoS(ManageTest):
         exec_cmd(f"oc apply -f {tmp_silver}")
         exec_cmd(f"oc apply -f {tmp_gold}")
 
-    @pytest.fixture
-    def test_resources_cleanup(self, request):
-        """Maintains cleanup handles for dynamically generated pods, claims, and snapshots."""
-        resources = {"pods": [], "pvcs": [], "snapshots": []}
-
-        def resource_teardown():
-            logger.info("Cleaning up test pods, PVCs, and snapshots")
-            cleanup_errors = (CommandFailed, TimeoutError, TimeoutExpiredError)
-
-            for pod in resources["pods"]:
-                try:
-                    pod.delete()
-                except cleanup_errors as ex:
-                    logger.warning(
-                        f"Handled expected deletion failure for pod {getattr(pod, 'name', 'unknown')}: {ex}"
-                    )
-                except Exception as ex:
-                    logger.exception(
-                        f"Unexpected error deleting pod {getattr(pod, 'name', 'unknown')}: {ex}"
-                    )
-
-            for pvc in resources["pvcs"]:
-                try:
-                    pvc.delete()
-                except cleanup_errors as ex:
-                    logger.warning(
-                        f"Handled expected deletion failure for PVC {getattr(pvc, 'name', 'unknown')}: {ex}"
-                    )
-                except Exception as ex:
-                    logger.exception(
-                        f"Unexpected error deleting PVC {getattr(pvc, 'name', 'unknown')}: {ex}"
-                    )
-
-            for snap in resources["snapshots"]:
-                try:
-                    snap.delete()
-                except cleanup_errors as ex:
-                    logger.warning(
-                        f"Handled expected deletion failure for snapshot {getattr(snap, 'name', 'unknown')}: {ex}"
-                    )
-                except Exception as ex:
-                    logger.exception(
-                        f"Unexpected error deleting snapshot {getattr(snap, 'name', 'unknown')}: {ex}"
-                    )
-
-        request.addfinalizer(resource_teardown)
-        return resources
-
     def verify_node_cgroup_throttling(
         self, pod_obj, expected_limits, timeout=60, sleep=5
     ):
@@ -230,20 +248,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 constants.VOLUME_MODE_FILESYSTEM,
                 False,
                 "guaranteed-qos-pod",
-                [
-                    {
-                        "name": "worker",
-                        "image": "quay.io/centos/centos:stream9",
-                        "command": ["sleep", "3600"],
-                        "resources": {
-                            "requests": {"cpu": "200m", "memory": "256Mi"},
-                            "limits": {"cpu": "200m", "memory": "256Mi"},
-                        },
-                        "volumeMounts": [
-                            {"name": "vol-data", "mountPath": "/mnt/storage"}
-                        ],
-                    }
-                ],
+                GUARANTEED_FS_CONTAINERS,
                 "Guaranteed",
                 False,
             ),
@@ -254,20 +259,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 constants.VOLUME_MODE_FILESYSTEM,
                 False,
                 "burstable-qos-pod",
-                [
-                    {
-                        "name": "worker",
-                        "image": "quay.io/centos/centos:stream9",
-                        "command": ["sleep", "3600"],
-                        "resources": {
-                            "requests": {"cpu": "100m", "memory": "128Mi"},
-                            "limits": {"cpu": "500m", "memory": "512Mi"},
-                        },
-                        "volumeMounts": [
-                            {"name": "vol-data", "mountPath": "/mnt/storage"}
-                        ],
-                    }
-                ],
+                BURSTABLE_FS_CONTAINERS,
                 "Burstable",
                 False,
             ),
@@ -278,24 +270,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 constants.VOLUME_MODE_BLOCK,
                 False,
                 "besteffort-qos-pod",
-                [
-                    {
-                        "name": "container-1",
-                        "image": "quay.io/centos/centos:stream9",
-                        "command": ["sleep", "3600"],
-                        "volumeDevices": [
-                            {"name": "vol-data", "devicePath": "/dev/rbdblock"}
-                        ],
-                    },
-                    {
-                        "name": "container-2",
-                        "image": "quay.io/centos/centos:stream9",
-                        "command": ["sleep", "3600"],
-                        "volumeDevices": [
-                            {"name": "vol-data", "devicePath": "/dev/rbdblock"}
-                        ],
-                    },
-                ],
+                BESTEFFORT_BLOCK_CONTAINERS,
                 "BestEffort",
                 False,
             ),
@@ -306,20 +281,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 constants.VOLUME_MODE_BLOCK,
                 False,
                 "guaranteed-block-pod",
-                [
-                    {
-                        "name": "worker",
-                        "image": "quay.io/centos/centos:stream9",
-                        "command": ["sleep", "3600"],
-                        "resources": {
-                            "requests": {"cpu": "200m", "memory": "256Mi"},
-                            "limits": {"cpu": "200m", "memory": "256Mi"},
-                        },
-                        "volumeDevices": [
-                            {"name": "vol-data", "devicePath": "/dev/rbdblock"}
-                        ],
-                    }
-                ],
+                GUARANTEED_BLOCK_CONTAINERS,
                 "Guaranteed",
                 False,
             ),
@@ -330,20 +292,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 constants.VOLUME_MODE_BLOCK,
                 False,
                 "burstable-block-pod",
-                [
-                    {
-                        "name": "worker",
-                        "image": "quay.io/centos/centos:stream9",
-                        "command": ["sleep", "3600"],
-                        "resources": {
-                            "requests": {"cpu": "100m", "memory": "128Mi"},
-                            "limits": {"cpu": "500m", "memory": "512Mi"},
-                        },
-                        "volumeDevices": [
-                            {"name": "vol-data", "devicePath": "/dev/rbdblock"}
-                        ],
-                    }
-                ],
+                BURSTABLE_BLOCK_CONTAINERS,
                 "Burstable",
                 False,
             ),
@@ -354,20 +303,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 constants.VOLUME_MODE_BLOCK,
                 True,  # Gold VAC Tier
                 "rox-block-pod",
-                [
-                    {
-                        "name": "worker",
-                        "image": "quay.io/centos/centos:stream9",
-                        "command": ["sleep", "3600"],
-                        "resources": {
-                            "requests": {"cpu": "200m", "memory": "256Mi"},
-                            "limits": {"cpu": "200m", "memory": "256Mi"},
-                        },
-                        "volumeDevices": [
-                            {"name": "vol-data", "devicePath": "/dev/rbdblock"}
-                        ],
-                    }
-                ],
+                GUARANTEED_BLOCK_CONTAINERS,
                 "Guaranteed",
                 True,  # Read-Only Spec Flag
             ),
