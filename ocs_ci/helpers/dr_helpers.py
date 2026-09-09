@@ -315,6 +315,7 @@ def failover(
             drpc_name=drpc_obj.resource_name,
             namespace=namespace,
             dr_action="app-failover",
+            retries=10,
         )
 
 
@@ -430,6 +431,7 @@ def relocate(
             drpc_name=drpc_obj.resource_name,
             namespace=namespace,
             dr_action="app-relocate",
+            retries=10,
         )
 
     config.switch_ctx(restore_index)
