@@ -13,6 +13,7 @@ from ocs_ci.helpers.scc_helpers import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
+    jira,
     polarion_id,
     post_upgrade,
     skipif_external_mode,
@@ -98,6 +99,7 @@ class TestSCCEnforcement(ManageTest):
 
     @tier1
     @polarion_id("OCS-8070")
+    @jira("DFBUGS-10771")
     def test_rook_ceph_daemons_scc(self):
         """
         Verify all Rook-Ceph daemon pods are pinned to rook-ceph SCC.
@@ -204,6 +206,7 @@ class TestSCCEnforcement(ManageTest):
 
     @tier1
     @polarion_id("OCS-8068")
+    @jira("DFBUGS-10771")
     def test_odf_operators_scc(self):
         """
         Verify all ODF operator pods are pinned to their expected SCCs.
@@ -371,9 +374,9 @@ class TestSCCEnforcement(ManageTest):
         cronjobs = ocp_cronjob.get().get("items", [])
 
         if not cronjobs:
-            pytest.skip("No CronJobs found in the openshift-storage namespace")
+            pytest.skip(f"No CronJobs found in namespace '{namespace}'")
 
-        ocp_job = OCP(kind="Job", namespace=namespace)
+        ocp_job = OCP(kind=constants.JOB, namespace=namespace)
         all_jobs = ocp_job.get().get("items", [])
         checked_count = 0
 
@@ -411,6 +414,7 @@ class TestSCCEnforcement(ManageTest):
 
     @tier1
     @polarion_id("OCS-8076")
+    @jira("DFBUGS-10771")
     def test_full_cluster_scc_audit(self):
         """
         Safety-net audit: zero running pods in openshift-storage without
