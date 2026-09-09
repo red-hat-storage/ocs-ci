@@ -4,23 +4,20 @@ metadata:
   name: odfcluster
   namespace: ibm-spectrum-fusion-ns
 spec:
-  taintNode: false
-  storageClient:
-    enable: true
-  creator: CreatedByFusion
-  erasureCoding:
-    codingChunks: 2
-    dataChunks: 4
-    enable: true
   autoScaleUp: true
-  deviceSets:
-  - capacity: 1Ti
-    count: 1
-    name: fusion-storage
-    storageClass: null
+  allowRemoteStorageConsumers: true
+  creator: CreatedByFusion
   encryption:
     clusterWide: false
     keyManagementService:
       enable: false
+  localVolumeSetSpec:
+    deviceTypes:
+      - disk
+      - part
+    diskType: SSD
   externalStorage: {}
+  storageClient:
+    enable: true
   storageNodes: []
+  taintNode: false
