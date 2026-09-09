@@ -115,8 +115,10 @@ class TestACMKubevirtDRIntergration:
 
         logger.info("Deploy 1st CNV workload")
         if static_vm_ip:
+            # Static IP VMs must be DR protected via the discovered apps CLI;
+            # ACM UI protection is not supported for them.
             cnv_workloads = cnv_workload_with_static_ip(
-                pvc_vm=1, dr_protect=False, shared_drpc_protection=False
+                pvc_vm=1, dr_protect=True, shared_drpc_protection=False
             )
         else:
             cnv_workloads = discovered_apps_dr_workload_cnv(
@@ -127,6 +129,9 @@ class TestACMKubevirtDRIntergration:
             # Deploy second workload for Shared protection (uses same namespace as first)
             logger.info("Deploy 2nd CNV workload in the existing namespace")
             if static_vm_ip:
+                # No second DRPC: the DRPC created above protects the whole
+                # namespace and its selectors (appname=kubevirt) already match
+                # this VM, which is what Shared protection means here.
                 cnv_workloads = cnv_workload_with_static_ip(
                     pvc_vm=1, dr_protect=False, shared_drpc_protection=True
                 )
@@ -139,7 +144,11 @@ class TestACMKubevirtDRIntergration:
         config.switch_acm_ctx()
         protection_name = cnv_workloads[0].workload_namespace
         logger.info(f"Protection name is {protection_name}")
-        resource_name = cnv_workloads[0].discovered_apps_placement_name + "-drpc"
+        # DRPCs created via the CLI are named after the placement, while the ACM
+        # UI appends a "-drpc" suffix to it.
+        resource_name = cnv_workloads[0].discovered_apps_placement_name
+        if not static_vm_ip:
+            resource_name += "-drpc"
 
         logger.info(f"CNV workloads instance is {cnv_workloads}")
 
@@ -163,9 +172,9 @@ class TestACMKubevirtDRIntergration:
                     namespace=cnv_workloads[0].workload_namespace,
                 )
         else:
-            # Static IP: DR protection done via CLI (dr_protect=True above).
-            # Set up network mapping ConfigMap on hub and link to DRPolicy.
-            # ACM UI protection for static-IP discovered VMs is not supported.
+            # Static IP: the workload is already DR protected via the CLI at
+            # deploy time. What remains is the network mapping ConfigMap on the
+            # hub, linked to the DRPolicy, which drives the IP translation.
             config.switch_acm_ctx()
             existing_policies = dr_helpers.get_all_drpolicy()
             assert existing_policies, "No DRPolicy found on hub"

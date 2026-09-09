@@ -355,12 +355,16 @@ def wait_for_drpolicy_network_mapping_status(
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture
 def setup_udn_nad(request):
     """
     Prerequisite fixture: creates the workload namespace and a Primary
     UserDefinedNetwork (with persistent IPAM) on each managed cluster, then
-    tears them down after the test class completes.
+    tears them down after the test completes.
+
+    Function scoped on purpose: the workload teardown deletes the project it
+    ran in, which is this same namespace (and takes the UDN with it). A wider
+    scope would leave later tests in the class without a namespace or UDN.
 
     Confirmed requirements from manual testing (Aug 2026):
       - Namespace must carry label k8s.ovn.org/primary-user-defined-network=""
