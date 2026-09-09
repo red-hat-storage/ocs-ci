@@ -311,7 +311,8 @@ class FDFUpgrade(BaseUpgrade):
         params_dict = {"spec": {"channel": self.channel}}
         params = json.dumps(params_dict)
         cmd = (
-            f"oc --kubeconfig {self.kubeconfig} -n {constants.OPENSHIFT_STORAGE_NAMESPACE} patch Subscription "
+            f"oc --kubeconfig {self.kubeconfig} -n {constants.OPENSHIFT_STORAGE_NAMESPACE} patch "
+            f"{constants.SUBSCRIPTION_COREOS} "
             f"odf-operator -p '{params}' --type merge"
         )
         run_patch_cmd(cmd)
