@@ -23,6 +23,7 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
     assert_pvc_volume_health_event,
     blocklist_cephfs_client,
+    count_pvc_volume_health_events,
     remove_cephfs_client_blocklist,
     modify_deployment_replica_count,
 )
@@ -304,6 +305,7 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
         """
         plugin_pods = pod.get_plugin_pods(constants.CEPHFILESYSTEM)
         targets = set(node_names)
+        restarted = []
         for plugin_pod in plugin_pods:
             plugin_node = plugin_pod.get()["spec"]["nodeName"]
             if plugin_node in targets:
@@ -312,6 +314,15 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
                     f"on node {plugin_node} to force the health-check probe"
                 )
                 plugin_pod.delete(wait=True)
+                restarted.append(plugin_node)
+        logger.assertion(
+            f"CephFS nodeplugin pods restarted on nodes: "
+            f"expected={sorted(targets)}, actual={sorted(restarted)}"
+        )
+        assert set(restarted) == targets, (
+            f"No CephFS nodeplugin pod found on nodes: "
+            f"{sorted(targets - set(restarted))}"
+        )
 
     @tier1
     @pytest.mark.polarion_id("OCS-8228")
@@ -501,11 +512,17 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
 
         def finalizer():
             logger.info("Finalizer: restore both MDS deployments to 1")
+            failed = []
             for dep in mds_deployments:
-                assert modify_deployment_replica_count(
-                    dep, 1
-                ), f"Failed to restore deployment {dep} to 1 replica"
+                if not modify_deployment_replica_count(dep, 1):
+                    logger.error(f"Failed to restore deployment {dep} to 1 replica")
+                    failed.append(dep)
+                else:
+                    logger.info(f"Restored deployment {dep} to 1 replica")
             ceph_health_check(tries=20, delay=30)
+            assert (
+                not failed
+            ), f"Failed to restore MDS deployments to 1 replica: {failed}"
 
         request.addfinalizer(finalizer)
 
@@ -573,13 +590,11 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
             )
 
         logger.test_step("Capture pre-recovery healthy event count")
-        pre_recovery_healthy_count = len(
-            assert_pvc_volume_health_event(
-                pvc_obj,
-                reason="VolumeConditionHealthy",
-                event_type="Normal",
-                message_substr="volume is in a healthy condition",
-            )
+        pre_recovery_healthy_count = count_pvc_volume_health_events(
+            pvc_obj,
+            reason="VolumeConditionHealthy",
+            event_type="Normal",
+            message_substr="volume is in a healthy condition",
         )
         logger.info(
             f"Pre-recovery VolumeConditionHealthy event count: "
@@ -606,13 +621,11 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
 
         def new_healthy_event():
             return (
-                len(
-                    assert_pvc_volume_health_event(
-                        pvc_obj,
-                        reason="VolumeConditionHealthy",
-                        event_type="Normal",
-                        message_substr="volume is in a healthy condition",
-                    )
+                count_pvc_volume_health_events(
+                    pvc_obj,
+                    reason="VolumeConditionHealthy",
+                    event_type="Normal",
+                    message_substr="volume is in a healthy condition",
                 )
                 > pre_recovery_healthy_count
             )
