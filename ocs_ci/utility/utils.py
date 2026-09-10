@@ -3022,6 +3022,38 @@ def get_cluster_version_info():
     return cluster_version_info
 
 
+@retry(
+    CommandFailed,
+    tries=10,
+    delay=30,
+    backoff=1,
+)
+def label_nodes_platform_type(platform_type="vsphere"):
+    """
+    Label all nodes with the given platform-type.
+
+    Retries the command on failure to handle transient errors (e.g. "infra
+    config cache not synchronized") that can occur shortly after the nodes join
+    the cluster (OCPBUGS-100052).
+
+    Args:
+        platform_type (str): Platform type value to set on the
+            node.openshift.io/platform-type label (default: "vsphere").
+
+    Raises:
+        CommandFailed: If labeling the nodes keeps failing after all retries.
+
+    """
+    # importing here to avoid circular imports
+    from ocs_ci.ocs.ocp import OCP
+
+    ocp = OCP()
+    ocp.exec_oc_cmd(
+        f"label node --all node.openshift.io/platform-type={platform_type}"
+        " --overwrite"
+    )
+
+
 def get_ocs_build_number():
     """
     Gets the build number for ocs operator

@@ -214,6 +214,7 @@ from ocs_ci.utility.utils import (
     get_infra_id,
     apply_oadp_workaround,
     mute_mon_netsplit,
+    label_nodes_platform_type,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -1142,11 +1143,7 @@ class Deployment(object):
             and version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22
         ):
             logger.info("Labeling all nodes with platform-type=vsphere for vSphere UPI")
-            ocp = OCP()
-            ocp.exec_oc_cmd(
-                "label node --all node.openshift.io/platform-type=vsphere"
-                " --overwrite"
-            )
+            label_nodes_platform_type(platform_type="vsphere")
         # configure Ingress Node Firewall and restrict SSH access to nodes
         if config.ENV_DATA.get("restrict_ssh_access_to_nodes", False):
             try:
