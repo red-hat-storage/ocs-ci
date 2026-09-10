@@ -589,7 +589,7 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
             pvc_obj,
             reason="VolumeConditionHealthy",
             event_type="Normal",
-            message_substr="volume is in a healthy condition",
+            message_substring="volume is in a healthy condition",
         )
         logger.info(
             f"Pre-recovery VolumeConditionHealthy event count: "
@@ -620,7 +620,7 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
                     pvc_obj,
                     reason="VolumeConditionHealthy",
                     event_type="Normal",
-                    message_substr="volume is in a healthy condition",
+                    message_substring="volume is in a healthy condition",
                 )
                 > pre_recovery_healthy_count
             )
