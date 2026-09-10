@@ -12,7 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
 )
-from ocs_ci.framework.testlib import E2ETest, tier1
+from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs import ocp
@@ -61,22 +61,12 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
         config_map_obj = ocp.OCP(kind=constants.CONFIGMAP, namespace=namespace)
         pod_obj = ocp.OCP(kind=constants.POD, namespace=namespace)
 
-        # Enable NFS feature
-        nfs_ganesha_pod_name = nfs_utils.nfs_enable(
-            storage_cluster_obj,
-            config_map_obj,
-            pod_obj,
-            namespace,
-        )
-        log.info(
-            f"NFS feature enabled successfully. NFS Ganesha pod: {nfs_ganesha_pod_name}"
-        )
+        nfs_ganesha_pod_name_holder = [None]
 
         def finalizer():
             """
             Finalizer to disable NFS feature after test completion.
             """
-            # Disable NFS feature
             nfs_sc = constants.NFS_STORAGECLASS_NAME
             sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": nfs_sc})
 
@@ -85,12 +75,24 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
                 config_map_obj,
                 pod_obj,
                 sc,
-                nfs_ganesha_pod_name,
+                nfs_ganesha_pod_name_holder[0],
             )
             log.info("NFS feature disabled successfully")
 
+        # Register the finalizer BEFORE enabling NFS so cleanup always runs
         request.addfinalizer(finalizer)
-        return nfs_ganesha_pod_name
+
+        # Enable NFS feature
+        nfs_ganesha_pod_name_holder[0] = nfs_utils.nfs_enable(
+            storage_cluster_obj,
+            config_map_obj,
+            pod_obj,
+            namespace,
+        )
+        log.info(
+            f"NFS feature enabled successfully. NFS Ganesha pod: {nfs_ganesha_pod_name_holder[0]}"
+        )
+        return nfs_ganesha_pod_name_holder[0]
 
     @pytest.fixture(scope="function")
     def setup_prerequisites(self, setup_nfs_feature, create_multiple_storage_pvcs_pods):
@@ -172,7 +174,7 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
                     rotation_results.append(False)
                     raise
 
-            log.info("Key rotation verified successfully for all PV's")
+            log.info("Key rotation verified successfully for all PVs")
             return rotation_results
 
         return _verify_key_rotation
@@ -306,12 +308,11 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
         log.info("SETUP COMPLETE: Ready to create PVCs and test key rotation")
 
         def finalizer():
-
+            """Reset Ceph full ratio to 85% after test to restore default thresholds."""
             change_ceph_full_ratio(85)
 
         request.addfinalizer(finalizer)
 
-    @tier1
     def test_rbd_encrypted_pvc_keyrotation_all_combinations(
         self,
         create_multiple_storage_pvcs_pods,
@@ -384,7 +385,11 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
         time.sleep(total_wait)
 
         log.info(" Verifying key rotation for all encrypted PVs")
-        verify_pvc_key_rotation(pvc_objs, self.pvk_obj)
+        rotation_results = verify_pvc_key_rotation(pvc_objs, self.pvk_obj)
+        assert all(rotation_results), (
+            f"Key rotation failed for one or more PVCs: "
+            f"{[pvc_objs[i].name for i, r in enumerate(rotation_results) if not r]}"
+        )
 
         log.info(
             " Performing snapshot, clone, expansion, and restore operations on test PVCs"
@@ -507,4 +512,8 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
 
         log.info("Waiting for 2 minutes to ensure key rotation has occurred")
         time.sleep(120)  # Wait 2 minutes for key rotation schedule
-        verify_pvc_key_rotation(pvc_objs, self.pvk_obj)
+        rotation_results = verify_pvc_key_rotation(pvc_objs, self.pvk_obj)
+        assert all(rotation_results), (
+            f"Key rotation failed for one or more PVCs after cluster-full recovery: "
+            f"{[pvc_objs[i].name for i, r in enumerate(rotation_results) if not r]}"
+        )

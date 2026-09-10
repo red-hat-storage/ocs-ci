@@ -2994,7 +2994,7 @@ def create_multiple_storage_pvcs_pods(
 
     def teardown():
         """
-        Teardown to restore Ceph full ratio and clean up NFS resources.
+        Teardown to clean up NFS resources.
         """
 
         # clean up all NFS resources
@@ -3036,11 +3036,16 @@ def create_multiple_storage_pvcs_pods(
 
         valid_storage_types = ["encrypted_rbd", "non_encrypted_rbd", "cephfs", "nfs"]
         if not isinstance(skip_storage_types, list):
-            raise ValueError(
+            raise TypeError(
                 f"skip_storage_types must be a list. Valid values: {valid_storage_types}"
             )
+        invalid = set(skip_storage_types) - set(valid_storage_types)
+        if invalid:
+            raise ValueError(
+                f"Invalid storage types {sorted(invalid)}. Valid values: {valid_storage_types}"
+            )
 
-        pvc_objs, pod_objs = [], []
+        pvc_objs, pod_objs, pvc_combinations = [], [], []
         non_enc_pvc_objs, non_enc_pod_objs, non_enc_combinations = [], [], []
         cephfs_pvc_objs, cephfs_pod_objs = [], []
         nfs_pvc_objs, nfs_pod_objs = [], []
@@ -3062,7 +3067,7 @@ def create_multiple_storage_pvcs_pods(
                 )
             ]
 
-            for idx, pvc_config in enumerate(pvc_combinations, start=1):
+            for pvc_config in pvc_combinations:
                 pvc_obj = pvc_factory(
                     interface=constants.CEPHBLOCKPOOL,
                     project=proj_obj,
@@ -3196,6 +3201,9 @@ def create_multiple_storage_pvcs_pods(
                     volume_mode=constants.VOLUME_MODE_FILESYSTEM,
                 )
                 nfs_pvc_objs.append(nfs_pvc_obj)
+                # Track PVC immediately so teardown cleans it up even if
+                # deployment creation or readiness check fails mid-iteration.
+                all_nfs_resources["pvcs"].append(nfs_pvc_obj)
 
                 deployment_name = f"{pvc_name_prefix}nfs-test-pod-{idx}"
                 deployment_template = templating.load_yaml(constants.NFS_APP_POD_YAML)
@@ -3232,11 +3240,8 @@ def create_multiple_storage_pvcs_pods(
                 )
                 nfs_pod_obj = nfs_pod_list[0]
                 nfs_pod_objs.append(nfs_pod_obj)
-                # Track NFS resources for cleanup in teardown
+                # Track pod immediately after it is confirmed running.
                 all_nfs_resources["pods"].append(nfs_pod_obj)
-
-            # Track NFS PVCs for cleanup in teardown
-            all_nfs_resources["pvcs"].extend(nfs_pvc_objs)
 
             logger.info(
                 f" All {len(nfs_pod_objs)} NFS deployment pods created and running"
@@ -3302,6 +3307,7 @@ def create_clones_until_cluster_full(pvc_clone_factory, threading_lock):
 
         all_clones = []
         attempt = 0
+        prometheus = PrometheusAPI(threading_lock=threading_lock)
 
         while attempt < max_attempts:
             for i in range(clone_batch_size):
@@ -3339,8 +3345,6 @@ def create_clones_until_cluster_full(pvc_clone_factory, threading_lock):
 
             # Check if we've reached the target alerts
             logger.info(f"Checking for expected alerts: {expected_alerts}")
-            prometheus = PrometheusAPI(threading_lock=threading_lock)
-
             sample = TimeoutSampler(
                 timeout=180,
                 sleep=10,
