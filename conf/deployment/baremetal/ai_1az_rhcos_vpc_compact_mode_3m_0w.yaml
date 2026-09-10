@@ -1,0 +1,56 @@
+---
+# VPC Bare Metal - Compact Mode (3 masters, 0 workers)
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+
+ENV_DATA:
+  platform: 'ibm_vpc_bm'
+  deployment_type: 'ai'
+  worker_replicas: 0
+  master_replicas: 3
+  region: 'us-south'
+
+  baremetal:
+    pool_tag: 'odf-qe-reserved-pool'
+    env_name: 'ibmcloud_odf_qe_vpc'
+    subnet_id: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'  # Replace with VPC subnet ID
+    bm_provisioning_network: 'private'
+    # bm_httpd_server: specified in test-specific config (floating IP for SSH)
+    # bm_httpd_provision_server: specified in test-specific config (private IP for BM nodes)
+    bm_httpd_server_user: 'jenkins'
+    bm_httpd_document_root: '/var/www/html/'
+    bm_tftp_base_dir: '/tftpboot/'
+    bm_path_to_upload: '/var/www/html/ocp/'
+    # bm_install_files: specified in test-specific config (uses private IP)
+
+    servers:
+      master-0:
+        mgmt_provider: 'vpc-bm'
+        server_id: '0717-xxxxx-xxxxx-xxxxx'  # Replace with actual VPC BM server ID
+        pool_tag: 'odf-qe-reserved-pool'
+        role: 'master'
+        private_mac: '02:00:01:00:B1:C4'
+        private_ip: '10.240.0.4'
+        private_prefix_length: 24
+        private_gw: '10.240.0.1'
+
+      master-1:
+        mgmt_provider: 'vpc-bm'
+        server_id: '0717-xxxxx-xxxxx-xxxxx'  # Replace with actual VPC BM server ID
+        pool_tag: 'odf-qe-reserved-pool'
+        role: 'master'
+        private_mac: '02:00:02:00:B1:C4'
+        private_ip: '10.240.0.5'
+        private_prefix_length: 24
+        private_gw: '10.240.0.1'
+
+      master-2:
+        mgmt_provider: 'vpc-bm'
+        server_id: '0717-xxxxx-xxxxx-xxxxx'  # Replace with actual VPC BM server ID
+        pool_tag: 'odf-qe-reserved-pool'
+        role: 'master'
+        private_mac: '02:00:03:00:B1:C4'
+        private_ip: '10.240.0.6'
+        private_prefix_length: 24
+        private_gw: '10.240.0.1'
