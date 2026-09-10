@@ -8,6 +8,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_cephfs_disabled,
+    skipif_no_nvmeof,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
@@ -209,6 +210,15 @@ class TestMetadata(ManageTest):
                 marks=[
                     tier2,
                     pytest.mark.polarion_id("OCS-4679"),
+                ],
+            ),
+            pytest.param(
+                # NVMe-oF StorageClass is RBD-backed on the default block pool
+                "ocs-storagecluster-cephblockpool",
+                constants.CEPH_NVMEOF_SC,
+                marks=[
+                    tier2,
+                    skipif_no_nvmeof,
                 ],
             ),
         ],
@@ -434,6 +444,12 @@ class TestMetadata(ManageTest):
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephblockpool", constants.DEFAULT_STORAGECLASS_RBD
+            ),
+            pytest.param(
+                # NVMe-oF StorageClass is RBD-backed on the default block pool
+                "ocs-storagecluster-cephblockpool",
+                constants.CEPH_NVMEOF_SC,
+                marks=skipif_no_nvmeof,
             ),
         ],
     )
