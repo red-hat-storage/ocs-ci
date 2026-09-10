@@ -1655,6 +1655,68 @@ def delete_application_ui(acm_obj, workloads_to_delete=[], timeout=70):
         return False
 
 
+def close_modal_dialog_if_present(acm_obj, acm_loc):
+    """
+    Best effort dismissal of the onboarding/help modal that the console pops up
+    on first visit of a page.
+
+    The close button can be present in the DOM but not clickable, for instance
+    when the popover anchor has scrolled out of the viewport and popper hides it
+    ('data-popper-reference-hidden'). Dismissing is optional, so a failure to
+    click must not fail the navigation.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        acm_loc (dict): ACM page locators for the current OCP version
+
+    Returns:
+        bool: True if the dialog was found and closed, False otherwise
+
+    """
+    if not acm_obj.check_element_presence(
+        (
+            acm_loc["modal_dialog_close_button"][1],
+            acm_loc["modal_dialog_close_button"][0],
+        ),
+        timeout=10,
+    ):
+        return False
+    log.info("Modal dialog box found, closing it..")
+    try:
+        acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+    except SeleniumTimeoutException:
+        log.info("Modal dialog box is not clickable, it is already hidden, moving on")
+        return False
+    return True
+
+
+def expand_nav_sidebar_if_collapsed(acm_obj, acm_loc):
+    """
+    Expand the console side navigation when it is rendered collapsed.
+
+    Switching to the Fleet Virtualization perspective can leave the sidebar
+    collapsed and aria-hidden, which makes every nav item unclickable even
+    though it is present in the DOM.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        acm_loc (dict): ACM page locators for the current OCP version
+
+    Returns:
+        bool: True if the sidebar was collapsed and got expanded, False otherwise
+
+    """
+    if not acm_obj.check_element_presence(
+        (acm_loc["nav-sidebar-collapsed"][1], acm_loc["nav-sidebar-collapsed"][0]),
+        timeout=10,
+    ):
+        return False
+    log.info("Side navigation is collapsed, expanding it")
+    acm_obj.do_click(acm_loc["nav-sidebar-toggle"], enable_screenshot=True)
+    acm_obj.page_has_loaded(retries=5, sleep_time=3)
+    return True
+
+
 def check_or_assign_drpolicy_for_discovered_vms_via_ui(
     acm_obj,
     vms: List[object],
@@ -1686,15 +1748,7 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
 
     """
     acm_loc = locators_for_current_ocp_version()["acm_page"]
-    if acm_obj.check_element_presence(
-        (
-            acm_loc["modal_dialog_close_button"][1],
-            acm_loc["modal_dialog_close_button"][0],
-        ),
-        timeout=10,
-    ):
-        log.info("Modal dialog box found, closing it..")
-        acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+    close_modal_dialog_if_present(acm_obj, acm_loc)
     log.info("Look for 'All Clusters'")
     all_clusters = acm_obj.wait_until_expected_text_is_found(
         acm_loc["all-clusters"], expected_text="All clusters"
@@ -1812,29 +1866,14 @@ def navigate_using_fleet_virtualization(acm_obj):
     acm_obj.do_click(acm_loc["fleet-virtual"])
     acm_obj.page_has_loaded(retries=10, sleep_time=5)
     if compare_versions(f"{acm_version_str} >= 2.16"):
-        if acm_obj.check_element_presence(
-            (
-                acm_loc["modal_dialog_close_button"][1],
-                acm_loc["modal_dialog_close_button"][0],
-            ),
-            timeout=10,
-        ):
-            log.info("Modal dialog box found, closing it..")
-            acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+        close_modal_dialog_if_present(acm_obj, acm_loc)
+    expand_nav_sidebar_if_collapsed(acm_obj, acm_loc)
     log.info("From side nav bar, navigate to VirtualMachines page")
     acm_obj.do_click(acm_loc["nav-bar-vms-page"])
     log.info(
         "Successfully navigate to the VirtualMachines page under Fleet Virtualization"
     )
     if compare_versions(f"{acm_version_str} < 2.16"):
-        if acm_obj.check_element_presence(
-            (
-                acm_loc["modal_dialog_close_button"][1],
-                acm_loc["modal_dialog_close_button"][0],
-            ),
-            timeout=10,
-        ):
-            log.info("Modal dialog box found, closing it..")
-            acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
+        close_modal_dialog_if_present(acm_obj, acm_loc)
 
     return True

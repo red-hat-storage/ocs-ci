@@ -1815,7 +1815,20 @@ acm_configuration_4_20 = {
         By.XPATH,
     ),
     "fleet-virtual": ("//h2[text()='Fleet Virtualization']", By.XPATH),
-    "nav-bar-vms-page": ("//a[@data-test-id='virtualmachines-nav-item']", By.XPATH),
+    # ACM 5.0 renamed the attribute on this nav item from data-test-id to
+    # data-test, so match either to stay compatible with earlier ACM builds.
+    "nav-bar-vms-page": (
+        "//a[@data-test-id='virtualmachines-nav-item' or @data-test='virtualmachines-nav-item']",
+        By.XPATH,
+    ),
+    # The side nav is rendered collapsed (and aria-hidden) after switching to the
+    # Fleet Virtualization perspective, so it has to be expanded before any of the
+    # nav items can be clicked.
+    "nav-sidebar-collapsed": (
+        "//div[@id='page-sidebar' and contains(@class, 'pf-m-collapsed')]",
+        By.XPATH,
+    ),
+    "nav-sidebar-toggle": ("//button[@id='nav-toggle']", By.XPATH),
     "all-clusters": ("//button[text()='All clusters']", By.XPATH),
     "managed-cluster-name": ("//button[text()='{}']", By.XPATH),
     "cnv-workload-namespace": ("//button[text()='{}']", By.XPATH),
