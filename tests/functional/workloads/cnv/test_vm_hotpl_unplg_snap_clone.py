@@ -180,9 +180,21 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 )
 
                 logger.info(f"Rebooting VM '{vm_obj.name}'")
-                vm_obj.restart()
+                vm_obj.restart(wait=True, verify=True)
                 logger.info(f"VM '{vm_obj.name}' rebooted successfully")
+                vm_obj.wait_for_ssh_connectivity(timeout=300)
 
+                volume_sample = TimeoutSampler(
+                    timeout=300,
+                    sleep=10,
+                    func=verifyvolume,
+                    vm_name=vm_obj.name,
+                    volume_name=pvc.name,
+                    namespace=vm_obj.namespace,
+                )
+                assert volume_sample.wait_for_func_status(
+                    result=True
+                ), f"Volume '{pvc.name}' not found on VM '{vm_obj.name}' after reboot"
                 volume_attached = verifyvolume(
                     vm_obj.name, volume_name=pvc.name, namespace=vm_obj.namespace
                 )
