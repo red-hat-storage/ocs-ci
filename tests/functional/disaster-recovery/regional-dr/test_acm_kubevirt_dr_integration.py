@@ -81,11 +81,10 @@ class TestACMKubevirtDRIntergration:
     # TODO: Add Polarion ID when available
     def test_acm_kubevirt_using_different_protection_types(
         self,
+        request,
         setup_acm_ui,
         protection_type,
         static_vm_ip,
-        setup_udn_nad,
-        network_mapping_configmap,
         discovered_apps_dr_workload_cnv,
         cnv_workload_with_static_ip,
         nodes_multicluster,
@@ -112,6 +111,18 @@ class TestACMKubevirtDRIntergration:
         md5sum_original = []
         md5sum_failover = []
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
+
+        # The UDN and the network mapping ConfigMap are only meaningful for the
+        # static IP cases, so request them lazily instead of as test arguments -
+        # otherwise every parametrization would pay for a UDN it never uses.
+        # setup_udn_nad must run before the workload is deployed because it
+        # creates the workload namespace with the primary-UDN label.
+        setup_udn_nad = network_mapping_configmap = None
+        if static_vm_ip:
+            setup_udn_nad = request.getfixturevalue("setup_udn_nad")
+            network_mapping_configmap = request.getfixturevalue(
+                "network_mapping_configmap"
+            )
 
         # The static IP VMs come from dedicated workload dirs that pin an address
         # inside the UDN subnet; everything else about them is deployed and DR
