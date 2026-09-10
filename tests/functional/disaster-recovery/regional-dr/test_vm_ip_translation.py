@@ -162,15 +162,21 @@ class TestVMIPTranslationConfigMap:
         rule (UNMAPPED_IP_DR1) has no translation entry — i.e. the ConfigMap
         does not implicitly map unknown IPs.
         """
+        logger.test_step("Get the DRPolicy name from the hub cluster")
         config.switch_acm_ctx()
         existing_policies = dr_helpers.get_all_drpolicy()
         assert existing_policies, "No DRPolicy found on hub"
         drpolicy_name = existing_policies[0]["metadata"]["name"]
 
+        logger.test_step(f"Create the network mapping ConfigMap '{cm_name}'")
         network_mapping_configmap(
             cm_name, pattern_rules=pattern_rules, explicit_rules=explicit_rules
         )
 
+        logger.test_step(
+            f"Wait for DRPolicy '{drpolicy_name}' to report networkMapping "
+            f"status {DRPOLICY_NM_STATUS_VALID}"
+        )
         # Poll until DRPolicy reports Valid status for the new ConfigMap
         # TODO: DRPolicy must reference the ConfigMap by name — confirm the
         # linkage mechanism (annotation, spec field, or auto-discovery by name).
@@ -178,6 +184,11 @@ class TestVMIPTranslationConfigMap:
             drpolicy_name, DRPOLICY_NM_STATUS_VALID
         )
 
+        logger.test_step(
+            f"Verify the translation method is classified as {expected_method} "
+            f"with {expected_pattern_count} pattern and "
+            f"{expected_explicit_count} explicit mappings"
+        )
         nm_status = get_drpolicy_network_mapping_status(drpolicy_name)
 
         # TODO: confirm exact field names in nm_status
@@ -195,6 +206,10 @@ class TestVMIPTranslationConfigMap:
         )
 
         if cm_name == "vm-ip-map-explicit":
+            logger.test_step(
+                f"Verify the unmapped IP {UNMAPPED_IP_DR1} is not implicitly "
+                "translated by the explicit-only ConfigMap"
+            )
             # Unmapped IP must not appear in the explicit mapping list
             nm_raw = get_drpolicy_network_mapping_status(drpolicy_name)
             raw_data = str(nm_raw)
@@ -240,11 +255,13 @@ class TestVMIPTranslationConfigMap:
         condition NetworkMappingLoaded should be False with a descriptive reason.
         DRPC operations must not crash.
         """
+        logger.test_step("Get the DRPolicy name from the hub cluster")
         config.switch_acm_ctx()
         existing_policies = dr_helpers.get_all_drpolicy()
         assert existing_policies, "No DRPolicy found on hub"
         drpolicy_name = existing_policies[0]["metadata"]["name"]
 
+        logger.test_step(f"Set up the '{scenario}' ConfigMap scenario")
         if cm_data is not None:
             # Create a deliberately bad ConfigMap
             with tempfile.NamedTemporaryFile(
@@ -267,6 +284,10 @@ class TestVMIPTranslationConfigMap:
             cm_name = "vm-ip-map-nonexistent"
 
         try:
+            logger.test_step(
+                f"Wait for DRPolicy '{drpolicy_name}' to report networkMapping "
+                f"status {DRPOLICY_NM_STATUS_INVALID}"
+            )
             # TODO: trigger or reference the ConfigMap from the DRPolicy
             # then poll for the condition reflecting the invalid state
             for sample in TimeoutSampler(
@@ -278,6 +299,9 @@ class TestVMIPTranslationConfigMap:
             ):
                 if sample == DRPOLICY_NM_STATUS_INVALID:
                     break
+            logger.test_step(
+                "Verify the Invalid status is reported with a descriptive reason"
+            )
             nm_status = get_drpolicy_network_mapping_status(drpolicy_name)
             assert nm_status.get("status") == DRPOLICY_NM_STATUS_INVALID, (
                 f"Expected networkMapping.status={DRPOLICY_NM_STATUS_INVALID} "
@@ -310,12 +334,17 @@ class TestVMIPTranslationConfigMap:
           - DRPolicy controller validates that labeled NADs exist on both
             clusters and reports NADsSynced condition correctly
         """
+        logger.test_step("Get the DRPolicy name from the hub cluster")
         config.switch_acm_ctx()
         existing_policies = dr_helpers.get_all_drpolicy()
         assert existing_policies, "No DRPolicy found on hub"
         drpolicy_name = existing_policies[0]["metadata"]["name"]
         drpolicy_ocp = ocp.OCP(kind=constants.DRPOLICY, resource_name=drpolicy_name)
 
+        logger.test_step(
+            f"Verify the {DRPOLICY_NADS_SYNCED_CONDITION} condition is True on "
+            f"DRPolicy '{drpolicy_name}'"
+        )
         # Verify NADsSynced condition on DRPolicy
         # TODO: confirm condition name and expected reason/status values
         conditions = drpolicy_ocp.get().get("status", {}).get("conditions", [])
@@ -331,6 +360,10 @@ class TestVMIPTranslationConfigMap:
         ), f"Expected NADsSynced=True, got: {nads_synced}"
         logger.info(f"DRPolicy NADsSynced condition: {nads_synced}")
 
+        logger.test_step(
+            "Verify each DRClusterConfig has discovered the labeled NADs in "
+            f"status.{DRCLUSTERCONFIG_NAD_STATUS_FIELD}"
+        )
         # Verify DRClusterConfig.status.networkAttachments on each managed cluster
         drcluster_list = dr_helpers.get_all_drclusters()
         assert drcluster_list, "No DRClusters found on hub"
@@ -371,6 +404,7 @@ class TestVMIPTranslationConfigMap:
         # TODO: Extend discovered_apps_dr_workload_cnv to support static-IP
         # VMs with IPAMClaims, or create a dedicated fixture.
         """
+        logger.test_step("Deploy and DR protect a CNV workload")
         cnv_workloads = discovered_apps_dr_workload_cnv(
             pvc_vm=1, dr_protect=True, shared_drpc_protection=False
         )
@@ -379,6 +413,7 @@ class TestVMIPTranslationConfigMap:
         namespace = workload.workload_namespace
         resource_name = workload.discovered_apps_placement_name + "-drpc"
 
+        logger.test_step("Get the DRPolicy name from the hub cluster")
         config.switch_acm_ctx()
         existing_policies = dr_helpers.get_all_drpolicy()
         assert existing_policies, "No DRPolicy found on hub"
@@ -387,6 +422,9 @@ class TestVMIPTranslationConfigMap:
         cluster_names = setup_udn_nad["cluster_names"]
         cluster_subnets = setup_udn_nad["cluster_subnets"]
 
+        logger.test_step(
+            "Create the network mapping ConfigMap and link it to the DRPolicy"
+        )
         # Create ConfigMap on hub and link to DRPolicy; fixture handles teardown
         network_mapping_configmap(
             "vm-ip-map-vrg-test",
@@ -399,8 +437,15 @@ class TestVMIPTranslationConfigMap:
             drpolicy_name=drpolicy_name,
         )
 
+        logger.test_step(
+            f"Wait for DRPolicy '{drpolicy_name}' to populate its network peers"
+        )
         wait_for_drpolicy_network_peers(drpolicy_name)
 
+        logger.test_step(
+            f"Verify the VRG on the primary cluster reports "
+            f"{VRG_CONDITION_NM_LOADED}=True"
+        )
         # Check VRG condition on the primary cluster
         primary_cluster = workload.preferred_primary_cluster
         config.switch_to_cluster_by_name(primary_cluster)
@@ -466,12 +511,17 @@ class TestVMIPTranslationMiscellaneous:
         scenario should cause a controller crash. The DRPolicy NADsSynced
         condition should reflect the misconfiguration with a descriptive reason.
         """
+        logger.test_step("Get the DRPolicy name from the hub cluster")
         config.switch_acm_ctx()
         existing_policies = dr_helpers.get_all_drpolicy()
         assert existing_policies
         drpolicy_name = existing_policies[0]["metadata"]["name"]
         drpolicy_ocp = ocp.OCP(kind=constants.DRPOLICY, resource_name=drpolicy_name)
 
+        logger.test_step(
+            f"Verify the {DRPOLICY_NADS_SYNCED_CONDITION} condition reflects the "
+            f"'{scenario}' misconfiguration without crashing the controller"
+        )
         # TODO: For "missing-nad": temporarily delete the NAD on one managed
         # cluster and verify the DRPolicy reports NADsSynced=False.
         # For "dhcp-nad-labeled-static": add the NAD_DR_LABEL to a DHCP NAD
@@ -506,6 +556,7 @@ class TestVMIPTranslationMiscellaneous:
         translation configured correctly cleans up all translation resources
         (IPAMClaims, network mapping references) so that no orphans remain.
         """
+        logger.test_step("Deploy and DR protect a CNV workload")
         cnv_workloads = discovered_apps_dr_workload_cnv(
             pvc_vm=1, dr_protect=True, shared_drpc_protection=False
         )
@@ -515,6 +566,10 @@ class TestVMIPTranslationMiscellaneous:
         resource_name = wl.discovered_apps_placement_name + "-drpc"
         primary_cluster = wl.preferred_primary_cluster
 
+        logger.test_step(
+            "Create the network mapping ConfigMap and wait for the DRPolicy to "
+            "report it Valid"
+        )
         network_mapping_configmap(
             "vm-ip-map-disable-test",
             pattern_rules=[{"source": DR1_SUBNET, "destination": DR2_SUBNET}],
@@ -525,6 +580,7 @@ class TestVMIPTranslationMiscellaneous:
             existing_policies[0]["metadata"]["name"], DRPOLICY_NM_STATUS_VALID
         )
 
+        logger.test_step(f"Disable DR protection by deleting DRPC '{resource_name}'")
         # Disable DR protection by deleting the DRPC
         config.switch_acm_ctx()
         drpc_obj = DRPC(
@@ -533,6 +589,9 @@ class TestVMIPTranslationMiscellaneous:
         drpc_obj.delete()
         logger.info(f"Deleted DRPC {resource_name} to disable DR protection")
 
+        logger.test_step(
+            "Verify the translated IPAMClaims are cleaned up on the primary cluster"
+        )
         # Verify IPAMClaim translation resources are cleaned up on primary
         config.switch_to_cluster_by_name(primary_cluster)
         # Poll until no translated IPAMClaims remain
@@ -550,6 +609,7 @@ class TestVMIPTranslationMiscellaneous:
                 break
         logger.info("Translation IPAMClaims cleaned up after DR protection disabled")
 
+        logger.test_step("Verify no orphaned VRG remains in the workload namespace")
         # Verify VRG is gone (no orphaned replication resources)
         vrg_list = ocp.OCP(
             kind="VolumeReplicationGroup",  # TODO: add constant
