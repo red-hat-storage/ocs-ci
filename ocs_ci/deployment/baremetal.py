@@ -5,6 +5,7 @@ import logging
 import re
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from time import sleep
 
@@ -890,7 +891,70 @@ class BAREMETALAI(BAREMETALBASE):
                     {"clusterName": self.cluster_name, "infraID": self.cluster_name},
                     metadata_file,
                 )
-            # load API and Ingress IPs from config
+            # IBM Cloud VPC BM: Create Network Load Balancers for VIPs
+            if config.ENV_DATA.get("platform") == constants.IBM_VPC_BM_PLATFORM:
+                logger.info(
+                    "VPC BM platform detected - creating Network Load Balancers"
+                )
+
+                # Import here to avoid circular dependency
+                from ocs_ci.utility import ibmcloud_bm
+
+                vpc_bm_manager = ibmcloud_bm.IBMCloudVPCBM(
+                    region=config.ENV_DATA.get("region")
+                )
+
+                # Extract server IPs from config
+                server_ips = [
+                    srv["private_ip"]
+                    for srv in config.ENV_DATA["baremetal"]["servers"].values()
+                ]
+                subnet_id = config.ENV_DATA["baremetal"]["subnet_id"]
+
+                # Create API ALB
+                api_lb_ip, api_lb_id = vpc_bm_manager.create_alb_for_api(
+                    cluster_name=self.cluster_name,
+                    subnet_id=subnet_id,
+                    server_ips=server_ips,
+                )
+
+                # Create Ingress ALB
+                ingress_lb_ip, ingress_lb_id = vpc_bm_manager.create_alb_for_ingress(
+                    cluster_name=self.cluster_name,
+                    subnet_id=subnet_id,
+                    server_ips=server_ips,
+                )
+
+                # Override VIPs with ALB IPs
+                self.api_vip = api_lb_ip
+                self.ingress_vip = ingress_lb_ip
+
+                # Store LB IDs for cleanup
+                self.api_lb_id = api_lb_id
+                self.ingress_lb_id = ingress_lb_id
+
+                logger.info(
+                    f"VPC BM ALBs created - API: {api_lb_ip} (ID: {api_lb_id}), "
+                    f"Ingress: {ingress_lb_ip} (ID: {ingress_lb_id})"
+                )
+
+                # Persist ALB IDs to vpc_bm_resources.json for cleanup during destroy
+                # (separate from metadata.json which gets overwritten by install_cluster)
+                vpc_resources = {
+                    "api_lb_id": self.api_lb_id,
+                    "ingress_lb_id": self.ingress_lb_id,
+                    "cluster_name": self.cluster_name,
+                }
+                vpc_resources_file = os.path.join(
+                    self.cluster_path, "vpc_bm_resources.json"
+                )
+                with open(vpc_resources_file, "w") as f:
+                    json.dump(vpc_resources, f, indent=2)
+                logger.info(f"Saved VPC BM resources to {vpc_resources_file}")
+
+                return
+
+            # load API and Ingress IPs from config (for non-VPC platforms)
             self.api_vip = config.ENV_DATA["api_vip"]
             self.ingress_vip = config.ENV_DATA["ingress_vip"]
 
@@ -1023,7 +1087,19 @@ class BAREMETALAI(BAREMETALBASE):
             self.ai_cluster.create_infrastructure_environment()
 
             # configure DNS records for API and Ingress
-            self.create_dns_records()
+            if config.ENV_DATA.get("platform") == constants.IBM_VPC_BM_PLATFORM:
+                # Use IBM Cloud CIS for DNS
+                logger.info(
+                    f"VPC BM: Creating CIS DNS records (API VIP: {self.api_vip}, Ingress VIP: {self.ingress_vip})"
+                )
+                ibmcloud_bm.IBMCloudVPCBM.create_cis_dns_records(
+                    cluster_name=self.cluster_name,
+                    api_vip=self.api_vip,
+                    ingress_vip=self.ingress_vip,
+                )
+            else:
+                # Use AWS Route53 for other platforms
+                self.create_dns_records()
 
             # download discovery ipxe config
             ipxe_config_file = self.ai_cluster.download_ipxe_config(self.cluster_path)
@@ -1031,12 +1107,138 @@ class BAREMETALAI(BAREMETALBASE):
             with open(ipxe_config_file) as ipxe_config_content:
                 content = ipxe_config_content.read()
             initrd_url = re.search(r"\ninitrd --name initrd (.*)\n", content).group(1)
-            kernel_url, rootfs_url = re.search(
-                r"\nkernel ([^ ]*) initrd=initrd coreos.live.rootfs_url=([^ ]*)",
-                content,
-            ).groups()
+            kernel_line = re.search(r"\nkernel (.*)\n", content).group(1)
+            kernel_url = kernel_line.split()[0]
+            # Extract all kernel args (everything after kernel URL)
+            ai_kernel_args = " ".join(kernel_line.split()[1:])
+            # Extract rootfs URL from kernel args
+            rootfs_match = re.search(r"coreos\.live\.rootfs_url=(\S+)", ai_kernel_args)
+            rootfs_url = rootfs_match.group(1) if rootfs_match else None
 
-            # download initrd, kernel and rootfs to httpd server
+            # IBM Cloud VPC Bare Metal: Use direct iPXE boot with AI URLs
+            if config.ENV_DATA.get("platform") == constants.IBM_VPC_BM_PLATFORM:
+                logger.info(
+                    "IBM Cloud VPC BM detected - using direct iPXE boot from AI service"
+                )
+
+                # Initialize VPC BM manager
+                vpc_bm_manager = ibmcloud_bm.IBMCloudVPCBM(
+                    region=config.ENV_DATA.get("region", "us-south")
+                )
+
+                # Generate inline iPXE script using AI service URLs and kernel args
+                ipxe_script = vpc_bm_manager.generate_rhcos_ipxe_script(
+                    kernel_url=kernel_url,
+                    initrd_url=initrd_url,
+                    ai_kernel_args=ai_kernel_args,
+                )
+                logger.info(
+                    f"Generated iPXE script for VPC BM ({len(ipxe_script)} bytes)"
+                )
+
+                # Prepare all server data for parallel reinitialization
+                servers_to_reinitialize = []
+                for machine in master_nodes + worker_nodes:
+                    server_id = self.srv_details[machine]["server_id"]
+                    servers_to_reinitialize.append((server_id, ipxe_script, machine))
+
+                # Reinitialize all servers in parallel (max 3 concurrent operations)
+                logger.info(
+                    f"Reinitializing {len(servers_to_reinitialize)} servers in parallel"
+                )
+                with ThreadPoolExecutor(max_workers=3) as executor:
+                    future_to_server = {
+                        executor.submit(
+                            vpc_bm_manager.reinitialize_with_ipxe,
+                            server_id,
+                            ipxe_script,
+                        ): machine
+                        for server_id, ipxe_script, machine in servers_to_reinitialize
+                    }
+
+                    for future in as_completed(future_to_server):
+                        machine = future_to_server[future]
+                        try:
+                            future.result()
+                            logger.info(f"Server {machine} reinitialized successfully")
+                        except Exception as e:
+                            logger.error(
+                                f"Server {machine} reinitialization failed: {e}"
+                            )
+                            raise
+
+                logger.info("All servers reinitialized and running with iPXE boot")
+
+                # Verify all servers are running before adding to ALB (no blind wait needed)
+                logger.info("Verifying all servers are in running state")
+                for machine in master_nodes + worker_nodes:
+                    server_id = self.srv_details[machine]["server_id"]
+                    vpc_bm_manager.wait_for_server_status(
+                        server_id, "running", timeout=1800
+                    )
+                    logger.info(f"Server {machine} ({server_id}) is running")
+
+                # Add servers as members to ALB pools now that they are running
+                if hasattr(self, "api_lb_id") and hasattr(self, "ingress_lb_id"):
+                    logger.info("Adding servers to ALB pools")
+                    server_ips = [
+                        self.srv_details[machine]["private_ip"]
+                        for machine in master_nodes + worker_nodes
+                    ]
+
+                    # Add members to API ALB (ports 6443 and 22623)
+                    vpc_bm_manager.add_alb_pool_members(
+                        self.api_lb_id, server_ips, [6443, 22623]
+                    )
+
+                    # Add members to Ingress ALB (ports 80 and 443)
+                    vpc_bm_manager.add_alb_pool_members(
+                        self.ingress_lb_id, server_ips, [80, 443]
+                    )
+
+                    logger.info("Successfully added all servers to ALB pools")
+
+                # Wait for discovering all nodes
+                expected_node_num = (
+                    config.ENV_DATA["master_replicas"]
+                    + config.ENV_DATA["worker_replicas"]
+                )
+                try:
+                    self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
+                except TimeoutExpiredError:
+                    discovered_hosts = [
+                        host["requested_hostname"]
+                        for host in self.ai_cluster.get_infra_env_hosts()
+                    ]
+                    for machine in master_nodes + worker_nodes:
+                        if machine not in discovered_hosts:
+                            server_id = self.srv_details[machine]["server_id"]
+                            logger.warning(
+                                f"Node {machine} not discovered, restarting server {server_id}"
+                            )
+                            vpc_bm_manager.stop_server(server_id, stop_type="hard")
+                            time.sleep(5)
+                            vpc_bm_manager.start_server(server_id)
+                    self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
+
+                # verify validations info
+                self.ai_cluster.verify_validations_info_for_discovered_nodes()
+
+                # update discovered hosts (configure hostname and role)
+                self.ai_cluster.update_hosts_config(
+                    mac_name_mapping=mac_name_mapping, mac_role_mapping=mac_role_mapping
+                )
+
+                # install the OCP cluster
+                self.ai_cluster.install_cluster(
+                    pending_user_action_handler=self.pending_user_action_handler
+                )
+
+                # VPC BM deployment complete - return early to skip traditional baremetal flow
+                logger.info("VPC BM deployment initiated successfully")
+                return
+
+            # Traditional baremetal: download initrd, kernel and rootfs to httpd server
             dest_dir = f"{self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
             cmd = f"wget --no-verbose -O {dest_dir}/initrd '{initrd_url}'"
             assert (
@@ -1183,6 +1385,28 @@ class BAREMETALAI(BAREMETALBASE):
                     f"Skipping handling pending user action for {machine}. "
                     "It was already handled less than 20 minutes ago."
                 )
+                return
+
+            # IBM Cloud VPC BM: Force restart hung servers
+            if self.srv_details[machine].get("mgmt_provider") == "vpc-bm":
+                server_id = self.srv_details[machine].get("server_id")
+                if not server_id:
+                    logger.error(f"Cannot restart {machine}: server_id not found")
+                    return
+
+                logger.info(f"Force restarting VPC BM server {machine} ({server_id})")
+                vpc_bm = ibmcloud_bm.IBMCloudVPCBM(
+                    region=config.ENV_DATA.get("region", "us-south")
+                )
+                vpc_bm.stop_server(server_id, stop_type="hard")
+                time.sleep(60)
+                try:
+                    vpc_bm.wait_for_server_status(server_id, "stopped", timeout=300)
+                except Exception as e:
+                    logger.warning(f"Stop wait failed: {e}, proceeding to start")
+                vpc_bm.start_server(server_id)
+                logger.info(f"Server {machine} restart initiated")
+                self.handled_pending_user_actions[machine] = time.time()
                 return
 
             if self.srv_details[machine].get("mgmt_provider", "ipmitool") == "ipmitool":
@@ -1378,29 +1602,101 @@ class BAREMETALAI(BAREMETALBASE):
                     "(ignoring the failure and continuing the destroy process to remove other resources)"
                 )
 
-            # delete DNS records for API and Ingress
-            # get the record sets
-            record_sets = self.aws.get_record_sets()
-            # form the record sets to delete
-            cluster_domain = (
-                f"{config.ENV_DATA.get('cluster_name')}."
-                f"{config.ENV_DATA.get('base_domain')}"
-            )
-            records_to_delete = [
-                f"api.{cluster_domain}.",
-                f"\\052.apps.{cluster_domain}.",
-            ]
-            # delete the records
-            hosted_zone_id = self.aws.get_hosted_zone_id_for_domain()
-            logger.debug(f"hosted zone id: {hosted_zone_id}")
-            for record in record_sets:
-                if record["Name"] in records_to_delete:
-                    logger.info(f"Deleting DNS record: {record}")
-                    self.aws.delete_record(record, hosted_zone_id)
+            # IBM Cloud VPC BM: Delete ALBs and CIS DNS records
+            if config.ENV_DATA.get("platform") == constants.IBM_VPC_BM_PLATFORM:
+                logger.info("VPC BM: Cleaning up ALBs and DNS records...")
+                from ocs_ci.utility import ibmcloud_bm
 
-            # cleanup ipxe provisioning files
-            cmd = f"rm -rf {self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
-            logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
+                cluster_name = config.ENV_DATA.get("cluster_name")
+
+                # Initialize VPC BM manager
+                vpc_bm_manager = ibmcloud_bm.IBMCloudVPCBM(
+                    region=config.ENV_DATA.get("region")
+                )
+
+                # PRIMARY: Use name-based lookup (handles retries/partial deploys)
+                api_lb_name = f"{cluster_name}-api-lb"
+                ingress_lb_name = f"{cluster_name}-ingress-lb"
+
+                api_lb_id = vpc_bm_manager.get_alb_id_by_name(api_lb_name)
+                ingress_lb_id = vpc_bm_manager.get_alb_id_by_name(ingress_lb_name)
+
+                # FALLBACK: Try vpc_bm_resources.json if name lookup failed
+                if not api_lb_id or not ingress_lb_id:
+                    vpc_resources_file = os.path.join(
+                        self.cluster_path, "vpc_bm_resources.json"
+                    )
+                    if os.path.exists(vpc_resources_file):
+                        try:
+                            with open(vpc_resources_file, "r") as f:
+                                vpc_resources = json.load(f)
+                                if not api_lb_id:
+                                    api_lb_id = vpc_resources.get("api_lb_id")
+                                if not ingress_lb_id:
+                                    ingress_lb_id = vpc_resources.get("ingress_lb_id")
+                            logger.info(f"Loaded ALB IDs from {vpc_resources_file}")
+                        except Exception as e:
+                            logger.warning(f"Failed to load vpc_bm_resources.json: {e}")
+
+                # Delete ALBs
+                if api_lb_id:
+                    logger.info(f"Deleting API ALB: {api_lb_id}")
+                    try:
+                        vpc_bm_manager.delete_alb(api_lb_id)
+                    except Exception as e:
+                        logger.warning(f"Failed to delete API ALB: {e}")
+                else:
+                    logger.warning("API ALB ID not found, skipping API ALB deletion")
+
+                if ingress_lb_id:
+                    logger.info(f"Deleting Ingress ALB: {ingress_lb_id}")
+                    try:
+                        vpc_bm_manager.delete_alb(ingress_lb_id)
+                    except Exception as e:
+                        logger.warning(f"Failed to delete Ingress ALB: {e}")
+                else:
+                    logger.warning(
+                        "Ingress ALB ID not found, skipping Ingress ALB deletion"
+                    )
+
+                # Delete CIS DNS records
+                if cluster_name:
+                    logger.info(f"Deleting CIS DNS records for cluster: {cluster_name}")
+                    try:
+                        ibmcloud_bm.IBMCloudVPCBM.delete_cis_dns_records(cluster_name)
+                    except Exception as e:
+                        logger.warning(f"CIS DNS cleanup failed: {e}")
+                else:
+                    logger.warning("Cluster name not found, skipping DNS cleanup")
+
+                logger.info("VPC BM cleanup complete")
+            else:
+                # delete DNS records for API and Ingress (non-VPC platforms)
+                # get the record sets
+                record_sets = self.aws.get_record_sets()
+                # form the record sets to delete
+                cluster_domain = (
+                    f"{config.ENV_DATA.get('cluster_name')}."
+                    f"{config.ENV_DATA.get('base_domain')}"
+                )
+                records_to_delete = [
+                    f"api.{cluster_domain}.",
+                    f"\\052.apps.{cluster_domain}.",
+                ]
+                # delete the records
+                hosted_zone_id = self.aws.get_hosted_zone_id_for_domain()
+                logger.debug(f"hosted zone id: {hosted_zone_id}")
+                for record in record_sets:
+                    if record["Name"] in records_to_delete:
+                        logger.info(f"Deleting DNS record: {record}")
+                        self.aws.delete_record(record, hosted_zone_id)
+
+            # cleanup ipxe provisioning files (skip for VPC BM - no helper node)
+            if config.ENV_DATA.get("platform") != constants.IBM_VPC_BM_PLATFORM:
+                cmd = f"rm -rf {self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
+                logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
+            else:
+                logger.info("VPC BM: Skipping helper node cleanup (not used)")
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
