@@ -13,6 +13,7 @@ from botocore.exceptions import (
     NoCredentialsError,
     WaiterError,
     EndpointConnectionError,
+    ProxyConnectionError,
 )
 
 from ocs_ci.utility.retry import retry
@@ -2598,6 +2599,13 @@ def check_root_volume(volume):
     return True if volume["attachments"][0]["DeleteOnTermination"] else False
 
 
+@retry(
+    ProxyConnectionError,
+    tries=4,
+    delay=5,
+    backoff=2,
+    text_in_exception="Tunnel connection failed",
+)
 def update_config_from_s3(
     bucket_name=constants.OCSCI_DATA_BUCKET, filename=constants.AUTHYAML
 ):
@@ -2629,6 +2637,11 @@ def update_config_from_s3(
         return None
     except EndpointConnectionError:
         logger.warning("Failed to fetch auth.yaml from ocs-ci-data")
+        return None
+    except ProxyConnectionError:
+        logger.warning(
+            "Proxy connection error while fetching auth.yaml from ocs-ci-data"
+        )
         return None
 
 
