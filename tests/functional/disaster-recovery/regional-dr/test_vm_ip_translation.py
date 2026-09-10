@@ -365,10 +365,10 @@ class TestVMIPTranslationConfigMap:
             f"status.{DRCLUSTERCONFIG_NAD_STATUS_FIELD}"
         )
         # Verify DRClusterConfig.status.networkAttachments on each managed cluster
+        # get_all_drclusters() returns the DRCluster names, not the objects
         drcluster_list = dr_helpers.get_all_drclusters()
         assert drcluster_list, "No DRClusters found on hub"
-        for drcluster in drcluster_list:
-            cluster_name = drcluster["metadata"]["name"]
+        for cluster_name in drcluster_list:
             # DRClusterConfig lives on the hub and is named after the managed cluster
             config.switch_acm_ctx()
             drclusterconfig_ocp = ocp.OCP(

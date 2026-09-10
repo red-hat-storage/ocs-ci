@@ -381,12 +381,11 @@ def setup_udn_nad(request):
     The fixture yields a dict with keys "udn_name", "nad_name",
     "cluster_names", "cluster_subnets" so tests can reference them.
     """
-    managed_cluster_names = []
     created_resources = []  # list of (cluster_name, kind, namespace, name)
 
     config.switch_acm_ctx()
-    for drcluster in dr_helpers.get_all_drclusters():
-        managed_cluster_names.append(drcluster["metadata"]["name"])
+    # get_all_drclusters() returns the DRCluster names, not the objects
+    managed_cluster_names = dr_helpers.get_all_drclusters()
 
     # Per-cluster subnets, assigned by DR role rather than by drcluster list
     # order. The static-IP VM workloads hardcode an address in PRIMARY_SUBNET
