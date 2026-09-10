@@ -3,41 +3,38 @@ Event-related utility functions for OCS-CI
 """
 
 import logging
-from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
 
-def count_pvc_volume_health_events(
-    pvc_obj, reason=None, event_type=None, message_substring=None
-):
+def count_pvc_volume_health_events(pvc_obj, reason, event_type, message_substr):
     """
-    Count Kubernetes events for a PVC matching specified criteria.
+    Return the total occurrence count of K8s core v1 events matching the
+    given criteria for the PVC, with ``source.component == 'CSI-Addons'``.
+    No assertion is made — zero is a valid return value.
 
     Args:
-        pvc_obj (OCS): PVC object to query events for
-        reason (str): Optional event reason filter
-        event_type (str): Optional event type filter ("Normal" or "Warning")
-        message_substring (str): Optional substring to match in event message
+        pvc_obj: PVC object
+        reason (str): Event reason
+            (e.g. 'VolumeConditionHealthy', 'VolumeConditionAbnormal')
+        event_type (str): Event type ('Normal' or 'Warning')
+        message_substr (str): Substring expected in the event message
 
     Returns:
-        int: Total count of matching events (may be zero)
-
+        int: Sum of ``count`` fields across all matching events (may be 0)
     """
-    event_obj = OCP(
-        kind=constants.EVENT,
-        namespace=pvc_obj.namespace,
+    event_ocp = OCP(kind="Event", namespace=pvc_obj.namespace)
+    events = event_ocp.get(
         field_selector=f"involvedObject.name={pvc_obj.name}",
+    )["items"]
+    return sum(
+        e.get("count", 1)
+        for e in events
+        if (
+            e.get("reason") == reason
+            and message_substr in e.get("message", "")
+            and e.get("type") == event_type
+            and e.get("source", {}).get("component") == "CSI-Addons"
+        )
     )
-    events = event_obj.get().get("items", [])
-    events = [e for e in events if e.get("source", {}).get("component") == "csi-addons"]
-    if reason:
-        events = [e for e in events if e.get("reason") == reason]
-    if event_type:
-        events = [e for e in events if e.get("type") == event_type]
-    if message_substring:
-        events = [e for e in events if message_substring in e.get("message", "")]
-    total_count = sum(e.get("count", 1) for e in events)
-    log.info(f"Found {total_count} events for PVC {pvc_obj.name}")
-    return total_count
