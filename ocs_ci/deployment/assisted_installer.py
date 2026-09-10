@@ -9,6 +9,7 @@ import logging
 import os
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     ClusterNotFoundException,
     HostValidationFailed,
@@ -233,22 +234,26 @@ class AssistedInstallerCluster(object):
             "cpu_architecture": self.cpu_architecture,
             "high_availability_mode": self.high_availability_mode,
             "base_dns_domain": self.base_dns_domain,
-            "api_vips": [
-                {
-                    "ip": self.api_vip,
-                }
-            ],
-            "ingress_vips": [
-                {
-                    "ip": self.ingress_vip,
-                }
-            ],
             "ssh_public_key": self.ssh_public_key,
             "pull_secret": self.pull_secret,
-            "platform": {
-                "type": self.platform,
-            },
         }
+
+        # VPC BM uses external ALBs for VIPs, not VRRP - requires user_managed_networking
+        if config.ENV_DATA.get("platform") == constants.IBM_VPC_BM_PLATFORM:
+            cluster_configuration["user_managed_networking"] = True
+            cluster_configuration["vip_dhcp_allocation"] = False
+            cluster_configuration["platform"] = {"type": "none"}
+            logger.info(
+                "Creating cluster with User Managed Networking (VIPs managed externally by ALBs)"
+            )
+        else:
+            # Traditional platforms (vSphere, baremetal) use managed networking with VRRP VIPs
+            cluster_configuration["platform"] = {"type": self.platform}
+            cluster_configuration["api_vips"] = [{"ip": self.api_vip}]
+            cluster_configuration["ingress_vips"] = [{"ip": self.ingress_vip}]
+            logger.info(
+                f"Creating cluster with managed networking (platform: {self.platform})"
+            )
         cl_data = self.api.create_cluster(cluster_configuration)
         self.id = cl_data["id"]
         logger.info(f"Created (defined) new cluster {self.name} (id: {self.id})")
