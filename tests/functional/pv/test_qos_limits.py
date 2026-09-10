@@ -194,7 +194,9 @@ class TestVolumeAttributesClassQoS(ManageTest):
         )
 
         def _check_cgroup_limits():
-            res = exec_cmd(find_cmd, shell=True, ignore_error=True)
+            # Bound each oc debug invocation to the sampler deadline so a single
+            # unavailable node cannot block on exec_cmd's 600s default timeout.
+            res = exec_cmd(find_cmd, shell=True, ignore_error=True, timeout=timeout)
             output = res.stdout.decode() if res.stdout else ""
 
             if not output.strip():
@@ -222,7 +224,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                     matched_output = result
                     break
         except TimeoutExpiredError:
-            res = exec_cmd(find_cmd, shell=True, ignore_error=True)
+            res = exec_cmd(find_cmd, shell=True, ignore_error=True, timeout=timeout)
             final_output = res.stdout.decode() if res.stdout else ""
             raise AssertionError(
                 f"Timed out after {timeout}s waiting for expected limits {expected_limits} "
@@ -432,21 +434,32 @@ class TestVolumeAttributesClassQoS(ManageTest):
             else:
                 io_target = "/dev/rbdblock"
 
-            # Sequential write I/O through the Ceph-CSI mounted volume path.
-            # exec_cmd_on_pod raises CommandFailed on non-zero exit, failing the test.
-            logger.assertion(
-                f"[{test_id}] Write I/O to {io_target} expected to succeed"
-            )
-            pod_obj.exec_cmd_on_pod(
-                f"dd if=/dev/zero of={io_target} bs=1M count=20 conv=fsync status=progress",
-                out_yaml_format=False,
-            )
+            # Exercise the I/O path in every container so multi-container pods
+            # (e.g. TC-03's shared RWX block volume) are validated end to end and
+            # not just in the default container. Single-container pods loop once.
+            for container in containers_spec:
+                container_name = container["name"]
 
-            # Sequential read I/O through the Ceph-CSI mounted volume path.
-            logger.assertion(
-                f"[{test_id}] Read I/O from {io_target} expected to succeed"
-            )
-            pod_obj.exec_cmd_on_pod(
-                f"dd if={io_target} of=/dev/null bs=1M count=20 status=progress",
-                out_yaml_format=False,
-            )
+                # Sequential write I/O through the Ceph-CSI mounted volume path.
+                # exec_cmd_on_pod raises CommandFailed on non-zero exit, failing
+                # the test.
+                logger.assertion(
+                    f"[{test_id}] Write I/O to {io_target} in container "
+                    f"{container_name} expected to succeed"
+                )
+                pod_obj.exec_cmd_on_pod(
+                    f"dd if=/dev/zero of={io_target} bs=1M count=20 conv=fsync status=progress",
+                    out_yaml_format=False,
+                    container_name=container_name,
+                )
+
+                # Sequential read I/O through the Ceph-CSI mounted volume path.
+                logger.assertion(
+                    f"[{test_id}] Read I/O from {io_target} in container "
+                    f"{container_name} expected to succeed"
+                )
+                pod_obj.exec_cmd_on_pod(
+                    f"dd if={io_target} of=/dev/null bs=1M count=20 status=progress",
+                    out_yaml_format=False,
+                    container_name=container_name,
+                )
