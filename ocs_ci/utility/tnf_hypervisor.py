@@ -831,6 +831,7 @@ class TNFHypervisor:
 
         config_file = f"config_{cluster_name}.sh"
         completion_marker = "/tmp/dev-scripts-complete"
+        pid_file = "/tmp/dev-scripts-pid"
         bg_cmd = (
             f"sudo bash -c 'nohup bash -c \""
             f"export PATH=/usr/local/bin:$PATH && "
@@ -838,7 +839,7 @@ class TNFHypervisor:
             f"export CONFIG={config_file} && "
             f"make >> /tmp/dev-scripts.log 2>&1; "
             f"echo \\$? > {completion_marker}"
-            f"\" </dev/null >/dev/null 2>&1 &'"
+            f"\" </dev/null >/dev/null 2>&1 & echo $! > {pid_file}'"
         )
         transport = self.ssh_conn.client.get_transport()
         channel = transport.open_session()
@@ -881,7 +882,9 @@ class TNFHypervisor:
     def _check_dev_scripts_done(self, completion_marker):
         """
         Check if dev-scripts completed by reading the marker file.
-        Uses a fresh SSH connection each time to avoid stale transports.
+        If no marker exists, verify the process is still running via
+        the saved PID. Fails fast if the process died without creating
+        the marker.
         """
         try:
             retcode, stdout, _ = self.ssh_conn.exec_cmd(
@@ -895,6 +898,28 @@ class TNFHypervisor:
             )
         if retcode == 0 and stdout.strip():
             return int(stdout.strip())
+
+        _, pid_out, _ = self.ssh_conn.exec_cmd("cat /tmp/dev-scripts-pid 2>/dev/null")
+        if pid_out.strip():
+            pid = pid_out.strip()
+            ret, _, _ = self.ssh_conn.exec_cmd(f"sudo kill -0 {pid} 2>/dev/null")
+            if ret != 0:
+                _, log_tail, _ = self.ssh_conn.exec_cmd(
+                    "tail -30 /tmp/dev-scripts.log 2>/dev/null"
+                    " || echo 'no log file'",
+                )
+                raise CommandFailed(
+                    f"dev-scripts process (PID {pid}) is no longer running "
+                    "but completion marker was never created. "
+                    f"Last log lines:\n{log_tail}"
+                )
+
+        _, progress, _ = self.ssh_conn.exec_cmd(
+            "tail -1 /tmp/dev-scripts.log 2>/dev/null || true"
+        )
+        if progress.strip():
+            logger.info(f"dev-scripts progress: {progress.strip()[:200]}")
+
         return None
 
     def resize_vm_disks(self):
