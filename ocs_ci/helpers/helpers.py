@@ -7877,43 +7877,6 @@ def verify_file_ownership(pod_obj, file_path, expected_uid, expected_gid):
     return file_uid, file_gid
 
 
-def count_pvc_volume_health_events(pvc_obj, reason, event_type, message_substr):
-    """
-    Return the count of K8s events matching the given criteria for the PVC,
-    with ``source.component == 'CSI-Addons'``.
-
-    No assertion is made — zero is a valid return value.  Use this when you
-    need a baseline count before an action (e.g. to detect new events after
-    recovery) without requiring any events to already exist.
-
-    Args:
-        pvc_obj: PVC object
-        reason (str): Event reason
-            (e.g. 'VolumeConditionHealthy', 'VolumeConditionAbnormal')
-        event_type (str): Event type ('Normal' or 'Warning')
-        message_substr (str): Substring expected in the event message
-
-    Returns:
-        int: Number of matching events (may be 0)
-    """
-    from ocs_ci.ocs.ocp import OCP
-
-    event_ocp = OCP(kind="Event", namespace=pvc_obj.namespace)
-    events = event_ocp.get(
-        field_selector=f"involvedObject.name={pvc_obj.name}",
-    )["items"]
-    return sum(
-        e.get("count", 1)
-        for e in events
-        if (
-            e.get("reason") == reason
-            and message_substr in e.get("message", "")
-            and e.get("type") == event_type
-            and e.get("source", {}).get("component") == "CSI-Addons"
-        )
-    )
-
-
 def create_custom_secret_for_cnsa_rm(name, namespace, data_dict, secret_type="Opaque"):
     """
     Helper to create a Kubernetes Secret using OCP class and temporary YAML files.

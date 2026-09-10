@@ -22,10 +22,10 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
     assert_pvc_volume_health_event,
     blocklist_cephfs_client,
-    count_pvc_volume_health_events,
     remove_cephfs_client_blocklist,
     modify_deployment_replica_count,
 )
+from ocs_ci.ocs.resources.events import count_pvc_volume_health_events
 from ocs_ci.ocs import constants, ocp, node
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.csi_addons import (
@@ -46,8 +46,6 @@ RECOVERY_POLL_TIMEOUT = 300
 @tier1
 @green_squad
 @skipif_mcg_only
-@skipif_managed_service
-@skipif_rosa_hcp
 @skipif_external_mode
 @skipif_ocs_version("<4.23")
 @pytest.mark.parametrize(
@@ -249,9 +247,6 @@ class TestPVCVolumeHealthAnnotation(ManageTest):
 @green_squad
 @skipif_ocs_version("<4.23")
 @skipif_mcg_only
-@skipif_managed_service
-@skipif_rosa_hcp
-@skipif_external_mode
 class TestPVCVolumeHealthUnhealthy(ManageTest):
     """
     Test PVC volume health annotation transitions to unhealthy state
@@ -403,6 +398,9 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
         logger.info("PVC health unhealthy via ceph blocklist test passed")
 
     @tier2
+    @skipif_managed_service
+    @skipif_rosa_hcp
+    @skipif_external_mode
     @pytest.mark.polarion_id("OCS-8261")
     def test_pvc_health_unhealthy_via_mds_scaledown(
         self, pvc_factory, pod_factory, request
