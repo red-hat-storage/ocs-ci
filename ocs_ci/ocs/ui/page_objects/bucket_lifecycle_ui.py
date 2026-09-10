@@ -138,6 +138,12 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
         """
         Create a new lifecycle rule using the interface-based approach
 
+        The wizard steps are (ODF 5.0+):
+          1. General configuration – rule name + scope
+          2. Conditional filters – prefix, object size
+          3. Lifecycle rule actions – action checkboxes
+          4. Review – final Create button
+
         Args:
             rule_name (str): Name for the rule
             scope (str): 'whole_bucket' or 'targeted'
@@ -271,7 +277,13 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
     def edit_lifecycle_rule(self, rule_name: str, new_rules: dict) -> None:
         """
-        Edit an existing lifecycle rule
+        Edit an existing lifecycle rule via the 4-step wizard (ODF 5.0+)
+
+        The edit wizard mirrors the create wizard:
+          1. General configuration (pre-filled, click Next)
+          2. Conditional filters (pre-filled, click Next)
+          3. Lifecycle rule actions – update action checkboxes/inputs
+          4. Review – click Save
 
         Args:
             rule_name (str): Name of the rule to edit
@@ -429,7 +441,11 @@ class IncompleteMultipartRuleUI(LifecycleRuleInterface):
     """Implementation for incomplete multipart upload cleanup rule"""
 
     def apply(self, params: dict, edit_mode: bool = False) -> None:
-        """Apply incomplete multipart upload cleanup rule."""
+        """Apply incomplete multipart upload cleanup rule.
+
+        ODF 5.0+: accordion wrapper removed; enable checkbox is directly visible.
+        ODF 4.22 and earlier: click accordion button first to expand the section.
+        """
         if self.ui.ocs_version_semantic < version.VERSION_5_0:
             self.ui.do_click(self.ui.bucket_tab["incomplete_multipart_checkbox"])
 
@@ -458,7 +474,11 @@ class ExpirationRuleUI(LifecycleRuleInterface):
     """Implementation for object expiration rule"""
 
     def apply(self, params: dict, edit_mode: bool = False) -> None:
-        """Apply object expiration rule."""
+        """Apply object expiration rule.
+
+        ODF 5.0+: accordion wrapper removed; enable checkbox is directly visible.
+        ODF 4.22 and earlier: click accordion button first to expand the section.
+        """
         if self.ui.ocs_version_semantic < version.VERSION_5_0:
             self.ui.do_click(self.ui.bucket_tab["current_objects_accordion"])
 
@@ -484,7 +504,11 @@ class NoncurrentVersionRuleUI(LifecycleRuleInterface):
     """Implementation for noncurrent version expiration rule"""
 
     def apply(self, params: dict, edit_mode: bool = False) -> None:
-        """Apply noncurrent version expiration rule."""
+        """Apply noncurrent version expiration rule.
+
+        ODF 5.0+: accordion wrapper removed; enable checkbox is directly visible.
+        ODF 4.22 and earlier: click accordion button first to expand the section.
+        """
         if self.ui.ocs_version_semantic < version.VERSION_5_0:
             self.ui.do_click(self.ui.bucket_tab["noncurrent_objects_accordion"])
 
@@ -516,7 +540,11 @@ class ExpiredDeleteMarkerRuleUI(LifecycleRuleInterface):
     """Implementation for expired delete marker cleanup rule"""
 
     def apply(self, params: dict, edit_mode: bool = False) -> None:
-        """Apply expired delete marker cleanup rule."""
+        """Apply expired delete marker cleanup rule.
+
+        ODF 5.0+: accordion wrapper removed; enable checkbox is directly visible.
+        ODF 4.22 and earlier: click accordion button first to expand the section.
+        """
         if self.ui.ocs_version_semantic < version.VERSION_5_0:
             self.ui.do_click(self.ui.bucket_tab["expired_markers_accordion"])
 
