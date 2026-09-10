@@ -94,8 +94,13 @@ class PreMigrationFusionAccessUI(PageNavigator, BaseUI):
         #      arrives slightly after we re-query is_selected().
         #   b) Stale element refs after a React re-render — get_elements()
         #      is called fresh on every attempt.
+
         logger.info("Step 3: Select all nodes — clicking each unchecked row checkbox")
         locator = FUSION_ACCESS_STORAGE_CLUSTER_LOCATORS["node_row_checkboxes"]
+        logger.info(
+            "Waiting for worker node checkboxes to appear on the wizard page..."
+        )
+        self.wait_for_element_to_be_present(locator=locator, timeout=120)
         for attempt in range(1, 4):
             node_checkboxes = self.get_elements(locator)
             assert node_checkboxes, (
