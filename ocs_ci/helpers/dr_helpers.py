@@ -256,6 +256,7 @@ def failover(
     discovered_apps=False,
     old_primary=None,
     skip_odf_cli_validation=False,
+    drpolicy_name=None,
 ):
     """
     Initiates Failover action to the specified cluster
@@ -270,6 +271,9 @@ def failover(
         old_primary (str): Name of cluster where workload were running
         skip_odf_cli_validation (bool): If True, skip ODF CLI validation
             (e.g. when the primary cluster is down and unreachable)
+        drpolicy_name (str): Name of the DRPolicy protecting the workload. When
+            provided (e.g. for custom DRPolicy workloads), the ODF CLI DR config
+            is updated with this name before application validation.
 
     """
     restore_index = config.cur_index
@@ -315,6 +319,7 @@ def failover(
             drpc_name=drpc_obj.resource_name,
             namespace=namespace,
             dr_action="app-failover",
+            drpolicy_name=drpolicy_name,
         )
 
 
@@ -331,6 +336,7 @@ def relocate(
     workload_instances_shared=None,
     vm_auto_cleanup=False,
     skip_odf_cli_validation=False,
+    drpolicy_name=None,
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -348,6 +354,9 @@ def relocate(
         workload_instances_shared (list): List of workloads tied to a single DRPC using Shared Protection type
         vm_auto_cleanup (bool): If true, cleanup will not be initiated after relocate action, False otherwise.
         skip_odf_cli_validation (bool): If True, skip ODF CLI validation
+        drpolicy_name (str): Name of the DRPolicy protecting the workload. When
+            provided (e.g. for custom DRPolicy workloads), the ODF CLI DR config
+            is updated with this name before application validation.
 
     """
     restore_index = config.cur_index
@@ -430,6 +439,7 @@ def relocate(
             drpc_name=drpc_obj.resource_name,
             namespace=namespace,
             dr_action="app-relocate",
+            drpolicy_name=drpolicy_name,
         )
 
     config.switch_ctx(restore_index)
@@ -4506,6 +4516,7 @@ def validate_application_odf_cli(
     dr_action=None,
     retries=5,
     retry_interval=100,
+    drpolicy_name=None,
 ):
     """
     Validate DR application using the ODF CLI tool.
@@ -4528,6 +4539,10 @@ def validate_application_odf_cli(
             "{action}-app" if not provided.
         retries (int): Number of retry attempts for validate action.
         retry_interval (int): Seconds to wait between retries.
+        drpolicy_name (str): Name of the DRPolicy protecting the application.
+            When provided, the ``drPolicy`` field of the ODF CLI DR config
+            (odf_cli_dr.yaml) is updated to this value before validation, so
+            custom DRPolicy workloads are validated against the right policy.
 
     Returns:
         str or None: The stdout output from the command,
@@ -4550,6 +4565,9 @@ def validate_application_odf_cli(
                 f"cluster '{cluster_name}' is a hosted cluster"
             )
             return None
+
+    if drpolicy_name:
+        update_odf_cli_dr_config_drpolicy(drpolicy_name)
 
     dir_label = dr_action or f"{action}-app"
     output_dir = os.path.join(
@@ -4696,6 +4714,31 @@ def update_odf_cli_dr_config_kubeconfigs():
         yaml.dump(cli_config, f, default_flow_style=False)
 
     logger.info(f"ODF CLI DR config updated at: {config_path}")
+
+
+def update_odf_cli_dr_config_drpolicy(drpolicy_name):
+    """
+    Update the ``drPolicy`` field in the ODF CLI DR config file at runtime.
+
+    Used by tests that create a custom DRPolicy (e.g. the CNV discovered-apps
+    custom StorageClass scenario) so that the ODF CLI application validation
+    runs against the DRPolicy actually protecting the workload instead of the
+    hard-coded default in odf_cli_dr.yaml.
+
+    Args:
+        drpolicy_name (str): Name of the DRPolicy to write into the config.
+
+    """
+    config_path = constants.ODF_CLI_DR_CONFIG_PATH
+    with open(config_path, "r") as f:
+        cli_config = yaml.safe_load(f)
+
+    cli_config["drPolicy"] = drpolicy_name
+
+    with open(config_path, "w") as f:
+        yaml.dump(cli_config, f, default_flow_style=False)
+
+    logger.info(f"Updated odf_cli_dr.yaml drPolicy: {drpolicy_name}")
 
 
 def validate_cluster_odf_cli(retries=5, retry_interval=60):

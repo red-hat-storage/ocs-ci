@@ -217,6 +217,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             discovered_apps=True,
             workload_placement_name=cnv_workloads[0].discovered_apps_placement_name,
             old_primary=primary_cluster_name_before_failover,
+            drpolicy_name=custom_dr_policy_name,
         )
 
         logger.test_step("Verify resources on secondary cluster after failover")
@@ -321,6 +322,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             discovered_apps=True,
             old_primary=primary_cluster_name_after_failover,
             workload_instance=cnv_workloads[0],
+            drpolicy_name=custom_dr_policy_name,
         )
 
         logger.test_step("Verify resources on primary cluster after relocate")
