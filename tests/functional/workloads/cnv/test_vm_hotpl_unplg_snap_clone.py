@@ -50,12 +50,19 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         vm_obj.wait_for_ssh_connectivity(timeout=300)
         logger.info(f"Hotplugging PVC '{pvc.name}' to VM '{vm_obj.name}'")
         vm_obj.addvolume(volume_name=pvc.name)
+
+        def _hotplug_ready():
+            return verifyvolume(
+                vm_obj.name, volume_name=pvc.name, namespace=vm_obj.namespace
+            ) or verify_hotplug(
+                vm_obj=vm_obj,
+                disks_before_hotplug=before_disks,
+            )
+
         sample = TimeoutSampler(
             timeout=600,
             sleep=5,
-            func=verify_hotplug,
-            vm_obj=vm_obj,
-            disks_before_hotplug=before_disks,
+            func=_hotplug_ready,
         )
         assert sample.wait_for_func_status(
             result=True
