@@ -744,7 +744,12 @@ def run_cmd_multicluster(
     tries=6,
     delay=10,
     backoff=1,
-    text_in_exception="client connection lost",
+    text_in_exception=(
+        "client connection lost",
+        "proxyconnect tcp",
+        "i/o timeout",
+        "websocket: close 1006",
+    ),
 )
 def exec_cmd(
     cmd,
