@@ -2294,6 +2294,9 @@ def check_pods_in_running_state(
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     for p in list_of_pods:
         # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
+        # Also skip CatalogSource pods (managed by OLM) — they may be Pending
+        # when nodes are tainted with custom taints that lack matching tolerations
+        # on the CatalogSource resource.
         if (
             "rook-ceph-osd-prepare" not in p.name
             and "rook-ceph-drain-canary" not in p.name
@@ -2304,6 +2307,7 @@ def check_pods_in_running_state(
             and ("rook-ceph-drain-canary" not in p.name)
             and ("debug" not in p.name)
             and (constants.REPORT_STATUS_TO_PROVIDER_POD not in p.name)
+            and not p.get_labels().get("olm.catalogSource")
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
             if skip_for_status:
