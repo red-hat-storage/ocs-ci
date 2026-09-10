@@ -2809,7 +2809,7 @@ validation_4_21 = {
         By.XPATH,
     ),
     "issue_table_checkbox": (
-        "//input[@name='check-all']",
+        "//input[@id='select-all' or @name='check-all']",
         By.XPATH,
     ),
     "silence_alerts": (
