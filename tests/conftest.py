@@ -15,7 +15,6 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from math import floor
 from shutil import copyfile, rmtree
-from functools import partial
 from copy import deepcopy
 from subprocess import CalledProcessError
 from abc import ABC, abstractmethod
@@ -2650,11 +2649,24 @@ def environment_checker(request):
         constants.S3CLI_APP_LABEL,
         constants.MUST_GATHER_HELPER_LABEL,
     ]
+    # Check for consumer_env_check marker
+    consumer_env_check_mark = request.node.get_closest_marker("consumer_env_check")
+
     for mark in node.iter_markers():
         if mark in marks_to_ignore:
             return
         if mark.name == ignore_leftover_label.name:
             exclude_labels.extend(list(mark.args))
+
+    # If test is marked with @consumer_env_check, switch to consumer cluster
+    # for environment checking (test handles its own context switching)
+    if ocsci_config.multicluster and consumer_env_check_mark:
+        ocsci_config.switch_to_consumer()
+        log.info(
+            "Switched to consumer cluster for environment checker "
+            "(test class has @consumer_env_check marker)"
+        )
+
     if ocsci_config.ENV_DATA["platform"] in {
         constants.FUSIONAAS_PLATFORM,
         constants.HCI_BAREMETAL,
@@ -2665,9 +2677,17 @@ def environment_checker(request):
             "This needs to be updated"
         )
     else:
-        request.addfinalizer(
-            partial(get_status_after_execution, exclude_labels=exclude_labels)
-        )
+        # Create finalizer that ensures we're on the right cluster before capturing POST state
+        def environment_finalizer():
+            if ocsci_config.multicluster and consumer_env_check_mark:
+                ocsci_config.switch_to_consumer()
+                log.info(
+                    "Switched to consumer cluster for environment checker finalizer "
+                    "(capturing POST state)"
+                )
+            get_status_after_execution(exclude_labels=exclude_labels)
+
+        request.addfinalizer(environment_finalizer)
         get_status_before_execution(exclude_labels=exclude_labels)
 
 
