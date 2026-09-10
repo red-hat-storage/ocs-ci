@@ -73,7 +73,7 @@ from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 
 logger = logging.getLogger(__name__)
 
-IO_SIZE = "1G"
+IO_SIZE = "512M"
 IO_RUNTIME_SEC = 30
 
 WORKLOAD_MIGRATION_TIMEOUT_SEC = 300
