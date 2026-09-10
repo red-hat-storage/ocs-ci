@@ -138,12 +138,6 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
         """
         Create a new lifecycle rule using the interface-based approach
 
-        The wizard steps are (ODF 5.0+):
-          1. General configuration – rule name + scope
-          2. Conditional filters – prefix, object size
-          3. Lifecycle rule actions – action checkboxes
-          4. Review – final Create button
-
         Args:
             rule_name (str): Name for the rule
             scope (str): 'whole_bucket' or 'targeted'
@@ -168,11 +162,10 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             self.do_click(self.bucket_tab["rule_scope_targeted"])
 
         if self.ocs_version_semantic >= version.VERSION_5_0:
-            # ODF 5.0+: 4-step wizard – click Next after step 1 (general config)
             logger.info("Step 1 complete – clicking Next to go to Step 2")
             self.do_click(self.bucket_tab["lifecycle_wizard_next"])
 
-        # Conditional filters (Step 2 in wizard, inline on 4.22)
+        # Conditional filters
         if scope not in ("whole_bucket", "global"):
             prefix = kwargs.get("prefix")
             if prefix:
@@ -200,11 +193,10 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                 )
 
         if self.ocs_version_semantic >= version.VERSION_5_0:
-            # ODF 5.0+: click Next after step 2 (conditional filters) to reach actions
             logger.info("Step 2 complete – clicking Next to go to Step 3")
             self.do_click(self.bucket_tab["lifecycle_wizard_next"])
 
-        # Lifecycle rule actions (Step 3 in wizard, inline on 4.22)
+        # Lifecycle rule actions
         for rule_type, params in rules.items():
             if rule_type in LIFECYCLE_RULE_REGISTRY:
                 rule_class = LIFECYCLE_RULE_REGISTRY[rule_type]
@@ -222,13 +214,12 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                 logger.warning(f"Unknown rule type: {rule_type}")
 
         if self.ocs_version_semantic >= version.VERSION_5_0:
-            # ODF 5.0+: click Next after step 3 (actions) to reach review, then Create
             logger.info("Step 3 complete – clicking Next to go to Step 4 (Review)")
             self.do_click(self.bucket_tab["lifecycle_wizard_next"])
             self.scroll_into_view(self.bucket_tab["lifecycle_wizard_create"])
             self.do_click(self.bucket_tab["lifecycle_wizard_create"])
         else:
-            # ODF 4.22 and earlier: single-page form, click Create directly
+            # Create the rule
             self.scroll_into_view(self.bucket_tab["lifecycle_create_button"])
             self.do_click(self.bucket_tab["lifecycle_create_button"])
 
@@ -280,13 +271,7 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
     def edit_lifecycle_rule(self, rule_name: str, new_rules: dict) -> None:
         """
-        Edit an existing lifecycle rule via the 4-step wizard (ODF 5.0+)
-
-        The edit wizard mirrors the create wizard:
-          1. General configuration (pre-filled, click Next)
-          2. Conditional filters (pre-filled, click Next)
-          3. Lifecycle rule actions – update action checkboxes/inputs
-          4. Review – click Save
+        Edit an existing lifecycle rule
 
         Args:
             rule_name (str): Name of the rule to edit
@@ -310,13 +295,12 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             self.do_click(self.bucket_tab["edit_rule_option"])
 
             if self.ocs_version_semantic >= version.VERSION_5_0:
-                # ODF 5.0+: wizard pre-fills steps 1 & 2, click Next twice to reach actions
                 logger.info("Edit Step 1 (general config) – clicking Next to Step 2")
                 self.do_click(self.bucket_tab["lifecycle_wizard_next"])
                 logger.info("Edit Step 2 (filters) – clicking Next to Step 3")
                 self.do_click(self.bucket_tab["lifecycle_wizard_next"])
 
-            # Apply updated rule params (Step 3 in wizard, inline on 4.22)
+            # Apply updated rule params
             for rule_type, params in new_rules.items():
                 if rule_type in LIFECYCLE_RULE_REGISTRY:
                     rule_class = LIFECYCLE_RULE_REGISTRY[rule_type]
@@ -336,7 +320,6 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                     logger.warning(f"Unknown rule type: {rule_type}")
 
             if self.ocs_version_semantic >= version.VERSION_5_0:
-                # ODF 5.0+: click Next to reach review step before Save
                 logger.info("Edit Step 3 (actions) complete – clicking Next to Step 4")
                 self.do_click(self.bucket_tab["lifecycle_wizard_next"])
 
@@ -446,13 +429,8 @@ class IncompleteMultipartRuleUI(LifecycleRuleInterface):
     """Implementation for incomplete multipart upload cleanup rule"""
 
     def apply(self, params: dict, edit_mode: bool = False) -> None:
-        """Apply incomplete multipart upload cleanup rule.
-
-        ODF 5.0+: accordion wrapper removed; enable checkbox is directly visible.
-        ODF 4.22 and earlier: click accordion button first to expand the section.
-        """
+        """Apply incomplete multipart upload cleanup rule."""
         if self.ui.ocs_version_semantic < version.VERSION_5_0:
-            # 4.22 and earlier: expand the accordion first
             self.ui.do_click(self.ui.bucket_tab["incomplete_multipart_checkbox"])
 
         # Only click the enable checkbox in CREATE mode
@@ -480,13 +458,8 @@ class ExpirationRuleUI(LifecycleRuleInterface):
     """Implementation for object expiration rule"""
 
     def apply(self, params: dict, edit_mode: bool = False) -> None:
-        """Apply object expiration rule.
-
-        ODF 5.0+: accordion wrapper removed; enable checkbox is directly visible.
-        ODF 4.22 and earlier: click accordion button first to expand the section.
-        """
+        """Apply object expiration rule."""
         if self.ui.ocs_version_semantic < version.VERSION_5_0:
-            # 4.22 and earlier: expand the accordion first
             self.ui.do_click(self.ui.bucket_tab["current_objects_accordion"])
 
         # Only click the enable checkbox in CREATE mode
@@ -511,13 +484,8 @@ class NoncurrentVersionRuleUI(LifecycleRuleInterface):
     """Implementation for noncurrent version expiration rule"""
 
     def apply(self, params: dict, edit_mode: bool = False) -> None:
-        """Apply noncurrent version expiration rule.
-
-        ODF 5.0+: accordion wrapper removed; enable checkbox is directly visible.
-        ODF 4.22 and earlier: click accordion button first to expand the section.
-        """
+        """Apply noncurrent version expiration rule."""
         if self.ui.ocs_version_semantic < version.VERSION_5_0:
-            # 4.22 and earlier: expand the accordion first
             self.ui.do_click(self.ui.bucket_tab["noncurrent_objects_accordion"])
 
         # Only click the enable checkbox in CREATE mode
@@ -548,13 +516,8 @@ class ExpiredDeleteMarkerRuleUI(LifecycleRuleInterface):
     """Implementation for expired delete marker cleanup rule"""
 
     def apply(self, params: dict, edit_mode: bool = False) -> None:
-        """Apply expired delete marker cleanup rule.
-
-        ODF 5.0+: accordion wrapper removed; enable checkbox is directly visible.
-        ODF 4.22 and earlier: click accordion button first to expand the section.
-        """
+        """Apply expired delete marker cleanup rule."""
         if self.ui.ocs_version_semantic < version.VERSION_5_0:
-            # 4.22 and earlier: expand the accordion first
             self.ui.do_click(self.ui.bucket_tab["expired_markers_accordion"])
 
         # Only click the enable checkbox in CREATE mode

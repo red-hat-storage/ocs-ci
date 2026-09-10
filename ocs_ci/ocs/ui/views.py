@@ -3624,11 +3624,11 @@ bucket_tab = {
         By.XPATH,
     ),
     "lifecycle_wizard_create": (
-        "//button[contains(normalize-space(.), 'Create')]",
+        "//button[normalize-space(.)='Create']",
         By.XPATH,
     ),
     "lifecycle_create_button": (
-        "//button[contains(normalize-space(.), 'Create')]",
+        "//button[normalize-space(.)='Create']",
         By.XPATH,
     ),
     "lifecycle_save_button": (
