@@ -65,7 +65,7 @@ spec:
       - name: FILES_SIZE       # File size in KB
         value: "4"
       - name: OPERATIONS       # File and directory operations to perform, Pass as a comma-separated string
-        value: "create,append,rename,stat,chmod,ls-l"
+        value: "create,mkdir,symlink,readdir,delete,append,rename,stat,chmod,ls-l"
       - name: OUTPUT_DIR
         value: "/mnt/output"
       - name: THREADS
@@ -117,6 +117,8 @@ spec:
     volumeMounts:
     - mountPath: /mnt
       name: mypvc
+  securityContext:
+    fsGroupChangePolicy: OnRootMismatch
   restartPolicy: Never
   volumes:
   - name: mypvc
