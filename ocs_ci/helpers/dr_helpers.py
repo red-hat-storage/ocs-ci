@@ -4551,6 +4551,13 @@ def validate_application_odf_cli(
             )
             return None
 
+    if config.MULTICLUSTER.get("multicluster_mode") == constants.MDR_MODE:
+        logger.info(
+            f"Skipping ODF CLI DR {action} for DRPC '{drpc_name}': "
+            f"MDR environment does not require application validation"
+        )
+        return None
+
     dir_label = dr_action or f"{action}-app"
     output_dir = os.path.join(
         os.path.expanduser(config.RUN["log_dir"]),
