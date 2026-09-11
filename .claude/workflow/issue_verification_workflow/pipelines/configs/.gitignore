@@ -1,0 +1,3 @@
+# Local pipeline run configs (copy from *.example.yaml)
+*.yaml
+!*.example.yaml
