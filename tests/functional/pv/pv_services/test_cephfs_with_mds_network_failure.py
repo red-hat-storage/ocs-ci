@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier4b,
     skipif_external_mode,
     green_squad,
+    zstream_4_16_16,
 )
 from ocs_ci.ocs.resources.pod import search_pattern_in_pod_logs
 from ocs_ci.helpers.helpers import change_vm_network_state
@@ -22,6 +23,7 @@ log = logging.getLogger(__name__)
 @green_squad
 @skipif_external_mode
 @vsphere_platform_required
+@zstream_4_16_16
 class TestCephFSWithMDSNetworkFailure:
     def teardown(self):
         """

@@ -6,7 +6,7 @@ from time import sleep
 import pytest
 from functools import partial
 
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, zstream_4_16_16
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4,
@@ -47,6 +47,7 @@ log = logging.getLogger(__name__)
 @skipif_hci_provider_and_client
 @skipif_external_mode
 @ignore_leftover_label(constants.ROOK_CEPH_DETECT_VERSION_LABEL)
+@zstream_4_16_16
 class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
     """
     Kill ceph daemon while creation/deletion of PVCs, and pods are progressing

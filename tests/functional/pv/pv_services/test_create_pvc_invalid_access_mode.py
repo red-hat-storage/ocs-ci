@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, zstream_4_16_16
 from ocs_ci.framework.testlib import ManageTest, tier3
 from ocs_ci.ocs.exceptions import CommandFailed
 
@@ -22,6 +22,7 @@ log = logging.getLogger(__name__)
         ),
     ],
 )
+@zstream_4_16_16
 class TestCreatePvcInvalidAccessMode(ManageTest):
     """
     This test class consists of tests to verify that PVC creation will not
