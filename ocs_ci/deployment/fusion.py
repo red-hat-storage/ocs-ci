@@ -191,10 +191,17 @@ class FusionDeployment:
         except (CommandFailed, ChannelNotFound):
             pass
 
+        platform = config.ENV_DATA.get("platform", "").lower()
+        subscription_name = (
+            defaults.FUSION_HCI_OPERATOR_NAME
+            if platform == constants.IBM_HCI_PLATFORM
+            else self.operator_name
+        )
+
         logger.info("Verifying Fusion is deployed")
         logger.info("Waiting for Subscription and CSV to be found")
-        wait_for_subscription(self.operator_name, self.namespace)
-        wait_for_csv(self.operator_name, self.namespace)
+        wait_for_subscription(subscription_name, self.namespace)
+        wait_for_csv(subscription_name, self.namespace)
         if sleep:
             logger.info(
                 f"Sleeping for {sleep} seconds after {self.operator_name} created"
@@ -218,8 +225,14 @@ class FusionDeployment:
 
         """
         logger.info("Retrieving installed Fusion version")
+        platform = config.ENV_DATA.get("platform", "").lower()
+        subscription_name = (
+            defaults.FUSION_HCI_OPERATOR_NAME
+            if platform == constants.IBM_HCI_PLATFORM
+            else self.operator_name
+        )
         results = run_cmd(
-            f"oc get subscription {self.operator_name} -n {self.namespace} --kubeconfig {self.kubeconfig} -o yaml"
+            f"oc get subscription {subscription_name} -n {self.namespace} --kubeconfig {self.kubeconfig} -o yaml"
         )
         build = yaml.safe_load(results)["status"]["installedCSV"]
         version = ".".join(build.split(".")[1:])

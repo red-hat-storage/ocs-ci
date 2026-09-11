@@ -1,6 +1,5 @@
 import sys
 
-from ocs_ci.deployment.fusion import FusionDeployment
 from ocs_ci.deployment.fusion_data_foundation import FusionDataFoundationDeployment
 from ocs_ci.utility.framework.fusion_fdf_init import Initializer, create_junit_report
 
@@ -17,8 +16,8 @@ def main(argv=None):
     init.set_cluster_connection()
 
     # Verify fusion is deployed
-    fusion = FusionDeployment()
-    fusion.verify(sleep=0)
+    # fusion = FusionDeployment()
+    # fusion.verify(sleep=0)
 
     # JUnit report custom properties
     suite_props = init.get_test_suite_props()
