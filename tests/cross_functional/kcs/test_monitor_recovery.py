@@ -75,7 +75,7 @@ NODE_RESTART_COOLDOWN = 300
 @magenta_squad
 @system_test
 @ignore_leftovers
-@pytest.mark.order("last")
+@pytest.mark.order("last-1")
 @pytest.mark.polarion_id("OCS-3911")
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.10")
