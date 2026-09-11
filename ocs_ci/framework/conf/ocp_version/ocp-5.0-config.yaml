@@ -23,6 +23,6 @@ ENV_DATA:
   mce_version: "5.0"
     # Remove below line for GAed config
   unreleased_mce: true
-  submariner_version: "0.24.0"
-  submariner_image: "quay.io/redhat-user-workloads/submariner-tenant/submariner-fbc-4-22@sha256:1a666c3c2c99b1148f184f54efcee293f45cfff32cf9ca7a239097fe574ff700"
+  submariner_version: "0.24.1"
+  submariner_image: "quay.io/redhat-user-workloads/submariner-tenant/submariner-fbc-4-22@sha256:d086e72ace45a2af7b25d418724f050d9d5bc84e4f4a2e9c3f2888c4116f345c"
   oadp_version: "1.6"
