@@ -5,6 +5,7 @@ This module contains functionality required for disconnected installation.
 import glob
 import logging
 import os
+from pathlib import Path
 import tempfile
 
 import yaml
@@ -35,6 +36,46 @@ from ocs_ci.utility.version import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def mirror_fdf_catalog_via_oc_mirror(
+    catalog_image,
+    mirror_registry=None,
+    configure_registries=False,
+):
+    """
+    Mirror FDF catalog and related images using oc-mirror tool.
+
+    This is a convenience wrapper around mirror_index_image_via_oc_mirror()
+    specifically for FDF catalogs with FDF-specific defaults.
+
+    Args:
+        catalog_image (str): FDF catalog image URL
+            Example: cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20
+        mirror_registry (str): Target mirror registry. If None, uses config.DEPLOYMENT['mirror_registry'].
+        configure_registries (bool): Whether to configure /etc/containers/registries.conf for internal images
+
+    Returns:
+        str: mirrored catalog image URL
+
+    Note:
+        Mirror registry credentials (mirror_registry_user, mirror_registry_password) should be set in
+        config.DEPLOYMENT before calling this function, or they will be read from the pull secret.
+
+    """
+    logger.info(f"Mirroring FDF catalog: {catalog_image}")
+
+    # Call the generic function with FDF-specific parameters
+    # mirror_registry is passed directly - no need to modify global config
+    return mirror_index_image_via_oc_mirror(
+        index_image=catalog_image,
+        packages=None,  # Mirror entire FDF catalog (no package filtering)
+        idms=None,
+        idms_name_prefix="fdf",  # Use 'fdf' prefix for IDMS naming
+        configure_registries=configure_registries,  # FDF-specific feature
+        mirror_registry=mirror_registry,
+        registries_template=constants.FDF_REGISTRIES_CONF_TEMPLATE,
+    )
 
 
 def get_csv_from_image(bundle_image):
@@ -225,7 +266,15 @@ def prune_and_mirror_index_image(
 
 
 @retry((CommandFailed, NotFoundError), tries=3, delay=10, backoff=2)
-def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
+def mirror_index_image_via_oc_mirror(
+    index_image,
+    packages=None,
+    idms=None,
+    idms_name_prefix="odf",
+    configure_registries=False,
+    mirror_registry=None,
+    registries_template=None,
+):
     """
     Mirror all images required for ODF deployment and testing to mirror
     registry via `oc-mirror` tool and create relevant
@@ -234,10 +283,13 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
 
     Args:
         index_image (str): index image which will be pruned and mirrored
-        packages (list): list of packages to keep
+        packages (list): list of packages to keep. If None or empty, mirrors entire catalog
         idms (dict): ImageDigestMirrorSet used for mirroring (workaround for
             stage images, which are pointing to different registry than they
             really are)
+        idms_name_prefix (str): Prefix for IDMS name (default: "odf")
+        configure_registries (bool): Whether to configure /etc/containers/registries.conf
+        mirror_registry (str): Target mirror registry. If None, uses config.DEPLOYMENT['mirror_registry']
 
     Returns:
         str: mirrored index image
@@ -245,6 +297,10 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
     """
     get_oc_mirror_tool()
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+
+    # Use provided mirror_registry or fall back to config
+    if not mirror_registry:
+        mirror_registry = config.DEPLOYMENT.get("mirror_registry")
 
     # login to mirror registry
     login_to_mirror_registry(pull_secret_path)
@@ -256,16 +312,58 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
         os.makedirs(os.path.expanduser("~/.docker/"), exist_ok=True)
         os.symlink(pull_secret_path, os.path.expanduser(docker_config_file))
 
+    # Configure registries.conf if requested (for FDF internal images)
+    if configure_registries:
+        logger.info(
+            "Configuring registry mirrors for internal images using registries.conf.d/"
+        )
+        if registries_template and os.path.exists(registries_template):
+            try:
+                with open(registries_template, "r") as f:
+                    registries_content = f.read()
+
+                # Use registries.conf.d/ directory
+                # Define the path cleanly using the / operator
+                registries_dir = (
+                    Path.home() / ".config" / "containers" / "registries.conf.d"
+                )
+                # to ensure the directory exists before using it
+                registries_dir.mkdir(parents=True, exist_ok=True)
+
+                ocs_ci_conf_file = registries_dir / "ocs-ci-fdf-mirrors.conf"
+
+                # Create temporary file with registry configuration
+                temp_file_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", delete=False, suffix=".conf"
+                    ) as temp_file:
+                        temp_file.write(registries_content)
+                        temp_file_path = temp_file.name
+
+                    # Copy to registries.conf.d/ directory and set readable permissions
+                    exec_cmd(f"cp {temp_file_path} {ocs_ci_conf_file}")
+                    exec_cmd(f"chmod 644 {ocs_ci_conf_file}")
+
+                    logger.info(
+                        f"Successfully configured registry mirrors at {ocs_ci_conf_file}"
+                    )
+                finally:
+                    if temp_file_path and os.path.exists(temp_file_path):
+                        os.unlink(temp_file_path)
+            except Exception as e:
+                logger.warning(f"Failed to configure registry mirrors: {e}")
+
     # prepare imageset-config.yaml file
     imageset_config_data = templating.load_yaml(constants.OC_MIRROR_IMAGESET_CONFIG_V2)
 
-    _packages = [{"name": package} for package in packages]
-    imageset_config_data["mirror"]["operators"].append(
-        {
-            "catalog": index_image,
-            "packages": _packages,
-        }
-    )
+    # Build catalog entry - only add packages if specified
+    catalog_entry = {"catalog": index_image}
+    if packages:
+        _packages = [{"name": package} for package in packages]
+        catalog_entry["packages"] = _packages
+
+    imageset_config_data["mirror"]["operators"].append(catalog_entry)
     imageset_config_file = os.path.join(
         config.ENV_DATA["cluster_path"],
         f"imageset-config-{config.RUN['run_id']}.yaml",
@@ -273,14 +371,13 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
     templating.dump_data_to_temp_yaml(imageset_config_data, imageset_config_file)
 
     # mirror required images
-    logger.info(
-        f"Mirror required images to mirror registry {config.DEPLOYMENT['mirror_registry']}"
-    )
+    logger.info(f"Mirror required images to mirror registry {mirror_registry}")
 
     cmd = (
         f"oc mirror --config {imageset_config_file} "
-        f"docker://{config.DEPLOYMENT['mirror_registry']} "
-        "--workspace file://oc-mirror-workspace/results-files --v2"
+        f"docker://{mirror_registry} "
+        "--workspace file://oc-mirror-workspace/results-files --v2 "
+        "--dest-tls-verify=false --image-timeout 30m"
     )
     try:
         exec_cmd(cmd, timeout=18000)
@@ -329,10 +426,10 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
         "working-dir/cluster-resources/idms-oc-mirror.yaml",
     )
 
-    # make idms name unique - append run_id
+    # make idms name unique - append run_id with configurable prefix
     with open(idms_file) as f:
         idms_content = yaml.safe_load(f)
-    idms_content["metadata"]["name"] = f"odf-{config.RUN['run_id']}"
+    idms_content["metadata"]["name"] = f"{idms_name_prefix}-{config.RUN['run_id']}"
     with open(idms_file, "w") as f:
         yaml.dump(idms_content, f)
     exec_cmd(f"oc apply -f {idms_file}")

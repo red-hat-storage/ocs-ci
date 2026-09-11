@@ -1,0 +1,188 @@
+"""
+FDF Mirror Initialization Module
+
+This module handles all initialization logic for FDF catalog mirroring,
+including CLI argument parsing, configuration setup, logging, and cluster connection.
+"""
+
+import argparse
+import logging
+
+from ocs_ci.utility.framework.fusion_fdf_init import (
+    BaseInitializer,
+)
+from ocs_ci.framework.exceptions import (
+    InvalidDeploymentType,
+)
+from ocs_ci.framework import config
+
+logger = logging.getLogger(__name__)
+
+LOG_NAMES = {
+    "fdf-mirror": "fdf-mirror",
+}
+
+
+class FDFMirrorInitializer(BaseInitializer):
+    """
+    Handles initialization for FDF mirror operations.
+
+    This class encapsulates all initialization logic including:
+    - CLI argument parsing
+    - Configuration initialization
+    """
+
+    def __init__(self, deployment_type: str) -> None:
+        """Initialize the FDF Mirror Initializer
+        Args:
+            deployment_type (str): Type of cluster deployment to init
+
+        Raises:
+            InvalidDeploymentType: If the provided deployment_type is invalid
+        """
+        try:
+            log_basename = LOG_NAMES[deployment_type]
+        except KeyError:
+            raise InvalidDeploymentType(
+                f"Deployment type '{deployment_type}' is invalid. "
+                f"Please provide one of the following: {list(LOG_NAMES.keys())}"
+            )
+        self.parsed_args = None
+        super().__init__(log_basename=log_basename)
+
+    def init_config(self, args):
+        """
+        Perform complete initialization for FDF mirroring.
+
+        Args:
+            args (list): Command line arguments
+
+        Returns:
+            argparse.Namespace: Parsed command line arguments
+        """
+        logger.debug("Starting FDF mirror initialization")
+
+        # Parse CLI arguments with FDF-mirror specific args
+        self.parsed_args = self._parse_fdf_mirror_args(args)
+
+        # Initialize configuration
+        super().init_config(self.parsed_args)
+
+        # Store mirror registry and credentials from CLI args if provided
+        if self.parsed_args.mirror_registry:
+            config.DEPLOYMENT["mirror_registry"] = self.parsed_args.mirror_registry
+            logger.info("Using mirror_registry from CLI argument")
+        if self.parsed_args.mirror_registry_user:
+            config.DEPLOYMENT["mirror_registry_user"] = (
+                self.parsed_args.mirror_registry_user
+            )
+            logger.info("Using mirror_registry_user from CLI argument")
+        if self.parsed_args.mirror_registry_password:
+            config.DEPLOYMENT["mirror_registry_password"] = (
+                self.parsed_args.mirror_registry_password
+            )
+            logger.info("Using mirror_registry_password from CLI argument")
+
+        logger.debug("FDF mirror config init completed")
+
+        return self.parsed_args
+
+    def _parse_fdf_mirror_args(self, args):
+        """
+        Parse FDF mirror specific CLI arguments.
+
+        Args:
+            args (list): Command line arguments
+
+        Returns:
+            argparse.Namespace: Parsed arguments
+        """
+        logger.info("Parsing FDF mirror arguments")
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--cluster-name", help="Name of the OCP cluster")
+        parser.add_argument("--cluster-path", help="OCP cluster directory")
+        parser.add_argument(
+            "--conf",
+            action="append",
+            default=[],
+            help="Path to config file. Repeatable.",
+        )
+        # FDF Mirror specific args
+        parser.add_argument(
+            "--catalog-image",
+            required=True,
+            help="FDF catalog image to mirror (e.g., cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20)",
+        )
+        parser.add_argument(
+            "--mirror-registry",
+            default=None,
+            help="Target mirror registry (e.g., registry.example.com:5000). If not provided, uses config value.",
+        )
+        parser.add_argument(
+            "--mirror-registry-user",
+            default=None,
+            help="Mirror registry username. If not provided, uses config value or pull secret.",
+        )
+        parser.add_argument(
+            "--mirror-registry-password",
+            default=None,
+            help="Mirror registry password. If not provided, uses config value or pull secret.",
+        )
+        parser.add_argument(
+            "--configure-registries",
+            action="store_true",
+            default=False,
+            help="Configure /etc/containers/registries.conf for internal FDF images",
+        )
+
+        parsed_args, _ = parser.parse_known_args(args)
+        return parsed_args
+
+    def get_mirror_registry(self):
+        """
+        Get mirror registry from CLI args or config.
+
+        Returns:
+            str: Mirror registry URL
+
+        Raises:
+            ValueError: If mirror registry is not specified
+        """
+        # Try to get mirror_registry from CLI args first, then from config
+        mirror_registry = self.parsed_args.mirror_registry
+        if not mirror_registry:
+            mirror_registry = config.DEPLOYMENT.get("mirror_registry")
+            logger.debug(f"Reading mirror_registry from config: {mirror_registry}")
+        else:
+            logger.debug(f"Using mirror_registry from CLI args: {mirror_registry}")
+
+        # Debug: Log all DEPLOYMENT config keys
+        logger.debug(
+            f"Available DEPLOYMENT config keys: {list(config.DEPLOYMENT.keys())}"
+        )
+
+        if not mirror_registry:
+            raise ValueError(
+                "Mirror registry not specified. Please provide --mirror-registry "
+                "or configure it in your config file under DEPLOYMENT.mirror_registry"
+            )
+
+        return mirror_registry
+
+    def get_catalog_image(self):
+        """
+        Get catalog image from parsed arguments.
+
+        Returns:
+            str: Catalog image URL
+        """
+        return self.parsed_args.catalog_image
+
+    def get_configure_registries(self):
+        """
+        Get configure_registries flag from parsed arguments.
+
+        Returns:
+            bool: Whether to configure registries
+        """
+        return self.parsed_args.configure_registries
