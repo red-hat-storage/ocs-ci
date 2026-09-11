@@ -1717,6 +1717,44 @@ def expand_nav_sidebar_if_collapsed(acm_obj, acm_loc):
     return True
 
 
+def ensure_on_fleet_vms_page(acm_obj, acm_loc):
+    """
+    Make sure the console is showing the Fleet Virtualization VMs list page.
+
+    Selecting a VM drills into its detail page, and enrolling it only closes
+    the confirmation modal afterwards - nothing navigates back. So every VM
+    after the first one, and every later call, starts off the list page and
+    cannot select a cluster or namespace. 'All clusters' is only rendered on
+    the list page, so use it as the marker and navigate back when it is absent.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        acm_loc (dict): ACM page locators
+
+    Returns:
+        bool: True if the VMs list page is showing, False otherwise
+
+    """
+    close_modal_dialog_if_present(acm_obj, acm_loc)
+    log.info("Look for 'All Clusters'")
+    # Probe with a short timeout and no AI fallback: not being on the list page
+    # is an expected outcome here, not a locator failure.
+    if acm_obj.wait_until_expected_text_is_found(
+        acm_loc["all-clusters"],
+        expected_text="All clusters",
+        timeout=15,
+        use_fallback=False,
+    ):
+        log.info("All Clusters option found")
+        return True
+    log.info("Not on the VMs list page, navigating back to it")
+    navigate_using_fleet_virtualization(acm_obj)
+    close_modal_dialog_if_present(acm_obj, acm_loc)
+    return acm_obj.wait_until_expected_text_is_found(
+        acm_loc["all-clusters"], expected_text="All clusters"
+    )
+
+
 def check_or_assign_drpolicy_for_discovered_vms_via_ui(
     acm_obj,
     vms: List[object],
@@ -1748,17 +1786,10 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
 
     """
     acm_loc = locators_for_current_ocp_version()["acm_page"]
-    close_modal_dialog_if_present(acm_obj, acm_loc)
-    log.info("Look for 'All Clusters'")
-    all_clusters = acm_obj.wait_until_expected_text_is_found(
-        acm_loc["all-clusters"], expected_text="All clusters"
-    )
-    if all_clusters:
-        log.info("All Clusters option found")
-    else:
-        log.warning("'All Clusters' not found on the VMs page")
-        return False
     for vm in vms:
+        if not ensure_on_fleet_vms_page(acm_obj, acm_loc):
+            log.warning("'All Clusters' not found on the VMs page")
+            return False
         log.info("Select the cluster where VM workload is running")
         acm_obj.do_click(
             format_locator(acm_loc["managed-cluster-name"], managed_cluster_name)
