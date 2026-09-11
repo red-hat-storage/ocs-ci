@@ -805,6 +805,12 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
         log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
         return
 
+    if ocsci_config.DEPLOYMENT.get("fusion_access_deployment"):
+        log.info(
+            "Skipping Ceph toolbox setup — Fusion Access cluster has no CephCluster"
+        )
+        return
+
     with config.RunWithProviderConfigContextIfAvailable():
         namespace = ocsci_config.ENV_DATA["cluster_namespace"]
         ceph_toolbox = get_pod_name_by_pattern("rook-ceph-tools", namespace)
