@@ -865,6 +865,19 @@ class Deployment(object):
         if config.DEPLOYMENT.get("metallb_operator"):
             MetalLBInstaller().deploy_lb()
 
+    def do_deploy_fusion_access(self):
+        """
+        Enable IBM Fusion Access for SAN operator deployment after OCP is deployed.
+        Triggered when ``config.DEPLOYMENT["fusion_access_deployment"]`` is True.
+        """
+        if (
+            config.DEPLOYMENT.get("fusion_access_deployment")
+            and config.ENV_DATA["skip_ocs_deployment"]
+        ):
+            from ocs_ci.deployment.fusion_access import FusionAccessOperator
+
+            FusionAccessOperator().deploy()
+
     def do_deploy_hosted_spoke_clusters(self):
         """
         Deploy Hosted cluster(s)
@@ -999,6 +1012,7 @@ class Deployment(object):
         self.do_deploy_cnv()
         self.do_deploy_hyperconverged()
         self.do_deploy_metallb()
+        self.do_deploy_fusion_access()
         self.do_deploy_hosted_spoke_clusters()
         self.do_deploy_external_spoke_clusters()
 
