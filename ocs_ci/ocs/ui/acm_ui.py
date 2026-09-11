@@ -225,7 +225,10 @@ class AcmPageNavigator(BaseUI):
             log.error(
                 "Couldn't navigate to Disaster recovery Overview page under 'Data Services' on ACM console"
             )
-            raise NoSuchElementException
+            raise NoSuchElementException(
+                "Data Services nav element not found on ACM console; "
+                "page may not have loaded or the UI layout changed"
+            )
 
     def navigate_from_ocp_to_acm_cluster_page(self, locator="click-local-cluster"):
         """
