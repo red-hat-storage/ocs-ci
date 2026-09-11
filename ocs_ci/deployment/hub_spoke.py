@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import random
+import re
 import subprocess
 import tempfile
 import time
@@ -521,12 +522,43 @@ def is_fdf_on_provider():
 _fdf_catalog_image_cache = None
 
 
+def _image_ref_matches_repository(image, repository) -> bool:
+    """
+    Return True if image matches an ITMS ``source`` boundary.
+
+    image must equal repository, or start with repository followed
+    immediately by one of:
+    - ``@`` (digest boundary), e.g. repository + "@sha256:abc"
+    - ``/`` (registry/namespace prefix boundary), e.g. repository + "/name:tag"
+    - ``:`` followed by a tag with no further ``/`` (tag boundary), e.g.
+      repository + ":v4.21"
+
+    This rejects near-match names, e.g. repository ``.../catalog`` must not
+    match image ``.../catalog-extra:tag``. It also rejects a registry port
+    masquerading as a tag, e.g. repository ``icr.io`` must not match image
+    ``icr.io:5000/cpopen/catalog:v1`` since ``:5000`` is followed by ``/``.
+    """
+    if not image or not repository:
+        return False
+    pattern = re.escape(repository) + r"(?:[@/].*|:[^/]*)?$"
+    return re.match(pattern, image) is not None
+
+
+def _mirror_registry_host(mirror) -> str:
+    """Return the registry host from a mirror repository path."""
+    return mirror.split("/", 1)[0] if mirror else ""
+
+
 def _resolve_image_through_itms(image):
     """
     Resolve a container image reference through ImageTagMirrorSet on the
     management cluster. If the image source matches an ITMS entry, replace
     the source with the mirror URL so it is pullable from spoke clusters
     that lack ITMS support (e.g. HyperShift hosted clusters).
+
+    Prefer ``fdf_pre_release_registry`` / ``cp.stg.icr.io`` over the first
+    ITMS mirror. The first entry is often ``preprod.icr.io``, which may not
+    publish unreleased tags (manifest unknown), while staging does.
 
     Args:
         image (str): Original image reference (e.g. icr.io/cpopen/catalog:v4.21)
@@ -542,14 +574,40 @@ def _resolve_image_through_itms(image):
         logger.debug("No ImageTagMirrorSet resources found on management cluster")
         return image
 
+    fdf_pre_release_registry = config.DEPLOYMENT.get("fdf_pre_release_registry") or ""
+    preferred_registry = fdf_pre_release_registry.rstrip("/")
+
     for itms in itms_list.get("items", []):
         for entry in itms.get("spec", {}).get("imageTagMirrors", []):
             source = entry.get("source", "")
             mirrors = entry.get("mirrors", [])
-            if source and mirrors and image.startswith(source):
-                resolved = image.replace(source, mirrors[0], 1)
-                logger.info(f"Resolved image through ITMS: {image} -> {resolved}")
-                return resolved
+            if not (
+                source and mirrors and _image_ref_matches_repository(image, source)
+            ):
+                continue
+
+            chosen_mirror = None
+            if preferred_registry:
+                for mirror in mirrors:
+                    if mirror == preferred_registry or mirror.startswith(
+                        preferred_registry + "/"
+                    ):
+                        chosen_mirror = mirror
+                        break
+            if not chosen_mirror:
+                for mirror in mirrors:
+                    if (
+                        _mirror_registry_host(mirror)
+                        == constants.FDF_PRE_RELEASE_REGISTRY_HOST
+                    ):
+                        chosen_mirror = mirror
+                        break
+            if not chosen_mirror:
+                chosen_mirror = mirrors[0]
+
+            resolved = image.replace(source, chosen_mirror, 1)
+            logger.info("Resolved image through ITMS: %s -> %s", image, resolved)
+            return resolved
     return image
 
 
