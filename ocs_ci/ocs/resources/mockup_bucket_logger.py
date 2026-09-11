@@ -37,7 +37,6 @@ class MockupBucketLogger:
 
         self.awscli_pod = awscli_pod
         self.mcg_obj = mcg_obj
-        self.log_files_dir = setup_pod_directories(awscli_pod, ["bucket_logs_dir"])[0]
 
         logger.info("Creating the AWS logs bucket Namespacestore")
 
@@ -59,6 +58,13 @@ class MockupBucketLogger:
     @property
     def standard_test_obj_list(self):
         return self._standard_test_obj_list
+
+    @property
+    def log_files_dir(self):
+        # Repeated calls are safe and idempotent.
+        # This also covers the case where the AWS CLI pod restarts
+        # and its local filesystem is wiped.
+        return setup_pod_directories(self.awscli_pod, ["bucket_logs_dir"])[0]
 
     def upload_test_objs_and_log(self, bucket_name):
         """
