@@ -2342,6 +2342,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             self.workload_namespace,
             skip_replication_resources=skip_replication_resources,
             discovered_apps=True,
+            vrg_name=self.discovered_apps_placement_name,
         )
         dr_helpers.wait_for_cnv_workload(
             vm_name=self.vm_name,
