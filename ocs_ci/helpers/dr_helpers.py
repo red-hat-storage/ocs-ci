@@ -4771,3 +4771,61 @@ def validate_cluster_odf_cli(retries=5, retry_interval=60):
         f"ODF DR validate clusters did not report success after {retries} attempts. "
         f"Output:\n{last_stdout}"
     )
+
+
+def configure_submariner_lighthouse_import_namespace_deny_list():
+    """
+    Temporary workaround required only for submariner version 0.24.1 in a
+    globalnet RDR setup, to be run after the multicluster service is enabled on
+    both managed clusters.
+
+    On each managed cluster, if the deployed submariner version is 0.24.1,
+    create the submariner-lighthouse-agent configmap with the
+    import-namespace-deny-list set to "kube-" and restart the ocs-operator pods
+    so that the change takes effect.
+
+    """
+    # Local imports to keep this temporary workaround self-contained
+    from ocs_ci.utility import version
+    from ocs_ci.ocs.resources.pod import get_operator_pods, delete_pods
+
+    target_version = version.get_semantic_version("0.24.1")
+    restore_index = config.cur_index
+    try:
+        for cluster in get_non_acm_cluster_config():
+            # Skip hosted/client clusters, apply only on managed clusters
+            if cluster.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT:
+                continue
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            cluster_name = cluster.ENV_DATA["cluster_name"]
+
+            submariner_version = version.get_submariner_operator_version()
+            if (
+                not submariner_version
+                or version.get_semantic_version(submariner_version) != target_version
+            ):
+                logger.info(
+                    f"Submariner version on cluster {cluster_name} is "
+                    f"{submariner_version}, skipping the submariner-lighthouse-agent "
+                    "import-namespace-deny-list configmap workaround "
+                    f"(only applicable for {target_version})"
+                )
+                continue
+
+            logger.info(
+                f"Submariner version on cluster {cluster_name} is {target_version}, "
+                "creating the submariner-lighthouse-agent configmap"
+            )
+            exec_cmd(
+                "oc create configmap submariner-lighthouse-agent "
+                '--from-literal=import-namespace-deny-list="kube-" '
+                f"-n {constants.SUBMARINER_OPERATOR_NAMESPACE}"
+            )
+            logger.info(f"Restarting ocs-operator pods on cluster {cluster_name}")
+            ocs_operator_pods = get_operator_pods(
+                operator_label=constants.OCS_OPERATOR_LABEL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            delete_pods(ocs_operator_pods)
+    finally:
+        config.switch_ctx(restore_index)
