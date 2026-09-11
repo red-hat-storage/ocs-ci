@@ -389,13 +389,13 @@ higher priority).
 * `deploy_hyperconverged` - Deploy hyperconverged operator or not (Default: false).  Necessary for Converged clusters with hosted clients with unreleased OCP version
 * `clusters` - section for hosted clusters
     * `<cluster name>` - name of the cluster
-      * `hosted_cluster_path` - path to the cluster directory to store auth_path, credentials files or cluster related files
+      * `cluster_path` - path to the cluster directory to store auth_path, credentials files or cluster related files. Legacy alias: `hosted_cluster_path`
       * `ocp_version` - OCP version of the hosted cluster in form x.y or x.y.z (e.g. "4.15.13" or "4.17")
       * `cpu_cores_per_hosted_cluster` - number of CPU cores per hosted cluster (default: 6)
       * `memory_per_hosted_cluster` - amount of memory per hosted cluster (default: 12Gi)
       * `nodepool_replicas` - number of replicas of nodepool for each cluster (default: 2)
-      * `hosted_odf_registry` - registry for hosted ODF (default: quay.io/rhceph-dev/ocs-registry)
-      * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
+      * `df_registry` - registry for DF/ODF (default: quay.io/rhceph-dev/ocs-registry). Legacy alias: `hosted_odf_registry`
+      * `df_version` - version of DF/ODF to be deployed on hosted clusters. Legacy alias: `hosted_odf_version`
       * `cp_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "SingleReplica"
       * `storage_quota` - storage quota for the hosted cluster
       * `provider_cluster_name` - Name of the provider cluster if storageclient is required/present in the hosted cluster. This is optional and useful when there are more than one provider cluster in the config, provider mode RDR for example
