@@ -1198,6 +1198,14 @@ class Deployment(object):
         # See https://github.com/red-hat-storage/ocs-ci/issues/4470
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
 
+        masters_schedulable = config.ENV_DATA.get("mark_masters_schedulable", False)
+        if masters_schedulable:
+            logger.info(
+                "mark_masters_schedulable is set, marking master nodes "
+                "schedulable and including them in the available node pool"
+            )
+            mark_masters_schedulable()
+
         nodes = ocp.OCP(kind="node").get().get("items", [])
 
         worker_nodes = [
@@ -1205,6 +1213,19 @@ class Deployment(object):
             for node in nodes
             if constants.WORKER_LABEL in node["metadata"]["labels"]
         ]
+        if masters_schedulable:
+            master_nodes = [
+                node
+                for node in nodes
+                if constants.MASTER_LABEL in node["metadata"]["labels"]
+                and node not in worker_nodes
+            ]
+            if master_nodes:
+                logger.info(
+                    f"Adding {len(master_nodes)} schedulable master node(s) "
+                    f"to the available node pool"
+                )
+                worker_nodes.extend(master_nodes)
         if not worker_nodes:
             raise UnavailableResourceException("No worker node found!")
         az_worker_nodes = {}
@@ -1653,6 +1674,11 @@ class Deployment(object):
                 resource_name=constants.DEFAULT_STORAGECLASS_LSO
             )
             if not lso_deployed:
+                if config.ENV_DATA.get("skip_disks_cleanup", False):
+                    logger.info("Skipping disks cleanup")
+                else:
+                    logger.info("Performing disk cleanup before LSO setup")
+                    cleanup_nodes_for_lso_install()
                 log_step("Deploy and setup Local Storage Operator")
                 setup_local_storage(
                     storageclass=constants.DEFAULT_STORAGECLASS_LSO,
