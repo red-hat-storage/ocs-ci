@@ -407,6 +407,123 @@ class ODFCliRunner:
         """
         return self.run_command(" object disable remote-obc")
 
+    def run_ceph_config_get(self, entity, config_name):
+        """
+        Get a Ceph config value via ODF CLI.
+
+        Args:
+            entity (str): Ceph entity
+                (e.g., "osd", "osd.0", "global").
+            config_name (str): Config option name.
+
+        Returns:
+            str: The config value string (stripped).
+
+        """
+        output = self.run_command(f"ceph config get {entity} {config_name}")
+        return output.stdout.decode().strip()
+
+    def run_ceph_config_set(self, entity, config_name, value):
+        """
+        Set a Ceph config value via ODF CLI.
+
+        Args:
+            entity (str): Ceph entity
+                (e.g., "osd.0", "global").
+            config_name (str): Config option name.
+            value (str): Value to set.
+
+        Returns:
+            CompletedProcess: Command result.
+
+        """
+        return self.run_command(f"ceph config set {entity} {config_name} {value}")
+
+    def run_ceph_config_rm(self, entity, config_name):
+        """
+        Remove a Ceph config override via ODF CLI.
+
+        Args:
+            entity (str): Ceph entity
+                (e.g., "osd.0", "global").
+            config_name (str): Config option name.
+
+        Returns:
+            CompletedProcess: Command result.
+
+        """
+        return self.run_command(f"ceph config rm {entity} {config_name}")
+
+    def run_ceph_config_show(self, entity):
+        """
+        Show effective Ceph config for an entity via ODF CLI.
+
+        Args:
+            entity (str): Ceph entity (e.g., "osd.0").
+
+        Returns:
+            str: Full config show output.
+
+        """
+        output = self.run_command(f"ceph config show {entity}")
+        return output.stdout.decode()
+
+    def run_ceph_config_dump(self):
+        """
+        Dump all Ceph config overrides via ODF CLI.
+
+        Returns:
+            str: Full config dump output.
+
+        """
+        output = self.run_command("ceph config dump")
+        return output.stdout.decode()
+
+    def wait_for_ceph_config_value(
+        self, entity, config_name, expected_value, timeout=60
+    ):
+        """
+        Poll until a Ceph config value matches the expected value.
+
+        Args:
+            entity (str): Ceph entity (e.g., "osd.0", "global").
+            config_name (str): Config option name.
+            expected_value (str): Expected value to wait for.
+            timeout (int): Max seconds to wait (default: 60).
+
+        Returns:
+            str: The matching config value.
+
+        Raises:
+            TimeoutExpiredError: If the value does not match
+                within the timeout.
+
+        """
+        from ocs_ci.utility.utils import TimeoutSampler
+
+        log.info(
+            "Waiting for %s %s to reach %s",
+            entity,
+            config_name,
+            expected_value,
+        )
+        for value in TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=self.run_ceph_config_get,
+            entity=entity,
+            config_name=config_name,
+        ):
+            if value and float(value) == float(expected_value):
+                log.info(
+                    "%s %s reached expected value %s",
+                    entity,
+                    config_name,
+                    expected_value,
+                )
+                return value
+        return None
+
 
 class ODFCLICephfsSnapRunner(ODFCliRunner):
     """
