@@ -763,6 +763,7 @@ def cli_create_aws_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
         region (str): which region to create backingstore (should be the same as uls)
 
     """
+    region = region or "us-east-1"
     mcg_obj.exec_mcg_cmd(
         f"backingstore create aws-s3 {backingstore_name} "
         f"--secret-name {cld_mgr.aws_client.secret.name} "
@@ -785,6 +786,7 @@ def cli_create_aws_sts_backingstore(
         region (str): which region to create backingstore (should be the same as uls)
 
     """
+    region = region or "us-east-1"
     mcg_obj.exec_mcg_cmd(
         f"backingstore create aws-sts-s3 {backingstore_name} "
         f"--aws-sts-arn {cld_mgr.aws_sts_client.role_arn} "
