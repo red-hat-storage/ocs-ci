@@ -1,0 +1,18 @@
+apiVersion: config.openshift.io/v1
+kind: ImageDigestMirrorSet
+metadata:
+    name: isf-operator-repo
+spec:
+  imageDigestMirrors:
+    - mirrors:
+        - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-mint-docker-local/isf-{{ sds_version }}/cp  # for mint HCI repo
+        - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/isf-{{ sds_version }}/cp  # for dev HCI repo
+        - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-mint-docker-local/sds-{{ sds_version }}/cp  # for mint SDS repo
+        - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/sds-{{ sds_version }}/cp  # for dev SDS repo
+      source: cp.icr.io/cp
+    - mirrors:
+        - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-mint-docker-local/isf-{{ sds_version }}/cpopen  # for mint repo
+        - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/isf-{{ sds_version }}/cpopen # for dev repo
+        - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-mint-docker-local/sds-{{ sds_version }}/cpopen  # for mint SDS repo
+        - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/sds-{{ sds_version }}/cpopen  # for dev SDS repo
+      source: icr.io/cpopen

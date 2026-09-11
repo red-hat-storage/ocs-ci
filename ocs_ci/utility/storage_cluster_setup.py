@@ -72,6 +72,11 @@ class StorageClusterSetup(object):
                 config.COMPONENTS[f"disable_{component}"] = True
                 logger.warning(f"disabling: {component}")
 
+        if config.DEPLOYMENT.get("provider_api_server_service_type"):
+            cluster_data["spec"]["providerAPIServerServiceType"] = (
+                config.DEPLOYMENT.get("provider_api_server_service_type")
+            )
+
         # Update cluster_data with respective component enable/disable
         for key in config.COMPONENTS.keys():
             comp_name = constants.OCS_COMPONENTS_MAP[key.split("_")[1]]
