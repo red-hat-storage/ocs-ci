@@ -1,5 +1,6 @@
 ---
 DEPLOYMENT:
+  openshift_install_timeout: 4800
   allow_lower_instance_requirements: false
 ENV_DATA:
   platform: 'azure'
@@ -7,7 +8,6 @@ ENV_DATA:
   region: 'eastus'
   azure_base_domain_resource_group_name: 'odfqe'
   azure_performance_plus: true
-  # Premium SSD with Performance Plus (default; 513 GiB+ disks)
   azure_performance_plus_disk_type: 'PremiumV2_LRS'
   worker_availability_zones:
     - '1'
@@ -17,6 +17,4 @@ ENV_DATA:
   master_replicas: 3
   master_instance_type: 'Standard_D8s_v3'
   worker_instance_type: 'Standard_D16s_v3'
-REPORTING:
-  polarion:
-    deployment_id: 'OCS-7406'
+
