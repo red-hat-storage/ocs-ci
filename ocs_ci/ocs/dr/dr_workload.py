@@ -1973,6 +1973,9 @@ class BusyboxDiscoveredApps(DRWorkload):
         """
         Delete Discovered Apps
 
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
         """
         current_test = (
             os.environ.get("PYTEST_CURRENT_TEST").split("::")[-1].split(" ")[0]
@@ -1981,53 +1984,68 @@ class BusyboxDiscoveredApps(DRWorkload):
         if self.discovered_apps_multi_ns:
             ignore_not_found_param = "--ignore-not-found=true"
 
-        if "test_disable_dr" not in current_test:
-            log.info("Deleting DRPC")
-            config.switch_acm_ctx()
-            run_cmd(
-                f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} {drpc_name or self.discovered_apps_placement_name} "
-                f"{ignore_not_found_param}"
-            )
-            log.info("Deleting Placement")
-            run_cmd(
-                f"oc delete placement -n {constants.DR_OPS_NAMESPACE} "
-                f"{self.discovered_apps_placement_name}-plmnt-1 {ignore_not_found_param}"
-            )
+        try:
+            if "test_disable_dr" not in current_test:
+                log.info("Deleting DRPC")
+                config.switch_acm_ctx()
+                drpc_resource = drpc_name or self.discovered_apps_placement_name
+                run_cmd(
+                    f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} "
+                    f"{drpc_resource} {ignore_not_found_param}"
+                )
+                log.info("Deleting Placement")
+                run_cmd(
+                    f"oc delete placement -n {constants.DR_OPS_NAMESPACE} "
+                    f"{self.discovered_apps_placement_name}-plmnt-1 {ignore_not_found_param}"
+                )
 
-        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
-        if dr_cluster_relations:
-            non_acm_cluster_config = (
-                get_non_acm_cluster_and_non_provider_cluster_config()
+            dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+            if dr_cluster_relations:
+                non_acm_cluster_config = (
+                    get_non_acm_cluster_and_non_provider_cluster_config()
+                )
+            else:
+                non_acm_cluster_config = get_non_acm_cluster_config()
+            for cluster in non_acm_cluster_config:
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                log.info(f"Deleting workload from {cluster.ENV_DATA['cluster_name']}")
+                run_cmd(
+                    f"oc delete -k {self.workload_path} -n {self.workload_namespace}",
+                    ignore_error=True,
+                )
+                log.info(f"Deleting recipe from {cluster.ENV_DATA['cluster_name']}")
+                run_cmd(
+                    cmd=f"oc delete recipe --all -n {self.workload_namespace}",
+                    ignore_error=True,
+                )
+                log.info(f"Deleting secret from {cluster.ENV_DATA['cluster_name']}")
+                secret_name = self.workload_namespace + "-secret"
+                run_cmd(
+                    cmd=f"oc delete secret {secret_name} -n {self.workload_namespace}",
+                    ignore_error=True,
+                )
+                dr_helpers.wait_for_all_resources_deletion(
+                    namespace=self.workload_namespace,
+                    discovered_apps=True,
+                    workload_cleanup=True,
+                    vrg_name=self.discovered_apps_placement_name,
+                    skip_vrg_check=skip_vrg_check,
+                )
+                ocp_obj = ocp.OCP()
+                ocp_obj.delete_project(project_name=self.workload_namespace)
+
+        except (
+            TimeoutExpired,
+            TimeoutExpiredError,
+            TimeoutError,
+            AssertionError,
+        ) as ex:
+            err_msg = (
+                f"Failed to delete the workload namespace: {self.workload_namespace}, "
+                f"Exception: {ex}"
             )
-        else:
-            non_acm_cluster_config = get_non_acm_cluster_config()
-        for cluster in non_acm_cluster_config:
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            log.info(f"Deleting workload from {cluster.ENV_DATA['cluster_name']}")
-            run_cmd(
-                f"oc delete -k {self.workload_path} -n {self.workload_namespace}",
-                ignore_error=True,
-            )
-            log.info(f"Deleting recipe from {cluster.ENV_DATA['cluster_name']}")
-            run_cmd(
-                cmd=f"oc delete recipe --all -n {self.workload_namespace}",
-                ignore_error=True,
-            )
-            log.info(f"Deleting secret from {cluster.ENV_DATA['cluster_name']}")
-            secret_name = self.workload_namespace + "-secret"
-            run_cmd(
-                cmd=f"oc delete secret {secret_name} -n {self.workload_namespace}",
-                ignore_error=True,
-            )
-            dr_helpers.wait_for_all_resources_deletion(
-                namespace=self.workload_namespace,
-                discovered_apps=True,
-                workload_cleanup=True,
-                vrg_name=self.discovered_apps_placement_name,
-                skip_vrg_check=skip_vrg_check,
-            )
-            ocp_obj = ocp.OCP()
-            ocp_obj.delete_project(project_name=self.workload_namespace)
+            log.exception(err_msg)
+            raise ResourceNotDeleted(err_msg)
 
 
 def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):

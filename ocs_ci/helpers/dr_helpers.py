@@ -3091,30 +3091,65 @@ def verify_drpc_placement_deletion(cmd, expected_output_lst):
     return True
 
 
-def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
+def verify_last_kubeobject_protection_time(
+    drpc_obj, kubeobject_sync_interval, initial_last_kubeobject_protection_time=None
+):
     """
     Verifies that the lastKubeObjectProtectionTime for a given DRPC object is within the expected range.
+    When a previous value is supplied the function additionally waits (via TimeoutSampler) until the
+    timestamp advances beyond that value, mirroring the behaviour of verify_last_group_sync_time.
 
     Args:
         drpc_obj (obj): DRPC object
         kubeobject_sync_interval (int): The KubeObject sync interval in minutes
+        initial_last_kubeobject_protection_time (str): Previous lastKubeObjectProtectionTime value
+            (optional). When provided, the function polls until the value changes before performing
+            the freshness check, ensuring the kubeobject sync has actually advanced.
 
     Returns:
         str: Current lastKubeObjectProtectionTime
 
     Raises:
         AssertionError: If the lastKubeObjectProtectionTime is outside the expected range
-            (greater than or equal to two times the scheduling interval)
+            (greater than or equal to two times the scheduling interval) or has not advanced
+            beyond the previous value within the timeout.
 
     """
     restore_index = config.cur_index
     config.switch_acm_ctx()
-    last_kubeobject_protection_time = drpc_obj.get_last_kubeobject_protection_time()
-    if not last_kubeobject_protection_time:
-        assert last_kubeobject_protection_time, (
-            "There is no lastKubeObjectProtectionTime. "
-            "Verify that certificates are included correctly in the Ramen Hub configuration map."
-        )
+    if initial_last_kubeobject_protection_time:
+        for last_kubeobject_protection_time in TimeoutSampler(
+            (2 * kubeobject_sync_interval * 60),
+            15,
+            drpc_obj.get_last_kubeobject_protection_time,
+        ):
+            if last_kubeobject_protection_time:
+                if (
+                    last_kubeobject_protection_time
+                    != initial_last_kubeobject_protection_time
+                ):
+                    logger.info(
+                        f"Verified: Current lastKubeObjectProtectionTime "
+                        f"{last_kubeobject_protection_time} is different from "
+                        f"previous value {initial_last_kubeobject_protection_time}"
+                    )
+                    break
+            logger.info(
+                "The value of lastKubeObjectProtectionTime in drpc is not updated. Retrying..."
+            )
+    else:
+        logger.info("Waiting for lastKubeObjectProtectionTime to be set")
+        for last_kubeobject_protection_time in TimeoutSampler(
+            (2 * kubeobject_sync_interval * 60),
+            15,
+            drpc_obj.get_last_kubeobject_protection_time,
+        ):
+            if last_kubeobject_protection_time:
+                logger.info(
+                    f"lastKubeObjectProtectionTime is now set: {last_kubeobject_protection_time}"
+                )
+                break
+            logger.info("lastKubeObjectProtectionTime not yet set, retrying...")
     # Verify lastKubeObjectProtectionTime
     time_format = "%Y-%m-%dT%H:%M:%SZ"
     last_kubeobject_protection_time_formatted = datetime.strptime(
@@ -3260,6 +3295,115 @@ def wait_for_vrg_state(vrg_state, vrg_namespace, resource_name, timeout=900):
         namespace=vrg_namespace,
         resource_name=resource_name,
         timeout=timeout,
+    )
+
+
+def get_vrg_annotation(
+    vrg_name, vrg_namespace, annotation_key, expected_value=None, timeout=120
+):
+    """
+    Fetch (or poll for) the value of a specific annotation on a VolumeReplicationGroup.
+
+    The caller is responsible for switching to the correct cluster context
+    before invoking this function.
+
+    When expected_value is given the function polls via TimeoutSampler until
+    the annotation equals that value, handling a missing VRG gracefully during
+    the propagation window.  When expected_value is None a single read is done.
+
+    Args:
+        vrg_name (str): Name of the VRG resource
+        vrg_namespace (str): Namespace of the VRG resource
+        annotation_key (str): The full annotation key to read
+        expected_value (str | None): When set, poll until the annotation equals
+            this value (default: None — single read)
+        timeout (int): Seconds to poll when expected_value is set (default: 120)
+
+    Returns:
+        str | None: The annotation value, or None if the annotation is absent
+    """
+    vrg_obj = ocp.OCP(
+        kind=constants.VOLUME_REPLICATION_GROUP,
+        namespace=vrg_namespace,
+        resource_name=vrg_name,
+    )
+
+    def _read():
+        try:
+            annotations = vrg_obj.get().get("metadata", {}).get("annotations", {}) or {}
+            return annotations.get(annotation_key)
+        except Exception:
+            return None
+
+    if expected_value is not None:
+        for value in TimeoutSampler(timeout=timeout, sleep=5, func=_read):
+            if value == expected_value:
+                logger.info(f"VRG {vrg_name} annotation {annotation_key!r} = {value!r}")
+                return value
+            logger.info(
+                f"VRG {vrg_name} annotation {annotation_key!r} = {value!r}, "
+                f"waiting for {expected_value!r}"
+            )
+
+    return _read()
+
+
+def verify_dryrun_snapshots(namespace, vrg_name, expected_count, timeout=900):
+    """
+    Verify that the expected number of dryRun VolumeSnapshots exist in a
+    namespace, that every snapshot carries the correct Ramen dryRun labels,
+    and that every snapshot has status.readyToUse == true.
+
+    The caller is responsible for switching to the correct cluster context
+    before invoking this function.
+
+    Args:
+        namespace (str): Namespace where the VolumeSnapshots are expected
+        vrg_name (str): VRG name used as the value of the dry-run-vrg label
+        expected_count (int): Exact number of dryRun snapshots expected
+        timeout (int): Seconds to wait for the expected count to appear
+
+    Raises:
+        AssertionError: If count, labels, or readyToUse checks fail
+        TimeoutExpiredError: If expected count is not reached within timeout
+    """
+    label_selector = (
+        f"{constants.DRYRUN_SNAPSHOT_LABEL}=true,"
+        f"{constants.DRYRUN_VRG_LABEL}={vrg_name}"
+    )
+    logger.info(
+        f"Waiting for {expected_count} dryRun VolumeSnapshot(s) "
+        f"in namespace '{namespace}' with selector '{label_selector}'"
+    )
+
+    snap_ocp = ocp.OCP(
+        kind=constants.VOLUMESNAPSHOT,
+        namespace=namespace,
+        selector=label_selector,
+    )
+
+    # Wait until the label-filtered count matches expectation
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=lambda: len(snap_ocp.get().get("items", [])),
+    )
+    sample.wait_for_func_value(expected_count)
+
+    # Verify every snapshot is readyToUse
+    snapshots = snap_ocp.get().get("items", [])
+    not_ready = [
+        snap["metadata"]["name"]
+        for snap in snapshots
+        if not snap.get("status", {}).get("readyToUse", False)
+    ]
+    assert not not_ready, (
+        f"The following dryRun VolumeSnapshot(s) in namespace '{namespace}' "
+        f"are not readyToUse: {not_ready}"
+    )
+    logger.info(
+        f"All {expected_count} dryRun VolumeSnapshot(s) are present "
+        f"with correct labels and readyToUse=true in namespace '{namespace}'"
     )
 
 
