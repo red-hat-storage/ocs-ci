@@ -6,7 +6,7 @@ import pytest
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier1
-from ocs_ci.framework.pytest_customization.marks import turquoise_squad, rdr
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad, rdr, zstream_4_18_1
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.cnv_helpers import run_dd_io
 from ocs_ci.ocs import constants
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 @tier1
 @turquoise_squad
 @pytest.mark.polarion_id("OCS-6266")
+@zstream_4_18_1
 class TestCNVFailoverAndRelocateWithDiscoveredApps:
     """
     Test CNV Failover and Relocate with Discovered Apps
