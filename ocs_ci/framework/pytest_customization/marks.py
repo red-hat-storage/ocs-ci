@@ -445,6 +445,11 @@ fdf_required = pytest.mark.skipif(
     reason="Test runs ONLY on FDF cluster",
 )
 
+fdf_standalone_required = pytest.mark.skipif(
+    not config.DEPLOYMENT.get("fdf_standalone_deployment"),
+    reason="Test runs ONLY on FDF standalone deployment",
+)
+
 cnsa_remote_mount = pytest.mark.cnsa_remote_mount
 
 
