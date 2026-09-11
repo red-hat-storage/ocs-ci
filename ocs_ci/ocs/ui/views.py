@@ -3622,8 +3622,17 @@ bucket_tab = {
         "//input[@id='incomplete-multiparts-delete-days']",
         By.XPATH,
     ),
+    # Wizard navigation buttons (ODF 5.0 multi-step wizard)
+    "lifecycle_wizard_next": (
+        "//button[contains(normalize-space(.), 'Next')]",
+        By.XPATH,
+    ),
+    "lifecycle_wizard_create": (
+        "//button[normalize-space(.)='Create']",
+        By.XPATH,
+    ),
     "lifecycle_create_button": (
-        "//button[contains(normalize-space(),'Create') and contains(@class, 'pf-m-primary')]",
+        "//button[normalize-space(.)='Create']",
         By.XPATH,
     ),
     "lifecycle_save_button": (
