@@ -3263,6 +3263,33 @@ def wait_for_vrg_state(vrg_state, vrg_namespace, resource_name, timeout=900):
     )
 
 
+def wait_for_drpc_progression_completed(
+    namespace, resource_name, timeout=600, sleep=10
+):
+    """
+    Wait until the given DRPC reaches Completed progression.
+
+    Args:
+        namespace (str): Namespace of the DRPC
+        resource_name (str): DRPC resource name
+        timeout (int): Time in seconds to wait (default: 600)
+        sleep (int): Seconds between polls (default: 10)
+
+    Raises:
+        AssertionError: If progression does not reach Completed within timeout
+
+    """
+    with config.RunWithAcmConfigContext():
+        drpc_obj = DRPC(namespace=namespace, resource_name=resource_name)
+        logger.info(
+            f"Waiting for DRPC {resource_name} in namespace {namespace} "
+            f"to reach progression {constants.STATUS_COMPLETED}"
+        )
+        drpc_obj.wait_for_progression_status(
+            status=constants.STATUS_COMPLETED, timeout=timeout, sleep=sleep
+        )
+
+
 def validate_storage_cluster_peer_state():
     """
     Validate Storage cluster peer state
