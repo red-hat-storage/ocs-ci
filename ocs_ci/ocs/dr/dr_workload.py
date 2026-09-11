@@ -1683,13 +1683,16 @@ class BusyboxDiscoveredApps(DRWorkload):
             "discovered_apps_name_selector_value"
         )
 
-    def deploy_workload(self, recipe=None):
+    def deploy_workload(self, recipe=None, skip_drpc=False):
         """
 
         Deployment specific to busybox workload for Discovered/Imperative Apps
 
         Args:
             recipe (bool): true if deploying workload with recipe, false otherwise
+            skip_drpc (bool): When True, skip DRPC creation and workload
+                verification entirely.  Use this when the caller will create
+                the DRPC itself (e.g. after generating a Recipe via OLS).
 
         """
         self._deploy_prereqs()
@@ -1710,6 +1713,13 @@ class BusyboxDiscoveredApps(DRWorkload):
         config.switch_acm_ctx()
         if not self.discovered_apps_multi_ns:
             self.create_placement()
+
+        if skip_drpc:
+            log.info(
+                "skip_drpc=True — skipping DRPC creation for workload '%s'",
+                self.workload_namespace,
+            )
+            return
 
         if recipe:
             log.info("Creating workload with recipe")
@@ -1908,10 +1918,18 @@ class BusyboxDiscoveredApps(DRWorkload):
         log.info("Creating DRPC")
         run_cmd(f"oc create -f {drcp_data_yaml.name}")
 
-    def create_drpc_for_apps_with_recipe(self):
+    def create_drpc_for_apps_with_recipe(self, recipe_name=None):
         """
-        Create drpc for discovered apps with recipe
+        Create drpc for discovered apps with recipe.
+
+        Args:
+            recipe_name (str): Name of the Recipe CR to reference in
+                ``recipeRef.name``.  Defaults to ``self.workload_namespace``
+                which matches the name set by ``create_recipe_with_checkhooks``.
         """
+        _recipe_name = (
+            recipe_name if recipe_name is not None else self.workload_namespace
+        )
 
         drpc_yaml_data = templating.load_yaml(self.drpc_recipe_yaml_file)
         drpc_yaml_data["spec"].setdefault("kubeObjectProtection", {})
@@ -1938,7 +1956,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         ] = self.kubeobject_capture_interval
         drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"][
             "name"
-        ] = self.workload_namespace
+        ] = _recipe_name
         drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"][
             "namespace"
         ] = self.workload_namespace
@@ -1977,21 +1995,17 @@ class BusyboxDiscoveredApps(DRWorkload):
         current_test = (
             os.environ.get("PYTEST_CURRENT_TEST").split("::")[-1].split(" ")[0]
         )
-        ignore_not_found_param = ""
-        if self.discovered_apps_multi_ns:
-            ignore_not_found_param = "--ignore-not-found=true"
-
         if "test_disable_dr" not in current_test:
             log.info("Deleting DRPC")
             config.switch_acm_ctx()
             run_cmd(
                 f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} {drpc_name or self.discovered_apps_placement_name} "
-                f"{ignore_not_found_param}"
+                f"--ignore-not-found=true"
             )
             log.info("Deleting Placement")
             run_cmd(
                 f"oc delete placement -n {constants.DR_OPS_NAMESPACE} "
-                f"{self.discovered_apps_placement_name}-plmnt-1 {ignore_not_found_param}"
+                f"{self.discovered_apps_placement_name}-plmnt-1 --ignore-not-found=true"
             )
 
         dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
