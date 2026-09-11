@@ -3,6 +3,7 @@ This module will have all DR related workload classes
 
 """
 
+import base64
 import logging
 import os
 import tempfile
@@ -39,11 +40,16 @@ from ocs_ci.ocs.resources.drpc import DRPC
 
 from ocs_ci.ocs.utils import (
     get_primary_cluster_config,
+    get_active_acm_index,
     get_non_acm_cluster_config,
     get_non_acm_cluster_and_non_provider_cluster_config,
 )
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import clone_repo, run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import (
+    clone_repo,
+    run_cmd,
+    TimeoutSampler,
+)  # IgnoreDeprecation
 
 log = logging.getLogger(__name__)
 
@@ -55,11 +61,16 @@ class DRWorkload(object):
     """
 
     def __init__(
-        self, workload_name=None, workload_repo_url=None, workload_repo_branch=None
+        self,
+        workload_name=None,
+        workload_repo_url=None,
+        workload_repo_branch=None,
+        workload_repo_login=None,
     ):
         self.workload_name = workload_name
         self.workload_repo_url = workload_repo_url
         self.workload_repo_branch = workload_repo_branch
+        self.workload_repo_login = workload_repo_login
 
     def deploy_workload(self):
         raise NotImplementedError("Method not implemented")
@@ -81,8 +92,14 @@ class BusyBox(DRWorkload):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         log.info(f"Repo used: {workload_repo_url}")
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("busybox", workload_repo_url, workload_repo_branch)
-
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.clusters[get_active_acm_index()].AUTH[
+                "ibm_hci"
+            ]["github_token"]
+        super().__init__(
+            "busybox", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
         self.workload_type = kwargs.get("workload_type", constants.SUBSCRIPTION)
         self.workload_namespace = kwargs.get("workload_namespace", None)
         self.pvc_interface = kwargs.get("pvc_interface", None)
@@ -285,8 +302,35 @@ class BusyBox(DRWorkload):
         channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
         if config.ENV_DATA.get("deploy_via_cli"):
             channel_yaml_data["metadata"]["namespace"] = self.workload_namespace
-
+            if config.ENV_DATA.get("dr_workload_repo_login"):
+                channel_yaml_data["spec"].setdefault("secretRef", {})
+                channel_yaml_data["spec"]["secretRef"][
+                    "name"
+                ] = constants.PRIVATE_REPO_SUB_SECRET
         if config.ENV_DATA.get("deploy_via_cli"):
+            if config.ENV_DATA.get("dr_workload_repo_login"):
+                sub_app_private_repo_secret = templating.load_yaml(
+                    constants.PRIVATE_REPO_SUB_SECRET_YAML
+                )
+                sub_app_private_repo_secret["metadata"][
+                    "name"
+                ] = constants.PRIVATE_REPO_SUB_SECRET
+                sub_app_private_repo_secret["metadata"].setdefault("annotations", {})
+                sub_app_private_repo_secret["metadata"].setdefault("labels", {})
+                sub_app_private_repo_secret["metadata"]["annotations"][
+                    "apps.open-cluster-management.io/serving-channel"
+                ] = f"{self.workload_namespace}/ramen-gitops"
+                sub_app_private_repo_secret["metadata"][
+                    "namespace"
+                ] = self.workload_namespace
+                sub_app_private_repo_secret["metadata"]["labels"][
+                    "apps.open-cluster-management.io/serving-channel"
+                ] = "true"
+                sub_app_private_repo_secret["data"]["accessToken"] = base64.b64encode(
+                    config.clusters[get_active_acm_index()]
+                    .AUTH["ibm_hci"]["github_token"]
+                    .encode()
+                ).decode()
             subscription_app_yaml_data = templating.load_yaml(
                 self.subscription_app_file
             )
@@ -340,6 +384,11 @@ class BusyBox(DRWorkload):
                     placement_yaml_data,
                     managed_clusterset_binding_yaml_data,
                 ]
+                + (
+                    [sub_app_private_repo_secret]
+                    if config.ENV_DATA.get("dr_workload_repo_login")
+                    else []
+                )
             )
 
             self.deploy_subscription_workload_yaml_file = tempfile.NamedTemporaryFile(
@@ -559,6 +608,7 @@ class BusyBox(DRWorkload):
             url=self.workload_repo_url,
             location=self.target_clone_dir,
             branch=self.workload_repo_branch,
+            clone_token=self.workload_repo_login,
         )
 
     def _get_workload_namespace(self):
@@ -713,7 +763,14 @@ class BusyBox_AppSet(DRWorkload):
     def __init__(self, **kwargs):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("busybox", workload_repo_url, workload_repo_branch)
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.clusters[get_active_acm_index()].AUTH[
+                "ibm_hci"
+            ]["github_token"]
+        super().__init__(
+            "busybox", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
 
         self.workload_type = kwargs.get("workload_type", constants.APPLICATION_SET)
         self.workload_namespace = kwargs.get("workload_namespace", None)
@@ -885,10 +942,12 @@ class BusyBox_AppSet(DRWorkload):
 
         """
         # Clone workload repo
+
         clone_repo(
             url=self.workload_repo_url,
             location=self.target_clone_dir,
             branch=self.workload_repo_branch,
+            clone_token=self.workload_repo_login,
         )
 
     def add_annotation_to_placement(self):
@@ -1062,7 +1121,14 @@ class CnvWorkload(DRWorkload):
         """
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("cnv", workload_repo_url, workload_repo_branch)
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.clusters[get_active_acm_index()].AUTH[
+                "ibm_hci"
+            ]["github_token"]
+        super().__init__(
+            "cnv", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
 
         self.workload_name = kwargs.get("workload_name")
         self.vm_name = kwargs.get("vm_name")
@@ -1149,9 +1215,38 @@ class CnvWorkload(DRWorkload):
                     self.channel_name = channel_yaml_data["metadata"]["name"]
                     channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
                     channel_yaml_data["metadata"]["namespace"] = self.channel_namespace
-                templating.dump_data_to_temp_yaml(
-                    channel_yaml_data_load, self.channel_yaml_file
+                    if config.ENV_DATA.get("dr_workload_repo_login"):
+                        channel_yaml_data["spec"].setdefault("secretRef", {})
+                        channel_yaml_data["spec"]["secretRef"][
+                            "name"
+                        ] = constants.PRIVATE_REPO_SUB_SECRET
+            if config.ENV_DATA.get("dr_workload_repo_login"):
+                cnv_sub_private_repo_secret = templating.load_yaml(
+                    constants.PRIVATE_REPO_SUB_SECRET_YAML
                 )
+                cnv_sub_private_repo_secret["metadata"][
+                    "name"
+                ] = constants.PRIVATE_REPO_SUB_SECRET
+                cnv_sub_private_repo_secret["metadata"].setdefault("annotations", {})
+                cnv_sub_private_repo_secret["metadata"].setdefault("labels", {})
+                cnv_sub_private_repo_secret["metadata"]["annotations"][
+                    "apps.open-cluster-management.io/serving-channel"
+                ] = f"{self.channel_namespace}/{self.channel_name}"
+                cnv_sub_private_repo_secret["metadata"][
+                    "namespace"
+                ] = self.channel_namespace
+                cnv_sub_private_repo_secret["metadata"]["labels"][
+                    "apps.open-cluster-management.io/serving-channel"
+                ] = "true"
+                cnv_sub_private_repo_secret["data"]["accessToken"] = base64.b64encode(
+                    config.clusters[get_active_acm_index()]
+                    .AUTH["ibm_hci"]["github_token"]
+                    .encode()
+                ).decode()
+                channel_yaml_data_load.append(cnv_sub_private_repo_secret)
+            templating.dump_data_to_temp_yaml(
+                channel_yaml_data_load, self.channel_yaml_file
+            )
         for cnv_workload_yaml_data in cnv_workload_yaml_data_load:
             if self.workload_type == constants.SUBSCRIPTION:
                 if cnv_workload_yaml_data["kind"] == "Namespace":
@@ -1177,6 +1272,19 @@ class CnvWorkload(DRWorkload):
                 cnv_workload_yaml_data["spec"]["template"]["spec"]["destination"][
                     "namespace"
                 ] = self.workload_namespace
+
+                # Update repoURL and targetRevision to use the configured repo
+                # (internal mirror in disconnected environments).
+                template_spec = cnv_workload_yaml_data["spec"]["template"]["spec"]
+                if "source" in template_spec:
+                    template_spec["source"]["repoURL"] = self.workload_repo_url
+                    template_spec["source"][
+                        "targetRevision"
+                    ] = self.workload_repo_branch
+                if "sources" in template_spec:
+                    for src in template_spec["sources"]:
+                        src["repoURL"] = self.workload_repo_url
+                        src["targetRevision"] = self.workload_repo_branch
 
                 # Change the AppSet placement label
                 for generator in cnv_workload_yaml_data["spec"]["generators"]:
@@ -1253,6 +1361,7 @@ class CnvWorkload(DRWorkload):
                 url=self.workload_repo_url,
                 location=self.target_clone_dir,
                 branch=self.workload_repo_branch,
+                clone_token=self.workload_repo_login,
             )
 
     def add_annotation_to_placement(self):
@@ -1397,6 +1506,14 @@ class CnvWorkload(DRWorkload):
                 if "(AlreadyExists)" in str(ex):
                     log.warning("The namespace already exists!")
 
+            # In disconnected environments the workload YAML files reference
+            # an internal Quay registry via ``secretRef: quayadmin`` and
+            # ``certConfigMap: user-ca-bundle``.  Both resources must exist in
+            # the workload namespace before the subscription deploys the workload.
+            if config.DEPLOYMENT.get("disconnected"):
+                create_cdi_pull_secret(namespace=self.workload_namespace)
+                create_cdi_cert_configmap(namespace=self.workload_namespace)
+
             # Create or recreate the secret for ssh access
             try:
                 log.info(
@@ -1462,7 +1579,14 @@ class BusyboxDiscoveredApps(DRWorkload):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         log.info(f"Repo used: {workload_repo_url}")
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("busybox", workload_repo_url, workload_repo_branch)
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.clusters[get_active_acm_index()].AUTH[
+                "ibm_hci"
+            ]["github_token"]
+        super().__init__(
+            "busybox", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
         self.workload_type = kwargs.get("workload_type", constants.DISCOVERED_APPS)
         self.workload_namespace = kwargs.get("workload_namespace", None)
         self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
@@ -1593,6 +1717,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             url=self.workload_repo_url,
             location=self.target_clone_dir,
             branch=self.workload_repo_branch,
+            clone_token=self.workload_repo_login,
         )
 
     def verify_workload_deployment(self, vrg_name=None):
@@ -1924,7 +2049,14 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         """
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("cnv", workload_repo_url, workload_repo_branch)
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.clusters[get_active_acm_index()].AUTH[
+                "ibm_hci"
+            ]["github_token"]
+        super().__init__(
+            "cnv", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
         self.workload_name = kwargs.get("workload_name")
         self.vm_name = kwargs.get("vm_name")
         self.vm_secret_name = kwargs.get("vm_secret")
@@ -2015,6 +2147,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             url=self.workload_repo_url,
             location=self.target_clone_dir,
             branch=self.workload_repo_branch,
+            clone_token=self.workload_repo_login,
         )
 
     def create_namespace(self):
