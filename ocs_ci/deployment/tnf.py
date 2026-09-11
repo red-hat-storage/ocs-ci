@@ -48,14 +48,13 @@ logger = logging.getLogger(__name__)
 
 def _configure_dns(public_ip):
     """
-    Create Route53 DNS records for the TNF cluster so it is
-    accessible via VPN without a proxy, same as baremetal clusters.
+    Create Route53 DNS records for the TNF cluster directly in
+    the base_domain zone so they are resolvable from internal DNS.
 
-    Creates:
+    Creates in the base_domain zone:
       - api.<cluster_name>.<base_domain> -> hypervisor public IP
       - api-int.<cluster_name>.<base_domain> -> hypervisor public IP
       - *.apps.<cluster_name>.<base_domain> -> hypervisor public IP
-      - NS delegation from base_domain zone
     """
 
     cluster_name = config.ENV_DATA.get("cluster_name")
@@ -65,12 +64,13 @@ def _configure_dns(public_ip):
         return
 
     aws = AWS()
-    zone_id = aws.create_hosted_zone(cluster_name=cluster_name)
-    logger.info(f"Created hosted zone for {cluster_name}.{base_domain}")
+    zone_id = aws.get_hosted_zone_id_for_domain(domain=base_domain)
+    logger.info(f"Using base domain zone {zone_id} for {base_domain}")
 
     for record_name in (
         f"api.{cluster_name}",
         f"api-int.{cluster_name}",
+        f"*.apps.{cluster_name}",
     ):
         aws.update_hosted_zone_record(
             zone_id=zone_id,
@@ -79,26 +79,6 @@ def _configure_dns(public_ip):
             type="A",
             operation_type="Add",
         )
-    aws.update_hosted_zone_record(
-        zone_id=zone_id,
-        record_name=f"*.apps.{cluster_name}",
-        data=public_ip,
-        type="A",
-        operation_type="Add",
-    )
-
-    base_domain_zone_id = aws.get_hosted_zone_id_for_domain(domain=base_domain)
-    ns_list = aws.get_ns_for_hosted_zone(zone_id)
-    ns_values = [{"Value": ns} for ns in ns_list]
-    aws.update_hosted_zone_record(
-        zone_id=base_domain_zone_id,
-        record_name=cluster_name,
-        data=ns_values,
-        type="NS",
-        operation_type="Add",
-        ttl=300,
-        raw_data=True,
-    )
     logger.info(
         f"DNS records created: api.{cluster_name}.{base_domain} "
         f"and *.apps.{cluster_name}.{base_domain} -> {public_ip}"
@@ -108,6 +88,7 @@ def _configure_dns(public_ip):
 def _delete_dns():
     """
     Delete Route53 DNS records created during deployment.
+    Removes A records from the base_domain zone.
     """
 
     cluster_name = config.ENV_DATA.get("cluster_name")
@@ -117,10 +98,17 @@ def _delete_dns():
 
     aws = AWS()
     try:
-        zone_id = aws.get_hosted_zone_id(cluster_name)
-        if zone_id:
-            aws.delete_hosted_zone(zone_id)
-            logger.info(f"Deleted hosted zone for {cluster_name}")
+        zone_id = aws.get_hosted_zone_id_for_domain(domain=base_domain)
+        record_sets = aws.get_record_sets(domain=base_domain)
+        cluster_domain = f"{cluster_name}.{base_domain}."
+        for record in record_sets:
+            name = record["Name"]
+            if name.endswith(cluster_domain) and record["Type"] == "A":
+                try:
+                    aws.delete_record(record, zone_id)
+                except Exception:
+                    logger.debug(f"Record {name} already deleted")
+        logger.info(f"Deleted DNS records for {cluster_name}.{base_domain}")
     except Exception as e:
         logger.warning(f"Failed to delete DNS records: {e}")
 
@@ -272,7 +260,18 @@ class TNF(TNFBASE):
             )
 
         def destroy(self, log_level=""):
-            logger.info("EC2 hypervisor termination handles OCP destroy")
+            _delete_dns()
+            try:
+                hypervisor = self._get_hypervisor()
+                if not hypervisor.instance_id:
+                    hypervisor.load_instance_info(self.cluster_path)
+                hypervisor.terminate_instance()
+                logger.info("TNF hypervisor EC2 instance terminated")
+            except UnexpectedDeploymentConfiguration:
+                logger.info(
+                    "No hypervisor config, pre-existing cluster — "
+                    "skipping OCP destroy"
+                )
 
     def deploy_prereq(self):
         """
@@ -501,30 +500,6 @@ class TNF(TNFBASE):
         deploy_ocs_via_operator method.
         """
         super().deploy_ocs()
-
-    def destroy_cluster(self, log_level="DEBUG"):
-        """
-        Destroy TNF cluster.
-
-        For hypervisor-based deployments, terminates the EC2 instance
-        which implicitly destroys the OCP cluster running inside it.
-        For pre-existing clusters, delegates to parent.
-        """
-        if self.hypervisor:
-            logger.info("Cleaning up DNS records...")
-            _delete_dns()
-            logger.info("Terminating TNF hypervisor EC2 instance...")
-            if not self.hypervisor.instance_id:
-                self.hypervisor.load_instance_info(self.cluster_path)
-            try:
-                self.hypervisor.terminate_instance()
-                logger.info("TNF hypervisor EC2 instance terminated")
-            except Exception as e:
-                logger.error(f"Failed to terminate hypervisor: {e}")
-                raise
-        else:
-            # Pre-existing cluster: uninstall OCS, leave OCP intact
-            super().destroy_cluster(log_level)
 
     def verify_deployment(self):
         """
