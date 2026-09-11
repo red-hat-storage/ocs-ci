@@ -64,7 +64,7 @@ class CNVInstaller(object):
         logger.info("Adding CatalogSource for CNV")
         cnv_catalog_source_data = templating.load_yaml(CNV_CATALOG_SOURCE_YAML)
         cnv_catalog_source_name = cnv_catalog_source_data.get("metadata").get("name")
-        cnv_image_tag = config.DEPLOYMENT.get("ocs_csv_channel")[-4:]
+        cnv_image_tag = config.DEPLOYMENT.get("ocs_csv_channel").split("-")[-1]
         cnv_catalog_source_data["spec"][
             "image"
         ] = f"{constants.CNV_QUAY_NIGHTLY_IMAGE}:{cnv_image_tag}"
@@ -134,7 +134,9 @@ class CNVInstaller(object):
             ] = constants.OPERATOR_CATALOG_SOURCE_NAME
             cnv_sub_channel = "stable"
         else:
-            cnv_channel_version = config.DEPLOYMENT.get("ocs_csv_channel")[-4:]
+            cnv_channel_version = config.DEPLOYMENT.get("ocs_csv_channel").split("-")[
+                -1
+            ]
             cnv_sub_channel = f"nightly-{cnv_channel_version}"
 
         cnv_subscription_yaml_data["spec"]["channel"] = f"{cnv_sub_channel}"
