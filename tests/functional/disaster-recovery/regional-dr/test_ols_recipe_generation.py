@@ -1264,39 +1264,6 @@ class TestOLSRecipeFailoverAndRelocate:
             skip_odf_cli_validation=True,
         )
 
-        # Verify ApplicationCleanupPending alert firing after relocate (OCS 4.22+)
-        if get_semantic_ocs_version_from_config() >= Version("4.22", partial=True):
-            # wait_time_for_alert = (
-            #     constants.ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD + 180
-            # )
-            # logger.info(
-            #     f"Waiting {wait_time_for_alert}s for ApplicationCleanupPending "
-            #     "alert to fire after relocate"
-            # )
-            # sleep(wait_time_for_alert)
-            # Create a fresh ACM UI session as the previous may have expired
-            # acm_obj = AcmAddClusters()
-            # verify_pending_cleanup_alert_firing(
-            #     acm_obj,
-            #     "Relocate",
-            #     drpc_name=workload.discovered_apps_placement_name,
-            # )
-
-            logger.info("Doing cleanup operations after relocate")
-            dr_helpers.do_discovered_apps_cleanup(
-                drpc_name=workload.discovered_apps_placement_name,
-                old_primary=secondary_cluster,
-                workload_namespace=workload.workload_namespace,
-                workload_dir=workload.workload_dir,
-                vrg_name=workload.discovered_apps_placement_name,
-            )
-
-            # verify_pending_cleanup_alert_resolved(
-            #     acm_obj,
-            #     "Relocate",
-            #     drpc_name=workload.discovered_apps_placement_name,
-            # )
-
         config.switch_to_cluster_by_name(primary_cluster)
         dr_helpers.wait_for_all_resources_creation(
             workload.workload_pvc_count,
