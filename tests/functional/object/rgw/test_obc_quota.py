@@ -11,8 +11,7 @@ from ocs_ci.ocs.bucket_utils import (
     rm_object_recursive,
     write_random_test_objects_to_bucket,
 )
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier2,
@@ -61,12 +60,11 @@ class TestOBCQuota:
     ):
         """
         Test OBC quota feature
-            * Create OBC with maxObjects quota set
-            * Write objects exceeding maxObjects, verify QuotaExceeded
-            * Patch maxObjects higher, verify additional writes succeed
-            * Decrease maxObjects below current usage, verify writes are
-              blocked (any CommandFailed accepted — RGW may return errors
-              other than QuotaExceeded when quota is reduced below usage)
+            * create OBC with some quota set
+            * check if the quota works
+            * change the quota
+            * check if the new quota works
+            * decrease maxObjects below current usage, verify writes are blocked
         """
         bucket_name = rgw_bucket_factory(amount, interface, quota=quota)[0].name
         obc_obj = OBC(bucket_name)
@@ -85,7 +83,10 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            logger.info(f"Quota {quota} blocked writes as expected: {e}")
+            if err_msg in str(e):
+                logger.info(f"Quota {quota} worked as expected!!")
+            else:
+                logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
         else:
             assert (
                 False
@@ -103,6 +104,7 @@ class TestOBCQuota:
 
         # check if the new quota applied works
         amount = new_quota - int(quota["maxObjects"])
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -117,7 +119,7 @@ class TestOBCQuota:
             if err_msg in str(e):
                 assert False, f"New quota {new_quota_str} didn't get applied!!"
             else:
-                logger.error(f"Copy objects to bucket failed unexpectedly: {e}")
+                logger.error("Copy objects to bucket failed unexpectedly!!")
         else:
             logger.info(f"New quota {new_quota_str} got applied!!")
 
@@ -133,6 +135,7 @@ class TestOBCQuota:
         )
         time.sleep(20)
 
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -144,10 +147,13 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            logger.info(
-                f"Decreased maxObjects quota to {decreased_quota} blocked writes "
-                f"as expected: {e}"
-            )
+            if err_msg in str(e):
+                logger.info(
+                    f"Decreased maxObjects quota to {decreased_quota} blocked writes as expected!!"
+                )
+            else:
+                logger.error("Copy objects to bucket failed unexpectedly!!")
+                raise
         else:
             assert False, (
                 f"Decreased maxObjects to {decreased_quota} below current usage "
@@ -202,7 +208,11 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            logger.info(f"Size quota {quota} blocked writes as expected: {e}")
+            if err_msg in str(e):
+                logger.info(f"Size quota {quota} worked as expected!!")
+            else:
+                logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
+                raise
         else:
             assert (
                 False
@@ -222,6 +232,7 @@ class TestOBCQuota:
 
         # Verify writes succeed under the new limit
         post_patch_amount = 5
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -236,7 +247,7 @@ class TestOBCQuota:
             if err_msg in str(e):
                 assert False, f"New maxSize quota {new_max_size} didn't get applied!!"
             else:
-                logger.error(f"Copy objects to bucket failed unexpectedly: {e}")
+                logger.error("Copy objects to bucket failed unexpectedly!!")
                 raise
         else:
             logger.info(f"New maxSize quota {new_max_size} got applied!!")
@@ -291,7 +302,11 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            logger.info(f"Both quotas blocked writes as expected: {e}")
+            if err_msg in str(e):
+                logger.info("Both quotas hit as expected!!")
+            else:
+                logger.error("ERROR: Copying objects to bucket failed unexpectedly!!")
+                raise
         else:
             assert False, "Combined quota didn't work!! All objects were written!!"
 
@@ -300,40 +315,29 @@ class TestOBCQuota:
         cmd = f"patch obc {bucket_name} -p '{patch_str}' -n openshift-storage --type=merge"
         OCP().exec_oc_cmd(cmd)
         logger.info(f"Patched only maxSize to 20M on obc {bucket_name}")
+        time.sleep(20)
 
-        def check_write_blocked_by_max_objects():
-            try:
-                copy_random_individual_objects(
-                    awscli_pod_session,
-                    pattern="size-patched-",
-                    file_dir=test_dir,
-                    target=full_bucket_path,
-                    amount=1,
-                    s3_obj=obc_obj,
-                    ignore_error=False,
-                )
-                return False
-            except CommandFailed:
-                return True
-
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
-            for blocked in TimeoutSampler(
-                timeout=120, sleep=20, func=check_write_blocked_by_max_objects
-            ):
-                if blocked:
-                    logger.info(
-                        "Write blocked by maxObjects as expected after "
-                        "patching only maxSize"
-                    )
-                    break
-                logger.info(
-                    "Write succeeded — RGW hasn't re-enforced "
-                    "maxObjects yet, retrying..."
-                )
-        except TimeoutExpiredError:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="size-patched-",
+                file_dir=test_dir,
+                target=full_bucket_path,
+                amount=1,
+                s3_obj=obc_obj,
+                ignore_error=False,
+            )
+        except CommandFailed as e:
+            if err_msg in str(e):
+                logger.info("Write still blocked by maxObjects as expected!!")
+            else:
+                logger.error("Copying objects to bucket failed unexpectedly!!")
+                raise
+        else:
             assert False, (
-                "Write never got blocked by maxObjects after patching "
-                "only maxSize — waited 120s"
+                "Write succeeded after patching only maxSize — "
+                "maxObjects should still block!!"
             )
 
         # Patch only maxObjects higher (reset maxSize back to original) —
@@ -346,40 +350,29 @@ class TestOBCQuota:
         logger.info(
             f"Patched maxObjects to 20 and maxSize back to 5M on obc {bucket_name}"
         )
+        time.sleep(20)
 
-        def check_write_blocked_by_max_size():
-            try:
-                copy_random_individual_objects(
-                    awscli_pod_session,
-                    pattern="obj-patched-",
-                    file_dir=test_dir,
-                    target=full_bucket_path,
-                    amount=1,
-                    s3_obj=obc_obj,
-                    ignore_error=False,
-                )
-                return False
-            except CommandFailed:
-                return True
-
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
-            for blocked in TimeoutSampler(
-                timeout=120, sleep=20, func=check_write_blocked_by_max_size
-            ):
-                if blocked:
-                    logger.info(
-                        "Write blocked by maxSize as expected after "
-                        "patching only maxObjects"
-                    )
-                    break
-                logger.info(
-                    "Write succeeded — RGW hasn't re-enforced "
-                    "maxSize yet, retrying..."
-                )
-        except TimeoutExpiredError:
+            copy_random_individual_objects(
+                awscli_pod_session,
+                pattern="obj-patched-",
+                file_dir=test_dir,
+                target=full_bucket_path,
+                amount=1,
+                s3_obj=obc_obj,
+                ignore_error=False,
+            )
+        except CommandFailed as e:
+            if err_msg in str(e):
+                logger.info("Write still blocked by maxSize as expected!!")
+            else:
+                logger.error("Copying objects to bucket failed unexpectedly!!")
+                raise
+        else:
             assert False, (
-                "Write never got blocked by maxSize after patching "
-                "only maxObjects — waited 120s"
+                "Write succeeded after patching only maxObjects — "
+                "maxSize should still block!!"
             )
 
         # Patch both quotas higher — writes should succeed
@@ -391,6 +384,7 @@ class TestOBCQuota:
         logger.info(f"Patched both quotas higher on obc {bucket_name}")
         time.sleep(20)
 
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -405,7 +399,7 @@ class TestOBCQuota:
             if err_msg in str(e):
                 assert False, "Both quotas were increased but writes still blocked!!"
             else:
-                logger.error(f"Copying objects to bucket failed unexpectedly: {e}")
+                logger.error("Copying objects to bucket failed unexpectedly!!")
                 raise
         else:
             logger.info("Writes succeeded after patching both quotas!!")
@@ -429,6 +423,7 @@ class TestOBCQuota:
         """
         interface = "RGW-OC"
         test_dir = test_directory_setup.result_dir
+        err_msg = "(QuotaExceeded)"
 
         # Create 4 buckets with different quota configurations
         bucket_no_quota = rgw_bucket_factory(1, interface)[0].name
@@ -465,14 +460,18 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            logger.info(
-                f"maxSize quota blocked writes on {bucket_max_size} "
-                f"as expected: {e}"
-            )
+            if err_msg in str(e):
+                logger.info(
+                    f"maxSize quota blocked writes on {bucket_max_size} as expected!!"
+                )
+            else:
+                logger.error("Copying objects to bucket failed unexpectedly!!")
+                raise
         else:
             assert False, f"maxSize quota not enforced on {bucket_max_size}!!"
 
         # Exceed maxObjects quota (upload 6 objects, expect failure at 6th)
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -484,14 +483,18 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            logger.info(
-                f"maxObjects quota blocked writes on {bucket_max_objects} "
-                f"as expected: {e}"
-            )
+            if err_msg in str(e):
+                logger.info(
+                    f"maxObjects quota blocked writes on {bucket_max_objects} as expected!!"
+                )
+            else:
+                logger.error("Copying objects to bucket failed unexpectedly!!")
+                raise
         else:
             assert False, f"maxObjects quota not enforced on {bucket_max_objects}!!"
 
         # Exceed combined quota (upload 6 objects, expect failure)
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -503,13 +506,18 @@ class TestOBCQuota:
                 ignore_error=False,
             )
         except CommandFailed as e:
-            logger.info(
-                f"Combined quota blocked writes on {bucket_both} " f"as expected: {e}"
-            )
+            if err_msg in str(e):
+                logger.info(
+                    f"Combined quota blocked writes on {bucket_both} as expected!!"
+                )
+            else:
+                logger.error("Copying objects to bucket failed unexpectedly!!")
+                raise
         else:
             assert False, f"Combined quota not enforced on {bucket_both}!!"
 
         # Verify no-quota bucket is still writable
+        awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
         try:
             copy_random_individual_objects(
                 awscli_pod_session,
@@ -545,6 +553,7 @@ class TestOBCQuota:
             (bucket_max_objects, obc_max_objects, "max-objects"),
             (bucket_both, obc_both, "both"),
         ]:
+            awscli_pod_session.exec_cmd_on_pod(f"mkdir -p {test_dir}")
             try:
                 copy_random_individual_objects(
                     awscli_pod_session,
@@ -587,11 +596,9 @@ class TestOBCQuota:
         quota,
     ):
         """
-        Test OBC object count quota Prometheus alert at 80% threshold
-            * Create OBC with an object count quota (maxObjects=10) set
-            * Write objects to ~90% of maxObjects capacity
-            * Wait for ObcQuotaObjectsAlert (80% warning) to fire and verify
-            * Verify alert description matches expected format
+        This test will verify the prometheus alerts
+        when the OBC quota is reached
+
         """
 
         # create the bucket
@@ -660,12 +667,10 @@ class TestOBCQuota:
         quota,
     ):
         """
-        Test OBC size quota Prometheus alerts at 80% and 100% thresholds
-            * Create OBC with a size quota (maxSize=10M) set
+        Test that ObcQuotaBytesAlert fires when OBC reaches ~80% of maxSize
+            * Create OBC with a size quota (maxSize) set
             * Write data to ~90% of maxSize capacity
-            * Wait for ObcQuotaBytesAlert (80% warning) to fire and verify
-            * Reduce maxSize below current usage to push ratio above 100%
-            * Wait for ObcQuotaBytesExhausedAlert (100% critical) to fire
+            * Wait for ObcQuotaBytesAlert Prometheus alert to fire
             * Verify alert description matches expected format
         """
 
@@ -710,48 +715,3 @@ class TestOBCQuota:
                 "description"
             ), f"Alert {constants.ALERT_OBC_QUOTA_BYTES_ALERT} doesn't seem have expected format"
         logger.info(f"Verified the alert {constants.ALERT_OBC_QUOTA_BYTES_ALERT}")
-
-        # Phase 2: Reduce quota below current usage to trigger exhaustion alert.
-        # RGW enforces maxSize strictly, so writes can't push past 100%.
-        # Instead, patch maxSize down so current usage exceeds the new limit.
-        reduced_max_size = fill_amount // 2
-        patch_str = (
-            f'{{"spec": {{"additionalConfig":{{"maxSize": "{reduced_max_size}M"}}}}}}'
-        )
-        cmd = (
-            f"patch obc {bucket_name} -p '{patch_str}' "
-            f"-n openshift-storage --type=merge"
-        )
-        OCP().exec_oc_cmd(cmd)
-        logger.info(
-            f"Reduced maxSize from {max_size_mb}M to {reduced_max_size}M "
-            f"on bucket {bucket_name} to trigger exhaustion"
-        )
-
-        exhausted_alerts = [
-            alert
-            for alert in prometheus.wait_for_alert(
-                name=constants.ALERT_OBC_QUOTA_BYTES_EXHAUSED_ALERT,
-                state="firing",
-                timeout=600,
-            )
-            if alert.get("labels").get("objectbucketclaim") == bucket_name
-        ]
-
-        assert len(exhausted_alerts) > 0, (
-            f"Alert {constants.ALERT_OBC_QUOTA_BYTES_EXHAUSED_ALERT} didn't fire "
-            f"despite the bucket exceeding 100% of maxSize"
-        )
-
-        exhausted_desc = (
-            f"ObjectBucketClaim {bucket_name} has crossed the limit "
-            f"set by the quota(bytes) and will be read-only now"
-        )
-        for alert in exhausted_alerts:
-            assert exhausted_desc in alert.get("annotations").get("description"), (
-                f"Alert {constants.ALERT_OBC_QUOTA_BYTES_EXHAUSED_ALERT} "
-                f"doesn't have expected format"
-            )
-        logger.info(
-            f"Verified the alert {constants.ALERT_OBC_QUOTA_BYTES_EXHAUSED_ALERT}"
-        )

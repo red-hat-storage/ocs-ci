@@ -1,5 +1,7 @@
 import logging
 
+import pytest
+
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
@@ -8,11 +10,16 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
 )
 
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.resources.objectbucket import MCGCLIBucket
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.prometheus import PrometheusAPI, wait_for_alert_firing
 
 from ocs_ci.ocs.bucket_utils import (
     get_bucket_status_value,
+    rm_object_recursive,
     write_random_test_objects_to_bucket,
 )
 
@@ -439,3 +446,145 @@ class TestOBCQuota:
             mcg_obj=mcg_obj,
         )
         logger.info("Write succeeded after quota removal as expected")
+
+
+@tier2
+@mcg
+@red_squad
+class TestMCGQuotaAlerts:
+    """
+    Tests for MCG quota Prometheus alerts that fire when buckets
+    approach their quota limits (80% threshold).
+    """
+
+    def _verify_alert_for_bucket(self, threading_lock, alert_name, bucket_name):
+        """
+        Wait for a Prometheus alert to fire and verify it has the correct bucket_name label.
+
+        Args:
+            threading_lock: Lock for Prometheus API
+            alert_name (str): Name of the alert to wait for
+            bucket_name (str): Expected bucket_name in alert labels
+
+        Raises:
+            AssertionError: If no matching alert is found
+        """
+        prometheus_api = PrometheusAPI(threading_lock=threading_lock)
+        alerts = wait_for_alert_firing(
+            api=prometheus_api,
+            alert_name=alert_name,
+            timeout=900,
+        )
+
+        matching_alert = next(
+            (
+                alert
+                for alert in alerts
+                if alert.get("labels", {}).get("bucket_name") == bucket_name
+            ),
+            None,
+        )
+        assert (
+            matching_alert
+        ), f"No '{alert_name}' alert found for bucket_name={bucket_name}"
+        logger.info(
+            f"Alert {alert_name} verified for bucket "
+            f"{matching_alert['labels'].get('bucket_name')}"
+        )
+
+    @pytest.fixture(params=["objects", "size"])
+    def quota_approaching_bucket(
+        self, request, mcg_obj, awscli_pod_session, test_directory_setup
+    ):
+        """
+        Create a bucket approaching quota threshold (objects or size).
+
+        Parameterized fixture that creates either:
+        - objects: bucket with max-objects=10 and 9 objects uploaded
+        - size: bucket with 1Gi quota and ~900MB uploaded
+
+        Both configurations trigger APPROACHING_QUOTA status.
+        """
+        quota_type = request.param
+
+        if quota_type == "objects":
+            bucket_name = create_unique_resource_name(
+                resource_description="bucket", resource_type="objquota"
+            )
+            bucket = MCGCLIBucket(bucket_name, mcg=mcg_obj)
+            logger.info(f"Created bucket {bucket_name}")
+
+            max_objects = 10
+            mcg_obj.exec_mcg_cmd(
+                cmd=f"bucket update --max-objects={max_objects} {bucket_name}",
+                namespace=config.ENV_DATA["cluster_namespace"],
+                use_yes=True,
+            )
+            logger.info(f"Set max-objects={max_objects} on bucket {bucket_name}")
+            upload_params = {"amount": max_objects - 1, "bs": "1M"}
+            logger.info(
+                f"Uploading {max_objects - 1} objects to bucket {bucket_name} "
+                f"(max-objects={max_objects})"
+            )
+        else:  # size
+            bucket_name = create_unique_resource_name(
+                resource_description="bucket", resource_type="sizequota"
+            )
+            bucket = MCGCLIBucket(bucket_name, mcg=mcg_obj, quota="1Gi")
+            logger.info(f"Created bucket {bucket_name} with 1Gi size quota")
+            upload_params = {"amount": 1, "bs": "900M"}
+            logger.info(f"Uploading ~900MB to bucket {bucket_name} (quota 1Gi)")
+
+        def finalizer():
+            try:
+                rm_object_recursive(awscli_pod_session, bucket_name, mcg_obj)
+            except CommandFailed:
+                logger.warning(f"Cleanup of bucket {bucket_name} objects failed")
+            bucket.delete()
+
+        request.addfinalizer(finalizer)
+
+        write_random_test_objects_to_bucket(
+            io_pod=awscli_pod_session,
+            bucket_to_write=bucket_name,
+            file_dir=test_directory_setup.origin_dir,
+            mcg_obj=mcg_obj,
+            **upload_params,
+        )
+
+        wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.APPROACHING)
+        return bucket_name, quota_type
+
+    def test_mcg_quota_approaching_alert(
+        self, quota_approaching_bucket, threading_lock
+    ):
+        """
+        Verify that NooBaaBucketReachingQuantityQuotaState or
+        NooBaaBucketReachingSizeQuotaState Prometheus alert fires when
+        bucket approaches its quota.
+
+        Steps:
+            1. Fixture creates bucket with quota and fills it to ~90%
+            2. Wait for appropriate alert to fire
+            3. Verify alert has the correct bucket_name label
+        """
+        bucket_name, quota_type = quota_approaching_bucket
+
+        if quota_type == "objects":
+            alert_name = constants.ALERT_BUCKETREACHINGQUOTASTATE
+            logger.info(
+                f"Bucket {bucket_name} is in APPROACHING_QUOTA mode "
+                f"(object count), waiting for Prometheus alert"
+            )
+        else:  # size
+            alert_name = constants.ALERT_BUCKETREACHINGSIZEQUOTASTATE
+            logger.info(
+                f"Bucket {bucket_name} is in APPROACHING_QUOTA mode "
+                f"(size), waiting for Prometheus alert"
+            )
+
+        self._verify_alert_for_bucket(
+            threading_lock,
+            alert_name,
+            bucket_name,
+        )
