@@ -4,13 +4,20 @@ import random
 from ocs_ci.helpers.helpers import create_lvs_resource
 from ocs_ci.ocs.cluster import check_ceph_osd_tree
 from ocs_ci.ocs.exceptions import CephHealthException, ResourceNotFoundError
-from ocs_ci.ocs.node import add_disk_to_node, get_node_objs, get_osd_running_nodes
+from ocs_ci.ocs.node import (
+    add_disk_to_node,
+    get_node_objs,
+    get_osd_running_nodes,
+)
 from ocs_ci.ocs.resources.pv import (
     get_pv_in_status,
     wait_for_pvs_in_lvs_to_reach_status,
 )
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
-from ocs_ci.ocs.resources.pvc import wait_for_pvcs_in_deviceset_to_reach_status
+from ocs_ci.ocs.resources.pvc import (
+    get_pvcs_in_deviceset,
+    wait_for_pvcs_in_deviceset_to_reach_status,
+)
 from ocs_ci.ocs.resources.storage_cluster import (
     get_storage_size,
     get_device_class,
@@ -18,9 +25,13 @@ from ocs_ci.ocs.resources.storage_cluster import (
     verify_device_class_in_osd_tree,
     get_deviceset_name_per_count,
     get_first_sc_name_from_storagecluster,
+    get_default_storagecluster,
+    get_all_device_sets,
+    get_deviceset_sc_name,
+    set_deviceset_count,
 )
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility.utils import sum_of_two_storage_sizes
+from ocs_ci.utility.utils import sum_of_two_storage_sizes, TimeoutSampler
 
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
@@ -28,6 +39,217 @@ from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
+
+
+def get_first_deviceset_by_sc_name():
+    """
+    Get the first StorageCluster deviceset matching the first SC name.
+
+    Returns:
+        dict: The first deviceset spec entry, or None if not found.
+
+    """
+    first_sc_name = get_first_sc_name_from_storagecluster()
+    for device_set in get_all_device_sets():
+        if get_deviceset_sc_name(device_set) == first_sc_name:
+            return device_set
+    log.warning(
+        "No deviceset found for storageclass %s",
+        first_sc_name,
+    )
+    return None
+
+
+def _is_deviceset_count_healed(deviceset_name, target_count, replica):
+    """
+    Check whether deviceset count and leftover PVCs are healed.
+
+    Args:
+        deviceset_name (str): Deviceset name to check.
+        target_count (int): Expected deviceset count after heal.
+        replica (int): Deviceset replica value.
+
+    Returns:
+        bool: True if count matches, no non-Bound deviceset PVCs remain,
+            and Bound PVC count equals target_count * replica.
+
+    """
+    current_count = get_deviceset_name_per_count().get(deviceset_name)
+    if current_count is None:
+        log.warning("Deviceset %s not found while waiting for heal", deviceset_name)
+        return False
+    current_count = int(current_count)
+    if current_count != target_count:
+        log.info(
+            "Waiting for deviceset %s count to reach %s (current=%s)",
+            deviceset_name,
+            target_count,
+            current_count,
+        )
+        return False
+
+    deviceset_pvcs = get_pvcs_in_deviceset(deviceset_name)
+    bound_pvcs = [pvc for pvc in deviceset_pvcs if pvc.status == constants.STATUS_BOUND]
+    non_bound_pvcs = [
+        pvc for pvc in deviceset_pvcs if pvc.status != constants.STATUS_BOUND
+    ]
+    if non_bound_pvcs:
+        log.info(
+            "Waiting for non-Bound leftover deviceset PVCs to be deleted: %s",
+            [pvc.name for pvc in non_bound_pvcs],
+        )
+        return False
+
+    expected_bound = target_count * replica
+    if len(bound_pvcs) != expected_bound:
+        log.info(
+            "Waiting for deviceset %s to have %s Bound PVCs "
+            "(target_count=%s * replica=%s, current Bound=%s)",
+            deviceset_name,
+            expected_bound,
+            target_count,
+            replica,
+            len(bound_pvcs),
+        )
+        return False
+    return True
+
+
+def heal_inflated_default_deviceset_count(timeout=600, sleep=20):
+    """
+    Lower inflated default deviceset count and clear non-Bound leftover PVCs.
+
+    Failed add_capacity runs can leave storageDeviceSets[0].count higher than
+    Bound deviceset PVC capacity. This patches count down and deletes non-Bound
+    leftover PVCs, then waits via TimeoutSampler until the heal is complete.
+
+    Args:
+        timeout (int): Seconds to wait for the heal to settle.
+        sleep (int): Seconds between heal polls.
+
+    Returns:
+        bool: True if a heal was applied, False if no heal was needed.
+
+    """
+    first_deviceset = get_first_deviceset_by_sc_name()
+    if not first_deviceset:
+        return False
+    first_sc_name = get_deviceset_sc_name(first_deviceset)
+    deviceset_name = first_deviceset["name"]
+    current_count = int(first_deviceset["count"])
+    replica = int(first_deviceset.get("replica", 1)) or 1
+
+    deviceset_pvcs = get_pvcs_in_deviceset(deviceset_name)
+    bound_count = len(
+        [pvc for pvc in deviceset_pvcs if pvc.status == constants.STATUS_BOUND]
+    )
+    log.info(
+        "Default deviceset %s (sc=%s): count=%s, replica=%s, "
+        "Bound PVCs=%s, total PVCs=%s",
+        deviceset_name,
+        first_sc_name,
+        current_count,
+        replica,
+        bound_count,
+        len(deviceset_pvcs),
+    )
+    if bound_count == 0:
+        return False
+
+    if bound_count % replica != 0:
+        log.warning(
+            "Bound PVC count %s is not divisible by replica %s; "
+            "skipping deviceset count heal to avoid a partial "
+            "replica group",
+            bound_count,
+            replica,
+        )
+        return False
+
+    # Each deviceset count unit provisions 'replica' OSDs/PVCs. Derive the
+    # highest safe count from Bound PVC capacity so count * replica matches
+    # provisioned PVCs without truncating a partial replica group.
+    log.info(
+        "Calculating target deviceset count from Bound PVCs (%s) / "
+        "replica (%s) so count * replica matches provisioned capacity",
+        bound_count,
+        replica,
+    )
+    target_count = max(1, bound_count // replica)
+    if current_count <= target_count:
+        return False
+
+    log.warning(
+        "Healing inflated deviceset count on %s from %s to %s "
+        "to match Bound PVCs before device-class test",
+        deviceset_name,
+        current_count,
+        target_count,
+    )
+    set_deviceset_count(target_count)
+    for pvc in deviceset_pvcs:
+        if pvc.status != constants.STATUS_BOUND:
+            log.info(
+                "Deleting non-Bound leftover deviceset PVC %s (status=%s)",
+                pvc.name,
+                pvc.status,
+            )
+            pvc.delete(wait=False)
+
+    for healed in TimeoutSampler(
+        timeout,
+        sleep,
+        _is_deviceset_count_healed,
+        deviceset_name,
+        target_count,
+        replica,
+    ):
+        if healed:
+            log.info(
+                "Deviceset %s heal completed: count=%s, Bound PVCs=%s",
+                deviceset_name,
+                target_count,
+                target_count * replica,
+            )
+            return True
+    return False
+
+
+def ensure_storagecluster_ready_for_deviceclass_test(timeout=600, sleep=20):
+    """
+    Heal leftover StorageCluster deviceset inflation and wait for Ready.
+
+    Failed add_capacity runs can leave the default deviceset count higher than
+    the number of Bound deviceset PVCs. That keeps StorageCluster in
+    Progressing and poisons later device-class tests. This helper heals the
+    inflated count when needed, then waits for PHASE=Ready.
+
+    Args:
+        timeout (int): Seconds to wait for StorageCluster Ready.
+        sleep (int): Seconds between Ready polls.
+
+    """
+    sc_obj = get_default_storagecluster()
+    sc_name = sc_obj.resource_name
+    sc_data = sc_obj.get()
+    log.info(
+        "StorageCluster %s phase before device-class test: %s",
+        sc_name,
+        sc_data.get("status", {}).get("phase"),
+    )
+    heal_inflated_default_deviceset_count(timeout=timeout, sleep=sleep)
+
+    log.info(
+        "Waiting for StorageCluster %s to reach Ready before device-class test",
+        sc_name,
+    )
+    sc_obj.wait_for_resource(
+        condition=constants.STATUS_READY,
+        resource_name=sc_name,
+        column="PHASE",
+        timeout=timeout,
+        sleep=sleep,
+    )
 
 
 def create_new_lvs_for_new_deviceclass(
@@ -246,7 +468,10 @@ def verify_available_pvs_for_deviceclass(sc_name=None, wait=True, timeout=180):
     if wait:
         log.info("Waiting for the new PVs to be available after adding disks")
         wait_for_pvs_in_lvs_to_reach_status(
-            sc_name, available_nodes_count, constants.STATUS_AVAILABLE, timeout=timeout
+            sc_name,
+            available_nodes_count,
+            constants.STATUS_AVAILABLE,
+            timeout=timeout,
         )
 
     return available_nodes_count
