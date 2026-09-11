@@ -9,7 +9,7 @@ import random
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     E2ETest,
     tier2,
@@ -35,6 +35,8 @@ DD_COUNT = 64
 @tier2
 @pytest.mark.polarion_id("OCS-2733")
 @skipif_ocs_version("<4.9")
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestMonDataAvailWarn(E2ETest):
     """
     Testing MON disk low threshold.

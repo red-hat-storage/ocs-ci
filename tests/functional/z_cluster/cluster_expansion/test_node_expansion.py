@@ -9,6 +9,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_hci_provider_and_client,
     brown_squad,
+    zstream_4_18_1,
+    zstream_4_18_1_ocs_operator,
 )
 from ocs_ci.ocs.resources.storage_cluster import (
     in_transit_encryption_verification,
@@ -28,6 +30,8 @@ logger = logging.getLogger(__name__)
 @skipif_ibm_flash
 @ignore_leftovers
 @tier1
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestAddNode(ManageTest):
     """
     Automates adding worker nodes to the cluster while IOs

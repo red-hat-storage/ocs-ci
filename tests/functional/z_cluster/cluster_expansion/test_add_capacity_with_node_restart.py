@@ -1,7 +1,7 @@
 import pytest
 import logging
 
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
@@ -41,6 +41,8 @@ logger = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_hci_provider_and_client
 @skipif_external_mode
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestAddCapacityNodeRestart(ManageTest):
     """
     Test add capacity when one of the worker nodes got restart

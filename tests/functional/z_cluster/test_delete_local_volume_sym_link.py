@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework.testlib import E2ETest, tier4b
 from ocs_ci.ocs import ocp, constants
-from ocs_ci.framework.pytest_customization.marks import skipif_no_lso, brown_squad
+from ocs_ci.framework.pytest_customization.marks import skipif_no_lso, brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.resources.pod import wait_for_storage_pods, get_pod_obj, get_pod_node
@@ -18,6 +18,8 @@ log = logging.getLogger(__name__)
 @tier4b
 @skipif_no_lso
 @pytest.mark.polarion_id("OCS-2316")
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestDeleteLocalVolumeSymLink(E2ETest):
     """
     A test case to validate rook-ceph-crashcollector pods
