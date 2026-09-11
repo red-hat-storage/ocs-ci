@@ -89,7 +89,7 @@ class Terraform(object):
             cmd = f"{self.terraform_installer} init {self.path}"
         else:
             cmd = f"{self.terraform_installer} -chdir={self.path} init"
-        run_cmd(cmd, timeout=1200)
+        run_cmd(cmd, timeout=2400)
 
     def apply(self, tfvars, bootstrap_complete=False, module=None, refresh=True):
         """
@@ -121,7 +121,7 @@ class Terraform(object):
             f" -auto-approve {bootstrap_complete_param} {dir_path}"
         )
 
-        run_cmd(cmd, timeout=1500)
+        run_cmd(cmd, timeout=3000)
 
     def destroy(self, tfvars, refresh=True):
         """
@@ -143,7 +143,7 @@ class Terraform(object):
             f"{self.terraform_installer} {chdir_param} destroy {refresh_param}"
             f" {self.state_file_param} '-var-file={tfvars}' -auto-approve {dir_path}"
         )
-        run_cmd(cmd, timeout=1200)
+        run_cmd(cmd, timeout=2400)
 
     def output(self, tfstate, module, json_format=True):
         """
@@ -187,7 +187,7 @@ class Terraform(object):
             f"{self.terraform_installer} {chdir_param} destroy -auto-approve "
             f" -target={module} {self.state_file_param} '-var-file={tfvars}' {dir_path}"
         )
-        run_cmd(cmd, timeout=1200)
+        run_cmd(cmd, timeout=2400)
 
     def change_statefile(self, module, vm_index):
         """
