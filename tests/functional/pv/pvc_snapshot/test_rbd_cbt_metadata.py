@@ -19,8 +19,9 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 
 from ocs_ci.ocs import constants
+from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import consumer_env_check, green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     polarion_id,
@@ -42,6 +43,7 @@ log = logging.getLogger(__name__)
 
 @green_squad
 @tier1
+@consumer_env_check
 @skipif_ocs_version("<4.23")
 class TestRbdCBTMetadata(ManageTest):
     """
@@ -67,7 +69,14 @@ class TestRbdCBTMetadata(ManageTest):
 
         PVCs and pods created through factories are cleaned
         up by their respective factory finalizers.
+
+        Note: in multicluster mode the consumer context is intentionally NOT
+        restored to provider on teardown so that the pvc_factory finalizer
+        runs on the correct (consumer) cluster. In standalone mode there is
+        only one cluster so no context switching is needed.
         """
+        if config.multicluster:
+            config.switch_to_consumer()
 
         def finalizer():
             if hasattr(self, "cbt_runner"):
