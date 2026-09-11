@@ -1698,6 +1698,10 @@ def expand_nav_sidebar_if_collapsed(acm_obj, acm_loc):
     collapsed and aria-hidden, which makes every nav item unclickable even
     though it is present in the DOM.
 
+    Only the OCP 5.0 hub console behaves this way, so the locators live in
+    acm_configuration_5_0 and are simply absent on earlier versions - treat
+    that as "nothing to expand" rather than an error.
+
     Args:
         acm_obj (AcmAddClusters): ACM Page Navigator Class
         acm_loc (dict): ACM page locators for the current OCP version
@@ -1706,6 +1710,8 @@ def expand_nav_sidebar_if_collapsed(acm_obj, acm_loc):
         bool: True if the sidebar was collapsed and got expanded, False otherwise
 
     """
+    if "nav-sidebar-collapsed" not in acm_loc:
+        return False
     if not acm_obj.check_element_presence(
         (acm_loc["nav-sidebar-collapsed"][1], acm_loc["nav-sidebar-collapsed"][0]),
         timeout=10,

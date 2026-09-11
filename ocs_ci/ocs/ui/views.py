@@ -1815,20 +1815,7 @@ acm_configuration_4_20 = {
         By.XPATH,
     ),
     "fleet-virtual": ("//h2[text()='Fleet Virtualization']", By.XPATH),
-    # ACM 5.0 renamed the attribute on this nav item from data-test-id to
-    # data-test, so match either to stay compatible with earlier ACM builds.
-    "nav-bar-vms-page": (
-        "//a[@data-test-id='virtualmachines-nav-item' or @data-test='virtualmachines-nav-item']",
-        By.XPATH,
-    ),
-    # The side nav is rendered collapsed (and aria-hidden) after switching to the
-    # Fleet Virtualization perspective, so it has to be expanded before any of the
-    # nav items can be clicked.
-    "nav-sidebar-collapsed": (
-        "//div[@id='page-sidebar' and contains(@class, 'pf-m-collapsed')]",
-        By.XPATH,
-    ),
-    "nav-sidebar-toggle": ("//button[@id='nav-toggle']", By.XPATH),
+    "nav-bar-vms-page": ("//a[@data-test-id='virtualmachines-nav-item']", By.XPATH),
     "all-clusters": ("//button[text()='All clusters']", By.XPATH),
     "managed-cluster-name": ("//button[text()='{}']", By.XPATH),
     "cnv-workload-namespace": ("//button[text()='{}']", By.XPATH),
@@ -1964,6 +1951,20 @@ acm_configuration_4_22 = {
         "(//button[@type='button'][.//*[normalize-space()='Nodes labeled']])[2]",
         By.XPATH,
     ),
+}
+
+acm_configuration_5_0 = {
+    # The VMs nav item moved from data-test-id to data-test on the ACM hub
+    # console shipped with OCP 5.0.
+    "nav-bar-vms-page": ("//a[@data-test='virtualmachines-nav-item']", By.XPATH),
+    # The side nav is rendered collapsed (and aria-hidden) after switching to
+    # the Fleet Virtualization perspective, so it has to be expanded before any
+    # of the nav items can be clicked.
+    "nav-sidebar-collapsed": (
+        "//div[@id='page-sidebar' and contains(@class, 'pf-m-collapsed')]",
+        By.XPATH,
+    ),
+    "nav-sidebar-toggle": ("//button[@id='nav-toggle']", By.XPATH),
 }
 
 add_capacity = {
@@ -4212,6 +4213,7 @@ locators = {
             **acm_configuration_4_20,
             **acm_configuration_4_21,
             **acm_configuration_4_22,
+            **acm_configuration_5_0,
         },
         "validation": {
             **validation,
