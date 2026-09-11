@@ -52,7 +52,15 @@ from ocs_ci.helpers.odf_cli import ODFCliRunner
 
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.helpers.virtctl import get_virtctl_tool
-from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
+from ocs_ci.ocs import (
+    constants,
+    defaults,
+    fio_artefacts,
+    md_blow,
+    node,
+    ocp,
+    platform_nodes,
+)
 from ocs_ci.ocs.constants import (
     RECLAIMSPACE_SCHEDULE_ANNOTATION,
     KEYROTATION_SCHEDULE_ANNOTATION,
@@ -150,6 +158,8 @@ from ocs_ci.ocs.resources.pod import (
     cal_md5sum,
     wait_for_pods_to_be_in_statuses,
     wait_for_noobaa_db_ready,
+    get_noobaa_db_pod,
+    get_noobaa_core_pod,
 )
 from ocs_ci.ocs.resources.pvc import (
     PVC,
@@ -10570,6 +10580,122 @@ def scale_noobaa_db_pod_pv_size(request):
     return scale_noobaa_db_pv(request)
 
 
+@pytest.fixture()
+def md_blow_factory(request):
+    """
+    Returns MdBlow configured for fast NooBaa DB fill to a usage threshold.
+
+    Uses md_blow.js production-like parameters (128 chunks, 1 MiB chunk size)
+    and byte-based PVC monitoring so large PVC fills do not false-stall on
+    unchanged integer df percentages.
+
+    Restores default noobaa-core resources on teardown.
+    """
+    obj_count = 100
+    concurrency = 50
+    chunks = 128
+    chunk_size = 1024 * 1024
+    max_stall_batches = 3
+
+    blow_io = md_blow.MdBlow()
+    blow_io.obj_count = obj_count
+    blow_io.concurrency = concurrency
+    blow_io.chunks = chunks
+    blow_io.chunk_size = chunk_size
+    blow_io.increase_core_pod_cpu_memory()
+
+    original_upload = blow_io.upload_obj_using_md_blow
+
+    def get_db_usage():
+        blow_io.noobaa_db_pod = get_noobaa_db_pod()
+        usage = blow_io.noobaa_db_pod.exec_cmd_on_pod(
+            "df -B1 | grep postgresql | awk '{print $3,$2}'",
+            container_name="postgres",
+            shell=True,
+        )
+        used_bytes, total_bytes = usage.strip().split()
+        used_bytes = int(used_bytes)
+        total_bytes = int(total_bytes)
+        usage_pct = (used_bytes * 100) // total_bytes if total_bytes else 0
+        return used_bytes, total_bytes, usage_pct
+
+    def upload_obj_using_md_blow(
+        bucket_name="first.bucket",
+        threshold_pct=None,
+        obj_count=obj_count,
+        concurrency=concurrency,
+        chunks=chunks,
+        chunk_size=chunk_size,
+    ):
+        if threshold_pct is None:
+            return original_upload(
+                bucket_name,
+                obj_count=obj_count,
+                concurrency=concurrency,
+                chunks=chunks,
+                chunk_size=chunk_size,
+            )
+
+        used_bytes, total_bytes, current_pct = get_db_usage()
+        log.info(
+            f"md_blow fill starting at {current_pct}% "
+            f"({used_bytes}/{total_bytes} bytes), target {threshold_pct}%"
+        )
+        if current_pct >= threshold_pct:
+            log.info(f"DB already at {current_pct}%, skipping fill")
+            return
+
+        stall_batches = 0
+        batch_num = 0
+        while current_pct < threshold_pct:
+            batch_num += 1
+            log.info(
+                f"Running md_blow batch {batch_num} with count={obj_count}, "
+                f"concur={concurrency}, chunks={chunks}, "
+                f"chunk_size={chunk_size}"
+            )
+            blow_io.noobaa_core_pod = get_noobaa_core_pod()
+            original_upload(
+                bucket_name,
+                obj_count=obj_count,
+                concurrency=concurrency,
+                chunks=chunks,
+                chunk_size=chunk_size,
+            )
+            new_used_bytes, total_bytes, current_pct = get_db_usage()
+            log.info(
+                f"DB usage after batch {batch_num}: {current_pct}% "
+                f"({new_used_bytes}/{total_bytes} bytes)"
+            )
+            if new_used_bytes == used_bytes:
+                stall_batches += 1
+                if stall_batches >= max_stall_batches:
+                    raise RuntimeError(
+                        f"md_blow stalled: DB used bytes unchanged for "
+                        f"{stall_batches} consecutive batches at "
+                        f"{current_pct}% (target {threshold_pct}%)"
+                    )
+            else:
+                stall_batches = 0
+            used_bytes = new_used_bytes
+
+        log.info(
+            f"md_blow fill completed at {current_pct}% "
+            f"({used_bytes}/{total_bytes} bytes), target was {threshold_pct}%"
+        )
+
+    blow_io.upload_obj_using_md_blow = upload_obj_using_md_blow
+
+    def teardown():
+        try:
+            blow_io.reduce_core_pod_cpu_memory()
+        except Exception as exc:
+            log.warning(f"Failed to restore noobaa-core resources: {exc}")
+
+    request.addfinalizer(teardown)
+    return blow_io
+
+
 def scale_noobaa_db_pv(request):
     """
     This fixtue helps to scale the noobaa db pv size.
@@ -10592,19 +10718,31 @@ def scale_noobaa_db_pv(request):
     ]
     nb_pvcs = get_all_pvc_objs(selector=constants.NOOBAA_DB_LABEL_419_AND_ABOVE)
 
-    def factory(pv_size="50"):
+    def factory(pv_size="50", pvc_names=None):
         """
         Args:
             pv_size(int): Size in GB
+            pvc_names(list): Optional list of PVC names to resize. When omitted,
+                all NooBaa DB PVCs are resized.
 
         """
         pods = []
+        pvcs_to_resize = nb_pvcs
+        if pvc_names:
+            pvc_names_set = set(pvc_names)
+            pvcs_to_resize = [
+                nb_pvc for nb_pvc in nb_pvcs if nb_pvc.name in pvc_names_set
+            ]
+            assert pvcs_to_resize, (
+                f"No NooBaa DB PVCs matched pvc_names={pvc_names}. "
+                f"Available PVCs: {[nb_pvc.name for nb_pvc in nb_pvcs]}"
+            )
 
         for operator in operators:
             modify_deployment_replica_count(deployment_name=operator, replica_count=0)
         log.info(f"Scaled down operators: {operators}")
 
-        for nb_pvc in nb_pvcs:
+        for nb_pvc in pvcs_to_resize:
             nb_pvc.resize_pvc(new_size=pv_size)
             log.info(f"{nb_pvc.name} is resized to {pv_size}")
 

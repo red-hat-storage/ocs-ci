@@ -5,12 +5,15 @@ from time import sleep
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_noobaa_core_pod, get_noobaa_db_pod
 from ocs_ci.ocs.resources.mcg import MCG
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.helpers import helpers
 from ocs_ci.framework import config
 
 
 logger = logging.getLogger(__name__)
+
+STALL_CHECK_ITERATIONS = 100
+STALL_CHECK_SLEEP_SECONDS = 5
 
 
 class MdBlow(object):
@@ -20,7 +23,7 @@ class MdBlow(object):
 
     def __init__(self):
         """
-        Assign default values to its parameter and patch required lines in core pod
+        Assign default values required for md_blow workload execution.
         """
         self.db_percentage = None
         self.obj_count = 1000
@@ -33,16 +36,40 @@ class MdBlow(object):
         self.password = self.creds["password"]
         self.noobaa_core_pod = get_noobaa_core_pod()
         self.noobaa_db_pod = get_noobaa_db_pod()
+
+    def increase_core_pod_cpu_memory(self):
+        """
+        Increase memory to 4Gi and CPU to 6 for faster IO operations
+        """
         namespace = config.ENV_DATA["cluster_namespace"]
         storage_cluster = constants.DEFAULT_STORAGE_CLUSTER
 
-        ptch = '{{"spec": {{"resources": {{"noobaa-core": {{"limits": {{"cpu": "6","memory": "4Gi"}}}}}}}}}}'
+        ptch = '{"spec": {"resources": {"noobaa-core": {"limits": {"cpu": "6","memory": "4Gi"}}}}}'
         ptch_cmd = (
             f"oc patch storagecluster {storage_cluster} "
             f"-n {namespace}  --type merge --patch '{ptch}'"
         )
-        run_cmd(ptch_cmd)
+        exec_cmd(ptch_cmd)
         logger.info("Wait for noobaa-core pod move to Running state")
+        self.noobaa_core_pod = get_noobaa_core_pod()
+        helpers.wait_for_resource_state(
+            self.noobaa_core_pod, state=constants.STATUS_RUNNING, timeout=300
+        )
+
+    def reduce_core_pod_cpu_memory(self):
+        """
+        Reduce memory and CPU to default values
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+        storage_cluster = constants.DEFAULT_STORAGE_CLUSTER
+        params = """[{"op": "remove", "path": "/spec/resources"}]"""
+        ptch_cmd = (
+            f"oc patch storagecluster {storage_cluster} "
+            f"-n {namespace} --patch '{params}' --type=json"
+        )
+        exec_cmd(ptch_cmd)
+        logger.info("Wait for noobaa-core pod move to Running state")
+        self.noobaa_core_pod = get_noobaa_core_pod()
         helpers.wait_for_resource_state(
             self.noobaa_core_pod, state=constants.STATUS_RUNNING, timeout=300
         )
@@ -56,6 +83,7 @@ class MdBlow(object):
         """
         current_db_percentage = self.noobaa_db_pod.exec_cmd_on_pod(
             "df -h | grep postgresql | awk '{print $5}'",
+            container_name="postgres",
             shell=True,
         )
         current_db_usage = int(current_db_percentage.strip().replace("%", ""))
@@ -67,24 +95,28 @@ class MdBlow(object):
                 logger.info(f"DB is filled with {threshold_pct}")
             prev_db_percentage = self.noobaa_db_pod.exec_cmd_on_pod(
                 "df -h | grep postgresql | awk '{print $5}'",
+                container_name="postgres",
                 shell=True,
             )
             prev_db_usage = int(prev_db_percentage.strip().replace("%", ""))
-            if prev_db_usage == current_db_percentage:
+            if prev_db_usage == current_db_usage:
                 count += 1
             else:
                 count = 0
-            if count == 100:
+            if count == STALL_CHECK_ITERATIONS:
                 logger.error(
-                    "DB Percentage is stuck from last 500 seconds to the same value"
+                    "DB Percentage is stuck from last "
+                    f"{STALL_CHECK_ITERATIONS * STALL_CHECK_SLEEP_SECONDS} seconds "
+                    "to the same value"
                 )
                 self.stop_dumping.set()
             current_db_percentage = self.noobaa_db_pod.exec_cmd_on_pod(
                 "df -h | grep postgresql | awk '{print $5}'",
+                container_name="postgres",
                 shell=True,
             )
             current_db_usage = int(current_db_percentage.strip().replace("%", ""))
-            sleep(5)
+            sleep(STALL_CHECK_SLEEP_SECONDS)
         logger.info("Exiting from monitor task")
 
     def upload_obj_using_md_blow(
@@ -120,12 +152,15 @@ class MdBlow(object):
                 f"--chunks={chunks} "
                 f"--chunk_size={chunk_size}"
             )
-            self.noobaa_core_pod.exec_cmd_on_pod(base_cmd + cmd)
+            self.noobaa_core_pod.exec_cmd_on_pod(
+                base_cmd + cmd, container_name="core", ignore_error=True
+            )
             logger.info("Workload executed successfully")
         else:
             assert threshold_pct <= 100, f"Invalid value. Given {threshold_pct}"
             current_db_percentage = self.noobaa_db_pod.exec_cmd_on_pod(
                 "df -h | grep postgresql | awk '{print $5}'",
+                container_name="postgres",
                 shell=True,
             )
             current_db_usage = int(current_db_percentage.strip().replace("%", ""))
@@ -142,6 +177,7 @@ class MdBlow(object):
                     args=(threshold_pct,),
                     name="MonitorThread",
                 )
+                t1.daemon = True
                 t1.start()
                 # Adding sleep to validate invalid percentage usage
                 sleep(10)
@@ -153,7 +189,9 @@ class MdBlow(object):
                 )
                 logger.info("Initiating IO dump directly into DB")
                 while not self.stop_dumping.is_set():
-                    self.noobaa_core_pod.exec_cmd_on_pod(base_cmd + cmd)
+                    self.noobaa_core_pod.exec_cmd_on_pod(
+                        base_cmd + cmd, container_name="core", ignore_error=True
+                    )
                     sleep(5)
                 t1.join()
                 logger.info(f"Stopping the IO... DB is filled with {threshold_pct}")
