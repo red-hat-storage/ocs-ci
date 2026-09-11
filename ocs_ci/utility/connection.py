@@ -154,3 +154,17 @@ class Connection(object):
         logger.info(f"uploading {localpath} to {self.user}@{self.host}:{remotepath}")
         sftp.put(localpath, remotepath)
         sftp.close()
+
+    def download_file(self, remotepath, localpath):
+        """
+        Download a file from remote server
+
+        Args:
+            remotepath (str): Remote file path to download
+            localpath (str): Local path to save file. Filename should be included
+
+        """
+        sftp = self.client.open_sftp()
+        logger.info(f"downloading {self.user}@{self.host}:{remotepath} to {localpath}")
+        sftp.get(remotepath, localpath)
+        sftp.close()
