@@ -1669,6 +1669,21 @@ class BAREMETALAI(BAREMETALBASE):
                 else:
                     logger.warning("Cluster name not found, skipping DNS cleanup")
 
+                # Stop BM servers
+                bm_config = config.ENV_DATA.get("baremetal", {})
+                servers = bm_config.get("servers", {})
+                for server_name, server_config in servers.items():
+                    if server_config.get("mgmt_provider") == "vpc-bm":
+                        server_id = server_config.get("server_id")
+                        if server_id:
+                            logger.info(
+                                f"Stopping BM server {server_name} ({server_id})"
+                            )
+                            try:
+                                vpc_bm_manager.stop_server(server_id)
+                            except Exception as e:
+                                logger.warning(f"Failed to stop {server_name}: {e}")
+
                 logger.info("VPC BM cleanup complete")
             else:
                 # delete DNS records for API and Ingress (non-VPC platforms)
