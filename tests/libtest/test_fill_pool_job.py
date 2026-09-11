@@ -10,6 +10,10 @@ from ocs_ci.helpers.ceph_helpers import (
     wait_for_ceph_used_capacity_reached,
 )
 from ocs_ci.ocs.cluster import CephCluster, get_ceph_used_capacity
+from ocs_ci.ocs.fill_pool_job import (
+    _apply_incompressible_resource_floors,
+    _memory_bytes,
+)
 
 log = logging.getLogger(__name__)
 
@@ -21,10 +25,39 @@ class TestFillPoolJob(ManageTest):
     Test the Fill Pool Job functionalities
     """
 
-    def test_fill_pool_job_with_both_modes(self, fill_job_factory):
+    def test_memory_bytes_fractional_binary_units(self):
+        """_memory_bytes must parse fractional Ki/Mi/Gi/Ti quantities."""
+        quantity_per_expected_bytes = {
+            "1.5Ki": 1.5 * 1024,
+            "1.5Mi": 1.5 * 1024**2,
+            "1.5Gi": 1.5 * 1024**3,
+            "1.5Ti": 1.5 * 1024**4,
+            "512Mi": 512 * 1024**2,
+            "2Gi": 2 * 1024**3,
+        }
+        for quantity, expected_bytes in quantity_per_expected_bytes.items():
+            actual_bytes = _memory_bytes(quantity)
+            assert actual_bytes == expected_bytes, (
+                f"_memory_bytes must parse {quantity} as {expected_bytes} bytes; "
+                f"got {actual_bytes}"
+            )
+
+        _, _, mem_request, mem_limit = _apply_incompressible_resource_floors(
+            "100m", "500m", "1.5Gi", "1.5Gi"
+        )
+        assert mem_request == "1.5Gi", (
+            "incompressible mem_request of 1.5Gi already exceeds the 512Mi floor "
+            f"and must be kept; got {mem_request}"
+        )
+        assert mem_limit == "2Gi", (
+            "incompressible mem_limit of 1.5Gi is below the 2Gi floor "
+            f"and must be raised to 2Gi; got {mem_limit}"
+        )
+
+    def test_fill_pool_job_incompressible(self, fill_job_factory):
         """
-        Run Fill Pool Job using both modes to fill the cluster to a target usage.
-        Verifies that the workload completes, logs capacity usage and elapsed time.
+        Run Fill Pool Job with incompressible data to fill the cluster to a
+        target usage. Verifies that used capacity increases and logs elapsed time.
 
         """
         ceph_cluster = CephCluster()
@@ -36,30 +69,19 @@ class TestFillPoolJob(ManageTest):
         )
         if ceph_capacity > 500:
             storage_to_fill = 240  # in GiB
-            timeout = 1200
+            # 240Gi at ~220MiB/s is ~18min; 40min leaves margin for slower clusters.
+            timeout = 2400
         else:
             storage_to_fill = ceph_capacity / 2  # in GiB
-            timeout = 600
+            timeout = 1800
 
-        # Divide the storage to fill between zero and random modes. The random mode will
-        # fill 25% of the total. This is to optimize the time taken to fill the cluster,
-        # as the zero mode is faster.
-        storage_to_fill_random_mode = int(storage_to_fill // 4)
-        storage_to_fill_zero_mode = storage_to_fill - storage_to_fill_random_mode
-        log.info(
-            f"Total storage to fill the cluster: {storage_to_fill}Gi, "
-            f"Storage to fill in zero mode: {storage_to_fill_zero_mode}Gi, "
-            f"Storage to fill in random mode: {storage_to_fill_random_mode}Gi"
-        )
+        log.info(f"Total storage to fill the cluster: {storage_to_fill}Gi")
 
         start = time.time()
         fill_job_factory(
-            fill_mode="zero",
-            storage=f"{storage_to_fill_zero_mode}Gi",
-        )
-        fill_job_factory(
-            fill_mode="random",
-            storage=f"{storage_to_fill_random_mode}Gi",
+            fill_mode="incompressible",
+            storage=f"{int(storage_to_fill)}Gi",
+            block_size="4M",
         )
 
         gap_difference = storage_to_fill * 0.1  # 10% gap
