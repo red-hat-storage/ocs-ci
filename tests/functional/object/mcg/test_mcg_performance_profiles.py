@@ -145,37 +145,6 @@ def resources_match(actual, req_cpu, lim_cpu, req_mem, lim_mem):
     )
 
 
-def get_qos_class(resources):
-    """
-    Determine QoS class from resources.
-
-    Args:
-        resources (dict): Resource dict with requests and limits
-
-    Returns:
-        str: QoS class (Guaranteed, Burstable, or BestEffort)
-    """
-    requests = resources.get("requests", {})
-    limits = resources.get("limits", {})
-
-    # BestEffort only when neither requests nor limits are set. If requests
-    # exist without limits, Kubernetes classifies the pod as Burstable.
-    if not requests and not limits:
-        return "BestEffort"
-
-    if not limits:
-        return "Burstable"
-
-    # Guaranteed: requests == limits for both CPU and memory. Compare CPU on
-    # normalized values so "1" and "1000m" are treated as equal.
-    if normalize_cpu(requests.get("cpu")) == normalize_cpu(
-        limits.get("cpu")
-    ) and requests.get("memory") == limits.get("memory"):
-        return "Guaranteed"
-
-    return "Burstable"
-
-
 @tier1
 @mcg
 @red_squad
@@ -319,7 +288,17 @@ class TestMCGPerformanceProfiles:
             restore_patch = {
                 "spec": {"multiCloudGateway": {"performanceProfile": original_profile}}
             }
-            ocp_obj.patch(params=json.dumps(restore_patch), format_type="merge")
+            patched = ocp_obj.patch(
+                params=json.dumps(restore_patch), format_type="merge"
+            )
+            # patch() returns False when nothing changed, which is expected when
+            # the profile was already at its original value (e.g. restoring a
+            # None/unset field), so only warn rather than fail the teardown.
+            if not patched:
+                logger.warning(
+                    "Restore patch reported no change while restoring profile to "
+                    f"'{original_profile}'"
+                )
             # Wait for the restore to fully reconcile so the cluster is left
             # healthy and the next test's NooBaa health check does not run
             # while NooBaa is still recreating pods.
@@ -408,7 +387,10 @@ class TestMCGPerformanceProfiles:
             "noobaa-core",
         ), f"noobaa-core resources do not match '{profile}' profile"
 
-        qos = get_qos_class(core_resources)
+        # Use the pod-reported QoS class, which Kubernetes computes across all
+        # (app and init) containers, rather than deriving it from a single
+        # container's resources.
+        qos = core_pods[0]["status"]["qosClass"]
         assert (
             qos == spec["core"]["qos"]
         ), f"noobaa-core QoS class: expected {spec['core']['qos']}, got {qos}"
@@ -438,7 +420,7 @@ class TestMCGPerformanceProfiles:
                 f"noobaa-db-{i+1}",
             ), f"noobaa-db pod {i+1} resources do not match '{profile}' profile"
 
-            qos = get_qos_class(db_resources)
+            qos = db_pod["status"]["qosClass"]
             assert (
                 qos == spec["db"]["qos"]
             ), f"noobaa-db pod {i+1} QoS class: expected {spec['db']['qos']}, got {qos}"
@@ -486,21 +468,28 @@ class TestMCGPerformanceProfiles:
             )
         assert endpoint_pods, "No running noobaa-endpoint pods found"
 
-        endpoint_resources = get_pod_resources(endpoint_pods[0])
-        assert verify_resources(
-            endpoint_resources,
-            spec["endpoint"]["req_cpu"],
-            spec["endpoint"]["lim_cpu"],
-            spec["endpoint"]["req_mem"],
-            spec["endpoint"]["lim_mem"],
-            "noobaa-endpoint",
-        ), f"noobaa-endpoint resources do not match '{profile}' profile"
+        # Verify every endpoint pod, not just the first one, so a pod with
+        # stale or incorrect resources cannot slip through.
+        for i, endpoint_pod in enumerate(endpoint_pods):
+            endpoint_resources = get_pod_resources(endpoint_pod)
+            assert verify_resources(
+                endpoint_resources,
+                spec["endpoint"]["req_cpu"],
+                spec["endpoint"]["lim_cpu"],
+                spec["endpoint"]["req_mem"],
+                spec["endpoint"]["lim_mem"],
+                f"noobaa-endpoint-{i+1}",
+            ), f"noobaa-endpoint pod {i+1} resources do not match '{profile}' profile"
 
-        qos = get_qos_class(endpoint_resources)
-        assert (
-            qos == spec["endpoint"]["qos"]
-        ), f"noobaa-endpoint QoS class: expected {spec['endpoint']['qos']}, got {qos}"
-        logger.info(f"noobaa-endpoint QoS class: {qos} ✓")
+            qos = endpoint_pod["status"]["qosClass"]
+            assert qos == spec["endpoint"]["qos"], (
+                f"noobaa-endpoint pod {i+1} QoS class: "
+                f"expected {spec['endpoint']['qos']}, got {qos}"
+            )
+        logger.info(
+            f"All {len(endpoint_pods)} noobaa-endpoint pods verified, "
+            f"QoS: {spec['endpoint']['qos']} ✓"
+        )
 
         # Verify endpoint pod count (min/max)
         current_count = len(endpoint_pods)
@@ -551,9 +540,14 @@ class TestMCGPerformanceProfiles:
         try:
             default_bs = bs_ocp.get(resource_name="noobaa-default-backing-store")
         except CommandFailed as e:
-            logger.info(f"Default backingstore not found: {e}")
-            logger.info("Skipping PV pool verification")
-            return
+            # Only a genuine "not found" is a valid skip (e.g. cloud platforms
+            # without a pv-pool). Authorization, connectivity, or other API
+            # errors must fail the test rather than be silently skipped.
+            if "not found" in str(e).lower() or "notfound" in str(e).lower():
+                logger.info(f"Default backingstore not found: {e}")
+                logger.info("Skipping PV pool verification")
+                return
+            raise
 
         bs_type = default_bs.get("spec", {}).get("type")
         if bs_type != "pv-pool":
