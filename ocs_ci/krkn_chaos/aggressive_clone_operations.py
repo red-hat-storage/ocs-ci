@@ -12,6 +12,7 @@ import random
 import shlex
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import suppress
 from typing import Any, Dict, List, Optional
@@ -44,6 +45,8 @@ _DEFAULT_AGGRESSIVE_CLONE_CONFIG = {
     "stop_join_timeout": 300,
 }
 
+AGGRESSIVE_CLONE_OWNER_LABEL = "aggressive-clone-owner"
+
 
 class AggressiveCloneOperations:
     """Manager for aggressive PVC clone stress operations."""
@@ -54,6 +57,8 @@ class AggressiveCloneOperations:
         self._pool_lock = threading.Lock()
         self._vdbench_lock = threading.Lock()
         self._clone_pool: List[Dict[str, Any]] = []
+        self._inflight_creates = 0
+        self._owner_id = uuid.uuid4().hex[:8]
         self._active_vdbench_workloads: List[Any] = []
         self._shutdown_event = threading.Event()
         self._metrics = {
@@ -126,7 +131,7 @@ class AggressiveCloneOperations:
         actions = create_actions + pool_actions
 
         with self._pool_lock:
-            pool_size = len(self._clone_pool)
+            pool_size = len(self._clone_pool) + self._inflight_creates
         if pool_size >= cfg["max_pool_size"]:
             log.info("Clone pool at capacity (%s), prioritizing cleanup", pool_size)
             selected = [self._cleanup_clones]
@@ -183,7 +188,7 @@ class AggressiveCloneOperations:
             if self._active_vdbench_workloads:
                 return True
         with self._pool_lock:
-            return bool(self._clone_pool)
+            return bool(self._clone_pool) or self._inflight_creates > 0
 
     def _sleep_interruptible(self, total_seconds: float) -> bool:
         """
@@ -255,6 +260,51 @@ class AggressiveCloneOperations:
 
         user_cfg = bg_config.get("aggressive_clone_config", {})
         return {**_DEFAULT_AGGRESSIVE_CLONE_CONFIG, **user_cfg}
+
+    def _owner_selector(self) -> str:
+        return f"{AGGRESSIVE_CLONE_OWNER_LABEL}={self._owner_id}"
+
+    def _label_owned_resource(self, resource):
+        with suppress(Exception):
+            resource.add_label(self._owner_selector())
+
+    def _label_owned_deployment(self, deployment_name: str):
+        from ocs_ci.ocs.ocp import OCP
+
+        with suppress(Exception):
+            OCP(kind="Deployment", namespace=self.namespace).add_label(
+                deployment_name, self._owner_selector()
+            )
+
+    def _try_reserve_clone_slots(self, count: int = 1) -> bool:
+        max_pool_size = self._get_config()["max_pool_size"]
+        with self._pool_lock:
+            used = len(self._clone_pool) + self._inflight_creates
+            if used + count > max_pool_size:
+                log.info(
+                    "Clone pool at capacity (tracked=%s inflight=%s max=%s); "
+                    "skipping create",
+                    len(self._clone_pool),
+                    self._inflight_creates,
+                    max_pool_size,
+                )
+                return False
+            self._inflight_creates += count
+            return True
+
+    def _release_clone_slots(self, count: int = 1):
+        with self._pool_lock:
+            self._inflight_creates = max(0, self._inflight_creates - count)
+
+    def _mark_clone_dirty(self, clone_pvc: PVC):
+        with self._pool_lock:
+            for entry in self._clone_pool:
+                if entry.get("pvc") is clone_pvc or (
+                    entry.get("pvc") is not None
+                    and getattr(entry["pvc"], "name", None) == clone_pvc.name
+                ):
+                    entry["dirty"] = True
+                    return
 
     def _single_clone(self, workload_pvcs: List[PVC], cfg: Dict[str, Any]):
         if not self._require_workload_pvcs("_single_clone", workload_pvcs):
@@ -330,7 +380,11 @@ class AggressiveCloneOperations:
             helpers.wait_for_resource_state(
                 resource=test_pod, state=constants.STATUS_RUNNING, timeout=120
             )
-            self.bg_ops._verify_pod_data(test_pod)
+            self._label_owned_resource(test_pod)
+            if not self.bg_ops._verify_pod_data(test_pod):
+                raise AssertionError(
+                    f"Mount verification failed for clone {clone_pvc.name}"
+                )
             log.info("Mount verification passed for clone %s", clone_pvc.name)
         finally:
             with suppress(Exception):
@@ -346,6 +400,12 @@ class AggressiveCloneOperations:
             return
         source_pvc = entry.get("source_pvc")
         clone_pvc = entry["pvc"]
+        if entry.get("dirty"):
+            log.info(
+                "Skipping integrity check for clone %s: clone was written after creation",
+                clone_pvc.name,
+            )
+            return
         if source_pvc is None:
             log.warning("No source PVC recorded for clone %s", clone_pvc.name)
             return
@@ -378,8 +438,7 @@ class AggressiveCloneOperations:
                 for pvc in clone_pvcs
             ]
             for future in as_completed(futures):
-                with suppress(Exception):
-                    future.result()
+                future.result()
 
     def _get_or_create_clone_for_io(
         self,
@@ -441,13 +500,17 @@ class AggressiveCloneOperations:
         with suppress(Exception):
             from ocs_ci.krkn_chaos.krkn_workload_config import KrknWorkloadConfig
 
-            return KrknWorkloadConfig().get_vdbench_config()
+            vdbench_config = KrknWorkloadConfig().get_vdbench_config()
+            if vdbench_config:
+                return vdbench_config
         with suppress(Exception):
             from ocs_ci.resiliency.resiliency_workload_config import (
                 ResiliencyWorkloadConfig,
             )
 
-            return ResiliencyWorkloadConfig().get_vdbench_config()
+            vdbench_config = ResiliencyWorkloadConfig().get_vdbench_config()
+            if vdbench_config:
+                return vdbench_config
         return {}
 
     def _create_vdbench_config_file(self, clone_pvc: PVC, cfg: Dict[str, Any]) -> str:
@@ -562,6 +625,14 @@ class AggressiveCloneOperations:
                 elapsed,
             )
             workload.start_workload()
+            deployment_name = getattr(
+                getattr(workload, "workload_impl", workload),
+                "deployment_name",
+                None,
+            )
+            if deployment_name:
+                self._label_owned_deployment(deployment_name)
+            self._mark_clone_dirty(clone_pvc)
             run_seconds = elapsed + interval
             if not self._sleep_interruptible(run_seconds):
                 log.info(
@@ -575,12 +646,12 @@ class AggressiveCloneOperations:
             else:
                 log.info("Vdbench completed on clone PVC %s", clone_pvc.name)
         except Exception as err:
-            self._metrics["failures"] += 1
             log.error("Vdbench on clone %s failed: %s", clone_pvc.name, err)
             with suppress(Exception):
                 if workload:
                     workload.stop_workload()
                     workload.cleanup_workload()
+            raise
         finally:
             if workload:
                 with self._vdbench_lock:
@@ -714,11 +785,16 @@ class AggressiveCloneOperations:
         original_source: Optional[PVC] = None,
     ) -> Optional[PVC]:
         start = time.time()
+        clone_pvc = None
+        reserved = False
         try:
             source_pvc.reload()
             clone_yaml = self._get_clone_yaml(source_pvc)
             if not clone_yaml:
                 return None
+            if not self._try_reserve_clone_slots(1):
+                return None
+            reserved = True
 
             capacity = self.bg_ops._get_pvc_storage_capacity(source_pvc)
             clone_pvc = pvc_helpers.create_pvc_clone(
@@ -730,6 +806,7 @@ class AggressiveCloneOperations:
                 access_mode=source_pvc.get_pvc_access_mode,
                 volume_mode=source_pvc.get()["spec"]["volumeMode"],
             )
+            self._label_owned_resource(clone_pvc)
             helpers.wait_for_resource_state(
                 resource=clone_pvc, state=constants.STATUS_BOUND, timeout=300
             )
@@ -740,9 +817,12 @@ class AggressiveCloneOperations:
                 "is_nested": is_nested,
                 "latency_seconds": latency,
                 "created_at": time.time(),
+                "dirty": False,
             }
             with self._pool_lock:
                 self._clone_pool.append(entry)
+                self._inflight_creates = max(0, self._inflight_creates - 1)
+                reserved = False
             self._metrics["latencies"].append(latency)
             self._metrics["successes"] += 1
             log.info(
@@ -756,11 +836,23 @@ class AggressiveCloneOperations:
         except Exception as err:
             self._metrics["failures"] += 1
             log.error("Failed to create clone from %s: %s", source_pvc.name, err)
+            if clone_pvc is not None:
+                with suppress(Exception):
+                    clone_pvc.delete()
+                    clone_pvc.ocp.wait_for_delete(
+                        resource_name=clone_pvc.name, timeout=180
+                    )
             return None
+        finally:
+            if reserved:
+                self._release_clone_slots(1)
 
     def _delete_tracked_clone(self, entry: Dict[str, Any]):
         clone_pvc = entry.get("pvc")
         if clone_pvc is None:
+            with self._pool_lock:
+                if entry in self._clone_pool:
+                    self._clone_pool.remove(entry)
             return
         try:
             clone_pvc.reload()
@@ -772,14 +864,15 @@ class AggressiveCloneOperations:
             clone_pvc.delete()
             clone_pvc.ocp.wait_for_delete(resource_name=clone_pvc.name, timeout=180)
             log.info("Deleted aggressive clone PVC %s", clone_pvc.name)
-        except Exception as err:
-            log.warning(
-                "Failed to delete clone %s: %s", getattr(clone_pvc, "name", "?"), err
-            )
-        finally:
             with self._pool_lock:
                 if entry in self._clone_pool:
                     self._clone_pool.remove(entry)
+        except Exception as err:
+            log.warning(
+                "Failed to delete clone %s; retaining for retry: %s",
+                getattr(clone_pvc, "name", "?"),
+                err,
+            )
 
     def _pick_random_pool_entry(self) -> Optional[Dict[str, Any]]:
         with self._pool_lock:
@@ -815,7 +908,11 @@ class AggressiveCloneOperations:
                 helpers.wait_for_resource_state(
                     resource=test_pod, state=constants.STATUS_RUNNING, timeout=120
                 )
-                self.bg_ops._verify_pod_data(test_pod)
+                self._label_owned_resource(test_pod)
+                if not self.bg_ops._verify_pod_data(test_pod):
+                    raise AssertionError(
+                        f"Integrity fallback verify failed for clone {clone_pvc.name}"
+                    )
             finally:
                 with suppress(Exception):
                     if test_pod:
@@ -836,6 +933,7 @@ class AggressiveCloneOperations:
                 helpers.wait_for_resource_state(
                     resource=test_pod, state=constants.STATUS_RUNNING, timeout=120
                 )
+                self._label_owned_resource(test_pod)
                 clone_checksum_cmd = (
                     f"dd if={constants.RAW_BLOCK_DEVICE} bs=1M count=1 "
                     "2>/dev/null | md5sum | awk '{print $1}'"
@@ -856,7 +954,11 @@ class AggressiveCloneOperations:
                     helpers.wait_for_resource_state(
                         resource=test_pod, state=constants.STATUS_RUNNING, timeout=120
                     )
-                    self.bg_ops._verify_pod_data(test_pod)
+                    self._label_owned_resource(test_pod)
+                    if not self.bg_ops._verify_pod_data(test_pod):
+                        raise AssertionError(
+                            f"Integrity fallback verify failed for clone {clone_pvc.name}"
+                        )
                     return
 
                 relative = sample_file.replace(source_mount, "").lstrip("/")
@@ -868,6 +970,7 @@ class AggressiveCloneOperations:
                 helpers.wait_for_resource_state(
                     resource=test_pod, state=constants.STATUS_RUNNING, timeout=120
                 )
+                self._label_owned_resource(test_pod)
                 clone_path = f"{clone_mount}/{relative}"
                 clone_sum = _exec_shell_on_pod(
                     test_pod,
@@ -881,17 +984,15 @@ class AggressiveCloneOperations:
                     clone_pvc.name,
                 )
             else:
-                log.warning(
-                    "Checksum mismatch: source %s vs clone %s (%s != %s)",
-                    source_pvc.name,
-                    clone_pvc.name,
-                    source_sum,
-                    clone_sum,
+                raise AssertionError(
+                    f"Checksum mismatch: source {source_pvc.name} vs clone "
+                    f"{clone_pvc.name} ({source_sum} != {clone_sum})"
                 )
         except Exception as err:
-            log.warning(
+            log.error(
                 "Integrity verification failed for clone %s: %s", clone_pvc.name, err
             )
+            raise
         finally:
             with suppress(Exception):
                 if test_pod:
@@ -955,61 +1056,39 @@ class AggressiveCloneOperations:
         self._verify_pool_reclamation()
 
     def _cleanup_orphan_aggressive_resources(self):
-        """Best-effort sweep for leftover clone/test/vdbench resources."""
+        """Best-effort sweep for leftover clone/test/vdbench resources owned by this operation."""
         from ocs_ci.ocs.ocp import OCP
 
-        clone_pvc_names = set()
-
+        selector = self._owner_selector()
         try:
             pvc_ocp = OCP(
                 kind="PersistentVolumeClaim",
                 namespace=self.namespace,
             )
-            for item in pvc_ocp.get().get("items", []):
+            for item in pvc_ocp.get(selector=selector).get("items", []):
                 name = item["metadata"]["name"]
-                if name.startswith("clone-"):
-                    clone_pvc_names.add(name)
-                    with suppress(Exception):
-                        pvc_ocp.delete(resource_name=name, wait=False)
-                        log.info("Deleted orphan aggressive clone PVC %s", name)
+                with suppress(Exception):
+                    pvc_ocp.delete(resource_name=name, wait=False)
+                    log.info("Deleted orphan aggressive clone PVC %s", name)
         except Exception as err:
             log.warning("Failed to sweep orphan clone PVCs: %s", err)
 
         try:
             pod_ocp = OCP(kind="Pod", namespace=self.namespace)
-            for item in pod_ocp.get().get("items", []):
+            for item in pod_ocp.get(selector=selector).get("items", []):
                 name = item["metadata"]["name"]
-                if name.startswith("test-pod-clone-"):
-                    with suppress(Exception):
-                        pod_ocp.delete(resource_name=name, wait=False)
-                        log.info("Deleted orphan aggressive clone test pod %s", name)
+                with suppress(Exception):
+                    pod_ocp.delete(resource_name=name, wait=False)
+                    log.info("Deleted orphan aggressive clone test pod %s", name)
         except Exception as err:
             log.warning("Failed to sweep orphan clone test pods: %s", err)
 
         try:
             deploy_ocp = OCP(kind="Deployment", namespace=self.namespace)
-            for item in deploy_ocp.get().get("items", []):
+            for item in deploy_ocp.get(selector=selector).get("items", []):
                 name = item["metadata"]["name"]
-                if not name.startswith("vdbench-workload-"):
-                    continue
-                volumes = (
-                    item.get("spec", {})
-                    .get("template", {})
-                    .get("spec", {})
-                    .get("volumes", [])
-                )
-                for volume in volumes:
-                    claim = volume.get("persistentVolumeClaim", {}).get("claimName")
-                    if claim and (
-                        claim in clone_pvc_names or claim.startswith("clone-")
-                    ):
-                        with suppress(Exception):
-                            deploy_ocp.delete(resource_name=name, wait=False)
-                            log.info(
-                                "Deleted orphan Vdbench deployment %s on clone PVC %s",
-                                name,
-                                claim,
-                            )
-                        break
+                with suppress(Exception):
+                    deploy_ocp.delete(resource_name=name, wait=False)
+                    log.info("Deleted orphan Vdbench deployment %s", name)
         except Exception as err:
             log.warning("Failed to sweep orphan Vdbench deployments on clones: %s", err)

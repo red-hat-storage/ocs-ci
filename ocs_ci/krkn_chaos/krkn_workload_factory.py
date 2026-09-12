@@ -1178,9 +1178,11 @@ class KrknWorkloadFactory:
                 log.warning("Continuing with other interfaces...")
                 continue
 
+        expected_pvcs = sum(num_pvcs_by_interface.values())
         log.info(
             f"Created {len(workloads)} total vdbench workloads "
-            f"({num_pvcs} per interface x 2 interfaces)"
+            f"(expected {expected_pvcs} from {num_rbd_pvcs} RBD + "
+            f"{num_cephfs_pvcs} CephFS)"
         )
 
         if not workloads:
@@ -1196,10 +1198,10 @@ class KrknWorkloadFactory:
             raise RuntimeError(
                 "Failed to create any VDBENCH workloads - all PVCs failed to bind"
             )
-        elif len(workloads) < (num_pvcs * 2):  # 2 interfaces
+        elif len(workloads) < expected_pvcs:
             log.warning(
                 f"Only created {len(workloads)} workloads out of "
-                f"{num_pvcs * 2} expected. Some PVCs failed to bind."
+                f"{expected_pvcs} expected. Some PVCs failed to bind."
             )
 
         return workloads

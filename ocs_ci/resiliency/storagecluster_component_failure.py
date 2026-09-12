@@ -2,6 +2,7 @@ import logging
 import random
 
 from ocs_ci.helpers.disruption_helpers import Disruptions
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_rgw_pods
 from ocs_ci.resiliency.resiliency_tools import (
     CephStatusTool,
@@ -38,7 +39,13 @@ class StorageClusterComponentFailures:
 
     def _rgw_pods_present(self):
         """Return True when at least one rook-ceph-rgw pod exists on the cluster."""
-        return bool(get_rgw_pods())
+        try:
+            return bool(get_rgw_pods())
+        except CommandFailed as err:
+            logger.warning(
+                "Failed to look up RGW pods; treating RGW as absent: %s", err
+            )
+            return False
 
     def _restart_pods(self, resource_type, wait=True):
         """Handles pod restarts for any Ceph component."""

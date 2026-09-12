@@ -396,6 +396,7 @@ class BackgroundClusterOperations:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=30)
 
+        clone_thread_stopped = True
         if self._aggressive_clone_thread and self._aggressive_clone_thread.is_alive():
             join_timeout = self._get_aggressive_clone_stop_join_timeout()
             log.info(
@@ -404,12 +405,14 @@ class BackgroundClusterOperations:
             )
             self._aggressive_clone_thread.join(timeout=join_timeout)
             if self._aggressive_clone_thread.is_alive():
-                log.warning(
+                clone_thread_stopped = False
+                log.error(
                     "Aggressive clone loop did not exit within %ss; "
-                    "proceeding with resource cleanup",
+                    "skipping resource cleanup while the worker is still running",
                     join_timeout,
                 )
 
+        snapshot_thread_stopped = True
         if (
             self._aggressive_snapshot_thread
             and self._aggressive_snapshot_thread.is_alive()
@@ -421,6 +424,7 @@ class BackgroundClusterOperations:
             )
             self._aggressive_snapshot_thread.join(timeout=join_timeout)
             if self._aggressive_snapshot_thread.is_alive():
+                snapshot_thread_stopped = False
                 log.warning(
                     "Aggressive snapshot loop did not exit within %ss; "
                     "proceeding with resource cleanup",
@@ -433,16 +437,28 @@ class BackgroundClusterOperations:
                 thread.join(timeout=10)
 
         if cleanup:
-            self._cleanup_resources()
-            if self._aggressive_clone_ops:
-                self._aggressive_clone_ops.cleanup_all()
-            if self._aggressive_snapshot_ops:
+            if clone_thread_stopped:
+                self._cleanup_resources()
+                if self._aggressive_clone_ops:
+                    self._aggressive_clone_ops.cleanup_all()
+            else:
+                log.error(
+                    "Deferring aggressive clone cleanup: worker thread still alive"
+                )
+            if snapshot_thread_stopped and self._aggressive_snapshot_ops:
                 self._aggressive_snapshot_ops.cleanup_all()
 
-        self._aggressive_clone_thread = None
-        self._aggressive_snapshot_thread = None
+        if clone_thread_stopped:
+            self._aggressive_clone_thread = None
+        if snapshot_thread_stopped:
+            self._aggressive_snapshot_thread = None
         log.info("Background cluster operations stopped")
         self._log_final_summary()
+        if not clone_thread_stopped:
+            raise RuntimeError(
+                "Aggressive clone worker did not stop within the join timeout; "
+                "teardown aborted to avoid racing resource cleanup"
+            )
 
     def _operation_loop(self):
         """Main operation loop - continuously performs background operations."""
@@ -1788,6 +1804,8 @@ class BackgroundClusterOperations:
                 )
         except Exception as e:
             log.warning(f"Data verification warning for pod {pod_obj.name}: {e}")
+            return False
+        return True
 
     def _verify_workload_pods_running(self):
         """Verify all workload pods are still running."""
