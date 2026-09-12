@@ -1,3 +1,4 @@
+import json
 import logging
 import pytest
 
@@ -8,8 +9,11 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     runs_on_provider,
 )
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +23,33 @@ def get_pod_resources(pod):
     Get CPU and memory resources from a pod's first container.
 
     Args:
-        pod (Pod): Pod object
+        pod (dict): Pod resource dict as returned by get_pods_having_label
 
     Returns:
         dict: Resources with requests and limits
     """
-    container = pod.get()["spec"]["containers"][0]
+    container = pod["spec"]["containers"][0]
     return container.get("resources", {})
+
+
+def normalize_cpu(value):
+    """
+    Normalize a CPU quantity so equivalent values compare equal
+    (e.g. "500m" == 0.5, "1" == "1000m").
+
+    Args:
+        value: CPU quantity as a string (e.g. "500m", "1") or number
+
+    Returns:
+        float or None: Normalized CPU value in cores, or None if value is None
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        if value.endswith("m"):
+            return float(value[:-1]) / 1000
+        return float(value)
+    return float(value)
 
 
 def verify_resources(
@@ -57,16 +81,6 @@ def verify_resources(
     lim_cpu = limits.get("cpu")
     req_mem = requests.get("memory")
     lim_mem = limits.get("memory")
-
-    # Normalize CPU values (500m == 0.5)
-    def normalize_cpu(value):
-        if value is None:
-            return None
-        if isinstance(value, str):
-            if value.endswith("m"):
-                return float(value[:-1]) / 1000
-            return float(value)
-        return float(value)
 
     req_cpu_norm = normalize_cpu(req_cpu)
     lim_cpu_norm = normalize_cpu(lim_cpu)
@@ -117,13 +131,19 @@ def get_qos_class(resources):
     requests = resources.get("requests", {})
     limits = resources.get("limits", {})
 
-    if not limits:
+    # BestEffort only when neither requests nor limits are set. If requests
+    # exist without limits, Kubernetes classifies the pod as Burstable.
+    if not requests and not limits:
         return "BestEffort"
 
-    # Guaranteed: requests == limits for all resources
-    if requests.get("cpu") == limits.get("cpu") and requests.get(
-        "memory"
-    ) == limits.get("memory"):
+    if not limits:
+        return "Burstable"
+
+    # Guaranteed: requests == limits for both CPU and memory. Compare CPU on
+    # normalized values so "1" and "1000m" are treated as equal.
+    if normalize_cpu(requests.get("cpu")) == normalize_cpu(
+        limits.get("cpu")
+    ) and requests.get("memory") == limits.get("memory"):
         return "Guaranteed"
 
     return "Burstable"
@@ -230,10 +250,12 @@ class TestMCGPerformanceProfiles:
         },
     }
 
-    @pytest.fixture()
+    @pytest.fixture
     def set_profile(self, request):
         """
-        Set MCG performance profile on StorageCluster CR and wait for propagation.
+        Set the MCG performance profile on the StorageCluster CR, wait for it
+        to propagate to the NooBaa CR, and restore the original profile on
+        teardown so the cluster is left as it was found.
 
         Returns:
             str: Profile name that was set
@@ -242,74 +264,76 @@ class TestMCGPerformanceProfiles:
         logger.info(f"Setting MCG performance profile to '{profile}'")
 
         ocp_obj = OCP(
-            kind="StorageCluster",
+            kind=constants.STORAGECLUSTER,
             namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name="ocs-storagecluster",
+            resource_name=constants.DEFAULT_CLUSTERNAME,
         )
 
-        # Patch StorageCluster with the profile
-        patch = {"spec": {"multiCloudGateway": {"performanceProfile": profile}}}
-        ocp_obj.patch(params=f"{patch}", format_type="merge")
+        # Capture the original profile so it can be restored on teardown.
+        # A JSON-merge patch removes a key when its value is null, so if the
+        # field was unset originally we restore it to None to drop it.
+        original_profile = (
+            ocp_obj.get()
+            .get("spec", {})
+            .get("multiCloudGateway", {})
+            .get("performanceProfile")
+        )
 
-        # Verify it propagated to NooBaa CR
+        def finalizer():
+            logger.info(
+                f"Restoring MCG performance profile to its original value "
+                f"'{original_profile}'"
+            )
+            restore_patch = {
+                "spec": {"multiCloudGateway": {"performanceProfile": original_profile}}
+            }
+            ocp_obj.patch(params=json.dumps(restore_patch), format_type="merge")
+
+        request.addfinalizer(finalizer)
+
+        # Patch StorageCluster with the profile. OCP.patch returns False when
+        # the resource is not patched, so assert on it to fail fast.
+        patch = {"spec": {"multiCloudGateway": {"performanceProfile": profile}}}
+        assert ocp_obj.patch(
+            params=json.dumps(patch), format_type="merge"
+        ), f"Failed to patch StorageCluster with performance profile '{profile}'"
+
+        # The operator propagates performanceProfile to the NooBaa CR
+        # asynchronously, so poll instead of reading immediately.
         noobaa_ocp = OCP(
             kind="NooBaa",
             namespace=config.ENV_DATA["cluster_namespace"],
             resource_name="noobaa",
         )
-        noobaa_profile = noobaa_ocp.get()["spec"].get("performanceProfile")
-        assert noobaa_profile == profile, (
-            f"Profile '{profile}' not propagated to NooBaa CR, "
-            f"got '{noobaa_profile}' instead"
-        )
+        for noobaa_profile in TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=lambda: noobaa_ocp.get()["spec"].get("performanceProfile"),
+        ):
+            if noobaa_profile == profile:
+                break
+            logger.info(
+                f"Waiting for NooBaa CR profile propagation, current: "
+                f"'{noobaa_profile}'"
+            )
 
         logger.info(f"Profile '{profile}' successfully set and propagated to NooBaa CR")
 
-        # Wait a bit for operator to reconcile
-        import time
-
-        time.sleep(10)
-
         return profile
 
-    @pytest.mark.parametrize(
-        "set_profile",
-        ["default", "mixed-workload", "small-objects"],
-        indirect=True,
-    )
-    @pytest.mark.polarion_id("OCS-6000")  # TODO: Update with actual Polarion ID
-    def test_mcg_performance_profile_resources(self, set_profile):
+    def _verify_core(self, spec, profile):
         """
-        Verify MCG performance profile resource specifications.
-
-        Test Steps (per profile):
-            1. Set spec.multiCloudGateway.performanceProfile on StorageCluster CR
-            2. Verify noobaa-core pod resources and QoS class
-            3. Verify noobaa-db pod resources and QoS class (per instance)
-            4. Verify noobaa-endpoint pod resources and QoS class
-            5. Verify endpoint pod count (min/max via HPA or deployment)
-            6. Verify DB instances count
-            7. Verify PV pool agent pod resources (vSphere/on-prem only)
-
-        Expected Results:
-            All resource values match the profile specification from RHSTOR-9144
+        Verify noobaa-core pod resources and QoS class.
         """
-        profile = set_profile
-        spec = self.PROFILE_SPECS[profile]
-
-        logger.info(f"Testing '{profile}' profile resource specifications")
-
-        # Step 2: Verify noobaa-core pod resources
         logger.info("Verifying noobaa-core pod resources")
         core_pods = get_pods_having_label(
-            label="noobaa-core=noobaa",
+            label=constants.NOOBAA_CORE_POD_LABEL,
             namespace=config.ENV_DATA["cluster_namespace"],
+            statuses=[constants.STATUS_RUNNING],
         )
-        assert core_pods, "No noobaa-core pods found"
+        assert core_pods, "No running noobaa-core pods found"
 
-        core_pod = core_pods[0]
-        core_resources = get_pod_resources(core_pod)
-
+        core_resources = get_pod_resources(core_pods[0])
         assert verify_resources(
             core_resources,
             spec["core"]["req_cpu"],
@@ -325,13 +349,18 @@ class TestMCGPerformanceProfiles:
         ), f"noobaa-core QoS class: expected {spec['core']['qos']}, got {qos}"
         logger.info(f"noobaa-core QoS class: {qos} ✓")
 
-        # Step 3: Verify noobaa-db pod resources (per instance)
+    def _verify_db(self, spec, profile):
+        """
+        Verify noobaa-db pod resources and QoS class (per instance) and the
+        expected DB instance count.
+        """
         logger.info("Verifying noobaa-db pod resources")
         db_pods = get_pods_having_label(
-            label="cnpg.io/cluster=noobaa-db-pg-cluster",
+            label=constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
             namespace=config.ENV_DATA["cluster_namespace"],
+            statuses=[constants.STATUS_RUNNING],
         )
-        assert db_pods, "No noobaa-db pods found"
+        assert db_pods, "No running noobaa-db pods found"
 
         for i, db_pod in enumerate(db_pods):
             db_resources = get_pod_resources(db_pod)
@@ -352,17 +381,47 @@ class TestMCGPerformanceProfiles:
             f"All {len(db_pods)} noobaa-db pods verified, QoS: {spec['db']['qos']} ✓"
         )
 
-        # Step 4: Verify noobaa-endpoint pod resources
-        logger.info("Verifying noobaa-endpoint pod resources")
-        endpoint_pods = get_pods_having_label(
-            label="app=noobaa,noobaa-s3=noobaa",
-            namespace=config.ENV_DATA["cluster_namespace"],
+        # Verify DB instances count
+        expected_db_instances = spec["db_instances"]
+        assert len(db_pods) == expected_db_instances, (
+            f"DB instance count: expected {expected_db_instances}, "
+            f"got {len(db_pods)}"
         )
-        assert endpoint_pods, "No noobaa-endpoint pods found"
+        logger.info(f"DB instances: {len(db_pods)} ✓")
 
-        endpoint_pod = endpoint_pods[0]
-        endpoint_resources = get_pod_resources(endpoint_pod)
+    def _verify_endpoints(self, spec, profile):
+        """
+        Verify noobaa-endpoint pod resources, QoS class, and pod count
+        (min/max via HPA or deployment).
+        """
+        logger.info("Verifying noobaa-endpoint pod resources")
+        endpoint_label = (
+            f"{constants.NOOBAA_APP_LABEL},{constants.NOOBAA_ENDPOINT_POD_LABEL}"
+        )
+        expected_min = spec["endpoint_count"]["min"]
+        expected_max = spec["endpoint_count"]["max"]
 
+        # A profile change recreates/rescales the endpoint pods, so wait until
+        # the running endpoint count settles within the expected range before
+        # asserting, to avoid reading terminating or freshly created pods.
+        endpoint_pods = []
+        for endpoint_pods in TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=get_pods_having_label,
+            label=endpoint_label,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            statuses=[constants.STATUS_RUNNING],
+        ):
+            if expected_min <= len(endpoint_pods) <= expected_max:
+                break
+            logger.info(
+                f"Waiting for running endpoint pod count to reach "
+                f"[{expected_min}, {expected_max}], current: {len(endpoint_pods)}"
+            )
+        assert endpoint_pods, "No running noobaa-endpoint pods found"
+
+        endpoint_resources = get_pod_resources(endpoint_pods[0])
         assert verify_resources(
             endpoint_resources,
             spec["endpoint"]["req_cpu"],
@@ -378,18 +437,15 @@ class TestMCGPerformanceProfiles:
         ), f"noobaa-endpoint QoS class: expected {spec['endpoint']['qos']}, got {qos}"
         logger.info(f"noobaa-endpoint QoS class: {qos} ✓")
 
-        # Step 5: Verify endpoint pod count (min/max)
-        logger.info("Verifying endpoint pod count configuration")
+        # Verify endpoint pod count (min/max)
         current_count = len(endpoint_pods)
-        expected_min = spec["endpoint_count"]["min"]
-        expected_max = spec["endpoint_count"]["max"]
-
         assert expected_min <= current_count <= expected_max, (
             f"Endpoint pod count {current_count} not within expected range "
             f"[{expected_min}, {expected_max}]"
         )
         logger.info(
-            f"Endpoint pod count: {current_count} (within range [{expected_min}, {expected_max}]) ✓"
+            f"Endpoint pod count: {current_count} "
+            f"(within range [{expected_min}, {expected_max}]) ✓"
         )
 
         # Check HPA if it exists
@@ -397,13 +453,13 @@ class TestMCGPerformanceProfiles:
             kind="HorizontalPodAutoscaler",
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-        hpas = hpa_ocp.get(selector="noobaa-s3=noobaa").get("items", [])
-
+        hpas = hpa_ocp.get(selector=constants.NOOBAA_ENDPOINT_POD_LABEL).get(
+            "items", []
+        )
         if hpas:
             hpa = hpas[0]
             hpa_min = hpa["spec"]["minReplicas"]
             hpa_max = hpa["spec"]["maxReplicas"]
-
             assert (
                 hpa_min == expected_min
             ), f"HPA minReplicas: expected {expected_min}, got {hpa_min}"
@@ -414,65 +470,86 @@ class TestMCGPerformanceProfiles:
         else:
             logger.info("No HPA found (static replica count)")
 
-        # Step 6: Verify DB instances count
-        logger.info("Verifying DB instances count")
-        db_count = len(db_pods)
-        expected_db_instances = spec["db_instances"]
-
-        assert (
-            db_count == expected_db_instances
-        ), f"DB instance count: expected {expected_db_instances}, got {db_count}"
-        logger.info(f"DB instances: {db_count} ✓")
-
-        # Step 7: Verify PV pool agent pod resources (vSphere/on-prem only)
+    def _verify_pv_pool(self, spec, profile):
+        """
+        Verify PV pool agent pod resources (vSphere/on-prem only). Skipped on
+        cloud platforms where the default backingstore is not a pv-pool.
+        """
         logger.info("Checking for PV pool backingstore")
         bs_ocp = OCP(
             kind="BackingStore", namespace=config.ENV_DATA["cluster_namespace"]
         )
 
+        # Limit the try to the backingstore lookup only, so a real resource
+        # mismatch below is not swallowed. A missing default backingstore is a
+        # valid skip (e.g. cloud platforms without a pv-pool).
         try:
             default_bs = bs_ocp.get(resource_name="noobaa-default-backing-store")
-            bs_type = default_bs.get("spec", {}).get("type")
-
-            if bs_type == "pv-pool":
-                logger.info(
-                    "PV pool backingstore detected, verifying agent pod resources"
-                )
-
-                pv_pool_pods = get_pods_having_label(
-                    label="pool=noobaa-default-backing-store",
-                    namespace=config.ENV_DATA["cluster_namespace"],
-                )
-
-                if pv_pool_pods:
-                    pv_pod = pv_pool_pods[0]
-                    pv_resources = get_pod_resources(pv_pod)
-
-                    # PV pool pods have equal requests and limits
-                    expected_cpu = spec["pv_pool"]["cpu"]
-                    expected_mem = spec["pv_pool"]["mem"]
-
-                    assert verify_resources(
-                        pv_resources,
-                        expected_cpu,
-                        expected_cpu,  # limits == requests for PV pool
-                        expected_mem,
-                        expected_mem,  # limits == requests for PV pool
-                        "PV pool agent",
-                    ), f"PV pool agent resources do not match '{profile}' profile"
-
-                    logger.info("PV pool agent pod resources verified ✓")
-                else:
-                    logger.warning(
-                        "PV pool backingstore exists but no agent pods found"
-                    )
-            else:
-                logger.info(
-                    f"Backingstore type is '{bs_type}' (cloud storage), "
-                    "skipping PV pool verification (N/A for cloud platforms)"
-                )
-        except Exception as e:
-            logger.info(f"Default backingstore not found or error checking: {e}")
+        except CommandFailed as e:
+            logger.info(f"Default backingstore not found: {e}")
             logger.info("Skipping PV pool verification")
+            return
+
+        bs_type = default_bs.get("spec", {}).get("type")
+        if bs_type != "pv-pool":
+            logger.info(
+                f"Backingstore type is '{bs_type}' (cloud storage), "
+                "skipping PV pool verification (N/A for cloud platforms)"
+            )
+            return
+
+        logger.info("PV pool backingstore detected, verifying agent pod resources")
+        pv_pool_pods = get_pods_having_label(
+            label=constants.NOOBAA_DEFAULT_BACKINGSTORE_LABEL,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            statuses=[constants.STATUS_RUNNING],
+        )
+        assert (
+            pv_pool_pods
+        ), "PV pool backingstore exists but no running agent pods found"
+
+        pv_resources = get_pod_resources(pv_pool_pods[0])
+        # PV pool pods have equal requests and limits
+        expected_cpu = spec["pv_pool"]["cpu"]
+        expected_mem = spec["pv_pool"]["mem"]
+        assert verify_resources(
+            pv_resources,
+            expected_cpu,
+            expected_cpu,  # limits == requests for PV pool
+            expected_mem,
+            expected_mem,  # limits == requests for PV pool
+            "PV pool agent",
+        ), f"PV pool agent resources do not match '{profile}' profile"
+        logger.info("PV pool agent pod resources verified ✓")
+
+    @pytest.mark.parametrize(
+        "set_profile",
+        ["default", "mixed-workload", "small-objects"],
+        indirect=True,
+    )
+    @pytest.mark.polarion_id("OCS-6000")  # TODO: Update with actual Polarion ID
+    def test_mcg_performance_profile_resources(self, set_profile):
+        """
+        Verify MCG performance profile resource specifications.
+
+        Test Steps (per profile):
+            1. Set spec.multiCloudGateway.performanceProfile on StorageCluster CR
+            2. Verify noobaa-core pod resources and QoS class
+            3. Verify noobaa-db pod resources, QoS class, and instance count
+            4. Verify noobaa-endpoint pod resources, QoS class, and count
+            5. Verify PV pool agent pod resources (vSphere/on-prem only)
+
+        Expected Results:
+            All resource values match the profile specification from RHSTOR-9144
+        """
+        profile = set_profile
+        spec = self.PROFILE_SPECS[profile]
+
+        logger.info(f"Testing '{profile}' profile resource specifications")
+
+        self._verify_core(spec, profile)
+        self._verify_db(spec, profile)
+        self._verify_endpoints(spec, profile)
+        self._verify_pv_pool(spec, profile)
 
         logger.info(f"✅ All verifications passed for '{profile}' profile")
