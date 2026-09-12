@@ -1,4 +1,3 @@
-import json
 import logging
 
 import pytest
@@ -106,6 +105,17 @@ class TestBucketLogs(MCGTest):
                 access_mode=constants.ACCESS_MODE_RWX,
             )
 
+            # Label the PVC and the PV to avoid false leftover errors
+            provided_logs_pvc.add_label(constants.CUSTOM_MCG_LABEL)
+            pv_ocp_obj = OCP(
+                namespace=config.ENV_DATA["cluster_namespace"],
+                kind=constants.PV,
+            )
+            pv_ocp_obj.add_label(
+                resource_name=provided_logs_pvc.backed_pv,
+                label=constants.CUSTOM_MCG_LABEL,
+            )
+
         # 1. Enable guaranteed bucket logs on top of the noobaa CR
         logs_pvc_name = provided_logs_pvc.name if use_provided_logs_pvc else None
         logs_manager.enable_bucket_logging_on_cr(logs_pvc=logs_pvc_name)
@@ -199,8 +209,7 @@ class TestBucketLogs(MCGTest):
         4. Get each object
         5. Head each object
         6. Delete the objects
-        7. Wait for the intermediate logs to be moved to the logs bucket
-        8. Validate that each operation and its intent are in the final logs
+        7. Wait for all expected operations to appear in the logs bucket
 
         Note that every operation should be logged twice with different op codes:
         The first should be the attempt of the operation with the 102 code,
@@ -239,23 +248,13 @@ class TestBucketLogs(MCGTest):
         # 6. Delete the objects
         rm_object_recursive(awscli_pod_session, source_bucket, mcg_obj_session)
 
-        # 7. Wait for the intermediate logs to be moved to the logs bucket
-        blm.await_interm_logs_transfer(logs_bucket)
-
-        # 8. Validate that each operation and its intent are in the final logs
-        bucket_logs = blm.get_bucket_logs(logs_bucket)
-
+        # 7. Wait for all expected operations to appear in the logs bucket
         expected_ops = []
         for obj_key in obj_keys:
             for op in ["PUT", "DELETE", "GET", "HEAD"]:
                 expected_ops.append((op, f"/{source_bucket}/{obj_key}"))
 
-        assert blm.verify_logs_integrity(
-            bucket_logs, expected_ops, check_intent=True
-        ), (
-            "Some of the expected logs were not found in the final logs"
-            f"Recieved: {json.dumps(bucket_logs, indent=4)}"
-            f"Expectation: {json.dumps(expected_ops, indent=4)}"
+        blm.await_and_verify_bucket_logs(
+            logs_bucket, source_bucket, expected_ops, check_intent=True
         )
-
         logger.info("All the expected logs were found")
