@@ -118,6 +118,33 @@ def verify_resources(
     return True
 
 
+def resources_match(actual, req_cpu, lim_cpu, req_mem, lim_mem):
+    """
+    Return whether a pod's resource dict matches the expected requests/limits.
+
+    A quiet, non-logging counterpart to verify_resources, intended for polling
+    while the operator recreates pods after a profile change.
+
+    Args:
+        actual (dict): Actual resource dict from a pod
+        req_cpu (str): Expected CPU request
+        lim_cpu (str): Expected CPU limit
+        req_mem (str): Expected memory request
+        lim_mem (str): Expected memory limit
+
+    Returns:
+        bool: True if requests and limits match (CPU compared normalized)
+    """
+    requests = actual.get("requests", {})
+    limits = actual.get("limits", {})
+    return (
+        normalize_cpu(requests.get("cpu")) == normalize_cpu(req_cpu)
+        and normalize_cpu(limits.get("cpu")) == normalize_cpu(lim_cpu)
+        and requests.get("memory") == req_mem
+        and limits.get("memory") == lim_mem
+    )
+
+
 def get_qos_class(resources):
     """
     Determine QoS class from resources.
@@ -268,6 +295,11 @@ class TestMCGPerformanceProfiles:
             namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=constants.DEFAULT_CLUSTERNAME,
         )
+        noobaa_ocp = OCP(
+            kind="NooBaa",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name="noobaa",
+        )
 
         # Capture the original profile so it can be restored on teardown.
         # A JSON-merge patch removes a key when its value is null, so if the
@@ -288,6 +320,10 @@ class TestMCGPerformanceProfiles:
                 "spec": {"multiCloudGateway": {"performanceProfile": original_profile}}
             }
             ocp_obj.patch(params=json.dumps(restore_patch), format_type="merge")
+            # Wait for the restore to fully reconcile so the cluster is left
+            # healthy and the next test's NooBaa health check does not run
+            # while NooBaa is still recreating pods.
+            self._wait_for_profile_settled(noobaa_ocp, original_profile)
 
         request.addfinalizer(finalizer)
 
@@ -298,28 +334,57 @@ class TestMCGPerformanceProfiles:
             params=json.dumps(patch), format_type="merge"
         ), f"Failed to patch StorageCluster with performance profile '{profile}'"
 
-        # The operator propagates performanceProfile to the NooBaa CR
-        # asynchronously, so poll instead of reading immediately.
-        noobaa_ocp = OCP(
-            kind="NooBaa",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name="noobaa",
-        )
-        for noobaa_profile in TimeoutSampler(
-            timeout=300,
-            sleep=10,
-            func=lambda: noobaa_ocp.get()["spec"].get("performanceProfile"),
-        ):
-            if noobaa_profile == profile:
-                break
-            logger.info(
-                f"Waiting for NooBaa CR profile propagation, current: "
-                f"'{noobaa_profile}'"
-            )
-
-        logger.info(f"Profile '{profile}' successfully set and propagated to NooBaa CR")
+        # The operator recreates the NooBaa pods asynchronously after the
+        # profile changes, so wait until NooBaa is back to Ready and the core
+        # pods have actually been recreated with the new resources before the
+        # test reads pod state.
+        self._wait_for_profile_settled(noobaa_ocp, profile)
+        logger.info(f"Profile '{profile}' successfully applied and reconciled")
 
         return profile
+
+    def _wait_for_profile_settled(self, noobaa_ocp, profile):
+        """
+        Wait until a performance-profile change has fully reconciled: NooBaa is
+        back to the Ready phase and the running noobaa-core pod has been
+        recreated with the target profile's resources.
+
+        The operator recreates the NooBaa pods asynchronously, so both reading
+        pod resources and starting the next test must wait for this; otherwise
+        the previous profile's pods (or a NooBaa still in the Creating phase)
+        are observed. TimeoutSampler swallows transient errors raised while
+        pods churn and retries until the timeout.
+
+        Args:
+            noobaa_ocp (OCP): OCP handle for the NooBaa CR
+            profile (str or None): target profile; None means the default spec
+        """
+        core_spec = self.PROFILE_SPECS[profile or "default"]["core"]
+
+        def _settled():
+            phase = noobaa_ocp.get().get("status", {}).get("phase")
+            if phase != constants.STATUS_READY:
+                return False
+            core_pods = get_pods_having_label(
+                label=constants.NOOBAA_CORE_POD_LABEL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                statuses=[constants.STATUS_RUNNING],
+            )
+            return bool(core_pods) and resources_match(
+                get_pod_resources(core_pods[0]),
+                core_spec["req_cpu"],
+                core_spec["lim_cpu"],
+                core_spec["req_mem"],
+                core_spec["lim_mem"],
+            )
+
+        for settled in TimeoutSampler(timeout=900, sleep=20, func=_settled):
+            if settled:
+                break
+            logger.info(
+                f"Waiting for NooBaa to settle on profile '{profile}' "
+                "(Ready phase and core pods recreated with new resources)"
+            )
 
     def _verify_core(self, spec, profile):
         """
