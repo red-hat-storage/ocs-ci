@@ -64,7 +64,7 @@ class StorageClusterComponentFailures:
         """Validate Ceph is healthy post-disruption."""
         logger.info(" Running post-failure checks...")
         CephStatusTool().wait_till_ceph_status_became_healthy()
-        logger.info(" Ceph is healthy after failure injection.")
+        logger.info("Ceph health is acceptable after failure injection.")
 
     def run(self, failure_method=None, wait_for_recovery=True, iterations=20):
         """
