@@ -5,7 +5,7 @@ from ocs_ci.utility import metadata_utils
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, zstream_4_16_16
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -36,6 +36,7 @@ ERRMSG = "Error in command"
 @skipif_proxy_cluster
 @green_squad
 @ignore_leftovers
+@zstream_4_16_16
 class TestMetadataUnavailable(ManageTest):
     """
     Test metadata feature is unavailable for ODF < 4.12
@@ -143,6 +144,7 @@ class TestMetadataUnavailable(ManageTest):
 @skipif_proxy_cluster
 @green_squad
 @ignore_leftovers
+@zstream_4_16_16
 class TestDefaultMetadataDisabled(ManageTest):
     """
     Test metadata feature disabled by default for ODF 4.12
@@ -229,6 +231,7 @@ class TestDefaultMetadataDisabled(ManageTest):
 @skipif_proxy_cluster
 @green_squad
 @ignore_leftovers
+@zstream_4_16_16
 class TestMetadata(ManageTest):
     """
     This test class consists of tests to verify cephfs metadata for

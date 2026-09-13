@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, zstream_4_16_16
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -56,6 +56,7 @@ else:
 @skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@zstream_4_16_16
 class TestEncryptedPVCNOExpansionOption(ManageTest):
     """
     Test Encrypted Volume Expansion
