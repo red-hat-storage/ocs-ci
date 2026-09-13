@@ -449,8 +449,10 @@ class TestMCGPerformanceProfiles:
         expected_max = spec["endpoint_count"]["max"]
 
         # A profile change recreates/rescales the endpoint pods, so wait until
-        # the running endpoint count settles within the expected range before
-        # asserting, to avoid reading terminating or freshly created pods.
+        # the running endpoint count settles within the expected range AND every
+        # running endpoint already carries the target profile's resources. The
+        # count alone can be valid mid-transition while a terminating pod (still
+        # phase Running) still has the previous profile's resources.
         endpoint_pods = []
         for endpoint_pods in TimeoutSampler(
             timeout=300,
@@ -460,11 +462,22 @@ class TestMCGPerformanceProfiles:
             namespace=config.ENV_DATA["cluster_namespace"],
             statuses=[constants.STATUS_RUNNING],
         ):
-            if expected_min <= len(endpoint_pods) <= expected_max:
+            count_ok = expected_min <= len(endpoint_pods) <= expected_max
+            resources_ok = bool(endpoint_pods) and all(
+                resources_match(
+                    get_pod_resources(pod),
+                    spec["endpoint"]["req_cpu"],
+                    spec["endpoint"]["lim_cpu"],
+                    spec["endpoint"]["req_mem"],
+                    spec["endpoint"]["lim_mem"],
+                )
+                for pod in endpoint_pods
+            )
+            if count_ok and resources_ok:
                 break
             logger.info(
-                f"Waiting for running endpoint pod count to reach "
-                f"[{expected_min}, {expected_max}], current: {len(endpoint_pods)}"
+                f"Waiting for {expected_min}-{expected_max} running endpoint pods "
+                f"with '{profile}' resources, current running: {len(endpoint_pods)}"
             )
         assert endpoint_pods, "No running noobaa-endpoint pods found"
 
