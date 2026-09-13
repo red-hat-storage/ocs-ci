@@ -583,7 +583,6 @@ def bad_creds_secret(request):
 # ===========================================================================
 @mcg
 @red_squad
-@jira("RHSTOR-8718")
 class TestBackingStoreEndpointUpdate:
     """Happy-path and matching-semantics coverage for the endpoint update CLI."""
 
@@ -988,7 +987,6 @@ class TestBackingStoreEndpointUpdate:
 # ===========================================================================
 @mcg
 @red_squad
-@jira("RHSTOR-8718")
 class TestConnectionUpdateNegative:
     """Failure paths: pre-validation aborts, argument handling, direct-edit."""
 
@@ -1202,7 +1200,6 @@ DFBUGS_10744_SKIP = pytest.mark.skip(
 
 @mcg
 @red_squad
-@jira("RHSTOR-8718")
 class TestNamespaceStoreEndpointUpdate:
     """
     Endpoint update for NamespaceStores, on their own and in a batch alongside
