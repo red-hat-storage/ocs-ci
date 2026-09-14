@@ -264,6 +264,28 @@ def get_pool_endpoint(mcg_obj, store_name):
     return None
 
 
+def _write_dir(base_dir, label):
+    """
+    A dedicated source directory for one write, under the test's origin dir.
+
+    ``write_random_test_objects_to_bucket`` syncs the whole directory it is
+    given, not only the files it has just generated. Reusing one directory
+    across writes therefore makes every later write re-upload the earlier
+    ones' objects into whichever bucket it is aimed at - which shows up as
+    objects "leaking" between buckets that never actually saw each other's
+    data. Tests here compare what each bucket holds, so every write gets its
+    own directory.
+
+    Args:
+        base_dir (str): The test's origin directory.
+        label (str): A name unique to this write within the test.
+
+    Returns:
+        str: The path to use as ``file_dir``.
+    """
+    return f"{base_dir}/{label}"
+
+
 def _try_write(io_pod, bucket_name, file_dir, pattern, mcg_obj):
     """Attempt a single write through a bucket; True when it goes through."""
     try:
@@ -293,6 +315,14 @@ STORE_QUIESCE_STABLE_SAMPLES = 3
 CHURN_ANNOTATION = "ocs-ci.qe/endpoint-update-churn"
 CHURN_INTERVAL = 1
 CHURN_JOIN_TIMEOUT = 30
+
+# The admission webhook refuses to delete a store while NooBaa is still removing
+# objects from it. That clears on its own once the deletion finishes, so
+# ``store_factory`` retries instead of leaving the store behind for the next
+# test to trip over.
+STORE_DELETE_TIMEOUT = 300
+STORE_DELETE_INTERVAL = 15
+STORE_DELETE_RETRY_MARKER = "are still being deleted"
 
 
 def wait_for_stores_quiesced(
@@ -695,21 +725,43 @@ def store_factory(request):
     Usage::
 
         bs = store_factory(constants.BACKINGSTORE, endpoint, bucket, secret)
+
+    Teardown clears a leftover pause-reconcile annotation first, then deletes,
+    retrying while the admission webhook reports that objects in the store are
+    still being deleted.
     """
     namespace = config.ENV_DATA["cluster_namespace"]
     created = []
 
+    def _delete_store(kind, name):
+        """Delete one store, waiting out the webhook's "try later" denial."""
+        store_ocp = OCP(kind=kind, namespace=namespace)
+        # A paused NamespaceStore (DFBUGS-10743) must have the annotation
+        # removed before it can be reconciled/deleted cleanly.
+        if get_store_pause_annotation(kind, name, namespace):
+            store_ocp.annotate(
+                annotation="noobaa.io/pause-reconcile-", resource_name=name
+            )
+        deadline = time.time() + STORE_DELETE_TIMEOUT
+        while True:
+            try:
+                store_ocp.delete(resource_name=name, wait=True)
+                return
+            except CommandFailed as ex:
+                if STORE_DELETE_RETRY_MARKER not in str(ex):
+                    raise
+                if time.time() >= deadline:
+                    raise
+                logger.info(
+                    f"{kind}/{name} still has objects being deleted, retrying "
+                    f"in {STORE_DELETE_INTERVAL}s"
+                )
+                time.sleep(STORE_DELETE_INTERVAL)
+
     def _finalizer():
         for kind, name in reversed(created):
             try:
-                store_ocp = OCP(kind=kind, namespace=namespace)
-                # A paused NamespaceStore (DFBUGS-10743) must have the annotation
-                # removed before it can be reconciled/deleted cleanly.
-                if get_store_pause_annotation(kind, name, namespace):
-                    store_ocp.annotate(
-                        annotation="noobaa.io/pause-reconcile-", resource_name=name
-                    )
-                store_ocp.delete(resource_name=name, wait=True)
+                _delete_store(kind, name)
             except Exception as ex:  # noqa - best-effort teardown
                 logger.warning(f"Teardown of {kind}/{name} failed: {ex}")
 
@@ -1059,7 +1111,10 @@ class TestBackingStoreEndpointUpdate:
             1. Create one BackingStore on OLD and one already on NEW, each with
                its own target bucket, and put an OBC in front of each.
             2. Write distinct objects through both, so each bucket holds data
-               that is identifiable as its own.
+               that is identifiable as its own. Every write gets its own source
+               directory (:func:`_write_dir`) - the cross-talk check in step 6
+               is only meaningful if no write can carry another one's objects
+               along with it.
             3. Let both stores quiesce - creating them and putting an OBC in
                front keeps the operator writing to them, and the CLI does not
                re-read on a resource-version conflict (DFBUGS-10937).
@@ -1101,12 +1156,14 @@ class TestBackingStoreEndpointUpdate:
         )[0]
 
         # Distinct prefixes per store, so an object turning up in the wrong
-        # bucket names the store it leaked from.
+        # bucket names the store it leaked from - and a directory per write, so
+        # that a shared source directory cannot fake such a leak
+        # (see :func:`_write_dir`).
         pre_old = set(
             write_random_test_objects_to_bucket(
                 awscli_pod_session,
                 obc_old.name,
-                test_directory_setup.origin_dir,
+                _write_dir(test_directory_setup.origin_dir, "pre-old"),
                 amount=2,
                 pattern="from-old-store-",
                 mcg_obj=mcg_obj,
@@ -1116,7 +1173,7 @@ class TestBackingStoreEndpointUpdate:
             write_random_test_objects_to_bucket(
                 awscli_pod_session,
                 obc_new.name,
-                test_directory_setup.origin_dir,
+                _write_dir(test_directory_setup.origin_dir, "pre-new"),
                 amount=2,
                 pattern="from-new-store-",
                 mcg_obj=mcg_obj,
@@ -1159,7 +1216,7 @@ class TestBackingStoreEndpointUpdate:
             _try_write,
             awscli_pod_session,
             obc_old.name,
-            test_directory_setup.origin_dir,
+            _write_dir(test_directory_setup.origin_dir, "post-old"),
             "post-switch-old-store-",
             mcg_obj,
         ):
@@ -1168,7 +1225,7 @@ class TestBackingStoreEndpointUpdate:
         assert _try_write(
             awscli_pod_session,
             obc_new.name,
-            test_directory_setup.origin_dir,
+            _write_dir(test_directory_setup.origin_dir, "post-new"),
             "post-switch-new-store-",
             mcg_obj,
         ), (
@@ -1399,7 +1456,7 @@ class TestBackingStoreEndpointUpdate:
         pre_objects = write_random_test_objects_to_bucket(
             awscli_pod_session,
             bucket.name,
-            test_directory_setup.origin_dir,
+            _write_dir(test_directory_setup.origin_dir, "pre"),
             amount=2,
             pattern="pre-switch-",
             mcg_obj=mcg_obj,
@@ -1413,10 +1470,14 @@ class TestBackingStoreEndpointUpdate:
             round_nr = 0
             while not stop_io.is_set():
                 try:
+                    # A directory per round, so each one uploads its own single
+                    # object instead of re-syncing everything written so far.
                     write_random_test_objects_to_bucket(
                         awscli_pod_session,
                         bucket.name,
-                        test_directory_setup.origin_dir,
+                        _write_dir(
+                            test_directory_setup.origin_dir, f"during-{round_nr}"
+                        ),
                         amount=1,
                         pattern=f"during-switch-{round_nr}-",
                         mcg_obj=mcg_obj,
@@ -1455,7 +1516,7 @@ class TestBackingStoreEndpointUpdate:
             _try_write,
             awscli_pod_session,
             bucket.name,
-            test_directory_setup.origin_dir,
+            _write_dir(test_directory_setup.origin_dir, "post"),
             "post-switch-",
             mcg_obj,
         ):
