@@ -3545,10 +3545,12 @@ bucket_tab = {
     ),
     # Lifecycle policy locators
     "management_tab": (
+        "//*[@data-test='horizontal-link-Management'] | "
         "//span[contains(@class, 'c-tabs__item-text') and text()='Management']/parent::*",
         By.XPATH,
     ),
     "create_lifecycle_rule_button": (
+        "//button[@data-test='create-button'] | "
         "//button[contains(normalize-space(),'Create lifecycle rule')]",
         By.XPATH,
     ),
@@ -3622,11 +3624,17 @@ bucket_tab = {
         "//input[@id='incomplete-multiparts-delete-days']",
         By.XPATH,
     ),
+    "wizard_next_button": (
+        "//button[normalize-space()='Next']",
+        By.XPATH,
+    ),
     "lifecycle_create_button": (
+        "//button[normalize-space()='Create'] | "
         "//button[contains(normalize-space(),'Create') and contains(@class, 'pf-m-primary')]",
         By.XPATH,
     ),
     "lifecycle_save_button": (
+        "//button[normalize-space()='Save'] | "
         "//button[contains(normalize-space(),'Save') and contains(@class, 'pf-m-primary')]",
         By.XPATH,
     ),

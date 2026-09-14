@@ -160,6 +160,11 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
         else:
             self.do_click(self.bucket_tab["rule_scope_targeted"])
 
+        # Advance from step 1 (General Config) to the next wizard step
+        self.do_click(self.bucket_tab["wizard_next_button"])
+
+        if scope not in ("whole_bucket", "global"):
+            # Step 2: Conditional Filters (only for targeted scope)
             prefix = kwargs.get("prefix")
             if prefix:
                 logger.info(f"Setting prefix filter: {prefix}")
@@ -185,6 +190,9 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                     self.bucket_tab["max_object_size_input"], str(max_size)
                 )
 
+            # Advance from step 2 (Conditional Filters) to step 3 (Actions)
+            self.do_click(self.bucket_tab["wizard_next_button"])
+
         for rule_type, params in rules.items():
             if rule_type in LIFECYCLE_RULE_REGISTRY:
                 rule_class = LIFECYCLE_RULE_REGISTRY[rule_type]
@@ -201,8 +209,11 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             else:
                 logger.warning(f"Unknown rule type: {rule_type}")
 
-        self.scroll_into_view(self.bucket_tab["lifecycle_create_button"])
+        # Advance from step 3 (Actions) to step 4 (Review)
+        self.do_click(self.bucket_tab["wizard_next_button"])
 
+        # Click Create on the Review step
+        self.scroll_into_view(self.bucket_tab["lifecycle_create_button"])
         self.do_click(self.bucket_tab["lifecycle_create_button"])
         time.sleep(3)
 
