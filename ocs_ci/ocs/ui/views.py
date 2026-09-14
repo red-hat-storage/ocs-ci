@@ -2654,8 +2654,7 @@ alerting = {
     "silences-tab-link": ("Silences", By.LINK_TEXT),
     "alerting-rules-tab-link": ("Alerting rules", By.LINK_TEXT),
     "runbook_link": (
-        "//a[@class='co-external-link'] | "
-        "//span[contains(text(),'https://github.com/openshift/runbooks/blob/master/')]",
+        "//a[contains(@href,'github.com/openshift/runbooks')]",
         By.XPATH,
     ),
     "alerting_rule_details_link": ("//a[normalize-space()='{}']", By.XPATH),
