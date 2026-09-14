@@ -106,6 +106,19 @@ def init_ocsci_conf(arguments=None):
         arguments (list): Arguments for pytest execution
 
     """
+    # Remove KUBERNETES_* environment variables from Jenkins agent's cluster
+    # to prevent ODF CLI and other tools from detecting the wrong cluster.
+    # When ocs-ci runs in a containerized Jenkins agent (which itself runs in
+    # a different OpenShift cluster), these env vars point to the Jenkins
+    # cluster, not the test cluster. This causes tools like odf-cli to assume
+    # they're running inside the test cluster and try to connect to
+    # .svc.cluster.local addresses which fail DNS resolution.
+    # Without these vars, tools correctly detect they're outside the cluster
+    # and use appropriate methods (e.g., port-forwarding, Routes).
+    for key in list(os.environ.keys()):
+        if key.startswith("KUBERNETES_"):
+            del os.environ[key]
+
     if "multicluster" in arguments:
         parser = argparse.ArgumentParser(add_help=False)
         subparser = parser.add_subparsers(title="subcommand", dest="subcommand")
