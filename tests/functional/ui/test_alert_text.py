@@ -111,6 +111,11 @@ def test_runbooks(setup_ui, alerts_expected):
 
         alert_details_page.navigate_backward()
 
+        if runbook_actual is None:
+            logger.error(f"No runbook link found for alert {alert_name}")
+            test_res[alert_name] = False
+            continue
+
         text_valid = runbook_actual.check_text_content(mandatory_headers, alert_name)
         text_as_expected = runbook_actual == Runbook(runbook_hash=runbook_hash)
 
