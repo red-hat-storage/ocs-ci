@@ -66,7 +66,7 @@ class Runbook:
             )
         # Check if the text contains all the headers
         for chapter in headers:
-            if not re.search(f"## {headers}", self.text):
+            if not re.search(f"## {chapter}", self.text):
                 logger.error(f"Chapter '{chapter}' is missing.")
                 return False
 
@@ -231,20 +231,26 @@ class AlertDetails(PageNavigator):
         Get Runbook Link
 
         Returns:
-            str: Runbook link
+            str: Runbook link, or None if the alert has no runbook URL on the page
 
         """
-        return self.get_element_text(self.alerting_loc["runbook_link"])
+        elements = self.get_elements(self.alerting_loc["runbook_link"])
+        if not elements:
+            logger.warning("No runbook link found on this alerting rule details page")
+            return None
+        return elements[0].text
 
     def get_raw_runbook(self):
         """
         Get Runbook
 
         Returns:
-            Runbook: Runbook page
+            Runbook: Runbook page, or None if no runbook link is present
 
         """
         runbook_link = self.get_runbook_link()
+        if not runbook_link:
+            return None
         raw_github_link = convert_github_link_to_raw(runbook_link)
         if raw_github_link:
             logger.debug(f"Get Runbook from {raw_github_link}")
