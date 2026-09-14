@@ -1360,7 +1360,7 @@ block_pool = {
         "//a[normalize-space()='Edit labels'] | //button[@id='Edit Labels']",
         By.XPATH,
     ),
-    "edit_labels_of_pool_input": ("#tags-input", By.TAG_NAME),
+    "edit_labels_of_pool_input": ("//input[@data-test='tags-input']", By.XPATH),
     "invalid_label_name_note_edit_label_pool": (
         "//h4[contains(@class, 'c-alert__title')]",
         By.XPATH,
