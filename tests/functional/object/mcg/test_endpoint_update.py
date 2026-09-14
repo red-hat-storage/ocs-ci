@@ -324,6 +324,12 @@ STORE_DELETE_TIMEOUT = 300
 STORE_DELETE_INTERVAL = 15
 STORE_DELETE_RETRY_MARKER = "are still being deleted"
 
+# How long test_switch_during_active_io waits for its writer thread to notice
+# that it has been asked to stop. A write already in flight is an exec into the
+# awscli pod and cannot be cancelled, so this is generous enough that only a
+# genuinely stuck exec reaches it.
+WRITER_JOIN_TIMEOUT = 300
+
 
 def wait_for_stores_quiesced(
     stores,
@@ -1123,9 +1129,12 @@ class TestBackingStoreEndpointUpdate:
                sit on NEW, neither is left paused, and both are OPTIMAL.
             6. Write again through both - the moved store retried over the
                endpoint-config propagation window, as elsewhere in this module -
-               then list both buckets and assert two things: every pre-switch
-               object is still readable through its own store, and neither
-               store's objects appear in the other's bucket.
+               then list both buckets and assert two things: every object is
+               still readable through the store that wrote it, and neither
+               store's objects appear in the other's bucket. Both checks cover
+               the post-switch writes as well as the pre-switch ones; the
+               post-switch pair is the only data written while the two
+               connections shared an endpoint.
 
         Teardown: ``store_factory`` deletes both stores, ``bucketclass_over_store``
         the BucketClasses, and ``bucket_factory`` / ``test_directory_setup`` the
@@ -1210,6 +1219,17 @@ class TestBackingStoreEndpointUpdate:
         # Both stores now share endpoint NEW. Write through each again - the
         # moved store only once its endpoint config has propagated - and prove
         # the two connections still address their own buckets.
+        #
+        # These two objects carry the weight of the cross-talk check below: they
+        # are the only ones written while both connections point at the same
+        # endpoint, which is when a mix-up could happen. ``_try_write`` reports
+        # whether the write went through rather than what it wrote, but it
+        # writes exactly one object, so the name is the pattern with index 0.
+        post_old_pattern = "post-switch-old-store-"
+        post_new_pattern = "post-switch-new-store-"
+        post_old = {f"{post_old_pattern}0"}
+        post_new = {f"{post_new_pattern}0"}
+
         for sample in TimeoutSampler(
             ENDPOINT_PROPAGATION_TIMEOUT,
             15,
@@ -1217,7 +1237,7 @@ class TestBackingStoreEndpointUpdate:
             awscli_pod_session,
             obc_old.name,
             _write_dir(test_directory_setup.origin_dir, "post-old"),
-            "post-switch-old-store-",
+            post_old_pattern,
             mcg_obj,
         ):
             if sample:
@@ -1226,7 +1246,7 @@ class TestBackingStoreEndpointUpdate:
             awscli_pod_session,
             obc_new.name,
             _write_dir(test_directory_setup.origin_dir, "post-new"),
-            "post-switch-new-store-",
+            post_new_pattern,
             mcg_obj,
         ), (
             f"The store already on {new} stopped serving writes after the other "
@@ -1247,15 +1267,28 @@ class TestBackingStoreEndpointUpdate:
             "Objects written before the switch are no longer readable through "
             f"the store that never moved: {sorted(pre_new - listed_new)}"
         )
-        # The real cross-talk check: neither store's data shows up in the other's
-        # bucket now that both connections sit on the same endpoint.
-        assert not listed_old & pre_new, (
-            "Objects written through the store already on NEW leaked into the "
-            f"moved store's bucket: {sorted(listed_old & pre_new)}"
+        assert not post_old - listed_old, (
+            "The object written through the moved store after the switch is not "
+            f"readable back through it: {sorted(post_old - listed_old)}"
         )
-        assert not listed_new & pre_old, (
+        assert not post_new - listed_new, (
+            "The object written through the store that never moved is not "
+            f"readable back through it: {sorted(post_new - listed_new)}"
+        )
+        # The real cross-talk check: neither store's data shows up in the other's
+        # bucket now that both connections sit on the same endpoint. The
+        # post-switch objects are in scope here, not just the pre-switch ones -
+        # they were written after the two connections converged, so leaving them
+        # out would miss exactly the case this test exists for.
+        leaked_into_old = listed_old & (pre_new | post_new)
+        assert not leaked_into_old, (
+            "Objects written through the store already on NEW leaked into the "
+            f"moved store's bucket: {sorted(leaked_into_old)}"
+        )
+        leaked_into_new = listed_new & (pre_old | post_old)
+        assert not leaked_into_new, (
             "Objects written through the moved store leaked into the other "
-            f"store's bucket: {sorted(listed_new & pre_old)}"
+            f"store's bucket: {sorted(leaked_into_new)}"
         )
 
     @tier2
@@ -1435,7 +1468,10 @@ class TestBackingStoreEndpointUpdate:
         artifact, so the pre-switch objects must remain visible throughout.
 
         Teardown: the writer thread is stopped and joined in a ``finally``, so it
-        cannot outlive the test even if the update raises. The store, BucketClass,
+        does not outlive the test even if the update raises. A write already in
+        flight cannot be cancelled - it is an exec into the awscli pod - so if
+        the join times out the overlap is logged as a warning rather than
+        silently ignored. The store, BucketClass,
         OBC and scratch directory belong to ``store_factory``,
         ``bucketclass_over_store``, ``bucket_factory`` and
         ``test_directory_setup`` respectively, each of which cleans up its own.
@@ -1492,7 +1528,17 @@ class TestBackingStoreEndpointUpdate:
             result = run_connection_update(mcg_obj, old, new)
         finally:
             stop_io.set()
-            writer.join(timeout=300)
+            writer.join(timeout=WRITER_JOIN_TIMEOUT)
+            if writer.is_alive():
+                # The loop checks stop_io only between writes, and a write
+                # already in flight cannot be cancelled. Nothing here can force
+                # it to end, so say so loudly: a teardown failure just below
+                # this line is then attributable rather than mysterious.
+                logger.warning(
+                    "The I/O thread was still running "
+                    f"{WRITER_JOIN_TIMEOUT}s after being asked to stop - a write "
+                    "may overlap this test's teardown"
+                )
         if io_errors:
             logger.info(
                 f"{len(io_errors)} write(s) failed during the switch window, "
