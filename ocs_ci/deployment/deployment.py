@@ -1990,6 +1990,7 @@ class Deployment(object):
                             csv=_csv["metadata"]["name"],
                             replace_from=csv_change_from,
                             replace_to=csv_change_to,
+                            namespace=self.namespace,
                         )
 
         # Create custom storage class early for Azure Performance Plus feature
