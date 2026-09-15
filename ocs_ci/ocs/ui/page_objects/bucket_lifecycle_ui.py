@@ -411,8 +411,10 @@ class IncompleteMultipartRuleUI(LifecycleRuleInterface):
 
     def apply(self, params: dict, edit_mode: bool = False) -> None:
         """Apply incomplete multipart upload cleanup rule"""
-        # Always click the accordion to expand the section
-        self.ui.do_click(self.ui.bucket_tab["incomplete_multipart_checkbox"])
+        # Ensure the Incomplete uploads accordion is expanded; it may already be open by default
+        self.ui.choose_expanded_mode(
+            mode=True, locator=self.ui.bucket_tab["incomplete_multipart_checkbox"]
+        )
 
         # Only click checkbox in CREATE mode - skip in edit mode as it's already enabled
         if not edit_mode:
@@ -442,8 +444,10 @@ class ExpirationRuleUI(LifecycleRuleInterface):
 
     def apply(self, params: dict, edit_mode: bool = False) -> None:
         """Apply object expiration rule"""
-        # Always click Objects accordion to expand the section (1st click)
-        self.ui.do_click(self.ui.bucket_tab["current_objects_accordion"])
+        # Ensure the Objects accordion is expanded; it may already be open by default
+        self.ui.choose_expanded_mode(
+            mode=True, locator=self.ui.bucket_tab["current_objects_accordion"]
+        )
 
         # Only click checkbox in CREATE mode (2nd click) - skip in edit mode as it's already enabled
         if not edit_mode:
@@ -468,7 +472,10 @@ class NoncurrentVersionRuleUI(LifecycleRuleInterface):
 
     def apply(self, params: dict, edit_mode: bool = False) -> None:
         """Apply noncurrent version expiration rule"""
-        self.ui.do_click(self.ui.bucket_tab["noncurrent_objects_accordion"])
+        # Ensure the Noncurrent objects accordion is expanded; it may already be open by default
+        self.ui.choose_expanded_mode(
+            mode=True, locator=self.ui.bucket_tab["noncurrent_objects_accordion"]
+        )
 
         # Only click checkbox in CREATE mode - skip in edit mode as it's already enabled
         if not edit_mode:
@@ -499,7 +506,10 @@ class ExpiredDeleteMarkerRuleUI(LifecycleRuleInterface):
 
     def apply(self, params: dict, edit_mode: bool = False) -> None:
         """Apply expired delete marker cleanup rule"""
-        self.ui.do_click(self.ui.bucket_tab["expired_markers_accordion"])
+        # Ensure the Expired markers accordion is expanded; it may already be open by default
+        self.ui.choose_expanded_mode(
+            mode=True, locator=self.ui.bucket_tab["expired_markers_accordion"]
+        )
 
         # Only click checkbox in CREATE mode - skip in edit mode as it's already enabled
         if not edit_mode:
