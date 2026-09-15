@@ -5,11 +5,10 @@ import subprocess
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
-    CephHealthException,
     NoRunningCephToolBoxException,
 )
-from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+from ocs_ci.resiliency.resiliency_tools import CephStatusTool
 
 log = logging.getLogger(__name__)
 
@@ -279,30 +278,28 @@ class NetworkFaults(PlatformNodesFactory):
         log.info("Performing pre-fault injection checks (placeholder)")
 
     def post_fault_injection_checks(self):
-        """Verifies Ceph cluster health and recovers from node failures if needed."""
+        """Verifies Ceph is not in HEALTH_ERR; restarts nodes only on error."""
         log.info("Verifying post-fault Ceph cluster health")
         try:
-            if ceph_health_check(tries=3, delay=20):
-                log.info("Ceph cluster is healthy post-fault")
-                return
-        except (CephHealthException, CommandFailed, subprocess.TimeoutExpired) as e:
-            log.error(f"Initial post-fault check failed: {e}")
+            CephStatusTool().wait_till_ceph_status_became_healthy()
+            log.info("Ceph cluster health is acceptable post-fault")
+            return
+        except AssertionError as e:
+            log.error("Initial post-fault check failed: %s", e)
 
-        log.warning("Ceph cluster unhealthy, initiating node restart")
+        log.warning("Ceph cluster in HEALTH_ERR, initiating node restart")
         self.platform_node_obj.restart_nodes_by_stop_and_start(self.nodes)
 
         try:
-            if ceph_health_check(tries=5, delay=30):
-                log.info("Ceph cluster recovered after reboot")
-            else:
-                log.error("Ceph cluster still unhealthy after node reboot")
+            CephStatusTool().wait_till_ceph_status_became_healthy()
+            log.info("Ceph cluster recovered after reboot")
         except (
-            CephHealthException,
+            AssertionError,
             CommandFailed,
             subprocess.TimeoutExpired,
             NoRunningCephToolBoxException,
         ) as e:
-            log.error(f"Final post-reboot health check failed: {e}")
+            log.error("Final post-reboot health check failed: %s", e)
 
     def run(self):
         """

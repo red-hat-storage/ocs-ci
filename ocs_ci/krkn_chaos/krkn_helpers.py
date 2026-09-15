@@ -4,6 +4,7 @@ import re
 import pytest
 from ocs_ci.ocs.constants import (
     CEPH_HEALTH_ERROR,
+    CEPH_HEALTH_WARN,
     KRKN_CHAOS_DIR,
     OPENSHIFT_STORAGE_NAMESPACE,
     # Component label constants
@@ -57,7 +58,11 @@ from ocs_ci.krkn_chaos.krkn_scenario_generator import (
     NodeScenarios,
     convert_signal_to_number,
 )
-from ocs_ci.resiliency.resiliency_tools import CephStatusTool, CEPH_CRASH_POLL_INTERVAL
+from ocs_ci.resiliency.resiliency_tools import (
+    CephStatusTool,
+    CEPH_CRASH_POLL_INTERVAL,
+    is_ceph_health_acceptable,
+)
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import format_ceph_crash_summary_lines
 
@@ -2156,16 +2161,16 @@ class CephHealthHelper(BaseScenarioHelper):
             # Use CephStatusTool to check health
             ceph_status = CephStatusTool()
             health_status = ceph_status.get_ceph_health()
-
-            if health_status == "HEALTH_OK":
-                self.log.info("✅ Ceph cluster health: HEALTHY")
+            if is_ceph_health_acceptable(health_status):
+                if health_status == CEPH_HEALTH_WARN:
+                    self.log.warning(
+                        "⚠️ Ceph cluster health: WARNING (acceptable during/after chaos)"
+                    )
+                else:
+                    self.log.info("✅ Ceph cluster health: HEALTHY")
                 return True
-            elif health_status == "HEALTH_WARN":
-                self.log.warning("⚠️ Ceph cluster health: WARNING (may be acceptable)")
-                return True  # Warnings are often acceptable during/after chaos
-            else:
-                self.log.error(f"❌ Ceph cluster health: {health_status}")
-                return False
+            self.log.error(f"❌ Ceph cluster health: {health_status}")
+            return False
 
         except Exception as e:
             self.log.error(f"Failed to check Ceph health: {e}")
@@ -2312,7 +2317,7 @@ def krkn_exit_criteria(chaos_context="krkn chaos", namespace=None):
 
     ceph_status = CephStatusTool()
     health_status = ceph_status.get_ceph_health()
-    assert health_status != CEPH_HEALTH_ERROR, (
+    assert is_ceph_health_acceptable(health_status), (
         f"Ceph cluster is in {CEPH_HEALTH_ERROR} state after test "
         f"(status: {health_status})"
     )

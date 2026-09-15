@@ -10,6 +10,7 @@ from ocs_ci.utility.utils import (
     log_all_ceph_crash_details,
     format_ceph_crash_summary_lines,
 )
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -22,6 +23,48 @@ log = logging.getLogger(__name__)
 
 # Default interval (seconds) for periodic Ceph crash checks during long-running tests.
 CEPH_CRASH_POLL_INTERVAL = 180
+
+# Resiliency/chaos tests treat recovery and degraded (HEALTH_WARN) as expected.
+# Only HEALTH_ERR is a failure.
+ACCEPTABLE_CEPH_HEALTH_STATES = {
+    constants.CEPH_HEALTH_OK,
+    constants.CEPH_HEALTH_WARN,
+}
+
+
+def get_ceph_health_status(health_output):
+    """
+    Extract the Ceph health token from ``ceph health`` output.
+
+    Args:
+        health_output: Raw ``ceph health`` / ``ceph health detail`` output.
+
+    Returns:
+        str: ``HEALTH_OK``, ``HEALTH_WARN``, ``HEALTH_ERR``, or ``HEALTH_ERR``
+            when the output is missing.
+    """
+    if health_output is None:
+        return constants.CEPH_HEALTH_ERROR
+    text = str(health_output).strip()
+    if not text:
+        return constants.CEPH_HEALTH_ERROR
+    return text.split()[0]
+
+
+def is_ceph_health_acceptable(health_output):
+    """
+    Return True when Ceph health is acceptable for resiliency/chaos tests.
+
+    HEALTH_OK and HEALTH_WARN (degraded, recovering, noout, mon down, etc.)
+    pass. Only HEALTH_ERR — or a missing status — fails.
+
+    Args:
+        health_output: Raw health string or status token.
+
+    Returns:
+        bool: True if status is HEALTH_OK or HEALTH_WARN.
+    """
+    return get_ceph_health_status(health_output) in ACCEPTABLE_CEPH_HEALTH_STATES
 
 
 class CephStatusTool:
@@ -38,25 +81,50 @@ class CephStatusTool:
         self.remove_ceph_crashes = remove_ceph_crashes
         self.toolbox = pod.get_ceph_tools_pod()
 
-    @retry(CommandFailed, tries=8, delay=3)
-    def wait_till_ceph_status_became_healthy(self):
-        """
-        Get the status of the Ceph cluster.
-
-        Returns:
-            str: The status of the Ceph cluster.
-        """
-
-        log.info("Performing post-failure injection checks...")
-        try:
-            ceph_health_check(fix_ceph_health=True)
-        except (
-            CephHealthException,
+    @retry(
+        (
+            AssertionError,
             CommandFailed,
             subprocess.TimeoutExpired,
             NoRunningCephToolBoxException,
-        ) as e:
-            log.error(f"Ceph health check failed after failure injection. : {e}")
+        ),
+        tries=15,
+        delay=20,
+        backoff=1,
+    )
+    def wait_till_ceph_status_became_healthy(self):
+        """
+        Wait until Ceph is not in HEALTH_ERR.
+
+        HEALTH_OK and HEALTH_WARN (degraded, recovery, noout, mon down, etc.)
+        are acceptable during resiliency, matching chaos test exit criteria.
+        Only HEALTH_ERR fails the wait.
+
+        Returns:
+            bool: True when Ceph health is HEALTH_OK or HEALTH_WARN.
+
+        Raises:
+            AssertionError: If Ceph remains in HEALTH_ERR after retries.
+        """
+        log.info("Checking Ceph health (HEALTH_WARN is acceptable)...")
+        health_status = self.get_ceph_health(detail=True)
+        if is_ceph_health_acceptable(health_status):
+            status = get_ceph_health_status(health_status)
+            if status == constants.CEPH_HEALTH_WARN:
+                log.warning(
+                    "Ceph health is HEALTH_WARN (acceptable for resiliency; "
+                    "recovery/degraded is not treated as failure): %s",
+                    health_status,
+                )
+            else:
+                log.info("Ceph cluster health is HEALTH_OK.")
+            return True
+
+        log.error("Ceph cluster is in error state: %s", health_status)
+        raise AssertionError(
+            f"Ceph cluster is in {constants.CEPH_HEALTH_ERROR} state "
+            f"(status: {health_status})"
+        )
 
     def check_ceph_crashes(self):
         """
@@ -141,9 +209,11 @@ class CephStatusTool:
                 ceph_health_cmd, out_yaml_format=False, timeout=60
             )
 
-            # Extract just the health status from the output
             if isinstance(health_output, str):
-                return health_output.strip().split()[0]
+                health_output = health_output.strip()
+                if detail:
+                    return health_output
+                return health_output.split()[0]
             return health_output
 
         except (
