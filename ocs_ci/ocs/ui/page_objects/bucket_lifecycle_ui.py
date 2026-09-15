@@ -267,13 +267,18 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             logger.error(f"Failed to import format_locator: {e}")
             raise
 
-    def edit_lifecycle_rule(self, rule_name: str, new_rules: dict) -> None:
+    def edit_lifecycle_rule(
+        self, rule_name: str, new_rules: dict, scope: str = "whole_bucket"
+    ) -> None:
         """
         Edit an existing lifecycle rule
 
         Args:
             rule_name (str): Name of the rule to edit
             new_rules (dict): Dictionary of new rules to apply, mapping rule types to their parameters
+            scope (str): Scope the rule was created with, 'whole_bucket' or
+                'targeted'. Targeted rules have an extra Conditional Filters
+                step to advance past, so the wizard navigation depends on it.
 
         Raises:
             NoSuchElementException: If rule kebab menu or edit option not found
@@ -292,6 +297,17 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
             self.do_click(self.bucket_tab["edit_rule_option"])
 
+            # The edit dialog is the same multi-step wizard as create, so we
+            # must click Next to reach the Actions step before applying changes.
+            # Step 1 (General Config) -> next step.
+            self.do_click(self.bucket_tab["wizard_next_button"])
+
+            # Targeted rules have an extra Conditional Filters step (pre-filled
+            # in edit mode) to advance past before the Actions step. Whole-bucket
+            # rules have no filter step, so one Next already lands on Actions.
+            if scope not in ("whole_bucket", "global"):
+                self.do_click(self.bucket_tab["wizard_next_button"])
+
             for rule_type, params in new_rules.items():
                 if rule_type in LIFECYCLE_RULE_REGISTRY:
                     rule_class = LIFECYCLE_RULE_REGISTRY[rule_type]
@@ -309,6 +325,9 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                         )
                 else:
                     logger.warning(f"Unknown rule type: {rule_type}")
+
+            # Advance from the Actions step to the Review step before saving.
+            self.do_click(self.bucket_tab["wizard_next_button"])
 
             self.scroll_into_view(self.bucket_tab["lifecycle_save_button"])
             self.do_click(self.bucket_tab["lifecycle_save_button"])
