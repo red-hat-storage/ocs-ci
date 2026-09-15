@@ -69,7 +69,23 @@ class OpenShiftAPI(object):
             }
             now = time.time()
             resp = requests.post(full_sso_url, data=data, headers=headers, timeout=120)
+
+            if not resp.ok:
+                logger.error(f"Failed to refresh token. Status: {resp.status_code}, Response: {resp.text}")
+                raise ValueError(
+                    f"Failed to refresh Assisted Installer API token (HTTP {resp.status_code}). "
+                    "Check that AUTH.assisted_installer.*.offline_token is valid and not expired."
+                    f"Response: {resp.text}"
+                )
+
             resp_json = resp.json()
+            if "access_token" not in resp_json:
+                logger.error(f"Token response missing 'access_token': {resp_json}")
+                raise ValueError(
+                    "Failed to obtain access token from SSO. This usually indicates an invalid or "
+                    "expired offline_token. Please verify your Assisted Installer credentials."
+                )
+
             self._token = resp_json["access_token"]
             self._token_exp = now + resp_json["expires_in"]
             logger.debug(
