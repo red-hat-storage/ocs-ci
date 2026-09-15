@@ -1,0 +1,10 @@
+---
+# Enable ramenctl e2e test execution after RDR deployment.
+# Pass this via --ocsci-conf to run ramendr upstream e2e tests
+# using the ramenctl tool.
+#
+# Set to true to run e2e tests with default settings.
+# Note: E2E test failures do not fail the deployment - they only log errors.
+
+UPGRADE:
+  run_ramenctl_e2e: true
