@@ -36,6 +36,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import UnexpectedDeploymentConfiguration
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.utility.aws import AWS
+from ocs_ci.utility.deployment import create_openshift_install_log_file
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
 from ocs_ci.utility.tnf_hypervisor import TNFHypervisor
 
@@ -235,6 +236,14 @@ class TNF(TNFBASE):
 
                 logger.info("Step 10: Testing cluster connectivity...")
                 self.test_cluster()
+
+                cluster_name = config.ENV_DATA["cluster_name"]
+                base_domain = config.ENV_DATA.get("base_domain", "")
+                console_url = (
+                    f"https://console-openshift-console.apps."
+                    f"{cluster_name}.{base_domain}"
+                )
+                create_openshift_install_log_file(self.cluster_path, console_url)
 
                 logger.info("OCP cluster deployed via dev-scripts on EC2 hypervisor")
             except Exception:
