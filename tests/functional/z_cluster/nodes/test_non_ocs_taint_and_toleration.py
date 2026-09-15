@@ -41,6 +41,8 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
+    zstream_4_18_1,
+    zstream_4_18_1_ocs_operator,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
@@ -57,6 +59,8 @@ logger = logging.getLogger(__name__)
 @skipif_tainted_nodes
 @skipif_managed_service
 @skipif_hci_provider_and_client
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestNonOCSTaintAndTolerations(E2ETest):
     """
     Test to test non ocs taints on ocs nodes

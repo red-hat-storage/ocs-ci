@@ -12,6 +12,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier4c,
     skipif_external_mode,
     skipif_ibm_cloud_managed,
+    zstream_4_18_1,
+    zstream_4_18_1_ocs_operator,
 )
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
@@ -51,6 +53,8 @@ def verify_active_and_standby_mds_count(target_count):
 @brown_squad
 @tier4c
 @skipif_external_mode
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestMultipleMds:
     """
     Tests for support multiple mds

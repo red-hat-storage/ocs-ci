@@ -32,6 +32,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_provider,
     skipif_rosa_hcp,
     skipif_compact_mode,
+    zstream_4_18_1,
+    zstream_4_18_1_ocs_operator,
 )
 from ocs_ci.framework.testlib import (
     tier1,
@@ -93,6 +95,8 @@ def teardown(request):
 
 @brown_squad
 @ignore_leftovers
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestNodesMaintenance(ManageTest):
     """
     Test basic flows of maintenance (unschedule and drain) and
