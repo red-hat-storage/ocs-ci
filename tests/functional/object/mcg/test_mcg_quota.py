@@ -453,8 +453,11 @@ class TestOBCQuota:
 @red_squad
 class TestMCGQuotaAlerts:
     """
-    Tests for MCG quota Prometheus alerts that fire when buckets
-    approach their quota limits (80% threshold).
+    Tests for MCG quantity (max-objects) quota Prometheus alerts that fire
+    when buckets approach their quota limits (80% threshold).
+
+    The size quota alerts are covered by
+    tests/functional/monitoring/prometheus/alerts/test_noobaa.py
     """
 
     def _verify_alert_for_bucket(self, threading_lock, alert_name, bucket_name):
@@ -492,48 +495,25 @@ class TestMCGQuotaAlerts:
             f"{matching_alert['labels'].get('bucket_name')}"
         )
 
-    @pytest.fixture(params=["objects", "size"])
-    def quota_approaching_bucket(
+    @pytest.fixture
+    def quantity_quota_approaching_bucket(
         self, request, mcg_obj, awscli_pod_session, test_directory_setup
     ):
         """
-        Create a bucket approaching quota threshold (objects or size).
+        Create a bucket approaching its max-objects quota.
 
-        Parameterized fixture that creates either:
-        - objects: bucket with max-objects=10 and 9 objects uploaded
-        - size: bucket with 1Gi quota and ~900MB uploaded
+        Sets max-objects=10 and uploads 9 objects, which puts the bucket
+        into APPROACHING_QUOTA status.
 
-        Both configurations trigger APPROACHING_QUOTA status.
+        Returns:
+            str: Name of the created bucket
+
         """
-        quota_type = request.param
-
-        if quota_type == "objects":
-            bucket_name = create_unique_resource_name(
-                resource_description="bucket", resource_type="objquota"
-            )
-            bucket = MCGCLIBucket(bucket_name, mcg=mcg_obj)
-            logger.info(f"Created bucket {bucket_name}")
-
-            max_objects = 10
-            mcg_obj.exec_mcg_cmd(
-                cmd=f"bucket update --max-objects={max_objects} {bucket_name}",
-                namespace=config.ENV_DATA["cluster_namespace"],
-                use_yes=True,
-            )
-            logger.info(f"Set max-objects={max_objects} on bucket {bucket_name}")
-            upload_params = {"amount": max_objects - 1, "bs": "1M"}
-            logger.info(
-                f"Uploading {max_objects - 1} objects to bucket {bucket_name} "
-                f"(max-objects={max_objects})"
-            )
-        else:  # size
-            bucket_name = create_unique_resource_name(
-                resource_description="bucket", resource_type="sizequota"
-            )
-            bucket = MCGCLIBucket(bucket_name, mcg=mcg_obj, quota="1Gi")
-            logger.info(f"Created bucket {bucket_name} with 1Gi size quota")
-            upload_params = {"amount": 1, "bs": "900M"}
-            logger.info(f"Uploading ~900MB to bucket {bucket_name} (quota 1Gi)")
+        bucket_name = create_unique_resource_name(
+            resource_description="bucket", resource_type="objquota"
+        )
+        bucket = MCGCLIBucket(bucket_name, mcg=mcg_obj)
+        logger.info(f"Created bucket {bucket_name}")
 
         def finalizer():
             try:
@@ -544,47 +524,50 @@ class TestMCGQuotaAlerts:
 
         request.addfinalizer(finalizer)
 
+        max_objects = 10
+        mcg_obj.exec_mcg_cmd(
+            cmd=f"bucket update --max-objects={max_objects} {bucket_name}",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            use_yes=True,
+        )
+        logger.info(f"Set max-objects={max_objects} on bucket {bucket_name}")
+
+        logger.info(
+            f"Uploading {max_objects - 1} objects to bucket {bucket_name} "
+            f"(max-objects={max_objects})"
+        )
         write_random_test_objects_to_bucket(
             io_pod=awscli_pod_session,
             bucket_to_write=bucket_name,
             file_dir=test_directory_setup.origin_dir,
             mcg_obj=mcg_obj,
-            **upload_params,
+            amount=max_objects - 1,
+            bs="1M",
         )
 
         wait_for_quota_status(mcg_obj, bucket_name, QuotaStatus.APPROACHING)
-        return bucket_name, quota_type
+        return bucket_name
 
-    def test_mcg_quota_approaching_alert(
-        self, quota_approaching_bucket, threading_lock
+    def test_mcg_quantity_quota_approaching_alert(
+        self, quantity_quota_approaching_bucket, threading_lock
     ):
         """
-        Verify that NooBaaBucketReachingQuantityQuotaState or
-        NooBaaBucketReachingSizeQuotaState Prometheus alert fires when
-        bucket approaches its quota.
+        Verify that the NooBaaBucketReachingQuantityQuotaState Prometheus
+        alert fires when a bucket approaches its max-objects quota.
 
         Steps:
-            1. Fixture creates bucket with quota and fills it to ~90%
-            2. Wait for appropriate alert to fire
-            3. Verify alert has the correct bucket_name label
+            1. Fixture creates a bucket with max-objects=10 and fills it to 9
+            2. Wait for the alert to fire
+            3. Verify the alert has the correct bucket_name label
         """
-        bucket_name, quota_type = quota_approaching_bucket
-
-        if quota_type == "objects":
-            alert_name = constants.ALERT_BUCKETREACHINGQUOTASTATE
-            logger.info(
-                f"Bucket {bucket_name} is in APPROACHING_QUOTA mode "
-                f"(object count), waiting for Prometheus alert"
-            )
-        else:  # size
-            alert_name = constants.ALERT_BUCKETREACHINGSIZEQUOTASTATE
-            logger.info(
-                f"Bucket {bucket_name} is in APPROACHING_QUOTA mode "
-                f"(size), waiting for Prometheus alert"
-            )
+        bucket_name = quantity_quota_approaching_bucket
+        logger.info(
+            f"Bucket {bucket_name} is in APPROACHING_QUOTA mode "
+            f"(object count), waiting for Prometheus alert"
+        )
 
         self._verify_alert_for_bucket(
             threading_lock,
-            alert_name,
+            constants.ALERT_BUCKETREACHINGQUOTASTATE,
             bucket_name,
         )
