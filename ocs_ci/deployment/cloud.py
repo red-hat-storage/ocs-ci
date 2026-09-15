@@ -137,7 +137,11 @@ class IPIOCPDeployment(BaseOCPDeployment):
                 )
                 logger.warning("Deleting bootstrap leftovers")
                 set_target_region()
-                infra_id = get_infra_id(config.ENV_DATA["cluster_name"])
+                try:
+                    infra_id = get_infra_id(self.cluster_path)
+                except Exception as ex:
+                    logger.error(f"Failed to get infra ID of the cluster: {ex}")
+                    raise e
                 try:
                     run_ibmcloud_cmd(f"ibmcloud is instance {infra_id}-bootstrap")
                     run_ibmcloud_cmd(
