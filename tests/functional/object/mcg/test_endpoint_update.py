@@ -1200,6 +1200,14 @@ class TestBackingStoreEndpointUpdate:
             variant_endpoint = old.rstrip("/") if old.endswith("/") else f"{old}/"
             result = run_connection_update(mcg_obj, variant_endpoint, new)
         else:  # rerun_after_success
+            # The only variant that performs a real update, so the only one that
+            # can hit DFBUGS-10937: the other three match nothing and never
+            # write. store_factory waits for Ready, which does not mean the
+            # operator has finished writing status, so settle the store first or
+            # the setup update aborts on a resource-version conflict and this
+            # test fails for a reason that has nothing to do with re-run
+            # matching.
+            wait_for_stores_quiesced([(constants.BACKINGSTORE, bs.name)], ns)
             first = run_connection_update(mcg_obj, old, new)
             assert first["stores_updated"] == 1, first["raw"]
             result = run_connection_update(mcg_obj, old, new)
