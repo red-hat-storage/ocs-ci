@@ -2,7 +2,11 @@ import pytest
 import logging
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad, ec_allowed
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    ec_allowed,
+    skipif_stretch_cluster,
+)
 from ocs_ci.ocs.cluster import is_ec_pool_supported
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -179,13 +183,47 @@ class TestCrossScCloneSnapRestore(ManageTest):
             "sc1_erasure_coded",
         ],
         argvalues=[
-            pytest.param(*[constants.CEPHBLOCKPOOL], "", "", False, False, False),
+            # Stretch/arbiter requires CephBlockPool replica size 4. These
+            # params create size 2/3 (or default 3) pools via new_rbd_pool.
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                "",
+                "",
+                False,
+                False,
+                False,
+                marks=skipif_stretch_cluster,
+            ),
             pytest.param(*[constants.CEPHFILESYSTEM], "", "", False, False, False),
-            pytest.param(*[constants.CEPHBLOCKPOOL], "", "", True, False, False),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                "",
+                "",
+                True,
+                False,
+                False,
+                marks=skipif_stretch_cluster,
+            ),
             pytest.param(*[constants.CEPHFILESYSTEM], "", "", True, False, False),
-            pytest.param(*[constants.CEPHBLOCKPOOL], 3, 2, False, False, False),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                3,
+                2,
+                False,
+                False,
+                False,
+                marks=skipif_stretch_cluster,
+            ),
             pytest.param(*[constants.CEPHFILESYSTEM], 3, 2, False, False, False),
-            pytest.param(*[constants.CEPHBLOCKPOOL], 2, 3, False, False, False),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                2,
+                3,
+                False,
+                False,
+                False,
+                marks=skipif_stretch_cluster,
+            ),
             pytest.param(*[constants.CEPHFILESYSTEM], 2, 3, False, False, False),
             # SC1=replicated, SC2=EC
             pytest.param(
@@ -196,6 +234,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 True,
                 False,
                 marks=[
+                    skipif_stretch_cluster,
                     ec_allowed,
                     pytest.mark.polarion_id("OCS-7966"),
                     pytest.mark.skipif(
@@ -212,6 +251,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 True,
                 False,
                 marks=[
+                    skipif_stretch_cluster,
                     ec_allowed,
                     pytest.mark.polarion_id("OCS-7967"),
                     pytest.mark.skipif(
@@ -228,6 +268,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 True,
                 False,
                 marks=[
+                    skipif_stretch_cluster,
                     ec_allowed,
                     pytest.mark.polarion_id("OCS-7968"),
                     pytest.mark.skipif(
@@ -245,6 +286,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 False,
                 True,
                 marks=[
+                    skipif_stretch_cluster,
                     ec_allowed,
                     pytest.mark.polarion_id("OCS-7969"),
                     pytest.mark.skipif(
@@ -261,6 +303,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 False,
                 True,
                 marks=[
+                    skipif_stretch_cluster,
                     ec_allowed,
                     pytest.mark.polarion_id("OCS-7970"),
                     pytest.mark.skipif(
