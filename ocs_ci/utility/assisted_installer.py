@@ -13,7 +13,7 @@ from urllib.parse import urljoin
 from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
 
-from ocs_ci.ocs.exceptions import OpenShiftAPIResponseException
+from ocs_ci.ocs.exceptions import OpenShiftAPIResponseException, ConfigurationError
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ class OpenShiftAPI(object):
 
             if not resp.ok:
                 logger.error(f"Failed to refresh token. Status: {resp.status_code}, Response: {resp.text}")
-                raise ValueError(
+                raise ConfigurationError(
                     f"Failed to refresh Assisted Installer API token (HTTP {resp.status_code}). "
                     "Check that AUTH.assisted_installer.*.offline_token is valid and not expired."
                     f"Response: {resp.text}"
@@ -81,7 +81,7 @@ class OpenShiftAPI(object):
             resp_json = resp.json()
             if "access_token" not in resp_json:
                 logger.error(f"Token response missing 'access_token': {resp_json}")
-                raise ValueError(
+                raise ConfigurationError(
                     "Failed to obtain access token from SSO. This usually indicates an invalid or "
                     "expired offline_token. Please verify your Assisted Installer credentials."
                 )
