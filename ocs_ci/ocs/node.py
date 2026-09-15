@@ -3307,3 +3307,18 @@ def get_ceph_tools_running_node():
     ct_pod = pod.get_ceph_tools_pod(wait=True, skip_creating_pod=True)
     ct_pod_running_node = ct_pod.data["spec"].get("nodeName")
     return ct_pod_running_node
+
+
+def mark_masters_schedulable():
+    """
+    Mark master nodes as schedulable
+    """
+    path = "/spec/mastersSchedulable"
+    params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
+    scheduler_obj = OCP(
+        kind=constants.SCHEDULERS_CONFIG,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    assert scheduler_obj.patch(
+        params=params, format_type="json"
+    ), "Failed to run patch command to update control nodes as scheduleable"
