@@ -11,8 +11,9 @@ from ocs_ci.ocs import ocp
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.framework import config
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.ocs import constants
+from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.utils import (
     run_cmd,
     exec_cmd,
@@ -147,6 +148,14 @@ class MCEInstaller(object):
                     "mce_channel"
                 )
 
+            # Use redhat-operators catalog source for GAed OCP versions
+            ocp_version = version.get_semantic_ocp_version_from_config()
+            ocp_ga_version = get_ocp_ga_version(ocp_version)
+            if ocp_ga_version:
+                mce_subscription_yaml_data["spec"][
+                    "source"
+                ] = constants.OPERATOR_CATALOG_SOURCE_NAME
+
             mce_subscription_manifest = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="mce_subscription_manifest", delete=False
             )
@@ -253,10 +262,21 @@ class MCEInstaller(object):
 
         if not self.mce_installed():
             logger.info("Installing mce")
-            # we create catsrc with nightly builds only if config.DEPLOYMENT does not have mce_latest_stable
-            qe_app_registry = QeAppRegistry()
-            qe_app_registry.icsp()
-            qe_app_registry.catalog_source()
+            # we create catsrc with nightly builds only if OCP version is not GAed
+            # For GAed versions, we rely on the default operator catalog
+            ocp_version = version.get_semantic_ocp_version_from_config()
+            ocp_ga_version = get_ocp_ga_version(ocp_version)
+            if not ocp_ga_version:
+                logger.info(
+                    f"OCP version {ocp_version} is not GAed, creating qe-app-registry catalog source for MCE"
+                )
+                qe_app_registry = QeAppRegistry()
+                qe_app_registry.icsp()
+                qe_app_registry.catalog_source()
+            else:
+                logger.info(
+                    f"OCP version {ocp_version} is GAed, using default operator catalog for MCE"
+                )
             self.create_mce_namespace()
             self.create_multiclusterengine_operatorgroup()
             self.create_mce_subscription()
