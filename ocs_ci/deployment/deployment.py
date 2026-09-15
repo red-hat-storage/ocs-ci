@@ -3501,8 +3501,15 @@ def create_catalog_source(image=None, ignore_upgrade=False):
 
     # workaround for https://github.com/red-hat-storage/ocs-ci/issues/15085
     # Remove extractContent for disconnected deployments to avoid init container issues
-    # in air-gapped environments while keeping memoryTarget to prevent OOM
-    if config.DEPLOYMENT.get("disconnected"):
+    # in air-gapped environments while keeping memoryTarget to prevent OOM.
+    # Also remove for nightly/CI OCP builds: extractContent causes OLM to use release
+    # payload images (quay.io/openshift-release-dev) as the catalog server infrastructure,
+    # and those CI images require credentials that are not present on the cluster.
+    ocp_version_str = config.ENV_DATA.get("ocp_version", "")
+    is_nightly_ocp = "nightly" in str(ocp_version_str) or "nightly" in str(
+        config.UPGRADE.get("ocp_upgrade_version", "")
+    )
+    if config.DEPLOYMENT.get("disconnected") or is_nightly_ocp:
         if "grpcPodConfig" in catalog_source_data.get("spec", {}):
             catalog_source_data["spec"]["grpcPodConfig"].pop("extractContent", None)
 

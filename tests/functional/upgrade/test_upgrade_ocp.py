@@ -123,11 +123,12 @@ class TestUpgradeOCP(ManageTest):
         if (
             config.multicluster
             and config.MULTICLUSTER.get("multicluster_mode")
-            and config.MULTICLUSTER["multicluster_mode"] in ["metro-dr", "regional-dr"]
+            and config.MULTICLUSTER["multicluster_mode"]
+            in ["metro-dr", "regional-dr", "rdr-provider"]
             and is_acm_cluster(config)
         ):
             # Find the ODF cluster in current zone in case of MDR
-            # In the case of RDR we will stick to the primary cluster
+            # In the case of RDR/RDR-provider we will stick to the primary cluster
             dr_upgrde_parametrizer = get_multicluster_upgrade_parametrizer()
             dr_upgrde_parametrizer.config_init()
             local_zone_odf = None
@@ -135,7 +136,7 @@ class TestUpgradeOCP(ManageTest):
                 for cluster in get_non_acm_cluster_config():
                     if config.ENV_DATA["zone"] == cluster.ENV_DATA["zone"]:
                         local_zone_odf = cluster
-            elif dr_upgrde_parametrizer.dr_type == "rdr":
+            elif dr_upgrde_parametrizer.dr_type in ["rdr", "rdr-provider"]:
                 local_zone_odf = get_primary_cluster_config()
             ceph_cluster = CephClusterMultiCluster(local_zone_odf)
             health_monitor = MulticlusterCephHealthMonitor
