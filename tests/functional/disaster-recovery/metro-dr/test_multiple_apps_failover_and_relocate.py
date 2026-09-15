@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier1, mdr
+from ocs_ci.framework.pytest_customization.marks import tier1, mdr, zstream_4_18_1
 from ocs_ci.framework import config
 
 from ocs_ci.ocs.acm.acm import AcmAddClusters
@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 @mdr
 @tier1
 @turquoise_squad
+@zstream_4_18_1
 class TestMultipleApplicationFailoverAndRelocate:
     """
     Deploy applications on both the managed clusters and test Failover and Relocate actions on them
