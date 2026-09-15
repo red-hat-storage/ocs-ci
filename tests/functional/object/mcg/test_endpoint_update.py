@@ -18,7 +18,9 @@ The coverage is organised into three test classes:
     matching semantics (no-match, idempotent no-op, selective matching plus the
     data path of two connections left sharing one endpoint), the
     pause-reconcile annotation's lifecycle, switching under active I/O, and the
-    default backingstore.
+    default backingstore. The six that need the update to succeed are skipped
+    on clusters carrying a Rook-keyed Ceph object-user secret, where
+    DFBUGS-10975 aborts every update; see ``DFBUGS_10975_SKIP``.
   * ``TestConnectionUpdateNegative`` - failure paths: pre-validation aborts the
     whole batch (unreachable endpoint, missing target bucket, a bucket that
     exists but is not a NooBaa location, bad credentials, one bad store in a
@@ -873,6 +875,65 @@ def bad_creds_secret(request):
     return name
 
 
+def cluster_has_rook_keyed_object_user_secret():
+    """
+    Report whether the cluster carries a Ceph object-user secret that names its
+    credentials ``AccessKey``/``SecretKey`` instead of ``AWS_ACCESS_KEY_ID``/
+    ``AWS_SECRET_ACCESS_KEY``.
+
+    This is the precondition for DFBUGS-10975. Rook generates the object-user
+    secret with its own key names, and the operator repoints a store's
+    ``secretRef`` at it whenever an existing secret holds identical credentials
+    (``CheckForIdenticalSecretsCreds``), so a store this suite creates from a
+    correctly-keyed secret still ends up reading the Rook-keyed one. The CLI's
+    credential lookup does not map the alternate names, so pre-validation is
+    handed empty credentials and the whole update aborts.
+
+    Testing the key names rather than "is this an RGW cluster" means the tests
+    un-skip by themselves if Rook ever adopts the AWS names.
+
+    Returns:
+        bool: True if such a secret exists, False otherwise - including when the
+            secrets cannot be listed, so an inaccessible cluster does not
+            silently skip the coverage.
+    """
+    namespace = config.ENV_DATA["cluster_namespace"]
+    try:
+        secrets = OCP(kind=constants.SECRET, namespace=namespace).get()["items"]
+    except (CommandFailed, KeyError) as ex:
+        logger.warning(f"Could not list secrets in {namespace}: {ex}")
+        return False
+    for secret in secrets:
+        if not secret["metadata"]["name"].startswith("rook-ceph-object-user-"):
+            continue
+        data = secret.get("data") or {}
+        if "AccessKey" in data and "AWS_ACCESS_KEY_ID" not in data:
+            return True
+    return False
+
+
+@pytest.fixture
+def skip_if_rook_keyed_secret():
+    """Skip when DFBUGS-10975's precondition holds on the cluster under test."""
+    if cluster_has_rook_keyed_object_user_secret():
+        pytest.skip(
+            "connection update cannot read a Ceph object-user secret that uses "
+            "the AccessKey/SecretKey names, so every s3-compatible store backed "
+            "by RGW fails pre-validation - "
+            "https://redhat.atlassian.net/browse/DFBUGS-10975"
+        )
+
+
+# Paired with @jira("DFBUGS-10975") on each affected test. This is a runtime
+# fixture rather than a pytest.mark.skipif because the condition has to query
+# the cluster, which is not reachable at collection time - a skipif would break
+# --collect-only. Unlike DFBUGS_10744_SKIP below it is conditional: the bug only
+# bites where a Rook-keyed object-user secret exists, so non-RGW clusters (e.g.
+# IBM Cloud, where the pair is derived from MCG's own S3) keep the coverage.
+# Drop both markers once DFBUGS-10975 is fixed.
+DFBUGS_10975_SKIP = pytest.mark.usefixtures("skip_if_rook_keyed_secret")
+
+
 # ===========================================================================
 # Module A - positive / core behaviour
 # ===========================================================================
@@ -882,6 +943,8 @@ class TestBackingStoreEndpointUpdate:
     """Happy-path and matching-semantics coverage for the endpoint update CLI."""
 
     @tier1
+    @jira("DFBUGS-10975")
+    @DFBUGS_10975_SKIP
     # TODO: assign polarion id
     def test_switch_and_revert_single_bs(self, mcg_obj, endpoint_conf, store_factory):
         """
@@ -933,6 +996,8 @@ class TestBackingStoreEndpointUpdate:
         assert get_store_endpoint(constants.BACKINGSTORE, bs.name, ns) == old
 
     @tier2
+    @jira("DFBUGS-10975")
+    @DFBUGS_10975_SKIP
     # TODO: assign polarion id
     def test_bulk_switch_and_connection_dedup(
         self, mcg_obj, endpoint_conf, store_factory
@@ -1292,6 +1357,8 @@ class TestBackingStoreEndpointUpdate:
         )
 
     @tier2
+    @jira("DFBUGS-10975")
+    @DFBUGS_10975_SKIP
     # TODO: assign polarion id
     def test_idempotent_no_op(self, mcg_obj, endpoint_conf, store_factory):
         """
@@ -1323,6 +1390,8 @@ class TestBackingStoreEndpointUpdate:
         assert not get_store_pause_annotation(constants.BACKINGSTORE, bs.name, ns)
 
     @tier2
+    @jira("DFBUGS-10975")
+    @DFBUGS_10975_SKIP
     # TODO: assign polarion id
     def test_pause_annotation_honored_and_cleaned_up(
         self, mcg_obj, endpoint_conf, store_factory
@@ -1439,6 +1508,8 @@ class TestBackingStoreEndpointUpdate:
         ), f"BackingStore {bs.name} did not return to OPTIMAL after the switch"
 
     @tier2
+    @jira("DFBUGS-10975")
+    @DFBUGS_10975_SKIP
     # TODO: assign polarion id
     def test_switch_during_active_io(
         self,
@@ -1579,6 +1650,8 @@ class TestBackingStoreEndpointUpdate:
         )
 
     @tier2
+    @jira("DFBUGS-10975")
+    @DFBUGS_10975_SKIP
     # TODO: assign polarion id
     def test_default_backingstore_endpoint_update(self, mcg_obj):
         """
@@ -1591,8 +1664,8 @@ class TestBackingStoreEndpointUpdate:
                it has no endpoint (e.g. a PV-Pool default store).
             2. Run the connection update with new-endpoint == its current
                endpoint.
-            3. Assert the default store is matched, its endpoint is unchanged,
-               and it stays Ready.
+            3. Assert the update did not abort, the default store is matched,
+               its endpoint is unchanged, and it stays Ready.
 
         Teardown: none needed. The test creates nothing and, by running the update
         with new-endpoint == old-endpoint, changes nothing on the live default
@@ -1616,6 +1689,13 @@ class TestBackingStoreEndpointUpdate:
             )
 
         result = run_connection_update(mcg_obj, endpoint, endpoint)
+        # A same-endpoint update changes nothing by design, so "endpoint
+        # unchanged" cannot by itself tell success apart from an abort that made
+        # no changes. The abort has to be ruled out explicitly or this test
+        # passes on a CLI that did nothing at all.
+        assert not result[
+            "aborted"
+        ], f"Default backingstore update aborted:\n{result['raw']}"
         assert (
             result["matched"] and result["matched"] >= 1
         ), f"Default backingstore was not matched:\n{result['raw']}"
