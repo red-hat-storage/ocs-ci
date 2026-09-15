@@ -1417,28 +1417,11 @@ def storageclass_factory_fixture(
 
     def finalizer():
         """
-        Delete the storageclass by deregistering from StorageConsumer first
+        Delete the storageclass
         """
-        from ocs_ci.ocs.resources.storage_cluster import (
-            delete_storageclass_and_deregister,
-        )
-
-        teardown_errors = []
         for instance in instances:
-            try:
-                delete_storageclass_and_deregister(
-                    sc_name=instance.name,
-                    sc_ocp=instance.ocp,
-                )
-            except Exception as e:
-                log.error(f"Failed to delete storageclass {instance.name}: {e}")
-                teardown_errors.append((instance.name, e))
-        if teardown_errors:
-            parts = [f"{name}: {exc}" for name, exc in teardown_errors]
-            raise RuntimeError(
-                "StorageClass teardown failed for "
-                f"{len(teardown_errors)} instance(s): " + "; ".join(parts)
-            ) from teardown_errors[-1][1]
+            instance.delete()
+            instance.ocp.wait_for_delete(instance.name, timeout=120)
 
     request.addfinalizer(finalizer)
     return factory
