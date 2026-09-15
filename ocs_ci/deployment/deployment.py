@@ -4317,6 +4317,278 @@ class MultiClusterDROperatorsDeploy(object):
             logger.info("Validating DRPolicy grouping configuration")
             validate_drpolicy_grouping(drpolicy_name=self.dr_policy_name)
 
+    def deploy_dr_policy_via_ui(
+        self,
+        primary_cluster,
+        secondary_cluster,
+        policy_name=None,
+        replication_interval=5,
+        timeout=600,
+    ):
+        """
+        Create DRPolicy via ACM UI wizard.
+        This wizard creates both MirrorPeer and DRPolicy in one flow.
+
+        Note: This feature is supported from ODF 4.23+ only.
+
+        Args:
+            primary_cluster (str): Primary managed cluster name
+            secondary_cluster (str): Secondary managed cluster name
+            policy_name (str): DRPolicy name (default: odr-policy-{interval}m)
+            replication_interval (int): Replication interval in minutes (default: 5)
+            timeout (int): Timeout for pairing completion in seconds (default: 600)
+
+        Raises:
+            TimeoutExpiredError: If policy creation times out
+            AssertionError: If validation fails at any step
+        """
+        from ocs_ci.ocs.acm.acm import AcmAddClusters, login_to_acm
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
+        # Default policy name
+        if policy_name is None:
+            policy_name = f"odr-policy-{replication_interval}m"
+
+        self.dr_policy_name = policy_name
+
+        # Check if DRPolicy already exists
+        dr_policy_obj = ocp.OCP(
+            kind="DRPolicy",
+            resource_name=policy_name,
+            namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+        )
+        if dr_policy_obj.is_exist():
+            logger.info(
+                f"DRPolicy '{policy_name}' already exists — skipping UI creation"
+            )
+            return policy_name
+
+        logger.info(
+            f"Creating DRPolicy '{policy_name}' via UI for clusters: "
+            f"{primary_cluster}, {secondary_cluster}"
+        )
+
+        # Login to ACM and switch context
+        config.switch_acm_ctx()
+        login_to_acm()
+        acm_obj = AcmAddClusters()
+        acm_loc = acm_obj.acm_page_nav
+
+        # Step 0: Navigate to DR Policies page
+        logger.info("Step 0: Navigating to DR Policies page")
+        acm_obj.navigate_data_services()
+        acm_obj.do_click(acm_loc["dr-policies-tab"], timeout=60)
+        acm_obj.page_has_loaded()
+
+        # Click Create DRPolicy button
+        logger.info("Clicking 'Create DRPolicy' button")
+        acm_obj.do_click(acm_loc["dr-create-policy-btn"], timeout=60)
+        acm_obj.page_has_loaded()
+
+        # Step 1: Select clusters
+        logger.info(
+            f"Step 1: Selecting clusters - {primary_cluster}, {secondary_cluster}"
+        )
+        primary_checkbox_loc = format_locator(
+            acm_loc["dr-cluster-checkbox"], primary_cluster
+        )
+        secondary_checkbox_loc = format_locator(
+            acm_loc["dr-cluster-checkbox"], secondary_cluster
+        )
+
+        acm_obj.do_click(primary_checkbox_loc, timeout=30)
+        acm_obj.do_click(secondary_checkbox_loc, timeout=30)
+
+        # Verify prerequisites met
+        logger.info("Verifying prerequisites banner")
+        try:
+            assert acm_obj.wait_until_expected_text_is_found(
+                acm_loc["dr-prerequisites-met"],
+                expected_text="All disaster recovery prerequisites met",
+                timeout=60,
+            ), "Prerequisites banner not found - DR prerequisites not met for clusters"
+        except AssertionError:
+            acm_obj.take_screenshot("prerequisites_check_failed")
+            raise
+
+        # Click Next
+        acm_obj.do_click(acm_loc["next-btn"], timeout=30)
+        acm_obj.page_has_loaded()
+
+        # Step 2: Configure - Verify Submariner and Globalnet
+        logger.info("Step 2: Verifying Submariner and Globalnet health")
+        try:
+            assert acm_obj.wait_until_expected_text_is_found(
+                acm_loc["dr-submariner-healthy"],
+                expected_text="Submariner is healthy",
+                timeout=120,
+            ), "Submariner is not healthy"
+        except AssertionError:
+            acm_obj.take_screenshot("submariner_health_failed")
+            raise
+
+        try:
+            assert acm_obj.wait_until_expected_text_is_found(
+                acm_loc["dr-globalnet-enabled"],
+                expected_text="Enabled",
+                timeout=60,
+            ), "Globalnet is not enabled"
+        except AssertionError:
+            acm_obj.take_screenshot("globalnet_check_failed")
+            raise
+
+        logger.info("Submariner healthy and Globalnet enabled - verified")
+
+        # Click Next
+        acm_obj.do_click(acm_loc["next-btn"], timeout=30)
+        acm_obj.page_has_loaded()
+
+        # Step 3: Enter policy details
+        logger.info(f"Step 3: Entering policy name: {policy_name}")
+        acm_obj.do_clear(acm_loc["dr-policy-name-input"])
+        acm_obj.do_send_keys(acm_loc["dr-policy-name-input"], policy_name)
+
+        # Always set the replication interval explicitly
+        logger.info(f"Setting replication interval to {replication_interval} minutes")
+        acm_obj.do_clear(acm_loc["dr-replication-interval-input"])
+        acm_obj.do_send_keys(
+            acm_loc["dr-replication-interval-input"], str(replication_interval)
+        )
+
+        # Click Next
+        acm_obj.do_click(acm_loc["next-btn"], timeout=30)
+        acm_obj.page_has_loaded()
+
+        # Step 4: Review and verify details
+        logger.info("Step 4: Reviewing policy details")
+
+        # Verify Cluster pair configured
+        try:
+            assert acm_obj.wait_until_expected_text_is_found(
+                acm_loc["dr-review-cluster-pair-configured"],
+                expected_text="Configured",
+                timeout=30,
+            ), "Cluster pair not showing as Configured in review"
+        except AssertionError:
+            acm_obj.take_screenshot("cluster_pair_config_failed")
+            raise
+
+        # Click Create
+        logger.info("Clicking 'Create' button")
+        acm_obj.do_click(acm_loc["dr-create-btn"], timeout=30)
+
+        # Step 5: Wait for pairing progress
+        logger.info("Step 5: Waiting for cluster pairing to complete...")
+
+        # Wait for progress modal to appear
+        acm_obj.wait_until_expected_text_is_found(
+            acm_loc["dr-pairing-in-progress"],
+            expected_text="Cluster pairing in progress",
+            timeout=60,
+        )
+
+        # Step 6: Wait for success
+        logger.info(
+            f"Step 6: Waiting for 'Clusters paired successfully' (timeout: {timeout}s)"
+        )
+        try:
+            assert acm_obj.wait_until_expected_text_is_found(
+                acm_loc["dr-clusters-paired-success"],
+                expected_text="Clusters paired successfully",
+                timeout=timeout,
+            ), f"Cluster pairing did not complete within {timeout} seconds"
+        except AssertionError:
+            acm_obj.take_screenshot("cluster_pairing_failed")
+            raise
+
+        logger.info("Clusters paired successfully!")
+
+        # Step 7: Click View Policy
+        logger.info("Step 7: Clicking 'View policy' button")
+        acm_obj.do_click(acm_loc["dr-view-policy-btn"], timeout=30)
+        acm_obj.page_has_loaded()
+
+        # Step 8: Verify policy in list
+        logger.info("Step 8: Verifying policy in policies list")
+        policy_name_loc = format_locator(acm_loc["dr-policy-row-name"], policy_name)
+        try:
+            assert acm_obj.wait_until_expected_text_is_found(
+                policy_name_loc,
+                expected_text=policy_name,
+                timeout=60,
+            ), f"Policy '{policy_name}' not found in policies list"
+        except AssertionError:
+            acm_obj.take_screenshot("policy_list_check_failed")
+            raise
+
+        # Verify status is Validated
+        policy_status_loc = format_locator(
+            acm_loc["dr-policy-status-validated"], policy_name
+        )
+        try:
+            assert acm_obj.wait_until_expected_text_is_found(
+                policy_status_loc,
+                expected_text="Validated",
+                timeout=120,
+            ), f"Policy '{policy_name}' status is not Validated"
+        except AssertionError:
+            acm_obj.take_screenshot("policy_status_check_failed")
+            raise
+
+        logger.info(
+            f"DRPolicy '{policy_name}' created and validated successfully via UI"
+        )
+
+        # Step 9: Verify MirrorPeer via CLI
+        logger.info("Step 9: Verifying MirrorPeer created via CLI")
+        self._verify_mirrorpeer_via_cli(primary_cluster, secondary_cluster)
+
+        return policy_name
+
+    def _verify_mirrorpeer_via_cli(self, primary_cluster, secondary_cluster):
+        """
+        Verify MirrorPeer was created by UI wizard.
+
+        Args:
+            primary_cluster (str): Primary cluster name
+            secondary_cluster (str): Secondary cluster name
+
+        Raises:
+            AssertionError: If MirrorPeer not found or not in Ready phase
+        """
+        config.switch_acm_ctx()
+        mirror_peer_obj = ocp.OCP(
+            kind="MirrorPeer",
+            namespace=constants.DR_DEFAULT_NAMESPACE,
+        )
+        mirror_peers = mirror_peer_obj.get().get("items", [])
+
+        found = False
+        for mp in mirror_peers:
+            mp_clusters = [
+                item.get("clusterName") for item in mp.get("spec", {}).get("items", [])
+            ]
+            if primary_cluster in mp_clusters and secondary_cluster in mp_clusters:
+                mp_name = mp.get("metadata", {}).get("name")
+                logger.info(f"MirrorPeer found: {mp_name}, waiting for Ready phase")
+
+                # Wait for phase to become Ready
+                mirror_peer = ocp.OCP(
+                    kind="MirrorPeer",
+                    namespace=constants.DR_DEFAULT_NAMESPACE,
+                    resource_name=mp_name,
+                )
+                mirror_peer._has_phase = True
+                mirror_peer.wait_for_phase(phase="Ready", timeout=1200)
+                logger.info(f"MirrorPeer {mp_name} is in Ready phase")
+                found = True
+                break
+
+        assert (
+            found
+        ), f"MirrorPeer for clusters {primary_cluster}, {secondary_cluster} not found"
+        logger.info("MirrorPeer verified via CLI")
+
     def enable_cluster_backup(self):
         """
         set cluster-backup to True in mch resource
@@ -5051,12 +5323,120 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
         # RBD dr deployment
         rbddops = RBDDRDeployOps()
-        self.configure_mirror_peer()
-        rbddops.deploy()
 
-        self.apply_custom_ramen_image()
-        logger.info("Deploying DR policy")
-        self.deploy_dr_policy()
+        # Check if UI-based DR policy creation is enabled and supported
+        # Requires both ODF 4.23+ and OCP 4.23+
+        create_via_ui = config.ENV_DATA.get("create_dr_policy_via_ui", False)
+        ui_supported = (
+            odf_running_version >= version.VERSION_4_23
+            and version.get_semantic_ocp_version_from_config() >= version.VERSION_4_23
+        )
+
+        if create_via_ui and ui_supported:
+            # UI creates MirrorPeer + DRPolicy together (ODF 4.23+)
+            logger.info(
+                "Creating DRPolicy via UI (includes MirrorPeer creation) - ODF 4.23+"
+            )
+
+            # Get policy configuration
+            replication_interval = config.ENV_DATA.get("dr_policy_interval", 5)
+            dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+
+            # Get cluster names for UI
+            primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
+            secondary_managed_cluster = None
+
+            if dr_cluster_relations:
+                # HCP-aware cluster resolution using dr_cluster_relations
+                try:
+                    idx = config.get_cluster_index_by_name(primary_cluster_name)
+                    primary_is_hosted = config.clusters[idx].MULTICLUSTER.get(
+                        "is_hosted", False
+                    )
+                except Exception:
+                    primary_is_hosted = False
+                primary_managed_cluster = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{primary_cluster_name}"
+                    if primary_is_hosted
+                    else primary_cluster_name
+                )
+
+                # Get secondary from dr_cluster_relations
+                for name in dr_cluster_relations[0]:
+                    if name != primary_cluster_name:
+                        try:
+                            idx = config.get_cluster_index_by_name(name)
+                            is_hosted = config.clusters[idx].MULTICLUSTER.get(
+                                "is_hosted", False
+                            )
+                        except Exception:
+                            is_hosted = False
+                        secondary_managed_cluster = (
+                            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{name}"
+                            if is_hosted
+                            else name
+                        )
+                        break
+            else:
+                # Standard flow for non-HCP setups
+                primary_managed_cluster = primary_cluster_name
+                non_acm_clusters = get_non_acm_cluster_config()
+                for cluster in non_acm_clusters:
+                    cluster_name = cluster.ENV_DATA["cluster_name"]
+                    if cluster_name == primary_cluster_name or is_recovery_cluster(
+                        cluster
+                    ):
+                        continue
+                    secondary_managed_cluster = cluster_name
+                    break
+
+            # Fail with clear message if no secondary cluster was resolved
+            if secondary_managed_cluster is None:
+                raise ValueError(
+                    f"No valid secondary cluster found for DR policy creation. "
+                    f"Primary cluster: {primary_cluster_name}"
+                )
+
+            # Build policy name (same logic as CLI for HCP compatibility)
+            base_policy_name = f"odr-policy-{replication_interval}m"
+            if dr_cluster_relations:
+                policy_name = f"{base_policy_name}-" + "-".join(dr_cluster_relations[0])
+            else:
+                policy_name = config.ENV_DATA.get("dr_policy_name", base_policy_name)
+
+            # UI wizard creates MirrorPeer + DRPolicy
+            self.deploy_dr_policy_via_ui(
+                primary_cluster=primary_managed_cluster,
+                secondary_cluster=secondary_managed_cluster,
+                policy_name=policy_name,
+                replication_interval=replication_interval,
+            )
+
+            # Run dependent validations AFTER MirrorPeer is created by UI
+            rbddops.deploy()
+            # Note: apply_custom_ramen_image() is skipped for UI flow as the wizard
+            # creates MirrorPeer + DRPolicy together, preventing mid-flow patching
+            if config.UPGRADE.get("custom_ramen_image"):
+                logger.warning(
+                    "custom_ramen_image is configured but skipped for UI flow. "
+                    "UI wizard creates MirrorPeer + DRPolicy together, "
+                    "preventing mid-flow patching."
+                )
+
+        else:
+            if create_via_ui:
+                logger.warning(
+                    f"DR policy via UI requires ODF 4.23+ and OCP 4.23+, "
+                    f"current ODF version: {odf_running_version}, "
+                    f"current OCP version: {version.get_semantic_ocp_version_from_config()}. "
+                    f"Falling back to CLI method."
+                )
+            self.configure_mirror_peer()
+            rbddops.deploy()
+            self.apply_custom_ramen_image()
+            logger.info("Deploying DR policy via CLI")
+            self.deploy_dr_policy()
+
         logger.info("Adding CA cert to Ramen configmap")
         self.add_cacert_ramen_configmap()
         multicluster_observability = ocp.OCP(kind="MultiClusterObservability")
