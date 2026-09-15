@@ -19,9 +19,12 @@ from ocs_ci.helpers.dr_helpers import (
     gracefully_reboot_ocp_nodes,
     verify_fence_state,
     wait_for_vrg_state,
+    mdr_post_failover_check,
+    wait_for_all_resources_deletion,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
+from ocs_ci.ocs.resources.drpc import DRPC
 
 logger = logging.getLogger(__name__)
 
@@ -118,12 +121,6 @@ class TestFailoverRelocateDiscoveredAppsMultiNs:
             skip_odf_cli_validation=primary_cluster_down,
         )
 
-        logger.info("Doing Cleanup Operations")
-        do_discovered_apps_cleanup_multi_ns(
-            old_primary=self.primary_cluster_name,
-            workload_instance=workloads,
-        )
-
         for workload in workloads:
             config.switch_to_cluster_by_name(secondary_cluster_name)
             dr_helpers.wait_for_all_resources_creation(
@@ -152,6 +149,16 @@ class TestFailoverRelocateDiscoveredAppsMultiNs:
             time.sleep(wait_time)
             wait_for_nodes_status([node.name for node in node_objs])
 
+        logger.info("Doing Cleanup Operations")
+        do_discovered_apps_cleanup_multi_ns(
+            old_primary=self.primary_cluster_name,
+            workload_instance=workloads,
+            skip_resource_deletion_verification=True,
+        )
+
+        for workload in workloads:
+            mdr_post_failover_check(namespace=workload.workload_namespace)
+
         enable_unfence(drcluster_name=self.primary_cluster_name)
         verify_fence_state(
             drcluster_name=self.primary_cluster_name, state=constants.ACTION_UNFENCE
@@ -160,6 +167,27 @@ class TestFailoverRelocateDiscoveredAppsMultiNs:
         gracefully_reboot_ocp_nodes(
             drcluster_name=self.primary_cluster_name, disable_eviction=True
         )
+
+        for workload_instance in workloads:
+            wait_for_all_resources_deletion(
+                namespace=workload_instance.workload_namespace,
+                discovered_apps=True,
+                vrg_name=workload_instance.discovered_apps_placement_name,
+                skip_vrg_check=True,
+            )
+
+            wait_for_vrg_state(
+                vrg_state="secondary",
+                vrg_namespace=constants.DR_OPS_NAMESPACE,
+                resource_name=workload_instance.discovered_apps_placement_name,
+            )
+
+            with config.RunWithAcmConfigContext():
+                drpc_obj = DRPC(
+                    namespace=constants.DR_OPS_NAMESPACE,
+                    resource_name=workload_instance.discovered_apps_placement_name,
+                )
+                drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
         logger.info(
             f"Wait for {wait_time} seconds before starting Relocate of application"
@@ -198,10 +226,14 @@ class TestFailoverRelocateDiscoveredAppsMultiNs:
                 vrg_name=workload.discovered_apps_placement_name,
                 skip_vrg_check=True,
             )
-
-        config.switch_to_cluster_by_name(self.primary_cluster_name)
-        wait_for_vrg_state(
-            vrg_state="primary",
-            vrg_namespace=constants.DR_OPS_NAMESPACE,
-            resource_name=workloads[0].discovered_apps_placement_name,
-        )
+            wait_for_vrg_state(
+                vrg_state="primary",
+                vrg_namespace=constants.DR_OPS_NAMESPACE,
+                resource_name=workload.discovered_apps_placement_name,
+            )
+            with config.RunWithAcmConfigContext():
+                drpc_obj = DRPC(
+                    namespace=constants.DR_OPS_NAMESPACE,
+                    resource_name=workloads.discovered_apps_placement_name,
+                )
+                drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
