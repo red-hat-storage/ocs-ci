@@ -80,7 +80,7 @@ def nfs_enable(
             condition=constants.STATUS_RUNNING,
             selector=provisioner,
             dont_allow_other_resources=True,
-            timeout=120,
+            timeout=1500,
         )
 
     # Fetch the nfs-ganesha pod name
