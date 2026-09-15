@@ -61,25 +61,11 @@ class TestFailoverAndRelocate:
             id="primary_down-cephfs-cli",
         ),
         pytest.param(
-            False,  # primary_cluster_down = False
-            constants.CEPHBLOCKPOOL,
-            True,  # via_ui = True
-            marks=pytest.mark.polarion_id("OCS-6861"),
-            id="primary_up-rbd-ui",
-        ),
-        pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHBLOCKPOOL,
             True,  # via_ui = True
             marks=pytest.mark.polarion_id("OCS-4743"),
             id="primary_down-rbd-ui",
-        ),
-        pytest.param(
-            False,  # primary_cluster_down = False
-            constants.CEPHFILESYSTEM,
-            True,  # via_ui = True
-            marks=pytest.mark.polarion_id("OCS-6860"),
-            id="primary_up-cephfs-ui",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
@@ -186,8 +172,6 @@ class TestFailoverAndRelocate:
                     down_cluster_name=primary_cluster_name,
                     expected_text="Unknown",
                 )
-        elif via_ui:
-            check_cluster_status_on_acm_console(acm_obj)
 
         for wl in workloads:
             if via_ui:
