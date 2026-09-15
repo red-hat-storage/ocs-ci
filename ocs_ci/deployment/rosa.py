@@ -20,13 +20,19 @@ from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
-from ocs_ci.utility.aws import AWS as AWSUtil, delete_sts_iam_roles, delete_subnet_tags
+from ocs_ci.utility.aws import (
+    AWS as AWSUtil,
+    delete_sts_iam_roles,
+    delete_subnet_tags,
+    terminate_rosa_hcp_worker_instances,
+)
 from ocs_ci.utility.deployment import (
     create_openshift_install_log_file,
     deploy_roks_icsp_daemonset,
 )
 from ocs_ci.utility.rosa import (
     get_associated_oidc_config_id,
+    get_rosa_hcp_infra_id,
     delete_account_roles,
     wait_console_url,
     destroy_rosa_cluster,
@@ -168,8 +174,10 @@ class ROSAOCP(BaseOCPDeployment):
                 raise
             if rosa_hcp:
                 subnet_ids = rosa.get_rosa_hcp_subnet_ids()
+                infra_id = get_rosa_hcp_infra_id(self.cluster_name)
             else:
                 subnet_ids = aws.get_cluster_subnet_ids(cluster_name=self.cluster_name)
+                infra_id = ""
             oidc_endpoint_url = None
             if rosa_hcp:
                 try:
@@ -201,6 +209,8 @@ class ROSAOCP(BaseOCPDeployment):
                 err_msg = f"Failed to delete {self.cluster_name}"
                 logger.error(err_msg)
                 raise TimeoutExpiredError(err_msg)
+            if rosa_hcp and infra_id:
+                terminate_rosa_hcp_worker_instances(infra_id)
             log_step("Deleting ROSA/aws associated resources")
             oproles_prefix = (
                 f"{constants.OPERATOR_ROLE_PREFIX_ROSA_HCP}-{self.cluster_name}"
@@ -249,7 +259,7 @@ class ROSAOCP(BaseOCPDeployment):
         cluster_list = ocm.list_cluster()
         for cluster in cluster_list:
             if cluster[0] == self.cluster_name:
-                logger.info(f"Cluster found: {cluster[0]}")
+                logger.info(f"Cluster found: {cluster[0]}, state: {cluster[1]}")
                 return True
         return False
 
