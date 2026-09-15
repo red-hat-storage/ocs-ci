@@ -34,6 +34,7 @@ from ocs_ci.ocs.dr_upgrade import (
 from ocs_ci.ocs.provider_client_upgrade import (
     ProviderClusterOperatorUpgrade,
     KubevirtClusterUpgrade,
+    _is_fdf_upgrade,
 )
 from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_z_stream_upgrade
@@ -146,7 +147,9 @@ def test_dr_hub_upgrade(zone_rank, role_rank, config_index):
     Test upgrade procedure for DR hub operator
 
     """
-    if is_z_stream_upgrade():
+    pre = config.UPGRADE.get("pre_upgrade_ocs_version", "")
+    upgrade = config.UPGRADE.get("upgrade_ocs_version", "")
+    if pre and upgrade and pre == upgrade:
         pytest.skip(
             "This is z-stream upgrade and this component upgrade should have been taken care by ODF upgrade"
         )
@@ -162,7 +165,7 @@ def test_dr_cluster_upgrade(zone_rank, role_rank, config_index):
     Test upgrade procedure for DR cluster operator
 
     """
-    if is_z_stream_upgrade():
+    if is_z_stream_upgrade() and not _is_fdf_upgrade():
         pytest.skip(
             "This is z-stream upgrade and this component upgrade should have been taken care by ODF upgrade"
         )
