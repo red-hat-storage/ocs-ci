@@ -32,10 +32,6 @@ from ocs_ci.deployment.helpers.tnf_helpers import (
     discover_available_disks,
     resolve_disk_by_id_path,
 )
-from ocs_ci.utility.utils import (
-    is_cluster_running,
-    TimeoutSampler,
-)
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import UnexpectedDeploymentConfiguration
 from ocs_ci.ocs.resources.pod import get_pods_having_label
@@ -67,18 +63,22 @@ def _configure_dns(public_ip):
     zone_id = aws.get_hosted_zone_id_for_domain(domain=base_domain)
     logger.info(f"Using base domain zone {zone_id} for {base_domain}")
 
+    response_list = []
     for record_name in (
         f"api.{cluster_name}",
         f"api-int.{cluster_name}",
         f"*.apps.{cluster_name}",
     ):
-        aws.update_hosted_zone_record(
+        response = aws.update_hosted_zone_record(
             zone_id=zone_id,
             record_name=record_name,
             data=public_ip,
             type="A",
             operation_type="Add",
         )
+        response_list.append(response)
+    logger.info("Waiting for DNS record propagation...")
+    aws.wait_for_record_set(response_list=response_list)
     logger.info(
         f"DNS records created: api.{cluster_name}.{base_domain} "
         f"and *.apps.{cluster_name}.{base_domain} -> {public_ip}"
@@ -175,6 +175,11 @@ class TNF(TNFBASE):
             self.tnf_config = config.ENV_DATA.get("tnf") or {}
             self.cluster_path = config.ENV_DATA["cluster_path"]
 
+        def test_cluster(self):
+            from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
+
+            BaseOCPDeployment.test_cluster(self)
+
         def deploy_prereq(self):
             logger.info("Preparing cluster path for dev-scripts output")
             os.makedirs(os.path.join(self.cluster_path, "auth"), exist_ok=True)
@@ -229,14 +234,7 @@ class TNF(TNFBASE):
                 hypervisor.retrieve_kubeconfig(auth_dir)
 
                 logger.info("Step 10: Testing cluster connectivity...")
-                for sample in TimeoutSampler(
-                    timeout=600,
-                    sleep=60,
-                    func=is_cluster_running,
-                    cluster_path=self.cluster_path,
-                ):
-                    if sample:
-                        break
+                self.test_cluster()
 
                 logger.info("OCP cluster deployed via dev-scripts on EC2 hypervisor")
             except Exception:
