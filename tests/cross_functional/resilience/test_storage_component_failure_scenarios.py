@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    green_squad,
+    white_squad,
     resiliency,
     polarion_id,
 )
@@ -12,7 +12,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 log = logging.getLogger(__name__)
 
 
-@green_squad
+@white_squad
 @resiliency
 class TestStorageClusterComponentFailurescenarios:
     """
