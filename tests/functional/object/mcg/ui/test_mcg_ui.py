@@ -618,6 +618,12 @@ class TestBucketCreate:
                 s3_buckets=s3_buckets_to_create, obc_buckets=obc_buckets_to_create
             )
 
+            # Wait for a short period to allow the UI to refresh and reflect the new buckets
+            # this will help avoid flakiness in the test due to timing issues when less than 100 buckets are visible
+            # on some failures we see 1 bucket less, meaning even though OBC was created, bucket was not yet provisioned
+            # or rendered in UI
+            time.sleep(30)
+
             bucket_ui.nav_object_storage_page()
             bucket_ui.nav_buckets_page()
 
