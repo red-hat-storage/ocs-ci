@@ -7,6 +7,8 @@ import json
 import logging
 import yaml
 import pytest
+import time
+
 from ocs_ci.ocs import constants, resources, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
@@ -14,6 +16,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.utility import version as version_module
+from ocs_ci.utility import templating
 from ocs_ci.utility.utils import convert_device_size, exec_cmd, TimeoutSampler
 from ocs_ci.deployment.hub_spoke import get_autodistributed_storage_classes
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
@@ -217,7 +220,12 @@ def create_nfs_load_balancer_service(
             configure_nfs_lb_security_group,
         )
 
+        log.info("Configuring IBM Cloud security group for NFS LoadBalancer...")
         configure_nfs_lb_security_group()
+        log.info(
+            "Security group configured. Waiting 60 seconds for rules to propagate..."
+        )
+        time.sleep(60)
 
     return hostname_add
 
@@ -850,3 +858,35 @@ def fetch_nfs_server_details_on_client_cluster(default_server=False):
                 server,
             )
             return server
+
+
+def frame_deployment_config(deployment_name, pvc_name, node_name=None):
+    """
+    Build a Deployment manifest for a pod that mounts the given PVC.
+
+    Args:
+        deployment_name (str): Name for the Deployment and its pod label.
+        pvc_name (str): Name of the PVC to mount at ``/mnt``.
+        node_name (str): Optional node hostname to pin the pod to.
+
+    Returns:
+        dict: Deployment manifest ready for creation.
+    """
+    deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
+
+    deployment_data["metadata"]["name"] = deployment_name
+
+    deployment_data["metadata"]["labels"]["app"] = deployment_name
+    deployment_data["spec"]["selector"]["matchLabels"]["name"] = deployment_name
+    deployment_data["spec"]["template"]["metadata"]["labels"]["name"] = deployment_name
+
+    deployment_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+        "claimName"
+    ] = pvc_name
+
+    # Pin the pod to a specific node so it never lands on the node being rebooted
+    if node_name:
+        deployment_data["spec"]["template"]["spec"]["nodeName"] = node_name
+        log.info(f"Deployment '{deployment_name}': nodeName set to '{node_name}'")
+
+    return deployment_data
