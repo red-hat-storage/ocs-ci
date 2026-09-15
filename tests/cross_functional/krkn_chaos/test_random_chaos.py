@@ -10,7 +10,7 @@ stop workload and background ops, cleanup. Ceph crash check also via fixture.
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import green_squad, chaos, polarion_id
+from ocs_ci.framework.pytest_customization.marks import white_squad, chaos, polarion_id
 from ocs_ci.ocs import constants
 from ocs_ci.krkn_chaos.krknclt_helper import (
     APPLICATION_OUTAGES_APP_LABELS,
@@ -37,7 +37,7 @@ DEFAULT_EXCLUDE_SCENARIO_BASES_EXACT = [
 ]
 
 
-@green_squad
+@white_squad
 @chaos
 class TestKrKnctlRandomChaos:
     """
@@ -309,7 +309,7 @@ class TestKrKnctlRandomChaos:
         )
 
 
-@green_squad
+@white_squad
 @chaos
 class TestKrKnctlServiceDisruption:
     """

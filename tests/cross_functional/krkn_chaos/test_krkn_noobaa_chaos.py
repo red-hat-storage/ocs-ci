@@ -26,7 +26,7 @@ import pytest
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad, chaos, polarion_id
+from ocs_ci.framework.pytest_customization.marks import white_squad, chaos, polarion_id
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.krkn_chaos.krkn_helpers import (
@@ -41,7 +41,7 @@ from ocs_ci.krkn_chaos.noobaa_chaos_helper import validate_noobaa_health
 log = logging.getLogger(__name__)
 
 
-@green_squad
+@white_squad
 @chaos
 class TestKrKnNooBaaChaos:
     """

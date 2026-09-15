@@ -3173,6 +3173,7 @@ SQUADS = {
     "Black": ["/ui/"],
     "Yellow": ["/managed-service/"],
     "Turquoise": ["/disaster-recovery/"],
+    "White": ["/resilience/", "/krkn_chaos/"],
 }
 SQUAD_CHECK_IGNORED_MARKERS = ["ignore_owner", "libtest"]
 

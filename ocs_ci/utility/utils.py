@@ -2797,6 +2797,11 @@ def add_squad_analysis_to_email(session, soup):
         background-color: yellow;
         display: inline;
     }
+    h4.squad-white {
+        color: black;
+        background-color: white;
+        display: inline;
+    }
     """
     # prepare place for the Squad Analysis in the email
     squad_analysis_div = soup.new_tag("div")
