@@ -18,9 +18,10 @@ The coverage is organised into three test classes:
     matching semantics (no-match, idempotent no-op, selective matching plus the
     data path of two connections left sharing one endpoint), the
     pause-reconcile annotation's lifecycle, switching under active I/O, and the
-    default backingstore. The six that need the update to succeed are skipped
+    default backingstore. The seven that need the update to succeed are skipped
     on clusters carrying a Rook-keyed Ceph object-user secret, where
-    DFBUGS-10975 aborts every update; see ``DFBUGS_10975_SKIP``.
+    DFBUGS-10975 aborts every update; see ``DFBUGS_10975_SKIP``. They still run
+    where no such secret exists, so non-RGW clusters keep the coverage.
   * ``TestConnectionUpdateNegative`` - failure paths: pre-validation aborts the
     whole batch (unreachable endpoint, missing target bucket, a bucket that
     exists but is not a NooBaa location, bad credentials, one bad store in a
@@ -745,11 +746,18 @@ def store_factory(request):
         """Delete one store, waiting out the webhook's "try later" denial."""
         store_ocp = OCP(kind=kind, namespace=namespace)
         # A paused NamespaceStore (DFBUGS-10743) must have the annotation
-        # removed before it can be reconciled/deleted cleanly.
-        if get_store_pause_annotation(kind, name, namespace):
-            store_ocp.annotate(
-                annotation="noobaa.io/pause-reconcile-", resource_name=name
-            )
+        # removed before it can be reconciled/deleted cleanly. This is a
+        # best-effort nicety, not a precondition for deleting: letting a
+        # transient API error here propagate would skip the delete below
+        # entirely and leak the store, which is how orphaned Rejected stores
+        # have been left on test clusters before.
+        try:
+            if get_store_pause_annotation(kind, name, namespace):
+                store_ocp.annotate(
+                    annotation="noobaa.io/pause-reconcile-", resource_name=name
+                )
+        except CommandFailed as ex:
+            logger.warning(f"Could not clear pause annotation on {kind}/{name}: {ex}")
         deadline = time.time() + STORE_DELETE_TIMEOUT
         while True:
             try:
@@ -796,8 +804,13 @@ def store_factory(request):
             secret_name,
             signature_version,
         )
-        ocs_obj = create_resource(**body)
+        # Registered before the CR is created, not after: if create_resource
+        # raises once the object already exists, an append placed after it
+        # would never run and the store would be invisible to teardown. If the
+        # create did fail outright the delete just reports NotFound, which the
+        # finalizer already downgrades to a warning.
         created.append((kind, name))
+        ocs_obj = create_resource(**body)
         if wait:
             OCP(kind=kind, namespace=namespace, resource_name=name).wait_for_resource(
                 condition=constants.STATUS_READY,
@@ -912,26 +925,66 @@ def cluster_has_rook_keyed_object_user_secret():
     return False
 
 
+_DFBUGS_10975_REASON = (
+    "connection update cannot read a Ceph object-user secret that uses the "
+    "AccessKey/SecretKey names, so every s3-compatible store backed by RGW "
+    "fails pre-validation - https://redhat.atlassian.net/browse/DFBUGS-10975"
+)
+
+
+# The pre-validation cases whose asserted failure reason DFBUGS-10975 masks.
+# "wrong_creds" is deliberately absent: see the parametrize list for why.
+_DFBUGS_10975_BLOCKED_PREVALIDATION = frozenset(
+    {
+        "unreachable",
+        "missing_target_bucket",
+        "not_noobaa_location",
+        "one_bad_in_batch",
+    }
+)
+
+
+def skip_if_dfbugs_10975():
+    """
+    Skip the calling test when DFBUGS-10975's precondition holds.
+
+    Parametrized cases call this from the test body instead of carrying
+    ``DFBUGS_10975_SKIP``: ``pytest.mark.usefixtures`` has no effect when it is
+    applied through ``pytest.param(marks=...)``, so the marker form only works
+    on a whole test.
+    """
+    if cluster_has_rook_keyed_object_user_secret():
+        pytest.skip(_DFBUGS_10975_REASON)
+
+
 @pytest.fixture
 def skip_if_rook_keyed_secret():
     """Skip when DFBUGS-10975's precondition holds on the cluster under test."""
-    if cluster_has_rook_keyed_object_user_secret():
-        pytest.skip(
-            "connection update cannot read a Ceph object-user secret that uses "
-            "the AccessKey/SecretKey names, so every s3-compatible store backed "
-            "by RGW fails pre-validation - "
-            "https://redhat.atlassian.net/browse/DFBUGS-10975"
-        )
+    skip_if_dfbugs_10975()
 
 
-# Paired with @jira("DFBUGS-10975") on each affected test. This is a runtime
-# fixture rather than a pytest.mark.skipif because the condition has to query
-# the cluster, which is not reachable at collection time - a skipif would break
-# --collect-only. Unlike DFBUGS_10744_SKIP below it is conditional: the bug only
-# bites where a Rook-keyed object-user secret exists, so non-RGW clusters (e.g.
-# IBM Cloud, where the pair is derived from MCG's own S3) keep the coverage.
-# Drop both markers once DFBUGS-10975 is fixed.
+# A runtime fixture rather than a pytest.mark.skipif because the condition has
+# to query the cluster, which is not reachable at collection time - a skipif
+# would break --collect-only.
+#
+# Deliberately NOT paired with @jira("DFBUGS-10975"), unlike the other bug
+# markers in this module: pytest-jira skips on the marker alone, unconditionally
+# and on every platform, which would delete the coverage everywhere. The bug
+# only bites where a Rook-keyed object-user secret exists, so gating on that
+# keeps these tests running on clusters without RGW (e.g. IBM Cloud, where the
+# endpoint pair is derived from MCG's own S3). The skip reason carries the bug
+# URL, so traceability does not depend on the marker.
+#
+# Drop this once DFBUGS-10975 is fixed.
 DFBUGS_10975_SKIP = pytest.mark.usefixtures("skip_if_rook_keyed_secret")
+
+# DFBUGS-10938 is not platform-conditional: check external connection maps a
+# genuine credentials rejection onto UNKNOWN FAILURE on every backend, so this
+# one is a plain skip like DFBUGS_10744_SKIP.
+DFBUGS_10938_SKIP = pytest.mark.skip(
+    "check external connection reports a credentials rejection as "
+    "UNKNOWN FAILURE - https://redhat.atlassian.net/browse/DFBUGS-10938"
+)
 
 
 # ===========================================================================
@@ -943,7 +996,6 @@ class TestBackingStoreEndpointUpdate:
     """Happy-path and matching-semantics coverage for the endpoint update CLI."""
 
     @tier1
-    @jira("DFBUGS-10975")
     @DFBUGS_10975_SKIP
     # TODO: assign polarion id
     def test_switch_and_revert_single_bs(self, mcg_obj, endpoint_conf, store_factory):
@@ -996,7 +1048,6 @@ class TestBackingStoreEndpointUpdate:
         assert get_store_endpoint(constants.BACKINGSTORE, bs.name, ns) == old
 
     @tier2
-    @jira("DFBUGS-10975")
     @DFBUGS_10975_SKIP
     # TODO: assign polarion id
     def test_bulk_switch_and_connection_dedup(
@@ -1068,7 +1119,13 @@ class TestBackingStoreEndpointUpdate:
     # TODO: assign polarion id
     @pytest.mark.parametrize(
         "variant",
-        ["wrong_endpoint", "trailing_slash", "dns_form", "rerun_after_success"],
+        [
+            "wrong_endpoint",
+            "trailing_slash",
+            "dns_form",
+            # Performs a real update before the re-run, so DFBUGS-10975 blocks it.
+            "rerun_after_success",
+        ],
     )
     def test_no_match_endpoint_variants(
         self, mcg_obj, endpoint_conf, store_factory, variant
@@ -1103,6 +1160,8 @@ class TestBackingStoreEndpointUpdate:
         Teardown: ``store_factory`` deletes the store. The rerun variant leaves it
         on NEW, which is immaterial - it is deleted either way.
         """
+        if variant == "rerun_after_success":
+            skip_if_dfbugs_10975()
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         old_dns = endpoint_conf.get("old_dns")
@@ -1155,6 +1214,7 @@ class TestBackingStoreEndpointUpdate:
         assert current == expected
 
     @tier2
+    @DFBUGS_10975_SKIP
     # TODO: assign polarion id
     def test_only_old_endpoint_stores_matched(
         self,
@@ -1357,7 +1417,6 @@ class TestBackingStoreEndpointUpdate:
         )
 
     @tier2
-    @jira("DFBUGS-10975")
     @DFBUGS_10975_SKIP
     # TODO: assign polarion id
     def test_idempotent_no_op(self, mcg_obj, endpoint_conf, store_factory):
@@ -1390,7 +1449,6 @@ class TestBackingStoreEndpointUpdate:
         assert not get_store_pause_annotation(constants.BACKINGSTORE, bs.name, ns)
 
     @tier2
-    @jira("DFBUGS-10975")
     @DFBUGS_10975_SKIP
     # TODO: assign polarion id
     def test_pause_annotation_honored_and_cleaned_up(
@@ -1508,7 +1566,6 @@ class TestBackingStoreEndpointUpdate:
         ), f"BackingStore {bs.name} did not return to OPTIMAL after the switch"
 
     @tier2
-    @jira("DFBUGS-10975")
     @DFBUGS_10975_SKIP
     # TODO: assign polarion id
     def test_switch_during_active_io(
@@ -1650,7 +1707,6 @@ class TestBackingStoreEndpointUpdate:
         )
 
     @tier2
-    @jira("DFBUGS-10975")
     @DFBUGS_10975_SKIP
     # TODO: assign polarion id
     def test_default_backingstore_endpoint_update(self, mcg_obj):
@@ -1730,10 +1786,19 @@ class TestConnectionUpdateNegative:
     @pytest.mark.parametrize(
         "failure",
         [
+            # DFBUGS-10975 aborts on the credentials error before the intended
+            # failure is reached, so the asserted reason never appears. The
+            # abort itself still happens - only the reason is unassertable.
             "unreachable",
             "missing_target_bucket",
             "not_noobaa_location",
-            "wrong_creds",
+            # Credentials ARE read for this one - the bad-creds secret uses the
+            # AWS key names, and fake credentials match no existing secret so
+            # the operator never repoints the secretRef. The rejection is real
+            # and merely misreported, which makes it DFBUGS-10938, not 10975.
+            pytest.param(
+                "wrong_creds", marks=[jira("DFBUGS-10938"), DFBUGS_10938_SKIP]
+            ),
             "one_bad_in_batch",
         ],
     )
@@ -1775,6 +1840,8 @@ class TestConnectionUpdateNegative:
         themselves. The variants that retarget a store only patch its spec, so
         they leave nothing extra behind.
         """
+        if failure in _DFBUGS_10975_BLOCKED_PREVALIDATION:
+            skip_if_dfbugs_10975()
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
 
@@ -1904,7 +1971,14 @@ class TestConnectionUpdateNegative:
     # TODO: assign polarion id
     @pytest.mark.parametrize(
         "case",
-        ["missing_flag", "whitespace_trimmed", "malformed_url", "long_url"],
+        [
+            "missing_flag",
+            # Asserts the padded endpoint PASSES pre-validation, which
+            # DFBUGS-10975 prevents.
+            "whitespace_trimmed",
+            "malformed_url",
+            "long_url",
+        ],
     )
     def test_cli_input_validation(self, mcg_obj, endpoint_conf, store_factory, case):
         """
@@ -1931,6 +2005,8 @@ class TestConnectionUpdateNegative:
         the one case that really does move it to NEW; that is the point of the
         case and makes no difference to cleanup.
         """
+        if case == "whitespace_trimmed":
+            skip_if_dfbugs_10975()
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         bs = store_factory(
