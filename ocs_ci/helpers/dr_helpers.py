@@ -1236,10 +1236,9 @@ def wait_for_replication_resources_deletion(
                 timeout=timeout,
             )
 
-    if (
+    if not skip_vrg_check and (
         not check_state
         or (ocs_version <= version.VERSION_4_17 and "cephfs" not in namespace)
-        and not skip_vrg_check
     ):
         wait_for_resource_existence(
             kind=constants.VOLUME_REPLICATION_GROUP,
@@ -1437,13 +1436,28 @@ def wait_for_cnv_workload(
 
     """
     logger.info(f"Wait for VM: {vm_name} to reach {phase} state")
-    vm_obj = ocp.OCP(
+    vmi_obj = ocp.OCP(
         kind=constants.VIRTUAL_MACHINE_INSTANCES,
         resource_name=vm_name,
         namespace=namespace,
     )
-    vm_obj._has_phase = True
-    vm_obj.wait_for_phase(phase=constants.STATUS_RUNNING, timeout=timeout)
+    vmi_obj._has_phase = True
+    vmi_obj.wait_for_phase(phase=constants.STATUS_RUNNING, timeout=timeout)
+
+    # A paused VMI still reports phase=Running — also wait for the VM's
+    # printableStatus to confirm the VM is not paused before returning.
+    if phase == constants.STATUS_RUNNING:
+        logger.info(f"Verifying VM: {vm_name} is not paused (printableStatus=Running)")
+        vm_ocp_obj = ocp.OCP(
+            kind=constants.VIRTUAL_MACHINE,
+            resource_name=vm_name,
+            namespace=namespace,
+        )
+        vm_ocp_obj.wait_for_resource(
+            resource_name=vm_name,
+            condition=constants.VM_RUNNING,
+            timeout=timeout,
+        )
 
 
 def wait_for_replication_destinations_creation(rep_dest_count, namespace, timeout=900):
@@ -1696,6 +1710,23 @@ def get_all_drpolicy():
 # Guard flag: bounce the ramen-hub-operator pod at most once per process
 # across all retry attempts of validate_drpolicy_grouping.
 _ramen_hub_pod_bounced = False
+
+
+def delete_drpolicy(drpolicy_name):
+    """
+    Delete a DRPolicy resource from the hub cluster.
+
+    Args:
+        drpolicy_name (str): Name of the DRPolicy to delete
+
+    """
+    config.switch_acm_ctx()
+    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
+    try:
+        drpolicy_obj.delete(resource_name=drpolicy_name)
+        logger.info(f"DRPolicy {drpolicy_name} deleted")
+    except Exception as ex:
+        logger.warning(f"Failed to delete DRPolicy {drpolicy_name}: {ex}")
 
 
 @retry(UnexpectedBehaviour, tries=10, delay=30, backoff=2, max_delay=120)
@@ -2046,6 +2077,172 @@ def validate_vgrc_count():
 
     logger.info("VGRC count validation completed successfully")
     return True
+
+
+def validate_vgr_vgrc_binding(namespace, drpc_names, timeout=120, sleep=30):
+    """
+    Validate that each DRPC's VolumeGroupReplication has a bound
+    VolumeGroupReplicationContent and that the VGRC references back
+    to the same VGR (bidirectional check).
+
+    The VGR may take time to appear after a DRPC is created, so
+    this polls until all expected VGRs are found and bound or the
+    timeout is reached.
+
+    Args:
+        namespace (str): Namespace where the VGRs are created
+        drpc_names (list): List of DRPC resource names to validate
+        timeout (int): Timeout in seconds (default: 120)
+        sleep (int): Polling interval in seconds (default: 30)
+
+    Raises:
+        TimeoutExpiredError: If VGR-VGRC binding is not established
+            within the timeout
+        AssertionError: If a VGRC references the wrong VGR
+            (stale binding)
+
+    """
+    vgr_ocp = ocp.OCP(
+        kind=constants.VOLUME_GROUP_REPLICATION,
+        namespace=namespace,
+    )
+    vgrc_ocp = ocp.OCP(kind="VolumeGroupReplicationContent")
+
+    def _match_vgr(vgr_items, drpc_name):
+        # VGR names are truncated by the operator and may be
+        # identical for different DRPCs. Match using the
+        # k8s-resource-selector value in the VGR spec which
+        # contains the full un-truncated DRPC base name.
+        base = drpc_name.replace("-drpc", "")
+        matched = []
+        for v in vgr_items:
+            selector = v.get("spec", {}).get("source", {}).get("selector", {})
+            match_exprs = selector.get("matchExpressions", [])
+            for expr in match_exprs:
+                if base in expr.get("values", []):
+                    matched.append(v)
+                    break
+        return matched
+
+    def _check_bindings():
+        vgr_items = vgr_ocp.get().get("items", [])
+        vgrc_items = vgrc_ocp.get().get("items", [])
+
+        for drpc_name in drpc_names:
+            matched = _match_vgr(vgr_items, drpc_name)
+            if not matched:
+                return False
+            vgr = matched[0]
+            vgrc_name = vgr["spec"].get("volumeGroupReplicationContentName", "")
+            if not vgrc_name:
+                return False
+            vgrc_match = [v for v in vgrc_items if v["metadata"]["name"] == vgrc_name]
+            if not vgrc_match:
+                return False
+        return True
+
+    for sample in TimeoutSampler(timeout=timeout, sleep=sleep, func=_check_bindings):
+        if sample:
+            break
+        logger.info(
+            "VGR-VGRC binding not yet ready for %s. Retrying",
+            drpc_names,
+        )
+
+    vgr_items = vgr_ocp.get().get("items", [])
+    vgrc_items = vgrc_ocp.get().get("items", [])
+
+    for drpc_name in drpc_names:
+        matched = _match_vgr(vgr_items, drpc_name)
+        vgr = matched[0]
+        vgr_name = vgr["metadata"]["name"]
+        vgrc_name = vgr["spec"].get("volumeGroupReplicationContentName", "")
+        vgrc_match = [v for v in vgrc_items if v["metadata"]["name"] == vgrc_name]
+        vgrc_ref = (
+            vgrc_match[0]
+            .get("spec", {})
+            .get("volumeGroupReplicationRef", {})
+            .get("name", "")
+        )
+        assert vgrc_ref == vgr_name, (
+            f"VGRC {vgrc_name} references VGR "
+            f"{vgrc_ref!r} instead of {vgr_name!r} "
+            f"(stale binding)"
+        )
+        logger.info(
+            "VGR %s <-> VGRC %s binding verified",
+            vgr_name,
+            vgrc_name,
+        )
+    logger.info("VGR-VGRC binding validation completed")
+
+
+def validate_vgr_pvc_refs(
+    namespace, drpc_name, expected_pvc_names, timeout=180, sleep=30
+):
+    """
+    Validate that a DRPC's VolumeGroupReplication contains exactly
+    the expected PVCs in status.persistentVolumeClaimsRefList.
+
+    The VGR PVC ref list may take a sync cycle to update after
+    a shared VM is enrolled, so this polls until the expected
+    PVCs appear or the timeout is reached.
+
+    Args:
+        namespace (str): Namespace where VGRs are created
+        drpc_name (str): DRPC resource name to match in VGR name
+        expected_pvc_names (list): Expected PVC names
+        timeout (int): Timeout in seconds (default: 120)
+        sleep (int): Polling interval in seconds (default: 30)
+
+    Raises:
+        TimeoutExpiredError: If VGR PVC refs do not match within
+            the timeout
+        AssertionError: If no VGR is found for the DRPC
+
+    """
+    expected = sorted(expected_pvc_names)
+
+    vgr_ocp = ocp.OCP(
+        kind=constants.VOLUME_GROUP_REPLICATION,
+        namespace=namespace,
+    )
+
+    def _match_vgr(vgr_items):
+        base = drpc_name.replace("-drpc", "")
+        matched = []
+        for v in vgr_items:
+            selector = v.get("spec", {}).get("source", {}).get("selector", {})
+            match_exprs = selector.get("matchExpressions", [])
+            for expr in match_exprs:
+                if base in expr.get("values", []):
+                    matched.append(v)
+                    break
+        return matched
+
+    def _check_pvc_refs():
+        vgr_items = vgr_ocp.get().get("items", [])
+        matched = _match_vgr(vgr_items)
+        assert matched, (
+            f"No VGR found for DRPC {drpc_name} in " f"namespace {namespace}"
+        )
+        vgr = matched[0]
+        pvc_refs = vgr.get("status", {}).get("persistentVolumeClaimsRefList", [])
+        return sorted([p["name"] for p in pvc_refs])
+
+    for sample in TimeoutSampler(timeout=timeout, sleep=sleep, func=_check_pvc_refs):
+        if sample == expected:
+            break
+        logger.info(
+            "VGR PVC refs not yet matching: expected %s, " "got %s. Retrying",
+            expected,
+            sample,
+        )
+
+    vgr_items = vgr_ocp.get().get("items", [])
+    matched = _match_vgr(vgr_items)
+    vgr_name = matched[0]["metadata"]["name"]
+    logger.info("VGR %s PVC refs validated: %s", vgr_name, expected)
 
 
 def verify_last_group_sync_time(
@@ -2907,6 +3104,7 @@ def do_discovered_apps_cleanup(
     vrg_name,
     skip_resource_deletion_verification=False,
     ignore_resource_not_found=False,
+    wait_for_cleanup_timeout=300,
 ):
     """
     Function to clean up Resources
@@ -2923,12 +3121,16 @@ def do_discovered_apps_cleanup(
 
         ignore_resource_not_found (bool): False by default, resource not found is ignored when the workload which was
                                         DR protected via ACM UI is deleted, refer DFBUGS-3706
+        wait_for_cleanup_timeout (int): Timeout in seconds for waiting for DRPC WaitOnUserToCleanUp
+                                        progression status (default: 300)
 
     """
     restore_index = config.cur_index
     config.switch_acm_ctx()
     drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESPACE, resource_name=drpc_name)
-    drpc_obj.wait_for_progression_status(status=constants.STATUS_WAITFORUSERTOCLEANUP)
+    drpc_obj.wait_for_progression_status(
+        status=constants.STATUS_WAITFORUSERTOCLEANUP, timeout=wait_for_cleanup_timeout
+    )
     time.sleep(90)
     assert drpc_obj.get_progression_status(
         status_to_check=constants.STATUS_WAITFORUSERTOCLEANUP
@@ -2939,16 +3141,33 @@ def do_discovered_apps_cleanup(
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
     if not ignore_resource_not_found:
-
         # --ignore-not-found is needed to avoid https://issues.redhat.com/browse/DFBUGS-3706
         logger.info("Using '--ignore-not-found' during workload deletion")
-        run_cmd(
-            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --ignore-not-found --force "
+        delete_cmd = (
+            f"oc delete -k {workload_path} -n {workload_namespace} "
+            f"--wait=false --ignore-not-found --force "
         )
     else:
-        run_cmd(
-            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
+        delete_cmd = (
+            f"oc delete -k {workload_path} -n {workload_namespace} "
+            f"--wait=false --force "
         )
+    retryable_errors = ("etcdserver", "Timeout", "context deadline exceeded")
+    for attempt in range(3):
+        try:
+            exec_cmd(delete_cmd)
+            break
+        except CommandFailed as e:
+            err_msg = str(e)
+            if any(err in err_msg for err in retryable_errors) and attempt < 2:
+                logger.warning(
+                    "Server error during workload deletion (attempt %d/3), "
+                    "retrying in 60s",
+                    attempt + 1,
+                )
+                time.sleep(60)
+            else:
+                raise
     if not skip_resource_deletion_verification:
         wait_for_all_resources_deletion(
             namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
@@ -4771,3 +4990,60 @@ def validate_cluster_odf_cli(retries=5, retry_interval=60):
         f"ODF DR validate clusters did not report success after {retries} attempts. "
         f"Output:\n{last_stdout}"
     )
+
+
+def wait_for_managed_cluster_unreachable(cluster_name, timeout=600, sleep=15):
+    """
+    Wait until the ACM hub reports a managed cluster as unreachable (AVAILABLE=Unknown).
+
+    After stopping cluster nodes, the ACM hub detects the loss of connectivity
+    and sets the ManagedCluster AVAILABLE condition to ``Unknown``. Ramen requires
+    this state before it will complete a failover operation. Using a fixed sleep
+    is unreliable — this function polls the actual cluster status instead.
+
+    Args:
+        cluster_name (str): Name of the managed cluster to wait for.
+        timeout (int): Maximum seconds to wait (default: 600).
+        sleep (int): Seconds between polling attempts (default: 15).
+
+    Raises:
+        TimeoutExpiredError: If the cluster does not become unreachable within timeout.
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    mc_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
+    logger.info(
+        "Waiting for managed cluster '%s' to become unreachable on ACM hub",
+        cluster_name,
+    )
+
+    def _is_unreachable():
+        try:
+            conditions = (
+                mc_obj.get(resource_name=cluster_name)
+                .get("status", {})
+                .get("conditions", [])
+            )
+        except Exception:
+            return False
+        for condition in conditions:
+            if condition.get("type") == "ManagedClusterConditionAvailable":
+                status = condition.get("status", "True")
+                if status in ("False", "Unknown"):
+                    logger.info(
+                        "Managed cluster '%s' is unreachable (AVAILABLE=%s)",
+                        cluster_name,
+                        status,
+                    )
+                    return True
+        return False
+
+    from ocs_ci.utility.utils import TimeoutSampler
+
+    for reachable in TimeoutSampler(timeout=timeout, sleep=sleep, func=_is_unreachable):
+        if reachable:
+            break
+        logger.info(f"Managed cluster '{cluster_name}' still reachable, retrying...")
+
+    config.switch_ctx(restore_index)
