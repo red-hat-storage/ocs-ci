@@ -1,0 +1,3 @@
+---
+DEPLOYMENT:
+  network_policy_verification: true
