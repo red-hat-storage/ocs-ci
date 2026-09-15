@@ -247,6 +247,14 @@ class FDFUpgrade(BaseUpgrade):
 
         self.validate_upgrade_versions()
         self.load_version_config_file(self.fdf_upgrade_version)
+
+        current_parts = self.version_before_upgrade.split(".")
+        upgrade_parts = self.fdf_upgrade_version.split(".")
+        config.UPGRADE["pre_upgrade_ocs_version"] = (
+            f"{current_parts[0]}.{current_parts[1]}"
+        )
+        config.UPGRADE["upgrade_ocs_version"] = f"{upgrade_parts[0]}.{upgrade_parts[1]}"
+
         if not self.upgrade_in_current_source:
             self.fdf_deployment.create_image_tag_mirror_set()
             self.fdf_deployment.create_image_digest_mirror_set(upgrade=True)
