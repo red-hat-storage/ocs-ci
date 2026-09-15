@@ -379,3 +379,13 @@ Version 4.18 not available in ROSA.
 $ echo $?
 255
 ```
+
+## Common Use Cases
+
+For specific deployment scenarios and advanced configurations, see:
+
+- **[Testing with Custom CSV Images](./usecases/custom_csv_images.md)** - Replace operator images for testing PRs, bug fixes, or custom builds
+- **[Multicluster Test Example](./multicluster_test_example.md)** - Detailed multicluster deployment and testing
+- **[Running Tests on Existing Clusters](./usecases/running_tests_on_cluster_not_deployed_by_ocsci.rst)** - Use ocs-ci with pre-existing clusters
+- **[ODF with KMS](./usecases/odf_with_kms.md)** - Deploy ODF with Key Management Service integration
+- **[More Use Cases](./usecases/)** - Browse all available use case documentation
