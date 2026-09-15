@@ -5,7 +5,11 @@ import logging
 import time
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    TimeoutExpiredError,
+    UnexpectedBehaviour,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     Pod,
@@ -411,48 +415,76 @@ class CephXClusterHelper:
         self.wait_for_pgs_active_clean(timeout=timeout, sleep=sleep)
         self.wait_for_cluster_ready(timeout=timeout)
 
-    def wait_for_cephcluster_rotation(self, timeout=1500, sleep=15):
+    def wait_for_cephcluster_rotation(
+        self,
+        timeout=1500,
+        sleep=15,
+        expected_generation=None,
+        component=None,
+    ):
         """
         Wait until CephCluster finishes CephX rotation reconcile.
 
         Expected flow after a StorageCluster-initiated rotation:
         ``Progressing`` (per-component messages such as Processing OSD…) →
-        ``Ready``. ``Error`` fails immediately.
+        ``status.cephx`` generations catch up. CephCluster often stays
+        ``Progressing`` after keys rotate while OSDs restart and PGs recover;
+        that recovery is not rotation completion. ``Error`` fails immediately.
 
-        ``Ready`` is accepted only after ``Progressing`` was observed so a
+        ``Ready`` without ``Progressing`` is accepted only when
+        *expected_generation* is already reported in ``status.cephx``, so a
         pre-reconcile Ready phase is not mistaken for completion.
 
         Args:
             timeout (int): Max seconds to wait (default 25 minutes).
             sleep (int): Seconds between polls (default 15).
+            expected_generation (int): Spec generation written to trigger
+                rotation. When set with *component*, rotation completes as
+                soon as those ``status.cephx`` entries reach it.
+            component (str): ``daemon``, ``csi``, or ``rbdMirrorPeer``.
 
         Returns:
-            bool: True when CephCluster is Ready after Progressing.
+            bool: True when rotation status has caught up (or Ready after
+                Progressing when no expected generation was provided).
 
         Raises:
-            UnexpectedBehaviour: If phase is Error, or Ready is not reached
-                within *timeout* after Progressing was seen.
+            UnexpectedBehaviour: If phase is Error, or completion is not
+                reached within *timeout*.
         """
         cephcluster = OCP(
             kind=constants.CEPH_CLUSTER,
             namespace=self.namespace,
             resource_name=self.ceph_cluster_name,
         )
+        generation_note = ""
+        if expected_generation is not None and component is not None:
+            generation_note = (
+                f"; complete when {component} status.cephx >= {expected_generation}"
+            )
         log.info(
             f"Waiting for CephCluster {self.ceph_cluster_name} rotation "
-            f"(Progressing→Ready; Error fails; timeout={timeout}s, "
-            f"poll every {sleep}s)"
+            f"(Progressing then status.cephx or Ready; Error fails; "
+            f"timeout={timeout}s, poll every {sleep}s{generation_note})"
         )
         seen_progressing = False
         last_phase = None
         last_message = ""
+        last_pending = ""
+
+        def _generations_reached():
+            if expected_generation is None or component is None:
+                return False, []
+            pending = self.get_pending_component_status_generations(
+                component, expected_generation
+            )
+            return not pending, pending
 
         def _poll_rotation_state():
             """
             Returns:
                 str: ``ready``, ``error``, or ``waiting``.
             """
-            nonlocal seen_progressing, last_phase, last_message
+            nonlocal seen_progressing, last_phase, last_message, last_pending
             cephcluster.reload_data()
             status = cephcluster.data.get("status") or {}
             phase = status.get("phase")
@@ -460,6 +492,17 @@ class CephXClusterHelper:
             last_phase = phase
             last_message = message
             msg_suffix = f" message={message}" if message else ""
+            generations_reached, pending = _generations_reached()
+            last_pending = ",".join(pending)
+            pending_suffix = (
+                f" cephx_pending={last_pending}"
+                if pending
+                else (
+                    f" cephx_generation>={expected_generation}"
+                    if expected_generation is not None and component is not None
+                    else ""
+                )
+            )
 
             if phase == constants.STATUS_ERROR:
                 log.error(
@@ -468,16 +511,24 @@ class CephXClusterHelper:
                 )
                 return "error"
 
+            if generations_reached:
+                log.info(
+                    f"CephCluster {self.ceph_cluster_name} CephX {component} "
+                    f"status reached generation {expected_generation} "
+                    f"(phase={phase}{msg_suffix}); treating rotation as complete"
+                )
+                return "ready"
+
             if phase == constants.STATUS_PROGRESSING:
                 if not seen_progressing:
                     log.info(
                         f"CephCluster {self.ceph_cluster_name} entered "
-                        f"Progressing{msg_suffix}"
+                        f"Progressing{msg_suffix}{pending_suffix}"
                     )
                 else:
                     log.info(
                         f"CephCluster {self.ceph_cluster_name} still "
-                        f"Progressing{msg_suffix}"
+                        f"Progressing{msg_suffix}{pending_suffix}"
                     )
                 seen_progressing = True
                 return "waiting"
@@ -491,25 +542,34 @@ class CephXClusterHelper:
                     return "ready"
                 log.info(
                     f"CephCluster {self.ceph_cluster_name} phase=Ready "
-                    "(pre-reconcile); waiting for Progressing"
+                    f"(pre-reconcile); waiting for Progressing{pending_suffix}"
                 )
                 return "waiting"
 
             log.info(
                 f"CephCluster {self.ceph_cluster_name} phase={phase}"
-                f"{msg_suffix}; waiting for Progressing→Ready"
+                f"{msg_suffix}{pending_suffix}; waiting for rotation completion"
             )
             return "waiting"
 
-        for state in TimeoutSampler(timeout, sleep, _poll_rotation_state):
-            if state == "error":
-                raise UnexpectedBehaviour(
-                    f"CephCluster {self.ceph_cluster_name} entered Error during "
-                    f"CephX key rotation (phase={last_phase}"
-                    f"{f' message={last_message}' if last_message else ''})"
-                )
-            if state == "ready":
-                return True
+        try:
+            for state in TimeoutSampler(timeout, sleep, _poll_rotation_state):
+                if state == "error":
+                    raise UnexpectedBehaviour(
+                        f"CephCluster {self.ceph_cluster_name} entered Error during "
+                        f"CephX key rotation (phase={last_phase}"
+                        f"{f' message={last_message}' if last_message else ''})"
+                    )
+                if state == "ready":
+                    return True
+        except TimeoutExpiredError as exc:
+            pending_note = f", cephx_pending={last_pending}" if last_pending else ""
+            raise UnexpectedBehaviour(
+                f"CephCluster {self.ceph_cluster_name} did not complete CephX "
+                f"rotation within {timeout}s "
+                f"(seen_progressing={seen_progressing}, last phase={last_phase}, "
+                f"message={last_message}{pending_note})"
+            ) from exc
 
         raise UnexpectedBehaviour(
             f"CephCluster {self.ceph_cluster_name} did not complete CephX "

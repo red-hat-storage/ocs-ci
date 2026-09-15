@@ -4,7 +4,7 @@ import logging
 import time
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
@@ -722,30 +722,41 @@ class CephXDaemonRotation:
     ):
         log.info(
             f"Waiting for CephX daemon rotation on {label} to reach "
-            f"generation {expected_generation}"
+            f"generation {expected_generation} (timeout={timeout}s)"
         )
+        last_generation = None
 
         def _daemon_ready():
+            nonlocal last_generation
             cr_obj.reload_data()
             cephx = cr_obj.data.get("status", {}).get("cephx", {}) or {}
             generation = int((cephx.get("daemon") or {}).get("keyGeneration", 0) or 0)
+            last_generation = generation
             if generation < expected_generation:
-                log.debug(
+                log.info(
                     f"{label} daemon keyGeneration={generation} "
                     f"(want >= {expected_generation})"
                 )
                 return False
             return True
 
-        for ready in TimeoutSampler(timeout, sleep, _daemon_ready):
-            if ready:
-                log.info(
-                    f"CephX daemon rotation on {label} reached "
-                    f"generation {expected_generation}"
-                )
-                return True
+        try:
+            for ready in TimeoutSampler(timeout, sleep, _daemon_ready):
+                if ready:
+                    log.info(
+                        f"CephX daemon rotation on {label} reached "
+                        f"generation {expected_generation}"
+                    )
+                    return True
+        except TimeoutExpiredError as exc:
+            raise UnexpectedBehaviour(
+                f"CephX daemon rotation on {label} did not reach generation "
+                f"{expected_generation} within {timeout}s "
+                f"(last keyGeneration={last_generation})"
+            ) from exc
 
         raise UnexpectedBehaviour(
             f"CephX daemon rotation on {label} did not reach generation "
-            f"{expected_generation} within {timeout}s"
+            f"{expected_generation} within {timeout}s "
+            f"(last keyGeneration={last_generation})"
         )
