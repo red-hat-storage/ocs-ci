@@ -1955,6 +1955,20 @@ acm_configuration_4_22 = {
     ),
 }
 
+acm_configuration_5_0 = {
+    # The VMs nav item moved from data-test-id to data-test on the ACM hub
+    # console shipped with OCP 5.0.
+    "nav-bar-vms-page": ("//a[@data-test='virtualmachines-nav-item']", By.XPATH),
+    # The side nav is rendered collapsed (and aria-hidden) after switching to
+    # the Fleet Virtualization perspective, so it has to be expanded before any
+    # of the nav items can be clicked.
+    "nav-sidebar-collapsed": (
+        "//div[@id='page-sidebar' and contains(@class, 'pf-m-collapsed')]",
+        By.XPATH,
+    ),
+    "nav-sidebar-toggle": ("//button[@id='nav-toggle']", By.XPATH),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -4240,6 +4254,7 @@ locators = {
             **acm_configuration_4_20,
             **acm_configuration_4_21,
             **acm_configuration_4_22,
+            **acm_configuration_5_0,
         },
         "validation": {
             **validation,

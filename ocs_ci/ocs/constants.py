@@ -3886,6 +3886,9 @@ DISCOVERED_APPS = "DiscoveredApps"
 DR_OPS_NAMESPACE = "openshift-dr-ops"
 DPA_DISCOVERED_APPS_PATH = os.path.join(TEMPLATE_DIR, "DR", "dpa_discovered_apps.yaml")
 
+# RHSTOR-8082: VM static IP translation during DR failover/failback
+VM_IP_TRANSLATION_WORKLOAD_NS = "vm-ip-translation-test"
+
 DISABLE_DR_EACH_APP = os.path.join(TEMPLATE_DIR, "DR", "disable_dr_each_app.sh")
 REMOVE_DR_EACH_MANAGED_CLUSTER = os.path.join(TEMPLATE_DIR, "DR", "dr_conf_removal.sh")
 CLUSTERSELECTORPATH = "/spec/predicates/0/requiredClusterSelector/labelSelector/matchExpressions/0/values/0"
