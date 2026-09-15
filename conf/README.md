@@ -86,6 +86,31 @@ anywhere else.
 * `default_latest_tag` - OCS latest tag to be used by default if one is not provided
 * `external_mode` - If OCS cluster is setup in external mode (Default: false)
 * `ocs_csv_channel` - Channel used to install OCS CSV
+* `csv_change_from` - List of patterns to be replaced in all the ODF CSVs, applied
+  after the CSVs are installed and before the StorageCluster is created. Has to be
+  used together with `csv_change_to`, and can be provided on the command line as
+  well via `--csv-change`. The replacement is done on the whole CSV, so the very
+  same string is replaced everywhere it appears. To replace an image in one
+  specific field only, use `csv_image_overrides`.
+* `csv_change_to` - List of the values to replace the `csv_change_from` patterns with
+* `csv_image_overrides` - Mapping of a CSV name prefix to the images which should be
+  set in specific fields of that CSV, applied after the CSVs are installed and before
+  the StorageCluster is created. Each entry supports the optional keys `containers`
+  (mapping a container name to an image) and `env` (mapping an environment variable
+  name to an image). Deployment fails if a container or environment variable listed
+  here is not defined in the CSV. Example:
+
+  ```yaml
+  DEPLOYMENT:
+    csv_image_overrides:
+      ocs-operator:
+        env:
+          PROVIDER_API_SERVER_IMAGE: quay.io/my-user/ocs:custom
+      ocs-client-operator:
+        containers:
+          manager: quay.io/my-user/ocs-client:custom
+  ```
+
 * `default_ocs_registry_image` - Default OCS registry image (e.g. "quay.io/rhceph-dev/ocs-olm-operator:latest-4.6")
 * `ocs_operator_nodes_to_label` - Number of OCS operator nodes to label
 * `ocs_operator_nodes_to_taint` - Number of OCS operator nodes to taint
