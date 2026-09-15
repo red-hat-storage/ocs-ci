@@ -1,6 +1,7 @@
 import json
 import logging
 
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     red_squad,
@@ -371,7 +372,14 @@ class TestNoobaaPriorityClass(MCGTest):
                 continue
             all_match = True
             for pod in pods:
-                pod_dict = pod.get()
+                try:
+                    pod_dict = pod.get()
+                except CommandFailed:
+                    logger.info(
+                        f"Pod {pod.name} disappeared during reconciliation, retrying"
+                    )
+                    all_match = False
+                    break
                 actual_pc = pod_dict["spec"].get("priorityClassName")
                 phase = pod_dict.get("status", {}).get("phase")
                 if actual_pc != expected_pc or phase != "Running":
