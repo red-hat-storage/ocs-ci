@@ -25,6 +25,9 @@ from ocs_ci.ocs.constants import (
     ORDER_BEFORE_FDF_UPGRADE,
     ORDER_FDF_UPGRADE,
     ORDER_AFTER_FDF_UPGRADE,
+    ORDER_BEFORE_FDF_MIGRATION,
+    ORDER_FDF_MIGRATION,
+    ORDER_AFTER_FDF_MIGRATION,
     ORDER_AFTER_UPGRADE,
     CLOUD_PLATFORMS,
     ON_PREM_PLATFORMS,
@@ -55,7 +58,6 @@ from ocs_ci.utility.utils import load_auth_config
 from ocs_ci.deployment.hub_spoke import hypershift_cluster_factory
 from ocs_ci.utility.nfs_utils import check_cluster_resources_for_nfs
 from ocs_ci.ocs.node import check_cluster_resources
-
 
 # tier marks
 
@@ -155,6 +157,9 @@ order_post_upgrade = pytest.mark.order(ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.order(ORDER_AFTER_OCP_UPGRADE)
 order_post_ocs_upgrade = pytest.mark.order(ORDER_AFTER_OCS_UPGRADE)
 order_post_fdf_upgrade = pytest.mark.order(ORDER_AFTER_FDF_UPGRADE)
+order_pre_fdf_migration = pytest.mark.order(ORDER_BEFORE_FDF_MIGRATION)
+order_fdf_migration = pytest.mark.order(ORDER_FDF_MIGRATION)
+order_post_fdf_migration = pytest.mark.order(ORDER_AFTER_FDF_MIGRATION)
 ocp_upgrade = compose(order_ocp_upgrade, pytest.mark.ocp_upgrade)
 
 # multicluster orchestrator
@@ -200,6 +205,14 @@ post_ocp_upgrade = compose(order_post_ocp_upgrade, pytest.mark.post_ocp_upgrade)
 post_ocs_upgrade = compose(order_post_ocs_upgrade, pytest.mark.post_ocs_upgrade)
 post_fdf_upgrade = compose(order_post_fdf_upgrade, pytest.mark.post_fdf_upgrade)
 
+# ODF to FDF migration markers
+pre_fdf_migration = compose(
+    order_pre_fdf_migration,
+    pytest.mark.pre_fdf_migration,
+)
+fdf_migration = compose(order_fdf_migration, pytest.mark.fdf_migration)
+post_fdf_migration = compose(order_post_fdf_migration, pytest.mark.post_fdf_migration)
+
 upgrade_marks = [
     ocp_upgrade,
     mco_upgrade,
@@ -215,6 +228,9 @@ upgrade_marks = [
     post_ocp_upgrade,
     post_ocs_upgrade,
     post_fdf_upgrade,
+    pre_fdf_migration,
+    fdf_migration,
+    post_fdf_migration,
 ]
 
 # mark the test class with marker below to ignore leftover check
