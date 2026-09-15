@@ -1,3 +1,4 @@
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.page_objects.page_navigator import logger
 from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 from ocs_ci.ocs.ui.page_objects.encryption_module import EncryptionModule
@@ -83,6 +84,51 @@ class ObjectStorage(EncryptionModule, ResourceList):
         )
 
         return ObjectBucketClaimsTab()
+
+    def select_storage_provider(self, provider: str) -> None:
+        """
+        Select S3 storage provider (MCG or RGW) on the Object Storage page.
+
+        Args:
+            provider (str): Provider ID - constants.S3_PROVIDER_NOOBAA or constants.S3_PROVIDER_RGW_INTERNAL.
+
+        Raises:
+            ValueError: If provider is not recognized.
+
+        """
+        provider_map = {
+            constants.S3_PROVIDER_NOOBAA: "provider_card_mcg",
+            constants.S3_PROVIDER_RGW_INTERNAL: "provider_card_rgw",
+        }
+        locator_key = provider_map.get(provider)
+        if not locator_key:
+            raise ValueError(
+                f"Unknown provider: {provider}. "
+                f"Use '{constants.S3_PROVIDER_NOOBAA}' or '{constants.S3_PROVIDER_RGW_INTERNAL}'"
+            )
+
+        logger.info(f"Selecting storage provider: {provider}")
+        self.do_click(self.bucket_tab[locator_key])
+        self.page_has_loaded(retries=10)
+
+    def is_rgw_provider_available(self) -> bool:
+        """
+        Check if RGW provider card is present and enabled.
+
+        Returns:
+            bool: True if RGW provider is available and selectable.
+
+        """
+        if not self.check_element_presence(self.bucket_tab["provider_radio_rgw"][::-1]):
+            logger.info("RGW provider card not found in DOM")
+            return False
+
+        is_disabled = self.get_element_attribute(
+            self.bucket_tab["provider_radio_rgw"], "disabled", safe=True
+        )
+        available = is_disabled is None
+        logger.info(f"RGW provider available: {available}")
+        return available
 
     def select_project(self, cluster_namespace):
         """
