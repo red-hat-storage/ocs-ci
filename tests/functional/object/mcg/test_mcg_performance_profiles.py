@@ -4,7 +4,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
+    tier2,
     red_squad,
     mcg,
     runs_on_provider,
@@ -145,7 +145,7 @@ def resources_match(actual, req_cpu, lim_cpu, req_mem, lim_mem):
     )
 
 
-@tier1
+@tier2
 @mcg
 @red_squad
 @runs_on_provider
