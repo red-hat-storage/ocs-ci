@@ -1201,7 +1201,6 @@ class TestOLSRecipeFailoverAndRelocate:
             timeout=1200,
             discovered_apps=True,
             vrg_name=workload.discovered_apps_placement_name,
-            performed_dr_action=True,
         )
         logger.info("Workload running on secondary cluster after failover")
 
@@ -1303,7 +1302,6 @@ class TestOLSRecipeFailoverAndRelocate:
             timeout=1200,
             discovered_apps=True,
             vrg_name=workload.discovered_apps_placement_name,
-            performed_dr_action=True,
         )
 
         if pvc_interface == constants.CEPHFILESYSTEM:
