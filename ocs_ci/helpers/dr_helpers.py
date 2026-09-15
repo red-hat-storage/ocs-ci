@@ -315,6 +315,7 @@ def failover(
             drpc_name=drpc_obj.resource_name,
             namespace=namespace,
             dr_action="app-failover",
+            retries=10,
         )
 
 
@@ -430,6 +431,7 @@ def relocate(
             drpc_name=drpc_obj.resource_name,
             namespace=namespace,
             dr_action="app-relocate",
+            retries=10,
         )
 
     config.switch_ctx(restore_index)
@@ -1287,7 +1289,7 @@ def wait_for_all_resources_creation(
     pvc_count,
     pod_count,
     namespace,
-    timeout=900,
+    timeout=1800,
     skip_replication_resources=False,
     discovered_apps=False,
     vrg_name="",
@@ -1341,7 +1343,7 @@ def wait_for_all_resources_creation(
 
 def wait_for_all_resources_deletion(
     namespace,
-    timeout=1500,
+    timeout=2000,
     discovered_apps=False,
     workload_cleanup=False,
     vrg_name="",
@@ -1517,6 +1519,7 @@ def get_backend_volumes_for_pvcs(namespace):
             elif pvc_obj.backed_sc in [
                 constants.DEFAULT_STORAGECLASS_CEPHFS,
                 constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS,
+                constants.CUSTOM_CEPHFS_STORAGECLASS,
             ]:
                 backend_volume = pvc_obj.get_cephfs_subvolume_name
 
