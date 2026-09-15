@@ -67,9 +67,10 @@ class TestVirtualMachineLifecycle(ManageTest):
 
         Steps:
         1. Check via CLI if any filesystem exists in ibm-spectrum-scale.
-           - If not found (already cleaned up by UI in test_clone_virtualmachine),
-             log success and skip to step 3.
-           - If found: raise AssertionError immediately — LUN group UI cleanup failed.
+           - If not found (UI cleanup in test_clone_virtualmachine succeeded):
+             proceed to steps 2 and 3.
+           - If found: raise AssertionError immediately — LUN group UI cleanup
+             failed; steps 2 and 3 are skipped.
         2. Poll until all LocalDisks are gone.
         3. Delete the IBM Spectrum Scale cluster resource.
         """
@@ -78,7 +79,7 @@ class TestVirtualMachineLifecycle(ManageTest):
 
             logger.info("teardown_lungroup: starting class-level cleanup")
 
-            # Step 1 — Verify filesystem was deleted by the UI step in each test.
+            # Step 1 — Verify filesystem was deleted by the UI step in last testcase.
             lungroup_name = None
             try:
                 ocp_fs = OCP(
@@ -112,73 +113,50 @@ class TestVirtualMachineLifecycle(ManageTest):
                     f"Could not verify filesystem deletion — oc get failed: {e}"
                 ) from e
 
-            # Step 2 — Delete LocalDisk from CLI
-            if lungroup_name:
+            # Step 2 and Step 3 only run when filesystem was successfully
+            # deleted by the delete lungroup from UI
+            # If filesystem still exists, AssertionError was already raised
+            # above and these steps are skipped.
+            if not lungroup_name:
+                # Step 2 — Poll until all LocalDisks are gone
+                logger.info(
+                    "Waiting for LocalDisk deletion to settle before deleting cluster..."
+                )
+                ocp_ld_wait = OCP(namespace=constants.IBM_STORAGE_SCALE_NAMESPACE)
+                for ld_check in TimeoutSampler(
+                    timeout=120,
+                    sleep=10,
+                    func=ocp_ld_wait.exec_oc_cmd,
+                    command=(
+                        f"get localdisks"
+                        f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+                        f" --no-headers"
+                    ),
+                    out_yaml_format=False,
+                ):
+                    if not ld_check or not ld_check.strip():
+                        logger.info(
+                            "All LocalDisks gone — proceeding to cluster deletion"
+                        )
+                        break
+
+                # Step 3 — Delete IBM Spectrum Scale cluster resource
                 try:
                     ocp = OCP(
-                        kind=constants.IBM_STORAGE_SCALE_LOCALDISK,
+                        kind=constants.IBM_STORAGE_SCALE_CLUSTER_KIND,
                         namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
                     )
-                    ld_out = ocp.exec_oc_cmd(
-                        f"get localdisks -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
-                        " --no-headers",
+                    ocp.exec_oc_cmd(
+                        f"delete {constants.IBM_STORAGE_SCALE_CLUSTER_KIND}"
+                        f" ibm-spectrum-scale"
+                        f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
                         out_yaml_format=False,
                     )
-                    localdisk_name = None
-                    for line in ld_out.splitlines():
-                        if lungroup_name in line:
-                            localdisk_name = line.split()[0]
-                            break
-                    if localdisk_name:
-                        ocp.exec_oc_cmd(
-                            f"delete localdisk {localdisk_name}"
-                            f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
-                            out_yaml_format=False,
-                        )
-                        logger.info(f"Deleted LocalDisk '{localdisk_name}'")
-                    else:
-                        logger.warning(
-                            f"No LocalDisk found for LUN group '{lungroup_name}'"
-                        )
+                    logger.info("Deleted IBM Spectrum Scale cluster resource")
                 except CommandFailed as e:
-                    logger.warning(f"Could not delete LocalDisk: {e}")
-
-            logger.info(
-                "Waiting for LocalDisk deletion to settle before deleting cluster..."
-            )
-            ocp_ld_wait = OCP(namespace=constants.IBM_STORAGE_SCALE_NAMESPACE)
-            for ld_check in TimeoutSampler(
-                timeout=120,
-                sleep=10,
-                func=ocp_ld_wait.exec_oc_cmd,
-                command=(
-                    f"get localdisks"
-                    f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
-                    f" --no-headers"
-                ),
-                out_yaml_format=False,
-            ):
-                if not ld_check or not ld_check.strip():
-                    logger.info("All LocalDisks gone — proceeding to cluster deletion")
-                    break
-
-            # Step 3 — Delete IBM Spectrum Scale cluster resource
-            try:
-                ocp = OCP(
-                    kind=constants.IBM_STORAGE_SCALE_CLUSTER_KIND,
-                    namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
-                )
-                ocp.exec_oc_cmd(
-                    f"delete {constants.IBM_STORAGE_SCALE_CLUSTER_KIND}"
-                    f" ibm-spectrum-scale"
-                    f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
-                    out_yaml_format=False,
-                )
-                logger.info("Deleted IBM Spectrum Scale cluster resource")
-            except CommandFailed as e:
-                logger.warning(
-                    f"Could not delete IBM Spectrum Scale cluster resource: {e}"
-                )
+                    logger.warning(
+                        f"Could not delete IBM Spectrum Scale cluster resource: {e}"
+                    )
 
             logger.info("teardown_lungroup: complete")
 
