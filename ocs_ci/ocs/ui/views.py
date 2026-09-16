@@ -3004,6 +3004,48 @@ validation_4_22 = {
     ),
 }
 
+validation_5_0 = {
+    "volume_health_card": (
+        "//div[@data-test='odf-volume-health-card']",
+        By.XPATH,
+    ),
+    "volume_health_namespace_dropdown": (
+        "//div[@data-test='odf-volume-health-card']"
+        "//button[@data-test='odf-volume-health-card-namespace-dropdown']",
+        By.XPATH,
+    ),
+    "volume_health_success_icon": (
+        "[data-test='odf-volume-health-card'] " "svg[data-test='success-icon']",
+        By.CSS_SELECTOR,  # ← CSS for success icon (XPath had issues)
+    ),
+    "volume_health_no_issues_text": (
+        "//div[@data-test='odf-volume-health-card']"
+        "//*[contains(@class, 'empty-state__title-text')]",
+        By.XPATH,
+    ),
+    "volume_health_view_all_pvcs_link": (
+        "//div[@data-test='odf-volume-health-card']"
+        "//a[contains(@href, 'persistentvolumeclaims')]",
+        By.XPATH,
+    ),
+    "volume_health_attention_text": (
+        "//div[@data-test='odf-volume-health-card']"
+        "//*[contains(normalize-space(.), 'need attention')]",
+        By.XPATH,
+    ),
+    "volume_health_table_rows": (
+        "//div[@data-test='odf-volume-health-card']"
+        "//table[@aria-label='Volume health table']/tbody/tr",
+        By.XPATH,
+    ),
+    "volume_health_view_events_link": (
+        "//div[@data-test='odf-volume-health-card']"
+        "//table[@aria-label='Volume health table']"
+        "//a[contains(@href, '{0}/events')]",
+        By.XPATH,
+    ),
+}
+
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
     "node_label": (
@@ -4262,6 +4304,7 @@ locators = {
             **validation_4_20,
             **validation_4_21,
             **validation_4_22,
+            **validation_5_0,
         },
         "block_pool": {
             **block_pool,

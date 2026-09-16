@@ -4,6 +4,7 @@ import time
 from ocs_ci.framework import config
 from ocs_ci.ocs.ui.helpers_ui import format_locator, logger
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs.ui.page_objects.volume_health_card import VolumeHealthCard
 from ocs_ci.ocs.ui.workload_ui import PvcCapacityDeploymentList, compare_mem_usage
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -309,3 +310,14 @@ class BlockAndFile(PageNavigator):
             parent_element_loc[1],
         )
         return len(self.get_elements(healthy_loc)) > 0
+
+    def get_volume_health_card(self):
+        """
+        Get the Volume Health Card page object.
+
+        Returns:
+            VolumeHealthCard: Volume Health Card page object instance
+        """
+
+        logger.info("Accessing Volume Health Card page object")
+        return VolumeHealthCard()
