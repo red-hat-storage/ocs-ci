@@ -504,35 +504,53 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
             constants.MDS_DAEMON_DEPLOYMENT_ONE,
             constants.MDS_DAEMON_DEPLOYMENT_TWO,
         ]
+        initial_cluster_index = config.cur_index
+        is_hci = (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        )
 
         def finalizer():
             logger.info("Finalizer: restore both MDS deployments to 1")
             failed = []
-            for dep in mds_deployments:
-                if not modify_deployment_replica_count(dep, 1):
-                    logger.error(f"Failed to restore deployment {dep} to 1 replica")
-                    failed.append(dep)
-                else:
-                    logger.info(f"Restored deployment {dep} to 1 replica")
-            ceph_health_check(tries=20, delay=30)
+            try:
+                if is_hci:
+                    config.switch_to_provider()
+                for dep in mds_deployments:
+                    if not modify_deployment_replica_count(dep, 1):
+                        logger.error(f"Failed to restore deployment {dep} to 1 replica")
+                        failed.append(dep)
+                    else:
+                        logger.info(f"Restored deployment {dep} to 1 replica")
+                ceph_health_check(tries=20, delay=30)
+            finally:
+                if is_hci:
+                    config.switch_ctx(initial_cluster_index)
             assert (
                 not failed
             ), f"Failed to restore MDS deployments to 1 replica: {failed}"
 
         request.addfinalizer(finalizer)
 
-        for dep in mds_deployments:
-            logger.assertion(f"Deployment {dep} scaled to 0 replicas")
-            assert modify_deployment_replica_count(
-                dep, 0
-            ), f"Failed to scale deployment {dep} to 0 replicas"
-            logger.info(f"Scaled deployment {dep} to 0")
+        try:
+            if is_hci:
+                logger.info("HCI platform: switching to provider for MDS operations")
+                config.switch_to_provider()
+            for dep in mds_deployments:
+                logger.assertion(f"Deployment {dep} scaled to 0 replicas")
+                assert modify_deployment_replica_count(
+                    dep, 0
+                ), f"Failed to scale deployment {dep} to 0 replicas"
+                logger.info(f"Scaled deployment {dep} to 0")
 
-        logger.test_step(
-            "Restart CephFS nodeplugin pods on the pod nodes to trigger the "
-            "unhealthy probe"
-        )
-        self._restart_cephfs_nodeplugin_on_nodes(pod_node_names)
+            logger.test_step(
+                "Restart CephFS nodeplugin pods on the pod nodes to trigger "
+                "the unhealthy probe"
+            )
+            self._restart_cephfs_nodeplugin_on_nodes(pod_node_names)
+        finally:
+            if is_hci:
+                config.switch_ctx(initial_cluster_index)
 
         logger.test_step("Assert both per-node keys report 'unhealthy'")
         unhealthy_annotations = pvc_obj.wait_for_volume_health_state(
