@@ -21,7 +21,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.defaults import ODF_OPERATOR_NAME
 from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 from ocs_ci.utility.utils import TimeoutSampler
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
@@ -653,14 +653,16 @@ class ValidationUI(PageNavigator):
         """
 
         self.select_administrator_user()
-        try:
-            self.nav_storage_cluster_default_page()
-        except TimeoutException:
-            logger.info(
-                "As expected, ODF dashboard is not available for the unprivileged user"
-            )
-        else:
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        # Negative check: the unprivileged user must NOT see the ODF "Storage
+        # cluster" dashboard entry. get_elements() returns [] when the element is
+        # absent and never triggers the AI locator fallback, so the expected
+        # denial can't be masked by a substitute link (e.g. "Object storage").
+        if self.get_elements(self.page_nav["storage_cluster"]):
             raise UnexpectedODFAccessException
+        logger.info(
+            "As expected, ODF dashboard is not available for the unprivileged user"
+        )
 
     def verify_odf_without_ocs_in_installed_operator(self) -> tuple:
         """
