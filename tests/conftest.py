@@ -2649,8 +2649,6 @@ def environment_checker(request):
         constants.S3CLI_APP_LABEL,
         constants.MUST_GATHER_HELPER_LABEL,
     ]
-    # Check for consumer_env_check marker
-    consumer_env_check_mark = request.node.get_closest_marker("consumer_env_check")
 
     for mark in node.iter_markers():
         if mark in marks_to_ignore:
@@ -2658,15 +2656,7 @@ def environment_checker(request):
         if mark.name == ignore_leftover_label.name:
             exclude_labels.extend(list(mark.args))
 
-    # If test is marked with @consumer_env_check, switch to consumer cluster
-    # for environment checking (test handles its own context switching)
-    if ocsci_config.multicluster and consumer_env_check_mark:
-        ocsci_config.switch_to_consumer()
-        log.info(
-            "Switched to consumer cluster for environment checker "
-            "(test class has @consumer_env_check marker)"
-        )
-
+    # Check platform support - skip environment checker for unsupported platforms
     if ocsci_config.ENV_DATA["platform"] in {
         constants.FUSIONAAS_PLATFORM,
         constants.HCI_BAREMETAL,
@@ -2676,18 +2666,54 @@ def environment_checker(request):
             "Environment checker is NOT IMPLEMENTED for Fusion service and provider/client hci setup."
             "This needs to be updated"
         )
-    else:
-        # Create finalizer that ensures we're on the right cluster before capturing POST state
-        def environment_finalizer():
-            if ocsci_config.multicluster and consumer_env_check_mark:
-                ocsci_config.switch_to_consumer()
+        return
+
+    # Check for consumer_env_check marker
+    consumer_env_check_mark = request.node.get_closest_marker("consumer_env_check")
+
+    # If test is marked with @consumer_env_check, run environment checking on consumer
+    if ocsci_config.multicluster and consumer_env_check_mark:
+        # Save current cluster context for restoration after cleanup
+        # Finalizers run in LIFO order, so register restoration first so it runs last
+        saved_cluster_index = ocsci_config.cur_index
+
+        def restore_context_finalizer():
+            """
+            Restore cluster context after all cleanup (environment POST state
+            capture and factory finalizers) completes.
+            """
+            if saved_cluster_index is not None:
+                ocsci_config.switch_ctx(saved_cluster_index)
                 log.info(
-                    "Switched to consumer cluster for environment checker finalizer "
-                    "(capturing POST state)"
+                    f"Restored cluster context to index {saved_cluster_index} "
+                    "after environment checker cleanup"
                 )
+
+        request.addfinalizer(restore_context_finalizer)
+
+        # Create finalizer that ensures we're on consumer before capturing POST state
+        def environment_finalizer():
+            ocsci_config.switch_to_consumer()
+            log.info(
+                "Switched to consumer cluster for environment checker finalizer "
+                "(capturing POST state)"
+            )
             get_status_after_execution(exclude_labels=exclude_labels)
 
         request.addfinalizer(environment_finalizer)
+
+        # Switch to consumer cluster for environment checking
+        ocsci_config.switch_to_consumer()
+        log.info(
+            "Switched to consumer cluster for environment checker "
+            "(test class has @consumer_env_check marker)"
+        )
+        get_status_before_execution(exclude_labels=exclude_labels)
+    else:
+        # No marker - run environment checking on current cluster (provider)
+        request.addfinalizer(
+            lambda: get_status_after_execution(exclude_labels=exclude_labels)
+        )
         get_status_before_execution(exclude_labels=exclude_labels)
 
 

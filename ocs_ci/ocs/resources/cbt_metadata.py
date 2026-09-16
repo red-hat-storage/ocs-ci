@@ -725,6 +725,7 @@ class VerifierTool(ListerTool):
 
         build_and_run = (
             "set -e && "
+            "set -x && "
             f"cd {self.build_dir} && "
             f"git clone --depth=1 --branch {self.tools_ref} "
             f"{self.tools_repo} && "
@@ -735,7 +736,8 @@ class VerifierTool(ListerTool):
             "snapshot-metadata-verifier . && "
             "echo '=== Verifier build OK ===' && "
             f"{self.build_dir}/"
-            f"snapshot-metadata-verifier {verifier_flags}"
+            f"snapshot-metadata-verifier {verifier_flags} 2>&1 && "
+            "echo '=== Verifier execution completed ==='"
         )
 
         pod_data = load_yaml(constants.CBT_VERIFIER_POD_YAML)

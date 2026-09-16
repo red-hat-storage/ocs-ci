@@ -213,6 +213,12 @@ class TestRbdCBTMetadata(ManageTest):
         )
         log.info("Verifier logs:\n%s", logs)
         assert exit_code == 0, f"Verifier exited with code {exit_code}. Logs:\n{logs}"
+
+        # Verify that the verifier actually ran (not just built successfully)
+        assert "snapshot-metadata-verifier" in logs and (
+            "=== Verifier build OK ===" in logs
+        ), "Verifier binary did not build or execute. Check logs for build/runtime errors."
+
         return restored_pvc
 
     # -- Test 1 ----------------------------------------------------
