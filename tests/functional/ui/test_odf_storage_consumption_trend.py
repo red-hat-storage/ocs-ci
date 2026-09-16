@@ -16,7 +16,11 @@ from ocs_ci.framework.testlib import (
     polarion_id,
 )
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.osd_resize import basic_resize_osd
+from ocs_ci.helpers.osd_resize import (
+    basic_resize_osd,
+    ceph_verification_steps_post_resize_osd,
+    check_ceph_health_after_resize_osd,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
@@ -24,11 +28,13 @@ from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
     delete_pods,
     get_prometheus_pods,
+    get_osd_pods,
 )
+from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs, get_deviceset_pvs
 from ocs_ci.ocs.resources.storage_cluster import get_storage_size
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
 
 logger = logging.getLogger(__name__)
 
@@ -289,9 +295,37 @@ class TestConsumptionTrendUI(ManageTest):
 
         logger.info("Get the value of 'Estimated days until full' from UI")
         est_days_before = block_and_file_page.get_est_days_from_ui()
+
+        # Capture the pre-resize OSD state so we can wait for the resize to actually
+        # complete before checking the dashboard. basic_resize_osd() only issues the
+        # resize and returns immediately; without waiting for the old OSDs to
+        # terminate, the larger OSDs to come up and Ceph to rebalance, the dashboard
+        # is polled while the cluster is still degraded and 'Estimated days until
+        # full' never increases, causing a false failure.
+        old_storage_size = get_storage_size()
+        old_osd_pods = get_osd_pods()
+        old_osd_pvcs = get_deviceset_pvcs()
+        old_osd_pvs = get_deviceset_pvs()
+
         logger.info("Performing OSD resize")
-        basic_resize_osd(get_storage_size())
+        new_storage_size = basic_resize_osd(old_storage_size)
+
+        logger.info("Wait for the OSD resize to complete and Ceph to be healthy")
+        new_storage_size_gb = convert_device_size(new_storage_size, "GB", 1024)
+        expected_ceph_capacity = int(len(old_osd_pods) * new_storage_size_gb)
+        ceph_verification_steps_post_resize_osd(
+            old_osd_pods,
+            old_osd_pvcs,
+            old_osd_pvs,
+            new_storage_size,
+            expected_ceph_capacity,
+        )
+        check_ceph_health_after_resize_osd()
+
         logger.info("After OSD resize, checking consumption trend UI")
+        # Re-navigate to the dashboard as it may have reloaded during the resize
+        block_and_file_page = PageNavigator().nav_storage_cluster_default_page()
+        block_and_file_page.validate_block_and_file_tab_active()
         est_days_after = None
         for est_days_after in TimeoutSampler(
             timeout=300, sleep=30, func=block_and_file_page.get_est_days_from_ui
