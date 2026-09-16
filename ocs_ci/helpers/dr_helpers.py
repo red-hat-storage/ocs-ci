@@ -4776,18 +4776,16 @@ def validate_cluster_odf_cli(retries=5, retry_interval=60):
 def configure_submariner_lighthouse_import_namespace_deny_list():
     """
     Temporary workaround required only for submariner version 0.24.1 in a
-    globalnet RDR setup, to be run after the multicluster service is enabled on
+    globalnet RDR setup, to be run immediately after submariner is installed on
     both managed clusters.
 
     On each managed cluster, if the deployed submariner version is 0.24.1,
     create the submariner-lighthouse-agent configmap with the
-    import-namespace-deny-list set to "kube-" and restart the ocs-operator pods
-    so that the change takes effect.
+    import-namespace-deny-list set to "kube-".
 
     """
     # Local imports to keep this temporary workaround self-contained
     from ocs_ci.utility import version
-    from ocs_ci.ocs.resources.pod import get_operator_pods, delete_pods
 
     target_version = version.get_semantic_version("0.24.1")
     restore_index = config.cur_index
@@ -4821,11 +4819,5 @@ def configure_submariner_lighthouse_import_namespace_deny_list():
                 '--from-literal=import-namespace-deny-list="kube-" '
                 f"-n {constants.SUBMARINER_OPERATOR_NAMESPACE}"
             )
-            logger.info(f"Restarting ocs-operator pods on cluster {cluster_name}")
-            ocs_operator_pods = get_operator_pods(
-                operator_label=constants.OCS_OPERATOR_LABEL,
-                namespace=config.ENV_DATA["cluster_namespace"],
-            )
-            delete_pods(ocs_operator_pods)
     finally:
         config.switch_ctx(restore_index)

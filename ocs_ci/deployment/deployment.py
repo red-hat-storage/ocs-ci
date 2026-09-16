@@ -385,6 +385,10 @@ class Deployment(object):
             # Configure submariner only on non-ACM clusters
             submariner = Submariner()
             submariner.deploy()
+            # Temporary workaround for submariner 0.24.1: immediately after
+            # submariner is installed, create the submariner-lighthouse-agent
+            # configmap
+            configure_submariner_lighthouse_import_namespace_deny_list()
 
     def deploy_gitops_operator(self, switch_ctx=None):
         """
@@ -640,11 +644,6 @@ class Deployment(object):
                                 timeout=2000,
                                 ocs_registry_image=ocs_registry_image,
                             )
-                        # Temporary workaround for submariner 0.24.1: after the
-                        # multicluster service is enabled on both managed
-                        # clusters, create the submariner-lighthouse-agent
-                        # configmap and restart ocs-operator pods
-                        configure_submariner_lighthouse_import_namespace_deny_list()
                     config.reset_ctx()
                 if config.REPORTING["collect_logs_on_success_run"]:
                     try:
