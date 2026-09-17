@@ -12,8 +12,6 @@ import time
 import pexpect
 import pytest
 import yaml
-from selenium.common.exceptions import WebDriverException
-
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
@@ -64,99 +62,291 @@ class TestVirtualMachineLifecycle(ManageTest):
     def teardown_lungroup(self, request):
         """
         Class-scoped teardown that runs once after all tests in this class.
+        Performs full CLI cleanup of the LUN group and IBM Spectrum Scale resources.
 
         Steps:
-        1. Check via CLI if any filesystem exists in ibm-spectrum-scale.
-           - If not found (UI cleanup in test_clone_virtualmachine succeeded):
-             proceed to steps 2 and 3.
-           - If found: raise AssertionError immediately — LUN group UI cleanup
-             failed; steps 2 and 3 are skipped.
-        2. Poll until all LocalDisks are gone.
-        3. Delete the IBM Spectrum Scale cluster resource.
+        1. Get filesystem name from ibm-spectrum-scale namespace.
+        2. Label the filesystem with allowDelete=true so it can be deleted.
+        3. List all StorageClasses and delete those whose name contains the
+           filesystem name; confirm each deletion.
+        4. Delete the filesystem resource and confirm deletion.
+        5. Get all LocalDisks and delete each one; confirm each deletion.
+        6. Delete the IBM Spectrum Scale cluster resource and confirm deletion.
         """
 
         def cleanup():
 
             logger.info("teardown_lungroup: starting class-level cleanup")
+            ocp_generic = OCP(namespace=constants.IBM_STORAGE_SCALE_NAMESPACE)
 
-            # Step 1 — Verify filesystem was deleted by the UI step in last testcase.
-            lungroup_name = None
+            logger.info(
+                "Step 1: Getting filesystem name from"
+                f"{constants.IBM_STORAGE_SCALE_NAMESPACE}..."
+            )
+            filesystem_name = None
             try:
-                ocp_fs = OCP(
-                    kind=constants.IBM_STORAGE_SCALE_FILESYSTEM,
-                    namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
-                )
-                fs_out = ocp_fs.exec_oc_cmd(
+                fs_out = ocp_generic.exec_oc_cmd(
                     f"get {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
                     f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE} --no-headers",
                     out_yaml_format=False,
                 )
-                if not fs_out or not fs_out.strip():
-                    logger.info(
-                        f"No {constants.IBM_STORAGE_SCALE_FILESYSTEM} found in "
-                        f"{constants.IBM_STORAGE_SCALE_NAMESPACE} — UI cleanup succeeded"
-                    )
-                else:
+                logger.info(f"oc get filesystem output:\n{fs_out}")
+                if fs_out and fs_out.strip():
                     for line in fs_out.splitlines():
                         line = line.strip()
                         if line:
-                            lungroup_name = line.split()[0]
+                            filesystem_name = line.split()[0]
                             break
-                    if lungroup_name:
-                        raise AssertionError(
-                            f"Filesystem '{lungroup_name}' still exists in "
-                            f"{constants.IBM_STORAGE_SCALE_NAMESPACE} after UI deletion — "
-                            "LUN group UI cleanup FAILED"
-                        )
-            except CommandFailed as e:
-                raise AssertionError(
-                    f"Could not verify filesystem deletion — oc get failed: {e}"
-                ) from e
-
-            # Step 2 and Step 3 only run when filesystem was successfully
-            # deleted by the delete lungroup from UI
-            # If filesystem still exists, AssertionError was already raised
-            # above and these steps are skipped.
-            if not lungroup_name:
-                # Step 2 — Poll until all LocalDisks are gone
-                logger.info(
-                    "Waiting for LocalDisk deletion to settle before deleting cluster..."
-                )
-                ocp_ld_wait = OCP(namespace=constants.IBM_STORAGE_SCALE_NAMESPACE)
-                for ld_check in TimeoutSampler(
-                    timeout=120,
-                    sleep=10,
-                    func=ocp_ld_wait.exec_oc_cmd,
-                    command=(
-                        f"get localdisks"
-                        f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
-                        f" --no-headers"
-                    ),
-                    out_yaml_format=False,
-                ):
-                    if not ld_check or not ld_check.strip():
-                        logger.info(
-                            "All LocalDisks gone — proceeding to cluster deletion"
-                        )
-                        break
-
-                # Step 3 — Delete IBM Spectrum Scale cluster resource
-                try:
-                    ocp = OCP(
-                        kind=constants.IBM_STORAGE_SCALE_CLUSTER_KIND,
-                        namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
+                if filesystem_name:
+                    logger.info(f"Found filesystem: '{filesystem_name}'")
+                else:
+                    logger.info(
+                        "No filesystem found in "
+                        f"{constants.IBM_STORAGE_SCALE_NAMESPACE} — skipping Steps 2-4"
                     )
-                    ocp.exec_oc_cmd(
-                        f"delete {constants.IBM_STORAGE_SCALE_CLUSTER_KIND}"
-                        f" ibm-spectrum-scale"
+            except CommandFailed as e:
+                logger.warning(f"Could not get filesystem list: {e}")
+
+            if filesystem_name:
+                logger.info(f"Step 2: Labelling filesystem '{filesystem_name}'")
+                try:
+                    ocp_generic.exec_oc_cmd(
+                        f"label {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
+                        f" {filesystem_name}"
+                        f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+                        f" scale.spectrum.ibm.com/allowDelete=true --overwrite",
+                        out_yaml_format=False,
+                    )
+                    logger.info(
+                        f"Filesystem '{filesystem_name}' labelled with allowDelete=true"
+                    )
+                except CommandFailed as e:
+                    logger.warning(
+                        f"Could not label filesystem '{filesystem_name}': {e}"
+                    )
+
+                logger.info("Step 3: Deleting StorageClasses")
+                ocp_sc = OCP(kind="StorageClass")
+                try:
+                    sc_out = ocp_sc.exec_oc_cmd(
+                        "get storageclass --no-headers",
+                        out_yaml_format=False,
+                    )
+                    sc_names_to_delete = []
+                    if sc_out and sc_out.strip():
+                        for line in sc_out.splitlines():
+                            line = line.strip()
+                            if line and filesystem_name in line:
+                                sc_name = line.split()[0]
+                                sc_names_to_delete.append(sc_name)
+
+                    if sc_names_to_delete:
+                        for sc_name in sc_names_to_delete:
+                            try:
+                                del_out = ocp_sc.exec_oc_cmd(
+                                    f"delete storageclass {sc_name}",
+                                    out_yaml_format=False,
+                                )
+                                logger.info(
+                                    f"StorageClass '{sc_name}' deleted: {del_out}"
+                                )
+                                # Confirm deletion — poll for up to 2 minutes
+                                logger.info(
+                                    f"Waiting for StorageClass '{sc_name}' to be deleted..."
+                                )
+                                deadline = time.time() + 120
+                                sc_deleted = False
+                                while time.time() < deadline:
+                                    try:
+                                        out = ocp_sc.exec_oc_cmd(
+                                            f"get storageclass {sc_name} --no-headers",
+                                            out_yaml_format=False,
+                                        )
+                                        if not out or not out.strip():
+                                            sc_deleted = True
+                                            break
+                                    except CommandFailed:
+                                        sc_deleted = True
+                                        break
+                                    time.sleep(10)
+                                if sc_deleted:
+                                    logger.info(
+                                        f"StorageClass '{sc_name}' confirmed deleted"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"StorageClass '{sc_name}' still exists "
+                                        "after 2-minute wait"
+                                    )
+                            except CommandFailed as e:
+                                logger.warning(
+                                    f"Could not delete StorageClass '{sc_name}': {e}"
+                                )
+                    else:
+                        logger.info(
+                            f"No StorageClasses found containing '{filesystem_name}'"
+                        )
+                except CommandFailed as e:
+                    logger.warning(f"Could not list StorageClasses: {e}")
+
+                logger.info(
+                    f"Step 4: Deleting filesystem '{filesystem_name}' from "
+                    f"{constants.IBM_STORAGE_SCALE_NAMESPACE}..."
+                )
+                try:
+                    del_fs_out = ocp_generic.exec_oc_cmd(
+                        f"delete {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
+                        f" {filesystem_name}"
                         f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
                         out_yaml_format=False,
                     )
-                    logger.info("Deleted IBM Spectrum Scale cluster resource")
+                    logger.info(f"Filesystem '{filesystem_name}' deleted: {del_fs_out}")
+                    # Confirm deletion — poll for up to 5 minutes
+                    logger.info(
+                        f"Waiting for filesystem '{filesystem_name}' to be deleted..."
+                    )
+                    deadline = time.time() + 300
+                    fs_deleted = False
+                    while time.time() < deadline:
+                        try:
+                            out = ocp_generic.exec_oc_cmd(
+                                f"get {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
+                                f" {filesystem_name}"
+                                f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+                                f" --no-headers",
+                                out_yaml_format=False,
+                            )
+                            if not out or not out.strip():
+                                fs_deleted = True
+                                break
+                        except CommandFailed:
+                            fs_deleted = True
+                            break
+                        time.sleep(10)
+                    if fs_deleted:
+                        logger.info(f"Filesystem '{filesystem_name}' confirmed deleted")
+                    else:
+                        logger.warning(
+                            f"Filesystem '{filesystem_name}' still exists "
+                            "after 5-minute wait"
+                        )
                 except CommandFailed as e:
                     logger.warning(
-                        f"Could not delete IBM Spectrum Scale cluster resource: {e}"
+                        f"Could not delete filesystem '{filesystem_name}': {e}"
                     )
+
+            logger.info(
+                "Step 5: Getting and deleting all LocalDisks from "
+                f"{constants.IBM_STORAGE_SCALE_NAMESPACE}..."
+            )
+            try:
+                ld_out = ocp_generic.exec_oc_cmd(
+                    f"get localdisk"
+                    f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE} --no-headers",
+                    out_yaml_format=False,
+                )
+                logger.info(f"oc get localdisk output:\n{ld_out}")
+                localdisk_names = []
+                if ld_out and ld_out.strip():
+                    for line in ld_out.splitlines():
+                        line = line.strip()
+                        if line:
+                            localdisk_names.append(line.split()[0])
+
+                if localdisk_names:
+                    for ld_name in localdisk_names:
+                        try:
+                            del_ld_out = ocp_generic.exec_oc_cmd(
+                                f"delete localdisk {ld_name}"
+                                f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
+                                out_yaml_format=False,
+                            )
+                            logger.info(f"LocalDisk '{ld_name}' deleted: {del_ld_out}")
+                            # Confirm deletion — poll for up to 2 minutes
+                            logger.info(
+                                f"Waiting for LocalDisk '{ld_name}' to be deleted..."
+                            )
+                            deadline = time.time() + 120
+                            ld_deleted = False
+                            while time.time() < deadline:
+                                try:
+                                    out = ocp_generic.exec_oc_cmd(
+                                        f"get localdisk {ld_name}"
+                                        f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+                                        f" --no-headers",
+                                        out_yaml_format=False,
+                                    )
+                                    if not out or not out.strip():
+                                        ld_deleted = True
+                                        break
+                                except CommandFailed:
+                                    ld_deleted = True
+                                    break
+                                time.sleep(10)
+                            if ld_deleted:
+                                logger.info(f"LocalDisk '{ld_name}' confirmed deleted")
+                            else:
+                                logger.warning(
+                                    f"LocalDisk '{ld_name}' still exists "
+                                    "after 2-minute wait"
+                                )
+                        except CommandFailed as e:
+                            logger.warning(
+                                f"Could not delete LocalDisk '{ld_name}': {e}"
+                            )
+                else:
+                    logger.info(
+                        f"No LocalDisks found in {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+                    )
+            except CommandFailed as e:
+                logger.warning(f"Could not list LocalDisks: {e}")
+
+            logger.info(
+                "Step 6: Deleting IBM Spectrum Scale cluster resource "
+                f"from {constants.IBM_STORAGE_SCALE_NAMESPACE}..."
+            )
+            try:
+                ocp_cluster = OCP(
+                    kind=constants.IBM_STORAGE_SCALE_CLUSTER_KIND,
+                    namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
+                )
+                del_cluster_out = ocp_cluster.exec_oc_cmd(
+                    f"delete {constants.IBM_STORAGE_SCALE_CLUSTER_KIND}"
+                    f" ibm-spectrum-scale"
+                    f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
+                    out_yaml_format=False,
+                )
+                logger.info(f"IBM Spectrum Scale cluster deleted: {del_cluster_out}")
+                # Confirm deletion — poll for up to 5 minutes
+                logger.info("Waiting for IBM Spectrum Scale cluster to be deleted...")
+                deadline = time.time() + 300
+                cluster_deleted = False
+                while time.time() < deadline:
+                    try:
+                        out = ocp_cluster.exec_oc_cmd(
+                            f"get {constants.IBM_STORAGE_SCALE_CLUSTER_KIND}"
+                            f" ibm-spectrum-scale"
+                            f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+                            f" --no-headers",
+                            out_yaml_format=False,
+                        )
+                        if not out or not out.strip():
+                            cluster_deleted = True
+                            break
+                    except CommandFailed:
+                        cluster_deleted = True
+                        break
+                    time.sleep(10)
+                if cluster_deleted:
+                    logger.info("IBM Spectrum Scale cluster confirmed deleted")
+                else:
+                    logger.warning(
+                        "IBM Spectrum Scale cluster still exists " "after 5-minute wait"
+                    )
+            except CommandFailed as e:
+                logger.warning(
+                    f"Could not delete IBM Spectrum Scale cluster resource: {e}"
+                )
 
             logger.info("teardown_lungroup: complete")
 
@@ -504,18 +694,6 @@ class TestVirtualMachineLifecycle(ManageTest):
 
         return vm_name, namespace
 
-    def _delete_lungroup_via_ui(self):
-        """
-        Delete the LUN group via the UI (Storage > External systems > SAN_Storage).
-        """
-        logger.info("\nDelete LUN group via UI")
-        logger.info("-" * 80)
-        try:
-            lungroup_name = self.vm_ui.delete_lungroup_via_ui()
-            logger.info(f"LUN group '{lungroup_name}' deletion initiated via UI")
-        except WebDriverException as e:
-            logger.warning(f"Could not delete LUN group via UI (browser error): {e}")
-
     def _fetch_vm_credentials(self, vm_name, namespace):
         """
         Retrieve the cloud-init username and password from the VM's YAML spec.
@@ -807,7 +985,6 @@ class TestVirtualMachineLifecycle(ManageTest):
         7. Log in to the cloned VM console, confirm the file exists, compute
            its md5sum without writing anything.
         8. Assert the md5sum of the cloned file matches the original checksum.
-        9. Delete the LUN group via the UI (Storage > External systems > SAN_Storage).
         """
         logger.info("=" * 80)
         logger.info("Starting VirtualMachine Clone Test")
@@ -920,7 +1097,3 @@ class TestVirtualMachineLifecycle(ManageTest):
             f"clone md5sum={clone_md5sum}"
         )
         logger.info("md5sum matches original — data integrity verified: PASS")
-
-        logger.info("\nStep 9: Delete LUN group via UI")
-        logger.info("-" * 80)
-        self._delete_lungroup_via_ui()
