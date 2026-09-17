@@ -4817,7 +4817,9 @@ def configure_submariner_lighthouse_import_namespace_deny_list():
             exec_cmd(
                 "oc create configmap submariner-lighthouse-agent "
                 '--from-literal=import-namespace-deny-list="kube-" '
-                f"-n {constants.SUBMARINER_OPERATOR_NAMESPACE}"
+                f"-n {constants.SUBMARINER_OPERATOR_NAMESPACE} "
+                "--dry-run=client -o yaml | oc apply -f -",
+                shell=True,
             )
     finally:
         config.switch_ctx(restore_index)
