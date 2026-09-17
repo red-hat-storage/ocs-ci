@@ -131,7 +131,6 @@ class TestFDFSANConnection(ManageTest):
             f'--portal "{iscsi_ip}" -l\' 2> /dev/null',
             shell=True,
             out_yaml_format=False,
-            secrets=[iscsi_ip, iscsi_iqn],
         )
         logger.info("LUN discovery completed on all worker nodes")
         logger.info("Waiting 2 minute for LUNs to become visible on the UI...")
