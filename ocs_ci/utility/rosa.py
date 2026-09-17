@@ -709,10 +709,7 @@ def download_rosa_cli():
         str: path to the installer
 
     """
-    force_download = (
-        config.RUN["cli_params"].get("deploy")
-        and config.DEPLOYMENT["force_download_rosa_cli"]
-    )
+    force_download = config.DEPLOYMENT["force_download_rosa_cli"]
     return utils.get_rosa_cli(
         config.DEPLOYMENT["rosa_cli_version"], force_download=force_download
     )
@@ -1183,6 +1180,41 @@ def wait_console_url(cluster_name, timeout=600, sleep=10):
         if console_url and "https" in console_url:
             logger.info(f"Console URL: {console_url}")
             return console_url
+
+
+def get_rosa_hcp_infra_id(cluster_name):
+    """
+    Get the infrastructure name (infra_id) of a ROSA HCP cluster.
+    Must be called while the cluster API is still reachable.
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        str: The infra_id (e.g. 'j041arh13t1'), or "" if unavailable
+    """
+    try:
+        infra_id = ocp.OCP().exec_oc_cmd(
+            "get infrastructure cluster " "-o jsonpath='{.status.infrastructureName}'"
+        )
+        if infra_id:
+            logger.info(f"Pre-fetched infra_id from cluster: {infra_id}")
+            return str(infra_id).strip()
+    except Exception as e:
+        logger.warning(f"Could not fetch infra_id from live cluster: {e}")
+
+    cmd = (
+        f"rosa describe cluster --cluster {cluster_name} -o json "
+        "| jq -r '.infra_id // \"\"'"
+    )
+    proc = utils.exec_cmd(cmd, shell=True)
+    if proc.returncode == 0:
+        infra_id = proc.stdout.decode().strip()
+        if infra_id:
+            logger.info(f"Pre-fetched infra_id from rosa CLI: {infra_id}")
+            return infra_id
+    logger.warning(f"Could not determine infra_id for cluster {cluster_name}")
+    return ""
 
 
 def get_associated_oidc_config_id(cluster_name):
