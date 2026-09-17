@@ -3016,7 +3016,7 @@ validation_5_0 = {
     ),
     "volume_health_success_icon": (
         "[data-test='odf-volume-health-card'] " "svg[data-test='success-icon']",
-        By.CSS_SELECTOR,  # ← CSS for success icon (XPath had issues)
+        By.CSS_SELECTOR,
     ),
     "volume_health_no_issues_text": (
         "//div[@data-test='odf-volume-health-card']"
@@ -3042,6 +3042,25 @@ validation_5_0 = {
         "//div[@data-test='odf-volume-health-card']"
         "//table[@aria-label='Volume health table']"
         "//a[contains(@href, '{0}/events')]",
+        By.XPATH,
+    ),
+    "volume_health_table_pvc_link": (
+        ".//td//a[contains(@href, 'persistentvolumeclaims') "
+        "and not(contains(@href, '/events'))]",
+        By.XPATH,
+    ),
+    "volume_health_table_node_link": (
+        ".//td//a[contains(@href, '/nodes/')]",
+        By.XPATH,
+    ),
+    "volume_health_table_events_link": (
+        ".//td//a[contains(@href, '/events')]",
+        By.XPATH,
+    ),
+    "volume_health_table_pvc_hrefs": (
+        "//div[@data-test='odf-volume-health-card']"
+        "//table[@aria-label='Volume health table']"
+        "//tbody/tr//td//a[contains(@href, 'persistentvolumeclaims') and not(contains(@href, '/events'))]",
         By.XPATH,
     ),
 }

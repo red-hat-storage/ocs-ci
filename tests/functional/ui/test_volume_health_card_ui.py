@@ -7,13 +7,15 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     runs_on_provider,
+    skipif_mcg_only,
     skipif_ocs_version,
     tier1,
     ui,
-    skipif_mcg_only,
 )
 from ocs_ci.framework.testlib import ManageTest
+from ocs_ci.ocs.ui.base_ui import SeleniumDriver
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
@@ -25,26 +27,41 @@ logger = logging.getLogger(__name__)
 @skipif_mcg_only
 class TestVolumeHealthCardHealthy(ManageTest):
     """
-    Test Volume Health Card in healthy state
+    Test Volume Health Card in healthy state on the Block and File tab.
     """
 
+    @pytest.fixture()
+    def ensure_healthy_cluster(self):
+        """
+        Verify cluster is in healthy state before running UI test.
+
+        Returns:
+            None
+        """
+        logger.info("Verifying cluster health before UI test")
+        ceph_health_check(tries=3, delay=10)
+
     @tier1
-    @pytest.mark.polarion_id("OCS-XXXX")  # Update with actual Polarion ID
-    def test_volume_health_card_healthy_state(self, setup_ui_class_factory):
+    @pytest.mark.polarion_id("OCS-XXXX")
+    def test_volume_health_card_healthy_state(
+        self, setup_ui_class_factory, ensure_healthy_cluster
+    ):
         """
         Test Volume Health Card shows healthy state when no PVC health issues exist.
 
         Steps:
-        1. Navigate to Storage Cluster -> Block and File tab
-        2. Verify Volume Health Card is present
-        3. Verify card shows healthy state (success icon visible)
-        4. Verify 'No issues found.' text is displayed
-        5. Verify 'View all PVCs' link is present and functional
+            1. Navigate to Storage Cluster -> Block and File tab.
+            2. Verify Volume Health Card is present.
+            3. Verify card shows healthy state (success icon visible).
+            4. Verify 'No issues found.' text is displayed.
+            5. Verify 'View all PVCs' link navigates to PVC list page.
         """
         logger.test_step("Navigate to Volume Health Card on Block and File tab")
         setup_ui_class_factory()
         page_nav = PageNavigator().nav_storage_cluster_default_page()
         sc_page = page_nav.nav_block_and_file_tab()
+
+        logger.info("Accessing Volume Health Card")
         card = sc_page.get_volume_health_card()
 
         logger.test_step("Verify Volume Health Card shows healthy state")
@@ -66,11 +83,12 @@ class TestVolumeHealthCardHealthy(ManageTest):
 
         logger.test_step("Verify 'View all PVCs' navigation link")
         card.take_screenshot("healthy_state_before_click")
-        current_url = card.click_view_all_pvcs()
+        card.click_view_all_pvcs()
 
+        current_url = SeleniumDriver().current_url
         logger.assertion(f"URL contains 'persistentvolumeclaims': {current_url}")
         assert (
             "persistentvolumeclaims" in current_url
         ), f"Expected URL to contain 'persistentvolumeclaims', got: {current_url}"
 
-        logger.info(" Volume Health Card healthy state test passed")
+        logger.info("Volume Health Card healthy state test passed")
