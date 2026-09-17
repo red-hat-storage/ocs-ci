@@ -33,6 +33,7 @@ from ocs_ci.ocs.resources.cbt_metadata import (
     validate_snapshot_metadata_sidecar,
 )
 from ocs_ci.ocs.resources.snapshots import (
+    get_snapshot_handle,
     restore_snapshot_to_block_pvc,
     write_data_to_pvc,
 )
@@ -172,6 +173,7 @@ class TestRbdCBTMetadata(ManageTest):
         copy_pvc,
         volume_mode,
         previous_snapshot=None,
+        previous_snapshot_id=None,
     ):
         """
         Restore a snapshot to a Block PVC, run the verifier, and
@@ -183,6 +185,8 @@ class TestRbdCBTMetadata(ManageTest):
             volume_mode (str): Volume mode of the original PVC
             previous_snapshot (str): Base snapshot name for delta
                 mode. Omit for allocated mode.
+            previous_snapshot_id (str): Base CSI snapshot handle
+                for delta mode, used instead of previous_snapshot
 
         Returns:
             PVC: The restored PVC object
@@ -201,10 +205,41 @@ class TestRbdCBTMetadata(ManageTest):
             source_pvc_name=restored_pvc.name,
             dest_pvc_name=copy_pvc.name,
             previous_snapshot=previous_snapshot,
+            previous_snapshot_id=previous_snapshot_id,
         )
         log.info("Verifier logs:\n%s", logs)
         assert exit_code == 0, f"Verifier exited with code {exit_code}. Logs:\n{logs}"
         return restored_pvc
+
+    def _finish_copy_step(self, restored_pvc):
+        """
+        Clean up after a completed copy step.
+
+        The copy PVC accumulates state across steps and is kept,
+        but the verifier pod and the restored PVC of the finished
+        step must be removed before the next step reuses the copy
+        PVC as its destination.
+
+        Args:
+            restored_pvc (PVC): Restored PVC of the finished step
+        """
+        if self.cbt_runner.verifier_pod_name:
+            self.cbt_runner.delete_pod(self.cbt_runner.verifier_pod_name)
+        restored_pvc.delete()
+        restored_pvc.ocp.wait_for_delete(restored_pvc.name, timeout=120)
+
+    @staticmethod
+    def _block_ranges(entries):
+        """
+        Reduce lister entries to their block ranges.
+
+        Args:
+            entries (list): Parsed lister entries
+
+        Returns:
+            set: Set of (ByteOffset, SizeBytes) tuples
+        """
+        return {(entry["ByteOffset"], entry["SizeBytes"]) for entry in entries}
 
     # -- Test 1 ----------------------------------------------------
 
@@ -385,10 +420,7 @@ class TestRbdCBTMetadata(ManageTest):
         )
 
         log.test_step("Delete the restored PVC from the allocated copy")
-        if self.cbt_runner.verifier_pod_name:
-            self.cbt_runner.delete_pod(self.cbt_runner.verifier_pod_name)
-        restored_pvc_1.delete()
-        restored_pvc_1.ocp.wait_for_delete(restored_pvc_1.name, timeout=120)
+        self._finish_copy_step(restored_pvc_1)
 
         # -- Phase 2: delta copy of snap-2 -------------------------
 
@@ -421,6 +453,351 @@ class TestRbdCBTMetadata(ManageTest):
             copy_pvc,
             volume_mode,
             previous_snapshot=snap_1.name,
+        )
+
+    # -- Test 4 ----------------------------------------------------
+
+    @pytest.mark.parametrize(
+        argnames=["volume_mode"],
+        argvalues=[
+            pytest.param(
+                constants.VOLUME_MODE_BLOCK,
+                marks=pytest.mark.polarion_id("OCS-8253"),
+            ),
+            pytest.param(
+                constants.VOLUME_MODE_FILESYSTEM,
+                marks=pytest.mark.polarion_id("OCS-8254"),
+            ),
+        ],
+    )
+    def test_cbt_delta_skipping_intermediate_snapshot(self, volume_mode):
+        """
+        Verify that a delta works when an intermediate snapshot is
+        skipped.
+
+        Takes three snapshots with a write before each one, then
+        computes the delta from snap-1 straight to snap-3, leaving
+        snap-2 out. The delta must cover the changes of both the
+        second and the third write, so it has to be a superset of
+        the snap-1 to snap-2 delta.
+
+        Steps:
+        1. Create an application PVC, a Block-mode copy PVC,
+           and a writer pod.
+        2. Write data A (10 MiB), take snap-1 and run an
+           allocated-mode verification.
+        3. Write data B (5 MiB at offset 100 MiB) and take snap-2.
+        4. Write data C (5 MiB at offset 200 MiB) and take snap-3.
+        5. Run the CBT lister in delta mode for snap-2 vs snap-1
+           and for snap-3 vs snap-1, and verify the skipping delta
+           covers the intermediate one.
+        6. Run the CBT verifier in delta mode for snap-3 vs snap-1
+           and assert it exits with code 0.
+        """
+        log.test_step(
+            "Create a %s application PVC, a Block-mode copy PVC, and a writer pod",
+            volume_mode,
+        )
+        app_pvc = self._create_app_pvc(volume_mode)
+        copy_pvc = self._create_block_pvc()
+        writer_pod = self._create_writer_pod(app_pvc, volume_mode)
+
+        log.test_step(
+            "Write data A (10 MiB), take snap-1 and run an allocated-mode verification"
+        )
+        write_data_to_pvc(
+            writer_pod,
+            volume_mode,
+            size_mb=10,
+            filename="file1.bin",
+        )
+        snap_1 = self._take_snapshot(app_pvc, "cbt-skip-1")
+        restored_pvc_1 = self._restore_and_verify(snap_1, copy_pvc, volume_mode)
+        self._finish_copy_step(restored_pvc_1)
+
+        log.test_step("Write data B (5 MiB at offset 100 MiB) and take snap-2")
+        write_data_to_pvc(
+            writer_pod,
+            volume_mode,
+            size_mb=5,
+            filename="file2.bin",
+            offset_mb=100,
+        )
+        snap_2 = self._take_snapshot(app_pvc, "cbt-skip-2")
+
+        log.test_step("Write data C (5 MiB at offset 200 MiB) and take snap-3")
+        write_data_to_pvc(
+            writer_pod,
+            volume_mode,
+            size_mb=5,
+            filename="file3.bin",
+            offset_mb=200,
+        )
+        snap_3 = self._take_snapshot(app_pvc, "cbt-skip-3")
+
+        log.test_step(
+            "Run the CBT lister in delta mode for snap-2 vs snap-1 and for "
+            "snap-3 vs snap-1, and verify the skipping delta covers the "
+            "intermediate one"
+        )
+        entries_1_to_2 = self.cbt_runner.run_lister_delta(
+            target_snap=snap_2.name,
+            base_snap=snap_1.name,
+        )
+        entries_1_to_3 = self.cbt_runner.run_lister_delta(
+            target_snap=snap_3.name,
+            base_snap=snap_1.name,
+        )
+        log.info(
+            "Delta snap-1 to snap-2 returned %d block(s), "
+            "delta snap-1 to snap-3 returned %d block(s)",
+            len(entries_1_to_2),
+            len(entries_1_to_3),
+        )
+        assert len(entries_1_to_2) > 0, "Delta lister returned no blocks for write B"
+        assert len(entries_1_to_3) > 0, "Delta lister returned no blocks for writes B+C"
+
+        ranges_1_to_2 = self._block_ranges(entries_1_to_2)
+        ranges_1_to_3 = self._block_ranges(entries_1_to_3)
+        assert ranges_1_to_2 <= ranges_1_to_3, (
+            f"Delta snap-1 to snap-3 does not cover the snap-1 to snap-2 "
+            f"delta. Missing block ranges: {sorted(ranges_1_to_2 - ranges_1_to_3)}"
+        )
+        assert len(ranges_1_to_3) > len(ranges_1_to_2), (
+            f"Delta snap-1 to snap-3 has the same {len(ranges_1_to_3)} block "
+            f"range(s) as the snap-1 to snap-2 delta, so the changes of "
+            f"write C were not reported"
+        )
+
+        log.test_step(
+            "Run the CBT verifier in delta mode for snap-3 vs snap-1 and "
+            "assert exit code 0"
+        )
+        self._restore_and_verify(
+            snap_3,
+            copy_pvc,
+            volume_mode,
+            previous_snapshot=snap_1.name,
+        )
+
+    # -- Test 5 ----------------------------------------------------
+
+    @pytest.mark.parametrize(
+        argnames=["volume_mode"],
+        argvalues=[
+            pytest.param(
+                constants.VOLUME_MODE_BLOCK,
+                marks=pytest.mark.polarion_id("OCS-8255"),
+            ),
+            pytest.param(
+                constants.VOLUME_MODE_FILESYSTEM,
+                marks=pytest.mark.polarion_id("OCS-8256"),
+            ),
+        ],
+    )
+    def test_cbt_chained_deltas(self, volume_mode):
+        """
+        Verify that chained deltas produce the same result as a
+        full copy.
+
+        Applies three incremental steps to a single copy PVC: an
+        allocated copy of snap-1, a delta from snap-1 to snap-2,
+        and a delta from snap-2 to snap-3. The verifier compares
+        the copy PVC against the restored snapshot after every
+        step, so the final exit code 0 proves the chain produced a
+        volume matching the full snap-3 state.
+
+        Steps:
+        1. Create an application PVC, a Block-mode copy PVC,
+           and a writer pod.
+        2. Write data A (10 MiB), take snap-1 and run an
+           allocated-mode verification.
+        3. Write data B (5 MiB at offset 100 MiB), take snap-2 and
+           run a delta verification for snap-2 vs snap-1.
+        4. Write data C (5 MiB at offset 200 MiB), take snap-3 and
+           run a delta verification for snap-3 vs snap-2.
+        """
+        log.test_step(
+            "Create a %s application PVC, a Block-mode copy PVC, and a writer pod",
+            volume_mode,
+        )
+        app_pvc = self._create_app_pvc(volume_mode)
+        copy_pvc = self._create_block_pvc()
+        writer_pod = self._create_writer_pod(app_pvc, volume_mode)
+
+        # -- Step 1: allocated copy of snap-1 ----------------------
+
+        log.test_step(
+            "Write data A (10 MiB), take snap-1 and run an allocated-mode verification"
+        )
+        write_data_to_pvc(
+            writer_pod,
+            volume_mode,
+            size_mb=10,
+            filename="file1.bin",
+        )
+        snap_1 = self._take_snapshot(app_pvc, "cbt-chain-1")
+        restored_pvc_1 = self._restore_and_verify(snap_1, copy_pvc, volume_mode)
+        self._finish_copy_step(restored_pvc_1)
+
+        # -- Step 2: delta snap-1 to snap-2 ------------------------
+
+        log.test_step(
+            "Write data B (5 MiB at offset 100 MiB), take snap-2 and run a "
+            "delta verification for snap-2 vs snap-1"
+        )
+        write_data_to_pvc(
+            writer_pod,
+            volume_mode,
+            size_mb=5,
+            filename="file2.bin",
+            offset_mb=100,
+        )
+        snap_2 = self._take_snapshot(app_pvc, "cbt-chain-2")
+        restored_pvc_2 = self._restore_and_verify(
+            snap_2,
+            copy_pvc,
+            volume_mode,
+            previous_snapshot=snap_1.name,
+        )
+        self._finish_copy_step(restored_pvc_2)
+
+        # -- Step 3: delta snap-2 to snap-3 ------------------------
+
+        log.test_step(
+            "Write data C (5 MiB at offset 200 MiB), take snap-3 and run a "
+            "delta verification for snap-3 vs snap-2"
+        )
+        write_data_to_pvc(
+            writer_pod,
+            volume_mode,
+            size_mb=5,
+            filename="file3.bin",
+            offset_mb=200,
+        )
+        snap_3 = self._take_snapshot(app_pvc, "cbt-chain-3")
+        self._restore_and_verify(
+            snap_3,
+            copy_pvc,
+            volume_mode,
+            previous_snapshot=snap_2.name,
+        )
+
+    # -- Test 6 ----------------------------------------------------
+
+    @pytest.mark.parametrize(
+        argnames=["volume_mode"],
+        argvalues=[
+            pytest.param(
+                constants.VOLUME_MODE_BLOCK,
+                marks=pytest.mark.polarion_id("OCS-8257"),
+            ),
+            pytest.param(
+                constants.VOLUME_MODE_FILESYSTEM,
+                marks=pytest.mark.polarion_id("OCS-8258"),
+            ),
+        ],
+    )
+    def test_cbt_delta_with_csi_snapshot_handle(self, volume_mode):
+        """
+        Verify that a delta works when the base snapshot is given
+        by CSI snapshot handle instead of by name.
+
+        Runs the same delta twice, once with the base snapshot
+        referenced by name (-p) and once by the CSI handle read
+        from the VolumeSnapshotContent (-P), and asserts both
+        produce the same block ranges.
+
+        Steps:
+        1. Create an application PVC, a Block-mode copy PVC,
+           and a writer pod.
+        2. Write 10 MiB of data, take snap-1 and run an
+           allocated-mode verification.
+        3. Write 5 MiB of additional data at offset 100 MiB and
+           take snap-2.
+        4. Get the CSI snapshot handle of snap-1 from its
+           VolumeSnapshotContent.
+        5. Run the CBT lister in delta mode with the base snapshot
+           given by name and by CSI handle, and verify both return
+           the same block ranges.
+        6. Run the CBT verifier in delta mode with the base
+           snapshot given by CSI handle and assert it exits with
+           code 0.
+        """
+        log.test_step(
+            "Create a %s application PVC, a Block-mode copy PVC, and a writer pod",
+            volume_mode,
+        )
+        app_pvc = self._create_app_pvc(volume_mode)
+        copy_pvc = self._create_block_pvc()
+        writer_pod = self._create_writer_pod(app_pvc, volume_mode)
+
+        log.test_step(
+            "Write 10 MiB of data, take snap-1 and run an allocated-mode verification"
+        )
+        write_data_to_pvc(
+            writer_pod,
+            volume_mode,
+            size_mb=10,
+            filename="file1.bin",
+        )
+        snap_1 = self._take_snapshot(app_pvc, "cbt-handle-1")
+        restored_pvc_1 = self._restore_and_verify(snap_1, copy_pvc, volume_mode)
+        self._finish_copy_step(restored_pvc_1)
+
+        log.test_step(
+            "Write 5 MiB of additional data at offset 100 MiB and take snap-2"
+        )
+        write_data_to_pvc(
+            writer_pod,
+            volume_mode,
+            size_mb=5,
+            filename="file2.bin",
+            offset_mb=100,
+        )
+        snap_2 = self._take_snapshot(app_pvc, "cbt-handle-2")
+
+        log.test_step("Get the CSI snapshot handle of snap-1")
+        snap_1_handle = get_snapshot_handle(snap_1)
+        assert snap_1_handle, f"Snapshot {snap_1.name} has an empty CSI snapshot handle"
+
+        log.test_step(
+            "Run the CBT lister in delta mode with the base snapshot given by "
+            "name and by CSI handle, and verify both return the same block ranges"
+        )
+        entries_by_name = self.cbt_runner.run_lister_delta(
+            target_snap=snap_2.name,
+            base_snap=snap_1.name,
+        )
+        entries_by_handle = self.cbt_runner.run_lister_delta(
+            target_snap=snap_2.name,
+            base_snap_id=snap_1_handle,
+        )
+        log.info(
+            "Delta by name returned %d block(s), delta by CSI handle "
+            "returned %d block(s)",
+            len(entries_by_name),
+            len(entries_by_handle),
+        )
+        assert len(entries_by_name) > 0, "Delta lister by name returned no blocks"
+
+        ranges_by_name = self._block_ranges(entries_by_name)
+        ranges_by_handle = self._block_ranges(entries_by_handle)
+        assert ranges_by_name == ranges_by_handle, (
+            f"Delta by CSI handle returned different block ranges than delta "
+            f"by name. Only by name: {sorted(ranges_by_name - ranges_by_handle)}, "
+            f"only by handle: {sorted(ranges_by_handle - ranges_by_name)}"
+        )
+
+        log.test_step(
+            "Run the CBT verifier in delta mode with the base snapshot given "
+            "by CSI handle and assert exit code 0"
+        )
+        self._restore_and_verify(
+            snap_2,
+            copy_pvc,
+            volume_mode,
+            previous_snapshot_id=snap_1_handle,
         )
 
 
