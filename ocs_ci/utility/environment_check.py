@@ -180,7 +180,7 @@ def get_status_before_execution(exclude_labels=None, exclude_job_owned_pods=True
     PVC = ocp.OCP(kind=constants.PVC)
     NS = ocp.OCP(kind=constants.NAMESPACE)
     VS = ocp.OCP(kind=constants.VOLUMESNAPSHOT)
-    if config.RUN["cephcluster"]:
+    if config.RUN.get("cephcluster", False):
         CEPHFILESYSTEM = ocp.OCP(kind=constants.CEPHFILESYSTEM)
         CEPHBLOCKPOOL = ocp.OCP(kind=constants.CEPHBLOCKPOOL)
         config.RUN["KINDS"] = [POD, SC, CEPHFILESYSTEM, CEPHBLOCKPOOL, PV, PVC, NS, VS]
@@ -194,7 +194,7 @@ def get_status_before_execution(exclude_labels=None, exclude_job_owned_pods=True
             "namespace": None,
             "vs": None,
         }
-    elif config.RUN["lvm"]:
+    elif config.RUN.get("lvm", False):
         LV = ocp.OCP(kind=constants.LOGICALVOLUME)
         config.RUN["KINDS"] = [POD, SC, PV, PVC, NS, VS, LV]
         config.RUN["ENV_STATUS_DICT"] = {
@@ -205,6 +205,17 @@ def get_status_before_execution(exclude_labels=None, exclude_job_owned_pods=True
             "namespace": None,
             "vs": None,
             "lv": None,
+        }
+    else:
+        # Default for consumer clusters or other scenarios without cephcluster/lvm
+        config.RUN["KINDS"] = [POD, SC, PV, PVC, NS, VS]
+        config.RUN["ENV_STATUS_DICT"] = {
+            "pod": None,
+            "sc": None,
+            "pv": None,
+            "pvc": None,
+            "namespace": None,
+            "vs": None,
         }
     config.RUN["ENV_STATUS_PRE"] = copy.deepcopy(config.RUN["ENV_STATUS_DICT"])
     config.RUN["ENV_STATUS_POST"] = copy.deepcopy(config.RUN["ENV_STATUS_DICT"])
@@ -254,7 +265,7 @@ def get_status_after_execution(exclude_labels=None, exclude_job_owned_pods=True)
     volumesnapshot_diff = compare_dicts(
         config.RUN["ENV_STATUS_PRE"]["vs"], config.RUN["ENV_STATUS_POST"]["vs"]
     )
-    if config.RUN["cephcluster"]:
+    if config.RUN.get("cephcluster", False):
         cephfs_diff = compare_dicts(
             config.RUN["ENV_STATUS_PRE"]["cephfs"],
             config.RUN["ENV_STATUS_POST"]["cephfs"],
@@ -273,7 +284,7 @@ def get_status_after_execution(exclude_labels=None, exclude_job_owned_pods=True)
             "namespaces": namespace_diff,
             "vs": volumesnapshot_diff,
         }
-    elif config.RUN["lvm"]:
+    elif config.RUN.get("lvm", False):
         lv_diff = compare_dicts(
             config.RUN["ENV_STATUS_PRE"]["lv"],
             config.RUN["ENV_STATUS_POST"]["lv"],
@@ -286,6 +297,16 @@ def get_status_after_execution(exclude_labels=None, exclude_job_owned_pods=True)
             "namespaces": namespace_diff,
             "vs": volumesnapshot_diff,
             "lv": lv_diff,
+        }
+    else:
+        # Default for consumer clusters or other scenarios without cephcluster/lvm
+        diffs_dict = {
+            "pods": pod_diff,
+            "storageClasses": sc_diff,
+            "pvs": pv_diff,
+            "pvcs": pvc_diff,
+            "namespaces": namespace_diff,
+            "vs": volumesnapshot_diff,
         }
 
     leftover_detected = False

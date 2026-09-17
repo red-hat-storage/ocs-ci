@@ -880,6 +880,10 @@ ocs_ci_utility = pytest.mark.ocs_ci_utility
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider
 
+# Mark to indicate environment_checker should run on consumer cluster
+# (test must handle its own context switching)
+consumer_env_check = pytest.mark.consumer_env_check
+
 # Marks to identify the regression tests for provider-client cluster
 provider_mode = pytest.mark.provider_mode
 
