@@ -315,8 +315,8 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
 
     def test_rbd_encrypted_pvc_keyrotation_all_combinations(
         self,
-        create_multiple_storage_pvcs_pods,
         setup_nfs_feature,
+        create_multiple_storage_pvcs_pods,
         setup_prerequisites,
         verify_pvc_key_rotation,
         snapshot_factory,
