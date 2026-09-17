@@ -32,6 +32,7 @@ class FusionDeployment:
         self.sds_version = config.DEPLOYMENT.get("fusion_pre_release_sds_version")
         self.image_tag = config.DEPLOYMENT.get("fusion_pre_release_image")
         self.operator_name = defaults.FUSION_OPERATOR_NAME
+        self.subscription_name = defaults.FUSION_SUBSCRIPTION_NAME
         self.namespace = defaults.FUSION_NAMESPACE
         self.kubeconfig = config.RUN["kubeconfig"]
 
@@ -219,8 +220,13 @@ class FusionDeployment:
         """
         logger.info("Retrieving installed Fusion version")
 
+        sub_name = (
+            self.subscription_name
+            if config.ENV_DATA.get("platform", "").lower() == constants.IBM_HCI_PLATFORM
+            else self.operator_name
+        )
         results = run_cmd(
-            f"oc get subscription {self.operator_name} -n {self.namespace} --kubeconfig {self.kubeconfig} -o yaml"
+            f"oc get subscription {sub_name} -n {self.namespace} --kubeconfig {self.kubeconfig} -o yaml"
         )
         build = yaml.safe_load(results)["status"]["installedCSV"]
         version = ".".join(build.split(".")[1:])
