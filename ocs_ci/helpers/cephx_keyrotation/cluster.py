@@ -116,9 +116,10 @@ class CephXClusterHelper:
         with a non-integer JSON value.
 
         Expected rejection: non-null values fail with an OpenAPI type error
-        (``must be of type integer: "<expected_json_type>"``); ``null`` fails
-        with ``keyGeneration cannot be removed once set`` (null is treated as
-        removing the field once it has been set).
+        (``must be of type integer`` or ``must be of type int64``). String
+        values typically include ``"<expected_json_type>"``; boolean
+        ``true`` may be reported as an empty value on int64 fields.
+        ``null`` fails with ``keyGeneration cannot be removed once set``.
 
         Args:
             invalid_value: Value to patch (e.g. ``"abc"``, ``True``, ``None``).
@@ -161,16 +162,16 @@ class CephXClusterHelper:
             )
         )
         expect_remove_error = invalid_value is None
-        expected_error = (
-            constants.CEPHX_KEY_GENERATION_REMOVE_ERROR
+        expected_errors = (
+            (constants.CEPHX_KEY_GENERATION_REMOVE_ERROR,)
             if expect_remove_error
-            else constants.CEPHX_KEY_GENERATION_TYPE_ERROR
+            else constants.CEPHX_KEY_GENERATION_TYPE_ERRORS
         )
         log.info(
             "Attempting invalid StorageCluster daemon keyGeneration=%s "
             "(expect rejection containing %r%s)",
             value_repr,
-            expected_error,
+            expected_errors,
             ("" if expect_remove_error else f", json type={expected_json_type}"),
         )
         try:
@@ -179,14 +180,21 @@ class CephXClusterHelper:
             )
         except CommandFailed as exc:
             err = str(exc)
-            if expected_error not in err:
+            if not any(token in err for token in expected_errors):
                 raise UnexpectedBehaviour(
                     "Expected StorageCluster validation error containing "
-                    f"'{expected_error}', got: {err}"
+                    f"{expected_errors}, got: {err}"
                 ) from exc
             if not expect_remove_error:
                 type_token = f'"{expected_json_type}"'
-                if type_token not in err and expected_json_type not in err:
+                empty_int64_value = (
+                    'Invalid value: ""' in err or 'type int64: ""' in err
+                )
+                if (
+                    type_token not in err
+                    and expected_json_type not in err
+                    and not empty_int64_value
+                ):
                     raise UnexpectedBehaviour(
                         "Expected type validation error to mention JSON type "
                         f"{type_token}, got: {err}"
@@ -200,7 +208,7 @@ class CephXClusterHelper:
         raise UnexpectedBehaviour(
             "StorageCluster accepted non-integer daemon keyGeneration="
             f"{value_repr}; expected validation rejection containing "
-            f"'{expected_error}'"
+            f"{expected_errors}"
         )
 
     def get_cephcluster_daemon_key_generation(self):
