@@ -47,31 +47,44 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         Raises:
             Exception: If there is an error during hotplugging or I/O operation.
         """
-        vm_obj.wait_for_ssh_connectivity(timeout=300)
         logger.info(f"Hotplugging PVC '{pvc.name}' to VM '{vm_obj.name}'")
         vm_obj.addvolume(volume_name=pvc.name)
 
-        def _hotplug_ready():
-            return verifyvolume(
-                vm_obj.name, volume_name=pvc.name, namespace=vm_obj.namespace
-            ) and verify_hotplug(
-                vm_obj=vm_obj,
-                disks_before_hotplug=before_disks,
-            )
-
-        sample = TimeoutSampler(
-            timeout=600,
-            sleep=5,
-            func=_hotplug_ready,
+        logger.info(
+            f"Waiting for PVC '{pvc.name}' to be attached to VM '{vm_obj.name}'"
         )
-        assert sample.wait_for_func_status(
-            result=True
-        ), f"Hotplug verification failed for PVC '{pvc.name}' on VM '{vm_obj.name}'"
+        volume_sample = TimeoutSampler(
+            timeout=300,
+            sleep=5,
+            func=verifyvolume,
+            vm_name=vm_obj.name,
+            volume_name=pvc.name,
+            namespace=vm_obj.namespace,
+        )
+        assert volume_sample.wait_for_func_value(
+            value=True
+        ), f"PVC '{pvc.name}' was not attached to VM '{vm_obj.name}'"
+
+        logger.info(
+            f"PVC '{pvc.name}' is attached to VM '{vm_obj.name}'. "
+            "Waiting for the disk to become visible inside the guest"
+        )
+
+        hotplug_sample = TimeoutSampler(
+            timeout=300,
+            sleep=5,
+            func=verify_hotplug,
+            vm_obj=vm_obj,
+            disks_before_hotplug=before_disks,
+        )
+        assert hotplug_sample.wait_for_func_value(value=True), (
+            f"PVC '{pvc.name}' is attached to VM '{vm_obj.name}', "
+            "but the hotplugged disk was not detected inside the guest"
+        )
 
         logger.info(f"PVC '{pvc.name}' hotplugged successfully to VM '{vm_obj.name}'")
 
         if not cross_pvc:
-            vm_obj.wait_for_ssh_connectivity(timeout=300)
             logger.info(f"Running I/O on VM '{vm_obj.name}'")
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             return source_csum
@@ -169,7 +182,6 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         logger.test_step("Hotplug disks, run I/O, reboot, and verify persistence")
         for i, (vm_obj, pvc) in enumerate(vms_pvc):
             try:
-                vm_obj.wait_for_ssh_connectivity(timeout=300)
                 disks_before_hotplug = vm_obj.run_ssh_cmd(
                     "lsblk -o NAME,SIZE,MOUNTPOINT -P"
                 )
@@ -182,19 +194,18 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 )
 
                 logger.info(f"Rebooting VM '{vm_obj.name}'")
-                vm_obj.restart(wait=True, verify=True)
+                vm_obj.restart()
                 logger.info(f"VM '{vm_obj.name}' rebooted successfully")
 
-                volume_sample = TimeoutSampler(
-                    timeout=300,
-                    sleep=10,
-                    func=verifyvolume,
-                    vm_name=vm_obj.name,
-                    volume_name=pvc.name,
-                    namespace=vm_obj.namespace,
+                volume_attached = verifyvolume(
+                    vm_obj.name, volume_name=pvc.name, namespace=vm_obj.namespace
                 )
-                assert volume_sample.wait_for_func_status(
-                    result=True
+                logger.assertion(
+                    f"Volume attached after reboot: vm='{vm_obj.name}', "
+                    f"volume='{pvc.name}', expected=True, actual={volume_attached}"
+                )
+                assert (
+                    volume_attached
                 ), f"Volume '{pvc.name}' not found on VM '{vm_obj.name}' after reboot"
 
                 new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
@@ -225,7 +236,6 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 f"'{dvt_obj.name}' -> '{clone_obj_dvt.name}'"
             )
 
-            vm_obj_pvc.wait_for_ssh_connectivity(timeout=300)
             logger.info(
                 f"Attaching clone '{clone_obj_dvt.name}' to VM '{vm_obj_pvc.name}'"
             )
@@ -237,7 +247,6 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 vm_obj_pvc, clone_obj_dvt, file_paths, before_disks_pvc, cross_pvc=True
             )
 
-            vm_obj_dvt.wait_for_ssh_connectivity(timeout=300)
             logger.info(
                 f"Attaching clone '{clone_obj_pvc.name}' to VM '{vm_obj_dvt.name}'"
             )
