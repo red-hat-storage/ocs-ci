@@ -111,8 +111,9 @@ class TestFDFSANConnection(ManageTest):
         )
         logger.info(f"Secret '{secret_name}' verified successfully in namespace '{ns}'")
 
-        iscsi_ip = config.ENV_DATA.get("san_iscsi_ip")
-        iscsi_iqn = config.ENV_DATA.get("san_iscsi_iqn")
+        san_details = config.AUTH.get("san_details", {})
+        iscsi_ip = san_details.get("san_iscsi_ip")
+        iscsi_iqn = san_details.get("san_iscsi_iqn")
 
         # Validate values before interpolating into a shell command.
         # IP must be a dotted-decimal address; IQN must follow the iqn. format.
@@ -175,15 +176,16 @@ class TestFDFSANConnection(ManageTest):
         11. Verify the connection and file system status
 
         Required config keys in your private cluster config YAML:
-            ENV_DATA:
-              san_image_registry_url: "quay.io"        # defaults to quay.io if not set
-              san_image_repository_name: "org/repo"
-              san_quay_server: "quay.io/org"
-              san_quay_username: "your-username"
-              san_quay_password: "your-password"  # pragma: allowlist secret
-              san_quay_email: "your-email@example.com"
-              san_iscsi_ip: "19X.16XX.1.1XX"            # iSCSI target portal IP
-              san_iscsi_iqn: "iqn.202X-XX.com.example:storage"  # iSCSI target IQN
+            AUTH:
+              san_details:
+                san_image_registry_url: "quay.io"        # defaults to quay.io if not set
+                san_image_repository_name: "org/repo"
+                san_quay_server: "quay.io/org"
+                san_quay_username: "your-username"
+                san_quay_password: "your-password"  # pragma: allowlist secret
+                san_quay_email: "your-email@example.com"
+                san_iscsi_ip: "19X.16XX.1.1XX"            # iSCSI target portal IP
+                san_iscsi_iqn: "iqn.202X-XX.com.example:storage"  # iSCSI target IQN
 
         """
         logger.info("Starting FDF SAN connection test")
@@ -211,24 +213,27 @@ class TestFDFSANConnection(ManageTest):
         fusion_access.click_next_button()
         fusion_access.take_screenshot("san_configuration_page")
 
+        # Fetch all SAN details from AUTH
+        san_details = config.AUTH.get("san_details", {})
+
         # Step 4a: Enter Image registry URL
-        image_registry_url = config.ENV_DATA.get("san_image_registry_url", "quay.io")
+        image_registry_url = san_details.get("san_image_registry_url", "quay.io")
         logger.info(f"Step 4a: Enter Image registry URL: {image_registry_url}")
         fusion_access.enter_image_registry_url(image_registry_url)
         fusion_access.take_screenshot("image_registry_url_entered")
 
         # Step 4b: Enter Image repository name
-        image_repository_name = config.ENV_DATA.get("san_image_repository_name")
+        image_repository_name = san_details.get("san_image_repository_name")
         logger.info(f"Step 4b: Enter Image repository name: {image_repository_name}")
         fusion_access.enter_image_repository_name(image_repository_name)
         fusion_access.take_screenshot("image_repository_name_entered")
 
         # Step 4c: Create docker-registry secret in ibm-spectrum-scale namespace
         secret_name = constants.IBM_QUAYIO_SECRET_NAME
-        quay_server = config.ENV_DATA.get("san_quay_server")
-        quay_username = config.ENV_DATA.get("san_quay_username")
-        quay_password = config.ENV_DATA.get("san_quay_password")
-        quay_email = config.ENV_DATA.get("san_quay_email")
+        quay_server = san_details.get("san_quay_server")
+        quay_username = san_details.get("san_quay_username")
+        quay_password = san_details.get("san_quay_password")
+        quay_email = san_details.get("san_quay_email")
         logger.info(
             f"Step 4c: Creating docker-registry secret '{secret_name}' "
             f"in ibm-spectrum-scale namespace"
