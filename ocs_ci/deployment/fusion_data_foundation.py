@@ -423,12 +423,10 @@ class FusionDataFoundationDeployment:
         """
 
         logger.info("Creating OdfCluster CR")
-        # storageclass = get_storageclass()
         worker_nodes = node.get_worker_nodes()
         with open(constants.FDF_ODFCLUSTER_CR, "r") as f:
             odfcluster_data = yaml.safe_load(f.read())
 
-        # odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
         odfcluster_data["spec"]["storageNodes"] = worker_nodes
 
         if config.ENV_DATA.get("erasureCoding"):
