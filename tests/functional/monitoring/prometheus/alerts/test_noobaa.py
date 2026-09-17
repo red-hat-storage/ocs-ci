@@ -1,12 +1,15 @@
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import (
     polarion_id,
+    post_upgrade,
     runs_on_provider,
     skipif_aws_creds_are_missing,
     skipif_disconnected_cluster,
     skipif_managed_service,
+    tier1,
     tier2,
     tier4a,
     mcg,
@@ -165,6 +168,27 @@ def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted, threading_loc
             measure_end_time=measure_noobaa_ns_target_bucket_deleted.get("stop"),
             time_min=pg_wait,
         )
+
+
+@mcg
+@blue_squad
+@tier1
+@post_upgrade
+@polarion_id("OCS-7915")
+@runs_on_provider
+def test_noobaa_prometheus_rules_exist():
+    """
+    Verify that the NooBaa PrometheusRule CR exists and contains rule groups.
+    """
+    prometheus_rule = OCP(
+        api_version="monitoring.coreos.com/v1",
+        kind="PrometheusRule",
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    rule = prometheus_rule.get(resource_name="noobaa-prometheus-rules")
+    groups = rule.get("spec", {}).get("groups", [])
+    log.info(f"Found {len(groups)} rule groups: " f"{[g['name'] for g in groups]}")
+    assert groups, "noobaa-prometheus-rules PrometheusRule CR has no rule groups"
 
 
 def setup_module(module):
