@@ -122,19 +122,20 @@ class TestFDFSANConnection(ManageTest):
             raise ValueError(f"san_iscsi_iqn '{iscsi_iqn}' is not a valid IQN")
 
         logger.info("Starting LUN discovery on all worker nodes")
-        # ocp_obj = ocp.OCP()
-        # ocp_obj.exec_oc_cmd(
-        #     f"get nodes -l node-role.kubernetes.io/worker --no-headers -o name "
-        #     f"| xargs -I {{}} -- oc debug {{}} -- bash -c "
-        #     f'\'chroot /host iscsiadm -m discovery -t st -p "{iscsi_ip}"; '
-        #     f'chroot /host iscsiadm --mode node --target "{iscsi_iqn}" '
-        #     f'--portal "{iscsi_ip}" -l\' 2> /dev/null',
-        #     shell=True,
-        #     out_yaml_format=False,
-        # )
-        # logger.info("LUN discovery completed on all worker nodes")
-        # logger.info("Waiting 2 minute for LUNs to become visible on the UI...")
-        # sleep(120)
+        ocp_obj = ocp.OCP()
+        ocp_obj.exec_oc_cmd(
+            f"get nodes -l node-role.kubernetes.io/worker --no-headers -o name "
+            f"| xargs -I {{}} -- oc debug {{}} -- bash -c "
+            f'\'chroot /host iscsiadm -m discovery -t st -p "{iscsi_ip}"; '
+            f'chroot /host iscsiadm --mode node --target "{iscsi_iqn}" '
+            f'--portal "{iscsi_ip}" -l\' 2> /dev/null',
+            shell=True,
+            out_yaml_format=False,
+            secrets=[iscsi_ip, iscsi_iqn],
+        )
+        logger.info("LUN discovery completed on all worker nodes")
+        logger.info("Waiting 2 minute for LUNs to become visible on the UI...")
+        sleep(120)
 
     @pytest.fixture(autouse=True)
     def setup_ui(self, setup_ui_class_factory):
