@@ -456,6 +456,9 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
         )
         logger.test_step("UI: Verify card returns to healthy state after recovery")
         card.nav_storage_cluster_default_page()
+        logger.info("Check unhealthy PVC removed from table")
+        pvc_cleared = card.wait_for_pvc_not_in_table(pvc_obj.name, timeout=60)
+        assert pvc_cleared, f"PVC {pvc_obj.name} still in table after recovery"
         card_healthy = card.wait_for_healthy(timeout=300)
         logger.assertion(f"Card healthy: expected=True, actual={card_healthy}")
         assert card_healthy, "Card did not return to healthy state"
@@ -775,6 +778,9 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
 
         logger.test_step("UI: Verify card returns to healthy after MDS recovery")
         card.nav_storage_cluster_default_page()
+        logger.info("Check unhealthy PVC removed from table")
+        pvc_cleared = card.wait_for_pvc_not_in_table(pvc_obj.name, timeout=60)
+        assert pvc_cleared, f"PVC {pvc_obj.name} still in table after recovery"
         card_healthy = card.wait_for_healthy(timeout=300)
         logger.assertion(f"Card healthy: expected=True, actual={card_healthy}")
         assert card_healthy

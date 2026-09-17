@@ -42,7 +42,7 @@ class TestVolumeHealthCardHealthy(ManageTest):
         ceph_health_check(tries=3, delay=10)
 
     @tier1
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-8264")
     def test_volume_health_card_healthy_state(
         self, setup_ui_class_factory, ensure_healthy_cluster
     ):
@@ -72,7 +72,6 @@ class TestVolumeHealthCardHealthy(ManageTest):
         is_healthy = card.is_healthy()
         logger.assertion(f"Card healthy: expected=True, actual={is_healthy}")
         assert is_healthy, "Volume Health Card should show healthy state"
-
         no_issues_text = card.get_no_issues_text()
         logger.assertion(
             f"No issues text: expected='No issues found.', actual='{no_issues_text}'"
