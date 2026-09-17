@@ -54,7 +54,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         def _hotplug_ready():
             return verifyvolume(
                 vm_obj.name, volume_name=pvc.name, namespace=vm_obj.namespace
-            ) or verify_hotplug(
+            ) and verify_hotplug(
                 vm_obj=vm_obj,
                 disks_before_hotplug=before_disks,
             )
@@ -67,12 +67,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         assert sample.wait_for_func_status(
             result=True
         ), f"Hotplug verification failed for PVC '{pvc.name}' on VM '{vm_obj.name}'"
-        volume_attached = verifyvolume(
-            vm_obj.name, volume_name=pvc.name, namespace=vm_obj.namespace
-        )
-        assert (
-            volume_attached
-        ), f"Volume '{pvc.name}' not found on VM '{vm_obj.name}' after hotplug"
+
         logger.info(f"PVC '{pvc.name}' hotplugged successfully to VM '{vm_obj.name}'")
 
         if not cross_pvc:
@@ -189,7 +184,6 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 logger.info(f"Rebooting VM '{vm_obj.name}'")
                 vm_obj.restart(wait=True, verify=True)
                 logger.info(f"VM '{vm_obj.name}' rebooted successfully")
-                vm_obj.wait_for_ssh_connectivity(timeout=300)
 
                 volume_sample = TimeoutSampler(
                     timeout=300,
@@ -201,16 +195,6 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 )
                 assert volume_sample.wait_for_func_status(
                     result=True
-                ), f"Volume '{pvc.name}' not found on VM '{vm_obj.name}' after reboot"
-                volume_attached = verifyvolume(
-                    vm_obj.name, volume_name=pvc.name, namespace=vm_obj.namespace
-                )
-                logger.assertion(
-                    f"Volume attached after reboot: vm='{vm_obj.name}', "
-                    f"volume='{pvc.name}', expected=True, actual={volume_attached}"
-                )
-                assert (
-                    volume_attached
                 ), f"Volume '{pvc.name}' not found on VM '{vm_obj.name}' after reboot"
 
                 new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
