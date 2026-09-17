@@ -2,13 +2,32 @@
 Unit tests for AI Locator Fallback mechanism.
 """
 
+from unittest.mock import MagicMock, patch
 import pytest
 
+from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs.ui.llm_tools.locator_fallback import LocatorFallback
 
 
 class DummyDriver:
-    pass
+    def __init__(
+        self,
+        title="OpenShift Web Console",
+        current_url="https://console.example.com",
+        elements_map=None,
+    ):
+        self.title = title
+        self.current_url = current_url
+        self.elements_map = elements_map or {}
+        self.page_source = (
+            "<html><body><button id='target-btn'>Submit</button></body></html>"
+        )
+
+    def find_elements(self, by, value):
+        return self.elements_map.get((by, value), [])
+
+    def save_screenshot(self, path):
+        return True
 
 
 @pytest.fixture
@@ -16,6 +35,7 @@ def fallback():
     return LocatorFallback(driver=DummyDriver())
 
 
+# 1. JSON Parsing Tests
 def test_parse_pure_json(fallback):
     raw = '{"selector": "//button[@id=\'submit\']", "by_type": "xpath"}'
     result = fallback._parse_llm_locator(raw)
@@ -77,16 +97,6 @@ def test_parse_json_with_additional_valid_fields(fallback):
     assert result == ("//a[@href='/home']", "xpath")
 
 
-def test_parse_json_with_index(fallback):
-    raw = """{
-    "selector": "tr.pf-v5-c-table__tr",
-    "by_type": "css",
-    "index": 2
-}"""
-    result = fallback._parse_llm_locator(raw)
-    assert result == ("tr.pf-v5-c-table__tr", "css", 2)
-
-
 def test_parse_json_with_nested_braces_in_reasoning(fallback):
     raw = """Here is the rationale: the structure {a: {b: 1}} was replaced by a button.
 ```json
@@ -144,91 +154,142 @@ Actual locator:
     assert result == ("//button[@id='save']", "xpath")
 
 
-def test_clean_soup_dom_removes_scripts_and_preserves_attributes(fallback):
-    html = """<html><body>
-    <script>alert(1);</script>
-    <style>.btn { color: red; }</style>
-    <!-- comment -->
-    <button id="submit-btn" class="pf-v5-c-button" data-test="save" onclick="doSomething()" arbitrary="remove-me">
-        Save
-    </button>
-    </body></html>"""
-    cleaned = fallback._strip_dom(html)
-    assert "alert" not in cleaned
-    assert ".btn {" not in cleaned
-    soup_cleaned = fallback._extract_intelligent_dom(html)
-    assert "submit-btn" in soup_cleaned
-    assert 'data-test="save"' in soup_cleaned
-    assert "arbitrary" not in soup_cleaned
-    assert "alert" not in soup_cleaned
+# 2. Strict Unique Locator Validation (Exactly 1 match)
+def test_validation_exactly_one_match():
+    driver = DummyDriver(
+        elements_map={("xpath", "//button[@id='save']"): ["element_1"]}
+    )
+    fb = LocatorFallback(driver=driver)
+    assert fb._validate_locator("//button[@id='save']", "xpath") is True
 
 
-def test_modal_prioritization(fallback):
-    html = """<html><body>
-    <div id="main-content">
-        <button id="ignored-bg-btn">Background</button>
-    </div>
-    <div role="dialog" aria-modal="true" class="pf-v5-c-modal-box">
-        <h2>Confirm Delete</h2>
-        <button id="modal-confirm-btn" data-test="confirm-action">Confirm</button>
-    </div>
-    </body></html>"""
-    extracted = fallback._extract_intelligent_dom(html)
-    assert "modal-confirm-btn" in extracted
-    assert 'data-test="confirm-action"' in extracted
-    # The modal context should be prioritized over the background
-    assert "ignored-bg-btn" not in extracted
+def test_validation_zero_matches():
+    driver = DummyDriver(elements_map={("xpath", "//button[@id='save']"): []})
+    fb = LocatorFallback(driver=driver)
+    assert fb._validate_locator("//button[@id='save']", "xpath") is False
 
 
-def test_menu_drawer_prioritization(fallback):
-    html = """<html><body>
-    <div id="main-content">
-        <button id="page-btn">Page</button>
-    </div>
-    <div role="menu" class="pf-v5-c-menu">
-        <ul class="pf-v5-c-menu__list">
-            <li role="menuitem"><button id="dropdown-item-edit">Edit</button></li>
-            <li role="menuitem"><button id="dropdown-item-delete">Delete</button></li>
-        </ul>
-    </div>
-    </body></html>"""
-    extracted = fallback._extract_intelligent_dom(html)
-    assert "dropdown-item-edit" in extracted
-    assert "dropdown-item-delete" in extracted
-    assert "page-btn" not in extracted
+def test_validation_multiple_matches_rejected():
+    driver = DummyDriver(
+        elements_map={("xpath", "//button[@id='save']"): ["el1", "el2", "el3"]}
+    )
+    fb = LocatorFallback(driver=driver)
+    # Strict uniqueness: multiple matches must be rejected
+    assert fb._validate_locator("//button[@id='save']", "xpath") is False
 
 
-def test_page_health_precheck_unhealthy(fallback):
-    class BadDriver:
-        title = "502 Bad Gateway"
-        current_url = "https://console.example.com"
-
-        def execute_script(self, script):
-            return "complete"
-
-    unhealthy_fallback = LocatorFallback(driver=BadDriver())
-    assert unhealthy_fallback._check_page_health() is False
-
-    class BlankDriver:
-        title = "OpenShift"
-        current_url = "about:blank"
-
-        def execute_script(self, script):
-            return "complete"
-
-    blank_fallback = LocatorFallback(driver=BlankDriver())
-    assert blank_fallback._check_page_health() is False
+# 3. Conservative Page Health Pre-Checks
+def test_page_health_normal_page(fallback):
+    assert fallback._check_page_health() is True
 
 
-def test_locator_validation_with_index(fallback):
-    class MultiElementDriver:
-        def find_elements(self, by, value):
-            return ["el0", "el1", "el2"]
+def test_page_health_error_titles():
+    for err_title in [
+        "404 Not Found",
+        "502 Bad Gateway",
+        "503 Service Unavailable",
+        "Server Error",
+    ]:
+        driver = DummyDriver(title=err_title)
+        fb = LocatorFallback(driver=driver)
+        assert fb._check_page_health() is False
 
-    val_fallback = LocatorFallback(driver=MultiElementDriver())
-    # Without index: 3 elements is not == 1, so returns False
-    assert val_fallback._validate_locator(".kebab", "css") is False
-    # With index within range: returns True
-    assert val_fallback._validate_locator(".kebab", "css", index=1) is True
-    # With index out of range: returns False
-    assert val_fallback._validate_locator(".kebab", "css", index=5) is False
+
+def test_page_health_invalid_urls():
+    for err_url in ["about:blank", "about:neterror", "data:text/html,<div>Error</div>"]:
+        driver = DummyDriver(current_url=err_url)
+        fb = LocatorFallback(driver=driver)
+        assert fb._check_page_health() is False
+
+
+# 4. Fallback Execution Flow (Cache, Stage 1, Stage 2, Failure)
+@patch.dict(ocsci_config.UI_SELENIUM, {"ai_fallback": True})
+def test_fallback_cache_hit(monkeypatch):
+    driver = DummyDriver(
+        elements_map={("xpath", "//button[@id='cached-btn']"): ["el1"]}
+    )
+    fb = LocatorFallback(driver=driver)
+    monkeypatch.setattr(
+        fb,
+        "_load_cache",
+        lambda: {
+            "old-btn|xpath": {
+                "old_selector": "old-btn",
+                "old_by_type": "xpath",
+                "new_selector": "//button[@id='cached-btn']",
+                "new_by_type": "xpath",
+            }
+        },
+    )
+    result = fb.attempt_fallback(("old-btn", "xpath"))
+    assert result == ("//button[@id='cached-btn']", "xpath")
+
+
+@patch.dict(ocsci_config.UI_SELENIUM, {"ai_fallback": True})
+def test_fallback_stage1_success(monkeypatch):
+    driver = DummyDriver(
+        elements_map={("xpath", "//button[@id='stage1-btn']"): ["el1"]}
+    )
+    fb = LocatorFallback(driver=driver)
+    monkeypatch.setattr(fb, "_load_cache", lambda: {})
+    monkeypatch.setattr(fb, "_cache_result", lambda *args, **kwargs: None)
+    mock_client = MagicMock()
+    mock_client.is_available.return_value = True
+    mock_client.total_cost_usd = 0.05
+    mock_client.total_requests = 1
+    mock_client.query_dom.return_value = (
+        '{"selector": "//button[@id=\'stage1-btn\']", "by_type": "xpath"}'
+    )
+    fb._client = mock_client
+
+    result = fb.attempt_fallback(("broken-btn", "xpath"))
+    assert result == ("//button[@id='stage1-btn']", "xpath")
+
+
+@patch.dict(ocsci_config.UI_SELENIUM, {"ai_fallback": True})
+def test_fallback_stage1_fail_stage2_success(monkeypatch):
+    driver = DummyDriver(
+        elements_map={("xpath", "//button[@id='stage2-btn']"): ["el1"]}
+    )
+    fb = LocatorFallback(driver=driver)
+    monkeypatch.setattr(fb, "_load_cache", lambda: {})
+    monkeypatch.setattr(fb, "_cache_result", lambda *args, **kwargs: None)
+    monkeypatch.setattr(fb, "_capture_screenshot", lambda: "/tmp/mock_screenshot.png")
+    mock_client = MagicMock()
+    mock_client.is_available.return_value = True
+    mock_client.total_cost_usd = 0.10
+    mock_client.total_requests = 2
+    # Stage 1 returns invalid locator (not matching driver's elements)
+    mock_client.query_dom.return_value = (
+        '{"selector": "//button[@id=\'nonexistent\']", "by_type": "xpath"}'
+    )
+    # Stage 2 returns valid locator
+    mock_client.query_screenshot.return_value = (
+        '{"selector": "//button[@id=\'stage2-btn\']", "by_type": "xpath"}'
+    )
+    fb._client = mock_client
+
+    result = fb.attempt_fallback(("broken-btn", "xpath"))
+    assert result == ("//button[@id='stage2-btn']", "xpath")
+
+
+@patch.dict(ocsci_config.UI_SELENIUM, {"ai_fallback": True})
+def test_fallback_both_stages_fail(monkeypatch):
+    driver = DummyDriver(elements_map={})
+    fb = LocatorFallback(driver=driver)
+    monkeypatch.setattr(fb, "_load_cache", lambda: {})
+    monkeypatch.setattr(fb, "_capture_screenshot", lambda: "/tmp/mock_screenshot.png")
+    mock_client = MagicMock()
+    mock_client.is_available.return_value = True
+    mock_client.total_cost_usd = 0.10
+    mock_client.total_requests = 2
+    mock_client.query_dom.return_value = (
+        '{"selector": "//button[@id=\'none1\']", "by_type": "xpath"}'
+    )
+    mock_client.query_screenshot.return_value = (
+        '{"selector": "//button[@id=\'none2\']", "by_type": "xpath"}'
+    )
+    fb._client = mock_client
+
+    result = fb.attempt_fallback(("broken-btn", "xpath"))
+    assert result is None

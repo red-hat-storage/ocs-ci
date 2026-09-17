@@ -3,41 +3,14 @@ import json
 import logging
 import os
 import re
+import time
 
-from bs4 import BeautifulSoup, Comment
 from selenium.common import WebDriverException
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.helpers.helpers import get_current_test_name
 
 logger = logging.getLogger(__name__)
-
-PRESERVED_ATTRIBUTES = {
-    "id",
-    "class",
-    "name",
-    "role",
-    "aria-label",
-    "aria-labelledby",
-    "aria-describedby",
-    "aria-expanded",
-    "aria-haspopup",
-    "aria-modal",
-    "aria-hidden",
-    "data-testid",
-    "data-test",
-    "data-test-id",
-    "data-cy",
-    "title",
-    "placeholder",
-    "value",
-    "href",
-    "type",
-    "disabled",
-    "selected",
-    "checked",
-    "alt",
-}
 
 STAGE_1_PROMPT = """\
 You are a Selenium UI test engineer debugging a locator failure.
@@ -138,6 +111,7 @@ STRIP_SELF_CLOSING_RE = re.compile(
     r"<(link|meta)\b[^>]*/?>",
     re.IGNORECASE,
 )
+STRIP_COMMENTS_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 WHITESPACE_RE = re.compile(r"\s{2,}")
 
 
@@ -227,204 +201,39 @@ class LocatorFallback:
         return f"{locator[0]}|{locator[1]}"
 
     @staticmethod
-    def _clean_soup_dom(soup, max_chars=DOM_MAX_CHARS_STAGE_1):
-        """
-        Cleans a BeautifulSoup tree by stripping non-essential tags, comments,
-        hidden elements, and irrelevant attributes while preserving structural hierarchy.
-        """
-        # 1. Remove script, style, svg, noscript, link, meta, iframe, etc.
-        for tag in soup.find_all(
-            ["script", "style", "svg", "noscript", "link", "meta", "template"]
-        ):
-            tag.decompose()
-
-        # 2. Remove HTML comments
-        for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
-            comment.extract()
-
-        # 3. Clean attributes on all remaining tags
-        for el in soup.find_all(True):
-            attrs_to_keep = {}
-            for k, v in list(el.attrs.items()):
-                k_lower = k.lower()
-                if k_lower in PRESERVED_ATTRIBUTES or k_lower.startswith("data-"):
-                    if isinstance(v, list):
-                        attrs_to_keep[k] = " ".join(v)
-                    else:
-                        attrs_to_keep[k] = v
-            el.attrs = attrs_to_keep
-
-        # Convert back to string and collapse excessive whitespace
-        rendered = str(soup)
-        rendered = WHITESPACE_RE.sub(" ", rendered)
-        if len(rendered) > max_chars:
-            rendered = rendered[:max_chars]
-        return rendered
-
-    def _extract_intelligent_dom(self, raw_html, max_chars=DOM_MAX_CHARS_STAGE_1):
-        """
-        Intelligently extracts DOM, prioritizing active modals, dialogs, drawers,
-        and open menus. If an active container exists, returns its structured context.
-        Otherwise, returns the structured full-page DOM.
-        """
-        if not raw_html:
-            return ""
-
-        try:
-            soup = BeautifulSoup(raw_html, "html.parser")
-        except Exception as e:
-            logger.warning(
-                f"BeautifulSoup parsing failed: {e}. Falling back to regex stripping."
-            )
-            return self._strip_dom(raw_html, max_chars)
-
-        # Priority 1: Active Modals / Dialogs
-        modal_selectors = [
-            {"role": "dialog"},
-            {"aria-modal": "true"},
-            {
-                "class": re.compile(
-                    r"\b(?:pf-v\d+-c-modal-box|modal-dialog|pf-c-modal-box)\b"
-                )
-            },
-        ]
-        for criteria in modal_selectors:
-            modal = soup.find(attrs=criteria)
-            if modal:
-                logger.info(
-                    "[AI_FALLBACK] Found active modal dialog context for DOM extraction"
-                )
-                cleaned_modal = self._clean_soup_dom(modal, max_chars)
-                if len(cleaned_modal.strip()) > 50:
-                    return cleaned_modal
-
-        # Priority 2: Open Menus / Dropdowns / Popovers / Drawers
-        menu_selectors = [
-            {"role": "menu"},
-            {"role": "listbox"},
-            {
-                "class": re.compile(
-                    r"\b(?:pf-v\d+-c-menu|pf-v\d+-c-dropdown__menu|pf-c-dropdown__menu|pf-v\d+-c-drawer__panel)\b"
-                )
-            },
-        ]
-        for criteria in menu_selectors:
-            menu = soup.find(attrs=criteria)
-            if menu:
-                logger.info(
-                    "[AI_FALLBACK] Found active menu/drawer context for DOM extraction"
-                )
-                cleaned_menu = self._clean_soup_dom(menu, max_chars)
-                if len(cleaned_menu.strip()) > 50:
-                    return cleaned_menu
-
-        # Priority 3: Full page structured extraction
-        body = soup.find("body") or soup
-        return self._clean_soup_dom(body, max_chars)
-
-    @staticmethod
     def _strip_dom(html, max_chars=DOM_MAX_CHARS_STAGE_1):
         """
-        Strips script, style, svg, noscript, link, and meta tags from HTML,
+        Strips script, style, svg, noscript, link, meta tags, and comments from HTML,
         collapses whitespace, and truncates to max_chars.
         """
         cleaned = STRIP_TAGS_RE.sub("", html)
         cleaned = STRIP_SELF_CLOSING_RE.sub("", cleaned)
+        cleaned = STRIP_COMMENTS_RE.sub("", cleaned)
         cleaned = WHITESPACE_RE.sub(" ", cleaned)
         if len(cleaned) > max_chars:
             cleaned = cleaned[:max_chars]
         return cleaned
 
-    def _extract_shadow_dom_and_iframes(self, raw_html):
-        """
-        Safely extracts Shadow DOM content and iframe documents using Selenium WebDriver
-        where supported, without permanently altering current frame context.
-        """
-        extra_contexts = []
-        if not self.driver:
-            return extra_contexts
-
-        # 1. Shadow DOM roots via JavaScript
-        try:
-            shadow_script = """
-            var shadowHosts = [];
-            var all = document.querySelectorAll('*');
-            for (var i = 0; i < all.length; i++) {
-                if (all[i].shadowRoot) {
-                    shadowHosts.push({
-                        tag: all[i].tagName.toLowerCase(),
-                        id: all[i].id || '',
-                        className: all[i].className || '',
-                        html: all[i].shadowRoot.innerHTML
-                    });
-                }
-            }
-            return shadowHosts;
-            """
-            shadow_elements = self.driver.execute_script(shadow_script)
-            if shadow_elements:
-                for idx, item in enumerate(shadow_elements):
-                    host_info = (
-                        f"<shadow-root host='{item.get('tag')}' id='{item.get('id')}'>"
-                    )
-                    extra_contexts.append(
-                        f"{host_info}\n{item.get('html', '')}\n</shadow-root>"
-                    )
-        except Exception as e:
-            logger.debug(f"Shadow DOM extraction not supported or failed: {e}")
-
-        # 2. Accessible iframes (with safe frame context restoration)
-        try:
-            iframes = self.driver.find_elements(by="tag name", value="iframe")
-            for idx, frame in enumerate(iframes[:3]):  # limit depth to 3 iframes
-                try:
-                    self.driver.switch_to.frame(frame)
-                    try:
-                        frame_html = self.driver.page_source
-                        if frame_html:
-                            extra_contexts.append(
-                                f"<iframe-content index='{idx}'>\n{frame_html}\n</iframe-content>"
-                            )
-                    finally:
-                        self.driver.switch_to.default_content()
-                except Exception as fe:
-                    logger.debug(f"Could not inspect iframe {idx}: {fe}")
-                    try:
-                        self.driver.switch_to.default_content()
-                    except Exception:
-                        pass
-        except Exception as e:
-            logger.debug(f"iframe inspection failed: {e}")
-
-        return extra_contexts
-
     def _check_page_health(self):
         """
-        Performs lightweight health checks on the browser page before invoking LLM.
+        Performs conservative pre-checks on the browser page before invoking LLM.
+        Avoids querying LLM on obvious 404, server error, or disconnected pages.
 
         Returns:
-            bool: True if page is healthy and ready for fallback, False if page is broken/disconnected/unreachable.
+            bool: True if page is in a testable state, False if unrecoverable error.
         """
         if not self.driver:
             return True
 
         try:
-            # Check readyState
-            ready_state = self.driver.execute_script("return document.readyState;")
-            if ready_state not in ("complete", "interactive"):
-                logger.warning(
-                    f"[AI_FALLBACK] Page document.readyState is '{ready_state}', may still be loading"
-                )
-
-            # Check title for clear 404 or connection failures
-            title = (self.driver.title or "").lower()
+            title = (getattr(self.driver, "title", None) or "").lower()
             if any(
                 err in title
                 for err in [
                     "404 not found",
-                    "server error",
                     "502 bad gateway",
                     "503 service unavailable",
+                    "server error",
                     "problem loading page",
                 ]
             ):
@@ -433,36 +242,31 @@ class LocatorFallback:
                 )
                 return False
 
-            url = (self.driver.current_url or "").lower()
+            url = (getattr(self.driver, "current_url", None) or "").lower()
             if (
                 url.startswith("data:")
                 or "about:neterror" in url
                 or "about:blank" in url
             ):
                 logger.warning(
-                    f"[AI_FALLBACK] Browser current_url indicates invalid page state: '{url}'"
+                    f"[AI_FALLBACK] Browser current_url indicates invalid state: '{url}'"
                 )
                 return False
 
             return True
         except Exception as e:
-            logger.debug(f"[AI_FALLBACK] Page health pre-check failed: {e}")
+            logger.debug(f"[AI_FALLBACK] Page health pre-check exception: {e}")
             return True
 
-    def _validate_locator(self, selector, by_type, index=None):
+    def _validate_locator(self, selector, by_type):
         """
-        Tests whether a locator finds valid matching elements on the current page.
-
-        If index is None: requires exactly 1 match (or attempts safe disambiguation if >1).
-        If index is provided (int): checks if elements list has at least index + 1 items.
+        Tests whether a locator finds exactly one element on the current page.
 
         Returns:
-            bool: True if a valid match is found.
+            bool: True if exactly one element is found.
         """
         try:
             elements = self.driver.find_elements(by=by_type, value=selector)
-            if index is not None:
-                return 0 <= index < len(elements)
             return len(elements) == 1
         except Exception as e:
             logger.debug(f"Locator validation failed: {e}")
@@ -485,7 +289,7 @@ class LocatorFallback:
             return results
 
         cleaned = text.strip()
-        # Strip markdown fences if present
+        # Check markdown code fences first
         if "```" in cleaned:
             fence_pattern = re.compile(
                 r"```(?:json)?\s*([\s\S]*?)\s*```", re.IGNORECASE
@@ -538,13 +342,14 @@ class LocatorFallback:
 
     def _parse_llm_locator(self, raw_response):
         """
-        Parses the LLM response into (selector, by_type) or (selector, by_type, index).
+        Parses the LLM response into (selector, by_type).
 
         Accepts JSON surrounded by markdown code fences or conversational reasoning.
-        Validates required fields ('selector' and 'by_type') and their types.
+        Validates required fields ('selector' and 'by_type') and strictly adheres to
+        exact locator return contract.
 
         Returns:
-            tuple: (selector, by_type) or (selector, by_type, index) or None if parsing fails.
+            tuple: (selector, by_type) or None if parsing fails.
         """
         if not raw_response or not isinstance(raw_response, str):
             return None
@@ -580,19 +385,11 @@ class LocatorFallback:
 
             by_type_normalized = by_type.strip().lower()
             if by_type_normalized not in valid_by_types:
-                # If LLM wrote 'css selector', map to 'css'
                 if by_type_normalized in ("css selector", "css_selector"):
                     by_type_normalized = "css"
                 else:
                     logger.warning(f"Unrecognized by_type in LLM response: {by_type}")
                     continue
-
-            index = data.get("index")
-            if index is not None:
-                if isinstance(index, int) and index >= 0:
-                    return (selector.strip(), by_type_normalized, index)
-                elif isinstance(index, str) and index.isdigit():
-                    return (selector.strip(), by_type_normalized, int(index))
 
             return (selector.strip(), by_type_normalized)
 
@@ -616,6 +413,7 @@ class LocatorFallback:
         if not ocsci_config.UI_SELENIUM.get("ai_fallback"):
             return None
 
+        start_time = time.time()
         selector = locator[0]
         by_type = locator[1]
         cache_key = self._cache_key(locator)
@@ -628,27 +426,26 @@ class LocatorFallback:
             f"  selector={selector}  by={by_type}  action={action}"
         )
 
-        # use cached updated if available and matching current locator
+        # 1. Use cached result if available and currently valid (exact 1 match)
+        cache_start = time.time()
         cache = self._load_cache()
         if cache_key in cache:
             cached = cache[cache_key]
             cached_selector = cached["new_selector"]
             cached_by_type = cached["new_by_type"]
-            cached_index = cached.get("index")
-            if self._validate_locator(
-                cached_selector, cached_by_type, index=cached_index
-            ):
+            if self._validate_locator(cached_selector, cached_by_type):
+                cache_duration = time.time() - cache_start
                 logger.info(
-                    "[AI_FALLBACK] cache_hit selector=%s by=%s index=%s",
+                    "[AI_FALLBACK] cache_hit selector=%s by=%s (duration=%.2fs)",
                     cached_selector,
                     cached_by_type,
-                    cached_index,
+                    cache_duration,
                 )
                 return cached_selector, cached_by_type
             else:
                 logger.info("Cached locator no longer valid, proceeding to LLM query")
 
-        # Page health pre-check
+        # 2. Conservative page-state health check
         if not self._check_page_health():
             logger.warning(
                 "[AI_FALLBACK] Page health pre-check failed, skipping AI fallback"
@@ -664,45 +461,65 @@ class LocatorFallback:
         except WebDriverException:
             url = "unknown"
 
+        # 3. Capture DOM
+        dom_start = time.time()
         try:
             raw_html = self.driver.page_source
         except WebDriverException as e:
             logger.error(f"Failed to capture DOM: {e}")
             return None
+        dom_capture_duration = time.time() - dom_start
+        logger.info(
+            f"[AI_FALLBACK] DOM captured (chars={len(raw_html)}, duration={dom_capture_duration:.2f}s)"
+        )
 
         cost_before = self.client.total_cost_usd
 
+        # 4. Stage 1 (DOM-only query)
+        stage_1_start = time.time()
         result = self._try_stage_1(
             selector, by_type, action, url, raw_html, stack_trace=stack_trace
         )
+        stage_1_total_duration = time.time() - stage_1_start
+
         if result:
             self._cache_result(cache_key, selector, by_type, result, url)
             self._log_cost(cost_before)
+            total_duration = time.time() - start_time
+            logger.info(
+                f"[AI_FALLBACK] completed via Stage 1 (total_duration={total_duration:.2f}s)"
+            )
             return result
 
+        # 5. Stage 2 (DOM + Screenshot query)
+        stage_2_start = time.time()
         result = self._try_stage_2(
             selector, by_type, action, url, raw_html, stack_trace=stack_trace
         )
+        stage_2_total_duration = time.time() - stage_2_start
+
         if result:
             self._cache_result(cache_key, selector, by_type, result, url)
             self._log_cost(cost_before)
+            total_duration = time.time() - start_time
+            logger.info(
+                f"[AI_FALLBACK] completed via Stage 2 (total_duration={total_duration:.2f}s)"
+            )
             return result
 
         self._log_cost(cost_before)
+        total_duration = time.time() - start_time
         logger.warning(
-            "[AI_FALLBACK] failed — no replacement found for selector=%s", selector
+            f"[AI_FALLBACK] failed — no replacement found for selector={selector} "
+            f"(stage1_duration={stage_1_total_duration:.2f}s, stage2_duration={stage_2_total_duration:.2f}s, "
+            f"total_duration={total_duration:.2f}s)"
         )
         return None
 
     def _try_stage_1(self, selector, by_type, action, url, raw_html, stack_trace=None):
         """Stage 1: DOM-only LLM query."""
         logger.info("[AI_FALLBACK] stage=1 (DOM-only) selector=%s", selector)
-        cleaned_html = self._extract_intelligent_dom(raw_html, DOM_MAX_CHARS_STAGE_1)
-        extra_contexts = self._extract_shadow_dom_and_iframes(raw_html)
-        if extra_contexts:
-            cleaned_html += "\n\nSHADOW DOM & IFRAME CONTEXTS:\n" + "\n".join(
-                extra_contexts
-            )
+        cleaned_html = self._strip_dom(raw_html, DOM_MAX_CHARS_STAGE_1)
 
         prompt = STAGE_1_PROMPT.format(
             selector=selector,
@@ -713,52 +530,57 @@ class LocatorFallback:
             cleaned_html=cleaned_html,
         )
 
+        llm_start = time.time()
         try:
             raw_response = self.client.query_dom(prompt)
         except Exception as e:
             logger.warning(f"Stage 1 LLM query failed: {e}")
             return None
+        llm_duration = time.time() - llm_start
+        logger.info(f"[AI_FALLBACK] stage=1 LLM query completed in {llm_duration:.2f}s")
 
         parsed = self._parse_llm_locator(raw_response)
         if not parsed:
             logger.info("Stage 1: LLM did not return a valid locator")
             return None
 
-        new_selector = parsed[0]
-        new_by_type = parsed[1]
-        index = parsed[2] if len(parsed) > 2 else None
+        new_selector, new_by_type = parsed
+        val_start = time.time()
+        is_valid = self._validate_locator(new_selector, new_by_type)
+        val_duration = time.time() - val_start
 
-        if self._validate_locator(new_selector, new_by_type, index=index):
+        if is_valid:
             logger.info(
-                "[AI_FALLBACK] stage=1 success new_selector=%s new_by=%s index=%s",
+                "[AI_FALLBACK] stage=1 success new_selector=%s new_by=%s (val_duration=%.2fs)",
                 new_selector,
                 new_by_type,
-                index,
+                val_duration,
             )
             return (new_selector, new_by_type)
 
         logger.info(
-            "[AI_FALLBACK] stage=1 no_match selector=%s by=%s index=%s",
+            "[AI_FALLBACK] stage=1 no_match selector=%s by=%s (val_duration=%.2fs)",
             new_selector,
             new_by_type,
-            index,
+            val_duration,
         )
         return None
 
     def _try_stage_2(self, selector, by_type, action, url, raw_html, stack_trace=None):
         """Stage 2: DOM + screenshot LLM query."""
         logger.info("[AI_FALLBACK] stage=2 (DOM+screenshot) selector=%s", selector)
-        cleaned_html = self._extract_intelligent_dom(raw_html, DOM_MAX_CHARS_STAGE_2)
-        extra_contexts = self._extract_shadow_dom_and_iframes(raw_html)
-        if extra_contexts:
-            cleaned_html += "\n\nSHADOW DOM & IFRAME CONTEXTS:\n" + "\n".join(
-                extra_contexts
-            )
+        cleaned_html = self._strip_dom(raw_html, DOM_MAX_CHARS_STAGE_2)
 
+        screenshot_start = time.time()
         screenshot_path = self._capture_screenshot()
+        screenshot_duration = time.time() - screenshot_start
+
         if not screenshot_path:
             logger.warning("Stage 2: Failed to capture screenshot, aborting")
             return None
+        logger.info(
+            f"[AI_FALLBACK] stage=2 screenshot captured in {screenshot_duration:.2f}s"
+        )
 
         prompt = STAGE_2_PROMPT.format(
             selector=selector,
@@ -769,35 +591,39 @@ class LocatorFallback:
             cleaned_html=cleaned_html,
         )
 
+        llm_start = time.time()
         try:
             raw_response = self.client.query_screenshot(screenshot_path, prompt)
         except Exception as e:
             logger.warning(f"Stage 2 LLM query failed: {e}")
             return None
+        llm_duration = time.time() - llm_start
+        logger.info(f"[AI_FALLBACK] stage=2 LLM query completed in {llm_duration:.2f}s")
 
         parsed = self._parse_llm_locator(raw_response)
         if not parsed:
             logger.info("Stage 2: LLM did not return a valid locator")
             return None
 
-        new_selector = parsed[0]
-        new_by_type = parsed[1]
-        index = parsed[2] if len(parsed) > 2 else None
+        new_selector, new_by_type = parsed
+        val_start = time.time()
+        is_valid = self._validate_locator(new_selector, new_by_type)
+        val_duration = time.time() - val_start
 
-        if self._validate_locator(new_selector, new_by_type, index=index):
+        if is_valid:
             logger.info(
-                "[AI_FALLBACK] stage=2 success new_selector=%s new_by=%s index=%s",
+                "[AI_FALLBACK] stage=2 success new_selector=%s new_by=%s (val_duration=%.2fs)",
                 new_selector,
                 new_by_type,
-                index,
+                val_duration,
             )
             return (new_selector, new_by_type)
 
         logger.info(
-            "[AI_FALLBACK] stage=2 no_match selector=%s by=%s index=%s",
+            "[AI_FALLBACK] stage=2 no_match selector=%s by=%s (val_duration=%.2fs)",
             new_selector,
             new_by_type,
-            index,
+            val_duration,
         )
         return None
 
@@ -868,7 +694,7 @@ class LocatorFallback:
     def _cache_result(self, cache_key, old_selector, old_by_type, new_locator, url):
         """Saves a successful fallback result to the cache."""
         cache = self._load_cache()
-        entry = {
+        cache[cache_key] = {
             "old_selector": old_selector,
             "old_by_type": old_by_type,
             "new_selector": new_locator[0],
@@ -877,9 +703,6 @@ class LocatorFallback:
             "page_url": url,
             "test_name": get_current_test_name(),
         }
-        if len(new_locator) > 2 and new_locator[2] is not None:
-            entry["index"] = new_locator[2]
-        cache[cache_key] = entry
         self._cache = cache
         self._save_cache()
         logger.info("[AI_FALLBACK] cached result path=%s", self._get_cache_path())
