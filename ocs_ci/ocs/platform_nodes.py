@@ -137,6 +137,17 @@ class PlatformNodesFactory:
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "ipi":
                 platform += "_ipi"
+
+        if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
+            if config.ENV_DATA["deployment_type"] == "ai":
+                if (
+                    config.ENV_DATA.get("infra_type", constants.CLASSIC_INFRA_TYPE)
+                    == constants.VPC_INFRA_TYPE
+                ):
+                    platform = "ibm_vpc_bm"
+                else:
+                    platform += "_ai"
+
         return self.cls_map[platform]()
 
 
