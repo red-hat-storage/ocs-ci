@@ -2807,7 +2807,59 @@ def apply_drpolicy_to_workload(workload, drcluster_name):
         run_cmd(f"oc create -f {wl.drcp_data_yaml.name}")
 
 
-def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
+def disable_dr_from_discovered_apps(workload):
+    """
+    Disable DR protection for discovered apps by deleting their DRPC and
+    Placement resources from the hub.
+
+    Discovered apps use a Placement in the openshift-dr-ops namespace with the
+    experimental-scheduling-disable annotation, so the placement clusterSelector
+    patching performed by :func:`disable_dr_from_app` does not apply to them.
+
+    Args:
+        workload(List): List of discovered apps workload objects
+
+    """
+    old_ctx = config.cur_index
+    config.switch_acm_ctx()
+    for wl in workload:
+        exec_cmd(
+            cmd=(
+                f"oc delete drpc {wl.discovered_apps_placement_name} "
+                f"-n {constants.DR_OPS_NAMESPACE} --ignore-not-found"
+            )
+        )
+        exec_cmd(
+            cmd=(
+                f"oc delete placement {wl.discovered_apps_placement_name}-plmnt-1 "
+                f"-n {constants.DR_OPS_NAMESPACE} --ignore-not-found"
+            )
+        )
+    logger.info("DR configuration is successfully disabled on each discovered app")
+    config.switch_ctx(old_ctx)
+
+
+def apply_drpolicy_to_discovered_apps(workload, drcluster_name):
+    """
+    Re-protect discovered apps against the rebuilt DR policy, with the surviving
+    cluster set as the preferred (primary) cluster.
+
+    Args:
+        workload(List): List of discovered apps workload objects
+        drcluster_name(str): Name of the DRcluster the workloads currently run on
+                             (the surviving cluster after failover)
+
+    """
+    for wl in workload:
+        wl.preferred_primary_cluster = drcluster_name
+        config.switch_acm_ctx()
+        wl.create_placement()
+        wl.create_drpc()
+
+
+def replace_cluster(
+    workload, primary_cluster_name, secondary_cluster_name, discovered_apps=False
+):
     """
     Function to do core replace cluster task
 
@@ -2815,6 +2867,9 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
         workload(List): List of workload objects
         primary_cluster_name (str): Name of the primary DRcluster
         secondary_cluster_name(str): Name of the secondary DRcluster
+        discovered_apps (bool): False by default. Set to True when the workloads
+                                are discovered apps so DR is disabled and
+                                re-applied using the discovered apps flow.
 
     """
 
@@ -2823,8 +2878,11 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     run_cmd(cmd=f"oc delete drcluster {primary_cluster_name} --wait=false")
 
     # Disable DR on hub for each app
-    disable_dr_from_app(secondary_cluster_name)
-    logger.info("DR configuration is successfully disabled on each app")
+    if discovered_apps:
+        disable_dr_from_discovered_apps(workload)
+    else:
+        disable_dr_from_app(secondary_cluster_name)
+        logger.info("DR configuration is successfully disabled on each app")
 
     # Remove DR configuration from hub and surviving cluster
     logger.info("Running Remove DR configuration script..")
@@ -2893,10 +2951,15 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     verify_drpolicy_cli(switch_ctx=get_active_acm_index())
 
     # Apply dr policy on all app on secondary cluster
-    apply_drpolicy_to_workload(workload, secondary_cluster_name)
+    if discovered_apps:
+        apply_drpolicy_to_discovered_apps(workload, secondary_cluster_name)
+    else:
+        apply_drpolicy_to_workload(workload, secondary_cluster_name)
 
-    # Configure DRClusters for fencing automation
-    configure_drcluster_for_fencing()
+    # Configure DRClusters for fencing automation. Fencing is only used by
+    # Metro-DR; Regional-DR does not fence clusters, so skip it in RDR mode.
+    if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        configure_drcluster_for_fencing()
 
 
 def do_discovered_apps_cleanup(
