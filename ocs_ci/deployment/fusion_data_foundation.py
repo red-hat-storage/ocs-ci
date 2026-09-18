@@ -90,7 +90,6 @@ class FusionDataFoundationDeployment:
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
-        self.ensure_ceph_health()
         self.ensure_install_plan_approval()
         if not self.fdf_skip_storage_setup:
             wait_for_storageclusters_crd()
@@ -350,6 +349,7 @@ class FusionDataFoundationDeployment:
                     "Arbiter deployment detected, muting MON_NETSPLIT health warning"
                 )
                 mute_mon_netsplit(namespace="ibm-spectrum-fusion-ns")
+            self.ensure_ceph_health()
             storagecluster_health_check()
 
     def patch_catalogsource(self):
@@ -374,6 +374,7 @@ class FusionDataFoundationDeployment:
         error, updates NTP on the cluster's compute nodes (vSphere only) and
         re-runs the health check, asserting it passes.
         """
+        logger.info("Ensuring ceph health")
         try:
             namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
             ceph_health_check(namespace=namespace, tries=30, delay=10)
