@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 from botocore.exceptions import ClientError
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import (
     NoSuchElementException,
     TimeoutException,
@@ -123,7 +124,12 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
         self.do_send_keys(self.generic_locators["search_resource_field"], bucket_name)
 
-        self.do_click((f"//tr//a[contains(text(), '{bucket_name}')]", By.XPATH))
+        # The buckets table re-renders as the search filter applies, so the row
+        # link found before the click can go stale. avoid_stale refreshes and
+        # retries the click instead of failing with StaleElementReferenceException.
+        self.do_click(
+            (f"//tr//a[contains(text(), '{bucket_name}')]", By.XPATH), avoid_stale=True
+        )
 
         self.page_has_loaded()
 
@@ -261,13 +267,18 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             logger.error(f"Failed to import format_locator: {e}")
             raise
 
-    def edit_lifecycle_rule(self, rule_name: str, new_rules: dict) -> None:
+    def edit_lifecycle_rule(
+        self, rule_name: str, new_rules: dict, scope: str = "whole_bucket"
+    ) -> None:
         """
         Edit an existing lifecycle rule
 
         Args:
             rule_name (str): Name of the rule to edit
             new_rules (dict): Dictionary of new rules to apply, mapping rule types to their parameters
+            scope (str): Scope the rule was created with, 'whole_bucket' or
+                'targeted'. Targeted rules have an extra Conditional Filters
+                step to advance past, so the wizard navigation depends on it.
 
         Raises:
             NoSuchElementException: If rule kebab menu or edit option not found
@@ -286,6 +297,17 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
             self.do_click(self.bucket_tab["edit_rule_option"])
 
+            # The edit dialog is the same multi-step wizard as create, so we
+            # must click Next to reach the Actions step before applying changes.
+            # Step 1 (General Config) -> next step.
+            self.do_click(self.bucket_tab["wizard_next_button"])
+
+            # Targeted rules have an extra Conditional Filters step (pre-filled
+            # in edit mode) to advance past before the Actions step. Whole-bucket
+            # rules have no filter step, so one Next already lands on Actions.
+            if scope not in ("whole_bucket", "global"):
+                self.do_click(self.bucket_tab["wizard_next_button"])
+
             for rule_type, params in new_rules.items():
                 if rule_type in LIFECYCLE_RULE_REGISTRY:
                     rule_class = LIFECYCLE_RULE_REGISTRY[rule_type]
@@ -303,6 +325,9 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                         )
                 else:
                     logger.warning(f"Unknown rule type: {rule_type}")
+
+            # Advance from the Actions step to the Review step before saving.
+            self.do_click(self.bucket_tab["wizard_next_button"])
 
             self.scroll_into_view(self.bucket_tab["lifecycle_save_button"])
             self.do_click(self.bucket_tab["lifecycle_save_button"])
@@ -453,9 +478,16 @@ class ExpirationRuleUI(LifecycleRuleInterface):
         if not edit_mode:
             self.ui.do_click(self.ui.bucket_tab["expiration_delete_checkbox"])
 
-        # Always update the days input value
+        # Always update the days input value.
+        # element.clear() can leave the PatternFly number input's default "1" in
+        # place, which turns e.g. 30 into 130. Select-all before typing so the
+        # value is replaced rather than appended to. Ctrl+A is sent in its own
+        # call so the modifier is released before the digits are typed.
         days = params.get("days")
         self.ui.do_clear(self.ui.bucket_tab["expiration_days_input"])
+        self.ui.do_send_keys(
+            self.ui.bucket_tab["expiration_days_input"], Keys.CONTROL + "a"
+        )
         self.ui.do_send_keys(self.ui.bucket_tab["expiration_days_input"], str(days))
 
     def validate_params(self, params: dict) -> bool:
