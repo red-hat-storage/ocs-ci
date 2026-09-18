@@ -378,7 +378,8 @@ def mirror_index_image_via_oc_mirror(
         f"oc mirror --config {imageset_config_file} "
         f"docker://{mirror_registry} "
         "--workspace file://oc-mirror-workspace/results-files --v2 "
-        "--dest-tls-verify=false --image-timeout 30m"
+        "--dest-tls-verify=false --image-timeout 30m "
+        "--log-level debug"
     )
     try:
         exec_cmd(cmd, timeout=18000)
