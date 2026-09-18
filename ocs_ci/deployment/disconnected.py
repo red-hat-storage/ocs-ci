@@ -435,19 +435,34 @@ def mirror_index_image_via_oc_mirror(
         yaml.dump(idms_content, f)
     exec_cmd(f"oc apply -f {idms_file}")
 
-    # create and apply ITMS derived from the IDMS entries — FDF only.
-    # FDF catalog images are pulled by tag (e.g. isf-data-foundation-catalog:v4.20)
-    # so an ITMS is required alongside the IDMS for disconnected mirroring.
+    # create and apply ITMS for FDF catalog image tag resolution
     if idms_name_prefix == "fdf":
         itms_file = os.path.join(
             f"{mirroring_manifests_dir}",
             "working-dir/cluster-resources/itms-oc-mirror.yaml",
         )
-        create_itms_from_idms(
-            idms_content=idms_content,
-            itms_name=f"{idms_name_prefix}-{config.RUN['run_id']}",
-            output_file=itms_file,
-        )
+        target_path = mirror_registry.rstrip("/")
+        itms_content = {
+            "apiVersion": "config.openshift.io/v1",
+            "kind": "ImageTagMirrorSet",
+            "metadata": {
+                "name": "isf-fdf-itms",
+            },
+            "spec": {
+                "imageTagMirrors": [
+                    {
+                        "mirrors": [
+                            f"{target_path}/cpopen/isf-data-foundation-catalog"
+                        ],
+                        "source": "icr.io/cpopen/isf-data-foundation-catalog",
+                        "mirrorSourcePolicy": "AllowContactingSource",
+                    }
+                ]
+            },
+        }
+        with open(itms_file, "w") as f:
+            yaml.dump(itms_content, f)
+        logger.info(f"ImageTagMirrorSet written to {itms_file}")
         exec_cmd(f"oc apply -f {itms_file}")
 
     wait_for_machineconfigpool_status("all")
@@ -468,46 +483,6 @@ def mirror_index_image_via_oc_mirror(
         cs_content = yaml.safe_load(f)
 
     return cs_content["spec"]["image"]
-
-
-def create_itms_from_idms(idms_content, itms_name, output_file):
-    """
-    Create an ImageTagMirrorSet file derived from an existing ImageDigestMirrorSet.
-
-    oc mirror --v2 only generates an IDMS (digest-based mirrors). This function
-    produces the equivalent ITMS so that tag-based image pulls (e.g. catalog
-    index images referenced by tag in a CatalogSource) are also redirected to
-    the mirror registry.
-
-    The generated ITMS reuses the same source->mirrors mappings from the IDMS,
-    only changing the kind and spec field name.
-
-    Args:
-        idms_content (dict): Parsed IDMS yaml content (already loaded).
-        itms_name (str): Name to set on the ImageTagMirrorSet metadata.
-        output_file (str): File path where the ITMS yaml will be written.
-
-    Returns:
-        str: Path to the written ITMS file (same as output_file).
-
-    """
-    itms_content = {
-        "apiVersion": "config.openshift.io/v1",
-        "kind": "ImageTagMirrorSet",
-        "metadata": {
-            "name": itms_name,
-        },
-        "spec": {
-            "imageTagMirrors": [
-                {"mirrors": entry["mirrors"], "source": entry["source"]}
-                for entry in idms_content["spec"]["imageDigestMirrors"]
-            ]
-        },
-    }
-    with open(output_file, "w") as f:
-        yaml.dump(itms_content, f)
-    logger.info(f"ImageTagMirrorSet written to {output_file}")
-    return output_file
 
 
 def prepare_disconnected_ocs_deployment(upgrade=False):

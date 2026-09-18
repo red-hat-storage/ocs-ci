@@ -225,6 +225,11 @@ class FusionDataFoundationDeployment:
                 (fdf_upgrade_registry and fdf_upgrade_image_tag). Default is False.
 
         """
+        if config.ENV_DATA.get("platform").lower() == constants.IBM_HCI_PLATFORM:
+            logger.info(
+                "Skipping patching fusion service definition, no need as we'r already using ITMS and IDMS"
+            )
+            return
         if upgrade:
             fdf_registry = config.DEPLOYMENT.get(
                 "fdf_upgrade_registry"
@@ -255,36 +260,20 @@ class FusionDataFoundationDeployment:
         ocp_version = f"ocp{get_running_ocp_version().replace('.', '')}-t"
         logger.info(f"OCP version: {ocp_version}")
         logger.info("Updating FusionServiceDefinition")
-        if config.ENV_DATA.get("platform").lower() == constants.IBM_HCI_PLATFORM:
-            params_dict = {
-                "spec": {
-                    "onboarding": {
-                        "serviceOperatorSubscription": {
-                            "multiVersionCatSrcDetails": {
-                                ocp_version: {
-                                    "imageTag": fdf_image_tag,
-                                    "registryPath": fdf_registry,
-                                }
+        params_dict = {
+            "spec": {
+                "onboarding": {
+                    "serviceOperatorSubscription": {
+                        "multiVersionCatSrcDetails": {
+                            ocp_version: {
+                                "imageDigest": fdf_image_digest,
+                                "registryPath": fdf_registry,
                             }
                         }
                     }
                 }
             }
-        else:
-            params_dict = {
-                "spec": {
-                    "onboarding": {
-                        "serviceOperatorSubscription": {
-                            "multiVersionCatSrcDetails": {
-                                ocp_version: {
-                                    "imageDigest": fdf_image_digest,
-                                    "registryPath": fdf_registry,
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        }
         params = json.dumps(params_dict)
         cmd = (
             f"oc --kubeconfig {self.kubeconfig} -n {constants.FDF_NAMESPACE} patch FusionServiceDefinition "
