@@ -431,8 +431,8 @@ class FusionDataFoundationDeployment:
 
         if config.ENV_DATA.get("erasureCoding"):
             odfcluster_data["spec"]["erasureCoding"] = {
-                "codingChunks": 2,
-                "dataChunks": 4,
+                "codingChunks": config.ENV_DATA.get("codingChunks", 2),
+                "dataChunks": config.ENV_DATA.get("dataChunks", 4),
                 "enable": True,
             }
 
