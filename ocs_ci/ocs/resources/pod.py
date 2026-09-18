@@ -1026,63 +1026,6 @@ def get_csi_snapshoter_pod():
     return snapshotner_pod
 
 
-def get_csi_snapshot_controller_leader(
-    namespace=constants.OPENSHIFT_CLUSTER_STORAGE_OPERATOR_NAMESPACE,
-):
-    """
-    Get the csi-snapshot-controller leader pod.
-
-    The csi-snapshot-controller runs as leader-elected replicas, the same way
-    as the odf external snapshotter. Only the leader pod logs the VolumeGroupSnapshot
-    events, so identify it via the leader-election lease messages.
-
-    Args:
-        namespace (str): Namespace of the csi-snapshot-controller pods
-
-    Returns:
-        Pod: csi-snapshot-controller leader pod
-
-    """
-    non_leader_msg = "Failed to acquire lease"
-    lease_acq_msg = "Successfully acquired lease"
-    lease_renew_msg = "Successfully renewed lease"
-    leader_pod = ""
-
-    # Get all csi-snapshot-controller pods (exclude the operator pod). The label
-    # matches both the controller and its operator, so filter by pod name.
-    pods = get_pods_having_label(constants.CSI_SNAPSHOT_CONTROLLER_LABEL, namespace)
-    controller_pods = [
-        Pod(**pod)
-        for pod in pods
-        if "csi-snapshot-controller" in pod["metadata"]["name"]
-        and "operator" not in pod["metadata"]["name"]
-    ]
-    assert controller_pods, "Couldn't find any csi-snapshot-controller pod."
-
-    pods_log = {}
-    for pod in controller_pods:
-        pods_log[pod] = get_pod_logs(
-            pod_name=pod.name,
-            namespace=namespace,
-        ).split("\n")
-
-    for pod, log_list in pods_log.items():
-        log_list.reverse()
-        for log_msg in log_list:
-            # Check for last occurrence of leader message
-            # This will be the first occurrence in reversed list.
-            if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
-                curr_index = log_list.index(log_msg)
-                # Ensure that there is no non leader message logged after
-                # the last occurrence of leader message
-                if not any(non_leader_msg in msg for msg in log_list[:curr_index]):
-                    leader_pod = pod
-                break
-    assert leader_pod, "Couldn't identify csi-snapshot-controller leader pod."
-    logger.info(f"csi-snapshot-controller leader pod is {leader_pod.name}")
-    return leader_pod
-
-
 def get_rgw_pods(rgw_label=constants.RGW_APP_LABEL, namespace=None):
     """
     Fetches info about rgw pods in the cluster
@@ -2332,15 +2275,26 @@ def get_plugin_provisioner_leader(interface, namespace=None, leader_type="provis
     return leader_pod
 
 
-def get_odf_external_snapshotter_leader(namespace=None):
+def get_odf_snapshotter_leader(
+    namespace=None,
+    label=constants.ODF_EXTERNAL_SNAPSHOTTER,
+    container="odf-external-snapshotter-operator",
+):
     """
-    Get ODF external snapshotter operator leader pod
+    Get the snapshotter leader pod (leader-elected).
+
+    Defaults to the ODF external snapshotter operator, but can identify the leader
+    for any leader-elected snapshotter that uses the same lease messages (e.g. the
+    csi-snapshot-controller) by passing its label and container.
 
     Args:
-        namespace (str): Name of cluster namespace
+        namespace (str): Name of the namespace. Defaults to the cluster namespace.
+        label (str): Pod label selector used to find the snapshotter pods.
+        container (str): Container name to read logs from. Pass None to let
+            'oc logs' select the pod's only/default container.
 
     Returns:
-        Pod: ODF external snapshotter operator leader pod
+        Pod: snapshotter leader pod
 
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
@@ -2350,15 +2304,15 @@ def get_odf_external_snapshotter_leader(namespace=None):
     lease_renew_msg = "Successfully renewed lease"
     leader_pod = ""
 
-    # Get all ODF external snapshotter pods
-    pods = get_pods_having_label(constants.ODF_EXTERNAL_SNAPSHOTTER, namespace)
-    odf_snapshotter_pods = [Pod(**pod) for pod in pods]
+    # Get all snapshotter pods
+    pods = get_pods_having_label(label, namespace)
+    snapshotter_pods = [Pod(**pod) for pod in pods]
 
     pods_log = {}
-    for pod in odf_snapshotter_pods:
+    for pod in snapshotter_pods:
         pods_log[pod] = get_pod_logs(
             pod_name=pod.name,
-            container="odf-external-snapshotter-operator",
+            container=container,
             namespace=namespace,
         ).split("\n")
 
@@ -2374,8 +2328,8 @@ def get_odf_external_snapshotter_leader(namespace=None):
                 if not any(non_leader_msg in msg for msg in log_list[:curr_index]):
                     leader_pod = pod
                 break
-    assert leader_pod, "Couldn't identify ODF external snapshotter leader pod."
-    logger.info(f"ODF external snapshotter leader pod is {leader_pod.name}")
+    assert leader_pod, "Couldn't identify snapshotter leader pod."
+    logger.info(f"Snapshotter leader pod is {leader_pod.name}")
     return leader_pod
 
 
