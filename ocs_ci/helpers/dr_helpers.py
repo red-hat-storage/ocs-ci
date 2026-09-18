@@ -1423,6 +1423,109 @@ def wait_for_all_resources_deletion(
             )
 
 
+def verify_post_dr_action(
+    workload_entries,
+    source_cluster,
+    target_cluster,
+    scheduling_interval,
+    action_label="",
+):
+    """
+    Verify workload and replication state after Failover or Relocate.
+
+    Args:
+        workload_entries (list): Dicts with keys namespace, pvc_count, pod_count,
+            is_discovered, vrg_name, pvc_interface, drpc, and optional ui_name
+        source_cluster (str): Cluster workloads are moved from
+        target_cluster (str): Cluster workloads are moved to
+        scheduling_interval (int): DR policy scheduling interval in minutes
+        action_label (str): Label for logging (e.g. failover, relocate)
+    """
+    label = action_label or "DR action"
+    source_index = config.get_cluster_index_by_name(source_cluster)
+    target_index = config.get_cluster_index_by_name(target_cluster)
+
+    for entry in workload_entries:
+        app_name = entry.get("ui_name", entry["namespace"])
+        config.switch_ctx(source_index)
+        logger.info(
+            f"Verify resources deleted from {source_cluster} for {app_name} "
+            f"after {label}"
+        )
+        wait_for_all_resources_deletion(
+            entry["namespace"],
+            discovered_apps=entry["is_discovered"],
+            vrg_name=entry["vrg_name"],
+        )
+
+    for entry in workload_entries:
+        app_name = entry.get("ui_name", entry["namespace"])
+        config.switch_ctx(target_index)
+        logger.info(
+            f"Verify resources created on {target_cluster} for {app_name} "
+            f"after {label}"
+        )
+        wait_for_all_resources_creation(
+            entry["pvc_count"],
+            entry["pod_count"],
+            entry["namespace"],
+            discovered_apps=entry["is_discovered"],
+            vrg_name=entry["vrg_name"],
+            performed_dr_action=True,
+        )
+
+    rbd_entries = [
+        entry
+        for entry in workload_entries
+        if entry["pvc_interface"] == constants.CEPHBLOCKPOOL
+    ]
+    if rbd_entries:
+        wait_for_mirroring_status_ok(
+            replaying_images=sum(entry["pvc_count"] for entry in rbd_entries)
+        )
+        logger.info(f"RBD mirroring status OK after {label}")
+
+    cephfs_entries = [
+        entry
+        for entry in workload_entries
+        if entry["pvc_interface"] == constants.CEPHFILESYSTEM
+    ]
+    if cephfs_entries:
+        cg_enabled = is_cg_cephfs_enabled()
+        for entry in cephfs_entries:
+            if cg_enabled:
+                config.switch_to_cluster_by_name(source_cluster)
+                wait_for_resource_existence(
+                    kind=constants.REPLICATION_GROUP_DESTINATION,
+                    namespace=entry["namespace"],
+                    should_exist=False,
+                )
+            config.switch_to_cluster_by_name(target_cluster)
+            wait_for_replication_resources_creation(
+                count=entry["pvc_count"],
+                namespace=entry["namespace"],
+                timeout=300,
+            )
+            if cg_enabled:
+                config.switch_to_cluster_by_name(source_cluster)
+                wait_for_resource_existence(
+                    kind=constants.REPLICATION_GROUP_DESTINATION,
+                    namespace=entry["namespace"],
+                    should_exist=True,
+                )
+                wait_for_resource_count(
+                    kind=constants.VOLUMESNAPSHOT,
+                    namespace=entry["namespace"],
+                    expected_count=entry["pvc_count"],
+                )
+        logger.info(f"CephFS replication resources verified after {label}")
+
+    config.switch_acm_ctx()
+    for entry in workload_entries:
+        verify_last_group_sync_time(entry["drpc"], scheduling_interval)
+    logger.info(f"Verified lastGroupSyncTime after {label}")
+
+
 def wait_for_cnv_workload(
     vm_name, namespace, phase=constants.STATUS_RUNNING, timeout=600
 ):

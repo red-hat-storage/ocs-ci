@@ -1955,6 +1955,42 @@ acm_configuration_4_22 = {
     ),
 }
 
+acm_configuration_5_0 = {
+    "protected-applications-tab": (
+        "//a[@data-test-id='horizontal-link-Protected applications']",
+        By.XPATH,
+    ),
+    "protected-app-select-all-checkbox": (
+        "//input[@name='bulk-select-checkbox' and @aria-label='Select all']",
+        By.XPATH,
+    ),
+    "protected-app-selected-count": (
+        "//span[@id='bulk-select-checkbox' and contains(normalize-space(.), 'selected')]",
+        By.XPATH,
+    ),
+    "protected-app-failover-relocate-btn": (
+        "//button[normalize-space()='Failover/Relocate']",
+        By.XPATH,
+    ),
+    "batch-failover-relocate-modal": (
+        "//div[@role='dialog'][.//*[contains(normalize-space(.), "
+        "'Failover or relocate selected applications')]]",
+        By.XPATH,
+    ),
+    "batch-failover-option": (
+        "//div[@role='dialog']//input[@type='radio' and @id='selectable-action-failover']",
+        By.XPATH,
+    ),
+    "batch-relocate-option": (
+        "//div[@role='dialog']//input[@type='radio' and @id='selectable-action-relocate']",
+        By.XPATH,
+    ),
+    "batch-action-initiate-btn": (
+        "button[data-test-id='modal-initiate-action']",
+        By.CSS_SELECTOR,
+    ),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -4247,6 +4283,7 @@ locators = {
             **acm_configuration_4_20,
             **acm_configuration_4_21,
             **acm_configuration_4_22,
+            **acm_configuration_5_0,
         },
         "validation": {
             **validation,
