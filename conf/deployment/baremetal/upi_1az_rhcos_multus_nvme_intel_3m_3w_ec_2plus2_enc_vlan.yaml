@@ -1,0 +1,57 @@
+---
+# Baremetal UPI deployment with LSO, FDF, EC 2+2, Multus VLAN, encryption
+# Masters schedulable (3m + 3w = 6 nodes, 5 labeled for OSD)
+# Covers: EC 2+2, Multus with VLAN isolation, encryption at rest + in-transit
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+  fdf_cluster: true
+  ec_default_pools: true
+  ec_data_chunks: 2
+  ec_coding_chunks: 2
+  ec_failure_domain: host
+  ocs_operator_nodes_to_label: 5
+ENV_DATA:
+  platform: 'baremetal'
+  deployment_type: 'upi'
+  worker_replicas: 3
+  master_replicas: 3
+  mon_type: 'hostpath'
+  osd_type: 'nvme'
+  mark_masters_schedulable: true
+  encryption_at_rest: true
+  in_transit_encryption: true
+  is_multus_enabled: true
+
+  # VLAN Configuration
+  multus_use_vlan: true
+
+  # Public Network Configuration
+  multus_create_public_net: true
+  multus_public_net_interface: 'enp1s0f1'
+  multus_public_net_namespace: 'openshift-storage'
+  multus_public_net_type: 'macvlan'
+  multus_public_net_mode: 'bridge'
+
+  # Public Network VLAN Settings
+  multus_public_net_vlan_id: 201
+  multus_public_net_ip_range: '192.168.20.0/24'
+
+  # Public Network Shim Settings (for host-to-pod communication)
+  multus_public_net_shim_name: 'odf-pub-shim'
+  multus_public_net_shim_network: '192.168.252.0/24'
+
+  # Cluster Network Configuration
+  multus_create_cluster_net: true
+  multus_cluster_net_interface: 'enp1s0f1'
+  multus_cluster_net_namespace: 'openshift-storage'
+  multus_cluster_net_type: 'macvlan'
+  multus_cluster_net_mode: 'bridge'
+
+  # Cluster Network VLAN Settings
+  multus_cluster_net_vlan_id: 202
+  multus_cluster_net_ip_range: '192.168.30.0/24'
+
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-8028'
