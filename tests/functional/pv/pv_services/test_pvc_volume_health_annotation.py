@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_rosa_hcp,
     skipif_external_mode,
+    ui,
 )
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2
 from ocs_ci.framework import config
@@ -31,6 +32,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.csi_addons import (
     get_csi_addon_pod_on_node,
 )
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 
@@ -317,9 +319,10 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
         )
 
     @tier1
+    @ui
     @pytest.mark.polarion_id("OCS-8228")
     def test_pvc_health_unhealthy_via_ceph_blocklist(
-        self, pvc_factory, pod_factory, request
+        self, pvc_factory, pod_factory, request, setup_ui_class_factory
     ):
         """
         Verify PVC health transitions to unhealthy when the CephFS
@@ -332,9 +335,10 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
             4. Wait ~1-2 min for reporter tick.
             5. Assert annotation state == 'unhealthy'.
             6. Assert VolumeConditionAbnormal Warning event.
-            7. (Manual) Check ODF dashboard PVC health widget.
+            7. UI: Verify PVC appears in Volume Health Card table.
             8. Remove blocklist, restart pod.
             9. Wait ~1-2 min, assert state == 'healthy'.
+            10. UI: Verify PVC disappears from Volume Health Card.
         """
         logger.test_step("Verify Ceph health")
         ceph_health_check(tries=3, delay=10)
@@ -372,6 +376,60 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
             event_type="Warning",
             message_substr="health-check has not responded",
         )
+
+        logger.test_step("UI: Verify unhealthy PVC appears in Volume Health Card")
+
+        setup_ui_class_factory()
+        page_nav = PageNavigator().nav_storage_cluster_default_page()
+        sc_page = page_nav.nav_block_and_file_tab()
+        card = sc_page.get_volume_health_card()
+
+        pvc_in_table = card.wait_for_pvc_in_table(pvc_obj.name, timeout=60)
+        logger.assertion(f"PVC in table: expected=True, actual={pvc_in_table}")
+        assert pvc_in_table, f"PVC {pvc_obj.name} not found in health table"
+
+        attention_text = card.get_attention_text()
+        logger.assertion(f"'need attention' in text: {repr(attention_text)}")
+        assert (
+            "need attention" in attention_text.lower()
+        ), f"Unexpected text: {attention_text}"
+
+        all_row_data = card.get_all_row_data()
+
+        test_pvc_rows = [row for row in all_row_data if row.pvc_name == pvc_obj.name]
+        logger.assertion(
+            f"Row count for {pvc_obj.name}: expected=1 (RWO), actual={len(test_pvc_rows)}"
+        )
+        assert (
+            len(test_pvc_rows) == 1
+        ), f"Expected 1 row for RWO PVC {pvc_obj.name}, got {len(test_pvc_rows)}"
+
+        row_data = test_pvc_rows[0]
+        logger.assertion(
+            f"PVC name: expected={pvc_obj.name}, actual={row_data.pvc_name}"
+        )
+        assert row_data.pvc_name == pvc_obj.name
+
+        logger.assertion(f"Node name: expected={pod_node}, actual={row_data.node_name}")
+        assert row_data.node_name == pod_node
+
+        logger.assertion(
+            f"Events href contains {pvc_obj.name}/events: {row_data.events_href}"
+        )
+        assert pvc_obj.name in row_data.events_href
+        assert "/events" in row_data.events_href
+
+        card.take_screenshot("unhealthy_state_confirmed")
+        events_page = card.click_view_events(pvc_obj.name)
+
+        current_url = events_page.driver.current_url
+        logger.assertion(
+            f"Events URL: expected={row_data.events_href}, actual={current_url}"
+        )
+        assert current_url == row_data.events_href
+
+        logger.info("Unhealthy state UI verification passed")
+
         logger.test_step("Remove blocklist and restart pod")
         remove_cephfs_client_blocklist(client_addr)
 
@@ -395,15 +453,37 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
             event_type="Normal",
             message_substr="volume is in a healthy condition",
         )
+        logger.test_step("UI: Verify card returns to healthy state after recovery")
+        card.nav_storage_cluster_default_page()
+        logger.info("Check unhealthy PVC removed from table")
+        pvc_cleared = card.wait_for_pvc_not_in_table(pvc_obj.name, timeout=60)
+        assert pvc_cleared, f"PVC {pvc_obj.name} still in table after recovery"
+        card_healthy = card.wait_for_healthy(timeout=300)
+        logger.assertion(f"Card healthy: expected=True, actual={card_healthy}")
+        assert card_healthy, "Card did not return to healthy state"
+
+        no_issues_text = card.get_no_issues_text()
+        logger.assertion(
+            f"No issues text: expected='No issues found.', actual='{no_issues_text}'"
+        )
+        assert no_issues_text == "No issues found."
+
+        pvc_cleared = card.wait_for_pvc_not_in_table(pvc_obj.name, timeout=60)
+        logger.assertion(f"PVC cleared from table: expected=True, actual={pvc_cleared}")
+        assert pvc_cleared, f"PVC {pvc_obj.name} still in table after recovery"
+
+        card.take_screenshot("recovery_confirmed")
+        logger.info("Recovery UI verification passed")
         logger.info("PVC health unhealthy via ceph blocklist test passed")
 
     @tier2
+    @ui
     @skipif_managed_service
     @skipif_rosa_hcp
     @skipif_external_mode
     @pytest.mark.polarion_id("OCS-8261")
     def test_pvc_health_unhealthy_via_mds_scaledown(
-        self, pvc_factory, pod_factory, request
+        self, pvc_factory, pod_factory, request, setup_ui_class_factory
     ):
         """
         Verify RWX PVC per-node health transitions to unhealthy when both
@@ -418,9 +498,11 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
             4. Assert both per-node keys report state == 'unhealthy'.
             5. Assert 'since' timestamp advanced vs the healthy snapshot.
             6. Assert VolumeConditionAbnormal Warning event fired.
-            7. Restore both MDS deployments to replicas=1.
-            8. Assert both keys return to state == 'healthy'.
-            9. Assert new VolumeConditionHealthy Normal event on recovery.
+            7. UI: Verify PVC appears in table with 2 rows (one per node).
+            8. Restore both MDS deployments to replicas=1.
+            9. Assert both keys return to state == 'healthy'.
+            10. Assert new VolumeConditionHealthy Normal event on recovery.
+            11. UI: Verify card returns to healthy state.
         """
         logger.test_step("Verify Ceph health is HEALTH_OK")
         ceph_health_check(tries=3, delay=10)
@@ -601,6 +683,42 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
                 "VolumeConditionAbnormal event not found for "
                 f"PVC {pvc_obj.name} within {ANNOTATION_POLL_TIMEOUT}s"
             )
+        logger.test_step(
+            "UI: Verify unhealthy RWX PVC appears in Volume Health Card (2 nodes)"
+        )
+        setup_ui_class_factory()
+        page_nav = PageNavigator().nav_storage_cluster_default_page()
+        sc_page = page_nav.nav_block_and_file_tab()
+        card = sc_page.get_volume_health_card()
+
+        pvc_in_table = card.wait_for_pvc_in_table(pvc_obj.name, timeout=60)
+        logger.assertion(f"PVC in table: expected=True, actual={pvc_in_table}")
+        assert pvc_in_table
+
+        all_row_data = card.get_all_row_data()
+        test_pvc_rows = [row for row in all_row_data if row.pvc_name == pvc_obj.name]
+        logger.assertion(
+            f"Row count for {pvc_obj.name}: expected=2 (RWX, 2 nodes), "
+            f"actual={len(test_pvc_rows)}"
+        )
+        assert (
+            len(test_pvc_rows) == 2
+        ), f"Expected 2 rows for RWX PVC {pvc_obj.name}, got {len(test_pvc_rows)}"
+
+        node_names = {row.node_name for row in test_pvc_rows}
+        expected_nodes = set(pod_node_names)
+        logger.assertion(f"Node names: expected={expected_nodes}, actual={node_names}")
+        assert node_names == expected_nodes
+
+        for row in test_pvc_rows:
+            logger.assertion(f"Events href for node {row.node_name}: {row.events_href}")
+            assert pvc_obj.name in row.events_href
+            assert "/events" in row.events_href
+
+        card.take_screenshot("mds_unhealthy_state_confirmed")
+        card.click_view_events(pvc_obj.name)
+
+        logger.info("MDS scaledown unhealthy UI verification passed")
 
         logger.test_step("Capture pre-recovery healthy event count")
         pre_recovery_healthy_count = count_pvc_volume_health_events(
@@ -656,4 +774,23 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
                 "No new VolumeConditionHealthy event for "
                 f"PVC {pvc_obj.name} within {RECOVERY_POLL_TIMEOUT}s"
             )
+
+        logger.test_step("UI: Verify card returns to healthy after MDS recovery")
+        card.nav_storage_cluster_default_page()
+        logger.info("Check unhealthy PVC removed from table")
+        pvc_cleared = card.wait_for_pvc_not_in_table(pvc_obj.name, timeout=60)
+        assert pvc_cleared, f"PVC {pvc_obj.name} still in table after recovery"
+        card_healthy = card.wait_for_healthy(timeout=300)
+        logger.assertion(f"Card healthy: expected=True, actual={card_healthy}")
+        assert card_healthy
+
+        no_issues_text = card.get_no_issues_text()
+        logger.assertion(f"No issues text: {repr(no_issues_text)}")
+        assert no_issues_text == "No issues found."
+
+        pvc_cleared = card.wait_for_pvc_not_in_table(pvc_obj.name, timeout=60)
+        logger.assertion(f"PVC cleared: expected=True, actual={pvc_cleared}")
+        assert pvc_cleared
+
+        card.take_screenshot("mds_recovery_confirmed")
         logger.info("PVC health unhealthy via MDS scale-down test passed")
