@@ -13,7 +13,6 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import exec_cmd, run_cmd  # IgnoreDeprecation
 from ocs_ci.utility.retry import retry
@@ -362,17 +361,27 @@ class IBMCloudVPCBM(IBMCloudBM):
             cluster_name (str): OpenShift cluster name
             api_vip (str): API load balancer IP
             ingress_vip (str): Ingress load balancer IP
-            cis_instance (str): CIS instance name (default: from constants.IBM_CIS_INSTANCE)
-            domain_id (str): CIS domain ID for ibmcloud2.qe.rh-ocs.com (default: from constants.IBM_CIS_DOMAIN_ID)
+            cis_instance (str): CIS instance name (default: from ENV_DATA.ibm_cis_instance)
+            domain_id (str): CIS domain ID for ibmcloud2.qe.rh-ocs.com (default: from ENV_DATA.ibm_cis_domain_id)
 
         Returns:
             dict: Dictionary with API, API-INT, and Ingress DNS record IDs
         """
-        # Use constants if not provided
         if cis_instance is None:
-            cis_instance = constants.IBM_CIS_INSTANCE
+            cis_instance = config.ENV_DATA.get("ibm_cis_instance")
         if domain_id is None:
-            domain_id = constants.IBM_CIS_DOMAIN_ID
+            domain_id = config.ENV_DATA.get("ibm_cis_domain_id")
+
+        if not cis_instance:
+            raise ValueError(
+                "CIS Instance is required. Please set 'ibm_cis_instance' in ENV_DATA "
+            )
+
+        if not domain_id:
+            raise ValueError(
+                "CIS Domain ID is required. Please set 'ibm_cis_domain_id' in ENV_DATA "
+            )
+
         logger.info(f"Creating CIS DNS records for cluster {cluster_name}")
 
         # Create all three DNS records using helper method
@@ -408,14 +417,23 @@ class IBMCloudVPCBM(IBMCloudBM):
 
         Args:
             cluster_name (str): OpenShift cluster name
-            cis_instance (str): CIS instance name (default: from constants.IBM_CIS_INSTANCE)
-            domain_id (str): CIS domain ID (default: from constants.IBM_CIS_DOMAIN_ID)
+            cis_instance (str): CIS instance name (default: from ENV_DATA.ibm_cis_instance)
+            domain_id (str): CIS domain ID (default: from ENV_DATA.ibm_cis_domain_id)
         """
-        # Use constants if not provided
         if cis_instance is None:
-            cis_instance = constants.IBM_CIS_INSTANCE
+            cis_instance = config.ENV_DATA.get("ibm_cis_instance")
         if domain_id is None:
-            domain_id = constants.IBM_CIS_DOMAIN_ID
+            domain_id = config.ENV_DATA.get("ibm_cis_domain_id")
+
+        if not cis_instance:
+            raise ValueError(
+                "CIS Instance is required. Please set 'ibm_cis_instance' in ENV_DATA "
+            )
+
+        if not domain_id:
+            raise ValueError(
+                "CIS Domain ID is required. Please set 'ibm_cis_domain_id' in ENV_DATA "
+            )
 
         logger.info(f"Deleting CIS DNS records for cluster {cluster_name}")
 
