@@ -4,7 +4,7 @@
 ENV_DATA:
   # Krkn version to clone (e.g., 'v5.0.0', 'v5.1.0')
   # If not set or empty, the latest code from the default branch will be cloned
-  krkn_version: "v5.0.0"
+  krkn_version: "v5.2.9"
 
   krkn_config:
     # Workload types: VDBENCH, CNV_WORKLOAD, RGW_WORKLOAD, MCG_WORKLOAD, WARP_WORKLOAD
@@ -156,7 +156,8 @@ ENV_DATA:
       max_concurrent_operations: 3
 
       # CephX key rotation during chaos (requires ODF 4.19+, non-external mode)
-      enable_cephx_keyrotation: true
+      # Opt-in: set true and uncomment cephx_keyrotation under enabled_operations.
+      enable_cephx_keyrotation: false
       # Minimum delay between rotation iterations; a single rotation may take longer.
       cephx_keyrotation_interval: 180
       cephx_keys:
@@ -210,5 +211,5 @@ ENV_DATA:
         - rgw_restart # RGW pod restart (ObjectStore)
         - reclaim_space # CSI-Addons ReclaimSpace on RBD volumes
         - longevity_operations # Comprehensive snapshot/restore/expand testing
-        - cephx_keyrotation # CephX rotation (rook_daemon, csi, rbdMirrorPeer)
+        # - cephx_keyrotation # CephX rotation (rook_daemon, csi, rbdMirrorPeer)
         # - volume_replication   # CSI-Addons VolumeReplication (requires DR)
