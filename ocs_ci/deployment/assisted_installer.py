@@ -239,7 +239,10 @@ class AssistedInstallerCluster(object):
         }
 
         # VPC BM uses external ALBs for VIPs, not VRRP - requires user_managed_networking
-        if config.ENV_DATA.get("platform") == constants.IBM_VPC_BM_PLATFORM:
+        if (
+            config.ENV_DATA.get("infra_type", constants.CLASSIC_INFRA_TYPE)
+            == constants.VPC_INFRA_TYPE
+        ):
             cluster_configuration["user_managed_networking"] = True
             cluster_configuration["vip_dhcp_allocation"] = False
             cluster_configuration["platform"] = {"type": "none"}
