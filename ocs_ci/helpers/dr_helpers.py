@@ -1196,7 +1196,10 @@ def wait_for_replication_resources_deletion(
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
         workload_cleanup (bool): Set to True during final workload teardown.
-            For CephFS workloads, wait for all VolumeSnapshots to be deleted.
+            For CephFS workloads, waits for all VolumeSnapshots to reach
+            count zero before returning. This wait is skipped (with a warning)
+            when ``config.ENV_DATA["skip_vs_check"]`` is enabled, allowing
+            CephFS cleanup to continue without blocking on snapshot deletion.
 
     Raises:
         TimeoutExpiredError: In case replication resources not deleted
@@ -1275,12 +1278,17 @@ def wait_for_replication_resources_deletion(
             )
 
         if "cephfs" in namespace and workload_cleanup:
-            wait_for_resource_count(
-                kind=constants.VOLUMESNAPSHOT,
-                namespace=namespace,
-                expected_count=0,
-                timeout=timeout,
-            )
+            if config.ENV_DATA.get("skip_vs_check"):
+                logger.warning(
+                    "Skipping VolumeSnapshot count check (skip_vs_check is set)"
+                )
+            else:
+                wait_for_resource_count(
+                    kind=constants.VOLUMESNAPSHOT,
+                    namespace=namespace,
+                    expected_count=0,
+                    timeout=timeout,
+                )
 
 
 def wait_for_all_resources_creation(
