@@ -3015,7 +3015,7 @@ validation_5_0 = {
         By.XPATH,
     ),
     "volume_health_success_icon": (
-        "[data-test='odf-volume-health-card'] " "svg[data-test='success-icon']",
+        "[data-test='odf-volume-health-card']svg[data-test='success-icon']",
         By.CSS_SELECTOR,
     ),
     "volume_health_no_issues_text": (

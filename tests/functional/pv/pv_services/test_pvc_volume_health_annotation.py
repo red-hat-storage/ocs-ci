@@ -794,5 +794,4 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
         assert pvc_cleared
 
         card.take_screenshot("mds_recovery_confirmed")
-        logger.info(" MDS recovery UI verification passed")
         logger.info("PVC health unhealthy via MDS scale-down test passed")

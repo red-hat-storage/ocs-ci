@@ -15,7 +15,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.ui.base_ui import SeleniumDriver
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
-from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
@@ -30,22 +29,9 @@ class TestVolumeHealthCardHealthy(ManageTest):
     Test Volume Health Card in healthy state on the Block and File tab.
     """
 
-    @pytest.fixture()
-    def ensure_healthy_cluster(self):
-        """
-        Verify cluster is in healthy state before running UI test.
-
-        Returns:
-            None
-        """
-        logger.info("Verifying cluster health before UI test")
-        ceph_health_check(tries=3, delay=10)
-
     @tier1
-    @pytest.mark.polarion_id("OCS-8264")
-    def test_volume_health_card_healthy_state(
-        self, setup_ui_class_factory, ensure_healthy_cluster
-    ):
+    @pytest.mark.polarion_id("OCS-XXXX")
+    def test_volume_health_card_healthy_state(self, setup_ui_class_factory):
         """
         Test Volume Health Card shows healthy state when no PVC health issues exist.
 
@@ -58,7 +44,9 @@ class TestVolumeHealthCardHealthy(ManageTest):
         """
         logger.test_step("Navigate to Volume Health Card on Block and File tab")
         setup_ui_class_factory()
+        logger.info("Navigating to Storage Cluster default page")
         page_nav = PageNavigator().nav_storage_cluster_default_page()
+        logger.info("Navigating to Block and File tab")
         sc_page = page_nav.nav_block_and_file_tab()
 
         logger.info("Accessing Volume Health Card")
@@ -72,6 +60,7 @@ class TestVolumeHealthCardHealthy(ManageTest):
         is_healthy = card.is_healthy()
         logger.assertion(f"Card healthy: expected=True, actual={is_healthy}")
         assert is_healthy, "Volume Health Card should show healthy state"
+
         no_issues_text = card.get_no_issues_text()
         logger.assertion(
             f"No issues text: expected='No issues found.', actual='{no_issues_text}'"
