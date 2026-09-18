@@ -251,12 +251,16 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
     def setup_encrypted_storage(
         self,
         request,
+        setup_nfs_feature,
         project_factory,
         pv_encryption_kms_setup_factory,
         storageclass_factory,
     ):
         """
         Setup fixture to configure Vault KMS and create encrypted storage class.
+
+        setup_nfs_feature is declared as a dependency so pytest is forced to
+        enable NFS in the cluster before this fixture runs.
 
         This fixture:
         1. Creates a test project/namespace
@@ -267,6 +271,7 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
 
         Args:
             request: pytest request object for finalizer registration
+            setup_nfs_feature: Fixture that enables NFS first (ordering dependency)
             project_factory: Factory fixture to create projects
             pv_encryption_kms_setup_factory: Factory to setup PV encryption with KMS
             storageclass_factory: Factory fixture to create storage classes
