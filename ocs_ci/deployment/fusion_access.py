@@ -117,12 +117,39 @@ class FusionAccessOperator(Operator):
         logger.info(f"CSV '{csv_name}' reached Succeeded phase")
 
     # ------------------------------------------------------------------
+    # Pull secret creation
+    # ------------------------------------------------------------------
+
+    def create_pull_secret(self):
+        """
+        Create the ``fusion-pullsecret`` generic secret in the Fusion Access
+        namespace using the IBM entitlement key from ``config.AUTH``.
+
+
+        Raises:
+            KeyError: If ``ibm_entitlement_key`` is not present in
+                ``config.AUTH``.
+        """
+        ibm_entitlement_key = config.AUTH["ibm_entitlement_key"]
+        ocp = OCP(kind="Secret", namespace=self.namespace)
+
+        logger.info(f"Creating 'fusion-pullsecret' in namespace '{self.namespace}'")
+        ocp.exec_oc_cmd(
+            command=(
+                f"create secret generic fusion-pullsecret "
+                f"--from-literal=ibm-entitlement-key={ibm_entitlement_key}"
+            ),
+            secrets=[ibm_entitlement_key],
+        )
+        logger.info("Secret 'fusion-pullsecret' created successfully")
+
+    # ------------------------------------------------------------------
     # Deployment verification: FusionAccess CR
     # ------------------------------------------------------------------
 
     def _deployment_verification(self):
         """
-        Create the FusionAccess CR and wait for it to reach the Ready phase.
+        Create the pull secret and FusionAccess CR, then wait for Ready state.
 
         Skipped when ``config.DEPLOYMENT["fusion_access_skip_cr"]`` is True.
         """
@@ -131,6 +158,8 @@ class FusionAccessOperator(Operator):
                 "fusion_access_skip_cr is set — skipping FusionAccess CR creation"
             )
             return
+
+        self.create_pull_secret()
 
         cr_ocp = OCP(kind="FusionAccess", namespace=self.namespace)
         if cr_ocp.is_exist(resource_name="fusionaccess-object"):
