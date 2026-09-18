@@ -1343,7 +1343,7 @@ def wait_for_all_resources_creation(
 
 def wait_for_all_resources_deletion(
     namespace,
-    timeout=2000,
+    timeout=1000,
     discovered_apps=False,
     workload_cleanup=False,
     vrg_name="",
