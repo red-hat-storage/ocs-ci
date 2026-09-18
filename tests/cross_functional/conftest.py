@@ -126,6 +126,7 @@ def noobaa_db_backup_and_recovery_locally(
         bucket_factory=bucket_factory,
         test_directory_setup=test_directory_setup,
         noobaa_db_recovery_patch=noobaa_db_recovery_patch,
+        noobaa_pods_running_timeout=900,
     ):
 
         # Create OBC and write data
@@ -218,7 +219,7 @@ def noobaa_db_backup_and_recovery_locally(
             condition=constants.STATUS_RUNNING,
             resource_count=len(noobaa_pods),
             selector=constants.NOOBAA_APP_LABEL,
-            timeout=900,
+            timeout=noobaa_pods_running_timeout,
         )
         logger.info("NooBaa pods are up and running after recovery")
 
