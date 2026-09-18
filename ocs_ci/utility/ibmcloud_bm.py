@@ -671,6 +671,13 @@ class IBMCloudVPCBM(IBMCloudBM):
         server = self.get_server_status(server_id)
         server_name = server.get("name", server_id)
 
+        server_status = server.get("status")
+        if server_status != "running":
+            logger.info(
+                f"Server {server_name} ({server_id}) is not running, skipping stop"
+            )
+            return
+
         logger.info(f"Stopping server {server_name} ({server_id}) - {stop_type} stop")
         self._api_call(
             "POST", f"/bare_metal_servers/{server_id}/stop", {"type": stop_type}
