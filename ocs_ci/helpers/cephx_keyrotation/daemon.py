@@ -4,7 +4,7 @@ import logging
 import time
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
@@ -666,38 +666,78 @@ class CephXDaemonRotation:
 
     def wait_for_pod_restarts(self, before_state, label, timeout=900, sleep=15):
         """
-        Wait until all Running pods for *label* have new names or annotations.
+        Wait until Running pods for *label* have new names or annotations.
+
+        MON, OSD, and MDS must all restart. MGR HA rotates one replica per
+        key generation, so a single restarted MGR is enough.
 
         Args:
             before_state (dict): Output of :meth:`capture_daemon_pod_state`.
         """
+        mgr_ha = label == constants.MGR_APP_LABEL
         log.info(
             f"Waiting for pod restarts (label={label}, "
-            f"prior pods={', '.join(before_state) or 'none'})"
+            f"prior pods={', '.join(before_state) or 'none'}"
+            f"{', mgr HA: at least one replica' if mgr_ha else ''})"
         )
+        last_stale = []
+        last_restarted = []
+
+        def _stale_and_restarted(current):
+            stale = [
+                name
+                for name, annotation in current.items()
+                if name in before_state and before_state[name] == annotation
+            ]
+            restarted = [name for name in current if name not in stale]
+            return stale, restarted
 
         def _pods_restarted():
+            nonlocal last_stale, last_restarted
             current = self.capture_daemon_pod_state(label)
             if not current:
                 return False
-            # Require every currently Running pod to be new or annotation-changed;
-            # a single restarted peer must not short-circuit the wait.
-            for pod_name, annotation in current.items():
-                if pod_name in before_state and before_state[pod_name] == annotation:
-                    return False
+            last_stale, last_restarted = _stale_and_restarted(current)
+            if last_stale:
+                # Rook rotates one MGR replica per generation; the other
+                # replica may keep its pod name and cephx-key-identifier.
+                if mgr_ha and last_restarted:
+                    return True
+                log.info(
+                    f"Pod restart pending for {label}: "
+                    f"stale={', '.join(last_stale)}; "
+                    f"restarted={', '.join(last_restarted) or 'none'}"
+                )
+                return False
             return True
 
-        for restarted in TimeoutSampler(timeout, sleep, _pods_restarted):
-            if restarted:
-                log.info(f"Pods restarted for label {label}")
-                return self.capture_daemon_pod_state(label)
+        try:
+            for restarted in TimeoutSampler(timeout, sleep, _pods_restarted):
+                if restarted:
+                    log.info(
+                        f"Pods restarted for label {label}"
+                        f"{' (MGR HA partial)' if mgr_ha and last_stale else ''}: "
+                        f"{', '.join(last_restarted) or ', '.join(self.capture_daemon_pod_state(label))}"
+                    )
+                    return self.capture_daemon_pod_state(label)
+        except TimeoutExpiredError as exc:
+            stale_note = (
+                f" (stale pods: {', '.join(last_stale)}; "
+                f"restarted: {', '.join(last_restarted) or 'none'})"
+                if last_stale or last_restarted
+                else ""
+            )
+            raise UnexpectedBehaviour(
+                f"Pods with label {label} did not restart within {timeout}s"
+                f"{stale_note}"
+            ) from exc
 
         raise UnexpectedBehaviour(
             f"Pods with label {label} did not restart within {timeout}s"
         )
 
     def wait_for_all_daemon_pod_restarts(self, before_states, timeout=900, sleep=15):
-        """Wait for MON, MGR, OSD, and MDS pod restarts."""
+        """Wait for MON, OSD, MDS (all replicas) and MGR (at least one) restarts."""
         after_states = {}
         for daemon, label in constants.ROOK_CEPHX_KEYROTATION_DAEMON_LABELS.items():
             after_states[daemon] = self.wait_for_pod_restarts(
@@ -722,30 +762,41 @@ class CephXDaemonRotation:
     ):
         log.info(
             f"Waiting for CephX daemon rotation on {label} to reach "
-            f"generation {expected_generation}"
+            f"generation {expected_generation} (timeout={timeout}s)"
         )
+        last_generation = None
 
         def _daemon_ready():
+            nonlocal last_generation
             cr_obj.reload_data()
             cephx = cr_obj.data.get("status", {}).get("cephx", {}) or {}
             generation = int((cephx.get("daemon") or {}).get("keyGeneration", 0) or 0)
+            last_generation = generation
             if generation < expected_generation:
-                log.debug(
+                log.info(
                     f"{label} daemon keyGeneration={generation} "
                     f"(want >= {expected_generation})"
                 )
                 return False
             return True
 
-        for ready in TimeoutSampler(timeout, sleep, _daemon_ready):
-            if ready:
-                log.info(
-                    f"CephX daemon rotation on {label} reached "
-                    f"generation {expected_generation}"
-                )
-                return True
+        try:
+            for ready in TimeoutSampler(timeout, sleep, _daemon_ready):
+                if ready:
+                    log.info(
+                        f"CephX daemon rotation on {label} reached "
+                        f"generation {expected_generation}"
+                    )
+                    return True
+        except TimeoutExpiredError as exc:
+            raise UnexpectedBehaviour(
+                f"CephX daemon rotation on {label} did not reach generation "
+                f"{expected_generation} within {timeout}s "
+                f"(last keyGeneration={last_generation})"
+            ) from exc
 
         raise UnexpectedBehaviour(
             f"CephX daemon rotation on {label} did not reach generation "
-            f"{expected_generation} within {timeout}s"
+            f"{expected_generation} within {timeout}s "
+            f"(last keyGeneration={last_generation})"
         )

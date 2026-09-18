@@ -67,9 +67,8 @@ class TestCephXMetricsExporterRotation:
             timeout=900,
         )
 
+        rotator.wait_for_cluster_fully_recovered(timeout=1500)
         ceph_health_check(namespace=namespace)
-        rotator.wait_for_cluster_ready()
-        rotator.wait_for_pgs_active_clean()
 
         log.info(
             "ocs-metrics-exporter CephX key rotation verification completed successfully"
