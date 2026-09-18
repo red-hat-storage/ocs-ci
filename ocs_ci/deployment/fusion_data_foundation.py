@@ -20,13 +20,14 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import create_lvs_resource
 from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.ocs.exceptions import (
+    CephHealthException,
     CommandFailed,
     TimeoutExpiredError,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import ceph_health_check, run_cmd
 
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
@@ -39,6 +40,7 @@ from ocs_ci.utility.utils import (
     get_running_ocp_version,
     mute_mon_netsplit,
 )
+from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +85,7 @@ class FusionDataFoundationDeployment:
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
+        self.ensure_ceph_health()
         self.ensure_install_plan_approval()
         if not self.fdf_skip_storage_setup:
             wait_for_storageclusters_crd()
@@ -357,6 +360,27 @@ class FusionDataFoundationDeployment:
             f"{defaults.FUSION_CATALOG_NAME} -p '{params}' --type merge"
         )
         run_patch_cmd(cmd)
+
+    def ensure_ceph_health(self):
+        """
+        Verify the Ceph cluster is healthy, remediating clock skew if detected.
+
+        Runs a Ceph health check and, if it fails due to a "clock skew detected"
+        error, updates NTP on the cluster's compute nodes (vSphere only) and
+        re-runs the health check, asserting it passes.
+        """
+        try:
+            namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+            ceph_health_check(namespace=namespace, tries=30, delay=10)
+        except CephHealthException as ex:
+            err = str(ex)
+            logger.warning(f"Ceph health check failed with {err}")
+            if "clock skew detected" in err:
+                logger.info("Changing NTP on cluster nodes")
+                platform = config.ENV_DATA.get("platform", "").lower()
+                if platform == constants.VSPHERE_PLATFORM:
+                    update_ntp_compute_nodes()
+                assert ceph_health_check(namespace=namespace, tries=60, delay=10)
 
     @staticmethod
     def create_odfcluster():
