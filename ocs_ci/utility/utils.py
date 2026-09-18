@@ -4034,6 +4034,7 @@ def clone_repo(
     force_checkout=False,
     clone_token=None,
     sparse_checkout_dirs=None,
+    timeout=3600,
 ):
     """
     Clone a repository or checkout latest changes if it already exists at
@@ -4054,6 +4055,8 @@ def clone_repo(
         sparse_checkout_dirs (list): list of directories to include in sparse
             checkout. When provided, only the specified directories will be
             checked out, significantly reducing disk usage for large repos.
+        timeout (int): Timeout in seconds for git clone/fetch commands.
+            Defaults to 3600 (60 minutes).
 
     Raises:
         UnknownCloneTypeException: In case of incorrect clone_type is used
@@ -4099,7 +4102,11 @@ def clone_repo(
         if clone_token:
             url = url.replace("https://", f"https://{clone_token}@")
             clone_token = [clone_token]
-        exec_cmd(cmd=f"git clone {git_params} {url} {location}", secrets=clone_token)
+        exec_cmd(
+            cmd=f"git clone {git_params} {url} {location}",
+            secrets=clone_token,
+            timeout=timeout,
+        )
         if sparse_checkout_dirs:
             sparse_paths = " ".join(sparse_checkout_dirs)
             log.info("Setting sparse checkout for directories: %s", sparse_paths)
@@ -4107,7 +4114,7 @@ def clone_repo(
     else:
         log.info("Repository already cloned at %s, skipping clone", location)
         log.info("Fetching latest changes from repository")
-        exec_cmd("git fetch --all", cwd=location)
+        exec_cmd("git fetch --all", cwd=location, timeout=timeout)
     log.info("Checking out repository to specific branch: %s", branch)
     if force_checkout:
         exec_cmd(f"git checkout --force {branch}", cwd=location)
