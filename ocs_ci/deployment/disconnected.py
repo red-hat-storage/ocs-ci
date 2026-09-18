@@ -378,7 +378,7 @@ def mirror_index_image_via_oc_mirror(
         f"oc mirror --config {imageset_config_file} "
         f"docker://{mirror_registry} "
         "--workspace file://oc-mirror-workspace/results-files --v2 "
-        "--dest-tls-verify=false --image-timeout 30m"
+        "--dest-tls-verify=false --image-timeout 30m "
     )
     try:
         exec_cmd(cmd, timeout=18000)
@@ -434,6 +434,37 @@ def mirror_index_image_via_oc_mirror(
     with open(idms_file, "w") as f:
         yaml.dump(idms_content, f)
     exec_cmd(f"oc apply -f {idms_file}")
+
+    # create and apply ITMS for FDF catalog image tag resolution
+    if idms_name_prefix == "fdf":
+        itms_file = os.path.join(
+            f"{mirroring_manifests_dir}",
+            "working-dir/cluster-resources/itms-oc-mirror.yaml",
+        )
+        target_path = mirror_registry.rstrip("/")
+        itms_content = {
+            "apiVersion": "config.openshift.io/v1",
+            "kind": "ImageTagMirrorSet",
+            "metadata": {
+                "name": "isf-fdf-itms",
+            },
+            "spec": {
+                "imageTagMirrors": [
+                    {
+                        "mirrors": [
+                            f"{target_path}/cpopen/isf-data-foundation-catalog"
+                        ],
+                        "source": "icr.io/cpopen/isf-data-foundation-catalog",
+                        "mirrorSourcePolicy": "AllowContactingSource",
+                    }
+                ]
+            },
+        }
+        with open(itms_file, "w") as f:
+            yaml.dump(itms_content, f)
+        logger.info(f"ImageTagMirrorSet written to {itms_file}")
+        exec_cmd(f"oc apply -f {itms_file}")
+
     wait_for_machineconfigpool_status("all")
 
     # get mirrored index image url from prepared catalogSource file
