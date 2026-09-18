@@ -1787,6 +1787,29 @@ def get_mgr_pods(mgr_label=constants.MGR_APP_LABEL, namespace=None):
     return mgr_pods
 
 
+def get_active_mgr_pod():
+    """
+    Get the active MGR pod using ceph mgr stat
+
+    Returns:
+        Pod: The active MGR pod object
+
+    Raises:
+        ValueError: If the active MGR pod is not found
+
+    """
+    toolbox = get_ceph_tools_pod()
+    active_mgr_pod_output = toolbox.exec_cmd_on_pod("ceph mgr stat")
+    active_mgr_pod_suffix = active_mgr_pod_output.get("active_name")
+    logger.info(f"The active MGR pod suffix is {active_mgr_pod_suffix}")
+
+    for mgr_pod in get_mgr_pods():
+        if active_mgr_pod_suffix in mgr_pod.name:
+            logger.info(f"Active MGR pod: {mgr_pod.name}")
+            return mgr_pod
+    raise ValueError(f"Active MGR pod with suffix '{active_mgr_pod_suffix}' not found")
+
+
 def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
     """
     Fetches info about osd pods in the cluster
