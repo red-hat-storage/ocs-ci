@@ -36,8 +36,7 @@ from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     get_ceph_tools_pod,
-    get_csi_snapshot_controller_leader,
-    get_odf_external_snapshotter_leader,
+    get_odf_snapshotter_leader,
     get_pods_having_label,
     wait_for_matching_pattern_in_pod_logs,
 )
@@ -3564,10 +3563,14 @@ def validate_volumegroupsnapshot(vgs_namespace):
 
     if ocs_version > version.VERSION_4_22:
         namespace = constants.OPENSHIFT_CLUSTER_STORAGE_OPERATOR_NAMESPACE
-        snapshotter_leader = get_csi_snapshot_controller_leader(namespace)
+        snapshotter_leader = get_odf_snapshotter_leader(
+            namespace,
+            label=constants.CSI_SNAPSHOT_CONTROLLER_LABEL,
+            container=None,
+        )
     else:
         namespace = config.ENV_DATA["cluster_namespace"]
-        snapshotter_leader = get_odf_external_snapshotter_leader(namespace)
+        snapshotter_leader = get_odf_snapshotter_leader(namespace)
 
     try:
         for expected_val in expected_output_lst:
