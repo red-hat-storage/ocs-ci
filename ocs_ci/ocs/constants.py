@@ -997,6 +997,8 @@ RBD_CTRLPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin"
 PROMETHEUS_POD_LABEL = "app.kubernetes.io/name=prometheus"
 ROOK_OPERATOR_PODS = "app.kubernetes.io/created-by=rook-ceph-operator"
 ODF_EXTERNAL_SNAPSHOTTER = "app.kubernetes.io/name=odf-external-snapshotter-operator"
+OPENSHIFT_CLUSTER_STORAGE_OPERATOR_NAMESPACE = "openshift-cluster-storage-operator"
+CSI_SNAPSHOT_CONTROLLER_LABEL = "app=csi-snapshot-controller"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
