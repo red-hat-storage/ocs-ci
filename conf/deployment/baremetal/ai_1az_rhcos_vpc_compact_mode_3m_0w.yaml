@@ -5,8 +5,9 @@ DEPLOYMENT:
   local_storage: true
 
 ENV_DATA:
-  platform: 'ibm_vpc_bm'
+  platform: 'baremetal'
   deployment_type: 'ai'
+  infra_type: 'vpc'
   worker_replicas: 0
   master_replicas: 3
   region: 'us-south'
