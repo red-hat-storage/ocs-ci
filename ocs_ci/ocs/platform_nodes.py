@@ -140,6 +140,27 @@ class PlatformNodesFactory:
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "ipi":
                 platform += "_ipi"
+
+        if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
+            if config.ENV_DATA["deployment_type"] == "ai":
+                if (
+                    config.ENV_DATA.get("infra_type", constants.CLASSIC_INFRA_TYPE)
+                    == constants.VPC_INFRA_TYPE
+                ):
+                    platform = "ibm_vpc_bm"
+                else:
+                    platform += "_ai"
+        if config.ENV_DATA[
+            "platform"
+        ] == constants.IBM_HCI_PLATFORM and get_client_type_by_name(
+            cluster_name
+        ) not in [
+            constants.HOSTED_CLUSTER_KUBEVIRT,
+            constants.HOSTED_CLUSTER_AGENT,
+        ]:
+            if config.ENV_DATA["deployment_type"] == "ipi":
+                platform += "_ipi"
+
         return self.cls_map[platform]()
 
 
