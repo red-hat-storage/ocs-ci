@@ -187,9 +187,10 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
         non_enc_combinations=None,
         cephfs_pod_objs=None,
         nfs_pod_objs=None,
+        batch_size=5,
     ):
         """
-        Start FIO workload on pods and wait for completion.
+        Start FIO workload on pods and wait for completion in batches.
 
         Args:
             pod_objs (list): List of encrypted RBD pod objects
@@ -198,6 +199,7 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
             non_enc_combinations (list): List of PVC configurations for non-encrypted RBD
             cephfs_pod_objs (list): List of CephFS pod objects
             nfs_pod_objs (list): List of NFS pod objects
+            batch_size (int): Number of pods to run FIO on concurrently (default 5)
 
         """
         # Prepare pods with config for FIO
@@ -212,40 +214,54 @@ class TestRBDEncryptedPVCKeyRotation(E2ETest):
             + [(pod, {**fs_config, "pod_type": "nfs"}) for pod in (nfs_pod_objs or [])]
         )
 
-        for idx, (pod_obj, pvc_config) in enumerate(all_pods_with_config, start=1):
-            # Determine IO type based on volume mode
-            if pvc_config["volume_mode"] == constants.VOLUME_MODE_BLOCK:
-                io_type = "block"
-                log.info("  - IO Type: Block device")
-            else:
-                io_type = "fs"
-                log.info("  - IO Type: Filesystem")
+        total = len(all_pods_with_config)
+        log.info(
+            f"Starting FIO on {total} pods in batches of {batch_size} "
+            "to avoid OOM kills from concurrent memory pressure"
+        )
 
-            is_nfs_pod = pvc_config.get("pod_type") == "nfs"
+        for batch_start in range(0, total, batch_size):
+            batch = all_pods_with_config[batch_start : batch_start + batch_size]
+            batch_num = batch_start // batch_size + 1
+            total_batches = (total + batch_size - 1) // batch_size
+            log.info(
+                f"FIO batch {batch_num}/{total_batches}: "
+                f"starting {len(batch)} pods (pods {batch_start + 1}–{batch_start + len(batch)} of {total})"
+            )
 
-            if is_nfs_pod:
-                # NFS pods: use direct I/O to prevent memory exhaustion
-                pod_obj.run_io(
-                    storage_type=io_type,
-                    size="500M",
-                    runtime=60,
-                    fio_filename=pod_obj.name,
-                    direct=1,
-                )
-            else:
-                # RBD/CephFS pods: use verify=True
-                pod_obj.run_io(
-                    storage_type=io_type,
-                    size="500M",
-                    verify=True,
-                    runtime=300,
-                )
-        log.info(f"FIO workload started on all {len(all_pods_with_config)} pods")
+            # Start FIO on all pods in this batch (non-blocking)
+            for pod_obj, pvc_config in batch:
+                if pvc_config["volume_mode"] == constants.VOLUME_MODE_BLOCK:
+                    io_type = "block"
+                else:
+                    io_type = "fs"
 
-        # Wait for IO completion on all pods
-        for idx, (pod_obj, pvc_config) in enumerate(all_pods_with_config, start=1):
-            pod_obj.get_fio_results()
-        log.info(f"FIO completed on all {len(all_pods_with_config)} pods")
+                is_nfs_pod = pvc_config.get("pod_type") == "nfs"
+                if is_nfs_pod:
+                    # NFS pods: use direct I/O to avoid buffered memory exhaustion
+                    pod_obj.run_io(
+                        storage_type=io_type,
+                        size="500M",
+                        runtime=60,
+                        fio_filename=pod_obj.name,
+                        direct=1,
+                    )
+                else:
+                    # RBD/CephFS pods: use verify=True
+                    pod_obj.run_io(
+                        storage_type=io_type,
+                        size="500M",
+                        verify=True,
+                        runtime=300,
+                    )
+
+            # Wait for all pods in this batch to complete before starting the next
+            for pod_obj, _ in batch:
+                pod_obj.get_fio_results()
+
+            log.info(f"FIO batch {batch_num}/{total_batches} completed")
+
+        log.info(f"FIO completed on all {total} pods")
 
     @pytest.fixture(autouse=True)
     def setup_encrypted_storage(
