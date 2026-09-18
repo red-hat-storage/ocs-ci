@@ -1,0 +1,15 @@
+# PVC YAML used by OLS tests for attach-context validation (conf path).
+# Test asks OLS questions about this YAML and validates the response.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ols-context-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: ocs-storagecluster-ceph-rbd
