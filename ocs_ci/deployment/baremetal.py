@@ -1691,7 +1691,7 @@ class BAREMETALAI(BAREMETALBASE):
                                 f"Stopping BM server {server_name} ({server_id})"
                             )
                             try:
-                                vpc_bm_manager.stop_server(server_id)
+                                vpc_bm_manager.stop_server(server_id, stop_type="hard")
                             except Exception as e:
                                 logger.warning(f"Failed to stop {server_name}: {e}")
 
