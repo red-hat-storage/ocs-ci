@@ -4,6 +4,7 @@ import time
 from ocs_ci.framework import config
 from ocs_ci.ocs.ui.helpers_ui import format_locator, logger
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs.ui.page_objects.resource_list import ResourceList
 from ocs_ci.ocs.ui.workload_ui import PvcCapacityDeploymentList, compare_mem_usage
 from ocs_ci.utility.utils import TimeoutSampler
 from selenium.common.exceptions import TimeoutException
@@ -397,12 +398,16 @@ class VolumeHealthCard(BlockAndFile):
         """
         Click the 'View all PVCs' link in healthy state.
         Navigates away to the PVC list page.
+
+        Returns:
+            ResourceList: PVC list page object
         """
         logger.info("Clicking 'View all PVCs' link")
         self.take_screenshot("before_click_view_all_pvcs")
         self.do_click(self.validation_loc["volume_health_view_all_pvcs_link"])
         logger.info("Navigated to PVC list page")
         self.take_screenshot("after_click_view_all_pvcs")
+        return ResourceList()
 
     def get_attention_text(self):
         """
@@ -573,15 +578,7 @@ class VolumeHealthCard(BlockAndFile):
         Returns:
             bool: True if PVC not found in table
         """
-        rows = self.get_table_rows()
-        if len(rows) == 0:
-            return True
-
-        for row in rows:
-            row_data = self.get_row_data(row)
-            if row_data.pvc_name == pvc_name:
-                return False
-        return True
+        return not self._is_pvc_in_table(pvc_name)
 
     def wait_for_pvc_not_in_table(self, pvc_name, timeout=60):
         """
@@ -652,6 +649,9 @@ class VolumeHealthCard(BlockAndFile):
 
         Args:
             pvc_name (str): PVC name to view events for
+
+        Returns:
+            PageNavigator: Page object for the destination events page
         """
         logger.info(f"Clicking 'View events' link for PVC '{pvc_name}'")
         self.take_screenshot(f"before_click_events_{pvc_name}")
@@ -663,3 +663,4 @@ class VolumeHealthCard(BlockAndFile):
 
         logger.info(f"Navigated to events page for PVC '{pvc_name}'")
         self.take_screenshot(f"after_click_events_{pvc_name}")
+        return PageNavigator()

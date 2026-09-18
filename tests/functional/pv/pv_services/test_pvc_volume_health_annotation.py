@@ -32,7 +32,6 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.csi_addons import (
     get_csi_addon_pod_on_node,
 )
-from ocs_ci.ocs.ui.base_ui import SeleniumDriver
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
@@ -421,9 +420,9 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
         assert "/events" in row_data.events_href
 
         card.take_screenshot("unhealthy_state_confirmed")
-        card.click_view_events(pvc_obj.name)
+        events_page = card.click_view_events(pvc_obj.name)
 
-        current_url = SeleniumDriver().current_url
+        current_url = events_page.driver.current_url
         logger.assertion(
             f"Events URL: expected={row_data.events_href}, actual={current_url}"
         )

@@ -13,7 +13,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     ui,
 )
 from ocs_ci.framework.testlib import ManageTest
-from ocs_ci.ocs.ui.base_ui import SeleniumDriver
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 logger = logging.getLogger(__name__)
@@ -30,7 +29,7 @@ class TestVolumeHealthCardHealthy(ManageTest):
     """
 
     @tier1
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-8264")
     def test_volume_health_card_healthy_state(self, setup_ui_class_factory):
         """
         Test Volume Health Card shows healthy state when no PVC health issues exist.
@@ -71,9 +70,9 @@ class TestVolumeHealthCardHealthy(ManageTest):
 
         logger.test_step("Verify 'View all PVCs' navigation link")
         card.take_screenshot("healthy_state_before_click")
-        card.click_view_all_pvcs()
+        pvc_list_page = card.click_view_all_pvcs()
 
-        current_url = SeleniumDriver().current_url
+        current_url = pvc_list_page.driver.current_url
         logger.assertion(f"URL contains 'persistentvolumeclaims': {current_url}")
         assert (
             "persistentvolumeclaims" in current_url
