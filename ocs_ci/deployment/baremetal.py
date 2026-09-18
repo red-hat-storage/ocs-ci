@@ -50,6 +50,14 @@ from ocs_ci.framework import config
 logger = logging.getLogger(__name__)
 
 
+def is_vpc_infra():
+    """Return whether the current bare-metal deployment uses IBM Cloud VPC."""
+    return (
+        config.ENV_DATA.get("infra_type", constants.CLASSIC_INFRA_TYPE)
+        == constants.VPC_INFRA_TYPE
+    )
+
+
 class BAREMETALBASE(Deployment):
     """
     A common class for Bare metal deployments
@@ -892,7 +900,7 @@ class BAREMETALAI(BAREMETALBASE):
                     metadata_file,
                 )
             # IBM Cloud VPC BM: Create Network Load Balancers for VIPs
-            if config.ENV_DATA.get("platform") == constants.IBM_VPC_BM_PLATFORM:
+            if is_vpc_infra():
                 logger.info(
                     "VPC BM platform detected - creating Network Load Balancers"
                 )
@@ -1087,7 +1095,7 @@ class BAREMETALAI(BAREMETALBASE):
             self.ai_cluster.create_infrastructure_environment()
 
             # configure DNS records for API and Ingress
-            if config.ENV_DATA.get("platform") == constants.IBM_VPC_BM_PLATFORM:
+            if is_vpc_infra():
                 # Use IBM Cloud CIS for DNS
                 logger.info(
                     f"VPC BM: Creating CIS DNS records (API VIP: {self.api_vip}, Ingress VIP: {self.ingress_vip})"
@@ -1116,7 +1124,7 @@ class BAREMETALAI(BAREMETALBASE):
             rootfs_url = rootfs_match.group(1) if rootfs_match else None
 
             # IBM Cloud VPC Bare Metal: Use direct iPXE boot with AI URLs
-            if config.ENV_DATA.get("platform") == constants.IBM_VPC_BM_PLATFORM:
+            if is_vpc_infra():
                 logger.info(
                     "IBM Cloud VPC BM detected - using direct iPXE boot from AI service"
                 )
@@ -1388,7 +1396,10 @@ class BAREMETALAI(BAREMETALBASE):
                 return
 
             # IBM Cloud VPC BM: Force restart hung servers
-            if self.srv_details[machine].get("mgmt_provider") == "vpc-bm":
+            if (
+                is_vpc_infra()
+                and self.srv_details[machine].get("mgmt_provider") == "vpc-bm"
+            ):
                 server_id = self.srv_details[machine].get("server_id")
                 if not server_id:
                     logger.error(f"Cannot restart {machine}: server_id not found")
@@ -1603,7 +1614,7 @@ class BAREMETALAI(BAREMETALBASE):
                 )
 
             # IBM Cloud VPC BM: Delete ALBs and CIS DNS records
-            if config.ENV_DATA.get("platform") == constants.IBM_VPC_BM_PLATFORM:
+            if is_vpc_infra():
                 logger.info("VPC BM: Cleaning up ALBs and DNS records...")
                 from ocs_ci.utility import ibmcloud_bm
 
@@ -1707,7 +1718,7 @@ class BAREMETALAI(BAREMETALBASE):
                         self.aws.delete_record(record, hosted_zone_id)
 
             # cleanup ipxe provisioning files (skip for VPC BM - no helper node)
-            if config.ENV_DATA.get("platform") != constants.IBM_VPC_BM_PLATFORM:
+            if not is_vpc_infra():
                 cmd = f"rm -rf {self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
                 logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
             else:
