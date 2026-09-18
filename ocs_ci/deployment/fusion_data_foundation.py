@@ -86,6 +86,9 @@ class FusionDataFoundationDeployment:
             self.create_image_digest_mirror_set()
             self.setup_fdf_pre_release_deployment()
 
+        if self.live_deployment:
+            self.align_fsd_image_tag_with_fdf_version()
+
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
         self.ensure_install_plan_approval()
@@ -170,6 +173,72 @@ class FusionDataFoundationDeployment:
             f"oc --kubeconfig {self.kubeconfig} apply -f {fdf_service_cr_yaml.name}",
             silent=True,
         )
+
+    def align_fsd_image_tag_with_fdf_version(self):
+        """
+        Align the FusionServiceDefinition image tag with the FDF version for
+        live (GA) deployments.
+
+        By default the FusionServiceDefinition ``data-foundation-service`` points
+        at an image tag matching the running OCP version. When a lower FDF version
+        is being installed on a higher OCP version (e.g. FDF 4.20 on OCP 4.21),
+        the ``imageTag`` under the running OCP version key in
+        ``multiVersionCatSrcDetails`` is patched to the FDF version tag
+        (e.g. ``v4.20``). If the FDF version is not lower than the OCP version, no
+        change is made.
+        """
+        fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
+        if not fdf_image_tag:
+            logger.warning(
+                "fdf_image_tag is not set, skipping FusionServiceDefinition "
+                "image tag alignment"
+            )
+            return
+
+        fdf_version_str = fdf_image_tag.lstrip("v")
+        ocp_version_str = get_running_ocp_version()
+        fdf_version = version.get_semantic_version(
+            fdf_version_str, only_major_minor=True
+        )
+        ocp_version = version.get_semantic_version(
+            ocp_version_str, only_major_minor=True
+        )
+        logger.info(f"FDF version: {fdf_version}, OCP version: {ocp_version}")
+
+        if fdf_version >= ocp_version:
+            logger.info(
+                "FDF version is not lower than OCP version, no "
+                "FusionServiceDefinition image tag change needed"
+            )
+            return
+
+        ocp_version_key = f"ocp{ocp_version_str.replace('.', '')}-t"
+        new_image_tag = f"v{fdf_version_str}"
+        logger.info(
+            f"FDF version {fdf_version} is lower than OCP version {ocp_version}. "
+            f"Patching FusionServiceDefinition data-foundation-service imageTag to "
+            f"{new_image_tag} for key {ocp_version_key}"
+        )
+        params_dict = {
+            "spec": {
+                "onboarding": {
+                    "serviceOperatorSubscription": {
+                        "multiVersionCatSrcDetails": {
+                            ocp_version_key: {
+                                "imageTag": new_image_tag,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        params = json.dumps(params_dict)
+        cmd = (
+            f"oc --kubeconfig {self.kubeconfig} -n {constants.FDF_NAMESPACE} patch "
+            f"FusionServiceDefinition data-foundation-service -p '{params}' "
+            f"--type merge"
+        )
+        run_patch_cmd(cmd)
 
     def setup_fdf_pre_release_deployment(self):
         """
