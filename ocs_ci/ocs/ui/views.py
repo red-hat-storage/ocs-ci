@@ -720,11 +720,16 @@ obc = {
         By.CSS_SELECTOR,
     ),
     "namespace_store_name": ('input[id="ns-name"]', By.CSS_SELECTOR),
+    # generated with AI Fallback
     "namespace_store_provider": (
-        "//div[@data-test='namespacestore-provider']//button",
+        "//button[@data-test='namespacestore-provider'] | //div[@data-test='namespacestore-provider']//button",
         By.XPATH,
     ),
-    "namespace_store_filesystem": ("//li[@id='Filesystem']", By.XPATH),
+    # generated with AI Fallback
+    "namespace_store_filesystem": (
+        "//button[@id='Filesystem'] | //li[@id='Filesystem']",
+        By.XPATH,
+    ),
     "namespace_store_pvc_expand": ("//div[@id='pvc-name']//button", By.XPATH),
     "namespace_store_folder": ('input[id="folder-name"]', By.CSS_SELECTOR),
     "namespace_store_create_item": (
@@ -2083,7 +2088,11 @@ block_pool = {
     "pool_type_block": ("type-block", By.ID),
     "first_select_replica": ('button[data-test="replica-dropdown"]', By.CSS_SELECTOR),
     "second_select_replica_2": ("//button[text()='2-way Replication']", By.XPATH),
-    "second_select_replica_3": ("//button[text()='3-way Replication']", By.XPATH),
+    # generated with AI Fallback
+    "second_select_replica_3": (
+        "//button[@role='menuitem' and .//span[text()='3-way Replication']] | //button[text()='3-way Replication']",
+        By.XPATH,
+    ),
     "conpression_checkbox": (
         'input[data-test="compression-checkbox"]',
         By.CSS_SELECTOR,
@@ -2097,7 +2106,11 @@ block_pool = {
         "//a[normalize-space()='Edit labels'] | //button[@id='Edit Labels']",
         By.XPATH,
     ),
-    "edit_labels_of_pool_input": ("#tags-input", By.TAG_NAME),
+    # generated with AI Fallback
+    "edit_labels_of_pool_input": (
+        "//input[@data-test='tags-input'] | //*[@id='tags-input']",
+        By.XPATH,
+    ),
     "invalid_label_name_note_edit_label_pool": (
         "//h4[contains(@class, 'c-alert__title')]",
         By.XPATH,
