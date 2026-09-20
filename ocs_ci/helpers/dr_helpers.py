@@ -4823,3 +4823,215 @@ def configure_submariner_lighthouse_import_namespace_deny_list():
             )
     finally:
         config.switch_ctx(restore_index)
+
+
+# ---------------------------------------------------------------------------
+# RDR chaos disruption helpers
+# ---------------------------------------------------------------------------
+
+
+def delete_pods_by_label(label, namespace, wait_for_recovery=True, timeout=300):
+    """
+    Delete all pods matching *label* in *namespace* and optionally wait for
+    them to be recreated and running again.
+
+    This is the "pod-delete" equivalent of a LitmusChaos experiment executed
+    directly through ocs-ci's existing pod primitives so that no additional
+    operator is required on the cluster.
+
+    Args:
+        label (str): kubectl label selector, e.g. ``"app=rook-ceph-rbd-mirror"``
+        namespace (str): Kubernetes namespace where the pods live
+        wait_for_recovery (bool): When True (default) block until every
+            deleted pod has been replaced by a new Running pod
+        timeout (int): seconds to wait for recovery (default 300)
+
+    Returns:
+        list[str]: names of the pods that were deleted
+
+    Raises:
+        AssertionError: if ``wait_for_recovery`` is True and the pods do not
+            reach Running state within *timeout* seconds
+
+    """
+    from ocs_ci.ocs.resources.pod import (
+        Pod,
+        get_pods_having_label,
+        wait_for_pods_to_be_running,
+    )
+
+    pods_data = get_pods_having_label(label=label, namespace=namespace)
+    assert pods_data, f"No pods found with label '{label}' in namespace '{namespace}'"
+
+    deleted_names = []
+    for pod_data in pods_data:
+        pod_obj = Pod(**pod_data)
+        logger.info(
+            f"[chaos] Deleting pod {pod_obj.name} " f"(label={label}, ns={namespace})"
+        )
+        pod_obj.delete(wait=False)
+        deleted_names.append(pod_obj.name)
+
+    logger.info(f"[chaos] Deleted {len(deleted_names)} pod(s): {deleted_names}")
+
+    if wait_for_recovery:
+        logger.info(
+            f"[chaos] Waiting up to {timeout}s for replacement pods "
+            f"(label={label}, ns={namespace}) to reach Running state"
+        )
+        assert wait_for_pods_to_be_running(
+            namespace=namespace,
+            timeout=timeout,
+            sleep=10,
+        ), (
+            f"Replacement pods with label '{label}' in namespace '{namespace}' "
+            f"did not reach Running state within {timeout}s"
+        )
+        logger.info(f"[chaos] All replacement pods for label '{label}' are Running")
+
+    return deleted_names
+
+
+def inject_pod_network_fault(
+    pod_label,
+    namespace,
+    fault_type,
+    duration_seconds,
+    latency_ms=None,
+    packet_loss_percent=None,
+    corrupt_percent=None,
+    network_interface="eth0",
+):
+    """
+    Inject a network fault (latency, packet-loss, or corruption) on all pods
+    matching *pod_label* in *namespace* by running ``tc qdisc`` commands
+    inside each pod.  The fault is held for *duration_seconds* and then
+    cleared, regardless of whether the test passes or fails.
+
+    Supported *fault_type* values
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ``"latency"``
+        Adds a fixed one-way delay. Requires *latency_ms*.
+    ``"loss"``
+        Drops a percentage of outgoing packets. Requires *packet_loss_percent*.
+    ``"corrupt"``
+        Randomly corrupts a percentage of outgoing packets. Requires
+        *corrupt_percent*.
+
+    Args:
+        pod_label (str): label selector for the target pods
+        namespace (str): namespace of the target pods
+        fault_type (str): one of ``"latency"``, ``"loss"``, ``"corrupt"``
+        duration_seconds (int): how long to hold the fault before clearing
+        latency_ms (int): milliseconds of added delay (for ``"latency"``)
+        packet_loss_percent (int): percentage of packets to drop (for ``"loss"``)
+        corrupt_percent (int): percentage of packets to corrupt (for ``"corrupt"``)
+        network_interface (str): network interface inside the pod
+            (default ``"eth0"``)
+
+    Raises:
+        ValueError: if *fault_type* is not one of the supported values or
+            required parameters for the chosen type are missing
+        AssertionError: if no pods are found matching the label
+
+    """
+    import time as _time
+    from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
+
+    valid_types = ("latency", "loss", "corrupt")
+    if fault_type not in valid_types:
+        raise ValueError(f"fault_type must be one of {valid_types}, got '{fault_type}'")
+    if fault_type == "latency" and latency_ms is None:
+        raise ValueError("latency_ms is required when fault_type='latency'")
+    if fault_type == "loss" and packet_loss_percent is None:
+        raise ValueError("packet_loss_percent is required when fault_type='loss'")
+    if fault_type == "corrupt" and corrupt_percent is None:
+        raise ValueError("corrupt_percent is required when fault_type='corrupt'")
+
+    # Build the tc netem add command
+    if fault_type == "latency":
+        netem_params = f"delay {latency_ms}ms"
+        fault_desc = f"latency {latency_ms}ms"
+    elif fault_type == "loss":
+        netem_params = f"loss {packet_loss_percent}%"
+        fault_desc = f"packet-loss {packet_loss_percent}%"
+    else:
+        netem_params = f"corrupt {corrupt_percent}%"
+        fault_desc = f"corrupt {corrupt_percent}%"
+
+    add_cmd = f"tc qdisc add dev {network_interface} root netem {netem_params}"
+    del_cmd = f"tc qdisc del dev {network_interface} root"
+
+    pods_data = get_pods_having_label(label=pod_label, namespace=namespace)
+    assert (
+        pods_data
+    ), f"No pods found with label '{pod_label}' in namespace '{namespace}'"
+
+    pod_objs = [Pod(**pd) for pd in pods_data]
+    affected = [p.name for p in pod_objs]
+    logger.info(
+        f"[chaos] Injecting {fault_desc} on {len(pod_objs)} pod(s) "
+        f"{affected} (ns={namespace}, iface={network_interface}) "
+        f"for {duration_seconds}s"
+    )
+
+    # Inject fault
+    for pod_obj in pod_objs:
+        try:
+            pod_obj.exec_cmd_on_pod(add_cmd, out_yaml_format=False)
+            logger.info(f"[chaos] {fault_desc} injected on pod {pod_obj.name}")
+        except Exception as exc:
+            logger.warning(
+                f"[chaos] Could not inject {fault_desc} on {pod_obj.name}: {exc}"
+            )
+
+    logger.info(f"[chaos] Holding {fault_desc} for {duration_seconds}s ...")
+    _time.sleep(duration_seconds)
+
+    # Clear fault
+    for pod_obj in pod_objs:
+        try:
+            pod_obj.exec_cmd_on_pod(del_cmd, out_yaml_format=False)
+            logger.info(f"[chaos] Cleared {fault_desc} on pod {pod_obj.name}")
+        except Exception as exc:
+            logger.warning(
+                f"[chaos] Could not clear {fault_desc} on {pod_obj.name}: {exc}"
+            )
+
+    logger.info(f"[chaos] Network fault cleared on all pods: {affected}")
+
+
+def verify_mirroring_resumes_after_chaos(
+    drpc_obj, scheduling_interval, pre_chaos_sync_time
+):
+    """
+    After a chaos event, assert that RBD mirroring is healthy again and that
+    the DRPC ``lastGroupSyncTime`` has advanced past the pre-chaos value.
+
+    This is used as the post-chaos probe for all rbd-mirror disruption tests.
+
+    Args:
+        drpc_obj (DRPC): the DRPC object to inspect
+        scheduling_interval (int): sync interval in minutes
+        pre_chaos_sync_time (str): ``lastGroupSyncTime`` value captured
+            *before* chaos was injected
+
+    Raises:
+        TimeoutExpiredError: if mirroring does not recover or sync time does
+            not advance within 3× the scheduling interval
+
+    """
+    logger.info(
+        "[chaos] Verifying RBD mirroring recovers and "
+        "lastGroupSyncTime advances after chaos"
+    )
+    wait_for_mirroring_status_ok(timeout=300)
+    verify_last_group_sync_time(
+        drpc_obj=drpc_obj,
+        scheduling_interval=scheduling_interval,
+        initial_last_group_sync_time=pre_chaos_sync_time,
+    )
+    logger.info(
+        "[chaos] Mirroring resumed and lastGroupSyncTime advanced — "
+        "chaos recovery verified"
+    )
