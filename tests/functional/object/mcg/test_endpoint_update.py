@@ -11,27 +11,6 @@ BackingStore (and NamespaceStore) whose spec endpoint == OLD, pre-validates each
 one against NEW, and only then patches the specs and updates the underlying
 NooBaa-core connections (rolling back automatically on any failure).
 
-The coverage is organised into three test classes:
-
-  * ``TestBackingStoreEndpointUpdate`` - positive / core behaviour: single-store
-    switch and revert, bulk switch with connection de-duplication, endpoint
-    matching semantics (no-match, idempotent no-op, selective matching plus the
-    data path of two connections left sharing one endpoint), the
-    pause-reconcile annotation's lifecycle, switching under active I/O, and the
-    default backingstore. The seven that need the update to succeed are skipped
-    on clusters carrying a Rook-keyed Ceph object-user secret, where
-    DFBUGS-10975 aborts every update; see ``DFBUGS_10975_SKIP``. They still run
-    where no such secret exists, so non-RGW clusters keep the coverage.
-  * ``TestConnectionUpdateNegative`` - failure paths: pre-validation aborts the
-    whole batch (unreachable endpoint, missing target bucket, a bucket that
-    exists but is not a NooBaa location, bad credentials, one bad store in a
-    batch), CLI argument handling, the direct-CR-edit path, and the update's
-    behaviour when the matched stores are being written to concurrently.
-  * ``TestNamespaceStoreEndpointUpdate`` - NamespaceStore switch and revert, and
-    the mixed BackingStore + NamespaceStore batch. Both skipped on builds where
-    DFBUGS-10744 (webhook denies the change) is not yet fixed; as of 2026-09-14
-    that fix is merged but not yet in a build, so the marker still applies.
-
 ENVIRONMENT PREREQUISITES
 -------------------------
 Most tests need TWO S3 endpoint strings that both address the SAME backend, plus
@@ -39,54 +18,9 @@ a secret with credentials valid on both.  A same-backend pair keeps data-path
 continuity assertable and avoids the two-backend "stranding" simulation artifact
 described in the test plan.
 
-The ``endpoint_conf`` fixture resolves such a pair automatically, so the suite
-runs unattended on a standard MCG job:
-
-  1. ``config.ENV_DATA["mcg_endpoint_pair"]`` if set - an explicit override, used
-     for labs with two genuinely separate S3 services (e.g. two MinIO routes).
-  2. Otherwise the pair is derived from an S3 service that already runs on the
-     cluster - RGW first, then MCG's own S3 (self-ref).  A second Service is
-     created in front of the very same pods, so the cluster hands out a second
-     ClusterIP for one unchanged backend, and the two ``http://<ip>:80`` strings
-     become a genuine endpoint pair.  The target buckets come from
-     ``cloud_uls_factory`` and are seeded with a ``noobaa_blocks/`` marker object,
-     which is what CLI pre-validation looks for when it checks that the bucket is
-     "a valid location used by noobaa"; one further bucket is provisioned and
-     deliberately left unseeded, to serve the negative case of a bucket that
-     exists but is not a NooBaa location.  The credentials secret comes from the
-     cloud manager.  Everything is torn down with the fixtures that made it.
-  3. Only if neither is available do the tests skip.
-
-Plain http against a ClusterIP is deliberate: pre-validation resolves the target
-bucket virtual-hosted style, so a DNS endpoint fails (no wildcard DNS for
-in-cluster services), and an https ClusterIP fails the certificate check because
-service-serving certificates carry DNS SANs only.
-
-The explicit override looks like::
-
-    ENV_DATA:
-      mcg_endpoint_pair:
-        old: https://<old-endpoint>
-        new: https://<new-endpoint>
-        target_bucket: <bucket-that-is-a-valid-noobaa-location-on-both>
-        secret: <k8s-secret-with-AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY>
-        signature_version: v4        # v2 for plain-http endpoints
-        target_buckets:              # optional; the tests that stand several
-          - <bucket-1>               # stores on one endpoint take one bucket
-          - <bucket-2>               # each. Defaults to [target_bucket].
-        empty_bucket: <bucket>       # optional; a bucket that exists on both
-                                     # endpoints but holds NO noobaa_blocks/
-                                     # prefix. Without it the
-                                     # not_noobaa_location pre-validation case
-                                     # skips - it cannot be derived from the
-                                     # other keys.
-        old_dns: http://<host>:<port>
-                                     # optional; a second, equivalent spelling
-                                     # of `old` - its DNS name where `old` is an
-                                     # IP, or the reverse. Used only as an
-                                     # --old-endpoint that must match nothing.
-                                     # Without it the dns_form no-match case
-                                     # skips.
+The ``endpoint_pair`` fixture resolves such a pair automatically, so the suite
+runs unattended on a standard MCG job.  See its docstring for the resolution
+order and for the ``ENV_DATA['mcg_endpoint_pair']`` override schema.
 """
 
 import logging
@@ -111,15 +45,153 @@ from ocs_ci.ocs.bucket_utils import (
     list_objects_from_bucket,
     write_random_test_objects_to_bucket,
 )
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.bucketclass import BucketClass
-from ocs_ci.ocs.resources.pod import get_pod_logs, get_pods_having_label
+from ocs_ci.ocs.resources.pod import get_noobaa_operator_pod, get_pod_logs
+from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
-NOOBAA_API_VERSION = "noobaa.io/v1alpha1"
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+# The MCG CR templates the store factory builds on. They already carry the
+# apiVersion, the exact kind, the app=noobaa label and the noobaa.io finalizer,
+# so only metadata and spec have to be filled in. See :func:`_store_dict`.
+_STORE_TEMPLATE = {
+    constants.BACKINGSTORE: constants.MCG_BACKINGSTORE_YAML,
+    constants.NAMESPACESTORE: constants.MCG_NAMESPACESTORE_YAML,
+}
+
+# A store that has only just reached Ready is still being written to by the
+# operator (status, conditions, finalizers). The CLI lists the stores up front
+# and then writes back the copies it holds, with no re-read on conflict
+# (DFBUGS-10937), so tests that are not about that bug wait for the writes to
+# die down first. See :func:`wait_for_stores_quiesced`.
+STORE_QUIESCE_TIMEOUT = 120
+STORE_QUIESCE_INTERVAL = 5
+STORE_QUIESCE_STABLE_SAMPLES = 3
+
+# The mirror image of the above: an annotation rewritten in a loop to keep
+# bumping resourceVersion on purpose, so that
+# TestConnectionUpdateNegative.test_switch_survives_concurrent_store_writes can
+# hold the stores in contention for the whole run. It carries no meaning to the
+# operator and is removed in teardown.
+CHURN_ANNOTATION = "ocs-ci.qe/endpoint-update-churn"
+CHURN_INTERVAL = 1
+CHURN_JOIN_TIMEOUT = 30
+
+# The admission webhook refuses to delete a store while NooBaa is still removing
+# objects from it. That clears on its own once the deletion finishes, so
+# ``store_factory`` retries instead of leaving the store behind for the next
+# test to trip over.
+STORE_DELETE_TIMEOUT = 300
+STORE_DELETE_INTERVAL = 15
+STORE_DELETE_RETRY_MARKER = "are still being deleted"
+
+# How long test_switch_during_active_io waits for its writer thread to notice
+# that it has been asked to stop. A write already in flight is an exec into the
+# awscli pod and cannot be cancelled, so this is generous enough that only a
+# genuinely stuck exec reaches it.
+WRITER_JOIN_TIMEOUT = 300
+
+# The annotation the CLI sets on every matched store for the duration of the
+# update, so the operator does not reconcile a store while its endpoint is being
+# moved underneath it.
+PAUSE_ANNOTATION = "noobaa.io/pause-reconcile"
+
+# While the annotation is set the operator logs a skip line for the store and
+# requeues a few seconds later. As of noobaa-operator 301d6e98 the line is
+#   BackingStore "<name>" reconciliation paused. Skipping reconcile.
+# emitted from pkg/backingstore/reconciler.go (pkg/namespacestore/reconciler.go
+# has the NamespaceStore twin). The pattern is deliberately loose - it pins the
+# store name and the word "paused" and nothing else - because the surrounding
+# wording is an operator log string and may be reworded at any time.
+PAUSE_SKIP_LOG_PATTERN = r"{name}.*paused"
+
+# How long to watch the operator log for that line before giving up. The
+# operator requeues a paused store every ~5s, so this is many chances over.
+PAUSE_LOG_TIMEOUT = 90
+PAUSE_LOG_INTERVAL = 10
+
+# After the annotation is removed, how long to let the operator pick the store
+# back up before asserting the skip lines have stopped. Several requeue periods,
+# so an in-flight skip logged just before the removal cannot fail the check.
+PAUSE_RESUME_SETTLE = 20
+
+# S3 services on the cluster that can supply an endpoint pair, in preference
+# order: (ULS platform key, cloud-manager client attribute, Service name,
+# signature version).
+_DERIVABLE_SERVICES = (
+    ("rgw", "rgw_client", constants.RGW_SERVICE_INTERNAL_MODE, "v2"),
+    ("self-ref-mcg", "self_ref_mcg_client", "s3", "v4"),
+)
+
+# The derived endpoints are plain-http ClusterIPs, which is what keeps
+# pre-validation on path-style addressing. Verified on a live cluster:
+#   * a DNS endpoint fails, because pre-validation resolves the bucket
+#     virtual-hosted style ("<bucket>.<host>") and in-cluster service names have
+#     no wildcard DNS -> "getaddrinfo ENOTFOUND <bucket>.s3.openshift-storage...";
+#   * an https ClusterIP fails the certificate check, since service-serving
+#     certificates carry DNS SANs only -> "IP: <ip> is not in the cert's list".
+_S3_HTTP_PORT = 80
+
+# Pre-validation also requires the target bucket to be "a valid location used by
+# noobaa". A single object under the block prefix is enough to satisfy it.
+NOOBAA_LOCATION_MARKER_KEY = "noobaa_blocks/ocs-ci-endpoint-update-marker"
+
+# How many BackingStores the bulk test puts on the shared endpoint. Each one
+# needs a target bucket of its own - ocs-ci's own backingstore factory mints one
+# ULS per store - so the fixture provisions this many buckets up front.
+BULK_STORE_COUNT = 2
+
+# One extra bucket is provisioned alongside them and deliberately left WITHOUT
+# the marker object, so it exists on both endpoints but is not a valid NooBaa
+# location. That is what the not_noobaa_location pre-validation case needs, and
+# it is a different condition from a bucket that does not exist at all (see
+# missing_target_bucket).
+EMPTY_BUCKET_COUNT = 1
+
+# An endpoint change takes a while to reach the running endpoint pods, so
+# post-switch I/O is retried over this window rather than asserted outright.
+ENDPOINT_PROPAGATION_TIMEOUT = 300
+
+# Host length used by the long-URL input case. Long enough that resolution fails
+# on the length itself (getaddrinfo EINVAL) rather than on the name not
+# existing, which is the point - it probes the CLI's handling of an absurd but
+# syntactically plausible endpoint.
+MALFORMED_LONG_HOST_LEN = 2048
+
+# NooBaa core's check_external_connection() reports a coarse UNKNOWN_FAILURE for
+# DNS failures, unreachable hosts and missing buckets alike - its AWS error map
+# is keyed on SDK v2 error names while the client is v3, so everything
+# client-side falls through to the catch-all (DFBUGS-10938). The real reason is
+# only in the error text, which is why the tests below assert on the message as
+# well as the code. INVALID_ENDPOINT is accepted too, so the tests keep passing
+# once DFBUGS-10938 is fixed and core starts classifying these properly.
+# TODO(DFBUGS-10938): once core reports precise codes, drop the message
+# assertions and pin each variant to its own status code.
+UNREACHABLE_STATUSES = ("UNKNOWN_FAILURE", "INVALID_ENDPOINT")
+
+_DFBUGS_10975_REASON = (
+    "connection update cannot read a Ceph object-user secret that uses the "
+    "AccessKey/SecretKey names, so every s3-compatible store backed by RGW "
+    "fails pre-validation - https://redhat.atlassian.net/browse/DFBUGS-10975"
+)
+
+# The pre-validation cases whose asserted failure reason DFBUGS-10975 masks.
+# "wrong_creds" is deliberately absent: see the parametrize list for why.
+_DFBUGS_10975_BLOCKED_PREVALIDATION = frozenset(
+    {
+        "unreachable",
+        "missing_target_bucket",
+        "not_noobaa_location",
+        "one_bad_in_batch",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +227,16 @@ def run_connection_update(
 
 
 def _search_int(pattern, text):
+    """
+    Return the first capture group of ``pattern`` in ``text`` as an int.
+
+    Args:
+        pattern (str): Regex with a single capturing group.
+        text (str): Text to search.
+
+    Returns:
+        int: The captured value, or None if the pattern does not match.
+    """
     match = re.search(pattern, text)
     return int(match.group(1)) if match else None
 
@@ -211,33 +293,37 @@ def parse_connection_update_output(result):
 # ---------------------------------------------------------------------------
 # Resource helpers
 # ---------------------------------------------------------------------------
-# ``constants.BACKINGSTORE`` / ``NAMESPACESTORE`` are the lower-cased spellings
-# that "oc get" accepts; a manifest handed to "oc create" needs the CR's exact
-# kind, so map one onto the other.
-_CR_KIND = {
-    constants.BACKINGSTORE: "BackingStore",
-    constants.NAMESPACESTORE: "NamespaceStore",
-}
-
-
 def _store_dict(
     kind, name, namespace, endpoint, target_bucket, secret_name, signature_version
 ):
-    """Build an s3-compatible BackingStore/NamespaceStore CR dict."""
-    return {
-        "apiVersion": NOOBAA_API_VERSION,
-        "kind": _CR_KIND[kind],
-        "metadata": {"name": name, "namespace": namespace},
-        "spec": {
-            "type": "s3-compatible",
-            "s3Compatible": {
-                "endpoint": endpoint,
-                "targetBucket": target_bucket,
-                "signatureVersion": signature_version,
-                "secret": {"name": secret_name, "namespace": namespace},
-            },
+    """
+    Build an s3-compatible BackingStore/NamespaceStore CR from the MCG template.
+
+    Args:
+        kind (str): ``constants.BACKINGSTORE`` or ``constants.NAMESPACESTORE``.
+        name (str): Name for the new store.
+        namespace (str): Namespace to create it in.
+        endpoint (str): S3 endpoint the store points at.
+        target_bucket (str): Bucket on that endpoint.
+        secret_name (str): Secret holding the credentials.
+        signature_version (str): ``v2`` or ``v4``.
+
+    Returns:
+        dict: The CR body, ready for :func:`create_resource`.
+    """
+    body = templating.load_yaml(_STORE_TEMPLATE[kind])
+    body["metadata"]["name"] = name
+    body["metadata"]["namespace"] = namespace
+    body["spec"] = {
+        "type": constants.BACKINGSTORE_TYPE_S3_COMP,
+        "s3Compatible": {
+            "endpoint": endpoint,
+            "targetBucket": target_bucket,
+            "signatureVersion": signature_version,
+            "secret": {"name": secret_name, "namespace": namespace},
         },
     }
+    return body
 
 
 def get_store_endpoint(kind, name, namespace):
@@ -301,39 +387,6 @@ def _try_write(io_pod, bucket_name, file_dir, pattern, mcg_obj):
         return False
 
 
-# A store that has only just reached Ready is still being written to by the
-# operator (status, conditions, finalizers). The CLI lists the stores up front
-# and then writes back the copies it holds, with no re-read on conflict
-# (DFBUGS-10937), so tests that are not about that bug wait for the writes to
-# die down first. See :func:`wait_for_stores_quiesced`.
-STORE_QUIESCE_TIMEOUT = 120
-STORE_QUIESCE_INTERVAL = 5
-STORE_QUIESCE_STABLE_SAMPLES = 3
-
-# The mirror image of the above: an annotation rewritten in a loop to keep
-# bumping resourceVersion on purpose, so that
-# TestConnectionUpdateNegative.test_switch_survives_concurrent_store_writes can
-# hold the stores in contention for the whole run. It carries no meaning to the
-# operator and is removed in teardown.
-CHURN_ANNOTATION = "ocs-ci.qe/endpoint-update-churn"
-CHURN_INTERVAL = 1
-CHURN_JOIN_TIMEOUT = 30
-
-# The admission webhook refuses to delete a store while NooBaa is still removing
-# objects from it. That clears on its own once the deletion finishes, so
-# ``store_factory`` retries instead of leaving the store behind for the next
-# test to trip over.
-STORE_DELETE_TIMEOUT = 300
-STORE_DELETE_INTERVAL = 15
-STORE_DELETE_RETRY_MARKER = "are still being deleted"
-
-# How long test_switch_during_active_io waits for its writer thread to notice
-# that it has been asked to stop. A write already in flight is an exec into the
-# awscli pod and cannot be cancelled, so this is generous enough that only a
-# genuinely stuck exec reaches it.
-WRITER_JOIN_TIMEOUT = 300
-
-
 def wait_for_stores_quiesced(
     stores,
     namespace,
@@ -377,80 +430,29 @@ def wait_for_stores_quiesced(
 
     previous = None
     stable = 0
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        current = _versions()
-        stable = stable + 1 if current == previous else 0
-        if stable >= stable_samples:
-            logger.info(f"Stores settled at resourceVersions {current}")
-            return True
-        previous = current
-        time.sleep(interval)
-    logger.warning(
-        f"Stores were still being written to after {timeout}s; running anyway"
-    )
+    try:
+        for current in TimeoutSampler(timeout, interval, _versions):
+            stable = stable + 1 if current == previous else 0
+            if stable >= stable_samples:
+                logger.info(f"Stores settled at resourceVersions {current}")
+                return True
+            previous = current
+    except TimeoutExpiredError:
+        logger.warning(
+            f"Stores were still being written to after {timeout}s; running anyway"
+        )
     return False
-
-
-# The annotation the CLI sets on every matched store for the duration of the
-# update, so the operator does not reconcile a store while its endpoint is being
-# moved underneath it.
-PAUSE_ANNOTATION = "noobaa.io/pause-reconcile"
-
-# While the annotation is set the operator logs a skip line for the store and
-# requeues a few seconds later. As of noobaa-operator 301d6e98 the line is
-#   BackingStore "<name>" reconciliation paused. Skipping reconcile.
-# emitted from pkg/backingstore/reconciler.go (pkg/namespacestore/reconciler.go
-# has the NamespaceStore twin). The pattern is deliberately loose - it pins the
-# store name and the word "paused" and nothing else - because the surrounding
-# wording is an operator log string and may be reworded at any time.
-PAUSE_SKIP_LOG_PATTERN = r"{name}.*paused"
-
-# How long to watch the operator log for that line before giving up. The
-# operator requeues a paused store every ~5s, so this is many chances over.
-PAUSE_LOG_TIMEOUT = 90
-PAUSE_LOG_INTERVAL = 10
-
-# After the annotation is removed, how long to let the operator pick the store
-# back up before asserting the skip lines have stopped. Several requeue periods,
-# so an in-flight skip logged just before the removal cannot fail the check.
-PAUSE_RESUME_SETTLE = 20
 
 
 def get_store_pause_annotation(kind, name, namespace):
     """Return the value of the noobaa.io/pause-reconcile annotation (or None)."""
-    annotations = (
+    return (
         OCP(kind=kind, namespace=namespace, resource_name=name)
         .get()
         .get("metadata", {})
         .get("annotations", {})
+        .get(PAUSE_ANNOTATION)
     )
-    return annotations.get(PAUSE_ANNOTATION)
-
-
-def get_noobaa_operator_pod_name(namespace):
-    """
-    Return the name of the running noobaa-operator pod.
-
-    Args:
-        namespace (str): Namespace the operator runs in.
-
-    Returns:
-        str: The pod name.
-
-    Raises:
-        AssertionError: If no operator pod is running.
-    """
-    pods = get_pods_having_label(
-        label=constants.NOOBAA_OPERATOR_POD_LABEL,
-        namespace=namespace,
-        statuses=[constants.STATUS_RUNNING],
-    )
-    assert pods, (
-        "No running noobaa-operator pod found with label "
-        f"{constants.NOOBAA_OPERATOR_POD_LABEL} in {namespace}"
-    )
-    return pods[0]["metadata"]["name"]
 
 
 def operator_logged_pause_skip(operator_pod, namespace, store_name, since):
@@ -481,61 +483,6 @@ def operator_logged_pause_skip(operator_pod, namespace, store_name, since):
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-# S3 services on the cluster that can supply an endpoint pair, in preference
-# order: (ULS platform key, cloud-manager client attribute, Service name,
-# signature version).
-_DERIVABLE_SERVICES = (
-    ("rgw", "rgw_client", constants.RGW_SERVICE_INTERNAL_MODE, "v2"),
-    ("self-ref-mcg", "self_ref_mcg_client", "s3", "v4"),
-)
-
-# The derived endpoints are plain-http ClusterIPs, which is what keeps
-# pre-validation on path-style addressing. Verified on a live cluster:
-#   * a DNS endpoint fails, because pre-validation resolves the bucket
-#     virtual-hosted style ("<bucket>.<host>") and in-cluster service names have
-#     no wildcard DNS -> "getaddrinfo ENOTFOUND <bucket>.s3.openshift-storage...";
-#   * an https ClusterIP fails the certificate check, since service-serving
-#     certificates carry DNS SANs only -> "IP: <ip> is not in the cert's list".
-_S3_HTTP_PORT = 80
-
-# Pre-validation also requires the target bucket to be "a valid location used by
-# noobaa". A single object under the block prefix is enough to satisfy it.
-NOOBAA_LOCATION_MARKER_KEY = "noobaa_blocks/ocs-ci-endpoint-update-marker"
-
-# How many BackingStores the bulk test puts on the shared endpoint. Each one
-# needs a target bucket of its own - ocs-ci's own backingstore factory mints one
-# ULS per store - so the fixture provisions this many buckets up front.
-BULK_STORE_COUNT = 2
-
-# One extra bucket is provisioned alongside them and deliberately left WITHOUT
-# the marker object, so it exists on both endpoints but is not a valid NooBaa
-# location. That is what the not_noobaa_location pre-validation case needs, and
-# it is a different condition from a bucket that does not exist at all (see
-# missing_target_bucket).
-EMPTY_BUCKET_COUNT = 1
-
-# An endpoint change takes a while to reach the running endpoint pods, so
-# post-switch I/O is retried over this window rather than asserted outright.
-ENDPOINT_PROPAGATION_TIMEOUT = 300
-
-# Host length used by the long-URL input case. Long enough that resolution fails
-# on the length itself (getaddrinfo EINVAL) rather than on the name not
-# existing, which is the point - it probes the CLI's handling of an absurd but
-# syntactically plausible endpoint.
-MALFORMED_LONG_HOST_LEN = 2048
-
-# NooBaa core's check_external_connection() reports a coarse UNKNOWN_FAILURE for
-# DNS failures, unreachable hosts and missing buckets alike - its AWS error map
-# is keyed on SDK v2 error names while the client is v3, so everything
-# client-side falls through to the catch-all (DFBUGS-10938). The real reason is
-# only in the error text, which is why the tests below assert on the message as
-# well as the code. INVALID_ENDPOINT is accepted too, so the tests keep passing
-# once DFBUGS-10938 is fixed and core starts classifying these properly.
-# TODO(DFBUGS-10938): once core reports precise codes, drop the message
-# assertions and pin each variant to its own status code.
-UNREACHABLE_STATUSES = ("UNKNOWN_FAILURE", "INVALID_ENDPOINT")
-
-
 def _create_alt_service(base_svc, name, namespace):
     """
     Put a second Service in front of the pods an existing S3 Service selects,
@@ -588,7 +535,7 @@ def derive_endpoint_pair(request, cld_mgr, cloud_uls_factory):
 
     The pair also carries ``old_dns``: the in-cluster DNS name of the SAME
     service ``old`` addresses by ClusterIP. It is never used as a working
-    endpoint (a DNS endpoint fails pre-validation, see the module docstring) -
+    endpoint (a DNS endpoint fails pre-validation, see ``_S3_HTTP_PORT``) -
     only as an ``--old-endpoint`` that resolves to the right backend yet must
     still match no store, which is what the ``dns_form`` no-match case needs.
 
@@ -669,9 +616,45 @@ def derive_endpoint_pair(request, cld_mgr, cloud_uls_factory):
 @pytest.fixture(scope="class")
 def endpoint_pair(request, cld_mgr, cloud_uls_factory):
     """
-    Resolve the endpoint pair once per test class - the explicit
-    ``ENV_DATA['mcg_endpoint_pair']`` override if it is complete, otherwise a
-    pair derived from the cluster.
+    Resolve the endpoint pair once per test class, so the suite runs unattended
+    on a standard MCG job:
+
+      1. ``config.ENV_DATA["mcg_endpoint_pair"]`` if it is complete - an explicit
+         override, used for labs with two genuinely separate S3 services (e.g.
+         two MinIO routes).
+      2. Otherwise the pair is derived from an S3 service that already runs on
+         the cluster - RGW first, then MCG's own S3 (self-ref). A second Service
+         is created in front of the very same pods, so the cluster hands out a
+         second ClusterIP for one unchanged backend, and the two
+         ``http://<ip>:80`` strings become a genuine endpoint pair. The target
+         buckets come from ``cloud_uls_factory`` and are seeded with a
+         ``noobaa_blocks/`` marker object, which is what CLI pre-validation looks
+         for when it checks that the bucket is "a valid location used by noobaa";
+         one further bucket is provisioned and deliberately left unseeded, to
+         serve the negative case of a bucket that exists but is not a NooBaa
+         location. The credentials secret comes from the cloud manager.
+         Everything is torn down with the fixtures that made it. See
+         :func:`derive_endpoint_pair`.
+      3. Only if neither is available do the tests skip (in ``endpoint_conf``).
+
+    The explicit override looks like::
+
+        ENV_DATA:
+          mcg_endpoint_pair:
+            old: https://<old-endpoint>
+            new: https://<new-endpoint>
+            target_bucket: <bucket-that-is-a-valid-noobaa-location-on-both>
+            secret: <k8s-secret-with-AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY>
+            signature_version: v4        # v2 for plain-http endpoints
+            target_buckets:              # optional; the tests that stand several
+              - <bucket-1>               # stores on one endpoint take one bucket
+              - <bucket-2>               # each. Defaults to [target_bucket].
+            empty_bucket: <bucket>       # optional; a bucket that exists on both
+                                         # endpoints but holds NO noobaa_blocks/
+                                         # prefix.
+            old_dns: http://<host>:<port>
+                                         # optional; a second, equivalent
+                                         # spelling of `old`.
 
     The override only has to supply ``old``, ``new``, ``target_bucket`` and
     ``secret``; ``target_buckets``, ``empty_bucket`` and ``old_dns`` are optional.
@@ -713,7 +696,7 @@ def endpoint_conf(endpoint_pair):
     Return the endpoint pair / bucket / secret used by the endpoint-update
     tests, or skip if the cluster cannot supply one.
 
-    See the module docstring for details.
+    See :func:`endpoint_pair` for how the pair is resolved.
     """
     if not endpoint_pair:
         pytest.skip(
@@ -925,25 +908,6 @@ def cluster_has_rook_keyed_object_user_secret():
     return False
 
 
-_DFBUGS_10975_REASON = (
-    "connection update cannot read a Ceph object-user secret that uses the "
-    "AccessKey/SecretKey names, so every s3-compatible store backed by RGW "
-    "fails pre-validation - https://redhat.atlassian.net/browse/DFBUGS-10975"
-)
-
-
-# The pre-validation cases whose asserted failure reason DFBUGS-10975 masks.
-# "wrong_creds" is deliberately absent: see the parametrize list for why.
-_DFBUGS_10975_BLOCKED_PREVALIDATION = frozenset(
-    {
-        "unreachable",
-        "missing_target_bucket",
-        "not_noobaa_location",
-        "one_bad_in_batch",
-    }
-)
-
-
 def skip_if_dfbugs_10975():
     """
     Skip the calling test when DFBUGS-10975's precondition holds.
@@ -993,7 +957,20 @@ DFBUGS_10938_SKIP = pytest.mark.skip(
 @mcg
 @red_squad
 class TestBackingStoreEndpointUpdate:
-    """Happy-path and matching-semantics coverage for the endpoint update CLI."""
+    """
+    Happy-path and matching-semantics coverage for the endpoint update CLI.
+
+    Single-store switch and revert, bulk switch with connection de-duplication,
+    endpoint matching semantics (no-match, idempotent no-op, selective matching
+    plus the data path of two connections left sharing one endpoint), the
+    pause-reconcile annotation's lifecycle, switching under active I/O, and the
+    default backingstore.
+
+    The seven that need the update to succeed are skipped on clusters carrying a
+    Rook-keyed Ceph object-user secret, where DFBUGS-10975 aborts every update;
+    see ``DFBUGS_10975_SKIP``. They still run where no such secret exists, so
+    non-RGW clusters keep the coverage.
+    """
 
     @tier1
     @DFBUGS_10975_SKIP
@@ -1519,7 +1496,7 @@ class TestBackingStoreEndpointUpdate:
             kind=constants.BACKINGSTORE, namespace=ns, resource_name=bs.name
         )
         wait_for_stores_quiesced([(constants.BACKINGSTORE, bs.name)], ns)
-        operator_pod = get_noobaa_operator_pod_name(ns)
+        operator_pod = get_noobaa_operator_pod(namespace=ns).name
 
         # --- honored while set ---
         store_ocp.annotate(annotation=f"{PAUSE_ANNOTATION}=true", resource_name=bs.name)
@@ -1787,7 +1764,15 @@ class TestBackingStoreEndpointUpdate:
 @mcg
 @red_squad
 class TestConnectionUpdateNegative:
-    """Failure paths: pre-validation aborts, argument handling, direct-edit."""
+    """
+    Failure paths: pre-validation aborts, argument handling, direct-edit.
+
+    Pre-validation aborts the whole batch (unreachable endpoint, missing target
+    bucket, a bucket that exists but is not a NooBaa location, bad credentials,
+    one bad store in a batch), CLI argument handling, the direct-CR-edit path,
+    and the update's behaviour when the matched stores are being written to
+    concurrently.
+    """
 
     @tier2
     # TODO: assign polarion id
