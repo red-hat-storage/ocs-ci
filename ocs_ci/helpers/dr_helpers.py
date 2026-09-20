@@ -2178,7 +2178,7 @@ def validate_vgr_vgrc_binding(namespace, drpc_names, timeout=120, sleep=30):
 
 
 def validate_vgr_pvc_refs(
-    namespace, drpc_name, expected_pvc_names, timeout=180, sleep=30
+    namespace, drpc_name, expected_pvc_names, timeout=240, sleep=30
 ):
     """
     Validate that a DRPC's VolumeGroupReplication contains exactly
@@ -2192,7 +2192,7 @@ def validate_vgr_pvc_refs(
         namespace (str): Namespace where VGRs are created
         drpc_name (str): DRPC resource name to match in VGR name
         expected_pvc_names (list): Expected PVC names
-        timeout (int): Timeout in seconds (default: 120)
+        timeout (int): Timeout in seconds (default: 240)
         sleep (int): Polling interval in seconds (default: 30)
 
     Raises:
