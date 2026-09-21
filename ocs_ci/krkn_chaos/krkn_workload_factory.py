@@ -518,6 +518,12 @@ class WorkloadOps:
             log.info("Background cluster operations stopped")
         except Exception as e:
             log.error(f"Error stopping background cluster operations: {e}")
+            from ocs_ci.krkn_chaos.background_cluster_operations import (
+                BackgroundOperationEscalationError,
+            )
+
+            if isinstance(e, BackgroundOperationEscalationError):
+                raise
         finally:
             self.background_cluster_ops = None
             self.background_cluster_validator = None

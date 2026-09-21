@@ -155,6 +155,9 @@ ENV_DATA:
       # Maximum concurrent background operations
       max_concurrent_operations: 3
 
+      # Maximum consecutive failures of the same operation before failing the run
+      max_consecutive_operation_failures: 5
+
       # CephX key rotation during chaos (requires ODF 4.19+, non-external mode)
       # Opt-in: set true and uncomment cephx_keyrotation under enabled_operations.
       enable_cephx_keyrotation: false

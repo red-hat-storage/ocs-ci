@@ -39,10 +39,42 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     CommandFailed,
     ResourceNotFoundError,
+    TimeoutExpiredError,
 )
 from ocs_ci.helpers import helpers
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
+
+# MDS failover: poll until rank 0 is active instead of a fixed sleep.
+MDS_FAILOVER_TIMEOUT = 300
+MDS_FAILOVER_POLL_INTERVAL = 10
+MDS_HEALTH_CODES = frozenset({"MDS_DAMAGE", "MDS_ALL_DOWN"})
+MDS_HARD_FAILURE_STATES = frozenset({"damaged"})
+
+# Escalate after this many consecutive failures of the same background op.
+DEFAULT_MAX_CONSECUTIVE_FAILURES = 5
+
+_session_metrics = None
+
+
+class BackgroundOperationEscalationError(UnexpectedBehaviour):
+    """Raised when one background operation fails consecutively past the limit."""
+
+
+def get_session_metrics():
+    """Return the process-wide background-op metrics (shared across test cycles)."""
+    global _session_metrics
+    if _session_metrics is None:
+        _session_metrics = BackgroundClusterMetrics()
+    return _session_metrics
+
+
+def reset_session_metrics():
+    """Reset session metrics. Used by unit tests and session start."""
+    global _session_metrics
+    _session_metrics = BackgroundClusterMetrics()
+
 
 # Background operations that need PVC-backed workloads (VDBENCH/FIO) as sources.
 PVC_DEPENDENT_BACKGROUND_OPERATIONS = frozenset(
@@ -106,6 +138,106 @@ def bg_ops_require_pvc_workloads(bg_config: Optional[Dict[str, Any]]) -> bool:
     return bool(set(enabled_operations) & PVC_DEPENDENT_BACKGROUND_OPERATIONS)
 
 
+def get_mds_rank0_entry(mds_stat):
+    """Return the MDS rank 0 mdsmap entry, or None if it is missing."""
+    if not isinstance(mds_stat, dict):
+        return None
+    mdsmap = mds_stat.get("mdsmap") or []
+    for entry in mdsmap:
+        if isinstance(entry, dict) and entry.get("rank") == 0:
+            return entry
+    return None
+
+
+def extract_mds_health_codes(health_detail):
+    """Return MDS_DAMAGE / MDS_ALL_DOWN codes present in ``ceph health detail``."""
+    if not health_detail:
+        return set()
+    if isinstance(health_detail, dict):
+        checks = health_detail.get("checks") or {}
+        if isinstance(checks, dict):
+            return MDS_HEALTH_CODES.intersection(checks.keys())
+        return set()
+    text = str(health_detail)
+    return {code for code in MDS_HEALTH_CODES if code in text}
+
+
+def format_mds_failover_error(mds_stat, health_detail, reason):
+    """Build an MDS failover failure message that surfaces health codes."""
+    codes = extract_mds_health_codes(health_detail)
+    codes_msg = ", ".join(sorted(codes)) if codes else "none"
+    return (
+        f"MDS failover verification failed: {reason}. "
+        f"Health checks: {codes_msg}. "
+        f"ceph fs status: {mds_stat}. "
+        f"ceph health detail: {health_detail}"
+    )
+
+
+def evaluate_mds_rank0(mds_stat, health_detail=None):
+    """
+    Return True when MDS rank 0 is active with a named daemon.
+
+    ``failed`` (failover in progress) returns False so the caller can keep
+    polling. ``damaged`` and ``MDS_DAMAGE`` raise immediately.
+
+    Raises:
+        UnexpectedBehaviour: Rank 0 is damaged, unnamed-active, or MDS_DAMAGE
+            is reported by ``ceph health detail``.
+    """
+    health_codes = extract_mds_health_codes(health_detail)
+    if "MDS_DAMAGE" in health_codes:
+        raise UnexpectedBehaviour(
+            format_mds_failover_error(
+                mds_stat, health_detail, "MDS_DAMAGE reported by ceph health"
+            )
+        )
+
+    rank0 = get_mds_rank0_entry(mds_stat)
+    if rank0 is None:
+        return False
+
+    state = (rank0.get("state") or "").lower()
+    name = rank0.get("name")
+    if state in MDS_HARD_FAILURE_STATES:
+        raise UnexpectedBehaviour(
+            format_mds_failover_error(mds_stat, health_detail, f"rank 0 is {state}")
+        )
+    if state == "active":
+        if name:
+            return True
+        raise UnexpectedBehaviour(
+            format_mds_failover_error(
+                mds_stat,
+                health_detail,
+                "rank 0 is active but has no daemon name",
+            )
+        )
+    return False
+
+
+def assert_mds_rank0_active(mds_stat, health_detail=None):
+    """
+    Assert MDS rank 0 is active with a named daemon.
+
+    Raises:
+        UnexpectedBehaviour: Rank 0 is not active, is damaged/failed, or
+            MDS_DAMAGE / MDS_ALL_DOWN is present in health detail.
+    """
+    if evaluate_mds_rank0(mds_stat, health_detail=health_detail):
+        return
+    rank0 = get_mds_rank0_entry(mds_stat) or {}
+    state = rank0.get("state", "unknown")
+    name = rank0.get("name")
+    raise UnexpectedBehaviour(
+        format_mds_failover_error(
+            mds_stat,
+            health_detail,
+            f"rank 0 is not active (state={state!r}, name={name!r})",
+        )
+    )
+
+
 class BackgroundClusterMetrics:
     """Track metrics for background cluster operations."""
 
@@ -113,7 +245,9 @@ class BackgroundClusterMetrics:
         self.operations = defaultdict(int)
         self.successes = defaultdict(int)
         self.failures = defaultdict(int)
+        self.consecutive_failures = defaultdict(int)
         self.errors = []
+        self.escalation_error = None
         self.start_time = time.time()
 
     def record_operation(
@@ -123,8 +257,10 @@ class BackgroundClusterMetrics:
         self.operations[operation_type] += 1
         if success:
             self.successes[operation_type] += 1
+            self.consecutive_failures[operation_type] = 0
         else:
             self.failures[operation_type] += 1
+            self.consecutive_failures[operation_type] += 1
             if error:
                 self.errors.append(
                     {
@@ -135,7 +271,7 @@ class BackgroundClusterMetrics:
                 )
 
     def get_summary(self) -> Dict[str, Any]:
-        """Get operation summary."""
+        """Get operation summary (cumulative for the whole run)."""
         duration = time.time() - self.start_time
         return {
             "duration_seconds": duration,
@@ -145,6 +281,7 @@ class BackgroundClusterMetrics:
             "operations_by_type": dict(self.operations),
             "successes_by_type": dict(self.successes),
             "failures_by_type": dict(self.failures),
+            "consecutive_failures_by_type": dict(self.consecutive_failures),
             "error_count": len(self.errors),
             "success_rate": (
                 sum(self.successes.values()) / sum(self.operations.values()) * 100
@@ -188,8 +325,14 @@ class BackgroundClusterOperations:
         self._thread: Optional[threading.Thread] = None
         self._operation_threads: List[threading.Thread] = []
 
-        # Metrics and tracking
-        self.metrics = BackgroundClusterMetrics()
+        # Metrics and tracking (session-wide so counters survive per-test cycles)
+        self.metrics = get_session_metrics()
+        self.max_consecutive_failures = int(
+            self._get_background_ops_config().get(
+                "max_consecutive_operation_failures",
+                DEFAULT_MAX_CONSECUTIVE_FAILURES,
+            )
+        )
         self._resources_to_cleanup: List[Any] = []
 
         # Feature availability tracking
@@ -381,6 +524,7 @@ class BackgroundClusterOperations:
             and not aggressive_snapshot_thread_alive
             and not has_aggressive_snapshot_resources
         ):
+            self._raise_if_escalated()
             return
 
         log.info("Stopping background cluster operations")
@@ -459,6 +603,12 @@ class BackgroundClusterOperations:
                 "Aggressive clone worker did not stop within the join timeout; "
                 "teardown aborted to avoid racing resource cleanup"
             )
+        self._raise_if_escalated()
+
+    def _raise_if_escalated(self):
+        """Re-raise a stored consecutive-failure escalation, if any."""
+        if self.metrics.escalation_error is not None:
+            raise self.metrics.escalation_error
 
     def _operation_loop(self):
         """Main operation loop - continuously performs background operations."""
@@ -466,6 +616,9 @@ class BackgroundClusterOperations:
 
         while self._running:
             try:
+                if self._abort_if_cluster_unrecoverable():
+                    break
+
                 # Clean up completed threads
                 self._operation_threads = [
                     t for t in self._operation_threads if t.is_alive()
@@ -604,16 +757,62 @@ class BackgroundClusterOperations:
             # Assume namespace exists if we can't check (to avoid false positives)
             return True
 
+    def _abort_if_cluster_unrecoverable(self) -> bool:
+        """
+        Stop background ops when the cluster is unrecoverable.
+
+        Degraded (HEALTH_WARN, MDS failover in progress, one OSD down) is
+        expected during chaos and does not abort.
+
+        Returns:
+            bool: True if the run should stop.
+        """
+        from ocs_ci.krkn_chaos.cluster_health_gate import (
+            UNRECOVERABLE,
+            evaluate_cluster_health_from_toolbox,
+        )
+
+        try:
+            ct_pod = pod_helpers.get_ceph_tools_pod()
+            result = evaluate_cluster_health_from_toolbox(
+                ct_pod, chaos_in_progress=True
+            )
+        except Exception as ex:
+            log.warning("Could not evaluate unrecoverable-cluster gate: %s", ex)
+            return False
+
+        if result.status != UNRECOVERABLE:
+            return False
+
+        escalation = BackgroundOperationEscalationError(
+            f"Cluster is unrecoverable during background operations: {result.reason}"
+        )
+        self.metrics.escalation_error = escalation
+        self._running = False
+        log.error("%s", escalation)
+        return True
+
     def _run_operation_safe(self, operation_name: str, operation_func):
         """
         Safely run an operation with error handling.
+
+        Failures are recorded and other operations continue until the same
+        operation fails ``max_consecutive_failures`` times in a row, at which
+        point the run is escalated.
 
         Args:
             operation_name: Name of the operation
             operation_func: Function to execute
         """
+        if self.metrics.escalation_error is not None:
+            log.error(
+                "Skipping %s: background operations already escalated: %s",
+                operation_name,
+                self.metrics.escalation_error,
+            )
+            return
+
         try:
-            # Check if namespace still exists before running operation
             if not self._namespace_exists():
                 log.info(f"Skipping {operation_name} - namespace no longer exists")
                 return
@@ -622,12 +821,24 @@ class BackgroundClusterOperations:
             operation_func()
             self.metrics.record_operation(operation_name, success=True)
             log.info(f"Completed background operation: {operation_name}")
+        except BackgroundOperationEscalationError:
+            raise
         except Exception as e:
             error_msg = f"{operation_name} failed: {str(e)}"
-            log.error(error_msg)
+            log.exception(error_msg)
             self.metrics.record_operation(
                 operation_name, success=False, error=error_msg
             )
+            consecutive = self.metrics.consecutive_failures[operation_name]
+            if consecutive >= self.max_consecutive_failures:
+                escalation = BackgroundOperationEscalationError(
+                    f"Background operation {operation_name} failed {consecutive} "
+                    f"consecutive times (limit={self.max_consecutive_failures}). "
+                    f"Last error: {e}"
+                )
+                self.metrics.escalation_error = escalation
+                self._running = False
+                log.error("%s", escalation)
 
     # ==========================================================================
     # PVC Snapshot Lifecycle Operations
@@ -750,8 +961,7 @@ class BackgroundClusterOperations:
             with suppress(Exception):
                 if snapshot_obj:
                     snapshot_obj.delete()
-            # Don't raise - allow other background operations to continue
-            return
+            raise
 
     # ==========================================================================
     # PVC Clone Lifecycle Operations
@@ -866,8 +1076,7 @@ class BackgroundClusterOperations:
             with suppress(Exception):
                 if clone_pvc_obj:
                     clone_pvc_obj.delete()
-            # Don't raise - allow other background operations to continue
-            return
+            raise
 
     # ==========================================================================
     # Aggressive PVC Clone Operations
@@ -1024,8 +1233,7 @@ class BackgroundClusterOperations:
                 ocp_obj = ocp.OCP()
                 command = f"adm taint node {target_node} chaos-taint-"
                 ocp_obj.exec_oc_cmd(command)
-            # Don't raise - allow other background operations to continue
-            return
+            raise
 
     # ==========================================================================
     # Rook/Ceph OSD Operations
@@ -1069,8 +1277,7 @@ class BackgroundClusterOperations:
 
         except Exception as e:
             log.error(f"OSD operations failed: {e}")
-            # Don't raise - allow other background operations to continue
-            return
+            raise
 
     # ==========================================================================
     # MDS Failover Operations
@@ -1080,44 +1287,82 @@ class BackgroundClusterOperations:
         """
         Perform MDS failover: fail active MDS daemon.
 
-        This validates CephFS resilience during MDS failures.
+        This validates CephFS resilience during MDS failures by polling until
+        rank 0 is active with a named daemon. A fixed sleep is not sufficient:
+        rank 0 can remain ``failed`` indefinitely (see Jenkins run 72858).
         """
         log.info("Executing MDS failover operation")
 
-        # Check if namespace still exists
         if not self._namespace_exists():
             return
 
+        ct_pod = pod_helpers.get_ceph_tools_pod()
+
         try:
-            # Get ceph tools pod
-            ct_pod = pod_helpers.get_ceph_tools_pod()
-
-            # Check if CephFS is deployed
-            try:
-                mds_stat = ct_pod.exec_ceph_cmd("ceph fs status")
-                log.info(f"CephFS status before failover:\n{mds_stat}")
-            except Exception:
-                log.info("CephFS not deployed, skipping MDS failover")
-                return
-
-            # Step 1: Fail active MDS (ID 0)
-            log.info("Failing active MDS daemon (ID 0)")
-            ct_pod.exec_ceph_cmd("ceph mds fail 0")
-
-            # Wait for MDS to recover
-            log.info("Waiting 30s for MDS failover to complete")
-            time.sleep(30)
-
-            # Verify CephFS is still healthy
             mds_stat = ct_pod.exec_ceph_cmd("ceph fs status")
-            log.info(f"CephFS status after failover:\n{mds_stat}")
-
-            log.info("MDS failover operation completed successfully")
-
-        except Exception as e:
-            log.error(f"MDS failover operation failed: {e}")
-            # Don't raise - allow other background operations to continue
+            log.info("CephFS status before failover:\n%s", mds_stat)
+        except Exception:
+            log.info("CephFS not deployed, skipping MDS failover")
             return
+
+        log.info("Failing active MDS daemon (ID 0)")
+        ct_pod.exec_ceph_cmd("ceph mds fail 0")
+
+        log.info(
+            "Waiting up to %ss for MDS rank 0 to become active",
+            MDS_FAILOVER_TIMEOUT,
+        )
+        self._wait_for_mds_rank0_active(ct_pod)
+        log.info("MDS failover operation completed successfully")
+
+    def _wait_for_mds_rank0_active(self, ct_pod, timeout=None, sleep=None):
+        """
+        Poll ``ceph fs status`` until MDS rank 0 is active with a named daemon.
+
+        Args:
+            ct_pod: Ceph toolbox pod
+            timeout (int): Seconds to wait (default: MDS_FAILOVER_TIMEOUT)
+            sleep (int): Poll interval (default: MDS_FAILOVER_POLL_INTERVAL)
+
+        Raises:
+            UnexpectedBehaviour: Rank 0 is damaged, MDS_DAMAGE is reported, or
+                rank 0 is not active when the timeout expires.
+            TimeoutExpiredError: Sampler timed out before a sample completed.
+        """
+        timeout = MDS_FAILOVER_TIMEOUT if timeout is None else timeout
+        sleep = MDS_FAILOVER_POLL_INTERVAL if sleep is None else sleep
+        last_stat = None
+        last_health = None
+
+        def _rank0_ready():
+            nonlocal last_stat, last_health
+            last_stat = ct_pod.exec_ceph_cmd("ceph fs status")
+            log.info("CephFS status during MDS failover wait:\n%s", last_stat)
+            try:
+                last_health = ct_pod.exec_ceph_cmd("ceph health detail")
+            except Exception as ex:
+                log.warning("Could not get ceph health detail during MDS wait: %s", ex)
+                last_health = None
+            return evaluate_mds_rank0(last_stat, health_detail=last_health)
+
+        try:
+            TimeoutSampler(timeout, sleep, _rank0_ready).wait_for_func_value(True)
+        except TimeoutExpiredError as ex:
+            log.error(
+                "MDS rank 0 did not become active within %ss. "
+                "Last fs status: %s. Last health: %s",
+                timeout,
+                last_stat,
+                last_health,
+            )
+            assert_mds_rank0_active(last_stat, health_detail=last_health)
+            raise UnexpectedBehaviour(
+                format_mds_failover_error(
+                    last_stat,
+                    last_health,
+                    f"rank 0 did not become active within {timeout}s",
+                )
+            ) from ex
 
     # ==========================================================================
     # RGW Restart Operations
@@ -1159,8 +1404,7 @@ class BackgroundClusterOperations:
 
         except Exception as e:
             log.error(f"RGW restart operation failed: {e}")
-            # Don't raise - allow other background operations to continue
-            return
+            raise
 
     # ==========================================================================
     # CSI-Addons Reclaim Space Operations
@@ -1289,8 +1533,7 @@ class BackgroundClusterOperations:
 
         except Exception as e:
             log.error(f"Reclaim space operation failed: {e}", exc_info=True)
-            # Don't raise - allow other background operations to continue
-            return
+            raise
 
     # ==========================================================================
     # CSI-Addons Volume Replication Operations
@@ -1491,8 +1734,7 @@ class BackgroundClusterOperations:
 
         except Exception as e:
             log.error(f"Longevity operations failed: {e}", exc_info=True)
-            # Don't raise - allow other background operations to continue
-            return
+            raise
 
     # ==========================================================================
     # CephX Key Rotation Operations
@@ -1842,7 +2084,16 @@ class BackgroundClusterOperations:
             failures = summary["failures_by_type"].get(op_type, 0)
             log.info(f"  {op_type}: {count} ({successes} success, {failures} failed)")
 
+        consecutive = summary.get("consecutive_failures_by_type") or {}
+        hot = {name: n for name, n in consecutive.items() if n}
+        if hot:
+            log.warning("Consecutive failures by type: %s", hot)
+
         if summary["error_count"] > 0:
             log.warning(f"\n{summary['error_count']} errors occurred during operations")
+        if self.metrics.escalation_error is not None:
+            log.error(
+                "Background operations escalated: %s", self.metrics.escalation_error
+            )
 
         log.info("=" * 80)

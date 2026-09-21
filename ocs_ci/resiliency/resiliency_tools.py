@@ -2,6 +2,7 @@ import logging
 import subprocess
 import threading
 from contextlib import contextmanager
+from dataclasses import dataclass
 
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility.utils import (
@@ -23,6 +24,89 @@ log = logging.getLogger(__name__)
 
 # Default interval (seconds) for periodic Ceph crash checks during long-running tests.
 CEPH_CRASH_POLL_INTERVAL = 180
+
+CRASH_CHECK_CLEAN = "clean"
+CRASH_CHECK_CRASHES = "crashes"
+CRASH_CHECK_UNRELIABLE = "unreliable"
+
+CRASH_COLLECTOR_AUTH_MARKERS = (
+    "CephXAuthenticate",
+    "failed to decode",
+    "handle_request failed",
+    "unable to authenticate",
+    "auth: unable",
+)
+
+
+@dataclass
+class CrashReportingStatus:
+    """Whether ``ceph crash ls`` can be trusted as a complete crash list."""
+
+    available: bool
+    reason: str = ""
+
+
+def assess_crash_reporting_status(
+    collector_pods,
+    collector_logs=None,
+    crash_ls_error=None,
+):
+    """
+    Distinguish "no crashes" from "crash reporting is broken".
+
+    Args:
+        collector_pods (list): ``[{"name": str, "phase": str}, ...]``
+        collector_logs (iterable): Crash collector pod log blobs
+        crash_ls_error: Exception raised by ``ceph crash ls``, if any
+
+    Returns:
+        CrashReportingStatus
+    """
+    if crash_ls_error is not None:
+        return CrashReportingStatus(False, f"ceph crash ls failed: {crash_ls_error}")
+    if not collector_pods:
+        return CrashReportingStatus(False, "no crash collector pods found")
+
+    not_running = [
+        pod_info.get("name", "?")
+        for pod_info in collector_pods
+        if (pod_info.get("phase") or "") != constants.STATUS_RUNNING
+    ]
+    if not_running:
+        return CrashReportingStatus(
+            False, f"crash collector pods not Running: {not_running}"
+        )
+
+    for log_text in collector_logs or []:
+        if not log_text:
+            continue
+        lowered = log_text if isinstance(log_text, str) else str(log_text)
+        for marker in CRASH_COLLECTOR_AUTH_MARKERS:
+            if marker in lowered:
+                return CrashReportingStatus(
+                    False, "crash collector authentication is failing"
+                )
+    return CrashReportingStatus(True)
+
+
+def evaluate_crash_monitor_check(reporting_available, reporting_reason, crashes_found):
+    """
+    Decide the crash-monitor outcome without claiming a clean result when
+    telemetry cannot be trusted.
+
+    Returns:
+        tuple: (outcome, message) where outcome is one of CRASH_CHECK_*
+    """
+    if not reporting_available:
+        message = (
+            f"Ceph crash reporting is unavailable ({reporting_reason}); "
+            "not treating an empty crash list as a clean result"
+        )
+        return CRASH_CHECK_UNRELIABLE, message
+    if crashes_found:
+        return CRASH_CHECK_CRASHES, "Ceph crash(es) detected"
+    return CRASH_CHECK_CLEAN, "no crashes detected"
+
 
 # Resiliency/chaos tests treat recovery and degraded (HEALTH_WARN) as expected.
 # Only HEALTH_ERR is a failure.
@@ -142,6 +226,44 @@ class CephStatusTool:
         log.error("Ceph crash ID(s) found: %s", ceph_crash_ids)
         log_all_ceph_crash_details(self.toolbox)
         return True
+
+    def verify_crash_reporting_available(self):
+        """
+        Verify crash collectors are Running and authenticating.
+
+        An empty ``ceph crash ls`` is not a clean result when collectors are
+        down or failing CephX auth.
+
+        Returns:
+            CrashReportingStatus
+        """
+        collector_pods = pod.get_crashcollector_pods()
+        pods_info = []
+        collector_logs = []
+        for crash_pod in collector_pods:
+            phase = (crash_pod.data.get("status") or {}).get("phase", "")
+            pods_info.append({"name": crash_pod.name, "phase": phase})
+            try:
+                collector_logs.append(crash_pod.ocp.get_logs(name=crash_pod.name) or "")
+            except Exception as ex:
+                log.debug(
+                    "Could not read crash collector logs for %s: %s",
+                    crash_pod.name,
+                    ex,
+                )
+                collector_logs.append("")
+
+        crash_ls_error = None
+        try:
+            self.toolbox.exec_ceph_cmd("ceph crash ls")
+        except Exception as ex:
+            crash_ls_error = ex
+
+        return assess_crash_reporting_status(
+            collector_pods=pods_info,
+            collector_logs=collector_logs,
+            crash_ls_error=crash_ls_error,
+        )
 
     def archive_ceph_crashes(self):
         """
@@ -325,6 +447,8 @@ class CephCrashMonitor(threading.Thread):
         # Avoid ``_stop`` — it shadows Thread._stop and breaks join() on Python 3.11+.
         self._stop_event = threading.Event()
         self.crash_error = None
+        self.reporting_unreliable = False
+        self.reporting_unreliable_reason = ""
 
     def run(self):
         ceph_tool = CephStatusTool()
@@ -337,14 +461,28 @@ class CephCrashMonitor(threading.Thread):
 
         def _check_once():
             try:
-                raise_if_ceph_crashes_detected(
-                    ceph_tool,
-                    chaos_type,
-                    poll_interval=self.interval,
+                reporting = ceph_tool.verify_crash_reporting_available()
+                # Still look for crashes that made it into the mon even when
+                # collectors are unhealthy, unless ``ceph crash ls`` itself failed.
+                if "crash ls failed" not in (reporting.reason or ""):
+                    raise_if_ceph_crashes_detected(
+                        ceph_tool,
+                        chaos_type,
+                        poll_interval=self.interval,
+                    )
+                outcome, message = evaluate_crash_monitor_check(
+                    reporting.available,
+                    reporting.reason,
+                    crashes_found=False,
                 )
+                if outcome == CRASH_CHECK_UNRELIABLE:
+                    self.reporting_unreliable = True
+                    self.reporting_unreliable_reason = reporting.reason
+                    log.warning("%s", message)
+                    return True
                 log.info(
-                    "Ceph crash monitor: no crashes detected for %s; "
-                    "next check in %ss",
+                    "Ceph crash monitor: %s for %s; next check in %ss",
+                    message,
                     self.context,
                     self.interval,
                 )
@@ -370,11 +508,22 @@ class CephCrashMonitor(threading.Thread):
 
     def final_check(self):
         """Run a final crash check after failure injection completes."""
-        raise_if_ceph_crashes_detected(
-            CephStatusTool(),
-            f"{self.context} (final check)",
-            poll_interval=0,
-        )
+        ceph_tool = CephStatusTool()
+        reporting = ceph_tool.verify_crash_reporting_available()
+        if "crash ls failed" not in (reporting.reason or ""):
+            raise_if_ceph_crashes_detected(
+                ceph_tool,
+                f"{self.context} (final check)",
+                poll_interval=0,
+            )
+        if not reporting.available:
+            self.reporting_unreliable = True
+            self.reporting_unreliable_reason = reporting.reason
+            log.warning(
+                "Final Ceph crash check: reporting unavailable (%s); "
+                "not treating an empty crash list as a clean result",
+                reporting.reason,
+            )
 
 
 @contextmanager

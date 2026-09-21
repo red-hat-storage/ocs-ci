@@ -30,6 +30,44 @@ from contextlib import suppress
 log = logging.getLogger(__name__)
 
 
+def _abort_session_if_cluster_unrecoverable():
+    """
+    Abort the entire pytest session when Ceph is unrecoverable.
+
+    HEALTH_WARN / single-OSD-down is degraded and allowed. MDS_DAMAGE, PGs
+    inactive above threshold, OSDs below pool min_size, or MDS_ALL_DOWN before
+    a test starts means further results are invalid.
+    """
+    from ocs_ci.krkn_chaos.cluster_health_gate import (
+        HEALTHY,
+        UNRECOVERABLE,
+        evaluate_cluster_health_from_toolbox,
+    )
+    from ocs_ci.ocs.resources import pod as pod_helpers
+
+    try:
+        ct_pod = pod_helpers.get_ceph_tools_pod()
+        result = evaluate_cluster_health_from_toolbox(ct_pod, chaos_in_progress=False)
+    except Exception as ex:
+        log.warning(
+            "Krkn chaos test lifecycle: could not evaluate cluster health gate: %s",
+            ex,
+        )
+        return
+
+    if result.status == UNRECOVERABLE:
+        message = (
+            f"Aborting krkn chaos session: cluster is unrecoverable: {result.reason}"
+        )
+        log.error(message)
+        pytest.exit(message, returncode=1)
+    if result.status != HEALTHY:
+        log.warning(
+            "Krkn chaos test lifecycle: cluster is degraded but recoverable: %s",
+            result.reason,
+        )
+
+
 # =============================================================================
 # Generic Krkn chaos test lifecycle fixture (autouse for all tests in this dir)
 # =============================================================================
@@ -43,6 +81,9 @@ def krkn_chaos_test_lifecycle(request):
     """
     Common lifecycle for all Krkn chaos tests in this directory.
 
+    - At test start: abort the pytest session if the cluster is unrecoverable
+      (MDS_DAMAGE, PGs inactive, OSDs below pool min_size). Degraded HEALTH_WARN
+      during/after chaos is allowed.
     - At test start: archive any existing Ceph crashes so the test starts from a clean baseline.
     - During the entire test (workload setup, krkn/krknctl run, teardown): background
       Ceph crash monitor checks every CEPH_CRASH_POLL_INTERVAL seconds.
@@ -51,6 +92,9 @@ def krkn_chaos_test_lifecycle(request):
     Extend this fixture's setup/finalizer when adding more shared behavior for
     krkn chaos tests.
     """
+    # ----- Pre-test health gate: abort the session, not just this test -----
+    _abort_session_if_cluster_unrecoverable()
+
     # ----- Setup: run at beginning of test -----
     try:
         ceph_status = CephStatusTool()
