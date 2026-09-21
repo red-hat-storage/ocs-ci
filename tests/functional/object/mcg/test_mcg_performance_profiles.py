@@ -18,24 +18,32 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
-def get_pod_resources(pod):
-    """
-    Get CPU and memory resources from a pod's first container.
-
-    Args:
-        pod (dict): Pod resource dict as returned by get_pods_having_label
-
-    Returns:
-        dict: Resources with requests and limits
-    """
-    container = pod["spec"]["containers"][0]
-    return container.get("resources", {})
+# Kubernetes memory suffixes. Binary suffixes come first so that "Ki" is
+# matched before "K" when scanning for the suffix of a quantity.
+MEMORY_UNITS = {
+    "Ki": 2**10,
+    "Mi": 2**20,
+    "Gi": 2**30,
+    "Ti": 2**40,
+    "Pi": 2**50,
+    "Ei": 2**60,
+    "k": 10**3,
+    "K": 10**3,
+    "M": 10**6,
+    "G": 10**9,
+    "T": 10**12,
+    "P": 10**15,
+    "E": 10**18,
+}
 
 
 def normalize_cpu(value):
     """
     Normalize a CPU quantity so equivalent values compare equal
     (e.g. "500m" == 0.5, "1" == "1000m").
+
+    Kubernetes CPU quantities only ever carry the "m" (milli) suffix, so no
+    other unit is accepted here; memory quantities go through normalize_memory.
 
     Args:
         value: CPU quantity as a string (e.g. "500m", "1") or number
@@ -46,9 +54,34 @@ def normalize_cpu(value):
     if value is None:
         return None
     if isinstance(value, str):
+        value = value.strip()
         if value.endswith("m"):
             return float(value[:-1]) / 1000
         return float(value)
+    return float(value)
+
+
+def normalize_memory(value):
+    """
+    Normalize a memory quantity to bytes so equivalent values compare equal
+    (e.g. "1Gi" == "1024Mi").
+
+    Args:
+        value: Memory quantity as a string (e.g. "1Gi", "800Mi") or a number
+            of bytes
+
+    Returns:
+        float or None: Normalized memory value in bytes, or None if value is
+            None
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return float(value)
+    value = value.strip()
+    for suffix, multiplier in MEMORY_UNITS.items():
+        if value.endswith(suffix):
+            return float(value[: -len(suffix)]) * multiplier
     return float(value)
 
 
@@ -61,7 +94,9 @@ def verify_resources(
     component_name,
 ):
     """
-    Verify that actual resources match expected values.
+    Verify that actual resources match expected values, logging every
+    mismatch. CPU and memory quantities are compared normalized, so
+    equivalent notations (e.g. "1" and "1000m", "1Gi" and "1024Mi") match.
 
     Args:
         actual (dict): Actual resource dict from pod
@@ -99,12 +134,12 @@ def verify_resources(
             f"{component_name} CPU limit: expected {expected_lim_cpu}, got {lim_cpu}"
         )
 
-    if req_mem != expected_req_mem:
+    if normalize_memory(req_mem) != normalize_memory(expected_req_mem):
         errors.append(
             f"{component_name} Memory request: expected {expected_req_mem}, got {req_mem}"
         )
 
-    if lim_mem != expected_lim_mem:
+    if normalize_memory(lim_mem) != normalize_memory(expected_lim_mem):
         errors.append(
             f"{component_name} Memory limit: expected {expected_lim_mem}, got {lim_mem}"
         )
@@ -133,15 +168,15 @@ def resources_match(actual, req_cpu, lim_cpu, req_mem, lim_mem):
         lim_mem (str): Expected memory limit
 
     Returns:
-        bool: True if requests and limits match (CPU compared normalized)
+        bool: True if requests and limits match (compared normalized)
     """
     requests = actual.get("requests", {})
     limits = actual.get("limits", {})
     return (
         normalize_cpu(requests.get("cpu")) == normalize_cpu(req_cpu)
         and normalize_cpu(limits.get("cpu")) == normalize_cpu(lim_cpu)
-        and requests.get("memory") == req_mem
-        and limits.get("memory") == lim_mem
+        and normalize_memory(requests.get("memory")) == normalize_memory(req_mem)
+        and normalize_memory(limits.get("memory")) == normalize_memory(lim_mem)
     )
 
 
@@ -156,11 +191,6 @@ class TestMCGPerformanceProfiles:
     Verifies that setting performanceProfile on StorageCluster CR correctly
     propagates resource specifications to noobaa-core, noobaa-db, and
     noobaa-endpoint pods.
-
-    Test cases correspond to:
-    - CLI-1: Verify "default" profile
-    - CLI-2: Verify "mixed-workload" profile
-    - CLI-3: Verify "small-objects" profile
     """
 
     # Profile specifications as per RHSTOR-9144 and NooBaa operator source code
@@ -350,7 +380,7 @@ class TestMCGPerformanceProfiles:
                 statuses=[constants.STATUS_RUNNING],
             )
             return bool(core_pods) and resources_match(
-                get_pod_resources(core_pods[0]),
+                core_pods[0]["spec"]["containers"][0].get("resources", {}),
                 core_spec["req_cpu"],
                 core_spec["lim_cpu"],
                 core_spec["req_mem"],
@@ -365,9 +395,46 @@ class TestMCGPerformanceProfiles:
                 "(Ready phase and core pods recreated with new resources)"
             )
 
+    def _verify_pods_against_spec(self, pods, component_spec, label, profile):
+        """
+        Verify every pod's resources and QoS class against a component spec.
+
+        Args:
+            pods (list): Pod dicts as returned by get_pods_having_label
+            component_spec (dict): Expected requests, limits and QoS class
+            label (str): Component name used in log and assertion messages
+            profile (str): Profile name being verified, for the messages
+        """
+        for i, pod in enumerate(pods, start=1):
+            resources = pod["spec"]["containers"][0].get("resources", {})
+            assert verify_resources(
+                resources,
+                component_spec["req_cpu"],
+                component_spec["lim_cpu"],
+                component_spec["req_mem"],
+                component_spec["lim_mem"],
+                f"{label}-{i}",
+            ), f"{label} pod {i} resources do not match '{profile}' profile"
+
+            # Use the pod-reported QoS class, which Kubernetes computes across
+            # all (app and init) containers, rather than deriving it from a
+            # single container's resources.
+            qos = pod["status"]["qosClass"]
+            assert qos == component_spec["qos"], (
+                f"{label} pod {i} QoS class: "
+                f"expected {component_spec['qos']}, got {qos}"
+            )
+        logger.info(
+            f"All {len(pods)} {label} pods verified, QoS: {component_spec['qos']} ✓"
+        )
+
     def _verify_core(self, spec, profile):
         """
         Verify noobaa-core pod resources and QoS class.
+
+        Args:
+            spec (dict): Profile specification from PROFILE_SPECS
+            profile (str): Profile name being verified
         """
         logger.info("Verifying noobaa-core pod resources")
         core_pods = get_pods_having_label(
@@ -377,29 +444,18 @@ class TestMCGPerformanceProfiles:
         )
         assert core_pods, "No running noobaa-core pods found"
 
-        core_resources = get_pod_resources(core_pods[0])
-        assert verify_resources(
-            core_resources,
-            spec["core"]["req_cpu"],
-            spec["core"]["lim_cpu"],
-            spec["core"]["req_mem"],
-            spec["core"]["lim_mem"],
-            "noobaa-core",
-        ), f"noobaa-core resources do not match '{profile}' profile"
-
-        # Use the pod-reported QoS class, which Kubernetes computes across all
-        # (app and init) containers, rather than deriving it from a single
-        # container's resources.
-        qos = core_pods[0]["status"]["qosClass"]
-        assert (
-            qos == spec["core"]["qos"]
-        ), f"noobaa-core QoS class: expected {spec['core']['qos']}, got {qos}"
-        logger.info(f"noobaa-core QoS class: {qos} ✓")
+        self._verify_pods_against_spec(
+            core_pods[:1], spec["core"], "noobaa-core", profile
+        )
 
     def _verify_db(self, spec, profile):
         """
         Verify noobaa-db pod resources and QoS class (per instance) and the
         expected DB instance count.
+
+        Args:
+            spec (dict): Profile specification from PROFILE_SPECS
+            profile (str): Profile name being verified
         """
         logger.info("Verifying noobaa-db pod resources")
         db_pods = get_pods_having_label(
@@ -409,24 +465,7 @@ class TestMCGPerformanceProfiles:
         )
         assert db_pods, "No running noobaa-db pods found"
 
-        for i, db_pod in enumerate(db_pods):
-            db_resources = get_pod_resources(db_pod)
-            assert verify_resources(
-                db_resources,
-                spec["db"]["req_cpu"],
-                spec["db"]["lim_cpu"],
-                spec["db"]["req_mem"],
-                spec["db"]["lim_mem"],
-                f"noobaa-db-{i+1}",
-            ), f"noobaa-db pod {i+1} resources do not match '{profile}' profile"
-
-            qos = db_pod["status"]["qosClass"]
-            assert (
-                qos == spec["db"]["qos"]
-            ), f"noobaa-db pod {i+1} QoS class: expected {spec['db']['qos']}, got {qos}"
-        logger.info(
-            f"All {len(db_pods)} noobaa-db pods verified, QoS: {spec['db']['qos']} ✓"
-        )
+        self._verify_pods_against_spec(db_pods, spec["db"], "noobaa-db", profile)
 
         # Verify DB instances count
         expected_db_instances = spec["db_instances"]
@@ -440,6 +479,10 @@ class TestMCGPerformanceProfiles:
         """
         Verify noobaa-endpoint pod resources, QoS class, and pod count
         (min/max via HPA or deployment).
+
+        Args:
+            spec (dict): Profile specification from PROFILE_SPECS
+            profile (str): Profile name being verified
         """
         logger.info("Verifying noobaa-endpoint pod resources")
         endpoint_label = (
@@ -465,7 +508,7 @@ class TestMCGPerformanceProfiles:
             count_ok = expected_min <= len(endpoint_pods) <= expected_max
             resources_ok = bool(endpoint_pods) and all(
                 resources_match(
-                    get_pod_resources(pod),
+                    pod["spec"]["containers"][0].get("resources", {}),
                     spec["endpoint"]["req_cpu"],
                     spec["endpoint"]["lim_cpu"],
                     spec["endpoint"]["req_mem"],
@@ -483,25 +526,8 @@ class TestMCGPerformanceProfiles:
 
         # Verify every endpoint pod, not just the first one, so a pod with
         # stale or incorrect resources cannot slip through.
-        for i, endpoint_pod in enumerate(endpoint_pods):
-            endpoint_resources = get_pod_resources(endpoint_pod)
-            assert verify_resources(
-                endpoint_resources,
-                spec["endpoint"]["req_cpu"],
-                spec["endpoint"]["lim_cpu"],
-                spec["endpoint"]["req_mem"],
-                spec["endpoint"]["lim_mem"],
-                f"noobaa-endpoint-{i+1}",
-            ), f"noobaa-endpoint pod {i+1} resources do not match '{profile}' profile"
-
-            qos = endpoint_pod["status"]["qosClass"]
-            assert qos == spec["endpoint"]["qos"], (
-                f"noobaa-endpoint pod {i+1} QoS class: "
-                f"expected {spec['endpoint']['qos']}, got {qos}"
-            )
-        logger.info(
-            f"All {len(endpoint_pods)} noobaa-endpoint pods verified, "
-            f"QoS: {spec['endpoint']['qos']} ✓"
+        self._verify_pods_against_spec(
+            endpoint_pods, spec["endpoint"], "noobaa-endpoint", profile
         )
 
         # Verify endpoint pod count (min/max)
@@ -539,8 +565,13 @@ class TestMCGPerformanceProfiles:
 
     def _verify_pv_pool(self, spec, profile):
         """
-        Verify PV pool agent pod resources (vSphere/on-prem only). Skipped on
-        cloud platforms where the default backingstore is not a pv-pool.
+        Verify the resources of every PV pool agent pod (vSphere/on-prem
+        only). Skipped on cloud platforms where the default backingstore is
+        not a pv-pool.
+
+        Args:
+            spec (dict): Profile specification from PROFILE_SPECS
+            profile (str): Profile name being verified
         """
         logger.info("Checking for PV pool backingstore")
         bs_ocp = OCP(
@@ -580,26 +611,32 @@ class TestMCGPerformanceProfiles:
             pv_pool_pods
         ), "PV pool backingstore exists but no running agent pods found"
 
-        pv_resources = get_pod_resources(pv_pool_pods[0])
         # PV pool pods have equal requests and limits
         expected_cpu = spec["pv_pool"]["cpu"]
         expected_mem = spec["pv_pool"]["mem"]
-        assert verify_resources(
-            pv_resources,
-            expected_cpu,
-            expected_cpu,  # limits == requests for PV pool
-            expected_mem,
-            expected_mem,  # limits == requests for PV pool
-            "PV pool agent",
-        ), f"PV pool agent resources do not match '{profile}' profile"
-        logger.info("PV pool agent pod resources verified ✓")
+        # Verify every agent pod, so a regression on agents beyond the first
+        # cannot slip through.
+        for i, pv_pool_pod in enumerate(pv_pool_pods, start=1):
+            pv_resources = pv_pool_pod["spec"]["containers"][0].get("resources", {})
+            assert verify_resources(
+                pv_resources,
+                expected_cpu,
+                expected_cpu,  # limits == requests for PV pool
+                expected_mem,
+                expected_mem,  # limits == requests for PV pool
+                f"PV pool agent-{i}",
+            ), f"PV pool agent {i} resources do not match '{profile}' profile"
+        logger.info(f"All {len(pv_pool_pods)} PV pool agent pod resources verified ✓")
 
     @pytest.mark.parametrize(
         "set_profile",
-        ["default", "mixed-workload", "small-objects"],
+        [
+            pytest.param("default", marks=pytest.mark.polarion_id("OCS-8289")),
+            pytest.param("mixed-workload", marks=pytest.mark.polarion_id("OCS-8290")),
+            pytest.param("small-objects", marks=pytest.mark.polarion_id("OCS-8291")),
+        ],
         indirect=True,
     )
-    @pytest.mark.polarion_id("OCS-6000")  # TODO: Update with actual Polarion ID
     def test_mcg_performance_profile_resources(self, set_profile):
         """
         Verify MCG performance profile resource specifications.
