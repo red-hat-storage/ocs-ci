@@ -626,7 +626,7 @@ class BAREMETALUPI(BAREMETALBASE):
                     f"{self.installer} wait-for bootstrap-complete "
                     f"--dir {self.cluster_path} "
                     f"--log-level {log_cli_level}",
-                    timeout=3600,
+                    timeout=config.DEPLOYMENT.get("bootstrap_complete_timeout", 5400),
                 )
             except CommandFailed as e:
                 if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
