@@ -2263,9 +2263,17 @@ def get_nb_db_psql_version_from_image():
         )
 
 
+@retry(
+    CommandFailed,
+    tries=5,
+    delay=5,
+    text_in_exception="shutting down",
+)
 def query_nb_db_psql_version():
     """
-    Query the NooBaa DB for its PostgreSQL version
+    Query the NooBaa DB for its PostgreSQL version.
+
+    Retries automatically if the database is shutting down or transitioning.
 
     Returns:
         str: The NooBaa DB version
