@@ -45,6 +45,7 @@ from jinja2 import FileSystemLoader, Environment
 from ocs_ci.framework import config
 from ocs_ci.framework import GlobalVariables as GV
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility.yaml_log_filter import filter_verbose_yaml
 from ocs_ci.ocs.exceptions import (
     AuthError,
@@ -7595,6 +7596,7 @@ def create_kubeconfig(kubeconfig_path):
             raise CommandFailed(f"Failed to create permanent kubeconfig at {kubeconfig_path}")
         else:
             log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
+        update_kubeconfig_with_proxy_url_for_client(kubeconfig_path)
 
         kubeadmin_password_file = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["password_location"]
