@@ -38,6 +38,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     tier3,
     jira,
+    polarion_id,
 )
 from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
 from ocs_ci.ocs import constants
@@ -645,7 +646,9 @@ def endpoint_pair(request, cld_mgr, cloud_uls_factory):
             new: https://<new-endpoint>
             target_bucket: <bucket-that-is-a-valid-noobaa-location-on-both>
             secret: <k8s-secret-with-AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY>
-            signature_version: v4        # v2 for plain-http endpoints
+            signature_version: v4        # BackingStores. NamespaceStores on a
+                                         # plain-http endpoint are forced to v2
+                                         # by ``endpoint_conf``.
             target_buckets:              # optional; the tests that stand several
               - <bucket-1>               # stores on one endpoint take one bucket
               - <bucket-2>               # each. Defaults to [target_bucket].
@@ -697,6 +700,12 @@ def endpoint_conf(endpoint_pair):
     tests, or skip if the cluster cannot supply one.
 
     See :func:`endpoint_pair` for how the pair is resolved.
+
+    Adds one derived key, ``signature_version_nss``. The admission webhook
+    rejects a NamespaceStore that pairs a non-secure endpoint with signature
+    version v4 ("Non-secure endpoint works only with signature-version v2"),
+    while a BackingStore on the very same endpoint is accepted with v4. So the
+    NamespaceStore tests cannot simply reuse ``signature_version``.
     """
     if not endpoint_pair:
         pytest.skip(
@@ -705,7 +714,13 @@ def endpoint_conf(endpoint_pair):
             "ENV_DATA['mcg_endpoint_pair'] (old, new, target_bucket, secret) to "
             "run these tests."
         )
-    return endpoint_pair
+    plain_http = endpoint_pair["old"].startswith("http://")
+    return {
+        **endpoint_pair,
+        "signature_version_nss": (
+            "v2" if plain_http else endpoint_pair["signature_version"]
+        ),
+    }
 
 
 @pytest.fixture
@@ -944,7 +959,7 @@ DFBUGS_10975_SKIP = pytest.mark.usefixtures("skip_if_rook_keyed_secret")
 
 # DFBUGS-10938 is not platform-conditional: check external connection maps a
 # genuine credentials rejection onto UNKNOWN FAILURE on every backend, so this
-# one is a plain skip like DFBUGS_10744_SKIP.
+# one is a plain unconditional skip.
 DFBUGS_10938_SKIP = pytest.mark.skip(
     "check external connection reports a credentials rejection as "
     "UNKNOWN FAILURE - https://redhat.atlassian.net/browse/DFBUGS-10938"
@@ -973,8 +988,8 @@ class TestBackingStoreEndpointUpdate:
     """
 
     @tier1
+    @polarion_id("OCS-8278")
     @DFBUGS_10975_SKIP
-    # TODO: assign polarion id
     def test_switch_and_revert_single_bs(self, mcg_obj, endpoint_conf, store_factory):
         """
         Switch a single s3-compatible BackingStore's endpoint from OLD to NEW,
@@ -1025,8 +1040,8 @@ class TestBackingStoreEndpointUpdate:
         assert get_store_endpoint(constants.BACKINGSTORE, bs.name, ns) == old
 
     @tier2
+    @polarion_id("OCS-8279")
     @DFBUGS_10975_SKIP
-    # TODO: assign polarion id
     def test_bulk_switch_and_connection_dedup(
         self, mcg_obj, endpoint_conf, store_factory
     ):
@@ -1093,15 +1108,14 @@ class TestBackingStoreEndpointUpdate:
             assert get_store_endpoint(constants.BACKINGSTORE, bs.name, ns) == new
 
     @tier2
-    # TODO: assign polarion id
     @pytest.mark.parametrize(
         "variant",
         [
-            "wrong_endpoint",
-            "trailing_slash",
-            "dns_form",
+            pytest.param("wrong_endpoint", marks=polarion_id("OCS-8280")),
+            pytest.param("trailing_slash", marks=polarion_id("OCS-8281")),
+            pytest.param("dns_form", marks=polarion_id("OCS-8282")),
             # Performs a real update before the re-run, so DFBUGS-10975 blocks it.
-            "rerun_after_success",
+            pytest.param("rerun_after_success", marks=polarion_id("OCS-8283")),
         ],
     )
     def test_no_match_endpoint_variants(
@@ -1199,8 +1213,8 @@ class TestBackingStoreEndpointUpdate:
         assert current == expected
 
     @tier2
+    @polarion_id("OCS-8284")
     @DFBUGS_10975_SKIP
-    # TODO: assign polarion id
     def test_only_old_endpoint_stores_matched(
         self,
         mcg_obj,
@@ -1402,8 +1416,8 @@ class TestBackingStoreEndpointUpdate:
         )
 
     @tier2
+    @polarion_id("OCS-8285")
     @DFBUGS_10975_SKIP
-    # TODO: assign polarion id
     def test_idempotent_no_op(self, mcg_obj, endpoint_conf, store_factory):
         """
         Running the update with ``--new-endpoint`` equal to ``--old-endpoint``
@@ -1434,8 +1448,8 @@ class TestBackingStoreEndpointUpdate:
         assert not get_store_pause_annotation(constants.BACKINGSTORE, bs.name, ns)
 
     @tier2
+    @polarion_id("OCS-8286")
     @DFBUGS_10975_SKIP
-    # TODO: assign polarion id
     def test_pause_annotation_honored_and_cleaned_up(
         self, mcg_obj, endpoint_conf, store_factory
     ):
@@ -1454,9 +1468,8 @@ class TestBackingStoreEndpointUpdate:
         SCOPE: this is the BackingStore annotation lifecycle only - a manual
         pause/resume plus the cleanup on a SUCCESSFUL update. It is NOT a
         regression test for DFBUGS-10743, whose trigger is the webhook rejecting
-        the rollback write-back, and that only happens for NamespaceStores (see
-        DFBUGS-10744). The true regression test is a NamespaceStore rollback
-        variant, currently blocked by DFBUGS-10744.
+        the rollback write-back. Reproducing that needs a store whose spec patch
+        is denied part-way through a batch, which the happy path never hits.
 
         Flow:
             1. Create a BackingStore and let it settle.
@@ -1551,8 +1564,8 @@ class TestBackingStoreEndpointUpdate:
         ), f"BackingStore {bs.name} did not return to OPTIMAL after the switch"
 
     @tier2
+    @polarion_id("OCS-8287")
     @DFBUGS_10975_SKIP
-    # TODO: assign polarion id
     def test_switch_during_active_io(
         self,
         mcg_obj,
@@ -1692,8 +1705,8 @@ class TestBackingStoreEndpointUpdate:
         )
 
     @tier2
+    @polarion_id("OCS-8288")
     @DFBUGS_10975_SKIP
-    # TODO: assign polarion id
     def test_default_backingstore_endpoint_update(self, mcg_obj):
         """
         The default backingstore participates in endpoint update like any other
@@ -1775,24 +1788,28 @@ class TestConnectionUpdateNegative:
     """
 
     @tier2
-    # TODO: assign polarion id
     @pytest.mark.parametrize(
         "failure",
         [
             # DFBUGS-10975 aborts on the credentials error before the intended
             # failure is reached, so the asserted reason never appears. The
             # abort itself still happens - only the reason is unassertable.
-            "unreachable",
-            "missing_target_bucket",
-            "not_noobaa_location",
+            pytest.param("unreachable", marks=polarion_id("OCS-8265")),
+            pytest.param("missing_target_bucket", marks=polarion_id("OCS-8266")),
+            pytest.param("not_noobaa_location", marks=polarion_id("OCS-8267")),
             # Credentials ARE read for this one - the bad-creds secret uses the
             # AWS key names, and fake credentials match no existing secret so
             # the operator never repoints the secretRef. The rejection is real
             # and merely misreported, which makes it DFBUGS-10938, not 10975.
             pytest.param(
-                "wrong_creds", marks=[jira("DFBUGS-10938"), DFBUGS_10938_SKIP]
+                "wrong_creds",
+                marks=[
+                    polarion_id("OCS-8268"),
+                    jira("DFBUGS-10938"),
+                    DFBUGS_10938_SKIP,
+                ],
             ),
-            "one_bad_in_batch",
+            pytest.param("one_bad_in_batch", marks=polarion_id("OCS-8269")),
         ],
     )
     def test_prevalidation_failure_aborts_batch(
@@ -1961,16 +1978,15 @@ class TestConnectionUpdateNegative:
             assert not get_store_pause_annotation(constants.BACKINGSTORE, bs.name, ns)
 
     @tier3
-    # TODO: assign polarion id
     @pytest.mark.parametrize(
         "case",
         [
-            "missing_flag",
+            pytest.param("missing_flag", marks=polarion_id("OCS-8270")),
             # Asserts the padded endpoint PASSES pre-validation, which
             # DFBUGS-10975 prevents.
-            "whitespace_trimmed",
-            "malformed_url",
-            "long_url",
+            pytest.param("whitespace_trimmed", marks=polarion_id("OCS-8271")),
+            pytest.param("malformed_url", marks=polarion_id("OCS-8272")),
+            pytest.param("long_url", marks=polarion_id("OCS-8273")),
         ],
     )
     def test_cli_input_validation(self, mcg_obj, endpoint_conf, store_factory, case):
@@ -2060,7 +2076,7 @@ class TestConnectionUpdateNegative:
             assert not get_store_pause_annotation(constants.BACKINGSTORE, bs.name, ns)
 
     @tier2
-    # TODO: assign polarion id
+    @polarion_id("OCS-8274")
     def test_direct_cr_edit_is_rejected_by_webhook(
         self, mcg_obj, endpoint_conf, store_factory
     ):
@@ -2109,7 +2125,7 @@ class TestConnectionUpdateNegative:
         assert get_pool_endpoint(mcg_obj, bs.name) == old
 
     @tier3
-    # TODO: assign polarion id
+    @polarion_id("OCS-8275")
     @jira("DFBUGS-10937")
     def test_switch_survives_concurrent_store_writes(
         self, mcg_obj, endpoint_conf, store_factory, request
@@ -2234,12 +2250,6 @@ class TestConnectionUpdateNegative:
 # ===========================================================================
 # Module C - NamespaceStore + mixed batch
 # ===========================================================================
-DFBUGS_10744_SKIP = pytest.mark.skip(
-    "NamespaceStore endpoint update is denied by the admission webhook - "
-    "https://redhat.atlassian.net/browse/DFBUGS-10744"
-)
-
-
 @mcg
 @red_squad
 class TestNamespaceStoreEndpointUpdate:
@@ -2247,23 +2257,22 @@ class TestNamespaceStoreEndpointUpdate:
     Endpoint update for NamespaceStores, on their own and in a batch alongside
     BackingStores.
 
-    Both tests assert the intended behaviour - a successful switch. They are
-    skipped on builds where DFBUGS-10744 is open: the admission webhook denies
-    the NamespaceStore change, and the broken rollback that follows leaves the
-    store annotated pause-reconcile=true (DFBUGS-10743). Drop the skip marker
-    once DFBUGS-10744 is fixed.
+    Both tests assert the intended behaviour - a successful switch.
 
-    Status as of 2026-09-14: DFBUGS-10744 is MODIFIED and DFBUGS-10743 is POST,
-    so both fixes are merged but not yet in a build. Re-check against the build
-    under test before removing the marker - and note the fix may land as
-    "exclude NamespaceStores from matching" rather than "allow the change",
-    which would invert what these two tests should assert.
+    These were skipped while DFBUGS-10744 was open, because the admission
+    webhook denied every NamespaceStore endpoint change. It was fixed by
+    noobaa-operator PR #2114, which lets the webhook through for a store
+    carrying ``noobaa.io/pause-reconcile=true`` - the annotation the CLI sets
+    for the duration of the update - and denies the change otherwise. Verified
+    present in ODF/MCG 5.0.0-45.stable, so the skip marker is gone.
+
+    Note the fix landed as "allow the change", not as "exclude NamespaceStores
+    from matching", which is what makes a successful switch the right thing to
+    assert here.
     """
 
     @tier2
-    @jira("DFBUGS-10744")
-    @DFBUGS_10744_SKIP
-    # TODO: assign polarion id
+    @polarion_id("OCS-8276")
     def test_switch_and_revert_single_nss(self, mcg_obj, endpoint_conf, store_factory):
         """
         Switch a single s3-compatible NamespaceStore's endpoint from OLD to NEW,
@@ -2292,7 +2301,7 @@ class TestNamespaceStoreEndpointUpdate:
             old,
             endpoint_conf["target_bucket"],
             endpoint_conf["secret"],
-            endpoint_conf["signature_version"],
+            endpoint_conf["signature_version_nss"],
         )
 
         # --- switch OLD -> NEW ---
@@ -2323,9 +2332,7 @@ class TestNamespaceStoreEndpointUpdate:
         assert get_store_endpoint(constants.NAMESPACESTORE, nss.name, ns) == old
 
     @tier2
-    @jira("DFBUGS-10744")
-    @DFBUGS_10744_SKIP
-    # TODO: assign polarion id
+    @polarion_id("OCS-8277")
     def test_mixed_batch_switch_bs_and_nss(self, mcg_obj, endpoint_conf, store_factory):
         """
         A mixed batch - a BackingStore and a NamespaceStore sharing one endpoint
@@ -2361,7 +2368,7 @@ class TestNamespaceStoreEndpointUpdate:
             old,
             buckets[1 % len(buckets)],
             endpoint_conf["secret"],
-            endpoint_conf["signature_version"],
+            endpoint_conf["signature_version_nss"],
         )
 
         # --- both stores switch in one command ---
