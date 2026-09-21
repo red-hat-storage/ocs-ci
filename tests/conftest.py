@@ -10567,117 +10567,159 @@ def scale_noobaa_db_pod_pv_size(request):
 @pytest.fixture()
 def md_blow_factory(request):
     """
-    Returns MdBlow configured for fast NooBaa DB fill to a usage threshold.
+    Factory for MdBlow objects that can fill the NooBaa DB to a usage threshold.
+    Restores the default noobaa-core resources on teardown.
 
-    Uses md_blow.js production-like parameters (128 chunks, 1 MiB chunk size)
-    and byte-based PVC monitoring so large PVC fills do not false-stall on
-    unchanged integer df percentages.
+    Returns:
+        function: Factory returning an MdBlow object
 
-    Restores default noobaa-core resources on teardown.
     """
-    obj_count = 100
-    concurrency = 50
-    chunks = 128
-    chunk_size = 1024 * 1024
-    max_stall_batches = 3
-
-    blow_io = md_blow.MdBlow()
-    blow_io.obj_count = obj_count
-    blow_io.concurrency = concurrency
-    blow_io.chunks = chunks
-    blow_io.chunk_size = chunk_size
-    blow_io.increase_core_pod_cpu_memory()
-
-    original_upload = blow_io.upload_obj_using_md_blow
-
-    def get_db_usage():
-        blow_io.noobaa_db_pod = get_noobaa_db_pod()
-        usage = blow_io.noobaa_db_pod.exec_cmd_on_pod(
-            "df -B1 | grep postgresql | awk '{print $3,$2}'",
-            container_name="postgres",
-            shell=True,
-        )
-        used_bytes, total_bytes = usage.strip().split()
-        used_bytes = int(used_bytes)
-        total_bytes = int(total_bytes)
-        usage_pct = (used_bytes * 100) // total_bytes if total_bytes else 0
-        return used_bytes, total_bytes, usage_pct
-
-    def upload_obj_using_md_blow(
-        bucket_name="first.bucket",
-        threshold_pct=None,
-        obj_count=obj_count,
-        concurrency=concurrency,
-        chunks=chunks,
-        chunk_size=chunk_size,
-    ):
-        if threshold_pct is None:
-            return original_upload(
-                bucket_name,
-                obj_count=obj_count,
-                concurrency=concurrency,
-                chunks=chunks,
-                chunk_size=chunk_size,
-            )
-
-        used_bytes, total_bytes, current_pct = get_db_usage()
-        log.info(
-            f"md_blow fill starting at {current_pct}% "
-            f"({used_bytes}/{total_bytes} bytes), target {threshold_pct}%"
-        )
-        if current_pct >= threshold_pct:
-            log.info(f"DB already at {current_pct}%, skipping fill")
-            return
-
-        stall_batches = 0
-        batch_num = 0
-        while current_pct < threshold_pct:
-            batch_num += 1
-            log.info(
-                f"Running md_blow batch {batch_num} with count={obj_count}, "
-                f"concur={concurrency}, chunks={chunks}, "
-                f"chunk_size={chunk_size}"
-            )
-            blow_io.noobaa_core_pod = get_noobaa_core_pod()
-            original_upload(
-                bucket_name,
-                obj_count=obj_count,
-                concurrency=concurrency,
-                chunks=chunks,
-                chunk_size=chunk_size,
-            )
-            new_used_bytes, total_bytes, current_pct = get_db_usage()
-            log.info(
-                f"DB usage after batch {batch_num}: {current_pct}% "
-                f"({new_used_bytes}/{total_bytes} bytes)"
-            )
-            if new_used_bytes == used_bytes:
-                stall_batches += 1
-                if stall_batches >= max_stall_batches:
-                    raise RuntimeError(
-                        f"md_blow stalled: DB used bytes unchanged for "
-                        f"{stall_batches} consecutive batches at "
-                        f"{current_pct}% (target {threshold_pct}%)"
-                    )
-            else:
-                stall_batches = 0
-            used_bytes = new_used_bytes
-
-        log.info(
-            f"md_blow fill completed at {current_pct}% "
-            f"({used_bytes}/{total_bytes} bytes), target was {threshold_pct}%"
-        )
-
-    blow_io.upload_obj_using_md_blow = upload_obj_using_md_blow
+    state = {"blow_io": None, "resources_increased": False}
 
     def teardown():
+        if not state["resources_increased"]:
+            return
         try:
-            blow_io.reduce_core_pod_cpu_memory()
+            state["blow_io"].reduce_core_pod_cpu_memory()
         except Exception as exc:
             log.warning(f"Failed to restore noobaa-core resources: {exc}")
 
     request.addfinalizer(teardown)
-    return blow_io
+
+    def factory(
+        obj_count=100,
+        concurrency=50,
+        chunks=128,
+        chunk_size=1024 * 1024,
+        max_stall_batches=3,
+        max_fill_batches=500,
+        increase_core_resources=True,
+    ):
+        """
+        Args:
+            obj_count (int): Number of objects uploaded per md_blow batch
+            concurrency (int): Number of md_blow upload threads
+            chunks (int): Number of chunks in each object
+            chunk_size (int): Size of each chunk in bytes
+            max_stall_batches (int): Number of consecutive batches without any
+                DB growth after which the fill is considered stalled
+            max_fill_batches (int): Hard cap on the number of batches, so that a
+                slow fill fails with a clear error instead of hanging until the
+                CI job timeout
+            increase_core_resources (bool): Bump the noobaa-core CPU and memory
+                limits for faster IO. Restored on teardown
+
+        Returns:
+            MdBlow: Object whose upload_obj_using_md_blow fills the DB up to
+                threshold_pct when that argument is given
+
+        """
+        blow_io = md_blow.MdBlow()
+        blow_io.obj_count = obj_count
+        blow_io.concurrency = concurrency
+        blow_io.chunks = chunks
+        blow_io.chunk_size = chunk_size
+        state["blow_io"] = blow_io
+
+        if increase_core_resources:
+            state["resources_increased"] = True
+            blow_io.increase_core_pod_cpu_memory()
+
+        original_upload = blow_io.upload_obj_using_md_blow
+
+        def get_db_usage():
+            blow_io.noobaa_db_pod = get_noobaa_db_pod()
+            usage = blow_io.noobaa_db_pod.exec_cmd_on_pod(
+                "df -B1 | grep postgresql | awk '{print $3,$2}'",
+                container_name="postgres",
+                shell=True,
+            )
+            fields = usage.strip().split()
+            try:
+                used_bytes, total_bytes = (int(field) for field in fields)
+            except ValueError as exc:
+                raise UnexpectedBehaviour(
+                    "Unexpected 'df' output while reading the NooBaa DB usage "
+                    f"from {blow_io.noobaa_db_pod.name}: {usage!r}"
+                ) from exc
+            usage_pct = (used_bytes * 100) // total_bytes if total_bytes else 0
+            return used_bytes, total_bytes, usage_pct
+
+        def upload_obj_using_md_blow(
+            bucket_name="first.bucket",
+            threshold_pct=None,
+            obj_count=obj_count,
+            concurrency=concurrency,
+            chunks=chunks,
+            chunk_size=chunk_size,
+        ):
+            if threshold_pct is None:
+                original_upload(
+                    bucket_name,
+                    obj_count=obj_count,
+                    concurrency=concurrency,
+                    chunks=chunks,
+                    chunk_size=chunk_size,
+                )
+                return
+
+            used_bytes, total_bytes, current_pct = get_db_usage()
+            log.info(
+                f"md_blow fill starting at {current_pct}% "
+                f"({used_bytes}/{total_bytes} bytes), target {threshold_pct}%"
+            )
+            if current_pct >= threshold_pct:
+                log.info(f"DB already at {current_pct}%, skipping fill")
+                return
+
+            stall_batches = 0
+            batch_num = 0
+            while current_pct < threshold_pct:
+                batch_num += 1
+                if batch_num > max_fill_batches:
+                    raise UnexpectedBehaviour(
+                        f"md_blow did not reach {threshold_pct}% after "
+                        f"{max_fill_batches} batches, stopped at {current_pct}%"
+                    )
+                log.info(
+                    f"Running md_blow batch {batch_num} with count={obj_count}, "
+                    f"concur={concurrency}, chunks={chunks}, "
+                    f"chunk_size={chunk_size}"
+                )
+                blow_io.noobaa_core_pod = get_noobaa_core_pod()
+                original_upload(
+                    bucket_name,
+                    obj_count=obj_count,
+                    concurrency=concurrency,
+                    chunks=chunks,
+                    chunk_size=chunk_size,
+                )
+                new_used_bytes, total_bytes, current_pct = get_db_usage()
+                log.info(
+                    f"DB usage after batch {batch_num}: {current_pct}% "
+                    f"({new_used_bytes}/{total_bytes} bytes)"
+                )
+                if new_used_bytes == used_bytes:
+                    stall_batches += 1
+                    if stall_batches >= max_stall_batches:
+                        raise UnexpectedBehaviour(
+                            f"md_blow stalled: DB used bytes unchanged for "
+                            f"{stall_batches} consecutive batches at "
+                            f"{current_pct}% (target {threshold_pct}%)"
+                        )
+                else:
+                    stall_batches = 0
+                used_bytes = new_used_bytes
+
+            log.info(
+                f"md_blow fill completed at {current_pct}% "
+                f"({used_bytes}/{total_bytes} bytes), target was {threshold_pct}%"
+            )
+
+        blow_io.upload_obj_using_md_blow = upload_obj_using_md_blow
+        return blow_io
+
+    return factory
 
 
 def scale_noobaa_db_pv(request):

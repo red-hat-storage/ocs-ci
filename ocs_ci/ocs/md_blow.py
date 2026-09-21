@@ -62,7 +62,7 @@ class MdBlow(object):
         """
         namespace = config.ENV_DATA["cluster_namespace"]
         storage_cluster = constants.DEFAULT_STORAGE_CLUSTER
-        params = """[{"op": "remove", "path": "/spec/resources"}]"""
+        params = """[{"op": "remove", "path": "/spec/resources/noobaa-core"}]"""
         ptch_cmd = (
             f"oc patch storagecluster {storage_cluster} "
             f"-n {namespace} --patch '{params}' --type=json"
