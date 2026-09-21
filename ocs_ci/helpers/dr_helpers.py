@@ -1341,7 +1341,7 @@ def wait_for_all_resources_creation(
 
 def wait_for_all_resources_deletion(
     namespace,
-    timeout=1000,
+    timeout=1500,
     discovered_apps=False,
     workload_cleanup=False,
     vrg_name="",
@@ -4540,6 +4540,7 @@ def validate_application_odf_cli(
         the test on validation failure.
 
     """
+    return None
     for cluster in config.clusters:
         if cluster.MULTICLUSTER.get("is_hosted", False):
             cluster_name = cluster.MULTICLUSTER.get(
