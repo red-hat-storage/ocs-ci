@@ -1015,9 +1015,18 @@ class TestBackingStoreEndpointUpdate:
             endpoint_conf["secret"],
             endpoint_conf["signature_version"],
         )
+        # store_factory waits for Ready, which does not mean the operator has
+        # finished writing status. Updating on top of those writes aborts on a
+        # resource-version conflict (DFBUGS-10937) and fails this test for a
+        # reason that has nothing to do with switching an endpoint.
+        wait_for_stores_quiesced([(constants.BACKINGSTORE, bs.name)], ns)
 
         # --- switch OLD -> NEW ---
         result = run_connection_update(mcg_obj, old, new)
+        assert not result["conflict"], (
+            "The CLI hit a resource-version conflict even though the store had "
+            f"settled - see DFBUGS-10937:\n{result['raw']}"
+        )
         assert not result["aborted"], f"Update aborted unexpectedly:\n{result['raw']}"
         assert (
             result["stores_updated"] == 1
@@ -1440,8 +1449,16 @@ class TestBackingStoreEndpointUpdate:
             endpoint_conf["secret"],
             endpoint_conf["signature_version"],
         )
+        # A no-op update still sets and removes the pause annotation, so it can
+        # lose a race with the operator's post-Ready status writes just like a
+        # real switch can (DFBUGS-10937). Settle first.
+        wait_for_stores_quiesced([(constants.BACKINGSTORE, bs.name)], ns)
 
         result = run_connection_update(mcg_obj, old, old)
+        assert not result["conflict"], (
+            "The CLI hit a resource-version conflict even though the store had "
+            f"settled - see DFBUGS-10937:\n{result['raw']}"
+        )
         assert not result["aborted"], result["raw"]
         assert result["matched"] and result["matched"] >= 1
         assert get_store_endpoint(constants.BACKINGSTORE, bs.name, ns) == old
@@ -1624,6 +1641,13 @@ class TestBackingStoreEndpointUpdate:
             mcg_obj=mcg_obj,
         )
 
+        # Settle the store before the writer starts. Creating it, putting an OBC
+        # in front of it and the pre-switch write all drive operator status
+        # writes, and updating on top of those aborts on a resource-version
+        # conflict (DFBUGS-10937) - which would fail this test in setup noise
+        # rather than on the switch-under-I/O it is actually about.
+        wait_for_stores_quiesced([(constants.BACKINGSTORE, bs.name)], ns)
+
         # Keep writing while the endpoint moves underneath the store.
         stop_io = threading.Event()
         io_errors = []
@@ -1671,6 +1695,11 @@ class TestBackingStoreEndpointUpdate:
                 f"first: {io_errors[0]}"
             )
 
+        assert not result["conflict"], (
+            "The CLI hit a resource-version conflict - see DFBUGS-10937. The "
+            "store was settled before the writer started, so this is the I/O "
+            f"itself driving status writes the CLI does not retry:\n{result['raw']}"
+        )
         assert not result["aborted"], result["raw"]
         assert (
             result["stores_updated"] == 1
