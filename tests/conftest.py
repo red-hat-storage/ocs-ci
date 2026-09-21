@@ -160,6 +160,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_noobaa_db_ready,
     get_noobaa_db_pod,
     get_noobaa_core_pod,
+    get_pod_obj,
 )
 from ocs_ci.ocs.resources.pvc import (
     PVC,
@@ -10587,20 +10588,22 @@ def md_blow_factory(request):
     request.addfinalizer(teardown)
 
     def factory(
-        obj_count=100,
+        obj_count=1000,
         concurrency=50,
-        chunks=128,
-        chunk_size=1024 * 1024,
+        chunks=200,
+        chunk_size=1,
         max_stall_batches=3,
         max_fill_batches=500,
         increase_core_resources=True,
+        db_pod_name=None,
+        exec_timeout=1800,
     ):
         """
         Args:
             obj_count (int): Number of objects uploaded per md_blow batch
             concurrency (int): Number of md_blow upload threads
-            chunks (int): Number of chunks in each object
-            chunk_size (int): Size of each chunk in bytes
+            chunks (int): Number of chunks in each object.
+            chunk_size (int): Size of each chunk in bytes.
             max_stall_batches (int): Number of consecutive batches without any
                 DB growth after which the fill is considered stalled
             max_fill_batches (int): Hard cap on the number of batches, so that a
@@ -10608,6 +10611,9 @@ def md_blow_factory(request):
                 CI job timeout
             increase_core_resources (bool): Bump the noobaa-core CPU and memory
                 limits for faster IO. Restored on teardown
+            db_pod_name (str): NooBaa DB instance whose usage drives the fill.
+                Defaults to the CNPG primary.
+            exec_timeout (int): Timeout of the md_blow 'oc exec'.
 
         Returns:
             MdBlow: Object whose upload_obj_using_md_blow fills the DB up to
@@ -10627,8 +10633,31 @@ def md_blow_factory(request):
 
         original_upload = blow_io.upload_obj_using_md_blow
 
+        def refresh_core_pod():
+            """
+            Re-read the noobaa-core pod and give its exec a longer timeout.
+            md_blow does not take a timeout, so it is injected here instead of
+            changing the default for every exec_cmd_on_pod caller.
+            """
+            core_pod = get_noobaa_core_pod()
+            pod_exec_cmd = core_pod.exec_cmd_on_pod
+
+            def exec_cmd_on_pod(command, **kwargs):
+                kwargs.setdefault("timeout", exec_timeout)
+                return pod_exec_cmd(command, **kwargs)
+
+            core_pod.exec_cmd_on_pod = exec_cmd_on_pod
+            blow_io.noobaa_core_pod = core_pod
+
+        refresh_core_pod()
+
         def get_db_usage():
-            blow_io.noobaa_db_pod = get_noobaa_db_pod()
+            if db_pod_name:
+                blow_io.noobaa_db_pod = get_pod_obj(
+                    db_pod_name, namespace=config.ENV_DATA["cluster_namespace"]
+                )
+            else:
+                blow_io.noobaa_db_pod = get_noobaa_db_pod()
             usage = blow_io.noobaa_db_pod.exec_cmd_on_pod(
                 "df -B1 | grep postgresql | awk '{print $3,$2}'",
                 container_name="postgres",
@@ -10686,7 +10715,7 @@ def md_blow_factory(request):
                     f"concur={concurrency}, chunks={chunks}, "
                     f"chunk_size={chunk_size}"
                 )
-                blow_io.noobaa_core_pod = get_noobaa_core_pod()
+                refresh_core_pod()
                 original_upload(
                     bucket_name,
                     obj_count=obj_count,
@@ -10702,10 +10731,21 @@ def md_blow_factory(request):
                 if new_used_bytes == used_bytes:
                     stall_batches += 1
                     if stall_batches >= max_stall_batches:
+                        # md_blow is executed with ignore_error=True, so a core
+                        # side failure only shows up as a DB that stops growing.
+                        # The restart count tells apart a crashing core pod from
+                        # md_blow running but writing nothing.
+                        try:
+                            restarts = blow_io.noobaa_core_pod.restart_count
+                        except Exception:
+                            restarts = "unknown"
                         raise UnexpectedBehaviour(
                             f"md_blow stalled: DB used bytes unchanged for "
                             f"{stall_batches} consecutive batches at "
-                            f"{current_pct}% (target {threshold_pct}%)"
+                            f"{current_pct}% (target {threshold_pct}%). "
+                            f"noobaa-core pod {blow_io.noobaa_core_pod.name} "
+                            f"restart count is {restarts}, check its log for "
+                            f"md_blow RPC errors"
                         )
                 else:
                     stall_batches = 0

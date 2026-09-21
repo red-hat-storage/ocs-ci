@@ -28,21 +28,11 @@ logger = logging.getLogger(__name__)
 
 DB_CAPACITY_WARNING_THRESHOLD = 80
 DB_CAPACITY_CRITICAL_THRESHOLD = 90
-# The fill loop measures usage with 'df' on the PGDATA mount, while the alert
-# expression uses (pg_wal size + nbcore database size) / PVC requested bytes.
-# 'df' counts the other databases, the logs and the filesystem overhead, and it
-# reports a total that is smaller than the requested size, so it always reads
-# higher than the alert expression. Both rules also use a strict '>', so the
-# fill target carries a margin over the 80/90 thresholds it has to trip.
 DB_FILL_WARNING_THRESHOLD = 85
 NOOBAA_PODS_RUNNING_TIMEOUT_AFTER_DB_FILL = 1800
 ALERT_FIRING_TIMEOUT = 900
 ALERT_SAMPLING_INTERVAL = 15
 DB_FILL_CLEANUP_TIMEOUT = 3600
-# Copied verbatim from the NooBaaDatabaseReachingCapacity and
-# NooBaaDatabaseStorageFull rules, because check_alert_list compares the
-# message and the description with an exact match. The thresholds are literals
-# in the rule text, they are not rendered from the expression.
 WARNING_ALERT_MSG = (
     "The NooBaa database on pod {pod} is consuming 80% of its PVC capacity. "
     "Plan to increase the PVC size soon to prevent service impact."
@@ -110,9 +100,6 @@ def verify_db_capacity_alerts(
         alert_description,
     ) in expected_alerts:
         logger.info(f"Waiting for the {alert_name} alert to fire for pod {pod_name}")
-        # Polled per pod, because PrometheusAPI.wait_for_alert returns as soon
-        # as any pod fires the alert, which passes while the pod under test has
-        # not fired it yet.
         for response in TimeoutSampler(
             timeout,
             ALERT_SAMPLING_INTERVAL,
@@ -124,9 +111,6 @@ def verify_db_capacity_alerts(
                 alert
                 for alert in response.json().get("data", {}).get("alerts", [])
                 if alert.get("labels", {}).get("alertname") == alert_name
-                # The rule builds its pod label from the PVC name with
-                # label_replace, and the CNPG PVC name equals the instance pod
-                # name, so an exact match is what identifies the instance.
                 and alert.get("labels", {}).get("pod") == pod_name
                 and alert.get("state") == "firing"
             ]
@@ -259,7 +243,7 @@ class TestMCGRecovery(E2ETest):
             f"Fill the primary NooBaa DB to ~{DB_FILL_WARNING_THRESHOLD}% "
             f"capacity using md_blow"
         )
-        blow_io = md_blow_factory()
+        blow_io = md_blow_factory(db_pod_name=expanded_pvc_name)
         fill_bucket = bucket_factory_session(1)[0].name
 
         def cleanup_db_fill():
