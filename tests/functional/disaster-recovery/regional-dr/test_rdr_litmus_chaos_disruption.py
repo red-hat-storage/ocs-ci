@@ -68,14 +68,16 @@ from ocs_ci.helpers.dr_helpers import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.drpc import DRPC
+from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 
 logger = logging.getLogger(__name__)
 
 # ── pod label selectors used across tests ──────────────────────────────────
-_RAMEN_HUB_LABEL = "app=ramen-hub-operator"
-_RAMEN_CLUSTER_LABEL = "app=ramen-dr-cluster"
+# ramen-hub-operator runs in openshift-operators with label "app=ramen-hub"
+_RAMEN_HUB_LABEL = "app=ramen-hub"
+_RAMEN_CLUSTER_LABEL = constants.RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL
 _RBD_MIRROR_LABEL = constants.RBD_MIRROR_APP_LABEL  # "app=rook-ceph-rbd-mirror"
 _SUBMARINER_GW_LABEL = (
     constants.SUBMARINER_GATEWAY_ACTIVE_LABEL
@@ -135,24 +137,35 @@ class TestRDRChaosDisruption:
         """
         Post-test guard: verify Ceph and mirroring health on every managed
         cluster regardless of test outcome.
+
+        Failures are collected across all clusters and raised as an aggregated
+        error after all cleanup steps have run, so one failing cluster does not
+        prevent the others from being checked.
         """
         yield
         restore_index = config.cur_index
+        teardown_errors = []
         try:
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 try:
                     ceph_health_check(tries=20, delay=30)
                 except Exception as exc:
-                    logger.warning(
-                        f"[teardown] ceph_health_check failed on "
+                    teardown_errors.append(
+                        f"ceph_health_check failed on "
                         f"{cluster.ENV_DATA['cluster_name']}: {exc}"
                     )
-            wait_for_mirroring_status_ok(timeout=300)
-        except Exception as exc:
-            logger.warning(f"[teardown] mirroring health restore failed: {exc}")
+            try:
+                wait_for_mirroring_status_ok(timeout=300)
+            except Exception as exc:
+                teardown_errors.append(f"mirroring health restore failed: {exc}")
         finally:
             config.switch_ctx(restore_index)
+            if teardown_errors:
+                raise AssertionError(
+                    "[chaos teardown] One or more post-test health checks failed:\n"
+                    + "\n".join(f"  • {e}" for e in teardown_errors)
+                )
 
     # ══════════════════════════════════════════════════════════════════
     # Priority #3 — ramen-hub-operator pod-delete mid-failover
@@ -226,13 +239,29 @@ class TestRDRChaosDisruption:
         failover_thread = threading.Thread(target=_run_failover, daemon=True)
         failover_thread.start()
 
-        # Give the failover time to patch the DRPC, then kill the hub operator
-        sleep(15)
+        # Poll the DRPC until the Failover action has been registered on the hub,
+        # confirming the patch has been accepted, then kill the hub operator pod.
         config.switch_acm_ctx()
+        _drpc_for_poll = _appset_drpc(wl)
+
+        def _failover_action_registered():
+            try:
+                return _drpc_for_poll.get()["spec"].get("action") == "Failover"
+            except Exception:
+                return False
+
+        logger.info(
+            "[chaos #3] Waiting for DRPC spec.action==Failover before "
+            "deleting ramen-hub-operator (timeout=60s)"
+        )
+        TimeoutSampler(
+            timeout=60, sleep=3, func=_failover_action_registered
+        ).wait_for_func_status(result=True)
+
         logger.info("[chaos #3] Deleting ramen-hub-operator pod on ACM hub")
         delete_pods_by_label(
             label=_RAMEN_HUB_LABEL,
-            namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+            namespace=constants.OPENSHIFT_OPERATORS,
             wait_for_recovery=True,
             timeout=180,
         )
@@ -574,7 +603,25 @@ class TestRDRChaosDisruption:
         failover_thread = threading.Thread(target=_run_failover, daemon=True)
         failover_thread.start()
 
-        sleep(10)
+        # Poll until the DRPC spec.action flips to Failover (hub has registered
+        # the request) before disrupting the secondary cluster operator.
+        config.switch_acm_ctx()
+        _drpc_for_poll = _appset_drpc(wl)
+
+        def _failover_action_registered():
+            try:
+                return _drpc_for_poll.get()["spec"].get("action") == "Failover"
+            except Exception:
+                return False
+
+        logger.info(
+            "[chaos #4] Waiting for DRPC spec.action==Failover before "
+            "deleting ramen-dr-cluster-operator (timeout=60s)"
+        )
+        TimeoutSampler(
+            timeout=60, sleep=3, func=_failover_action_registered
+        ).wait_for_func_status(result=True)
+
         config.switch_to_cluster_by_name(secondary_cluster_name)
         logger.info(
             f"[chaos #4] Deleting ramen-dr-cluster-operator on "
@@ -582,7 +629,7 @@ class TestRDRChaosDisruption:
         )
         delete_pods_by_label(
             label=_RAMEN_CLUSTER_LABEL,
-            namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+            namespace=constants.OPENSHIFT_OPERATORS,
             wait_for_recovery=True,
             timeout=180,
         )
@@ -665,7 +712,9 @@ class TestRDRChaosDisruption:
         )
 
         scheduling_interval = get_scheduling_interval(
-            wl.workload_namespace, wl.workload_type
+            wl.workload_namespace,
+            workload_type=constants.APPLICATION_SET,
+            resource_name=wl.appset_placement_name,
         )
         sleep(2 * scheduling_interval * 60)
 
@@ -676,7 +725,25 @@ class TestRDRChaosDisruption:
 
         fault_duration = scheduling_interval * 60
 
+        # Switch to primary and wait for a VolSync rsync-tls source mover pod
+        # to be active before injecting the fault — avoids a spurious
+        # "no pods found" failure if the mover pod is not yet scheduled.
         config.switch_to_cluster_by_name(primary_cluster_name)
+        logger.info(
+            f"[chaos #5] Waiting for VolSync mover pod (label={_VOLSYNC_SRC_LABEL}) "
+            f"in namespace {wl.workload_namespace} to be ready (timeout=300s)"
+        )
+
+        def _volsync_mover_ready():
+            pods = get_pods_having_label(
+                label=_VOLSYNC_SRC_LABEL, namespace=wl.workload_namespace
+            )
+            return bool(pods)
+
+        TimeoutSampler(
+            timeout=300, sleep=10, func=_volsync_mover_ready
+        ).wait_for_func_status(result=True)
+
         logger.info(
             f"[chaos #5] Injecting 100% packet-loss on VolSync source pods "
             f"in namespace {wl.workload_namespace} for {fault_duration}s"

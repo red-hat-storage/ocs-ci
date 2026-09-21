@@ -4879,7 +4879,31 @@ def delete_pods_by_label(label, namespace, wait_for_recovery=True, timeout=300):
             f"[chaos] Waiting up to {timeout}s for replacement pods "
             f"(label={label}, ns={namespace}) to reach Running state"
         )
+
+        # Step 1 — wait for deleted pod names to disappear from the namespace
+        # so we are not racing against still-terminating pods.
+        def _deleted_pods_gone():
+            current_names = {
+                p["metadata"]["name"]
+                for p in get_pods_having_label(label=label, namespace=namespace)
+            }
+            return not current_names.intersection(deleted_names)
+
+        sampler = TimeoutSampler(timeout=timeout, sleep=5, func=_deleted_pods_gone)
+        assert sampler.wait_for_func_status(result=True), (
+            f"Deleted pods {deleted_names} did not terminate within {timeout}s "
+            f"(label='{label}', ns='{namespace}')"
+        )
+
+        # Step 2 — wait for the newly created replacement pods to be Running.
+        # Fetch current pod names (the replacements) to pass as an explicit list
+        # so we don't accidentally wait on unrelated pods in the namespace.
+        replacement_pod_names = [
+            p["metadata"]["name"]
+            for p in get_pods_having_label(label=label, namespace=namespace)
+        ]
         assert wait_for_pods_to_be_running(
+            pod_names=replacement_pod_names,
             namespace=namespace,
             timeout=timeout,
             sleep=10,
@@ -4975,15 +4999,24 @@ def inject_pod_network_fault(
         f"for {duration_seconds}s"
     )
 
-    # Inject fault
+    # Inject fault — track successes so we can fail fast if nothing was injected
+    injected_count = 0
     for pod_obj in pod_objs:
         try:
             pod_obj.exec_cmd_on_pod(add_cmd, out_yaml_format=False)
             logger.info(f"[chaos] {fault_desc} injected on pod {pod_obj.name}")
+            injected_count += 1
         except Exception as exc:
             logger.warning(
                 f"[chaos] Could not inject {fault_desc} on {pod_obj.name}: {exc}"
             )
+
+    if injected_count == 0:
+        raise UnexpectedBehaviour(
+            f"[chaos] Failed to inject {fault_desc} on ANY pod "
+            f"(label='{pod_label}', ns='{namespace}'). "
+            f"Attempted pods: {affected}"
+        )
 
     logger.info(f"[chaos] Holding {fault_desc} for {duration_seconds}s ...")
     _time.sleep(duration_seconds)
