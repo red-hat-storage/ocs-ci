@@ -198,6 +198,16 @@ class FusionDataFoundationDeployment:
                     param["value"] = backing_storage_type
                     break
 
+        if platform == constants.IBM_HCI_PLATFORM:
+            logger.info("IBM HCI platform detected: adding enableLVMStorage parameter")
+            for param in fdf_service_data["spec"]["parameters"]:
+                if param["name"] == "backingStorageType":
+                    param["provided"] = False
+                    break
+            fdf_service_data["spec"]["parameters"].append(
+                {"name": "enableLVMStorage", "provided": False, "value": "false"}
+            )
+
         fdf_service_cr_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="fdf_service_cr", delete=False
         )
