@@ -189,7 +189,9 @@ class TestRDRChaosDisruption:
         wl = workloads[0]
 
         secondary_cluster_name = get_current_secondary_cluster_name(
-            wl.workload_namespace
+            wl.workload_namespace,
+            workload_type=constants.APPLICATION_SET,
+            resource_name=wl.appset_placement_name,
         )
 
         scheduling_interval = get_scheduling_interval(
@@ -385,7 +387,11 @@ class TestRDRChaosDisruption:
         )
         wl = workloads[0]
 
-        primary_cluster_name = get_current_primary_cluster_name(wl.workload_namespace)
+        primary_cluster_name = get_current_primary_cluster_name(
+            wl.workload_namespace,
+            workload_type=constants.APPLICATION_SET,
+            resource_name=wl.appset_placement_name,
+        )
         scheduling_interval = get_scheduling_interval(
             wl.workload_namespace, wl.workload_type
         )
@@ -538,7 +544,9 @@ class TestRDRChaosDisruption:
         wl = workloads[0]
 
         secondary_cluster_name = get_current_secondary_cluster_name(
-            wl.workload_namespace
+            wl.workload_namespace,
+            workload_type=constants.APPLICATION_SET,
+            resource_name=wl.appset_placement_name,
         )
 
         scheduling_interval = get_scheduling_interval(
@@ -639,9 +647,15 @@ class TestRDRChaosDisruption:
         )
         wl = workloads[0]
 
-        primary_cluster_name = get_current_primary_cluster_name(wl.workload_namespace)
+        primary_cluster_name = get_current_primary_cluster_name(
+            wl.workload_namespace,
+            workload_type=constants.APPLICATION_SET,
+            resource_name=wl.appset_placement_name,
+        )
         secondary_cluster_name = get_current_secondary_cluster_name(
-            wl.workload_namespace
+            wl.workload_namespace,
+            workload_type=constants.APPLICATION_SET,
+            resource_name=wl.appset_placement_name,
         )
 
         # Verify VolSync ReplicationDestination exists on secondary before chaos
