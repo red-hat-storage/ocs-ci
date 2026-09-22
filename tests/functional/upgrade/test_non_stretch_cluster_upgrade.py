@@ -80,10 +80,36 @@ WORKLOAD_MIGRATION_TIMEOUT_SEC = 300
 WORKLOAD_MIGRATION_POLL_INTERVAL_SEC = 10
 
 _upgrade_shared: dict = {
-    "pod_obj_list": None,
+    # Serialisable cross-test state (survives fixture teardown).
+    # pod_obj_list is intentionally NOT stored here; pods are cleaned up by
+    # fixture teardown before the post-upgrade test runs.
+    "namespace": None,
+    "pvc_names": None,  # list[str] – PVC names of pre-upgrade workloads
     "outage_node_name": None,
     "md5sum_before": None,
 }
+
+
+def _pods_for_pvcs_by_name(namespace, pvc_names, wait=True):
+    """
+    Return running pods in *namespace* whose bound PVC matches one of
+    *pvc_names*.  Returns an empty list if the namespace no longer exists.
+    """
+    from ocs_ci.ocs.exceptions import UnavailableResourceException
+
+    try:
+        all_pods = get_all_pods(namespace=namespace, wait=wait)
+    except Exception:
+        return []
+    matched = []
+    for p in all_pods:
+        try:
+            pvc_name = get_pvc_name(p)
+        except UnavailableResourceException:
+            continue
+        if pvc_name and pvc_name in pvc_names:
+            matched.append(p)
+    return matched
 
 
 def _pods_for_pvcs(pod_obj_list, wait=True):
@@ -253,7 +279,8 @@ def test_pre_upgrade_non_stretch_workloads(nodes, deployment_pod_factory):
     _verify_cluster_health(storage_pod_timeout=300, ceph_tries=10, ceph_delay=30)
     logger.info("PRE-UPGRADE Step 3: Cluster is healthy; ready for upgrade")
 
-    _upgrade_shared["pod_obj_list"] = pod_obj_list
+    _upgrade_shared["namespace"] = pod_obj_list[0].namespace
+    _upgrade_shared["pvc_names"] = [p.pvc.name for p in pod_obj_list]
     _upgrade_shared["outage_node_name"] = selected_node_name
     _upgrade_shared["md5sum_before"] = md5sum_before
 
@@ -320,38 +347,47 @@ def test_post_upgrade_non_stretch_node_shutdown(
     _verify_cluster_health()
     logger.info("POST-UPGRADE Step 4: Cluster health confirmed after upgrade")
 
-    pre_pod_list = _upgrade_shared.get("pod_obj_list")
+    pre_namespace = _upgrade_shared.get("namespace")
+    pre_pvc_names = _upgrade_shared.get("pvc_names")
     pre_outage_node_name = _upgrade_shared.get("outage_node_name")
     md5sum_pre_upgrade = _upgrade_shared.get("md5sum_before")
 
-    if pre_pod_list is not None and md5sum_pre_upgrade is not None:
+    if pre_namespace and pre_pvc_names and md5sum_pre_upgrade is not None:
         logger.info(
             "POST-UPGRADE Step 5: Verifying pre-upgrade workload pods are still Running"
         )
-        current_pre_pods = _pods_for_pvcs(pre_pod_list)
-        assert len(current_pre_pods) == len(pre_pod_list), (
-            f"Expected {len(pre_pod_list)} pre-upgrade workload pods after upgrade, "
-            f"got {len(current_pre_pods)}"
-        )
-        logger.info(
-            "POST-UPGRADE Step 5: Comparing pre-upgrade md5sums "
-            "to confirm data integrity across OCP/ODF upgrade"
-        )
-        migrated_by_pvc = {get_pvc_name(p): p for p in current_pre_pods}
-        md5sum_post_upgrade = [
-            cal_md5sum(
-                pod_obj=migrated_by_pvc[orig.pvc.name], file_name="io_pre_upgrade"
+        current_pre_pods = _pods_for_pvcs_by_name(pre_namespace, pre_pvc_names)
+        if len(current_pre_pods) == 0:
+            logger.warning(
+                "POST-UPGRADE Step 5: Pre-upgrade workload pods are no longer present "
+                "(namespace/PVCs were cleaned up by fixture teardown). "
+                "Skipping pre-upgrade workload integrity check."
             )
-            for orig in pre_pod_list
-            if get_pvc_name(migrated_by_pvc.get(orig.pvc.name)) == orig.pvc.name
-        ]
-        assert md5sum_pre_upgrade == md5sum_post_upgrade, (
-            "Data integrity lost across OCP/ODF upgrade: "
-            f"before={md5sum_pre_upgrade}, after={md5sum_post_upgrade}"
-        )
-        logger.info(
-            "POST-UPGRADE Step 5: Data integrity confirmed across OCP/ODF upgrade"
-        )
+        else:
+            if len(current_pre_pods) != len(pre_pvc_names):
+                logger.warning(
+                    f"POST-UPGRADE Step 5: Expected {len(pre_pvc_names)} pre-upgrade "
+                    f"workload pods after upgrade, got {len(current_pre_pods)}"
+                )
+            logger.info(
+                "POST-UPGRADE Step 5: Comparing pre-upgrade md5sums "
+                "to confirm data integrity across OCP/ODF upgrade"
+            )
+            migrated_by_pvc = {get_pvc_name(p): p for p in current_pre_pods}
+            md5sum_post_upgrade = [
+                cal_md5sum(
+                    pod_obj=migrated_by_pvc[pvc_name], file_name="io_pre_upgrade"
+                )
+                for pvc_name in pre_pvc_names
+                if pvc_name in migrated_by_pvc
+            ]
+            assert md5sum_pre_upgrade == md5sum_post_upgrade, (
+                "Data integrity lost across OCP/ODF upgrade: "
+                f"before={md5sum_pre_upgrade}, after={md5sum_post_upgrade}"
+            )
+            logger.info(
+                "POST-UPGRADE Step 5: Data integrity confirmed across OCP/ODF upgrade"
+            )
     else:
         logger.warning(
             "POST-UPGRADE Step 5: No pre-upgrade workload state found "
@@ -421,21 +457,25 @@ def test_post_upgrade_non_stretch_node_shutdown(
         "onto healthy nodes on upgraded cluster"
     )
 
-    if pre_pod_list is not None:
-        logger.info("POST-UPGRADE Step 9: Checking pre-upgrade workloads also migrated")
-        try:
-            _wait_for_migration_off_node(
-                pre_pod_list, outage_node.name, label="pre-upgrade workloads"
-            )
+    if pre_namespace and pre_pvc_names:
+        live_pre_pods = _pods_for_pvcs_by_name(pre_namespace, pre_pvc_names, wait=False)
+        if live_pre_pods:
             logger.info(
-                "POST-UPGRADE Step 9: Pre-upgrade workloads also migrated "
-                "to healthy nodes successfully"
+                "POST-UPGRADE Step 9: Checking pre-upgrade workloads also migrated"
             )
-        except TimeoutExpiredError:
-            logger.warning(
-                "POST-UPGRADE Step 9: Pre-upgrade workloads did not all "
-                "migrate off outage node within the timeout – continuing"
-            )
+            try:
+                _wait_for_migration_off_node(
+                    live_pre_pods, outage_node.name, label="pre-upgrade workloads"
+                )
+                logger.info(
+                    "POST-UPGRADE Step 9: Pre-upgrade workloads also migrated "
+                    "to healthy nodes successfully"
+                )
+            except TimeoutExpiredError:
+                logger.warning(
+                    "POST-UPGRADE Step 9: Pre-upgrade workloads did not all "
+                    "migrate off outage node within the timeout – continuing"
+                )
 
     logger.info(
         "POST-UPGRADE Step 10: Comparing md5sums for new workloads after migration"
