@@ -3678,11 +3678,11 @@ def get_worker_node_allocatable():
     This function queries the OpenShift (okd) cluster's API using 'oc' command to retrieve the
     available CPU and memory resources for each worker node. The results are then parsed
     and returned as a dictionary with node names as keys, and nested dictionaries containing
-    CPU (in millicores) and Memory (in GB) values.
+    CPU (in fractional cores) and Memory (in GB) values.
 
     Returns:
         dict: A dictionary where keys are worker node names and values are another
-            dictionary containing 'cpu' (int, in millicores) and 'mem' (float, in GB).
+            dictionary containing 'cpu' (float, in fractional cores) and 'mem' (float, in GB).
     """
     cmd = [
         "oc",
