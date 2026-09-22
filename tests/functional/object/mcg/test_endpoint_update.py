@@ -70,6 +70,9 @@ STORE_QUIESCE_TIMEOUT = 120
 STORE_QUIESCE_INTERVAL = 5
 STORE_QUIESCE_STABLE_SAMPLES = 3
 
+# Settling narrows the DFBUGS-10937 window but cannot close it, so re-run.
+UPDATE_CONFLICT_ATTEMPTS = 3
+
 # Rewritten in a loop to bump resourceVersion and hold stores in contention.
 CHURN_ANNOTATION = "ocs-ci.qe/endpoint-update-churn"
 CHURN_INTERVAL = 1
@@ -343,8 +346,9 @@ def wait_for_stores_quiesced(
 
     This is a mitigation, not a guarantee - the operator is free to write again
     a moment later. It only narrows the window in which ``connection update``
-    would hit the un-retried resource-version conflict of DFBUGS-10937, so that
-    tests about other behaviour are not derailed by that bug.
+    would hit the un-retried resource-version conflict of DFBUGS-10937, which
+    is why :func:`run_update_on_settled_stores` pairs it with a re-run rather
+    than relying on it alone.
     :meth:`TestConnectionUpdateNegative.test_switch_survives_concurrent_store_writes`
     is the test that deliberately does NOT settle, and pins the bug instead.
 
@@ -393,6 +397,83 @@ def get_store_pause_annotation(kind, name, namespace):
         .get("annotations", {})
         .get(PAUSE_ANNOTATION)
     )
+
+
+def clear_pause_annotations(stores, namespace):
+    """
+    Best-effort removal of a leftover pause-reconcile annotation from each store.
+
+    A run that aborts on DFBUGS-10937 can fail its own rollback the same way
+    ("failed to remove pause annotations"), because that rollback reuses the
+    stale object copy that lost the race. Anything left paused has to be
+    released before the command is worth running again.
+
+    Args:
+        stores (list): (kind, name) tuples to clear.
+        namespace (str): Namespace the stores live in.
+    """
+    for kind, name in stores:
+        try:
+            if get_store_pause_annotation(kind, name, namespace):
+                OCP(kind=kind, namespace=namespace).annotate(
+                    annotation=f"{PAUSE_ANNOTATION}-", resource_name=name
+                )
+        except CommandFailed as ex:
+            logger.warning(f"Could not clear pause annotation on {kind}/{name}: {ex}")
+
+
+def run_update_on_settled_stores(
+    mcg_obj,
+    old_endpoint,
+    new_endpoint,
+    stores,
+    namespace,
+    settle=True,
+    attempts=UPDATE_CONFLICT_ATTEMPTS,
+):
+    """
+    Run the connection update, re-running it while it aborts on a
+    resource-version conflict.
+
+    :func:`wait_for_stores_quiesced` narrows the DFBUGS-10937 window but cannot
+    close it: the operator may write to a store at any moment, including in the
+    fraction of a second between the CLI reading the stores and writing the
+    pause annotation back - which is exactly where the abort observed in CI
+    happened, with pre-validation already passed. Tests that are about other
+    behaviour re-run rather than fail on that bug; the bug itself is pinned by
+    :meth:`TestConnectionUpdateNegative.test_switch_survives_concurrent_store_writes`.
+
+    Only commands that get past pre-validation need this. A pre-validation
+    failure aborts before any annotation is written, so the negative tests
+    cannot hit the conflict at all.
+
+    Args:
+        mcg_obj (MCG): The MCG fixture object.
+        old_endpoint (str): Value passed to ``--old-endpoint``.
+        new_endpoint (str): Value passed to ``--new-endpoint``.
+        stores (list): (kind, name) tuples the update is expected to match.
+        namespace (str): Namespace the stores live in.
+        settle (bool): Wait for the stores to quiesce before each attempt. Off
+            for the active-I/O test, where they never will.
+        attempts (int): How many times to run the command.
+
+    Returns:
+        dict: The parsed result of the last attempt, so the caller's own
+            ``conflict`` assertion still fires if every attempt lost the race.
+    """
+    for attempt in range(1, attempts + 1):
+        if settle:
+            wait_for_stores_quiesced(stores, namespace)
+        result = run_connection_update(mcg_obj, old_endpoint, new_endpoint)
+        if not result["conflict"]:
+            return result
+        logger.warning(
+            f"Attempt {attempt}/{attempts} aborted on a resource-version "
+            "conflict (DFBUGS-10937); releasing any store left paused and "
+            "running the command again"
+        )
+        clear_pause_annotations(stores, namespace)
+    return result
 
 
 def operator_logged_pause_skip(operator_pod, namespace, store_name, since):
@@ -918,13 +999,12 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         then revert it back.
 
         Flow:
-            1. Create a BackingStore on the OLD endpoint and let it settle -
-               Ready does not mean the operator has stopped writing to it,
-               and the CLI does not re-read on a resource-version conflict
-               (DFBUGS-10937).
-            2. Run the connection update OLD -> NEW and assert exactly one store
-               was updated, its spec endpoint now points at NEW, and the
-               transient pause-reconcile annotation was cleaned up.
+            1. Create a BackingStore on the OLD endpoint.
+            2. Settle the store and run the connection update OLD -> NEW,
+               re-running it if the CLI aborts on a resource-version conflict
+               (DFBUGS-10937). Assert exactly one store was updated, its spec
+               endpoint now points at NEW, and the transient pause-reconcile
+               annotation was cleaned up.
             3. Run the reverse update NEW -> OLD and assert the store is switched
                back to its original endpoint.
 
@@ -934,14 +1014,13 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         bs = make_store(store_factory, endpoint_conf, old)
-        # Ready does not stop the operator writing status (DFBUGS-10937).
-        wait_for_stores_quiesced([(constants.BACKINGSTORE, bs.name)], ns)
+        stores = [(constants.BACKINGSTORE, bs.name)]
 
         # --- switch OLD -> NEW ---
-        result = run_connection_update(mcg_obj, old, new)
+        result = run_update_on_settled_stores(mcg_obj, old, new, stores, ns)
         assert not result["conflict"], (
-            "The CLI hit a resource-version conflict even though the store had "
-            f"settled - see DFBUGS-10937:\n{result['raw']}"
+            f"All {UPDATE_CONFLICT_ATTEMPTS} attempts hit a resource-version "
+            f"conflict on a settled store - see DFBUGS-10937:\n{result['raw']}"
         )
         assert not result["aborted"], f"Update aborted unexpectedly:\n{result['raw']}"
         assert (
@@ -959,7 +1038,7 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         )
 
         # --- revert NEW -> OLD ---
-        revert = run_connection_update(mcg_obj, new, old)
+        revert = run_update_on_settled_stores(mcg_obj, new, old, stores, ns)
         assert not revert["aborted"], f"Revert aborted:\n{revert['raw']}"
         assert revert["stores_updated"] == 1
         assert get_store_endpoint(constants.BACKINGSTORE, bs.name, ns) == old
@@ -988,10 +1067,10 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         keeps the assertion honest instead of letting identical stores make it
         look true by accident.
 
-        The stores are left to settle before the CLI runs. Reaching Ready does
-        not mean the operator has finished writing to them, and the CLI does not
-        re-read on a resource-version conflict (DFBUGS-10937), so firing
-        immediately makes this test fail for a reason that has nothing to do
+        The update goes through :func:`run_update_on_settled_stores`. Reaching
+        Ready does not mean the operator has finished writing to the stores, and
+        the CLI does not re-read on a resource-version conflict (DFBUGS-10937),
+        so firing blind makes this test fail for a reason that has nothing to do
         with de-duplication. That bug has a test of its own -
         :meth:`TestConnectionUpdateNegative.test_switch_survives_concurrent_store_writes`.
 
@@ -1005,14 +1084,12 @@ class TestBackingStoreEndpointUpdate(MCGTest):
             make_store(store_factory, endpoint_conf, old, buckets[i % len(buckets)])
             for i in range(BULK_STORE_COUNT)
         ]
-        wait_for_stores_quiesced(
-            [(constants.BACKINGSTORE, bs.name) for bs in stores], ns
+        result = run_update_on_settled_stores(
+            mcg_obj, old, new, [(constants.BACKINGSTORE, bs.name) for bs in stores], ns
         )
-
-        result = run_connection_update(mcg_obj, old, new)
         assert not result["conflict"], (
-            "The CLI hit a resource-version conflict even though the stores had "
-            f"settled - see DFBUGS-10937:\n{result['raw']}"
+            f"All {UPDATE_CONFLICT_ATTEMPTS} attempts hit a resource-version "
+            f"conflict on settled stores - see DFBUGS-10937:\n{result['raw']}"
         )
         assert not result["aborted"], result["raw"]
         assert result["stores_updated"] == len(
@@ -1101,8 +1178,9 @@ class TestBackingStoreEndpointUpdate(MCGTest):
             result = run_connection_update(mcg_obj, variant_endpoint, new)
         else:  # rerun_after_success
             # The only variant that really updates, so the only one hitting 10937.
-            wait_for_stores_quiesced([(constants.BACKINGSTORE, bs.name)], ns)
-            first = run_connection_update(mcg_obj, old, new)
+            first = run_update_on_settled_stores(
+                mcg_obj, old, new, [(constants.BACKINGSTORE, bs.name)], ns
+            )
             assert first["stores_updated"] == 1, first["raw"]
             result = run_connection_update(mcg_obj, old, new)
 
@@ -1204,15 +1282,16 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         )
 
         # Both stores are fresh and still being written to, so settle them first.
-        wait_for_stores_quiesced(
+        result = run_update_on_settled_stores(
+            mcg_obj,
+            old,
+            new,
             [
                 (constants.BACKINGSTORE, bs_old.name),
                 (constants.BACKINGSTORE, bs_new.name),
             ],
             ns,
         )
-
-        result = run_connection_update(mcg_obj, old, new)
         assert (
             result["stores_updated"] == 1
         ), f"Only the OLD-endpoint store should be updated:\n{result['raw']}"
@@ -1298,11 +1377,10 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         is a safe no-op.
 
         Flow:
-            1. Create a BackingStore on the OLD endpoint and let it settle. A
-               no-op update still sets and removes the pause annotation, so
-               it can lose the same resource-version race as a real switch
-               (DFBUGS-10937).
-            2. Run the connection update with new-endpoint == old-endpoint.
+            1. Create a BackingStore on the OLD endpoint.
+            2. Run the connection update with new-endpoint == old-endpoint. A
+               no-op still sets and removes the pause annotation, so it can
+               lose the same resource-version race as a real switch.
             3. Assert the store is matched and pre-validated, its endpoint is
                unchanged, and no pause-reconcile annotation is left behind.
 
@@ -1312,12 +1390,12 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         old = endpoint_conf["old"]
         bs = make_store(store_factory, endpoint_conf, old)
         # A no-op update still writes the pause annotation, so settle first.
-        wait_for_stores_quiesced([(constants.BACKINGSTORE, bs.name)], ns)
-
-        result = run_connection_update(mcg_obj, old, old)
+        result = run_update_on_settled_stores(
+            mcg_obj, old, old, [(constants.BACKINGSTORE, bs.name)], ns
+        )
         assert not result["conflict"], (
-            "The CLI hit a resource-version conflict even though the store had "
-            f"settled - see DFBUGS-10937:\n{result['raw']}"
+            f"All {UPDATE_CONFLICT_ATTEMPTS} attempts hit a resource-version "
+            f"conflict on a settled store - see DFBUGS-10937:\n{result['raw']}"
         )
         assert not result["aborted"], result["raw"]
         assert result["matched"] and result["matched"] >= 1
@@ -1422,8 +1500,9 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         )
 
         # --- not left behind by a successful update ---
-        wait_for_stores_quiesced([(constants.BACKINGSTORE, bs.name)], ns)
-        result = run_connection_update(mcg_obj, old, new)
+        result = run_update_on_settled_stores(
+            mcg_obj, old, new, [(constants.BACKINGSTORE, bs.name)], ns
+        )
         assert not result["aborted"], result["raw"]
         assert result["stores_updated"] == 1, result["raw"]
         assert get_store_endpoint(constants.BACKINGSTORE, bs.name, ns) == new
@@ -1456,7 +1535,9 @@ class TestBackingStoreEndpointUpdate(MCGTest):
             2. Let the store settle before the writer starts, so DFBUGS-10937
                cannot fail this test on setup noise rather than on the switch
                under I/O - creation, the OBC and the pre-switch write all
-               drive status writes the CLI does not retry.
+               drive status writes the CLI does not retry. The update itself
+               re-runs on a conflict but cannot settle first, since the writer
+               never stops.
             3. Start a continuous write loop and trigger the connection update
                OLD -> NEW while it runs.
             4. Assert the store ends up Ready/OPTIMAL on NEW with no lingering
@@ -1522,7 +1603,9 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         writer = threading.Thread(target=_write_loop, daemon=True)
         writer.start()
         try:
-            result = run_connection_update(mcg_obj, old, new)
+            result = run_update_on_settled_stores(
+                mcg_obj, old, new, [(constants.BACKINGSTORE, bs.name)], ns, settle=False
+            )
         finally:
             stop_io.set()
             writer.join(timeout=WRITER_JOIN_TIMEOUT)
@@ -1540,9 +1623,10 @@ class TestBackingStoreEndpointUpdate(MCGTest):
             )
 
         assert not result["conflict"], (
-            "The CLI hit a resource-version conflict - see DFBUGS-10937. The "
-            "store was settled before the writer started, so this is the I/O "
-            f"itself driving status writes the CLI does not retry:\n{result['raw']}"
+            f"All {UPDATE_CONFLICT_ATTEMPTS} attempts hit a resource-version "
+            "conflict - see DFBUGS-10937. The store was settled before the "
+            "writer started, so this is the I/O itself driving status writes "
+            f"the CLI does not retry:\n{result['raw']}"
         )
         assert not result["aborted"], result["raw"]
         assert (
@@ -1615,7 +1699,13 @@ class TestBackingStoreEndpointUpdate(MCGTest):
                 "(e.g. PV-Pool) - N/A for endpoint update."
             )
 
-        result = run_connection_update(mcg_obj, endpoint, endpoint)
+        result = run_update_on_settled_stores(
+            mcg_obj,
+            endpoint,
+            endpoint,
+            [(constants.BACKINGSTORE, constants.DEFAULT_NOOBAA_BACKINGSTORE)],
+            ns,
+        )
         # "Unchanged" cannot tell a no-op from an abort, so rule the abort out.
         assert not result[
             "aborted"
@@ -1863,7 +1953,13 @@ class TestConnectionUpdateNegative(MCGTest):
             assert get_store_endpoint(constants.BACKINGSTORE, bs.name, ns) == old
         elif case == "whitespace_trimmed":
             # Matching on a padded --old-endpoint is what proves the CLI trimmed.
-            result = run_connection_update(mcg_obj, f'"  {old}  "', f'"  {new}  "')
+            result = run_update_on_settled_stores(
+                mcg_obj,
+                f'"  {old}  "',
+                f'"  {new}  "',
+                [(constants.BACKINGSTORE, bs.name)],
+                ns,
+            )
             assert not result["no_match"], (
                 "Padded --old-endpoint matched no stores, so the surrounding "
                 f"whitespace was not trimmed:\n{result['raw']}"
@@ -2088,9 +2184,11 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
 
         Flow:
             1. Create a NamespaceStore on the OLD endpoint and wait for Ready.
-            2. Run the connection update OLD -> NEW and assert exactly one store
-               was updated, its spec endpoint now points at NEW, and the
-               transient pause-reconcile annotation was cleaned up.
+            2. Settle the store and run the connection update OLD -> NEW,
+               re-running it if the CLI aborts on a resource-version conflict
+               (DFBUGS-10937). Assert exactly one store was updated, its spec
+               endpoint now points at NEW, and the transient pause-reconcile
+               annotation was cleaned up.
             3. Run the reverse update NEW -> OLD and assert the store is switched
                back to its original endpoint.
 
@@ -2105,8 +2203,10 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
             store_factory, endpoint_conf, old, kind=constants.NAMESPACESTORE
         )
 
+        stores = [(constants.NAMESPACESTORE, nss.name)]
+
         # --- switch OLD -> NEW ---
-        result = run_connection_update(mcg_obj, old, new)
+        result = run_update_on_settled_stores(mcg_obj, old, new, stores, ns)
         assert not result["webhook_denied"], (
             f"The NamespaceStore endpoint change was denied by the admission "
             f"webhook (DFBUGS-10744):\n{result['raw']}"
@@ -2127,7 +2227,7 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
         )
 
         # --- revert NEW -> OLD ---
-        revert = run_connection_update(mcg_obj, new, old)
+        revert = run_update_on_settled_stores(mcg_obj, new, old, stores, ns)
         assert not revert["aborted"], f"Revert aborted:\n{revert['raw']}"
         assert revert["stores_updated"] == 1
         assert get_store_endpoint(constants.NAMESPACESTORE, nss.name, ns) == old
@@ -2167,7 +2267,16 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
         )
 
         # --- both stores switch in one command ---
-        result = run_connection_update(mcg_obj, old, new)
+        result = run_update_on_settled_stores(
+            mcg_obj,
+            old,
+            new,
+            [
+                (constants.BACKINGSTORE, bs.name),
+                (constants.NAMESPACESTORE, nss.name),
+            ],
+            ns,
+        )
         assert not result["webhook_denied"], (
             f"The NamespaceStore half of the batch was denied by the admission "
             f"webhook (DFBUGS-10744):\n{result['raw']}"
