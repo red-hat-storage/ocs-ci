@@ -985,9 +985,11 @@ def is_cluster_already_imported(cluster_name):
     """
     ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
     try:
-        resource = ocp_obj.get(resource_name=cluster_name, dont_raise=True)
-    except Exception:
-        return False
+        resource = ocp_obj.get(resource_name=cluster_name)
+    except CommandFailed as ex:
+        if "NotFound" in str(ex):
+            return False
+        raise
     if not resource:
         return False
     for condition in resource.get("status", {}).get("conditions", []):
