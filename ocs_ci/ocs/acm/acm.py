@@ -972,6 +972,30 @@ def get_clusters_env():
     return clusters_env
 
 
+def is_cluster_already_imported(cluster_name):
+    """
+    Check whether a ManagedCluster is already imported and available in ACM.
+
+    Args:
+        cluster_name (str): Name of the managed cluster to check.
+
+    Returns:
+        bool: True if the ManagedCluster resource exists and its AVAILABLE
+              condition is True, False otherwise.
+    """
+    ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
+    try:
+        resource = ocp_obj.get(resource_name=cluster_name, dont_raise=True)
+    except Exception:
+        return False
+    if not resource:
+        return False
+    for condition in resource.get("status", {}).get("conditions", []):
+        if condition.get("type") == "ManagedClusterConditionAvailable":
+            return condition.get("status") == "True"
+    return False
+
+
 def import_clusters_via_cli(clusters):
     """
     Import clusters via cli
@@ -983,6 +1007,11 @@ def import_clusters_via_cli(clusters):
         ResourceNotFoundError: If the managed cluster is MCE cluster and applicable KlusterletConfig is not found
     """
     for cluster in clusters:
+        if is_cluster_already_imported(cluster[0]):
+            log.info(
+                f"ManagedCluster '{cluster[0]}' is already imported and available, skipping import"
+            )
+            continue
         log.info("Importing clusters via CLI method")
         log.info(f"**** clustername={cluster[0]}")
         log.info(f"**** kubeconfig={cluster[1]}")
@@ -1113,10 +1142,15 @@ def import_clusters_with_acm():
     if config.DEPLOYMENT.get("ui_acm_import"):
         login_to_acm()
         acm_nav = AcmAddClusters()
-        acm_nav.import_cluster(
-            cluster_name=cluster_name_a,
-            kubeconfig_location=kubeconfig_a,
-        )
+        if is_cluster_already_imported(cluster_name_a):
+            log.info(
+                f"ManagedCluster '{cluster_name_a}' is already imported and available, skipping UI import"
+            )
+        else:
+            acm_nav.import_cluster(
+                cluster_name=cluster_name_a,
+                kubeconfig_location=kubeconfig_a,
+            )
     else:
         import_clusters_via_cli(clusters)
 
