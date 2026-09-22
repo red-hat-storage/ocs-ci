@@ -646,9 +646,10 @@ def store_factory(request):
     Factory that creates s3-compatible BackingStore / NamespaceStore CRs on a
     given endpoint, waits for Ready, and cleans them up afterwards.
 
-    Usage::
+    Tests call it through :func:`make_store`, which fills in the endpoint,
+    bucket, secret and signature version from ``endpoint_conf``::
 
-        bs = store_factory(constants.BACKINGSTORE, endpoint, bucket, secret)
+        bs = make_store(store_factory, endpoint_conf, old)
 
     Teardown clears a leftover pause-reconcile annotation first, then deletes,
     retrying while the admission webhook reports that objects in the store are
@@ -917,7 +918,10 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         then revert it back.
 
         Flow:
-            1. Create a BackingStore on the OLD endpoint and wait for Ready.
+            1. Create a BackingStore on the OLD endpoint and let it settle -
+               Ready does not mean the operator has stopped writing to it,
+               and the CLI does not re-read on a resource-version conflict
+               (DFBUGS-10937).
             2. Run the connection update OLD -> NEW and assert exactly one store
                was updated, its spec endpoint now points at NEW, and the
                transient pause-reconcile annotation was cleaned up.
@@ -1294,7 +1298,10 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         is a safe no-op.
 
         Flow:
-            1. Create a BackingStore on the OLD endpoint.
+            1. Create a BackingStore on the OLD endpoint and let it settle. A
+               no-op update still sets and removes the pause annotation, so
+               it can lose the same resource-version race as a real switch
+               (DFBUGS-10937).
             2. Run the connection update with new-endpoint == old-endpoint.
             3. Assert the store is matched and pre-validated, its endpoint is
                unchanged, and no pause-reconcile annotation is left behind.
@@ -1446,9 +1453,13 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         Flow:
             1. Create a BackingStore on OLD, put an OBC in front of it through a
                single-tier BucketClass, and prove the data path works.
-            2. Start a continuous write loop and trigger the connection update
+            2. Let the store settle before the writer starts, so DFBUGS-10937
+               cannot fail this test on setup noise rather than on the switch
+               under I/O - creation, the OBC and the pre-switch write all
+               drive status writes the CLI does not retry.
+            3. Start a continuous write loop and trigger the connection update
                OLD -> NEW while it runs.
-            3. Assert the store ends up Ready/OPTIMAL on NEW with no lingering
+            4. Assert the store ends up Ready/OPTIMAL on NEW with no lingering
                pause, and that I/O issued after the endpoint-config propagation
                window succeeds and the pre-switch objects are still readable.
 
@@ -1461,10 +1472,10 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         does not outlive the test even if the update raises. A write already in
         flight cannot be cancelled - it is an exec into the awscli pod - so if
         the join times out the overlap is logged as a warning rather than
-        silently ignored. The store, BucketClass,
-        OBC and scratch directory belong to ``store_factory``,
-        ``bucketclass_over_store``, ``bucket_factory`` and
-        ``test_directory_setup`` respectively, each of which cleans up its own.
+        silently ignored. The store, BucketClass, OBC and scratch directory
+        belong to ``store_factory``, ``bucketclass_over_store``,
+        ``bucket_factory`` and ``test_directory_setup`` respectively, each of
+        which cleans up its own.
         """
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
