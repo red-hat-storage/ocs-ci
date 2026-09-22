@@ -19,6 +19,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.status_logger import log_status_change
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.utility.version import VERSION_2_12, get_semantic_version
 
@@ -316,4 +317,10 @@ def spectrum_fusion_status_check():
     )
     spectrumfusion.reload()
     spectrumfusion_status = spectrumfusion.data["status"]["status"]
+    log_status_change(
+        key="SpectrumFusion/spectrumfusion",
+        status=spectrumfusion_status,
+        logger=logger,
+        message=f"SpectrumFusion status: {spectrumfusion_status}",
+    )
     assert spectrumfusion_status == "Completed"
