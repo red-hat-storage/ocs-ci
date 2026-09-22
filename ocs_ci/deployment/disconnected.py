@@ -371,12 +371,33 @@ def mirror_index_image_via_oc_mirror(
     )
     templating.dump_data_to_temp_yaml(imageset_config_data, imageset_config_file)
 
+    # Determine target mirror path for oc mirror
+    target_mirror_url = mirror_registry.rstrip("/")
+    version_subpath = None
+    if idms_name_prefix == "fdf":
+        # Extract tag from index_image or config (e.g. v4.20.3-2 -> 4-20-3-2)
+        tag = ""
+        if ":" in index_image:
+            tag = index_image.split(":")[-1]
+        elif config.DEPLOYMENT.get("fdf_image_tag"):
+            tag = config.DEPLOYMENT.get("fdf_image_tag")
+        elif config.ENV_DATA.get("fdf_version"):
+            tag = config.ENV_DATA.get("fdf_version")
+
+        if tag:
+            # Format tag to sanitized version subpath (e.g., v4.20.3-2 -> 4-20-3-2)
+            version_subpath = tag.lstrip("v").replace(".", "-")
+            target_mirror_url = f"{target_mirror_url}/{version_subpath}"
+            logger.info(
+                f"Using versioned target subpath for FDF mirroring: {target_mirror_url}"
+            )
+
     # mirror required images
-    logger.info(f"Mirror required images to mirror registry {mirror_registry}")
+    logger.info(f"Mirror required images to mirror registry {target_mirror_url}")
 
     cmd = (
         f"oc mirror --config {imageset_config_file} "
-        f"docker://{mirror_registry} "
+        f"docker://{target_mirror_url} "
         "--workspace file://oc-mirror-workspace/results-files --v2 "
         "--dest-tls-verify=false --image-timeout 30m "
     )
@@ -441,18 +462,20 @@ def mirror_index_image_via_oc_mirror(
             f"{mirroring_manifests_dir}",
             "working-dir/cluster-resources/itms-oc-mirror.yaml",
         )
-        target_path = mirror_registry.rstrip("/")
+        itms_name = (
+            f"isf-fdf-itms-{version_subpath}" if version_subpath else "isf-fdf-itms"
+        )
         itms_content = {
             "apiVersion": "config.openshift.io/v1",
             "kind": "ImageTagMirrorSet",
             "metadata": {
-                "name": "isf-fdf-itms",
+                "name": itms_name,
             },
             "spec": {
                 "imageTagMirrors": [
                     {
                         "mirrors": [
-                            f"{target_path}/cpopen/isf-data-foundation-catalog"
+                            f"{target_mirror_url}/cpopen/isf-data-foundation-catalog"
                         ],
                         "source": "icr.io/cpopen/isf-data-foundation-catalog",
                         "mirrorSourcePolicy": "AllowContactingSource",
