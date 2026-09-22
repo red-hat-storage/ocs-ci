@@ -34,7 +34,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     red_squad,
-    tier1,
     tier2,
     tier3,
     jira,
@@ -945,7 +944,7 @@ class TestBackingStoreEndpointUpdate(MCGTest):
     non-RGW clusters keep the coverage.
     """
 
-    @tier1
+    @tier2
     @polarion_id("OCS-8278")
     @DFBUGS_10975_SKIP
     def test_switch_and_revert_single_bs(self, mcg_obj, endpoint_conf, store_factory):
