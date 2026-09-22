@@ -1020,7 +1020,13 @@ def import_clusters_via_cli(clusters):
         log.info("Importing clusters via CLI method")
         log.info(f"**** clustername={cluster[0]}")
         log.info(f"**** kubeconfig={cluster[1]}")
-        create_project(cluster[0])
+        project_ocp = OCP(kind="Project")
+        if project_ocp.check_resource_existence(
+            timeout=10, should_exist=True, resource_name=cluster[0]
+        ):
+            log.info(f"Project '{cluster[0]}' already exists, skipping creation")
+        else:
+            create_project(cluster[0])
 
         log.info("Create and apply managed-cluster.yaml")
         managed_cluster = templating.load_yaml(
