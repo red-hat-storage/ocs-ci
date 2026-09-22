@@ -17,15 +17,49 @@ from ocs_ci.resiliency.resiliency_tools import (
 log = logging.getLogger(__name__)
 
 
+def _abort_session_if_cluster_unrecoverable():
+    """Abort the pytest session when StorageCluster is Error or Ceph is unrecoverable."""
+    from ocs_ci.krkn_chaos.cluster_health_gate import (
+        HEALTHY,
+        UNRECOVERABLE,
+        evaluate_odf_cluster_health,
+    )
+
+    try:
+        result = evaluate_odf_cluster_health(chaos_in_progress=False)
+    except Exception as ex:
+        log.warning(
+            "Resiliency test lifecycle: could not evaluate cluster health gate: %s",
+            ex,
+        )
+        return
+
+    if result.status == UNRECOVERABLE:
+        message = (
+            f"Aborting resiliency session: cluster is unrecoverable: {result.reason}"
+        )
+        log.error(message)
+        pytest.exit(message, returncode=1)
+    if result.status != HEALTHY:
+        log.warning(
+            "Resiliency test lifecycle: cluster is degraded but recoverable: %s",
+            result.reason,
+        )
+
+
 @pytest.fixture(autouse=True)
 def resiliency_test_lifecycle(request):
     """
     Common lifecycle for all resiliency tests in this directory.
 
+    - At test start: abort the pytest session if StorageCluster is Error or
+      Ceph is unrecoverable. Degraded HEALTH_WARN is allowed.
     - At test start: archive any existing Ceph crashes so the test starts clean.
     - During the entire test: background Ceph crash monitor every CEPH_CRASH_POLL_INTERVAL s.
     - finalizer: fail if Ceph crashes were introduced during the test.
     """
+    _abort_session_if_cluster_unrecoverable()
+
     try:
         ceph_status = CephStatusTool()
         ceph_status.archive_ceph_crashes()

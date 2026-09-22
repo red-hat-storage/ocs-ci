@@ -166,17 +166,11 @@ class TestKrKnNooBaaContainerChaos:
                 style="detailed",
             )
 
-            # Create container chaos scenario file
-            scenario_file = ContainerScenarios.container_kill(
-                scenario_dir=scenario_dir,
-                scenarios=noobaa_scenarios,
-            )
-
-            log.info(f"Created NooBaa container kill scenario file: {scenario_file}")
-
-            # Create Krkn configuration
+            # Isolate each component so one kill-count miss cannot abort the other.
             config = KrknConfigGenerator()
-            config.add_scenario("container_scenarios", scenario_file)
+            scenario_helper.register_isolated_container_kill_scenarios(
+                config, scenario_dir, noobaa_scenarios
+            )
 
             # =================================================================
             # EXECUTION: Single Krkn run with specified kill signal
@@ -606,15 +600,11 @@ class TestKrKnNooBaaContainerChaos:
                     components=noobaa_components,
                 )
 
-                # Create scenario file
-                scenario_file = ContainerScenarios.container_kill(
-                    scenario_dir=scenario_dir,
-                    scenarios=noobaa_scenarios,
-                )
-
-                # Create Krkn configuration
+                # Isolate each component so one kill-count miss cannot abort the other.
                 config = KrknConfigGenerator()
-                config.add_scenario("container_scenarios", scenario_file)
+                scenario_helper.register_isolated_container_kill_scenarios(
+                    config, scenario_dir, noobaa_scenarios
+                )
 
                 # Number of iterations based on stress level
                 base_iterations = 2

@@ -178,37 +178,65 @@ class CephStatusTool:
     )
     def wait_till_ceph_status_became_healthy(self):
         """
-        Wait until Ceph is not in HEALTH_ERR.
+        Wait until Ceph is not in HEALTH_ERR and StorageCluster is not Error.
 
         HEALTH_OK and HEALTH_WARN (degraded, recovery, noout, mon down, etc.)
         are acceptable during resiliency, matching chaos test exit criteria.
-        Only HEALTH_ERR fails the wait.
+        HEALTH_ERR fails the wait. StorageCluster phase Error fails even when
+        Ceph reports HEALTH_OK.
 
         Returns:
-            bool: True when Ceph health is HEALTH_OK or HEALTH_WARN.
+            bool: True when Ceph health is HEALTH_OK or HEALTH_WARN and
+                StorageCluster is not Error.
 
         Raises:
             AssertionError: If Ceph remains in HEALTH_ERR after retries.
+            UnrecoverableClusterError: If StorageCluster phase is Error.
         """
+        from ocs_ci.krkn_chaos.cluster_health_gate import (
+            STORAGECLUSTER_ERROR_PHASES,
+            UnrecoverableClusterError,
+            get_storagecluster_phase,
+        )
+
         log.info("Checking Ceph health (HEALTH_WARN is acceptable)...")
         health_status = self.get_ceph_health(detail=True)
-        if is_ceph_health_acceptable(health_status):
-            status = get_ceph_health_status(health_status)
-            if status == constants.CEPH_HEALTH_WARN:
-                log.warning(
-                    "Ceph health is HEALTH_WARN (acceptable for resiliency; "
-                    "recovery/degraded is not treated as failure): %s",
-                    health_status,
-                )
-            else:
-                log.info("Ceph cluster health is HEALTH_OK.")
-            return True
+        if not is_ceph_health_acceptable(health_status):
+            log.error("Ceph cluster is in error state: %s", health_status)
+            raise AssertionError(
+                f"Ceph cluster is in {constants.CEPH_HEALTH_ERROR} state "
+                f"(status: {health_status})"
+            )
 
-        log.error("Ceph cluster is in error state: %s", health_status)
-        raise AssertionError(
-            f"Ceph cluster is in {constants.CEPH_HEALTH_ERROR} state "
-            f"(status: {health_status})"
-        )
+        status = get_ceph_health_status(health_status)
+        if status == constants.CEPH_HEALTH_WARN:
+            log.warning(
+                "Ceph health is HEALTH_WARN (acceptable for resiliency; "
+                "recovery/degraded is not treated as failure): %s",
+                health_status,
+            )
+        else:
+            log.info("Ceph cluster health is HEALTH_OK.")
+
+        try:
+            sc_phase = get_storagecluster_phase()
+        except Exception as ex:
+            log.warning("Could not get StorageCluster phase: %s", ex)
+            sc_phase = None
+        if sc_phase and str(sc_phase).lower() in STORAGECLUSTER_ERROR_PHASES:
+            log.error(
+                "StorageCluster phase is %s while Ceph health is %s. "
+                "Treating this as a failed resiliency result.",
+                sc_phase,
+                status,
+            )
+            raise UnrecoverableClusterError(
+                f"StorageCluster phase is {sc_phase} "
+                f"(ceph health {status} is not sufficient)"
+            )
+        if sc_phase:
+            log.info("StorageCluster phase: %s", sc_phase)
+        return True
 
     def check_ceph_crashes(self):
         """

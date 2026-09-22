@@ -1,10 +1,14 @@
 """
-Cluster health gate for Krkn chaos tests.
+Cluster health gate for Krkn chaos and resiliency tests.
 
 Distinguishes recoverable degradation during chaos (HEALTH_WARN, a single OSD
-down, MDS failover in progress) from unrecoverable failure that must abort the
-pytest session: MDS_DAMAGE, PGs inactive above a threshold, OSDs below pool
-min_size, or a fully offline filesystem when chaos is not in progress.
+down, MDS failover in progress, StorageCluster Progressing) from unrecoverable
+failure that must abort the pytest session: StorageCluster phase Error,
+MDS_DAMAGE, PGs inactive above a threshold, OSDs below pool min_size, or a
+fully offline filesystem when chaos is not in progress.
+
+StorageCluster phase Error is independent of ``ceph health``. Ceph can be
+HEALTH_OK while the ODF StorageCluster CR is Error (Available=False).
 """
 
 import logging
@@ -22,6 +26,7 @@ DEFAULT_INACTIVE_PG_THRESHOLD = 0.5
 
 ALWAYS_UNRECOVERABLE_CODES = frozenset({"MDS_DAMAGE"})
 PRE_TEST_UNRECOVERABLE_CODES = frozenset({"MDS_DAMAGE", "MDS_ALL_DOWN"})
+STORAGECLUSTER_ERROR_PHASES = frozenset({"error", "failed"})
 
 
 class UnrecoverableClusterError(Exception):
@@ -93,6 +98,27 @@ def _num_up_osds(osd_stat) -> Optional[int]:
     return None
 
 
+def get_storagecluster_phase(namespace=None) -> Optional[str]:
+    """
+    Return StorageCluster ``status.phase``, or None if it cannot be read.
+
+    Does not require the Ceph toolbox. Lists StorageCluster CRs so this works
+    even when ``storage_cluster_name`` is missing from config.
+    """
+    from ocs_ci.framework import config
+    from ocs_ci.ocs import constants
+    from ocs_ci.ocs.ocp import OCP
+
+    namespace = namespace or config.ENV_DATA.get("cluster_namespace")
+    namespace = namespace or constants.OPENSHIFT_STORAGE_NAMESPACE
+    sc = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+    items = sc.get().get("items") or []
+    if not items:
+        log.warning("No StorageCluster found in namespace %s", namespace)
+        return None
+    return (items[0].get("status") or {}).get("phase")
+
+
 def classify_cluster_health(
     health_detail,
     pg_stat=None,
@@ -100,6 +126,7 @@ def classify_cluster_health(
     osd_dump=None,
     chaos_in_progress=False,
     inactive_pg_threshold=DEFAULT_INACTIVE_PG_THRESHOLD,
+    storagecluster_phase=None,
 ) -> ClusterHealthClassification:
     """
     Classify cluster health as healthy, degraded, or unrecoverable.
@@ -111,10 +138,21 @@ def classify_cluster_health(
         osd_dump: ``ceph osd dump`` dict (for pool min_size)
         chaos_in_progress: When True, MDS_ALL_DOWN alone is degraded (failover)
         inactive_pg_threshold: Inactive PG fraction that is unrecoverable
+        storagecluster_phase: StorageCluster ``status.phase`` (Error is always
+            unrecoverable, even when Ceph is HEALTH_OK)
 
     Returns:
         ClusterHealthClassification
     """
+    if storagecluster_phase and str(storagecluster_phase).lower() in (
+        STORAGECLUSTER_ERROR_PHASES
+    ):
+        return ClusterHealthClassification(
+            UNRECOVERABLE,
+            f"StorageCluster phase is {storagecluster_phase} "
+            "(Ceph HEALTH_OK/WARN is not sufficient)",
+        )
+
     codes = _health_codes(health_detail)
     token = _health_status_token(health_detail)
 
@@ -158,6 +196,7 @@ def raise_if_cluster_unrecoverable(
     osd_dump=None,
     chaos_in_progress=False,
     inactive_pg_threshold=DEFAULT_INACTIVE_PG_THRESHOLD,
+    storagecluster_phase=None,
 ):
     """Raise UnrecoverableClusterError when the cluster cannot recover."""
     result = classify_cluster_health(
@@ -167,6 +206,7 @@ def raise_if_cluster_unrecoverable(
         osd_dump=osd_dump,
         chaos_in_progress=chaos_in_progress,
         inactive_pg_threshold=inactive_pg_threshold,
+        storagecluster_phase=storagecluster_phase,
     )
     if result.status == UNRECOVERABLE:
         log.error("Cluster is unrecoverable: %s", result.reason)
@@ -176,33 +216,67 @@ def raise_if_cluster_unrecoverable(
     return result
 
 
-def evaluate_cluster_health_from_toolbox(ct_pod, chaos_in_progress=False):
+def evaluate_cluster_health_from_toolbox(ct_pod=None, chaos_in_progress=False):
     """
-    Query Ceph via the toolbox pod and classify health.
+    Classify ODF/Ceph health from StorageCluster phase and optional toolbox cmds.
+
+    StorageCluster phase is queried even when the toolbox pod is unavailable.
+    ``ct_pod`` may be None.
 
     Returns:
         ClusterHealthClassification
     """
-    health_detail = ct_pod.exec_ceph_cmd("ceph health detail")
+    storagecluster_phase = None
+    try:
+        storagecluster_phase = get_storagecluster_phase()
+        log.info("StorageCluster phase: %s", storagecluster_phase)
+    except Exception as ex:
+        log.warning("Could not get StorageCluster phase for health gate: %s", ex)
+
+    health_detail = None
     pg_stat = None
     osd_stat = None
     osd_dump = None
-    try:
-        pg_stat = ct_pod.exec_ceph_cmd("ceph pg stat")
-    except Exception as ex:
-        log.warning("Could not get ceph pg stat for health gate: %s", ex)
-    try:
-        osd_stat = ct_pod.exec_ceph_cmd("ceph osd stat")
-    except Exception as ex:
-        log.warning("Could not get ceph osd stat for health gate: %s", ex)
-    try:
-        osd_dump = ct_pod.exec_ceph_cmd("ceph osd dump")
-    except Exception as ex:
-        log.warning("Could not get ceph osd dump for health gate: %s", ex)
+    if ct_pod is not None:
+        try:
+            health_detail = ct_pod.exec_ceph_cmd("ceph health detail")
+        except Exception as ex:
+            log.warning("Could not get ceph health detail for health gate: %s", ex)
+        try:
+            pg_stat = ct_pod.exec_ceph_cmd("ceph pg stat")
+        except Exception as ex:
+            log.warning("Could not get ceph pg stat for health gate: %s", ex)
+        try:
+            osd_stat = ct_pod.exec_ceph_cmd("ceph osd stat")
+        except Exception as ex:
+            log.warning("Could not get ceph osd stat for health gate: %s", ex)
+        try:
+            osd_dump = ct_pod.exec_ceph_cmd("ceph osd dump")
+        except Exception as ex:
+            log.warning("Could not get ceph osd dump for health gate: %s", ex)
     return classify_cluster_health(
         health_detail,
         pg_stat=pg_stat,
         osd_stat=osd_stat,
         osd_dump=osd_dump,
         chaos_in_progress=chaos_in_progress,
+        storagecluster_phase=storagecluster_phase,
+    )
+
+
+def evaluate_odf_cluster_health(chaos_in_progress=False):
+    """
+    Classify ODF health using StorageCluster phase and Ceph toolbox if present.
+
+    Toolbox failure does not skip the StorageCluster check.
+    """
+    from ocs_ci.ocs.resources import pod as pod_helpers
+
+    ct_pod = None
+    try:
+        ct_pod = pod_helpers.get_ceph_tools_pod()
+    except Exception as ex:
+        log.warning("Could not get ceph tools pod for health gate: %s", ex)
+    return evaluate_cluster_health_from_toolbox(
+        ct_pod, chaos_in_progress=chaos_in_progress
     )

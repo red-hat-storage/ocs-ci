@@ -32,22 +32,19 @@ log = logging.getLogger(__name__)
 
 def _abort_session_if_cluster_unrecoverable():
     """
-    Abort the entire pytest session when Ceph is unrecoverable.
+    Abort the entire pytest session when the ODF cluster is unrecoverable.
 
-    HEALTH_WARN / single-OSD-down is degraded and allowed. MDS_DAMAGE, PGs
-    inactive above threshold, OSDs below pool min_size, or MDS_ALL_DOWN before
-    a test starts means further results are invalid.
+    StorageCluster phase Error fails even when Ceph is HEALTH_OK. HEALTH_WARN /
+    single-OSD-down / StorageCluster Progressing is degraded and allowed.
     """
     from ocs_ci.krkn_chaos.cluster_health_gate import (
         HEALTHY,
         UNRECOVERABLE,
-        evaluate_cluster_health_from_toolbox,
+        evaluate_odf_cluster_health,
     )
-    from ocs_ci.ocs.resources import pod as pod_helpers
 
     try:
-        ct_pod = pod_helpers.get_ceph_tools_pod()
-        result = evaluate_cluster_health_from_toolbox(ct_pod, chaos_in_progress=False)
+        result = evaluate_odf_cluster_health(chaos_in_progress=False)
     except Exception as ex:
         log.warning(
             "Krkn chaos test lifecycle: could not evaluate cluster health gate: %s",

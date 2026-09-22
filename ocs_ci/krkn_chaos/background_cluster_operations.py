@@ -769,14 +769,11 @@ class BackgroundClusterOperations:
         """
         from ocs_ci.krkn_chaos.cluster_health_gate import (
             UNRECOVERABLE,
-            evaluate_cluster_health_from_toolbox,
+            evaluate_odf_cluster_health,
         )
 
         try:
-            ct_pod = pod_helpers.get_ceph_tools_pod()
-            result = evaluate_cluster_health_from_toolbox(
-                ct_pod, chaos_in_progress=True
-            )
+            result = evaluate_odf_cluster_health(chaos_in_progress=True)
         except Exception as ex:
             log.warning("Could not evaluate unrecoverable-cluster gate: %s", ex)
             return False
