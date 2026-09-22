@@ -13,7 +13,10 @@ from selenium.common.exceptions import (
 
 from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 from ocs_ci.helpers.dr_helpers import get_cluster_set_name
-from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
+from ocs_ci.helpers.helpers import (
+    apply_resource,
+    create_unique_resource_name,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm_constants import (
     ACM_NAMESPACE,
@@ -1153,12 +1156,27 @@ def discover_hosted_clusters():
         "name": "discoveryPrefix",
         "value": constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX,
     }
-    spec_data.append(discovery_prefix_data_to_add)
-    addondeploymentconfig.patch(
-        resource_name="hypershift-addon-deploy-config",
-        params=json.dumps({"spec": {"customizedVariables": spec_data}}),
-        format_type="merge",
+    existing_discovery_prefix = next(
+        (entry for entry in spec_data if entry.get("name") == "discoveryPrefix"),
+        None,
     )
+    if (
+        existing_discovery_prefix is None
+        or existing_discovery_prefix.get("value")
+        != constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+    ):
+        if existing_discovery_prefix is not None:
+            spec_data = [
+                entry for entry in spec_data if entry.get("name") != "discoveryPrefix"
+            ]
+        spec_data.append(discovery_prefix_data_to_add)
+        addondeploymentconfig.patch(
+            resource_name="hypershift-addon-deploy-config",
+            params=json.dumps({"spec": {"customizedVariables": spec_data}}),
+            format_type="merge",
+        )
+    else:
+        log.info("discoveryPrefix is already set to the expected value, skipping patch")
 
     # Find the relevant managedcluster names
     managed_cluster_names = []
@@ -1219,10 +1237,10 @@ def automate_import_of_hosted_clusters():
     Enable automatic import of hosted clusters that are created on the imported multicluster engine clusters
 
     """
-    policy_mce_hcp_autoimport = create_resource(
+    policy_mce_hcp_autoimport = apply_resource(
         **templating.load_yaml(constants.POLICY_MCE_HCP_AUTOIMPORT_YAML)
     )
-    policy_mce_hcp_autoimport_placement = create_resource(
+    policy_mce_hcp_autoimport_placement = apply_resource(
         **templating.load_yaml(constants.POLICY_MCE_HCP_AUTOIMPORT_PLACEMENT_YAML)
     )
     placement_binding_data = templating.load_yaml(
@@ -1232,7 +1250,7 @@ def automate_import_of_hosted_clusters():
         "name"
     ] = policy_mce_hcp_autoimport_placement.name
     placement_binding_data["subjects"][0]["name"] = policy_mce_hcp_autoimport.name
-    create_resource(**placement_binding_data)
+    apply_resource(**placement_binding_data)
 
 
 def import_recovery_clusters_with_acm():
