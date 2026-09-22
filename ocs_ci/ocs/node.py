@@ -3700,9 +3700,9 @@ def get_worker_node_allocatable():
         name = node["metadata"]["name"]
         cpu_str = node["status"]["allocatable"]["cpu"]
         if cpu_str.endswith("m"):  # e.g. "500m"
-            cpu = int(int(cpu_str[:-1]) / 1000)
+            cpu = int(cpu_str[:-1]) / 1000
         else:
-            cpu = int(cpu_str)
+            cpu = float(cpu_str)
         mem_raw = node["status"]["allocatable"]["memory"]  # e.g. "31948256Ki"
         mem_gib = int(mem_raw.replace("Ki", "")) / (1024**2)
         alloc[name] = {"cpu": cpu, "mem": mem_gib}
