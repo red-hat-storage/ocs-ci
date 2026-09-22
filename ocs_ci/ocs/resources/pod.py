@@ -1708,9 +1708,9 @@ def get_pods_having_label(
         "items"
     )
     if statuses:
-        for pod in pods:
-            if pod["status"]["phase"] not in statuses:
-                pods.remove(pod)
+        # Build a new list instead of removing from the list being iterated,
+        # which would skip consecutive non-matching pods.
+        pods = [pod for pod in pods if pod["status"]["phase"] in statuses]
     return pods
 
 
