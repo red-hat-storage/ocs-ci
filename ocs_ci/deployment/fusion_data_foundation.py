@@ -27,6 +27,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.status_logger import log_status_change
 from ocs_ci.utility.utils import ceph_health_check, run_cmd
 
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
@@ -428,6 +429,15 @@ def fusion_service_instance_health_check():
     instance_status = instance.data["status"]
     service_health = instance_status["health"]
     install_percent = instance_status["installStatus"]["progressPercentage"]
+    log_status_change(
+        key=f"FusionServiceInstance/{constants.FDF_SERVICE_NAME}",
+        status=(service_health, install_percent),
+        logger=logger,
+        message=(
+            f"FusionServiceInstance health: {service_health}, "
+            f"install progress: {install_percent}%"
+        ),
+    )
     assert service_health == "Healthy"
     assert install_percent == 100
 
@@ -447,8 +457,17 @@ def odfcluster_status_check():
     )
     odfcluster_status = odfcluster.data["status"]
     odfcluster_phase = odfcluster_status["phase"]
-    assert odfcluster_phase == "Ready"
     ceph_cluster_health = odfcluster_status["cephClusterHealth"]
+    log_status_change(
+        key="OdfCluster/odfcluster",
+        status=(odfcluster_phase, ceph_cluster_health),
+        logger=logger,
+        message=(
+            f"OdfCluster phase: {odfcluster_phase}, "
+            f"Ceph cluster health: {ceph_cluster_health}"
+        ),
+    )
+    assert odfcluster_phase == "Ready"
     assert ceph_cluster_health == "HEALTH_OK"
     logger.info("OdfCluster created successfully")
 
@@ -554,7 +573,12 @@ def storagecluster_health_check():
     status = storagecluster.data.get("status", {})
     phase = status.get("phase")
 
-    logger.info(f"StorageCluster phase: {phase}")
+    log_status_change(
+        key="StorageCluster/ocs-storagecluster",
+        status=phase,
+        logger=logger,
+        message=f"StorageCluster phase: {phase}",
+    )
 
     assert phase == "Ready", f"StorageCluster phase is not Ready (found: {phase})"
 
