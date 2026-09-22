@@ -40,6 +40,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     jira,
     polarion_id,
 )
+from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
@@ -49,132 +50,94 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.bucketclass import BucketClass
-from ocs_ci.ocs.resources.pod import get_noobaa_operator_pod, get_pod_logs
+from ocs_ci.ocs.resources.pod import (
+    get_noobaa_operator_pod,
+    search_pattern_in_pod_logs,
+)
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-# The MCG CR templates the store factory builds on. They already carry the
-# apiVersion, the exact kind, the app=noobaa label and the noobaa.io finalizer,
-# so only metadata and spec have to be filled in. See :func:`_store_dict`.
+# MCG CR templates the store factory builds on: they carry the apiVersion, kind,
+# app=noobaa label and finalizer, so only metadata and spec have to be filled in.
 _STORE_TEMPLATE = {
     constants.BACKINGSTORE: constants.MCG_BACKINGSTORE_YAML,
     constants.NAMESPACESTORE: constants.MCG_NAMESPACESTORE_YAML,
 }
 
-# A store that has only just reached Ready is still being written to by the
-# operator (status, conditions, finalizers). The CLI lists the stores up front
-# and then writes back the copies it holds, with no re-read on conflict
-# (DFBUGS-10937), so tests that are not about that bug wait for the writes to
-# die down first. See :func:`wait_for_stores_quiesced`.
+# A store that has only just reached Ready is still being written to, and the CLI
+# does not re-read on conflict (DFBUGS-10937). See wait_for_stores_quiesced.
 STORE_QUIESCE_TIMEOUT = 120
 STORE_QUIESCE_INTERVAL = 5
 STORE_QUIESCE_STABLE_SAMPLES = 3
 
-# The mirror image of the above: an annotation rewritten in a loop to keep
-# bumping resourceVersion on purpose, so that
-# TestConnectionUpdateNegative.test_switch_survives_concurrent_store_writes can
-# hold the stores in contention for the whole run. It carries no meaning to the
-# operator and is removed in teardown.
+# A no-op annotation rewritten in a loop to keep bumping resourceVersion, so
+# test_switch_survives_concurrent_store_writes can hold stores in contention.
 CHURN_ANNOTATION = "ocs-ci.qe/endpoint-update-churn"
 CHURN_INTERVAL = 1
 CHURN_JOIN_TIMEOUT = 30
 
-# The admission webhook refuses to delete a store while NooBaa is still removing
-# objects from it. That clears on its own once the deletion finishes, so
-# ``store_factory`` retries instead of leaving the store behind for the next
-# test to trip over.
+# The webhook refuses to delete a store while NooBaa is still emptying it, so
+# store_factory retries rather than leaking the store into the next test.
 STORE_DELETE_TIMEOUT = 300
 STORE_DELETE_INTERVAL = 15
 STORE_DELETE_RETRY_MARKER = "are still being deleted"
 
-# How long test_switch_during_active_io waits for its writer thread to notice
-# that it has been asked to stop. A write already in flight is an exec into the
-# awscli pod and cannot be cancelled, so this is generous enough that only a
-# genuinely stuck exec reaches it.
+# How long test_switch_during_active_io waits for its writer thread to stop; an
+# in-flight write is an exec into the awscli pod and cannot be cancelled.
 WRITER_JOIN_TIMEOUT = 300
 
-# The annotation the CLI sets on every matched store for the duration of the
-# update, so the operator does not reconcile a store while its endpoint is being
-# moved underneath it.
+# Set by the CLI on every matched store for the duration of the update.
 PAUSE_ANNOTATION = "noobaa.io/pause-reconcile"
 
-# While the annotation is set the operator logs a skip line for the store and
-# requeues a few seconds later. As of noobaa-operator 301d6e98 the line is
-#   BackingStore "<name>" reconciliation paused. Skipping reconcile.
-# emitted from pkg/backingstore/reconciler.go (pkg/namespacestore/reconciler.go
-# has the NamespaceStore twin). The pattern is deliberately loose - it pins the
-# store name and the word "paused" and nothing else - because the surrounding
-# wording is an operator log string and may be reworded at any time.
+# The operator logs '<name>" reconciliation paused. Skipping reconcile.' while
+# the annotation is set. Loose on purpose - that wording may change at any time.
 PAUSE_SKIP_LOG_PATTERN = r"{name}.*paused"
 
-# How long to watch the operator log for that line before giving up. The
-# operator requeues a paused store every ~5s, so this is many chances over.
+# The operator requeues a paused store every ~5s, so this is many chances over.
 PAUSE_LOG_TIMEOUT = 90
 PAUSE_LOG_INTERVAL = 10
 
-# After the annotation is removed, how long to let the operator pick the store
-# back up before asserting the skip lines have stopped. Several requeue periods,
-# so an in-flight skip logged just before the removal cannot fail the check.
+# Grace after the annotation is removed, so a skip line logged just before it
+# cannot fail the "skipping has stopped" check.
 PAUSE_RESUME_SETTLE = 20
 
-# S3 services on the cluster that can supply an endpoint pair, in preference
-# order: (ULS platform key, cloud-manager client attribute, Service name,
-# signature version).
+# S3 services that can supply an endpoint pair, in preference order: (ULS
+# platform key, cloud-manager client attribute, Service name, signature version).
 _DERIVABLE_SERVICES = (
     ("rgw", "rgw_client", constants.RGW_SERVICE_INTERNAL_MODE, "v2"),
     ("self-ref-mcg", "self_ref_mcg_client", "s3", "v4"),
 )
 
-# The derived endpoints are plain-http ClusterIPs, which is what keeps
-# pre-validation on path-style addressing. Verified on a live cluster:
-#   * a DNS endpoint fails, because pre-validation resolves the bucket
-#     virtual-hosted style ("<bucket>.<host>") and in-cluster service names have
-#     no wildcard DNS -> "getaddrinfo ENOTFOUND <bucket>.s3.openshift-storage...";
-#   * an https ClusterIP fails the certificate check, since service-serving
-#     certificates carry DNS SANs only -> "IP: <ip> is not in the cert's list".
+# Plain-http ClusterIPs keep pre-validation on path-style addressing: a DNS
+# endpoint fails it (no wildcard DNS for "<bucket>.<host>") and an https
+# ClusterIP fails the cert check (service certs carry DNS SANs only).
 _S3_HTTP_PORT = 80
 
-# Pre-validation also requires the target bucket to be "a valid location used by
-# noobaa". A single object under the block prefix is enough to satisfy it.
+# Pre-validation requires the target bucket to be "a valid location used by
+# noobaa"; one object under the block prefix satisfies it.
 NOOBAA_LOCATION_MARKER_KEY = "noobaa_blocks/ocs-ci-endpoint-update-marker"
 
-# How many BackingStores the bulk test puts on the shared endpoint. Each one
-# needs a target bucket of its own - ocs-ci's own backingstore factory mints one
-# ULS per store - so the fixture provisions this many buckets up front.
+# Stores the bulk test puts on the shared endpoint; each needs its own bucket.
 BULK_STORE_COUNT = 2
 
-# One extra bucket is provisioned alongside them and deliberately left WITHOUT
-# the marker object, so it exists on both endpoints but is not a valid NooBaa
-# location. That is what the not_noobaa_location pre-validation case needs, and
-# it is a different condition from a bucket that does not exist at all (see
-# missing_target_bucket).
+# One further bucket, deliberately left without the marker: a real bucket that is
+# not a valid NooBaa location, which is what not_noobaa_location needs.
 EMPTY_BUCKET_COUNT = 1
 
-# An endpoint change takes a while to reach the running endpoint pods, so
-# post-switch I/O is retried over this window rather than asserted outright.
+# An endpoint change takes a while to reach the endpoint pods, so post-switch
+# I/O is retried over this window rather than asserted outright.
 ENDPOINT_PROPAGATION_TIMEOUT = 300
 
-# Host length used by the long-URL input case. Long enough that resolution fails
-# on the length itself (getaddrinfo EINVAL) rather than on the name not
-# existing, which is the point - it probes the CLI's handling of an absurd but
-# syntactically plausible endpoint.
+# Host length for the long-URL case: long enough that resolution fails on the
+# length itself (getaddrinfo EINVAL) rather than on the name not existing.
 MALFORMED_LONG_HOST_LEN = 2048
 
-# NooBaa core's check_external_connection() reports a coarse UNKNOWN_FAILURE for
-# DNS failures, unreachable hosts and missing buckets alike - its AWS error map
-# is keyed on SDK v2 error names while the client is v3, so everything
-# client-side falls through to the catch-all (DFBUGS-10938). The real reason is
-# only in the error text, which is why the tests below assert on the message as
-# well as the code. INVALID_ENDPOINT is accepted too, so the tests keep passing
-# once DFBUGS-10938 is fixed and core starts classifying these properly.
-# TODO(DFBUGS-10938): once core reports precise codes, drop the message
-# assertions and pin each variant to its own status code.
+# Core reports a coarse UNKNOWN_FAILURE for DNS failures, unreachable hosts and
+# missing buckets alike (DFBUGS-10938), so the tests assert on the message too.
+# INVALID_ENDPOINT is accepted, so they keep passing once that bug is fixed.
 UNREACHABLE_STATUSES = ("UNKNOWN_FAILURE", "INVALID_ENDPOINT")
 
 _DFBUGS_10975_REASON = (
@@ -183,7 +146,7 @@ _DFBUGS_10975_REASON = (
     "fails pre-validation - https://redhat.atlassian.net/browse/DFBUGS-10975"
 )
 
-# The pre-validation cases whose asserted failure reason DFBUGS-10975 masks.
+# Pre-validation cases whose asserted failure reason DFBUGS-10975 masks.
 # "wrong_creds" is deliberately absent: see the parametrize list for why.
 _DFBUGS_10975_BLOCKED_PREVALIDATION = frozenset(
     {
@@ -195,9 +158,6 @@ _DFBUGS_10975_BLOCKED_PREVALIDATION = frozenset(
 )
 
 
-# ---------------------------------------------------------------------------
-# CLI helper + output parser (reusable by every test)
-# ---------------------------------------------------------------------------
 def run_connection_update(
     mcg_obj, old_endpoint, new_endpoint, namespace=None, extra_args=""
 ):
@@ -291,9 +251,6 @@ def parse_connection_update_output(result):
     }
 
 
-# ---------------------------------------------------------------------------
-# Resource helpers
-# ---------------------------------------------------------------------------
 def _store_dict(
     kind, name, namespace, endpoint, target_bucket, secret_name, signature_version
 ):
@@ -470,20 +427,14 @@ def operator_logged_pause_skip(operator_pod, namespace, store_name, since):
     Returns:
         bool: True if a skip line for this store was logged in the window.
     """
-    matched = get_pod_logs(
-        pod_name=operator_pod,
-        namespace=namespace,
-        since=since,
-        grep=PAUSE_SKIP_LOG_PATTERN.format(name=re.escape(store_name)),
-        regex=True,
-        first_match_only=False,
+    pattern = PAUSE_SKIP_LOG_PATTERN.format(name=re.escape(store_name))
+    return bool(
+        search_pattern_in_pod_logs(
+            operator_pod, pattern, namespace=namespace, since=since
+        )
     )
-    return bool(matched and matched.strip())
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
 def _create_alt_service(base_svc, name, namespace):
     """
     Put a second Service in front of the pods an existing S3 Service selects,
@@ -495,10 +446,10 @@ def _create_alt_service(base_svc, name, namespace):
         namespace (str): Namespace to create it in.
 
     Returns:
-        tuple: (OCS object of the new Service, its ClusterIP)
+        OCS: The new Service.
     """
     http_port = next(p for p in base_svc["spec"]["ports"] if p["port"] == _S3_HTTP_PORT)
-    svc_obj = create_resource(
+    return create_resource(
         **{
             "apiVersion": "v1",
             "kind": "Service",
@@ -516,10 +467,6 @@ def _create_alt_service(base_svc, name, namespace):
             },
         }
     )
-    cluster_ip = OCP(kind="Service", namespace=namespace, resource_name=name).get()[
-        "spec"
-    ]["clusterIP"]
-    return svc_obj, cluster_ip
 
 
 def derive_endpoint_pair(request, cld_mgr, cloud_uls_factory):
@@ -571,7 +518,7 @@ def derive_endpoint_pair(request, cld_mgr, cloud_uls_factory):
 
         alt_svc_name = create_unique_resource_name("eps-alt", "svc")
         try:
-            alt_svc, alt_ip = _create_alt_service(base_svc, alt_svc_name, namespace)
+            alt_svc = _create_alt_service(base_svc, alt_svc_name, namespace)
             request.addfinalizer(lambda obj=alt_svc: obj.delete(wait=False))
             # cloud_uls_factory owns the teardown of every bucket it mints.
             buckets = sorted(
@@ -580,9 +527,8 @@ def derive_endpoint_pair(request, cld_mgr, cloud_uls_factory):
                 )[platform]
             )
             target_buckets = buckets[:BULK_STORE_COUNT]
-            # Everything but the last bucket gets the marker; the last one is
-            # left empty on purpose so it is a real bucket that is not a valid
-            # NooBaa location.
+            # The last bucket is left unmarked on purpose: a real bucket that
+            # is not a valid NooBaa location.
             empty_bucket = buckets[-1]
             for bucket in target_buckets:
                 client.client.Bucket(bucket).put_object(
@@ -592,14 +538,13 @@ def derive_endpoint_pair(request, cld_mgr, cloud_uls_factory):
             logger.warning(f"Could not build an endpoint pair from {platform}: {ex}")
             continue
 
+        alt_ip = alt_svc.get()["spec"]["clusterIP"]
         pair = {
             "old": f"http://{base_svc['spec']['clusterIP']}:{_S3_HTTP_PORT}",
             "new": f"http://{alt_ip}:{_S3_HTTP_PORT}",
-            # The SAME backend as "old", addressed by its service DNS name
-            # instead of its ClusterIP. Only ever passed as --old-endpoint, to
-            # show that matching is an exact string comparison and an equivalent
-            # spelling matches nothing - so it is never connected to, and the
-            # virtual-hosted DNS limitation noted above does not apply.
+            # The same backend as "old" by DNS name rather than ClusterIP. Only
+            # ever passed as --old-endpoint, to show matching is an exact string
+            # comparison, so it is never actually connected to.
             "old_dns": (
                 f"http://{svc_name}.{namespace}.svc.cluster.local:{_S3_HTTP_PORT}"
             ),
@@ -743,34 +688,32 @@ def store_factory(request):
     def _delete_store(kind, name):
         """Delete one store, waiting out the webhook's "try later" denial."""
         store_ocp = OCP(kind=kind, namespace=namespace)
-        # A paused NamespaceStore (DFBUGS-10743) must have the annotation
-        # removed before it can be reconciled/deleted cleanly. This is a
-        # best-effort nicety, not a precondition for deleting: letting a
-        # transient API error here propagate would skip the delete below
-        # entirely and leak the store, which is how orphaned Rejected stores
-        # have been left on test clusters before.
+        # A paused store (DFBUGS-10743) deletes cleanly only once the annotation
+        # is gone, but this stays best-effort: raising here would skip the delete
+        # below and leak the store.
         try:
             if get_store_pause_annotation(kind, name, namespace):
                 store_ocp.annotate(
-                    annotation="noobaa.io/pause-reconcile-", resource_name=name
+                    annotation=f"{PAUSE_ANNOTATION}-", resource_name=name
                 )
         except CommandFailed as ex:
             logger.warning(f"Could not clear pause annotation on {kind}/{name}: {ex}")
-        deadline = time.time() + STORE_DELETE_TIMEOUT
-        while True:
+
+        def _try_delete():
             try:
                 store_ocp.delete(resource_name=name, wait=True)
-                return
+                return True
             except CommandFailed as ex:
                 if STORE_DELETE_RETRY_MARKER not in str(ex):
                     raise
-                if time.time() >= deadline:
-                    raise
-                logger.info(
-                    f"{kind}/{name} still has objects being deleted, retrying "
-                    f"in {STORE_DELETE_INTERVAL}s"
-                )
-                time.sleep(STORE_DELETE_INTERVAL)
+                logger.info(f"{kind}/{name} is still being emptied, retrying")
+                return False
+
+        for deleted in TimeoutSampler(
+            STORE_DELETE_TIMEOUT, STORE_DELETE_INTERVAL, _try_delete
+        ):
+            if deleted:
+                return
 
     def _finalizer():
         for kind, name in reversed(created):
@@ -802,11 +745,8 @@ def store_factory(request):
             secret_name,
             signature_version,
         )
-        # Registered before the CR is created, not after: if create_resource
-        # raises once the object already exists, an append placed after it
-        # would never run and the store would be invisible to teardown. If the
-        # create did fail outright the delete just reports NotFound, which the
-        # finalizer already downgrades to a warning.
+        # Recorded before the CR is created, so a create that raises once the
+        # object exists still leaves the store visible to teardown.
         created.append((kind, name))
         ocs_obj = create_resource(**body)
         if wait:
@@ -819,6 +759,36 @@ def store_factory(request):
         return ocs_obj
 
     return _factory
+
+
+def make_store(store_factory, conf, endpoint, bucket=None, kind=None, **kwargs):
+    """
+    Create a store out of ``endpoint_conf``, so each call site shows only what
+    it actually varies.
+
+    Picks the signature version for the kind: the webhook rejects v4 on a
+    non-secure endpoint for a NamespaceStore but accepts it for a BackingStore.
+
+    Args:
+        store_factory (function): The ``store_factory`` fixture.
+        conf (dict): The ``endpoint_conf`` fixture.
+        endpoint (str): Endpoint the store points at.
+        bucket (str): Target bucket. Defaults to ``conf["target_bucket"]``.
+        kind (str): Store kind. Defaults to BackingStore.
+        **kwargs: Passed to the factory (``secret_name``, ``name``, ``wait``).
+
+    Returns:
+        OCS: The created store.
+    """
+    kind = kind or constants.BACKINGSTORE
+    sig_key = (
+        "signature_version_nss"
+        if kind == constants.NAMESPACESTORE
+        else "signature_version"
+    )
+    kwargs.setdefault("secret_name", conf["secret"])
+    kwargs.setdefault("signature_version", conf[sig_key])
+    return store_factory(kind, endpoint, bucket or conf["target_bucket"], **kwargs)
 
 
 @pytest.fixture
@@ -942,19 +912,10 @@ def skip_if_rook_keyed_secret():
     skip_if_dfbugs_10975()
 
 
-# A runtime fixture rather than a pytest.mark.skipif because the condition has
-# to query the cluster, which is not reachable at collection time - a skipif
-# would break --collect-only.
-#
-# Deliberately NOT paired with @jira("DFBUGS-10975"), unlike the other bug
-# markers in this module: pytest-jira skips on the marker alone, unconditionally
-# and on every platform, which would delete the coverage everywhere. The bug
-# only bites where a Rook-keyed object-user secret exists, so gating on that
-# keeps these tests running on clusters without RGW (e.g. IBM Cloud, where the
-# endpoint pair is derived from MCG's own S3). The skip reason carries the bug
-# URL, so traceability does not depend on the marker.
-#
-# Drop this once DFBUGS-10975 is fixed.
+# A fixture rather than a skipif: the condition has to query the cluster, which
+# --collect-only cannot do. Not paired with @jira either, because pytest-jira
+# skips on the marker alone and would drop the coverage on clusters without RGW,
+# where the bug does not bite. Remove once DFBUGS-10975 is fixed.
 DFBUGS_10975_SKIP = pytest.mark.usefixtures("skip_if_rook_keyed_secret")
 
 # DFBUGS-10938 is not platform-conditional: check external connection maps a
@@ -966,12 +927,9 @@ DFBUGS_10938_SKIP = pytest.mark.skip(
 )
 
 
-# ===========================================================================
-# Module A - positive / core behaviour
-# ===========================================================================
 @mcg
 @red_squad
-class TestBackingStoreEndpointUpdate:
+class TestBackingStoreEndpointUpdate(MCGTest):
     """
     Happy-path and matching-semantics coverage for the endpoint update CLI.
 
@@ -1008,17 +966,9 @@ class TestBackingStoreEndpointUpdate:
         """
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
-        bs = store_factory(
-            constants.BACKINGSTORE,
-            old,
-            endpoint_conf["target_bucket"],
-            endpoint_conf["secret"],
-            endpoint_conf["signature_version"],
-        )
-        # store_factory waits for Ready, which does not mean the operator has
-        # finished writing status. Updating on top of those writes aborts on a
-        # resource-version conflict (DFBUGS-10937) and fails this test for a
-        # reason that has nothing to do with switching an endpoint.
+        bs = make_store(store_factory, endpoint_conf, old)
+        # Ready does not mean the operator has stopped writing status, and the
+        # CLI aborts on a resource-version conflict (DFBUGS-10937).
         wait_for_stores_quiesced([(constants.BACKINGSTORE, bs.name)], ns)
 
         # --- switch OLD -> NEW ---
@@ -1086,13 +1036,7 @@ class TestBackingStoreEndpointUpdate:
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         buckets = endpoint_conf["target_buckets"]
         stores = [
-            store_factory(
-                constants.BACKINGSTORE,
-                old,
-                buckets[i % len(buckets)],
-                endpoint_conf["secret"],
-                endpoint_conf["signature_version"],
-            )
+            make_store(store_factory, endpoint_conf, old, buckets[i % len(buckets)])
             for i in range(BULK_STORE_COUNT)
         ]
         wait_for_stores_quiesced(
@@ -1173,13 +1117,7 @@ class TestBackingStoreEndpointUpdate:
                 "ENV_DATA['mcg_endpoint_pair'] to run it against a "
                 "pre-provisioned lab."
             )
-        bs = store_factory(
-            constants.BACKINGSTORE,
-            old,
-            endpoint_conf["target_bucket"],
-            endpoint_conf["secret"],
-            endpoint_conf["signature_version"],
-        )
+        bs = make_store(store_factory, endpoint_conf, old)
 
         if variant == "wrong_endpoint":
             bad_old = "https://no-such-endpoint.example.invalid:9000"
@@ -1200,13 +1138,8 @@ class TestBackingStoreEndpointUpdate:
             variant_endpoint = old.rstrip("/") if old.endswith("/") else f"{old}/"
             result = run_connection_update(mcg_obj, variant_endpoint, new)
         else:  # rerun_after_success
-            # The only variant that performs a real update, so the only one that
-            # can hit DFBUGS-10937: the other three match nothing and never
-            # write. store_factory waits for Ready, which does not mean the
-            # operator has finished writing status, so settle the store first or
-            # the setup update aborts on a resource-version conflict and this
-            # test fails for a reason that has nothing to do with re-run
-            # matching.
+            # The only variant that really updates, so the only one that can hit
+            # DFBUGS-10937 in setup. Settle the store first.
             wait_for_stores_quiesced([(constants.BACKINGSTORE, bs.name)], ns)
             first = run_connection_update(mcg_obj, old, new)
             assert first["stores_updated"] == 1, first["raw"]
@@ -1276,19 +1209,9 @@ class TestBackingStoreEndpointUpdate:
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         buckets = endpoint_conf["target_buckets"]
-        bs_old = store_factory(
-            constants.BACKINGSTORE,
-            old,
-            buckets[0],
-            endpoint_conf["secret"],
-            endpoint_conf["signature_version"],
-        )
-        bs_new = store_factory(
-            constants.BACKINGSTORE,
-            new,
-            buckets[1 % len(buckets)],
-            endpoint_conf["secret"],
-            endpoint_conf["signature_version"],
+        bs_old = make_store(store_factory, endpoint_conf, old, buckets[0])
+        bs_new = make_store(
+            store_factory, endpoint_conf, new, buckets[1 % len(buckets)]
         )
         obc_old = bucket_factory(
             interface="OC", bucketclass=bucketclass_over_store(bs_old)
@@ -1297,10 +1220,8 @@ class TestBackingStoreEndpointUpdate:
             interface="OC", bucketclass=bucketclass_over_store(bs_new)
         )[0]
 
-        # Distinct prefixes per store, so an object turning up in the wrong
-        # bucket names the store it leaked from - and a directory per write, so
-        # that a shared source directory cannot fake such a leak
-        # (see :func:`_write_dir`).
+        # A prefix per store names the leak source, and a directory per write
+        # stops a shared source directory faking one. See :func:`_write_dir`.
         pre_old = set(
             write_random_test_objects_to_bucket(
                 awscli_pod_session,
@@ -1322,11 +1243,8 @@ class TestBackingStoreEndpointUpdate:
             )
         )
 
-        # Both stores have just been created and had an OBC put in front of
-        # them, so the operator is still writing to them. The CLI does not
-        # re-read on a resource-version conflict (DFBUGS-10937), and that race
-        # has a test of its own - let them settle so this one fails only for its
-        # own reasons.
+        # Both stores are fresh and still being written to; that race has a test
+        # of its own (DFBUGS-10937), so settle them first.
         wait_for_stores_quiesced(
             [
                 (constants.BACKINGSTORE, bs_old.name),
@@ -1349,15 +1267,9 @@ class TestBackingStoreEndpointUpdate:
                 store.name, constants.BS_OPTIMAL, timeout=ENDPOINT_PROPAGATION_TIMEOUT
             ), f"BackingStore {store.name} is not OPTIMAL after the switch"
 
-        # Both stores now share endpoint NEW. Write through each again - the
-        # moved store only once its endpoint config has propagated - and prove
-        # the two connections still address their own buckets.
-        #
-        # These two objects carry the weight of the cross-talk check below: they
-        # are the only ones written while both connections point at the same
-        # endpoint, which is when a mix-up could happen. ``_try_write`` reports
-        # whether the write went through rather than what it wrote, but it
-        # writes exactly one object, so the name is the pattern with index 0.
+        # Both stores now share endpoint NEW, so these are the only objects
+        # written while a mix-up is possible. ``_try_write`` writes exactly one
+        # object, so its name is the pattern with index 0.
         post_old_pattern = "post-switch-old-store-"
         post_new_pattern = "post-switch-new-store-"
         post_old = {f"{post_old_pattern}0"}
@@ -1408,11 +1320,9 @@ class TestBackingStoreEndpointUpdate:
             "The object written through the store that never moved is not "
             f"readable back through it: {sorted(post_new - listed_new)}"
         )
-        # The real cross-talk check: neither store's data shows up in the other's
-        # bucket now that both connections sit on the same endpoint. The
-        # post-switch objects are in scope here, not just the pre-switch ones -
-        # they were written after the two connections converged, so leaving them
-        # out would miss exactly the case this test exists for.
+        # The cross-talk check itself. The post-switch objects are in scope too:
+        # they were written after the connections converged, which is the case
+        # this test exists for.
         leaked_into_old = listed_old & (pre_new | post_new)
         assert not leaked_into_old, (
             "Objects written through the store already on NEW leaked into the "
@@ -1442,13 +1352,7 @@ class TestBackingStoreEndpointUpdate:
         """
         ns = config.ENV_DATA["cluster_namespace"]
         old = endpoint_conf["old"]
-        bs = store_factory(
-            constants.BACKINGSTORE,
-            old,
-            endpoint_conf["target_bucket"],
-            endpoint_conf["secret"],
-            endpoint_conf["signature_version"],
-        )
+        bs = make_store(store_factory, endpoint_conf, old)
         # A no-op update still sets and removes the pause annotation, so it can
         # lose a race with the operator's post-Ready status writes just like a
         # real switch can (DFBUGS-10937). Settle first.
@@ -1515,13 +1419,7 @@ class TestBackingStoreEndpointUpdate:
         """
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
-        bs = store_factory(
-            constants.BACKINGSTORE,
-            old,
-            endpoint_conf["target_bucket"],
-            endpoint_conf["secret"],
-            endpoint_conf["signature_version"],
-        )
+        bs = make_store(store_factory, endpoint_conf, old)
         store_ocp = OCP(
             kind=constants.BACKINGSTORE, namespace=ns, resource_name=bs.name
         )
@@ -1621,13 +1519,7 @@ class TestBackingStoreEndpointUpdate:
         """
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
-        bs = store_factory(
-            constants.BACKINGSTORE,
-            old,
-            endpoint_conf["target_bucket"],
-            endpoint_conf["secret"],
-            endpoint_conf["signature_version"],
-        )
+        bs = make_store(store_factory, endpoint_conf, old)
         bucket = bucket_factory(interface="OC", bucketclass=bucketclass_over_store(bs))[
             0
         ]
@@ -1641,11 +1533,9 @@ class TestBackingStoreEndpointUpdate:
             mcg_obj=mcg_obj,
         )
 
-        # Settle the store before the writer starts. Creating it, putting an OBC
-        # in front of it and the pre-switch write all drive operator status
-        # writes, and updating on top of those aborts on a resource-version
-        # conflict (DFBUGS-10937) - which would fail this test in setup noise
-        # rather than on the switch-under-I/O it is actually about.
+        # Creation, the OBC and the pre-switch write all drive status writes.
+        # Settle before the writer starts, so DFBUGS-10937 cannot fail this test
+        # on setup noise rather than on the switch under I/O.
         wait_for_stores_quiesced([(constants.BACKINGSTORE, bs.name)], ns)
 
         # Keep writing while the endpoint moves underneath the store.
@@ -1680,10 +1570,8 @@ class TestBackingStoreEndpointUpdate:
             stop_io.set()
             writer.join(timeout=WRITER_JOIN_TIMEOUT)
             if writer.is_alive():
-                # The loop checks stop_io only between writes, and a write
-                # already in flight cannot be cancelled. Nothing here can force
-                # it to end, so say so loudly: a teardown failure just below
-                # this line is then attributable rather than mysterious.
+                # An in-flight write cannot be cancelled, so say so loudly -
+                # a teardown failure below is then attributable.
                 logger.warning(
                     "The I/O thread was still running "
                     f"{WRITER_JOIN_TIMEOUT}s after being asked to stop - a write "
@@ -1772,10 +1660,8 @@ class TestBackingStoreEndpointUpdate:
             )
 
         result = run_connection_update(mcg_obj, endpoint, endpoint)
-        # A same-endpoint update changes nothing by design, so "endpoint
-        # unchanged" cannot by itself tell success apart from an abort that made
-        # no changes. The abort has to be ruled out explicitly or this test
-        # passes on a CLI that did nothing at all.
+        # "endpoint unchanged" cannot tell a no-op apart from an abort that
+        # changed nothing, so the abort has to be ruled out explicitly.
         assert not result[
             "aborted"
         ], f"Default backingstore update aborted:\n{result['raw']}"
@@ -1800,12 +1686,9 @@ class TestBackingStoreEndpointUpdate:
         )
 
 
-# ===========================================================================
-# Module B - pre-validation / all-or-nothing / input validation
-# ===========================================================================
 @mcg
 @red_squad
-class TestConnectionUpdateNegative:
+class TestConnectionUpdateNegative(MCGTest):
     """
     Failure paths: pre-validation aborts, argument handling, direct-edit.
 
@@ -1820,16 +1703,14 @@ class TestConnectionUpdateNegative:
     @pytest.mark.parametrize(
         "failure",
         [
-            # DFBUGS-10975 aborts on the credentials error before the intended
-            # failure is reached, so the asserted reason never appears. The
-            # abort itself still happens - only the reason is unassertable.
+            # DFBUGS-10975 aborts on the credentials error first, so the abort
+            # still happens but the intended reason never appears.
             pytest.param("unreachable", marks=polarion_id("OCS-8265")),
             pytest.param("missing_target_bucket", marks=polarion_id("OCS-8266")),
             pytest.param("not_noobaa_location", marks=polarion_id("OCS-8267")),
-            # Credentials ARE read for this one - the bad-creds secret uses the
-            # AWS key names, and fake credentials match no existing secret so
-            # the operator never repoints the secretRef. The rejection is real
-            # and merely misreported, which makes it DFBUGS-10938, not 10975.
+            # Credentials ARE read here: the bad-creds secret uses the AWS key
+            # names, so the rejection is real and merely misreported - which
+            # makes this DFBUGS-10938, not 10975.
             pytest.param(
                 "wrong_creds",
                 marks=[
@@ -1885,26 +1766,14 @@ class TestConnectionUpdateNegative:
         old, new = endpoint_conf["old"], endpoint_conf["new"]
 
         if failure == "unreachable":
-            bs = store_factory(
-                constants.BACKINGSTORE,
-                old,
-                endpoint_conf["target_bucket"],
-                endpoint_conf["secret"],
-                endpoint_conf["signature_version"],
-            )
+            bs = make_store(store_factory, endpoint_conf, old)
             target_new = "https://unreachable.example.invalid:9000"
             result = run_connection_update(mcg_obj, old, target_new)
             expected_statuses = UNREACHABLE_STATUSES
             expected_error = "ENOTFOUND"
             stores = [bs]
         elif failure == "missing_target_bucket":
-            bs = store_factory(
-                constants.BACKINGSTORE,
-                old,
-                endpoint_conf["target_bucket"],
-                endpoint_conf["secret"],
-                endpoint_conf["signature_version"],
-            )
+            bs = make_store(store_factory, endpoint_conf, old)
             # Retarget the store at a bucket that exists on NEITHER endpoint.
             absent_bucket = create_unique_resource_name("absent", "bucket")
             OCP(kind=constants.BACKINGSTORE, namespace=ns, resource_name=bs.name).patch(
@@ -1928,13 +1797,7 @@ class TestConnectionUpdateNegative:
                     "ENV_DATA['mcg_endpoint_pair'] to run it against a "
                     "pre-provisioned lab."
                 )
-            bs = store_factory(
-                constants.BACKINGSTORE,
-                old,
-                endpoint_conf["target_bucket"],
-                endpoint_conf["secret"],
-                endpoint_conf["signature_version"],
-            )
+            bs = make_store(store_factory, endpoint_conf, old)
             # Retarget the store at a bucket that is real but holds no NooBaa
             # blocks, so core reaches it, lists it, and rejects its CONTENT.
             OCP(kind=constants.BACKINGSTORE, namespace=ns, resource_name=bs.name).patch(
@@ -1952,12 +1815,11 @@ class TestConnectionUpdateNegative:
             expected_error = "valid location used by noobaa"
             stores = [bs]
         elif failure == "wrong_creds":
-            bs = store_factory(
-                constants.BACKINGSTORE,
+            bs = make_store(
+                store_factory,
+                endpoint_conf,
                 old,
-                endpoint_conf["target_bucket"],
-                bad_creds_secret,
-                endpoint_conf["signature_version"],
+                secret_name=bad_creds_secret,
                 wait=False,
             )
             result = run_connection_update(mcg_obj, old, new)
@@ -1965,20 +1827,13 @@ class TestConnectionUpdateNegative:
             expected_error = "access key"
             stores = [bs]
         else:  # one_bad_in_batch
-            good = store_factory(
-                constants.BACKINGSTORE,
-                old,
-                endpoint_conf["target_bucket"],
-                endpoint_conf["secret"],
-                endpoint_conf["signature_version"],
-            )
+            good = make_store(store_factory, endpoint_conf, old)
             # The bad one targets a bucket that exists on neither endpoint.
-            bad = store_factory(
-                constants.BACKINGSTORE,
+            bad = make_store(
+                store_factory,
+                endpoint_conf,
                 old,
                 create_unique_resource_name("absent", "bucket"),
-                endpoint_conf["secret"],
-                endpoint_conf["signature_version"],
                 wait=False,
             )
             result = run_connection_update(mcg_obj, old, new)
@@ -2047,32 +1902,23 @@ class TestConnectionUpdateNegative:
             skip_if_dfbugs_10975()
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
-        bs = store_factory(
-            constants.BACKINGSTORE,
-            old,
-            endpoint_conf["target_bucket"],
-            endpoint_conf["secret"],
-            endpoint_conf["signature_version"],
-        )
+        bs = make_store(store_factory, endpoint_conf, old)
 
         if case == "missing_flag":
             result = mcg_obj.exec_mcg_cmd(
                 f"connection update --old-endpoint {old}", ignore_error=True
             )
-            # Raw CompletedProcess here, not the parsed dict - .returncode is a
-            # real attribute. Read it directly rather than via getattr(), whose
-            # default would quietly satisfy this assertion if it ever went away.
+            # Raw CompletedProcess, not the parsed dict: read .returncode
+            # directly, since a getattr() default would mask its removal.
             assert result.returncode != 0, (
                 "Omitting --new-endpoint was accepted instead of producing a "
                 f"usage error:\n{result.stdout}\n{result.stderr}"
             )
             assert get_store_endpoint(constants.BACKINGSTORE, bs.name, ns) == old
         elif case == "whitespace_trimmed":
-            # Pad both flags with surrounding spaces; the CLI must trim them.
-            # Matching the store on a padded --old-endpoint is what proves the
-            # trimming happened - an untrimmed value would match nothing - so
-            # that is what is asserted, rather than the outcome of the update
-            # itself, which this test is not about.
+            # Pad both flags; the CLI must trim them. Matching on a padded
+            # --old-endpoint is the proof, since an untrimmed value would match
+            # nothing - so that, not the update's outcome, is what is asserted.
             result = run_connection_update(mcg_obj, f'"  {old}  "', f'"  {new}  "')
             assert not result["no_match"], (
                 "Padded --old-endpoint matched no stores, so the surrounding "
@@ -2093,9 +1939,8 @@ class TestConnectionUpdateNegative:
                 else f"http://{'x' * MALFORMED_LONG_HOST_LEN}:9000"
             )
             result = run_connection_update(mcg_obj, old, bad_new)
-            # run_connection_update returns the PARSED dict, so the return code
-            # is a key - not an attribute. getattr() on a dict would always fall
-            # through to its default and make this assertion vacuously true.
+            # The parsed dict, so the return code is a key: getattr() would
+            # always hit its default and make this assertion vacuous.
             rc = result["returncode"]
             assert result["aborted"] or (rc is not None and rc != 0), (
                 f"Bad --new-endpoint ({case}) was not rejected - the command "
@@ -2128,13 +1973,7 @@ class TestConnectionUpdateNegative:
         """
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
-        bs = store_factory(
-            constants.BACKINGSTORE,
-            old,
-            endpoint_conf["target_bucket"],
-            endpoint_conf["secret"],
-            endpoint_conf["signature_version"],
-        )
+        bs = make_store(store_factory, endpoint_conf, old)
         assert (
             get_pool_endpoint(mcg_obj, bs.name) == old
         ), "Core did not pick up the store's original endpoint - bad starting state"
@@ -2198,14 +2037,13 @@ class TestConnectionUpdateNegative:
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         stores = [
-            store_factory(
-                constants.BACKINGSTORE,
+            make_store(
+                store_factory,
+                endpoint_conf,
                 old,
                 endpoint_conf["target_buckets"][
                     i % len(endpoint_conf["target_buckets"])
                 ],
-                endpoint_conf["secret"],
-                endpoint_conf["signature_version"],
             )
             for i in range(BULK_STORE_COUNT)
         ]
@@ -2276,12 +2114,9 @@ class TestConnectionUpdateNegative:
             ), f"{name} was left paused after the update"
 
 
-# ===========================================================================
-# Module C - NamespaceStore + mixed batch
-# ===========================================================================
 @mcg
 @red_squad
-class TestNamespaceStoreEndpointUpdate:
+class TestNamespaceStoreEndpointUpdate(MCGTest):
     """
     Endpoint update for NamespaceStores, on their own and in a batch alongside
     BackingStores.
@@ -2325,12 +2160,8 @@ class TestNamespaceStoreEndpointUpdate:
         """
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
-        nss = store_factory(
-            constants.NAMESPACESTORE,
-            old,
-            endpoint_conf["target_bucket"],
-            endpoint_conf["secret"],
-            endpoint_conf["signature_version_nss"],
+        nss = make_store(
+            store_factory, endpoint_conf, old, kind=constants.NAMESPACESTORE
         )
 
         # --- switch OLD -> NEW ---
@@ -2385,19 +2216,13 @@ class TestNamespaceStoreEndpointUpdate:
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         buckets = endpoint_conf["target_buckets"]
-        bs = store_factory(
-            constants.BACKINGSTORE,
-            old,
-            buckets[0],
-            endpoint_conf["secret"],
-            endpoint_conf["signature_version"],
-        )
-        nss = store_factory(
-            constants.NAMESPACESTORE,
+        bs = make_store(store_factory, endpoint_conf, old, buckets[0])
+        nss = make_store(
+            store_factory,
+            endpoint_conf,
             old,
             buckets[1 % len(buckets)],
-            endpoint_conf["secret"],
-            endpoint_conf["signature_version_nss"],
+            kind=constants.NAMESPACESTORE,
         )
 
         # --- both stores switch in one command ---
