@@ -1186,6 +1186,123 @@ class NetworkScenarioHelper(BaseScenarioHelper):
 # HOG SCENARIO HELPER CLASS
 # ============================================================================
 
+# Krkn hog_scenarios and krknctl node-*-hog create pods with these name prefixes.
+# They are supposed to be deleted after chaos duration; OOMKilled / Completed /
+# ContainerStatusUnknown hog pods are often left behind.
+KRKN_HOG_POD_NAME_PREFIXES = (
+    "cpu-hog",
+    "memory-hog",
+    "io-hog",
+    "node-cpu-hog",
+    "node-memory-hog",
+    "node-io-hog",
+    "krkn-hog",
+)
+KRKN_HOG_POD_NAMESPACES = ("default", OPENSHIFT_STORAGE_NAMESPACE)
+
+
+def _is_krkn_hog_pod_name(name):
+    """Return True if the pod name was created by Krkn/krknctl hog scenarios."""
+    if not name:
+        return False
+    return any(
+        name == prefix or name.startswith(f"{prefix}-")
+        for prefix in KRKN_HOG_POD_NAME_PREFIXES
+    )
+
+
+def cleanup_krkn_hog_pods(namespaces=None, force=True):
+    """Delete leftover Krkn/krknctl hog pods.
+
+    Krkn hog_scenarios (namespace default) and krknctl node-*-hog pods are not
+    always removed when the hog container OOMKills, the kubelet goes Unknown,
+    or Krkn exits before plugin teardown. Leftover hog pods keep stressing
+    nodes and break later chaos and resiliency tests.
+
+    Args:
+        namespaces (list): Namespaces to scan. None scans default plus
+            openshift-storage (and all namespaces when that API succeeds).
+        force (bool): Force-delete with grace-period 0 so Unknown/Completed
+            hog pods are removed.
+
+    Returns:
+        list: Names of hog pods that were deleted (best-effort).
+    """
+    from ocs_ci.ocs import constants
+    from ocs_ci.ocs.exceptions import CommandFailed
+    from ocs_ci.ocs.ocp import OCP
+    from ocs_ci.ocs.resources.pod import Pod, get_all_pods
+
+    hog_pods = []
+    scan_namespaces = list(namespaces) if namespaces else list(KRKN_HOG_POD_NAMESPACES)
+
+    try:
+        ocp_pod = OCP(kind=constants.POD)
+        data = ocp_pod.get(all_namespaces=True)
+        for item in data.get("items", []) if isinstance(data, dict) else []:
+            name = item.get("metadata", {}).get("name", "")
+            if _is_krkn_hog_pod_name(name):
+                hog_pods.append(Pod(**item))
+    except Exception as ex:
+        log.warning(
+            "Could not list hog pods cluster-wide (%s); scanning %s",
+            ex,
+            scan_namespaces,
+        )
+        for ns in scan_namespaces:
+            try:
+                hog_pods.extend(
+                    pod
+                    for pod in get_all_pods(namespace=ns)
+                    if _is_krkn_hog_pod_name(pod.name)
+                )
+            except Exception as ns_ex:
+                log.warning(
+                    "Could not list pods in namespace %s while scanning for hog leftovers: %s",
+                    ns,
+                    ns_ex,
+                )
+
+    if not hog_pods:
+        log.info("No leftover Krkn hog pods found")
+        return []
+
+    deleted = []
+    for pod in hog_pods:
+        ns = getattr(pod, "namespace", None) or "default"
+        try:
+            phase = ""
+            try:
+                phase = (pod.data or {}).get("status", {}).get("phase", "")
+            except Exception:
+                pass
+            log.info(
+                "Deleting leftover hog pod %s in namespace %s (phase=%s)",
+                pod.name,
+                ns,
+                phase or "unknown",
+            )
+            ocp_ns = OCP(kind=constants.POD, namespace=ns)
+            ocp_ns.delete(resource_name=pod.name, wait=False, force=force, timeout=60)
+            deleted.append(f"{ns}/{pod.name}")
+        except CommandFailed as ex:
+            log.warning(
+                "Failed to delete hog pod %s/%s: %s",
+                ns,
+                pod.name,
+                ex,
+            )
+        except Exception as ex:
+            log.warning(
+                "Unexpected error deleting hog pod %s/%s: %s",
+                ns,
+                pod.name,
+                ex,
+            )
+
+    log.info("Deleted %s leftover Krkn hog pod(s): %s", len(deleted), deleted)
+    return deleted
+
 
 class HogScenarioHelper(BaseScenarioHelper):
     """Helper class for resource hog scenarios with CPU/Memory/IO stress."""
@@ -1193,6 +1310,10 @@ class HogScenarioHelper(BaseScenarioHelper):
     def __init__(self, scenario_dir=None, namespace=None):
         """Initialize hog scenario helper."""
         super().__init__(scenario_dir, namespace)
+
+    def cleanup_hog_pods(self, namespaces=None, force=True):
+        """Delete leftover hog pods created by this helper's scenarios."""
+        return cleanup_krkn_hog_pods(namespaces=namespaces, force=force)
 
     def create_cpu_hog_scenario(
         self, duration=None, namespace=None, node_selector=None, output_name=None
