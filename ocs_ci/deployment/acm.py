@@ -164,7 +164,16 @@ class Submariner(object):
             )
             addon_data = addon_obj.get(dont_raise=True)
 
-            if submariner_feature == "available" or addon_data:
+            addon_available = any(
+                c.get("type") == "Available" and c.get("status") == "True"
+                for c in (
+                    addon_data.get("status", {}).get("conditions", [])
+                    if addon_data
+                    else []
+                )
+            )
+
+            if submariner_feature == "available" or addon_available:
                 logger.info(
                     f"Submariner addon detected on ManagedCluster '{acm_cluster_name}' "
                     f"(feature label: {submariner_feature}, clusterset: {cluster_set})"
