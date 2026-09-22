@@ -1147,15 +1147,16 @@ def import_clusters_with_acm():
     if config.DEPLOYMENT.get("ui_acm_import"):
         login_to_acm()
         acm_nav = AcmAddClusters()
-        if is_cluster_already_imported(cluster_name_a):
-            log.info(
-                f"ManagedCluster '{cluster_name_a}' is already imported and available, skipping UI import"
-            )
-        else:
-            acm_nav.import_cluster(
-                cluster_name=cluster_name_a,
-                kubeconfig_location=kubeconfig_a,
-            )
+        for cluster_name, kubeconfig in clusters:
+            if is_cluster_already_imported(cluster_name):
+                log.info(
+                    f"ManagedCluster '{cluster_name}' is already imported and available, skipping UI import"
+                )
+            else:
+                acm_nav.import_cluster(
+                    cluster_name=cluster_name,
+                    kubeconfig_location=kubeconfig,
+                )
     else:
         import_clusters_via_cli(clusters)
 
