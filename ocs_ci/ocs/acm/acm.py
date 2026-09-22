@@ -1156,27 +1156,25 @@ def discover_hosted_clusters():
         "name": "discoveryPrefix",
         "value": constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX,
     }
-    existing_discovery_prefix = next(
-        (entry for entry in spec_data if entry.get("name") == "discoveryPrefix"),
-        None,
-    )
+    existing_discovery_prefix_entries = [
+        entry for entry in spec_data if entry.get("name") == "discoveryPrefix"
+    ]
     if (
-        existing_discovery_prefix is None
-        or existing_discovery_prefix.get("value")
-        != constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+        len(existing_discovery_prefix_entries) == 1
+        and existing_discovery_prefix_entries[0].get("value")
+        == constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
     ):
-        if existing_discovery_prefix is not None:
-            spec_data = [
-                entry for entry in spec_data if entry.get("name") != "discoveryPrefix"
-            ]
+        log.info("discoveryPrefix is already set to the expected value, skipping patch")
+    else:
+        spec_data = [
+            entry for entry in spec_data if entry.get("name") != "discoveryPrefix"
+        ]
         spec_data.append(discovery_prefix_data_to_add)
         addondeploymentconfig.patch(
             resource_name="hypershift-addon-deploy-config",
             params=json.dumps({"spec": {"customizedVariables": spec_data}}),
             format_type="merge",
         )
-    else:
-        log.info("discoveryPrefix is already set to the expected value, skipping patch")
 
     # Find the relevant managedcluster names
     managed_cluster_names = []
