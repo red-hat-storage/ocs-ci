@@ -6,7 +6,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
     ignore_leftovers,
     encryption_at_rest_required,
-    jira,
 )
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.keyrotation_helper import (
@@ -26,7 +25,6 @@ logger = logging.getLogger(__name__)
 @system_test
 @ignore_leftovers
 @encryption_at_rest_required
-@jira("DFBUGS-5769")
 class TestKeyRotationWithClusterFull(E2ETest):
     @pytest.fixture(autouse=True)
     def init_sanity(self):
@@ -106,7 +104,7 @@ class TestKeyRotationWithClusterFull(E2ETest):
         logger.test_step(
             "Configure cluster-wide key rotation schedule to every 5 minutes"
         )
-        time_interval_to_rotate_key_in_minutes = str(5)
+        time_interval_to_rotate_key_in_minutes = str(2)
         tries = 10
         delays = int(time_interval_to_rotate_key_in_minutes) * 60 / tries
         schedule = f"*/{time_interval_to_rotate_key_in_minutes} * * * *"
