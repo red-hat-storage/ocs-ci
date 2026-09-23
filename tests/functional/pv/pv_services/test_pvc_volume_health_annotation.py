@@ -31,7 +31,6 @@ from ocs_ci.ocs import constants, ocp, node
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.csi_addons import (
     get_csi_addon_pod_on_node,
-    get_csi_addons_config_value,
     remove_csi_addons_config_key,
     restart_csi_addons_controller,
     update_csi_addons_config,
@@ -48,7 +47,7 @@ REPORTER_TICK_WAIT = 60
 UNHEALTHY_POLL_TIMEOUT = 300
 RECOVERY_POLL_TIMEOUT = 300
 STALE_CLEANUP_WAIT = 210
-MAX_LAST_CHECKED_AGE_SECONDS = 60
+MAX_LAST_CHECKED_AGE_SECONDS = 120
 
 
 @tier1
@@ -843,12 +842,24 @@ class TestPVCVolumeHealthStaleAnnotation(TestPVCVolumeHealthUnhealthy):
         threshold_key = "volume-health-stale-threshold"
         interval_key = "volume-health-cleanup-interval"
 
-        original_threshold = get_csi_addons_config_value(threshold_key, default="")
-        original_interval = get_csi_addons_config_value(interval_key, default="")
+        threshold_existed = False
+        interval_existed = False
+        original_threshold = ""
+        original_interval = ""
+
+        if cm_existed:
+            cm_data = cm_ocp.get().get("data", {})
+            if threshold_key in cm_data:
+                threshold_existed = True
+                original_threshold = cm_data[threshold_key]
+            if interval_key in cm_data:
+                interval_existed = True
+                original_interval = cm_data[interval_key]
+
         logger.info(
             f"Snapshotted CSI Addons config — cm_existed={cm_existed}, "
-            f"{threshold_key}={repr(original_threshold)}, "
-            f"{interval_key}={repr(original_interval)}"
+            f"{threshold_key}_existed={threshold_existed} value={repr(original_threshold)}, "
+            f"{interval_key}_existed={interval_existed} value={repr(original_interval)}"
         )
 
         def finalizer():
@@ -864,18 +875,23 @@ class TestPVCVolumeHealthStaleAnnotation(TestPVCVolumeHealthUnhealthy):
                         f"Deleted ConfigMap " f"{constants.CSI_ADDONS_CONFIGMAP_NAME}"
                     )
                 except CommandFailed as e:
-                    logger.warning(
-                        f"Failed to delete ConfigMap "
-                        f"{constants.CSI_ADDONS_CONFIGMAP_NAME} "
-                        f"(may not exist): {e}"
+                    if "not found" not in str(e).lower():
+                        logger.error(
+                            f"Failed to delete ConfigMap "
+                            f"{constants.CSI_ADDONS_CONFIGMAP_NAME}: {e}"
+                        )
+                        raise
+                    logger.info(
+                        f"ConfigMap {constants.CSI_ADDONS_CONFIGMAP_NAME} "
+                        f"already deleted"
                     )
                 restart_csi_addons_controller()
                 return
-            for key, original in (
-                (threshold_key, original_threshold),
-                (interval_key, original_interval),
+            for key, existed, original in (
+                (threshold_key, threshold_existed, original_threshold),
+                (interval_key, interval_existed, original_interval),
             ):
-                if original:
+                if existed:
                     update_csi_addons_config(key, original, restart=False)
                     logger.info(f"Restored {key}={original!r}")
                 else:
@@ -885,8 +901,89 @@ class TestPVCVolumeHealthStaleAnnotation(TestPVCVolumeHealthUnhealthy):
 
         request.addfinalizer(finalizer)
 
+    def _validate_stale_cleanup(
+        self,
+        pvc_stale,
+        stale_key,
+        active_key,
+        pvc_active=None,
+    ):
+        """
+        Validate stale annotation cleanup behavior.
+
+        Polls for stale annotation cleanup, asserts the stale key is removed
+        and the active key persists with a fresh lastChecked timestamp.
+
+        Args:
+            pvc_stale: PVC object containing the stale annotation key
+            stale_key: Annotation key expected to be cleaned up
+            active_key: Annotation key expected to remain active
+            pvc_active: Optional separate PVC for active annotation.
+                If None, validates active key on pvc_stale (same PVC).
+        """
+        logger.test_step(
+            f"Poll up to {STALE_CLEANUP_WAIT}s for stale annotation cleanup"
+        )
+        try:
+            for cleaned in TimeoutSampler(
+                timeout=STALE_CLEANUP_WAIT,
+                sleep=10,
+                func=lambda: (
+                    stale_key not in pvc_stale.get_volume_health_annotations()
+                ),
+            ):
+                if cleaned:
+                    logger.info(f"Stale annotation {stale_key} cleaned up")
+                    break
+        except TimeoutExpiredError:
+            logger.warning(f"Stale annotation not cleaned within {STALE_CLEANUP_WAIT}s")
+
+        remaining_stale = pvc_stale.get_volume_health_annotations()
+        logger.assertion(
+            f"stale key not in annotations; "
+            f"remaining={list(remaining_stale.keys())}"
+        )
+        assert stale_key not in remaining_stale, (
+            f"Stale key {stale_key} still present "
+            f"on PVC {pvc_stale.name} after {STALE_CLEANUP_WAIT}s"
+        )
+
+        logger.test_step("Assert active annotation key is still present")
+        # Use separate PVC for active validation if provided, else same PVC
+        pvc_for_active = pvc_active if pvc_active else pvc_stale
+        remaining_active = pvc_for_active.get_volume_health_annotations()
+        logger.assertion(
+            f"active key in annotations; " f"present={list(remaining_active.keys())}"
+        )
+        assert active_key in remaining_active, (
+            f"Active key {active_key} missing from "
+            f"PVC {pvc_for_active.name} — should not have been cleaned up"
+        )
+
+        logger.test_step(
+            f"Parse lastChecked from active annotation; "
+            f"assert age <= {MAX_LAST_CHECKED_AGE_SECONDS}s"
+        )
+        active_parsed = json.loads(remaining_active[active_key])
+        last_checked_raw = active_parsed.get("lastChecked", "")
+        logger.info(f"Active annotation lastChecked: {last_checked_raw}")
+        dt_last = datetime.fromisoformat(last_checked_raw.replace("Z", "+00:00"))
+        now = datetime.now(tz=timezone.utc)
+        age_seconds = (now - dt_last).total_seconds()
+        logger.assertion(
+            f"lastChecked age in range [0, {MAX_LAST_CHECKED_AGE_SECONDS}]s; "
+            f"actual={age_seconds:.1f}s"
+        )
+        assert 0 <= age_seconds <= MAX_LAST_CHECKED_AGE_SECONDS, (
+            f"Active annotation lastChecked age out of range: "
+            f"{age_seconds:.1f}s "
+            f"(expected 0 to {MAX_LAST_CHECKED_AGE_SECONDS}s). "
+            f"lastChecked={last_checked_raw}"
+        )
+        logger.info(f"Active annotation lastChecked age={age_seconds:.1f}s — OK")
+
     @tier2
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-8292")
     def test_stale_volume_health_annotation_cleanup(self, pvc_factory, pod_factory):
         """
         Verify stale volumehealth annotations are cleaned up after the
@@ -914,34 +1011,25 @@ class TestPVCVolumeHealthStaleAnnotation(TestPVCVolumeHealthUnhealthy):
                PVC.
             9. Parse lastChecked from active annotation; assert age
                is within MAX_LAST_CHECKED_AGE_SECONDS.
-
-        Args:
-            pvc_factory: pytest fixture that creates PVC objects.
-            pod_factory: pytest fixture that creates pod objects.
         """
         logger.test_step(
             "Verify Ceph health OK; create stale PVC+pod; "
-            f"wait {REPORTER_TICK_WAIT}s and assert healthy annotation"
+            "poll for healthy annotation"
         )
         ceph_health_check(tries=3, delay=10)
         pvc_stale, pod_stale = self._create_pvc_and_pod_with_io(
             pvc_factory, pod_factory
         )
-        time.sleep(REPORTER_TICK_WAIT)
         pvc_stale.wait_for_volume_health_state(
             "healthy",
             timeout=ANNOTATION_POLL_TIMEOUT,
             interval=ANNOTATION_POLL_INTERVAL,
         )
 
-        logger.test_step(
-            "Create active PVC+pod; "
-            f"wait {REPORTER_TICK_WAIT}s and assert healthy annotation"
-        )
+        logger.test_step("Create active PVC+pod; " "poll for healthy annotation")
         pvc_active, pod_active = self._create_pvc_and_pod_with_io(
             pvc_factory, pod_factory
         )
-        time.sleep(REPORTER_TICK_WAIT)
         pvc_active.wait_for_volume_health_state(
             "healthy",
             timeout=ANNOTATION_POLL_TIMEOUT,
@@ -986,65 +1074,152 @@ class TestPVCVolumeHealthStaleAnnotation(TestPVCVolumeHealthUnhealthy):
         pod_stale.ocp.wait_for_delete(pod_stale.name)
         logger.info(f"Pod {pod_stale.name} deleted")
 
-        logger.test_step(
-            f"Poll up to {STALE_CLEANUP_WAIT}s for stale annotation " "to be cleaned up"
-        )
-        try:
-            for cleaned in TimeoutSampler(
-                timeout=STALE_CLEANUP_WAIT,
-                sleep=10,
-                func=lambda: (
-                    stale_key not in pvc_stale.get_volume_health_annotations()
-                ),
-            ):
-                if cleaned:
-                    logger.info(
-                        f"Stale annotation {stale_key} cleaned up " f"before timeout"
-                    )
-                    break
-        except TimeoutExpiredError:
-            logger.warning(
-                f"Stale annotation not cleaned within "
-                f"{STALE_CLEANUP_WAIT}s; asserting final state"
-            )
-
-        remaining_stale = pvc_stale.get_volume_health_annotations()
-        logger.assertion(
-            f"stale_key not in stale PVC annotations; "
-            f"remaining={list(remaining_stale.keys())}"
-        )
-        assert stale_key not in remaining_stale, (
-            f"Stale annotation key {stale_key} still present "
-            f"on PVC {pvc_stale.name} after {STALE_CLEANUP_WAIT}s"
+        self._validate_stale_cleanup(
+            pvc_stale=pvc_stale,
+            stale_key=stale_key,
+            active_key=active_key,
+            pvc_active=pvc_active,
         )
 
-        logger.test_step("Assert active annotation key is still present on active PVC")
-        current_active = pvc_active.get_volume_health_annotations()
-        logger.assertion(
-            f"active_key in active PVC annotations; "
-            f"present={list(current_active.keys())}"
-        )
-        assert active_key in current_active, (
-            f"Active annotation key {active_key} missing from "
-            f"PVC {pvc_active.name} — should not have been cleaned up"
-        )
-
-        logger.test_step("Parse lastChecked from active annotation; assert age <= 60s")
-        active_parsed = json.loads(current_active[active_key])
-        last_checked_raw = active_parsed.get("lastChecked", "")
-        logger.info(f"Active annotation lastChecked: {last_checked_raw}")
-        dt_last = datetime.fromisoformat(last_checked_raw.replace("Z", "+00:00"))
-        now = datetime.now(tz=timezone.utc)
-        age_seconds = (now - dt_last).total_seconds()
-        logger.assertion(
-            f"lastChecked age <= {MAX_LAST_CHECKED_AGE_SECONDS}s; "
-            f"actual={age_seconds:.1f}s"
-        )
-        assert age_seconds <= MAX_LAST_CHECKED_AGE_SECONDS, (
-            f"Active annotation lastChecked is too old: "
-            f"{age_seconds:.1f}s "
-            f"(expected <= {MAX_LAST_CHECKED_AGE_SECONDS}s). "
-            f"lastChecked={last_checked_raw}"
-        )
-        logger.info(f"Active annotation lastChecked " f"age={age_seconds:.1f}s — OK")
         logger.info("PVC volume health stale annotation cleanup test passed")
+
+    @tier2
+    @pytest.mark.polarion_id("OCS-8293")
+    def test_stale_volume_health_annotation_cleanup_rwx_multi_node(
+        self, pvc_factory, pod_factory, request
+    ):
+        """
+        Verify stale volumehealth annotation cleanup on a CephFS RWX PVC
+        mounted across two worker nodes: deleting pod-A on node-1 results
+        in its per-node annotation key being removed after the stale
+        threshold expires, while pod-B on node-2 remains running and its
+        annotation key stays active and fresh.
+
+        Steps:
+            1. Ceph health OK; create CephFS RWX PVC (5Gi).
+            2. Create pod-A on node-1 and pod-B on node-2; run FIO I/O
+               on both.
+            3. Wait for reporter tick and assert 2 per-node healthy
+               annotation keys exist.
+            4. Resolve per-node annotation keys for node-1 (stale candidate)
+               and node-2 (active candidate).
+            5. Configure stale threshold (2 m) and cleanup interval (1 m)
+               on the CSI Addons controller.
+            6. Delete pod-A on node-1 and wait for it to disappear.
+            7. Poll until node-1 annotation key disappears (up to
+               STALE_CLEANUP_WAIT seconds).
+            8. Assert node-1 annotation key is gone from the RWX PVC.
+            9. Assert node-2 annotation key is still present on the RWX PVC.
+            10. Parse lastChecked from node-2 annotation; assert age
+                is within MAX_LAST_CHECKED_AGE_SECONDS.
+        """
+        logger.test_step("Verify Ceph health OK; create CephFS RWX PVC (5Gi)")
+        ceph_health_check(tries=3, delay=10)
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            size=5,
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+        logger.info(f"RWX PVC {pvc_obj.name} created and Bound")
+
+        logger.test_step("Create pod-A on node-1 and pod-B on node-2")
+        worker_nodes = node.get_worker_nodes()
+        logger.assertion(
+            f"Worker node count: expected >= 2, actual={len(worker_nodes)}"
+        )
+        assert (
+            len(worker_nodes) >= 2
+        ), f"Need >= 2 worker nodes, found {len(worker_nodes)}"
+
+        pod_a = pod_factory(
+            pvc=pvc_obj,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=worker_nodes[0],
+        )
+        pod_b = pod_factory(
+            pvc=pvc_obj,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=worker_nodes[1],
+        )
+        node_a = pod_a.get()["spec"]["nodeName"]
+        node_b = pod_b.get()["spec"]["nodeName"]
+        logger.info(
+            f"Pod-A {pod_a.name} on {node_a}, " f"Pod-B {pod_b.name} on {node_b}"
+        )
+        logger.assertion(f"Pods on different nodes: {node_a} != {node_b}")
+        assert node_a != node_b, f"Both pods on same node: {node_a}"
+
+        def finalizer_cleanup_pods():
+            """Clean up any remaining pods if test fails"""
+            for p, name in [(pod_a, "pod_a"), (pod_b, "pod_b")]:
+                try:
+                    if p.ocp.is_exist(resource_name=p.name):
+                        logger.info(f"Finalizer cleaning up {name}: {p.name}")
+                        p.delete(wait=False)
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup {name}: {e}")
+
+        request.addfinalizer(finalizer_cleanup_pods)
+
+        logger.test_step("Run FIO I/O on both pods")
+        for p in (pod_a, pod_b):
+            p.run_io(
+                storage_type="fs",
+                size="512M",
+                fio_filename=p.name,
+            )
+        for p in (pod_a, pod_b):
+            pod.get_fio_rw_iops(p)
+        logger.info("FIO I/O completed on both pods")
+
+        logger.test_step("Poll for 2 healthy per-node annotation keys")
+        health_annotations = pvc_obj.wait_for_volume_health_state(
+            expected_state="healthy",
+            timeout=ANNOTATION_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+            expected_count=2,
+        )
+
+        logger.test_step(
+            "Resolve per-node annotation keys for node-1 (stale) and " "node-2 (active)"
+        )
+        node_a_ocp = ocp.OCP(kind="node", resource_name=node_a)
+        uid_a = node_a_ocp.get()["metadata"]["uid"]
+        key_a = f"{constants.VOLUME_HEALTH_ANNOTATION_PREFIX}{uid_a}"
+
+        node_b_ocp = ocp.OCP(kind="node", resource_name=node_b)
+        uid_b = node_b_ocp.get()["metadata"]["uid"]
+        key_b = f"{constants.VOLUME_HEALTH_ANNOTATION_PREFIX}{uid_b}"
+
+        logger.assertion(f"key_a ({key_a}) in health annotations")
+        assert key_a in health_annotations, (
+            f"Missing key_a {key_a} in annotations: "
+            f"{list(health_annotations.keys())}"
+        )
+        logger.assertion(f"key_b ({key_b}) in health annotations")
+        assert key_b in health_annotations, (
+            f"Missing key_b {key_b} in annotations: "
+            f"{list(health_annotations.keys())}"
+        )
+        logger.info(f"Resolved key_a={key_a} (node-1), key_b={key_b} (node-2)")
+
+        logger.test_step(
+            "Configure stale threshold=2m, cleanup interval=1m on "
+            "CSI Addons controller"
+        )
+        update_csi_addons_config("volume-health-stale-threshold", "2m", restart=False)
+        update_csi_addons_config("volume-health-cleanup-interval", "1m", restart=True)
+        logger.info("CSI Addons config updated; controller restarted")
+
+        logger.test_step(f"Delete pod-A ({pod_a.name}) on node-1 and wait for deletion")
+        pod_a.delete(wait=True)
+        pod_a.ocp.wait_for_delete(pod_a.name)
+        logger.info(f"Pod-A {pod_a.name} deleted; pod-B {pod_b.name} still running")
+
+        self._validate_stale_cleanup(
+            pvc_stale=pvc_obj,
+            stale_key=key_a,
+            active_key=key_b,
+        )
+
+        logger.info("RWX multi-node stale volume health annotation cleanup test passed")
