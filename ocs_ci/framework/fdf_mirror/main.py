@@ -1,7 +1,10 @@
 import sys
 import logging
 
-from ocs_ci.deployment.disconnected import mirror_fdf_catalog_via_oc_mirror
+from ocs_ci.deployment.disconnected import (
+    mirror_fdf_catalog_via_oc_mirror,
+    tag_fdf_catalog_adjacent_versions,
+)
 from ocs_ci.utility.framework.fdf_mirror_init import FDFMirrorInitializer
 
 logger = logging.getLogger(__name__)
@@ -51,6 +54,12 @@ def main(argv=None):
     if not mirrored_image:
         logger.error("Mirroring failed")
         sys.exit(1)
+
+    # Create adjacent version tags on mirror registry (N-1, N, N+1)
+    tag_fdf_catalog_adjacent_versions(
+        catalog_image=catalog_image,
+        mirror_registry=mirror_registry,
+    )
 
     logger.info(f"FDF catalog successfully mirrored to: {mirrored_image}")
     logger.info("Mirroring completed successfully!")
