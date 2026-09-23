@@ -2630,6 +2630,12 @@ class Deployment(object):
             run_cmd(cmd=cmd)
             logger.info("Sleeping for 60 Sec for Background Activity")
             time.sleep(60)
+            addon_deployment_config = OCP(
+                kind=constants.ADDONDEPLOYMENTCONFIG,
+                namespace=constants.MCE_NAMESPACE,
+                resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG,
+            )
+            existing_spec = addon_deployment_config.get()
             for pod_label in [
                 "open-cluster-management.io/addon=cluster-proxy",
                 "component=work-manager",
@@ -2639,12 +2645,13 @@ class Deployment(object):
                 if not wait_for_pods_by_label_count(
                     label=pod_label,
                     expected_count=1,
-                    namespace=constants.ACM_ADDONS_NAMESPACE_DISCOVERY,
+                    namespace=existing_spec["spec"]["agentInstallNamespace"],
                     timeout=400,
                     sleep=10,
                 ):
                     raise ResourceNotFoundError(
-                        f"Pod with label {pod_label} not found in the ns {constants.ACM_ADDONS_NAMESPACE_DISCOVERY}"
+                        f"Pod with label {pod_label} not found in the ns "
+                        f"{existing_spec['spec']['agentInstallNamespace']}"
                     )
 
         # Configuration for backup and restore. Add backup label to the default and new addondeploymentconfig,
