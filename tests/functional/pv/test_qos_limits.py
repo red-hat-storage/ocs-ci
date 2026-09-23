@@ -6,7 +6,7 @@ import tempfile
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    orange_squad,
+    green_squad,
     skipif_ocs_version,
     tier1,
 )
@@ -87,7 +87,7 @@ BURSTABLE_BLOCK_CONTAINERS = [
 ]
 
 
-@orange_squad
+@green_squad
 @tier1
 @skipif_ocs_version("<4.21")
 class TestVolumeAttributesClassQoS(ManageTest):
