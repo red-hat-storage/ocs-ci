@@ -2390,6 +2390,72 @@ def get_storage_cluster(namespace=None):
     return sc_obj
 
 
+def get_noobaa_external_pgsql_secret_name():
+    """
+    Get the external PostgreSQL secret name configured on the StorageCluster for NooBaa.
+
+    Returns:
+        str: The pgSecretName from spec.multiCloudGateway.externalPgConfig,
+            or None if not configured
+
+    """
+    sc = get_storage_cluster()
+    sc_data = sc.get().get("items")[0]
+    return (
+        sc_data["spec"]
+        .get("multiCloudGateway", {})
+        .get("externalPgConfig", {})
+        .get("pgSecretName")
+    )
+
+
+def verify_noobaa_external_pgsql_config():
+    """
+    Verify that NooBaa is configured to use an external PostgreSQL database.
+
+    Checks that:
+        - StorageCluster spec.multiCloudGateway.externalPgConfig.pgSecretName is set
+          to the expected external PostgreSQL secret
+        - The referenced secret exists and contains a db_url
+        - No internal noobaa-db pod is running (the external DB replaces it)
+
+    Raises:
+        AssertionError: If any of the external PostgreSQL configuration checks fail
+
+    """
+    # Imported here to avoid a circular import at module load time
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    pg_secret_name = get_noobaa_external_pgsql_secret_name()
+    assert pg_secret_name == constants.NOOBAA_POSTGRES_SECRET, (
+        f"StorageCluster externalPgConfig.pgSecretName is '{pg_secret_name}', "
+        f"expected '{constants.NOOBAA_POSTGRES_SECRET}'"
+    )
+
+    secret_obj = OCP(
+        kind=constants.SECRET,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=pg_secret_name,
+    )
+    secret_data = secret_obj.get()
+    assert secret_data.get("data", {}).get(
+        "db_url"
+    ), f"External PostgreSQL secret '{pg_secret_name}' is missing 'db_url'"
+
+    internal_db_pods = get_pods_having_label(
+        constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    assert not internal_db_pods, (
+        "Found internal noobaa-db pod(s) while external PostgreSQL is configured: "
+        f"{[pod['metadata']['name'] for pod in internal_db_pods]}"
+    )
+    log.info(
+        "Verified NooBaa is configured with external PostgreSQL "
+        f"(secret: {pg_secret_name}, no internal noobaa-db pod running)"
+    )
+
+
 def get_osd_count():
     """
     Get osd count from Storage cluster.
