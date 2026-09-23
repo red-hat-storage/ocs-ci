@@ -919,11 +919,20 @@ class BAREMETALAI(BAREMETALBASE):
                 ]
                 subnet_id = config.ENV_DATA["baremetal"]["subnet_id"]
 
-                # Create API ALB
-                api_lb_ip, api_lb_id = vpc_bm_manager.create_alb_for_api(
+                # Create Internal API ALB (ports 6443, 22623)
+                api_int_lb_ip, api_int_lb_id = vpc_bm_manager.create_alb_for_api(
                     cluster_name=self.cluster_name,
                     subnet_id=subnet_id,
                     server_ips=server_ips,
+                )
+
+                # Create Public API ALB for external client access (port 6443 only)
+                api_public_lb_ip, api_public_lb_id = (
+                    vpc_bm_manager.create_alb_for_public_api(
+                        cluster_name=self.cluster_name,
+                        subnet_id=subnet_id,
+                        server_ips=server_ips,
+                    )
                 )
 
                 # Create Ingress ALB
@@ -933,16 +942,20 @@ class BAREMETALAI(BAREMETALBASE):
                     server_ips=server_ips,
                 )
 
-                # Override VIPs with ALB IPs
-                self.api_vip = api_lb_ip
+                # Override VIPs with ALB IPs:
+                # self.api_vip is the public IP exposed externally for client access / kubeconfig
+                self.api_vip = api_public_lb_ip
+                self.api_int_vip = api_int_lb_ip
                 self.ingress_vip = ingress_lb_ip
 
                 # Store LB IDs for cleanup
-                self.api_lb_id = api_lb_id
+                self.api_lb_id = api_int_lb_id
+                self.public_api_lb_id = api_public_lb_id
                 self.ingress_lb_id = ingress_lb_id
 
                 logger.info(
-                    f"VPC BM ALBs created - API: {api_lb_ip} (ID: {api_lb_id}), "
+                    f"VPC BM ALBs created - Internal API: {api_int_lb_ip} (ID: {api_int_lb_id}), "
+                    f"Public API: {api_public_lb_ip} (ID: {api_public_lb_id}), "
                     f"Ingress: {ingress_lb_ip} (ID: {ingress_lb_id})"
                 )
 
@@ -950,6 +963,7 @@ class BAREMETALAI(BAREMETALBASE):
                 # (separate from metadata.json which gets overwritten by install_cluster)
                 vpc_resources = {
                     "api_lb_id": self.api_lb_id,
+                    "public_api_lb_id": self.public_api_lb_id,
                     "ingress_lb_id": self.ingress_lb_id,
                     "cluster_name": self.cluster_name,
                 }
@@ -1098,12 +1112,14 @@ class BAREMETALAI(BAREMETALBASE):
             if is_vpc_infra():
                 # Use IBM Cloud CIS for DNS
                 logger.info(
-                    f"VPC BM: Creating CIS DNS records (API VIP: {self.api_vip}, Ingress VIP: {self.ingress_vip})"
+                    f"VPC BM: Creating CIS DNS records (Public API VIP: {self.api_vip}, "
+                    f"Internal API VIP: {self.api_int_vip}, Ingress VIP: {self.ingress_vip})"
                 )
                 ibmcloud_bm.IBMCloudVPCBM.create_cis_dns_records(
                     cluster_name=self.cluster_name,
                     api_vip=self.api_vip,
                     ingress_vip=self.ingress_vip,
+                    api_int_vip=self.api_int_vip,
                 )
             else:
                 # Use AWS Route53 for other platforms
@@ -1194,10 +1210,16 @@ class BAREMETALAI(BAREMETALBASE):
                         for machine in master_nodes + worker_nodes
                     ]
 
-                    # Add members to API ALB (ports 6443 and 22623)
+                    # Add members to Internal API ALB (ports 6443 and 22623)
                     vpc_bm_manager.add_alb_pool_members(
                         self.api_lb_id, server_ips, [6443, 22623]
                     )
+
+                    # Add members to Public API ALB (port 6443)
+                    if hasattr(self, "public_api_lb_id") and self.public_api_lb_id:
+                        vpc_bm_manager.add_alb_pool_members(
+                            self.public_api_lb_id, server_ips, [6443]
+                        )
 
                     # Add members to Ingress ALB (ports 80 and 443)
                     vpc_bm_manager.add_alb_pool_members(
@@ -1627,13 +1649,15 @@ class BAREMETALAI(BAREMETALBASE):
 
                 # PRIMARY: Use name-based lookup (handles retries/partial deploys)
                 api_lb_name = f"{cluster_name}-api-lb"
+                public_api_lb_name = f"{cluster_name}-api-public-lb"
                 ingress_lb_name = f"{cluster_name}-ingress-lb"
 
                 api_lb_id = vpc_bm_manager.get_alb_id_by_name(api_lb_name)
+                public_api_lb_id = vpc_bm_manager.get_alb_id_by_name(public_api_lb_name)
                 ingress_lb_id = vpc_bm_manager.get_alb_id_by_name(ingress_lb_name)
 
                 # FALLBACK: Try vpc_bm_resources.json if name lookup failed
-                if not api_lb_id or not ingress_lb_id:
+                if not api_lb_id or not public_api_lb_id or not ingress_lb_id:
                     vpc_resources_file = os.path.join(
                         self.cluster_path, "vpc_bm_resources.json"
                     )
@@ -1643,6 +1667,10 @@ class BAREMETALAI(BAREMETALBASE):
                                 vpc_resources = json.load(f)
                                 if not api_lb_id:
                                     api_lb_id = vpc_resources.get("api_lb_id")
+                                if not public_api_lb_id:
+                                    public_api_lb_id = vpc_resources.get(
+                                        "public_api_lb_id"
+                                    )
                                 if not ingress_lb_id:
                                     ingress_lb_id = vpc_resources.get("ingress_lb_id")
                             logger.info(f"Loaded ALB IDs from {vpc_resources_file}")
@@ -1650,25 +1678,21 @@ class BAREMETALAI(BAREMETALBASE):
                             logger.warning(f"Failed to load vpc_bm_resources.json: {e}")
 
                 # Delete ALBs
-                if api_lb_id:
-                    logger.info(f"Deleting API ALB: {api_lb_id}")
-                    try:
-                        vpc_bm_manager.delete_alb(api_lb_id)
-                    except Exception as e:
-                        logger.warning(f"Failed to delete API ALB: {e}")
-                else:
-                    logger.warning("API ALB ID not found, skipping API ALB deletion")
-
-                if ingress_lb_id:
-                    logger.info(f"Deleting Ingress ALB: {ingress_lb_id}")
-                    try:
-                        vpc_bm_manager.delete_alb(ingress_lb_id)
-                    except Exception as e:
-                        logger.warning(f"Failed to delete Ingress ALB: {e}")
-                else:
-                    logger.warning(
-                        "Ingress ALB ID not found, skipping Ingress ALB deletion"
-                    )
+                for lb_name_label, lb_id in [
+                    ("Internal API ALB", api_lb_id),
+                    ("Public API ALB", public_api_lb_id),
+                    ("Ingress ALB", ingress_lb_id),
+                ]:
+                    if lb_id:
+                        logger.info(f"Deleting {lb_name_label}: {lb_id}")
+                        try:
+                            vpc_bm_manager.delete_alb(lb_id)
+                        except Exception as e:
+                            logger.warning(f"Failed to delete {lb_name_label}: {e}")
+                    else:
+                        logger.warning(
+                            f"{lb_name_label} ID not found, skipping {lb_name_label} deletion"
+                        )
 
                 # Delete CIS DNS records
                 if cluster_name:
