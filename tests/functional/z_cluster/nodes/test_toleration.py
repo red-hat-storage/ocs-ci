@@ -1,7 +1,7 @@
 import logging
 import pytest
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     tier4c,
     E2ETest,
@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_hci_provider_and_client
 @pytest.mark.polarion_id("OCS-2450")
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestTaintAndTolerations(E2ETest):
     """
     Test to test taints and toleration

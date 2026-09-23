@@ -10,6 +10,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ms_consumer,
     skipif_hci_client,
     stretchcluster_required_skipif,
+    zstream_4_18_1,
+    zstream_4_18_1_ocs_operator,
 )
 from ocs_ci.ocs.must_gather.must_gather import MustGather
 from ocs_ci.ocs.must_gather import const_must_gather
@@ -18,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 @brown_squad
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestMustGather(ManageTest):
     @pytest.mark.parametrize(
         argnames=[

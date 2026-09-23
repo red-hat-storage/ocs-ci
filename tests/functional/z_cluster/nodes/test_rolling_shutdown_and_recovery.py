@@ -3,7 +3,7 @@ import time
 import pytest
 
 
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     tier4b,
     ignore_leftovers,
@@ -27,6 +27,8 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_managed_service
 @ignore_leftovers
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestRollingWorkerNodeShutdownAndRecovery(ManageTest):
     """
     Test rolling shutdown and recovery of OCS pods running worker nodes

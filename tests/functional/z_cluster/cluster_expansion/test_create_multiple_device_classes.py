@@ -27,6 +27,7 @@ from ocs_ci.helpers.helpers import (
     create_rbd_deviceclass_storageclass,
 )
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.framework.pytest_customization.marks import zstream_4_18_1, zstream_4_18_1_ocs_operator
 
 
 log = logging.getLogger(__name__)
@@ -37,6 +38,8 @@ log = logging.getLogger(__name__)
 @skipif_no_lso
 @skipif_bm
 @skipif_hci_provider_or_client
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestMultipleDeviceClasses(ManageTest):
     """
     Automate the multiple device classes tests
