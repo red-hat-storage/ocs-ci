@@ -251,13 +251,10 @@ class TestPVCVolumeHealthAnnotation(ManageTest):
         logger.info(f"{driver.upper()} PVC volume health annotation test passed")
 
 
-@green_squad
-@skipif_ocs_version("<4.23")
-@skipif_mcg_only
-class TestPVCVolumeHealthUnhealthy(ManageTest):
+class PVCVolumeHealthTestHelpers:
     """
-    Test PVC volume health annotation transitions to unhealthy state
-    when Ceph connectivity is disrupted, and recovers when restored.
+    Mixin class providing shared helper methods for PVC volume health tests.
+    Not a test class itself - provides utilities for creating PVCs, pods, and I/O.
     """
 
     def _create_pvc_and_pod_with_io(self, pvc_factory, pod_factory):
@@ -322,6 +319,16 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
             f"No CephFS nodeplugin pod found on nodes: "
             f"{sorted(targets - set(restarted))}"
         )
+
+
+@green_squad
+@skipif_ocs_version("<4.23")
+@skipif_mcg_only
+class TestPVCVolumeHealthUnhealthy(PVCVolumeHealthTestHelpers, ManageTest):
+    """
+    Test PVC volume health annotation transitions to unhealthy state
+    when Ceph connectivity is disrupted, and recovers when restored.
+    """
 
     @tier1
     @ui
@@ -808,7 +815,7 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
 @skipif_rosa_hcp
 @skipif_external_mode
 @skipif_mcg_only
-class TestPVCVolumeHealthStaleAnnotation(TestPVCVolumeHealthUnhealthy):
+class TestPVCVolumeHealthStaleAnnotation(PVCVolumeHealthTestHelpers, ManageTest):
     """
     Verify that stale volumehealth annotations are cleaned up by the
     CSI Addons controller once the stale threshold elapses after the
@@ -966,6 +973,14 @@ class TestPVCVolumeHealthStaleAnnotation(TestPVCVolumeHealthUnhealthy):
         )
         active_parsed = json.loads(remaining_active[active_key])
         last_checked_raw = active_parsed.get("lastChecked", "")
+        logger.assertion(
+            f"lastChecked field exists in annotation {active_key}; "
+            f"value={repr(last_checked_raw)}, full_annotation={active_parsed}"
+        )
+        assert last_checked_raw, (
+            f"Annotation {active_key} missing 'lastChecked' field. "
+            f"Full annotation: {active_parsed}"
+        )
         logger.info(f"Active annotation lastChecked: {last_checked_raw}")
         dt_last = datetime.fromisoformat(last_checked_raw.replace("Z", "+00:00"))
         now = datetime.now(tz=timezone.utc)
@@ -1086,7 +1101,7 @@ class TestPVCVolumeHealthStaleAnnotation(TestPVCVolumeHealthUnhealthy):
     @tier2
     @pytest.mark.polarion_id("OCS-8293")
     def test_stale_volume_health_annotation_cleanup_rwx_multi_node(
-        self, pvc_factory, pod_factory, request
+        self, pvc_factory, pod_factory
     ):
         """
         Verify stale volumehealth annotation cleanup on a CephFS RWX PVC
@@ -1148,18 +1163,6 @@ class TestPVCVolumeHealthStaleAnnotation(TestPVCVolumeHealthUnhealthy):
         )
         logger.assertion(f"Pods on different nodes: {node_a} != {node_b}")
         assert node_a != node_b, f"Both pods on same node: {node_a}"
-
-        def finalizer_cleanup_pods():
-            """Clean up any remaining pods if test fails"""
-            for p, name in [(pod_a, "pod_a"), (pod_b, "pod_b")]:
-                try:
-                    if p.ocp.is_exist(resource_name=p.name):
-                        logger.info(f"Finalizer cleaning up {name}: {p.name}")
-                        p.delete(wait=False)
-                except Exception as e:
-                    logger.warning(f"Failed to cleanup {name}: {e}")
-
-        request.addfinalizer(finalizer_cleanup_pods)
 
         logger.test_step("Run FIO I/O on both pods")
         for p in (pod_a, pod_b):
