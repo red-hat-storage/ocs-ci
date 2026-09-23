@@ -3151,6 +3151,160 @@ data_foundation_overview = {
         By.XPATH,
     ),
 }
+# VirtualMachine Page Locators
+virtualmachine = {
+    "virtualization_menu": (
+        "//button[text()='Virtualization']",
+        By.XPATH,
+    ),
+    "virtualmachines_tab": (
+        "//a[@data-test-id='virtualmachines-nav-item']",
+        By.XPATH,
+    ),
+    "workloads_menu": (
+        "//button[text()='Workloads']",
+        By.XPATH,
+    ),
+    "workloads_pods_option": (
+        "Pods",
+        By.LINK_TEXT,
+    ),
+    "project_selector_dropdown": (
+        "//button[contains(@class,'co-namespace-dropdown__menu-toggle')]",
+        By.XPATH,
+    ),
+    "project_show_default_toggle": (
+        "//input[@type='checkbox'][@id[contains(.,'showDefault')]]",
+        By.XPATH,
+    ),
+    "project_search_input": (
+        "//input[@data-test='dropdown-text-filter']",
+        By.XPATH,
+    ),
+    "project_namespace_item_tmpl": (
+        "//button[normalize-space(.)='{namespace}']",
+        By.XPATH,
+    ),
+    "create_vm_button": (
+        "//button[@data-test='item-create']",
+        By.XPATH,
+    ),
+    "create_vm_from_instancetype_option": (
+        "//li[@data-test='list-page-create-dropdown-item-instanceType']"
+        "//button[@role='menuitem']",
+        By.XPATH,
+    ),
+    "instancetype_vm_name_input": (
+        "//input[@data-test-id='instancetypes-vm-name-input']",
+        By.XPATH,
+    ),
+    "boot_volume_first_row": (
+        "//tbody[@role='rowgroup']/tr[td[@id='name']]",
+        By.XPATH,
+    ),
+    "instance_type_general_purpose_card": (
+        "//div[contains(@class,'instance-type-series-menu-card__toggle-card')]"
+        "[normalize-space(.)='General Purpose']",
+        By.XPATH,
+    ),
+    "vm_details_storageclass_dropdown": (
+        "//dt[normalize-space(.)='Storage class']"
+        "/following-sibling::dd//button[contains(@class,'c-menu-toggle')]",
+        By.XPATH,
+    ),
+    "vm_details_storageclass_vm_option": (
+        "//button[@role='option']" "[substring(@id, string-length(@id) - 2) = '-vm']",
+        By.XPATH,
+    ),
+    "create_vm_instancetype_submit_button": (
+        "//footer[contains(@class,'create-vm-instance-type-footer')]"
+        "//button[.//*[normalize-space(.)='Create VirtualMachine']]",
+        By.XPATH,
+    ),
+    "vm_status_running": (
+        "//dd[@data-test-id='virtual-machine-overview-details-status']"
+        "//*[normalize-space(text())='Running']",
+        By.XPATH,
+    ),
+    "vm_status_stopped": (
+        "//dd[@data-test-id='virtual-machine-overview-details-status']"
+        "//*[normalize-space(text())='Stopped']",
+        By.XPATH,
+    ),
+    "actions_button": (
+        "//button[normalize-space(.)='Actions']",
+        By.XPATH,
+    ),
+    "actions_control_menu": (
+        "//li//button[normalize-space(.)='Control']",
+        By.XPATH,
+    ),
+    "actions_stop_option": (
+        "//li//button[normalize-space(.)='Stop']",
+        By.XPATH,
+    ),
+    "actions_start_option": (
+        "//li//button[normalize-space(.)='Start']",
+        By.XPATH,
+    ),
+    "actions_clone_option": (
+        "//li//button[normalize-space(.)='Clone']",
+        By.XPATH,
+    ),
+    "clone_start_vm_checkbox": (
+        "//input[@id='start-clone']",
+        By.XPATH,
+    ),
+    "clone_submit_button": (
+        "//*[@role='dialog']//button[@data-test='save-button']",
+        By.XPATH,
+    ),
+    "clone_vm_name_input": (
+        "//input[@id='clone-name']",
+        By.XPATH,
+    ),
+    "vm_left_tree_link_tmpl": (
+        "//a[@data-test='{vm_name}']",
+        By.XPATH,
+    ),
+    "dialog_overlay": (
+        "//*[@role='dialog']",
+        By.XPATH,
+    ),
+    # --- Snapshot / Restore locators ---
+    "actions_take_snapshot_option": (
+        "//li//button[normalize-space(.)='Take snapshot']",
+        By.XPATH,
+    ),
+    "take_snapshot_save_button": (
+        "//*[@role='dialog']//button[normalize-space(.)='Save']",
+        By.XPATH,
+    ),
+    "vm_detail_snapshots_tab": (
+        "//a[@data-test-id='horizontal-link-Snapshots']",
+        By.XPATH,
+    ),
+    "vm_detail_overview_tab": (
+        "//a[@data-test-id='horizontal-link-Overview']",
+        By.XPATH,
+    ),
+    "snapshot_row_status_succeeded": (
+        "//span[@data-test='status-text'][normalize-space(text())='Succeeded']",
+        By.XPATH,
+    ),
+    "snapshot_kebab_button": (
+        "//td[@role='gridcell']//button[contains(@class,'pf-m-plain')]",
+        By.XPATH,
+    ),
+    "snapshot_kebab_restore_option": (
+        "//button[@role='menuitem'][normalize-space(.)='Restore VirtualMachine from snapshot']",
+        By.XPATH,
+    ),
+    "restore_snapshot_confirm_button": (
+        "//button[@data-test='save-button']" "[ancestor::*[@role='dialog']]",
+        By.XPATH,
+    ),
+}
 external_systems = {
     "connect_external_system": (
         "//button[@data-test='configure-external-systems']",
@@ -3326,6 +3480,7 @@ locators = {
         "external_systems": external_systems,
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
+        "virtualmachine": virtualmachine,
     },
     "4.20": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
