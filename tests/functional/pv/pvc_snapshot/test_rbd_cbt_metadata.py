@@ -5,8 +5,9 @@ Validates the GetMetadataAllocated and GetMetadataDelta gRPC
 operations exposed by the snapshot-metadata sidecar running in
 the RBD CSI controller pods.
 
-These tests require ODF 5.0 or later, where the
-SnapshotMetadataService is automatically deployed.
+These tests require the SnapshotMetadataService CR and its
+connection ConfigMap to be present in openshift-storage. That is
+automatic on ODF 5.0 and later.
 
 RHSTOR-6440
 """
@@ -211,14 +212,18 @@ class TestRbdCBTMetadata(ManageTest):
         assert exit_code == 0, f"Verifier exited with code {exit_code}. Logs:\n{logs}"
         return restored_pvc
 
-    def _finish_copy_step(self, restored_pvc):
+    def _delete_verifier_pod_and_restored_pvc(self, restored_pvc):
         """
-        Clean up after a completed copy step.
+        Delete the verifier pod and the restored PVC of a finished
+        copy step.
 
         The copy PVC accumulates state across steps and is kept,
-        but the verifier pod and the restored PVC of the finished
-        step must be removed before the next step reuses the copy
-        PVC as its destination.
+        but it is a RWO Block PVC, so the verifier pod of the
+        finished step has to be gone and its volumes detached
+        before the next step attaches the copy PVC again. The
+        restored PVC is a throwaway full-size clone of the
+        snapshot, so it is dropped here instead of being held
+        until the teardown_factory finalizer runs.
 
         Args:
             restored_pvc (PVC): Restored PVC of the finished step
@@ -386,8 +391,10 @@ class TestRbdCBTMetadata(ManageTest):
            and a writer pod.
         2. Write 10 MiB of data to the PVC.
         3. Take snap-1 and run an allocated-mode verification.
-        4. Delete the restored PVC from the allocated copy.
-        5. Write 5 MiB of additional data at offset 100 MiB.
+        4. Delete the verifier pod and the restored PVC of the
+           allocated copy.
+        5. Write 5 MiB of additional data (at offset 100 MiB in
+           Block mode).
         6. Take snap-2.
         7. Run the CBT lister in delta mode (snap-2 vs snap-1).
         8. Run the CBT verifier in delta mode and assert it
@@ -419,12 +426,16 @@ class TestRbdCBTMetadata(ManageTest):
             volume_mode,
         )
 
-        log.test_step("Delete the restored PVC from the allocated copy")
-        self._finish_copy_step(restored_pvc_1)
+        log.test_step(
+            "Delete the verifier pod and the restored PVC of the allocated copy"
+        )
+        self._delete_verifier_pod_and_restored_pvc(restored_pvc_1)
 
         # -- Phase 2: delta copy of snap-2 -------------------------
 
-        log.test_step("Write 5 MiB of additional data at offset 100 MiB")
+        log.test_step(
+            "Write 5 MiB of additional data (at offset 100 MiB in Block mode)"
+        )
         write_data_to_pvc(
             writer_pod,
             volume_mode,
@@ -439,7 +450,7 @@ class TestRbdCBTMetadata(ManageTest):
         log.test_step("Run the CBT lister in delta mode (snap-2 vs snap-1)")
         entries = self.cbt_runner.run_lister_delta(
             target_snap=snap_2.name,
-            base_snap=snap_1.name,
+            base_snap_name=snap_1.name,
         )
         log.info(
             "Lister delta returned %d changed block(s)",
@@ -462,11 +473,11 @@ class TestRbdCBTMetadata(ManageTest):
         argvalues=[
             pytest.param(
                 constants.VOLUME_MODE_BLOCK,
-                marks=pytest.mark.polarion_id("OCS-8253"),
+                marks=pytest.mark.polarion_id("OCS-XXXX"),
             ),
             pytest.param(
                 constants.VOLUME_MODE_FILESYSTEM,
-                marks=pytest.mark.polarion_id("OCS-8254"),
+                marks=pytest.mark.polarion_id("OCS-XXXX"),
             ),
         ],
     )
@@ -486,8 +497,10 @@ class TestRbdCBTMetadata(ManageTest):
            and a writer pod.
         2. Write data A (10 MiB), take snap-1 and run an
            allocated-mode verification.
-        3. Write data B (5 MiB at offset 100 MiB) and take snap-2.
-        4. Write data C (5 MiB at offset 200 MiB) and take snap-3.
+        3. Write data B (5 MiB, at offset 100 MiB in Block mode)
+           and take snap-2.
+        4. Write data C (5 MiB, at offset 200 MiB in Block mode)
+           and take snap-3.
         5. Run the CBT lister in delta mode for snap-2 vs snap-1
            and for snap-3 vs snap-1, and verify the skipping delta
            covers the intermediate one.
@@ -513,9 +526,11 @@ class TestRbdCBTMetadata(ManageTest):
         )
         snap_1 = self._take_snapshot(app_pvc, "cbt-skip-1")
         restored_pvc_1 = self._restore_and_verify(snap_1, copy_pvc, volume_mode)
-        self._finish_copy_step(restored_pvc_1)
+        self._delete_verifier_pod_and_restored_pvc(restored_pvc_1)
 
-        log.test_step("Write data B (5 MiB at offset 100 MiB) and take snap-2")
+        log.test_step(
+            "Write data B (5 MiB, at offset 100 MiB in Block mode) and take snap-2"
+        )
         write_data_to_pvc(
             writer_pod,
             volume_mode,
@@ -525,7 +540,9 @@ class TestRbdCBTMetadata(ManageTest):
         )
         snap_2 = self._take_snapshot(app_pvc, "cbt-skip-2")
 
-        log.test_step("Write data C (5 MiB at offset 200 MiB) and take snap-3")
+        log.test_step(
+            "Write data C (5 MiB, at offset 200 MiB in Block mode) and take snap-3"
+        )
         write_data_to_pvc(
             writer_pod,
             volume_mode,
@@ -542,11 +559,11 @@ class TestRbdCBTMetadata(ManageTest):
         )
         entries_1_to_2 = self.cbt_runner.run_lister_delta(
             target_snap=snap_2.name,
-            base_snap=snap_1.name,
+            base_snap_name=snap_1.name,
         )
         entries_1_to_3 = self.cbt_runner.run_lister_delta(
             target_snap=snap_3.name,
-            base_snap=snap_1.name,
+            base_snap_name=snap_1.name,
         )
         log.info(
             "Delta snap-1 to snap-2 returned %d block(s), "
@@ -587,11 +604,11 @@ class TestRbdCBTMetadata(ManageTest):
         argvalues=[
             pytest.param(
                 constants.VOLUME_MODE_BLOCK,
-                marks=pytest.mark.polarion_id("OCS-8255"),
+                marks=pytest.mark.polarion_id("OCS-XXXX"),
             ),
             pytest.param(
                 constants.VOLUME_MODE_FILESYSTEM,
-                marks=pytest.mark.polarion_id("OCS-8256"),
+                marks=pytest.mark.polarion_id("OCS-XXXX"),
             ),
         ],
     )
@@ -612,10 +629,12 @@ class TestRbdCBTMetadata(ManageTest):
            and a writer pod.
         2. Write data A (10 MiB), take snap-1 and run an
            allocated-mode verification.
-        3. Write data B (5 MiB at offset 100 MiB), take snap-2 and
-           run a delta verification for snap-2 vs snap-1.
-        4. Write data C (5 MiB at offset 200 MiB), take snap-3 and
-           run a delta verification for snap-3 vs snap-2.
+        3. Write data B (5 MiB, at offset 100 MiB in Block mode),
+           take snap-2 and run a delta verification for snap-2
+           vs snap-1.
+        4. Write data C (5 MiB, at offset 200 MiB in Block mode),
+           take snap-3 and run a delta verification for snap-3
+           vs snap-2.
         """
         log.test_step(
             "Create a %s application PVC, a Block-mode copy PVC, and a writer pod",
@@ -638,13 +657,13 @@ class TestRbdCBTMetadata(ManageTest):
         )
         snap_1 = self._take_snapshot(app_pvc, "cbt-chain-1")
         restored_pvc_1 = self._restore_and_verify(snap_1, copy_pvc, volume_mode)
-        self._finish_copy_step(restored_pvc_1)
+        self._delete_verifier_pod_and_restored_pvc(restored_pvc_1)
 
         # -- Step 2: delta snap-1 to snap-2 ------------------------
 
         log.test_step(
-            "Write data B (5 MiB at offset 100 MiB), take snap-2 and run a "
-            "delta verification for snap-2 vs snap-1"
+            "Write data B (5 MiB, at offset 100 MiB in Block mode), take "
+            "snap-2 and run a delta verification for snap-2 vs snap-1"
         )
         write_data_to_pvc(
             writer_pod,
@@ -660,13 +679,13 @@ class TestRbdCBTMetadata(ManageTest):
             volume_mode,
             previous_snapshot=snap_1.name,
         )
-        self._finish_copy_step(restored_pvc_2)
+        self._delete_verifier_pod_and_restored_pvc(restored_pvc_2)
 
         # -- Step 3: delta snap-2 to snap-3 ------------------------
 
         log.test_step(
-            "Write data C (5 MiB at offset 200 MiB), take snap-3 and run a "
-            "delta verification for snap-3 vs snap-2"
+            "Write data C (5 MiB, at offset 200 MiB in Block mode), take "
+            "snap-3 and run a delta verification for snap-3 vs snap-2"
         )
         write_data_to_pvc(
             writer_pod,
@@ -690,11 +709,11 @@ class TestRbdCBTMetadata(ManageTest):
         argvalues=[
             pytest.param(
                 constants.VOLUME_MODE_BLOCK,
-                marks=pytest.mark.polarion_id("OCS-8257"),
+                marks=pytest.mark.polarion_id("OCS-XXXX"),
             ),
             pytest.param(
                 constants.VOLUME_MODE_FILESYSTEM,
-                marks=pytest.mark.polarion_id("OCS-8258"),
+                marks=pytest.mark.polarion_id("OCS-XXXX"),
             ),
         ],
     )
@@ -713,8 +732,8 @@ class TestRbdCBTMetadata(ManageTest):
            and a writer pod.
         2. Write 10 MiB of data, take snap-1 and run an
            allocated-mode verification.
-        3. Write 5 MiB of additional data at offset 100 MiB and
-           take snap-2.
+        3. Write 5 MiB of additional data (at offset 100 MiB in
+           Block mode) and take snap-2.
         4. Get the CSI snapshot handle of snap-1 from its
            VolumeSnapshotContent.
         5. Run the CBT lister in delta mode with the base snapshot
@@ -743,10 +762,11 @@ class TestRbdCBTMetadata(ManageTest):
         )
         snap_1 = self._take_snapshot(app_pvc, "cbt-handle-1")
         restored_pvc_1 = self._restore_and_verify(snap_1, copy_pvc, volume_mode)
-        self._finish_copy_step(restored_pvc_1)
+        self._delete_verifier_pod_and_restored_pvc(restored_pvc_1)
 
         log.test_step(
-            "Write 5 MiB of additional data at offset 100 MiB and take snap-2"
+            "Write 5 MiB of additional data (at offset 100 MiB in Block mode) "
+            "and take snap-2"
         )
         write_data_to_pvc(
             writer_pod,
@@ -767,7 +787,7 @@ class TestRbdCBTMetadata(ManageTest):
         )
         entries_by_name = self.cbt_runner.run_lister_delta(
             target_snap=snap_2.name,
-            base_snap=snap_1.name,
+            base_snap_name=snap_1.name,
         )
         entries_by_handle = self.cbt_runner.run_lister_delta(
             target_snap=snap_2.name,
