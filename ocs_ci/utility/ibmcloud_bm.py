@@ -347,20 +347,26 @@ class IBMCloudVPCBM(IBMCloudBM):
 
     @staticmethod
     def create_cis_dns_records(
-        cluster_name, api_vip, ingress_vip, cis_instance=None, domain_id=None
+        cluster_name,
+        api_vip,
+        ingress_vip,
+        api_int_vip=None,
+        cis_instance=None,
+        domain_id=None,
     ):
         """
         Create DNS records in IBM Cloud Internet Services (CIS) for API, API-INT, and Ingress VIPs.
 
         Creates three DNS records required for OpenShift Assisted Installer:
-        - api.<cluster>.<domain> -> API VIP
-        - api-int.<cluster>.<domain> -> API VIP (internal API)
+        - api.<cluster>.<domain> -> API VIP (public API VIP for external client access)
+        - api-int.<cluster>.<domain> -> API-INT VIP (internal API VIP for cluster nodes)
         - *.apps.<cluster>.<domain> -> Ingress VIP
 
         Args:
             cluster_name (str): OpenShift cluster name
-            api_vip (str): API load balancer IP
+            api_vip (str): API load balancer IP (public IP for external client access)
             ingress_vip (str): Ingress load balancer IP
+            api_int_vip (str, optional): Internal API load balancer IP. Defaults to api_vip if not specified.
             cis_instance (str): CIS instance name (default: from ENV_DATA.ibm_cis_instance)
             domain_id (str): CIS domain ID for ibmcloud2.qe.rh-ocs.com (default: from ENV_DATA.ibm_cis_domain_id)
 
@@ -382,6 +388,9 @@ class IBMCloudVPCBM(IBMCloudBM):
                 "CIS Domain ID is required. Please set 'ibm_cis_domain_id' in ENV_DATA "
             )
 
+        if api_int_vip is None:
+            api_int_vip = api_vip
+
         logger.info(f"Creating CIS DNS records for cluster {cluster_name}")
 
         # Create all three DNS records using helper method
@@ -389,7 +398,7 @@ class IBMCloudVPCBM(IBMCloudBM):
             f"api.{cluster_name}", api_vip, cis_instance, domain_id
         )
         api_int_record_id = IBMCloudVPCBM._create_cis_a_record(
-            f"api-int.{cluster_name}", api_vip, cis_instance, domain_id
+            f"api-int.{cluster_name}", api_int_vip, cis_instance, domain_id
         )
         ingress_record_id = IBMCloudVPCBM._create_cis_a_record(
             f"*.apps.{cluster_name}", ingress_vip, cis_instance, domain_id
@@ -965,26 +974,68 @@ class IBMCloudVPCBM(IBMCloudBM):
 
         logger.info(f"Successfully added all members to ALB {lb_id}")
 
-    def create_alb(self, lb_name, subnet_id, ports, server_ips=None):
+    def allow_inbound_traffic_on_alb(self, lb_id, ports):
+        """
+        Ensure inbound TCP traffic for specified ports is allowed on the ALB's security groups.
+
+        Args:
+            lb_id (str): Load balancer ID
+            ports (list): List of integer ports to allow inbound traffic for
+        """
+        try:
+            lb_details = self._api_call("GET", f"/load_balancers/{lb_id}")
+            security_groups = lb_details.get("security_groups", [])
+            for sg in security_groups:
+                sg_id = sg.get("id")
+                if not sg_id:
+                    continue
+                for port in ports:
+                    rule_data = {
+                        "direction": "inbound",
+                        "ip_version": "ipv4",
+                        "protocol": "tcp",
+                        "port_min": port,
+                        "port_max": port,
+                    }
+                    try:
+                        self._api_call(
+                            "POST", f"/security_groups/{sg_id}/rules", rule_data
+                        )
+                        logger.info(
+                            f"Added inbound rule for TCP port {port} on security group {sg_id}"
+                        )
+                    except Exception as e:
+                        logger.debug(
+                            f"Could not add SG rule for port {port} on {sg_id} (may already exist): {e}"
+                        )
+        except Exception as e:
+            logger.warning(
+                f"Failed to configure security group rules for ALB {lb_id}: {e}"
+            )
+
+    def create_alb(self, lb_name, subnet_id, ports, server_ips=None, is_public=False):
         """
         Create Application Load Balancer with pools and listeners
 
         Generic method for creating ALBs with configurable ports.
-        Used for both API/MCS (ports 6443, 22623) and Ingress (ports 80, 443).
+        Used for internal API/MCS (ports 6443, 22623), public API (port 6443), and Ingress (ports 80, 443).
 
         Args:
-            lb_name (str): Load balancer name (e.g., "cluster-api-lb", "cluster-ingress-lb")
+            lb_name (str): Load balancer name (e.g., "cluster-api-lb", "cluster-api-public-lb", "cluster-ingress-lb")
             subnet_id (str): VPC subnet ID for ALB
             ports (list): List of ports to create pools/listeners for
             server_ips (list): Optional list of server IPs for backend pool (not used in current impl)
+            is_public (bool): Whether to create a public (internet-facing) ALB. Defaults to False.
 
         Returns:
-            tuple: (alb_private_ip, alb_id)
+            tuple: (alb_ip, alb_id)
 
         Raises:
             CommandFailed: If ALB creation fails
         """
-        logger.info(f"Creating ALB: {lb_name} with ports {ports}")
+        logger.info(
+            f"Creating ALB: {lb_name} with ports {ports} (is_public={is_public})"
+        )
 
         # Check for existing ALB with same name (use pagination)
         existing_lbs = self._paginated_list("/load_balancers", "load_balancers")
@@ -997,7 +1048,7 @@ class IBMCloudVPCBM(IBMCloudBM):
 
         lb_data = {
             "name": lb_name,
-            "is_public": False,
+            "is_public": is_public,
             "subnets": [{"id": subnet_id}],
             # Note: Application Load Balancers do not use a profile parameter
             # (unlike Network Load Balancers which require profile: network-fixed)
@@ -1009,9 +1060,20 @@ class IBMCloudVPCBM(IBMCloudBM):
         lb_result = self._api_call("POST", "/load_balancers", lb_data)
         lb_id = lb_result["id"]
 
-        # Wait for ALB to be ready and get its private IP (10 min timeout for slow provisioning)
+        # Wait for ALB to be ready and get its IP (10 min timeout for slow provisioning)
         lb_details = self.wait_for_alb_ready(lb_id, timeout=600)
-        lb_ip = lb_details["private_ips"][0]["address"]
+        if is_public:
+            public_ips = lb_details.get("public_ips", [])
+            if public_ips:
+                lb_ip = public_ips[0]["address"]
+            else:
+                lb_ip = lb_details.get("hostname")
+            logger.info(f"Public ALB {lb_name} active with public IP: {lb_ip}")
+            # Ensure inbound traffic is permitted on the ALB's security group
+            self.allow_inbound_traffic_on_alb(lb_id, ports)
+        else:
+            lb_ip = lb_details["private_ips"][0]["address"]
+            logger.info(f"Private ALB {lb_name} active with private IP: {lb_ip}")
 
         # Create backend pools and listeners for each port
         for port in ports:
@@ -1073,7 +1135,28 @@ class IBMCloudVPCBM(IBMCloudBM):
             tuple: (alb_private_ip, alb_id)
         """
         lb_name = f"{cluster_name}-api-lb"
-        return self.create_alb(lb_name, subnet_id, [6443, 22623], server_ips)
+        return self.create_alb(
+            lb_name, subnet_id, [6443, 22623], server_ips, is_public=False
+        )
+
+    def create_alb_for_public_api(self, cluster_name, subnet_id, server_ips=None):
+        """
+        Create Public Application Load Balancer for external OpenShift API access
+
+        Convenience wrapper around create_alb() for Public API load balancer (port 6443 only).
+
+        Args:
+            cluster_name (str): Cluster name for naming/tagging
+            subnet_id (str): VPC subnet ID for ALB
+            server_ips (list): List of server IP addresses for backend pool
+
+        Returns:
+            tuple: (alb_public_ip, alb_id)
+        """
+        lb_name = f"{cluster_name}-api-public-lb"
+        return self.create_alb(
+            lb_name, subnet_id, [6443], server_ips=server_ips, is_public=True
+        )
 
     def create_alb_for_ingress(self, cluster_name, subnet_id, server_ips):
         """
@@ -1090,7 +1173,9 @@ class IBMCloudVPCBM(IBMCloudBM):
             tuple: (alb_private_ip, alb_id)
         """
         lb_name = f"{cluster_name}-ingress-lb"
-        return self.create_alb(lb_name, subnet_id, [80, 443], server_ips)
+        return self.create_alb(
+            lb_name, subnet_id, [80, 443], server_ips, is_public=False
+        )
 
     def wait_for_alb_ready(self, lb_id, timeout=300):
         """
