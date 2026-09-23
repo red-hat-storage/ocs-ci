@@ -72,6 +72,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     ACMClusterConfigurationException,
     ACMObservabilityNotEnabled,
+    WrongVersionExpression,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -90,7 +91,7 @@ from ocs_ci.ocs.resources.catalog_source import (
     CatalogSource,
     disable_specific_source,
 )
-from ocs_ci.ocs.resources.csv import CSV
+from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
@@ -3338,6 +3339,17 @@ class MultiClusterDROperatorsDeploy(object):
         )
         mch_resource._has_phase = True
         resource_dict = mch_resource.get()
+
+        # Check if cluster-backup is already enabled; if so skip the apply
+        already_enabled = any(
+            c.get("name") == "cluster-backup" and c.get("enabled") is True
+            for c in resource_dict["spec"]["overrides"]["components"]
+        )
+        if already_enabled:
+            logger.info("cluster-backup is already enabled in MCH — skipping apply")
+            self.backup_pod_status_check()
+            return
+
         for components in resource_dict["spec"]["overrides"]["components"]:
             if components["name"] == "cluster-backup":
                 components["enabled"] = True
@@ -3387,16 +3399,48 @@ class MultiClusterDROperatorsDeploy(object):
             bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
         return bucket_name
 
-    @retry((TimeoutExpiredError, ACMClusterConfigurationException), tries=20, delay=10)
+    @retry(
+        (
+            TimeoutExpiredError,
+            ACMClusterConfigurationException,
+            WrongVersionExpression,
+        ),
+        tries=20,
+        delay=10,
+        backoff=1,
+    )
     def backup_pod_status_check(self):
-        pods_list = get_all_pods(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
-        if len(pods_list) != 3:
-            raise ACMClusterConfigurationException("backup pod count mismatch ")
-        for pod in pods_list:
-            # check pod status Running
-            if not pod.data["status"]["phase"] == "Running":
+        # 1. Verify the OADP CSV is present and Succeeded
+        oadp_csvs = get_csvs_start_with_prefix(
+            "oadp-operator", namespace=constants.ACM_HUB_BACKUP_NAMESPACE
+        )
+        if not oadp_csvs:
+            raise ACMClusterConfigurationException(
+                "OADP CSV not found in namespace "
+                f"{constants.ACM_HUB_BACKUP_NAMESPACE} — operator may still be installing"
+            )
+        oadp_csv = oadp_csvs[0]
+        csv_phase = oadp_csv.get("status", {}).get("phase", "")
+        if csv_phase != "Succeeded":
+            raise ACMClusterConfigurationException(
+                f"OADP CSV phase is '{csv_phase}', expected 'Succeeded'"
+            )
+
+        # 2. Verify every Deployment in the namespace has its expected pods available
+        deployments = OCP(
+            kind=constants.DEPLOYMENT, namespace=constants.ACM_HUB_BACKUP_NAMESPACE
+        ).get()["items"]
+        if not deployments:
+            raise ACMClusterConfigurationException(
+                f"No Deployments found in {constants.ACM_HUB_BACKUP_NAMESPACE}"
+            )
+        for dep in deployments:
+            dep_name = dep["metadata"]["name"]
+            desired = dep["spec"].get("replicas", 1)
+            available = dep.get("status", {}).get("availableReplicas", 0)
+            if available != desired:
                 raise ACMClusterConfigurationException(
-                    "backup pods not in Running state"
+                    f"Deployment '{dep_name}' has {available}/{desired} available replicas"
                 )
 
     def create_generic_credentials(self, access_key, secret_key, acm_indexes):
