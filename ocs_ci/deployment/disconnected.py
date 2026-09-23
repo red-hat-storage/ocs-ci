@@ -79,6 +79,96 @@ def mirror_fdf_catalog_via_oc_mirror(
     )
 
 
+def tag_fdf_catalog_adjacent_versions(
+    catalog_image,
+    mirror_registry=None,
+):
+    """
+    Create adjacent (N-1, N, N+1) major.minor version tag aliases on the mirror registry
+    for the mirrored FDF catalog image.
+
+    This ensures that regardless of whether Fusion requests the current OCP version tag,
+    a previous version tag, or a next version tag, the image can be pulled from the mirror registry.
+
+    Args:
+        catalog_image (str): Source FDF catalog image URL
+        (e.g., cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20.3-2)
+        mirror_registry (str): Target mirror registry. If None, uses config.DEPLOYMENT['mirror_registry'].
+
+    """
+    if not mirror_registry:
+        mirror_registry = config.DEPLOYMENT.get("mirror_registry")
+
+    if not mirror_registry:
+        logger.warning("Mirror registry not specified, skipping adjacent tag creation.")
+        return
+
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+
+    # Extract source tag
+    tag = ""
+    if ":" in catalog_image:
+        tag = catalog_image.split(":")[-1]
+    elif config.DEPLOYMENT.get("fdf_image_tag"):
+        tag = config.DEPLOYMENT.get("fdf_image_tag")
+    elif config.ENV_DATA.get("fdf_version"):
+        tag = config.ENV_DATA.get("fdf_version")
+
+    if not tag:
+        logger.warning(
+            "Could not determine catalog image tag, skipping adjacent tag creation."
+        )
+        return
+
+    # Derive version subpath matching the mirroring destination (e.g., v4.20.3-2 -> 4-20-3-2)
+    version_subpath = tag.lstrip("v").replace(".", "-")
+    clean_mirror_registry = mirror_registry.rstrip("/")
+    # If the user-provided mirror_registry already contains the version subpath, avoid duplicating it
+    if clean_mirror_registry.endswith(version_subpath):
+        target_mirror_url = clean_mirror_registry
+    else:
+        target_mirror_url = f"{clean_mirror_registry}/{version_subpath}"
+
+    catalog_repo = f"{target_mirror_url}/cpopen/isf-data-foundation-catalog"
+    source_image = f"{catalog_repo}:{tag}"
+
+    # Compute adjacent tags (N-1, N, N+1)
+    clean_tag = tag.lstrip("v")
+    parts = clean_tag.split(".")
+    adjacent_tags = set()
+    try:
+        major = int(parts[0])
+        minor = int(parts[1].split("-")[0])
+        for m in [minor - 1, minor, minor + 1]:
+            if m >= 0:
+                ver_str = f"{major}.{m}"
+                adjacent_tags.add(f"v{ver_str}")
+                adjacent_tags.add(ver_str)
+    except (ValueError, IndexError):
+        adjacent_tags.add(tag)
+        adjacent_tags.add(f"v{clean_tag}")
+        adjacent_tags.add(clean_tag)
+
+    logger.info(
+        f"Creating adjacent version tags for FDF catalog on mirror registry: {adjacent_tags}"
+    )
+
+    for extra_tag in adjacent_tags:
+        if extra_tag == tag:
+            continue
+        dest_image = f"{catalog_repo}:{extra_tag}"
+        logger.info(f"Tagging {source_image} -> {dest_image}")
+        cmd = (
+            f"skopeo copy --all --authfile {pull_secret_path} "
+            f"--dest-tls-verify=false --src-tls-verify=false "
+            f"docker://{source_image} docker://{dest_image}"
+        )
+        try:
+            exec_cmd(cmd)
+        except Exception as e:
+            logger.warning(f"Failed to create tag {dest_image}: {e}")
+
+
 def get_csv_from_image(bundle_image):
     """
     Extract clusterserviceversion.yaml file from operator bundle image.
@@ -387,7 +477,8 @@ def mirror_index_image_via_oc_mirror(
         if tag:
             # Format tag to sanitized version subpath (e.g., v4.20.3-2 -> 4-20-3-2)
             version_subpath = tag.lstrip("v").replace(".", "-")
-            target_mirror_url = f"{target_mirror_url}/{version_subpath}"
+            if not target_mirror_url.endswith(version_subpath):
+                target_mirror_url = f"{target_mirror_url}/{version_subpath}"
             logger.info(
                 f"Using versioned target subpath for FDF mirroring: {target_mirror_url}"
             )
