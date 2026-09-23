@@ -393,7 +393,14 @@ def backingstore_factory(
                             )
                         else:
                             cmdMap[method.lower()][cloud.lower()](
-                                backingstore_name, vol_num, size, storagecluster
+                                backingstore_name,
+                                vol_num,
+                                size,
+                                storagecluster,
+                                req_cpu=req_cpu,
+                                req_mem=req_mem,
+                                lim_cpu=lim_cpu,
+                                lim_mem=lim_mem,
                             )
                     else:
                         _, region = uls_tup
