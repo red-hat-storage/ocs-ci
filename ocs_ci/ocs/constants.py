@@ -1074,6 +1074,9 @@ NOOBAA_CORE_STATEFULSET = "noobaa-core"
 NOOBAA_BG_WORKERS_STATEFULSET = "noobaa-bg-workers"
 NOOBAA_CORE_POD = "noobaa-core-0"
 
+# Noobaa operator secret, holds the auth token used for mgmt RPC calls
+NOOBAA_OPERATOR_SECRET = "noobaa-operator"
+
 # Noobaa db secret
 NOOBAA_DB_SECRET = "noobaa-db-pg-cluster-app"
 NOOBAA_S3_SERVING_CERT = "noobaa-s3-serving-cert"

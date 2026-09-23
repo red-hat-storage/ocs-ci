@@ -304,7 +304,9 @@ class Warp(object):
         # may be older and does not support that flag.
         warp_region = s3_region if s3_region is not None else "us-east-1"
         objects_opt = ""
-        if objects is not None:
+        # ``warp put`` has no --objects flag (it fails with "flag provided but
+        # not defined: -objects"); it is only valid for get/mixed/stat/etc.
+        if objects is not None and workload_type != "put":
             objects_opt = f"--objects={int(objects)} "
         base_options = "".join(
             f"--duration={self.duration} "
@@ -352,7 +354,14 @@ class Warp(object):
         if validate:
             # Synchronous run: block until warp finishes so output.csv exists for validation.
             cmd_blocking = f"sh -c {shlex.quote(inner)}"
-            self._exec_warp_resilient(cmd_blocking, exec_timeout=timeout)
+            try:
+                self._exec_warp_resilient(cmd_blocking, exec_timeout=timeout)
+            except CommandFailed:
+                log.error(
+                    "Warp failed. Last lines of /tmp/warp.log:\n%s",
+                    self.get_warp_logs(lines=30),
+                )
+                raise
             log.info(
                 "Warp benchmark finished (synchronous run; validation will follow)"
             )
