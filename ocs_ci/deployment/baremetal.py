@@ -1247,7 +1247,14 @@ class BAREMETALAI(BAREMETALBASE):
                                 f"Node {machine} not discovered, restarting server {server_id}"
                             )
                             vpc_bm_manager.stop_server(server_id, stop_type="hard")
-                            time.sleep(5)
+                            try:
+                                vpc_bm_manager.wait_for_server_status(
+                                    server_id, "stopped", timeout=300
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Wait for server {server_id} stopped failed: {e}, proceeding to start"
+                                )
                             vpc_bm_manager.start_server(server_id)
                     self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
 
@@ -1264,8 +1271,20 @@ class BAREMETALAI(BAREMETALBASE):
                     pending_user_action_handler=self.pending_user_action_handler
                 )
 
+                # Verify cluster health
+                self.test_cluster()
+
+                # Clean disks on worker nodes (required for reserved pool reuse)
+                if config.ENV_DATA.get("skip_disks_cleanup", False):
+                    logger.info("Skipping disks cleanup")
+                else:
+                    logger.info("Performing Disk cleanup on worker nodes")
+                    workers = get_nodes(node_type="worker")
+                    for worker in workers:
+                        clean_disks(worker)
+
                 # VPC BM deployment complete - return early to skip traditional baremetal flow
-                logger.info("VPC BM deployment initiated successfully")
+                logger.info("VPC BM deployment completed successfully")
                 return
 
             # Traditional baremetal: download initrd, kernel and rootfs to httpd server
@@ -1651,10 +1670,14 @@ class BAREMETALAI(BAREMETALBASE):
                 api_lb_name = f"{cluster_name}-api-lb"
                 public_api_lb_name = f"{cluster_name}-api-public-lb"
                 ingress_lb_name = f"{cluster_name}-ingress-lb"
+                public_ingress_lb_name = f"{cluster_name}-ingress-public-lb"
 
                 api_lb_id = vpc_bm_manager.get_alb_id_by_name(api_lb_name)
                 public_api_lb_id = vpc_bm_manager.get_alb_id_by_name(public_api_lb_name)
                 ingress_lb_id = vpc_bm_manager.get_alb_id_by_name(ingress_lb_name)
+                public_ingress_lb_id = vpc_bm_manager.get_alb_id_by_name(
+                    public_ingress_lb_name
+                )
 
                 # FALLBACK: Try vpc_bm_resources.json if name lookup failed
                 if not api_lb_id or not public_api_lb_id or not ingress_lb_id:
@@ -1682,6 +1705,7 @@ class BAREMETALAI(BAREMETALBASE):
                     ("Internal API ALB", api_lb_id),
                     ("Public API ALB", public_api_lb_id),
                     ("Ingress ALB", ingress_lb_id),
+                    ("Public Ingress ALB", public_ingress_lb_id),
                 ]:
                     if lb_id:
                         logger.info(f"Deleting {lb_name_label}: {lb_id}")
