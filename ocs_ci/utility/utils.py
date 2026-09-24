@@ -7593,7 +7593,9 @@ def create_kubeconfig(kubeconfig_path):
             log.warning(f"returncode: {result.returncode}")
             log.warning(f"stdout: {result.stdout}")
             log.warning(f"stderr: {result.stderr}")
-            raise CommandFailed(f"Failed to create permanent kubeconfig at {kubeconfig_path}")
+            raise CommandFailed(
+                f"Failed to create permanent kubeconfig at {kubeconfig_path}"
+            )
         else:
             log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
         update_kubeconfig_with_proxy_url_for_client(kubeconfig_path)
