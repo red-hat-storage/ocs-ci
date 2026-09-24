@@ -146,6 +146,42 @@ PROFILE_SPECS = {
     },
 }
 
+# Number of PVs the default pv-pool backingstore is created with, per profile.
+# Kept apart from PROFILE_SPECS because it also covers the two NooBaa-only
+# profiles, and because it is only applied when the backingstore is created -
+# getPVPoolNumVolumes returns the existing count for an existing backingstore
+# and never lowers it.
+PV_POOL_NUM_VOLUMES = {
+    "default": 3,
+    "mixed-workload": 3,
+    "small-objects": 3,
+    "dev-env": 1,
+    "mini-env": 1,
+}
+
+# Core resources for every profile, including the two the StorageCluster CRD
+# does not accept. Useful as a cheap probe that a profile change was picked up,
+# since the core StatefulSet is reconciled on every profile change.
+CORE_SPECS = dict(
+    {profile: PROFILE_SPECS[profile]["core"] for profile in SC_PROFILES},
+    **{
+        "dev-env": {
+            "req_cpu": "500m",
+            "lim_cpu": "500m",
+            "req_mem": "1Gi",
+            "lim_mem": "1Gi",
+            "qos": "Guaranteed",
+        },
+        "mini-env": {
+            "req_cpu": "100m",
+            "lim_cpu": "100m",
+            "req_mem": "1Gi",
+            "lim_mem": "1Gi",
+            "qos": "Guaranteed",
+        },
+    },
+)
+
 
 def normalize_cpu(value):
     """
