@@ -319,6 +319,10 @@ def backingstore_factory(
             i.e. - 'aws': [(3, us-west-1),(2, eu-west-2)]
             PV form - 'pv': [(amount, size_in_gb, storagecluster), ...]
             i.e. - 'pv': [(3, 32, ocs-storagecluster-ceph-rbd),(2, 100, ocs-storagecluster-ceph-rbd)]
+            A PV tuple may also carry explicit agent pod resources, which take
+            precedence over the MCG performance profile's pvPoolResources -
+            'pv': [(amount, size_in_gb, storagecluster, req_cpu, req_mem, lim_cpu, lim_mem), ...]
+            i.e. - 'pv': [(1, 32, ocs-storagecluster-ceph-rbd, '600m', '1Gi', '600m', '1Gi')]
             timeout (int): Timeout until backingstore reaches desired state
         Returns:
             list: A list of backingstore names.

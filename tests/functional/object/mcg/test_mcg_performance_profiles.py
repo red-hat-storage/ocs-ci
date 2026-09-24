@@ -217,7 +217,13 @@ class TestMCGPerformanceProfiles:
             3. Verify noobaa-core pod resources and QoS class
             4. Verify noobaa-db pod resources, QoS class, and instance count
             5. Verify noobaa-endpoint pod resources, QoS class, and count
-            6. Verify PV pool agent pod resources (vSphere/on-prem only)
+
+        The default backingstore's PV pool agent pods are deliberately left
+        out: their resources are stamped into the pod template when the pod is
+        created, so a pool that predates the profile keeps the values it was
+        born with. The profile's pvPoolResources are covered by
+        test_pv_pool_volume_resources_override, which creates the backingstore
+        after setting the profile.
 
         Expected Results:
             All resource values match the profile specification from RHSTOR-9144
@@ -228,7 +234,7 @@ class TestMCGPerformanceProfiles:
         logger.info(f"Testing '{profile}' profile resource specifications")
 
         profiles.verify_profile_propagated(profile)
-        profiles.verify_all_components(spec, profile)
+        profiles.verify_all_components(spec, profile, check_pv_pool=False)
 
         logger.info(f"✅ All verifications passed for '{profile}' profile")
 
@@ -266,7 +272,9 @@ class TestMCGPerformanceProfiles:
             logger.info(f"Switching MCG performance profile to '{profile}'")
             profiles.apply_profile(profile)
             profiles.verify_profile_propagated(profile)
-            profiles.verify_all_components(self.PROFILE_SPECS[profile], profile)
+            profiles.verify_all_components(
+                self.PROFILE_SPECS[profile], profile, check_pv_pool=False
+            )
             profiles.verify_noobaa_pods_healthy()
             self._verify_user_pv_pool_unchanged(
                 backingstore_name, f"profile '{profile}'"
@@ -279,7 +287,9 @@ class TestMCGPerformanceProfiles:
         logger.info("Removing the performanceProfile field from the StorageCluster CR")
         profiles.apply_profile(None)
         profiles.verify_profile_propagated("default")
-        profiles.verify_all_components(self.PROFILE_SPECS["default"], "default")
+        profiles.verify_all_components(
+            self.PROFILE_SPECS["default"], "default", check_pv_pool=False
+        )
         profiles.verify_noobaa_pods_healthy()
         self._verify_user_pv_pool_unchanged(backingstore_name, "profile field removed")
 
@@ -430,7 +440,7 @@ class TestMCGPerformanceProfiles:
 
     @tier3
     def test_profile_set_directly_on_noobaa_cr(
-        self, restore_profile, ocs_operator_replicas
+        self, clear_endpoint_overrides, restore_profile, ocs_operator_replicas
     ):
         """
         Verify how a profile set directly on the NooBaa CR behaves, both while

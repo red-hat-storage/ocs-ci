@@ -82,6 +82,21 @@ def _as_k8s_resources(component_spec):
     }
 
 
+def _clear_overrides():
+    """
+    Remove the NooBaa resource overrides and the MCG endpoints section from the
+    StorageCluster CR, handing every component back to the active profile.
+    """
+    profiles.patch_storagecluster(
+        {
+            "spec": {
+                "resources": {key: None for key in OVERRIDE_KEYS},
+                "multiCloudGateway": {"endpoints": None},
+            }
+        }
+    )
+
+
 @mcg
 @red_squad
 @runs_on_provider
@@ -93,10 +108,14 @@ class TestMCGPerformanceProfileOverrides:
     """
 
     @pytest.fixture
-    def restore_overrides(self, request):
+    def clear_preexisting_overrides(self, request):
         """
         Snapshot the StorageCluster resource overrides and the MCG endpoints
-        section, and put them back on teardown.
+        section, clear them for the duration of the test, and put them back on
+        teardown.
+
+        A pre-existing override would mask the profile baseline the tests
+        assert before applying their own.
 
         Only the three NooBaa keys under spec.resources are touched, because
         that map is shared with the Ceph components and must not be wiped
@@ -111,8 +130,6 @@ class TestMCGPerformanceProfileOverrides:
         original_endpoints = (spec.get("multiCloudGateway") or {}).get("endpoints")
 
         def finalizer():
-            # Null out whatever the test added, then restore the values that
-            # were there to begin with.
             restored = {
                 key: original_resources.get(key) or None for key in OVERRIDE_KEYS
             }
@@ -125,27 +142,22 @@ class TestMCGPerformanceProfileOverrides:
 
         request.addfinalizer(finalizer)
 
-        # Start from a clean slate - a pre-existing override would mask the
-        # profile baseline this test asserts before applying its own.
         if any(original_resources.get(key) for key in OVERRIDE_KEYS) or (
             original_endpoints
         ):
             logger.info("Clearing pre-existing MCG resource and endpoint overrides")
-            profiles.patch_storagecluster(
-                {
-                    "spec": {
-                        "resources": {key: None for key in OVERRIDE_KEYS},
-                        "multiCloudGateway": {"endpoints": None},
-                    }
-                }
-            )
+            _clear_overrides()
         return original_resources
 
     @pytest.fixture
-    def base_profile(self, request):
+    def base_profile(self, request, clear_preexisting_overrides):
         """
         Put the cluster on a known profile for the test and restore whatever
         profile it had afterwards.
+
+        Depends on clear_preexisting_overrides so that the profile is applied
+        to a cluster with no override left pinning a component's resources -
+        otherwise the profile could never settle.
 
         Returns:
             str: The profile that was set
@@ -161,6 +173,24 @@ class TestMCGPerformanceProfileOverrides:
 
         profiles.apply_profile(BASE_PROFILE)
         return BASE_PROFILE
+
+    @pytest.fixture
+    def restore_overrides(self, request, base_profile):
+        """
+        Drop the overrides the test itself applied.
+
+        Set up after base_profile so that its finalizer runs first: the
+        profile restoration in base_profile waits for the original profile to
+        settle, which cannot happen while an explicit override is still
+        pinning a component's resources. The pre-existing overrides, if any,
+        are put back afterwards by clear_preexisting_overrides.
+        """
+
+        def finalizer():
+            logger.info("Dropping the resource and endpoint overrides set by the test")
+            _clear_overrides()
+
+        request.addfinalizer(finalizer)
 
     @tier2
     def test_component_resource_overrides(self, restore_overrides, base_profile):
@@ -186,7 +216,7 @@ class TestMCGPerformanceProfileOverrides:
         profile_spec = profiles.PROFILE_SPECS[base_profile]
 
         logger.info(f"Baseline: every component follows the '{base_profile}' profile")
-        profiles.verify_all_components(profile_spec, base_profile)
+        profiles.verify_all_components(profile_spec, base_profile, check_pv_pool=False)
 
         logger.info("Overriding noobaa-core resources")
         profiles.patch_storagecluster(
@@ -247,16 +277,9 @@ class TestMCGPerformanceProfileOverrides:
         profiles.verify_noobaa_pods_healthy()
 
         logger.info("Removing all overrides, the profile must take over again")
-        profiles.patch_storagecluster(
-            {
-                "spec": {
-                    "resources": {key: None for key in OVERRIDE_KEYS},
-                    "multiCloudGateway": {"endpoints": None},
-                }
-            }
-        )
+        _clear_overrides()
         profiles.wait_for_profile_settled(base_profile)
-        profiles.verify_all_components(profile_spec, base_profile)
+        profiles.verify_all_components(profile_spec, base_profile, check_pv_pool=False)
         profiles.verify_noobaa_pods_healthy()
 
         logger.info(

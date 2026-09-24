@@ -324,7 +324,7 @@ def resources_match(actual, req_cpu, lim_cpu, req_mem, lim_mem):
 def get_storagecluster_ocp():
     """
     Returns:
-        OCP: Handle for the default StorageCluster CR
+        ocs_ci.ocs.ocp.OCP: Handle for the default StorageCluster CR
     """
     return OCP(
         kind=constants.STORAGECLUSTER,
@@ -336,7 +336,7 @@ def get_storagecluster_ocp():
 def get_noobaa_ocp():
     """
     Returns:
-        OCP: Handle for the NooBaa CR
+        ocs_ci.ocs.ocp.OCP: Handle for the NooBaa CR
     """
     return OCP(
         kind=NOOBAA_KIND,
@@ -849,18 +849,24 @@ def verify_pv_pool_agent_resources(agent_pods, expected_cpu, expected_mem, conte
     logger.info(f"All {len(agent_pods)} PV pool agent pod resources verified ✓")
 
 
-def verify_all_components(spec, profile):
+def verify_all_components(spec, profile, check_pv_pool=True):
     """
     Run every per-component profile verification.
 
     Args:
         spec (dict): Profile specification from PROFILE_SPECS
         profile (str): Profile name being verified
+        check_pv_pool (bool): Whether to verify the default backingstore PV
+            pool agent pods. Pass False when the profile was applied to an
+            already running system - the agent pods keep the resources they
+            were created with, so they legitimately lag behind the profile
+            (see verify_pv_pool)
     """
     verify_core(spec, profile)
     verify_db(spec, profile)
     verify_endpoints(spec, profile)
-    verify_pv_pool(spec, profile)
+    if check_pv_pool:
+        verify_pv_pool(spec, profile)
 
 
 def verify_noobaa_pods_healthy(settle_checks=2, sleep=20):
