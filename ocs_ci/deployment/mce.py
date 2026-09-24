@@ -201,11 +201,20 @@ class MCEInstaller(object):
                 logger.info(
                     "Using released MCE - getting catalog source from PackageManifest"
                 )
+                desired_channel = mce_subscription_yaml_data["spec"]["channel"]
                 try:
-                    mce_catalog_name = PackageManifest(
-                        resource_name=constants.MCE_OPERATOR,
-                    ).get()["metadata"]["labels"]["catalog"]
-                    logger.info(f"Found MCE catalog source: {mce_catalog_name}")
+                    pm = PackageManifest(resource_name=constants.MCE_OPERATOR)
+                    mce_catalog_name = pm.get()["metadata"]["labels"]["catalog"]
+                    available_channels = [ch["name"] for ch in pm.get_channels()]
+                    if desired_channel not in available_channels:
+                        logger.warning(
+                            f"Channel '{desired_channel}' not available in catalog "
+                            f"'{mce_catalog_name}' (available: {available_channels}). "
+                            f"Falling back to dev catalog: {constants.MCE_DEV_CATALOG_SOURCE_NAME}"
+                        )
+                        mce_catalog_name = constants.MCE_DEV_CATALOG_SOURCE_NAME
+                    else:
+                        logger.info(f"Found MCE catalog source: {mce_catalog_name}")
                     mce_subscription_yaml_data["spec"]["source"] = mce_catalog_name
                 except Exception as e:
                     logger.warning(
