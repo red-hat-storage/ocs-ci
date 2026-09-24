@@ -54,6 +54,7 @@ from ocs_ci.utility.iscsi_config import iscsi_setup
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.dr_helpers import (
     configure_drcluster_for_fencing,
+    configure_submariner_lighthouse_import_namespace_deny_list,
     get_cluster_set_name,
     create_service_exporter,
     is_cg_enabled,
@@ -345,6 +346,7 @@ class Deployment(object):
             # Configure submariner only on non-ACM clusters
             submariner = Submariner()
             submariner.deploy()
+            configure_submariner_lighthouse_import_namespace_deny_list()
 
     def deploy_gitops_operator(self, switch_ctx=None):
         """
