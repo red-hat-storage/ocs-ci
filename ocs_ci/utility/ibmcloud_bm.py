@@ -9,11 +9,9 @@ import logging
 import time
 
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceNotFoundError
 from ocs_ci.utility.utils import exec_cmd, run_cmd  # IgnoreDeprecation
 from ocs_ci.utility.retry import retry
 
@@ -338,8 +336,7 @@ class IBMCloudVPCBM(IBMCloudBM):
             "json",
         ]
 
-        cmd_str = " ".join(cmd)
-        result = exec_cmd(cmd_str).stdout.decode()
+        result = exec_cmd(cmd).stdout.decode()
         record = json.loads(result)
         record_id = record.get("id")
         logger.info(f"DNS record created: {record_id}")
@@ -458,19 +455,31 @@ class IBMCloudVPCBM(IBMCloudBM):
             logger.warning(f"Failed to list DNS records: {e}")
             return
 
-        # Delete records matching cluster name (substring match for FQDNs)
+        # Delete only expected records matching cluster name
+        base_domain = config.ENV_DATA.get("base_domain", "ibmcloud2.qe.rh-ocs.com")
+        expected_names = {
+            f"api.{cluster_name}.{base_domain}".rstrip(".").lower(),
+            f"api-int.{cluster_name}.{base_domain}".rstrip(".").lower(),
+            f"*.apps.{cluster_name}.{base_domain}".rstrip(".").lower(),
+            f"api.{cluster_name}".lower(),
+            f"api-int.{cluster_name}".lower(),
+            f"*.apps.{cluster_name}".lower(),
+        }
         deleted_count = 0
         for record in records:
-            record_name = record.get("name", "")
-            # Match FQDNs containing cluster pattern (e.g., api.cluster.ibmcloud2.qe.rh-ocs.com)
-            # Use substring match: ".{cluster_name}." appears in the FQDN
-            if f".{cluster_name}." in record_name:
+            record_name = record.get("name", "").rstrip(".").lower()
+            if record_name in expected_names:
                 record_id = record["id"]
                 logger.info(f"Deleting DNS record: {record_name}")
-                delete_cmd = (
-                    f"ibmcloud cis dns-record-delete {domain_id} {record_id} "
-                    f"--instance {cis_instance}"
-                )
+                delete_cmd = [
+                    "ibmcloud",
+                    "cis",
+                    "dns-record-delete",
+                    domain_id,
+                    record_id,
+                    "--instance",
+                    cis_instance,
+                ]
                 try:
                     exec_cmd(delete_cmd)
                     deleted_count += 1
@@ -483,7 +492,7 @@ class IBMCloudVPCBM(IBMCloudBM):
     @retry(CommandFailed, tries=3, delay=20, backoff=1)
     def _api_call(self, method, endpoint, data=None):
         """
-        Make an API call to IBM Cloud VPC API using requests library
+        Make an API call to IBM Cloud VPC API using requests library.
 
         Args:
             method (str): HTTP method (GET, POST, PUT, DELETE, PATCH)
@@ -494,10 +503,10 @@ class IBMCloudVPCBM(IBMCloudBM):
             dict: Parsed JSON response
 
         Raises:
+            ResourceNotFoundError: If the resource is not found (HTTP 404)
             CommandFailed: If API call fails
         """
         token = self._get_token()
-        # Add version and generation parameters to endpoint
         separator = "&" if "?" in endpoint else "?"
         url = f"{self.api_base}{endpoint}{separator}version={self.api_version}&generation={self.generation}"
 
@@ -506,18 +515,9 @@ class IBMCloudVPCBM(IBMCloudBM):
             "Content-Type": "application/json",
         }
 
-        # Setup retry strategy for transient failures
-        retry_strategy = Retry(
-            total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504]
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
         session = requests.Session()
-        session.mount("https://", adapter)
-
         try:
             logger.debug(f"API call: {method} {url}")
-            # Don't log request body (may contain sensitive data like user_data)
-
             response = session.request(
                 method=method, url=url, headers=headers, json=data, timeout=90
             )
@@ -548,14 +548,18 @@ class IBMCloudVPCBM(IBMCloudBM):
             if e.response is not None:
                 logger.error(f"Response: {e.response.text}")
 
-            # Check for auth errors that need token refresh
-            if e.response and e.response.status_code in [401, 403]:
+            # Check for 404 Not Found - do not retry
+            if e.response is not None and e.response.status_code == 404:
+                raise ResourceNotFoundError(f"IBM Cloud resource not found: {endpoint}")
+
+            # Check for auth errors that need token refresh on retry
+            if e.response is not None and e.response.status_code in [401, 403]:
                 self._token = None
                 self._token_expiry = 0
+                logger.info("Token expired (401/403), invalidated cached token")
 
-            raise CommandFailed(
-                f"IBM Cloud API error: {e.response.text if e.response else str(e)}"
-            )
+            error_text = e.response.text if e.response is not None else str(e)
+            raise CommandFailed(f"IBM Cloud API error: {error_text}")
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Request failed: {e}")
@@ -679,13 +683,34 @@ class IBMCloudVPCBM(IBMCloudBM):
         """
         server = self.get_server_status(server_id)
         server_name = server.get("name", server_id)
-
         server_status = server.get("status")
-        if server_status != "running":
+
+        # If server is in a transitional status, wait for it to reach running before issuing stop
+        if server_status in ["starting", "pending", "restarting"]:
             logger.info(
-                f"Server {server_name} ({server_id}) is not running, skipping stop"
+                f"Server {server_name} ({server_id}) is in transitional status '{server_status}', "
+                f"waiting for it to reach running before issuing stop"
+            )
+            try:
+                server = self.wait_for_server_status(server_id, "running", timeout=300)
+                server_status = server.get("status")
+            except Exception as e:
+                logger.warning(
+                    f"Wait for running status failed: {e}, rechecking status"
+                )
+                server = self.get_server_status(server_id)
+                server_status = server.get("status")
+
+        if server_status == "stopped":
+            logger.info(
+                f"Server {server_name} ({server_id}) is already stopped, skipping stop"
             )
             return
+
+        if server_status != "running":
+            logger.warning(
+                f"Server {server_name} ({server_id}) status is '{server_status}', attempting {stop_type} stop anyway"
+            )
 
         logger.info(f"Stopping server {server_name} ({server_id}) - {stop_type} stop")
         self._api_call(
@@ -694,15 +719,9 @@ class IBMCloudVPCBM(IBMCloudBM):
 
     def get_ipxe_image_id(self):
         """
-        Get iPXE image ID for VPC BM server reinitialization
-
-        Uses hardcoded IBM Cloud public iPXE image ID to avoid pagination issues.
-        Image: ibm-ipxe-20240326-amd64-1 (stable public image)
-
-        Previous implementation queried all public images (1,190+ images) but only
-        received the first page (50 results) due to API pagination, missing the iPXE
-        image which was beyond page 1. Since the image ID is stable, hardcoding is
-        more reliable.
+        Get iPXE image ID for VPC BM server reinitialization.
+        Checks ENV_DATA override first, falls back to dynamic lookup by name in current region,
+        and finally falls back to the default us-south image ID if lookup fails.
 
         Returns:
             str: iPXE image ID
@@ -710,33 +729,54 @@ class IBMCloudVPCBM(IBMCloudBM):
         Raises:
             CommandFailed: If image verification fails
         """
-        # Check if already cached
         if hasattr(self, "_ipxe_image_id") and self._ipxe_image_id:
             return self._ipxe_image_id
 
-        # IBM Cloud public iPXE image (stable ID)
+        # 1. Check ENV_DATA override
+        config_image_id = config.ENV_DATA.get("baremetal", {}).get("ipxe_image_id")
+        if config_image_id:
+            logger.info(f"Using configured iPXE image ID: {config_image_id}")
+            self._ipxe_image_id = config_image_id
+            return self._ipxe_image_id
+
+        # 2. Dynamic lookup in the current region
+        try:
+            logger.info("Searching for public ibm-ipxe image in current region...")
+            images = self._paginated_list("/images", "images")
+            ipxe_images = [
+                img
+                for img in images
+                if img.get("name", "").startswith("ibm-ipxe-")
+                and img.get("status") == "available"
+            ]
+            if ipxe_images:
+                latest = sorted(
+                    ipxe_images,
+                    key=lambda x: x.get("created_at", x.get("name", "")),
+                    reverse=True,
+                )[0]
+                image_id = latest["id"]
+                logger.info(
+                    f"Found public iPXE image: {latest.get('name')} (ID: {image_id})"
+                )
+                self._ipxe_image_id = image_id
+                return self._ipxe_image_id
+        except Exception as e:
+            logger.warning(f"Dynamic iPXE image search failed: {e}")
+
+        # 3. Fallback for us-south
         IPXE_IMAGE_ID = "r006-bfef819d-11af-4252-9bd3-bae1d9dd8e1d"
-
-        logger.info(f"Using IBM Cloud public iPXE image: {IPXE_IMAGE_ID}")
-
-        # Verify image exists and is available
+        logger.info(f"Using default fallback iPXE image ID: {IPXE_IMAGE_ID}")
         try:
             image = self._api_call("GET", f"/images/{IPXE_IMAGE_ID}")
             if image.get("status") != "available":
                 raise CommandFailed(
                     f"iPXE image {IPXE_IMAGE_ID} is not available (status: {image.get('status')})"
                 )
-
-            logger.info(
-                f"Verified iPXE image: {image.get('name')} (status: {image.get('status')})"
-            )
-
-            # Cache for session
             self._ipxe_image_id = IPXE_IMAGE_ID
             return self._ipxe_image_id
-
         except Exception as e:
-            logger.error(f"Failed to verify iPXE image {IPXE_IMAGE_ID}: {e}")
+            logger.error(f"Failed to verify fallback iPXE image {IPXE_IMAGE_ID}: {e}")
             raise CommandFailed(f"iPXE image not available: {e}")
 
     def get_ssh_keys_for_server(self, server_id):
@@ -939,7 +979,10 @@ class IBMCloudVPCBM(IBMCloudBM):
             # Find the pool for this port
             pool = None
             for p in pools:
-                if str(port) in p.get("name", ""):
+                pool_name = p.get("name", "")
+                if pool_name.endswith(f"-pool-{port}") or pool_name.endswith(
+                    f"-{port}"
+                ):
                     pool = p
                     break
 
@@ -1046,16 +1089,91 @@ class IBMCloudVPCBM(IBMCloudBM):
                     f"Run destroy to clean up resources from previous deployment before retrying."
                 )
 
+        rg_id = self._get_resource_group_id_from_subnet(subnet_id)
         lb_data = {
             "name": lb_name,
             "is_public": is_public,
             "subnets": [{"id": subnet_id}],
             # Note: Application Load Balancers do not use a profile parameter
             # (unlike Network Load Balancers which require profile: network-fixed)
-            "resource_group": {
-                "id": self._get_resource_group_id_from_subnet(subnet_id)
-            },
+            "resource_group": {"id": rg_id},
         }
+
+        if is_public:
+            # Use dedicated security group for public ALB instead of modifying default VPC SG
+            subnet_info = self._api_call("GET", f"/subnets/{subnet_id}")
+            vpc_id = subnet_info.get("vpc", {}).get("id")
+            if not vpc_id:
+                raise CommandFailed(
+                    f"Could not determine VPC ID for subnet {subnet_id}"
+                )
+            sg_name = f"{lb_name}-sg"
+            logger.info(
+                f"Creating dedicated security group '{sg_name}' for public ALB '{lb_name}'"
+            )
+            existing_sgs = self._paginated_list("/security_groups", "security_groups")
+            existing_sg = next(
+                (sg for sg in existing_sgs if sg.get("name") == sg_name), None
+            )
+            if existing_sg:
+                dedicated_sg_id = existing_sg["id"]
+                logger.info(
+                    f"Using existing security group {sg_name} ({dedicated_sg_id})"
+                )
+            else:
+                sg_payload = {
+                    "name": sg_name,
+                    "vpc": {"id": vpc_id},
+                }
+                if rg_id:
+                    sg_payload["resource_group"] = {"id": rg_id}
+                sg_result = self._api_call("POST", "/security_groups", sg_payload)
+                dedicated_sg_id = sg_result["id"]
+                logger.info(
+                    f"Created dedicated security group {sg_name} ({dedicated_sg_id})"
+                )
+
+            # Add inbound rules on the dedicated SG for the specified ports
+            for port in ports:
+                rule_data = {
+                    "direction": "inbound",
+                    "ip_version": "ipv4",
+                    "protocol": "tcp",
+                    "port_min": port,
+                    "port_max": port,
+                }
+                try:
+                    self._api_call(
+                        "POST",
+                        f"/security_groups/{dedicated_sg_id}/rules",
+                        rule_data,
+                    )
+                    logger.info(
+                        f"Added inbound rule for TCP port {port} to security group {dedicated_sg_id}"
+                    )
+                except Exception as e:
+                    logger.debug(
+                        f"Rule for port {port} on {dedicated_sg_id} might already exist: {e}"
+                    )
+
+            # Ensure outbound traffic is allowed so ALB can communicate with backend targets
+            outbound_rule = {
+                "direction": "outbound",
+                "ip_version": "ipv4",
+                "protocol": "all",
+            }
+            try:
+                self._api_call(
+                    "POST",
+                    f"/security_groups/{dedicated_sg_id}/rules",
+                    outbound_rule,
+                )
+            except Exception as e:
+                logger.debug(
+                    f"Outbound rule on {dedicated_sg_id} might already exist: {e}"
+                )
+
+            lb_data["security_groups"] = [{"id": dedicated_sg_id}]
 
         lb_result = self._api_call("POST", "/load_balancers", lb_data)
         lb_id = lb_result["id"]
@@ -1158,7 +1276,9 @@ class IBMCloudVPCBM(IBMCloudBM):
             lb_name, subnet_id, [6443], server_ips=server_ips, is_public=True
         )
 
-    def create_alb_for_ingress(self, cluster_name, subnet_id, server_ips):
+    def create_alb_for_ingress(
+        self, cluster_name, subnet_id, server_ips, is_public=True
+    ):
         """
         Create Application Load Balancer for OpenShift Ingress
 
@@ -1168,13 +1288,14 @@ class IBMCloudVPCBM(IBMCloudBM):
             cluster_name (str): Cluster name for naming/tagging
             subnet_id (str): VPC subnet ID for ALB
             server_ips (list): List of server IP addresses for backend pool
+            is_public (bool): Whether to create a public (internet-facing) ALB. Defaults to True.
 
         Returns:
-            tuple: (alb_private_ip, alb_id)
+            tuple: (alb_ip, alb_id)
         """
         lb_name = f"{cluster_name}-ingress-lb"
         return self.create_alb(
-            lb_name, subnet_id, [80, 443], server_ips, is_public=False
+            lb_name, subnet_id, [80, 443], server_ips, is_public=is_public
         )
 
     def wait_for_alb_ready(self, lb_id, timeout=300):
@@ -1193,10 +1314,8 @@ class IBMCloudVPCBM(IBMCloudBM):
         while time.time() - start_time < timeout:
             try:
                 lb = self._api_call("GET", f"/load_balancers/{lb_id}")
-            except requests.exceptions.HTTPError as e:
-                if "404" in str(e):
-                    raise CommandFailed(f"ALB {lb_id} not found")
-                raise
+            except ResourceNotFoundError:
+                raise CommandFailed(f"ALB {lb_id} not found")
             status = lb.get("provisioning_status")
             if status == "active":
                 logger.info(f"ALB {lb_id} is active")
@@ -1250,7 +1369,7 @@ class IBMCloudVPCBM(IBMCloudBM):
 
     def delete_alb(self, lb_id, verify_ownership=True):
         """
-        Delete Application Load Balancer
+        Delete Application Load Balancer and any associated dedicated security group
 
         Args:
             lb_id (str): Load balancer ID
@@ -1259,25 +1378,20 @@ class IBMCloudVPCBM(IBMCloudBM):
         Raises:
             ValueError: If ownership verification fails
         """
-        token = self._get_token()
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        }
+        alb = None
+        try:
+            alb = self._api_call("GET", f"/load_balancers/{lb_id}")
+        except ResourceNotFoundError:
+            logger.info(f"ALB {lb_id} not found (already deleted) - skipping")
+            return
+        except Exception as e:
+            logger.warning(f"Could not fetch ALB {lb_id} details before deletion: {e}")
 
-        if verify_ownership:
-            # Get ALB details to verify ownership using direct requests.get
-            url = f"{self.api_base}/load_balancers/{lb_id}?version={self.api_version}&generation={self.generation}"
-            response = requests.get(url, headers=headers, timeout=30)
-            if response.status_code == 404:
-                logger.info(f"ALB {lb_id} not found (already deleted) - skipping")
-                return
-            response.raise_for_status()
-            alb = response.json()
+        alb_name = alb.get("name", "") if alb else ""
 
+        if verify_ownership and alb:
             # Verify cluster name is in ALB name (REQUIRED safety check)
             cluster_name = config.ENV_DATA.get("cluster_name")
-            alb_name = alb.get("name", "")
             if cluster_name:
                 if cluster_name not in alb_name:
                     raise ValueError(
@@ -1299,38 +1413,98 @@ class IBMCloudVPCBM(IBMCloudBM):
                         f"expected {expected_rg}. Refusing deletion for safety."
                     )
 
+        # Identify any dedicated security groups ({alb_name}-sg) attached to this ALB
+        dedicated_sg_name = f"{alb_name}-sg" if alb_name else None
+        dedicated_sg_ids = []
+        if alb:
+            for sg in alb.get("security_groups", []):
+                sg_id = sg.get("id")
+                if not sg_id:
+                    continue
+                if sg.get("name") == dedicated_sg_name:
+                    dedicated_sg_ids.append(sg_id)
+                elif dedicated_sg_name:
+                    try:
+                        sg_obj = self._api_call("GET", f"/security_groups/{sg_id}")
+                        if sg_obj.get("name") == dedicated_sg_name:
+                            dedicated_sg_ids.append(sg_id)
+                    except Exception:
+                        pass
+
+        # Also search by name if not found in ALB attachment
+        if dedicated_sg_name and not dedicated_sg_ids:
+            try:
+                existing_sgs = self._paginated_list(
+                    "/security_groups", "security_groups"
+                )
+                for sg in existing_sgs:
+                    if sg.get("name") == dedicated_sg_name:
+                        dedicated_sg_ids.append(sg["id"])
+            except Exception as e:
+                logger.debug(
+                    f"Could not list security groups to find {dedicated_sg_name}: {e}"
+                )
+
         logger.info(f"Deleting ALB: {lb_id}")
+        alb_deleted = False
         try:
-            # Use direct requests.delete for explicit auditability
-            url = f"{self.api_base}/load_balancers/{lb_id}?version={self.api_version}&generation={self.generation}"
-            response = requests.delete(url, headers=headers, timeout=30)
-            response.raise_for_status()
+            self._api_call("DELETE", f"/load_balancers/{lb_id}")
             logger.info(f"ALB {lb_id} deletion initiated")
 
             # Wait for deletion to complete
             logger.info("Waiting for ALB deletion to complete...")
-            time.sleep(30)  # Initial wait for deletion to start
+            time.sleep(15)  # Initial wait for deletion to start
 
             # Poll until ALB is gone (max 5 minutes)
             for _ in range(30):
                 try:
-                    url = (
-                        f"{self.api_base}/load_balancers/{lb_id}"
-                        f"?version={self.api_version}&generation={self.generation}"
-                    )
-                    response = requests.get(url, headers=headers, timeout=30)
-                    response.raise_for_status()
+                    self._api_call("GET", f"/load_balancers/{lb_id}")
                     time.sleep(10)
-                except requests.exceptions.HTTPError:
+                except ResourceNotFoundError:
                     # ALB not found = deletion complete
                     logger.info(f"ALB {lb_id} deleted successfully")
-                    return
+                    alb_deleted = True
+                    break
+                except Exception as e:
+                    logger.warning(f"Error checking ALB {lb_id} deletion status: {e}")
+                    time.sleep(10)
 
-            logger.warning(f"ALB {lb_id} deletion timed out (may still be deleting)")
-        except requests.exceptions.HTTPError as e:
-            logger.warning(f"Failed to delete ALB {lb_id}: {e}")
+            if not alb_deleted:
+                logger.warning(
+                    f"ALB {lb_id} deletion timed out (may still be deleting)"
+                )
+        except ResourceNotFoundError:
+            logger.info(f"ALB {lb_id} not found during delete call - already deleted")
+            alb_deleted = True
         except Exception as e:
             logger.warning(f"Failed to delete ALB {lb_id}: {e}")
+
+        # Delete dedicated security group(s) if ALB was deleted (or initiated)
+        if dedicated_sg_ids:
+            for sg_id in set(dedicated_sg_ids):
+                logger.info(
+                    f"Deleting dedicated security group {sg_id} ({dedicated_sg_name})"
+                )
+                deleted_sg = False
+                for sg_attempt in range(6):
+                    try:
+                        self._api_call("DELETE", f"/security_groups/{sg_id}")
+                        logger.info(f"Successfully deleted security group {sg_id}")
+                        deleted_sg = True
+                        break
+                    except ResourceNotFoundError:
+                        logger.info(f"Security group {sg_id} already deleted")
+                        deleted_sg = True
+                        break
+                    except Exception as e:
+                        logger.debug(
+                            f"Attempt {sg_attempt + 1}/6: Failed to delete SG {sg_id} (may still be bound): {e}"
+                        )
+                        time.sleep(5)
+                if not deleted_sg:
+                    logger.warning(
+                        f"Failed to delete dedicated security group {sg_id} after retries"
+                    )
 
     def _get_resource_group_id_from_subnet(self, subnet_id):
         """
