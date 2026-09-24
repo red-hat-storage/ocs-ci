@@ -96,7 +96,7 @@ ENV_DATA:
     },
     { name: "appset-busybox-4", workload_dir: "rdr/busybox/cephfs/appset/deployments/appset-busybox-4-cephfs.yaml",
       dr_workload_app_placement_name: "busybox-4-placement-cephfs",
-      dr_workload_app_pvc_selector: { 'appname': 'busybox_app3_cephfs' }, pod_count: 10, pvc_count: 10,
+      dr_workload_app_pvc_selector: { 'appname': 'busybox_app4_cephfs' }, pod_count: 10, pvc_count: 10,
       workload_path: "rdr/busybox/cephfs/workloads/deployments/app-busybox-4"
     },
   ]
