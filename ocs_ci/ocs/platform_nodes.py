@@ -3513,6 +3513,15 @@ class IBMCloudVPCBMNodes(NodesBase):
             self.ibmcloud_vpc_bm.stop_server(server_id, stop_type=stop_type)
 
         if wait:
+            # Wait for cloud-side server stopped status
+            for node, server_id in server_mapping:
+                logger.info(
+                    f"Waiting for VPC BM server {server_id} ({node.name}) to reach stopped status"
+                )
+                self.ibmcloud_vpc_bm.wait_for_server_status(
+                    server_id, "stopped", timeout=600
+                )
+
             node_names = [n.name for n in nodes]
             try:
                 wait_for_nodes_status(
@@ -3559,26 +3568,54 @@ class IBMCloudVPCBMNodes(NodesBase):
         self.stop_nodes(nodes, wait=True, force=force)
         self.start_nodes(nodes, wait=wait)
 
-    def restart_nodes_by_stop_and_start(self, nodes, wait=True):
+    def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=False):
         """
-        Restart nodes by stop and start (calls restart_nodes with soft stop)
+        Restart nodes by stop and start
 
         Args:
             nodes (list): The OCS objects of the nodes
             wait (bool): If True, wait for nodes to be ready
+            force (bool): If True, use hard stop. Otherwise soft stop.
         """
-        return self.restart_nodes(nodes, wait=wait, force=False)
+        return self.restart_nodes(nodes, wait=wait, force=force)
 
     def restart_nodes_by_stop_and_start_teardown(self):
         """
-        Start any nodes in NotReady state (recovery method)
+        Start any nodes in NotReady state (recovery method).
+        Falls back to cloud-side status check if the cluster API is unreachable.
         """
         from ocs_ci.ocs.node import get_nodes_in_statuses
 
-        nodes_not_ready = get_nodes_in_statuses([constants.NODE_NOT_READY])
+        nodes_not_ready = None
+        try:
+            nodes_not_ready = get_nodes_in_statuses([constants.NODE_NOT_READY])
+        except Exception as e:
+            logger.warning(
+                f"Failed to query node status via cluster API: {e}. Falling back to cloud-side server check."
+            )
+
         if nodes_not_ready:
             logger.info(f"Starting {len(nodes_not_ready)} NotReady nodes")
             self.start_nodes(nodes_not_ready, wait=True)
+        elif nodes_not_ready is None:
+            # Cloud-side recovery: check all configured servers and start any that are stopped
+            srv_details = config.ENV_DATA.get("baremetal", {}).get("servers", {})
+            for srv_name, srv_conf in srv_details.items():
+                server_id = srv_conf.get("server_id")
+                if server_id:
+                    try:
+                        status = self.ibmcloud_vpc_bm.get_server_status(server_id).get(
+                            "status"
+                        )
+                        if status != "running":
+                            logger.info(
+                                f"Teardown recovery: starting server {srv_name} ({server_id}) in status {status}"
+                            )
+                            self.ibmcloud_vpc_bm.start_server(server_id)
+                    except Exception as err:
+                        logger.warning(
+                            f"Failed to check/start server {srv_name} ({server_id}): {err}"
+                        )
         else:
             logger.info("All nodes are already ready")
 
