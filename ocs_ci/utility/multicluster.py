@@ -332,8 +332,9 @@ def create_mce_catsrc():
             timeout=10, should_exist=True, resource_name="acm-idms"
         ):
             log.info(
-                "ImageDigestMirrorSet 'acm-idms' already present, skipping creation"
+                "ImageDigestMirrorSet 'acm-idms' already present, verifying MCP readiness"
             )
+            wait_for_machineconfigpool_status(node_type="all")
         else:
             run_cmd(f"oc apply -f {constants.ACM_BREW_IDMS_YAML}")  # IgnoreDeprecation
             wait_for_machineconfigpool_status(node_type="all")

@@ -198,13 +198,16 @@ class Submariner(object):
         Returns:
             bool: True if IDMS was newly applied, False if already present (skipped)
         """
-        idms_obj = OCP(kind=constants.IMAGEDIGESTMIRRORSET, resource_name="acm-idms")
+        idms_obj = OCP(
+            kind=constants.IMAGEDIGESTMIRRORSET, resource_name="brew-registry"
+        )
         if idms_obj.check_resource_existence(
-            timeout=10, should_exist=True, resource_name="acm-idms"
+            timeout=10, should_exist=True, resource_name="brew-registry"
         ):
             logger.info(
-                "ImageDigestMirrorSet 'acm-idms' already present, skipping creation"
+                "ImageDigestMirrorSet 'brew-registry' already present, waiting for MCP readiness"
             )
+            wait_for_machineconfigpool_status(node_type="all")
             return False
         idms_data = templating.load_yaml(constants.SUBMARINER_DOWNSTREAM_BREW_IDMS)
         idms_data_yaml = tempfile.NamedTemporaryFile(

@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 @acm_import
 def test_acm_import():
     def apply_idms(cluster):
+        """Apply acm-idms to the cluster if not already present.
+
+        Returns:
+            str: 'applied' if newly created, 'existing' if already present, 'skipped' on error.
+        """
         index = cluster.MULTICLUSTER["multicluster_index"]
         cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
         with config.RunWithConfigContext(index):
@@ -31,14 +36,14 @@ def test_acm_import():
                 timeout=10, should_exist=True, resource_name="acm-idms"
             ):
                 logger.info(
-                    f"[{cluster_name}] ImageDigestMirrorSet 'acm-idms' already present, skipping creation"
+                    f"[{cluster_name}] ImageDigestMirrorSet 'acm-idms' already present, will verify MCP readiness"
                 )
-                return False
+                return "existing"
             logger.info(
                 f"[{cluster_name}] Creating ImageDigestMirrorSet for ACM Deployment"
             )
             run_cmd(f"oc apply -f {constants.ACM_BREW_IDMS_YAML}")
-            return True
+            return "applied"
 
     def wait_for_mcp(cluster):
         index = cluster.MULTICLUSTER["multicluster_index"]
@@ -48,7 +53,7 @@ def test_acm_import():
             wait_for_machineconfigpool_status(node_type="all")
 
     if version.compare_versions(f"{config.ENV_DATA.get('acm_version')} >= 2.14"):
-        clusters_applied_idms = []
+        clusters_need_mcp_wait = []
         # Step 1: Apply IDMS to all clusters
         for cluster in config.clusters:
             if cluster.DEPLOYMENT.get("disconnected", False) or not config.ENV_DATA.get(
@@ -59,15 +64,16 @@ def test_acm_import():
                 )
             else:
                 try:
-                    if apply_idms(cluster):
-                        clusters_applied_idms.append(cluster)
+                    result = apply_idms(cluster)
+                    if result in ("applied", "existing"):
+                        clusters_need_mcp_wait.append(cluster)
                 except Exception as e:
                     logger.error(
                         f"Error applying IDMS on cluster index {cluster.MULTICLUSTER['multicluster_index']}: {e}"
                     )
 
-        # Step 2: Wait for MCP update only on clusters where IDMS was newly applied
-        for cluster in clusters_applied_idms:
+        # Step 2: Verify MCP readiness on all clusters where IDMS is present
+        for cluster in clusters_need_mcp_wait:
             try:
                 wait_for_mcp(cluster)
             except Exception as e:
