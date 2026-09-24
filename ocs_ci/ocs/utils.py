@@ -2264,7 +2264,7 @@ def get_nb_db_psql_version_from_image():
 
 
 @retry(
-    CommandFailed,
+    UnexpectedBehaviour,
     tries=5,
     delay=5,
     text_in_exception="shutting down",
