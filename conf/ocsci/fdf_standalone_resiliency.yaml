@@ -1,0 +1,23 @@
+# FDF Standalone Resilience Testing Configuration (RHSTOR-8290 / TC-9)
+#
+# Overlay for running node-failure, disk-failure, and pod-disruption tests
+# on FDF standalone clusters. Combines FDF standalone deployment with the
+# resiliency test configuration.
+#
+# Usage:
+#   run-ci ... --ocsci-conf conf/ocsci/fdf_standalone_deployment.yaml \
+#              --ocsci-conf conf/ocsci/fdf_standalone_resiliency.yaml \
+#              --ocsci-conf conf/ocsci/resiliency_tests_config.yaml \
+#              tests/functional/z_cluster/nodes/
+#
+# The existing node/disk/pod failure tests are architecture-agnostic and
+# run identically on FDF standalone (same Ceph + ODF operator stack).
+---
+DEPLOYMENT:
+  fdf_standalone_deployment: true
+ENV_DATA:
+  resiliency_config:
+    run_workload: true
+    enable_verification: true
+    workloads:
+      - VDBENCH
