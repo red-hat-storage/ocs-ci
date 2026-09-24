@@ -14,6 +14,7 @@ import platform
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     DRPrimaryNotFoundException,
@@ -194,7 +195,17 @@ class Submariner(object):
         """
         This is a prereq for downstream unreleased submariner
 
+        Returns:
+            bool: True if IDMS was newly applied, False if already present (skipped)
         """
+        idms_obj = OCP(kind=constants.IMAGEDIGESTMIRRORSET, resource_name="acm-idms")
+        if idms_obj.check_resource_existence(
+            timeout=10, should_exist=True, resource_name="acm-idms"
+        ):
+            logger.info(
+                "ImageDigestMirrorSet 'acm-idms' already present, skipping creation"
+            )
+            return False
         idms_data = templating.load_yaml(constants.SUBMARINER_DOWNSTREAM_BREW_IDMS)
         idms_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="acm_idms", delete=False
@@ -202,6 +213,7 @@ class Submariner(object):
         templating.dump_data_to_temp_yaml(idms_data, idms_data_yaml.name)
         run_cmd(f"oc apply -f {idms_data_yaml.name}", timeout=300)
         wait_for_machineconfigpool_status(node_type="all")
+        return True
 
     def download_binary(self):
         if self.source == "upstream":
