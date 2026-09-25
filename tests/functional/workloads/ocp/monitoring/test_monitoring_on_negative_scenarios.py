@@ -55,15 +55,9 @@ def wait_to_update_mgrpod_info_prometheus_pod(threading_lock):
     logger.info(
         "Verifying ceph health status metrics is updated after rebooting the node"
     )
-    ocp_obj = ocp.OCP(
-        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-    )
-    mgr_pod = (
-        ocp_obj.get(selector=constants.MGR_APP_LABEL)
-        .get("items")[0]
-        .get("metadata")
-        .get("name")
-    )
+    mgr_pod = pod.get_active_mgr_pod().name
+    logger.info(f"Checking metrics for active MGR pod: {mgr_pod}")
+
     assert check_ceph_health_status_metrics_on_prometheus(
         mgr_pod=mgr_pod, threading_lock=threading_lock
     ), "Ceph health status metrics are not updated after the rebooting node where the mgr running"
@@ -481,18 +475,9 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         """
 
-        # Get the mgr pod obj
-        mgr_pod_obj = pod.get_mgr_pods()
-
         # Get active mgr pod
-        toolbox = pod.get_ceph_tools_pod()
-        active_mgr_pod_output = toolbox.exec_cmd_on_pod("ceph mgr stat")
-        active_mgr_pod_suffix = active_mgr_pod_output.get("active_name")
-        logger.info(f"The active MGR pod is {active_mgr_pod_suffix}")
-        for obj in mgr_pod_obj:
-            if active_mgr_pod_suffix in obj.name:
-                active_mgr_pod_obj = obj
-        logger.info(f"The active MGR pod name is  {active_mgr_pod_obj.name}")
+        active_mgr_pod_obj = pod.get_active_mgr_pod()
+        logger.info(f"The active MGR pod name is {active_mgr_pod_obj.name}")
 
         # Get the node where the mgr pod is hosted
         mgr_node_obj = pod.get_pod_node(active_mgr_pod_obj)
