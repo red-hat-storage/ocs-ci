@@ -1125,6 +1125,89 @@ SCALE_DASHBOARD_LOCATORS = {
     ),
 }
 
+# ---------------------------------------------------------------------------
+# Fusion Access HA — Stretch Cluster UI locators  (RHSTOR-8877)
+# ---------------------------------------------------------------------------
+STRETCH_CLUSTER_LOCATORS = {
+    # ---- Node-selection wizard page ----------------------------------------
+    # "Include control plane nodes" toggle (checkbox or switch)
+    "include_control_plane_toggle": (
+        "//input[@id='include-control-plane-nodes' "
+        "or @data-test='include-control-plane-nodes-checkbox']"
+        "| //button[@data-test='include-control-plane-nodes-toggle']",
+        By.XPATH,
+    ),
+    # "Stretch cluster" toggle
+    "stretch_cluster_toggle": (
+        "//input[@id='stretch-cluster' or @data-test='stretch-cluster-checkbox']"
+        "| //button[@data-test='stretch-cluster-toggle']",
+        By.XPATH,
+    ),
+    # The node table that lists all nodes visible on the page
+    "node_table": (
+        "//table[@aria-label='Nodes table' or @data-test='nodes-table']",
+        By.XPATH,
+    ),
+    # All rows inside the node table body
+    "node_table_rows": (
+        "//table[@aria-label='Nodes table' or @data-test='nodes-table']"
+        "//tbody//tr",
+        By.XPATH,
+    ),
+    # Node name column — row index placeholder {i} (1-based)
+    "node_table_name_cell": (
+        "//table[@aria-label='Nodes table' or @data-test='nodes-table']"
+        "//tbody//tr[{i}]//td[@data-label='Name' or position()=1]",
+        By.XPATH,
+    ),
+    # Role column for row i
+    "node_table_role_cell": (
+        "//table[@aria-label='Nodes table' or @data-test='nodes-table']"
+        "//tbody//tr[{i}]//td[@data-label='Role' or position()=2]",
+        By.XPATH,
+    ),
+    # Role dropdown button for a given node name
+    "node_role_dropdown_by_name": (
+        "//tr[contains(., '{node_name}')]"
+        "//button[@data-test='node-role-dropdown' or contains(@aria-label, 'role')]",
+        By.XPATH,
+    ),
+    # All role dropdown options in an open dropdown
+    "node_role_dropdown_options": (
+        "//ul[@role='listbox' or @role='menu']//li//button",
+        By.XPATH,
+    ),
+    # Role dropdown for arbiter row — should be disabled
+    "arbiter_node_role_dropdown": (
+        "//tr[contains(., '{arbiter_node}')]"
+        "//button[@data-test='node-role-dropdown' or contains(@aria-label, 'role')]",
+        By.XPATH,
+    ),
+    # Alert banner displayed when no arbiter node is detected
+    "no_arbiter_alert": (
+        "//*[@role='alert' or contains(@class,'pf-m-warning') or contains(@class,'pf-m-danger')]"
+        "[contains(., 'arbiter') or contains(., 'Arbiter')]",
+        By.XPATH,
+    ),
+    # ---- LUN discovery page -----------------------------------------------
+    # LUN table (reusing FDF_SAN_LOCATORS keys for consistency)
+    "lun_discovery_table": (
+        "//table[@aria-label='LUNs table' or @data-test='luns-table']",
+        By.XPATH,
+    ),
+    # All LUN rows in the discovery table
+    "lun_discovery_rows": (
+        "//table[@aria-label='LUNs table' or @data-test='luns-table']//tbody//tr",
+        By.XPATH,
+    ),
+    # Individual LUN row by WWID value
+    "lun_row_by_wwid": (
+        "//table[@aria-label='LUNs table' or @data-test='luns-table']"
+        "//tbody//tr[contains(., '{wwid}')]",
+        By.XPATH,
+    ),
+}
+
 acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
