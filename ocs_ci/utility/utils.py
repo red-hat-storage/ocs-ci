@@ -45,8 +45,10 @@ from jinja2 import FileSystemLoader, Environment
 from ocs_ci.framework import config
 from ocs_ci.framework import GlobalVariables as GV
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility.yaml_log_filter import filter_verbose_yaml
 from ocs_ci.ocs.exceptions import (
+    AuthError,
     CephHealthException,
     CephHealthRecoveredException,
     CephHealthNotRecoveredException,
@@ -7572,7 +7574,6 @@ def create_kubeconfig(kubeconfig_path):
             f"oc login --username {config.RUN['username']} "
             f"--password {config.RUN['kubeadmin_password']} "
             f"{ocp_api_url} "
-            f"--kubeconfig {kubeconfig_path} "
             "--insecure-skip-tls-verify=true"
         )
         result = exec_cmd(cmd, secrets=(config.RUN["kubeadmin_password"],))
@@ -7581,8 +7582,23 @@ def create_kubeconfig(kubeconfig_path):
             log.warning(f"returncode: {result.returncode}")
             log.warning(f"stdout: {result.stdout}")
             log.warning(f"stderr: {result.stderr}")
+            raise AuthError(f"Failed to login to OCP cluster at {ocp_api_url}")
+
+        kubeconfig_dir = os.path.dirname(kubeconfig_path)
+        os.makedirs(kubeconfig_dir, exist_ok=True)
+        cmd = f"oc config new-admin-kubeconfig > {kubeconfig_path}"
+        result = exec_cmd(cmd, shell=True)
+        if result.returncode:
+            log.warning(f"executed command: {cmd}")
+            log.warning(f"returncode: {result.returncode}")
+            log.warning(f"stdout: {result.stdout}")
+            log.warning(f"stderr: {result.stderr}")
+            raise CommandFailed(
+                f"Failed to create permanent kubeconfig at {kubeconfig_path}"
+            )
         else:
             log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
+        update_kubeconfig_with_proxy_url_for_client(kubeconfig_path)
 
         kubeadmin_password_file = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["password_location"]
