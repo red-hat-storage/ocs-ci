@@ -941,6 +941,32 @@ class Deployment(object):
 
             FusionAccessOperator().deploy()
 
+    def do_deploy_fusion_access_stretch_cluster(self):
+        """
+        Deploy the Fusion Access HA (Stretch Cluster) stack after OCP is up.
+
+        Triggered when ``config.DEPLOYMENT["fusion_access"]`` is True in the
+        deployment config (e.g.
+        ``conf/deployment/vsphere/upi_2az_rhcos_vsan_lso_vmdk_3m_4w_arbiter_fusion_access.yaml``).
+
+        Runs the full sequence:
+            1. Zone labels
+            2. Arbiter master designation
+            3. IBM Fusion operator
+            4. FDF service stack
+            5. KMM operator
+            6. Image registry
+            7. Fusion Access Operator + FusionAccess CR
+            8. UI deployment validation (node-selection wizard, LUN group,
+               filesystem health in ibm-spectrum-scale)
+        """
+        if config.DEPLOYMENT.get("fusion_access"):
+            from ocs_ci.deployment.fusion_access_stretch_cluster import (
+                deploy_fusion_access_stretch_cluster,
+            )
+
+            deploy_fusion_access_stretch_cluster()
+
     def do_deploy_hosted_spoke_clusters(self):
         """
         Deploy Hosted cluster(s)
@@ -1078,6 +1104,7 @@ class Deployment(object):
         self.do_deploy_hyperconverged()
         self.do_deploy_metallb()
         self.do_deploy_fusion_access()
+        self.do_deploy_fusion_access_stretch_cluster()
         self.do_deploy_hosted_spoke_clusters()
         self.do_deploy_external_spoke_clusters()
 

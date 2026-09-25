@@ -1,0 +1,62 @@
+---
+# Deployment configuration for RHSTOR-8877 — Fusion Access HA (Stretch Cluster)
+
+DEPLOYMENT:
+  # --- OCP provisioner ---
+  allow_lower_instance_requirements: false
+  ocs_operator_nodes_to_label: 4
+
+  # --- Stretch / arbiter ---
+  arbiter_deployment: true
+  arbiter_zone: 'arbiter'
+  arbiter_autodetect: false
+  dummy_zone_node_labels: true
+  network_split_setup: true
+  network_zone_latency: 5
+  host_network: true
+  provider_api_server_service_type: 'ClusterIP'
+
+  # --- Fusion Access for SAN (iSCSI) ---
+  # fusion_access: true gates the fusion_access_required marker — every test in
+  # the Fusion Access HA suite is automatically skipped on clusters without it.
+  fusion_access: true
+  fdf_standalone_deployment: true
+  # iSCSI-based LUN provisioning; LUNs are pre-zoned on the IBM FlashSystem.
+  iscsi_deployment: true
+
+  # --- KMM ---
+  # Use community-operators catalog until the signed KMM build ships.
+  # Set kmm_secure_boot: true for GA testing once the signed build is available.
+  kmm_deployment: true
+  kmm_secure_boot: false
+
+  # --- Image registry ---
+  # External registry is the default.  Set use_internal_registry: true in an
+  # environment-specific overlay when the internal OCP registry is required.
+  use_internal_registry: false
+
+  # --- Subscription channel overrides (optional) ---
+  # fusion_access_channel: "stable-v1"
+
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'upi'
+  worker_replicas: 4
+  master_replicas: 3
+
+  # Zone assignments -------------------------------------------------------
+  # One master in the arbiter zone; remaining masters and workers in data zones.
+  worker_availability_zones:
+    - 'data-1'
+    - 'data-2'
+  master_availability_zones:
+    - 'arbiter'
+    - 'data-1'
+    - 'data-2'
+
+  # Node sizing ------------------------------------------------------------
+  worker_num_cpus: '16'
+  master_num_cpus: '8'
+  master_memory: '16384'
+  compute_memory: '65536'
+
