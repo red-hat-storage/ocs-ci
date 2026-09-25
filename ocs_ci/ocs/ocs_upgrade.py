@@ -1313,6 +1313,8 @@ def run_ocs_upgrade(
         upgrade_ocs.version_before_upgrade,
     )
 
+    log.debug("Waiting for NooBaa database to stabilize after upgrade...")
+    time.sleep(10)
     verify_nb_db_psql_version(check_image_name_version=False)
 
     upgrade_version_semantic = version.get_semantic_version(upgrade_version, True)
