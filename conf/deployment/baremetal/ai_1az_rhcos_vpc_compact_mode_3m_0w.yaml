@@ -1,0 +1,11 @@
+---
+# VPC Bare Metal - Compact Mode (3 masters, 0 workers)
+DEPLOYMENT:
+  local_storage: true
+
+ENV_DATA:
+  platform: 'baremetal'
+  deployment_type: 'ai'
+  infra_type: 'vpc'
+  worker_replicas: 0
+  master_replicas: 3
