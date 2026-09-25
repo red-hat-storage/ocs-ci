@@ -787,6 +787,11 @@ skipif_noobaa_external_pgsql = pytest.mark.skipif(
     reason="This test will not run correctly in external DB deployed cluster.",
 )
 
+skipif_noobaa_external_pgsql_not_set = pytest.mark.skipif(
+    config.ENV_DATA.get("noobaa_external_pgsql") is not True,
+    reason="This test requires NooBaa to be deployed with an external PostgreSQL DB.",
+)
+
 skipif_compact_mode = pytest.mark.skipif(
     config.ENV_DATA.get("worker_replicas") == 0,
     reason="This test is not supported for compact mode deployment types.",
