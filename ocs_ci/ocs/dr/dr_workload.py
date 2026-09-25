@@ -663,6 +663,14 @@ class BusyBox(DRWorkload):
         dr_helpers.wait_for_all_resources_creation(
             self.workload_pvc_count, self.workload_pod_count, self.workload_namespace
         )
+        dr_helpers.wait_for_drpc_progression_completed(
+            namespace=self.workload_namespace,
+            resource_name=(
+                f"{self.sub_placement_name}-drpc"
+                if self.is_placement
+                else templating.load_yaml(self.drpc_yaml_file)["metadata"]["name"]
+            ),
+        )
 
     def delete_workload(self, switch_ctx=None):
         """
@@ -1013,6 +1021,10 @@ class BusyBox_AppSet(DRWorkload):
                 raise ResourceWrongStatusException(
                     f"{appset_resource_name} health status is not Healthy"
                 )
+        dr_helpers.wait_for_drpc_progression_completed(
+            namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+            resource_name=f"{self.appset_placement_name}-drpc",
+        )
 
     def check_workload_health_status(self):
         """
@@ -1433,6 +1445,14 @@ class CnvWorkload(DRWorkload):
 
         """
         self.check_pod_pvc_status(skip_replication_resources=False)
+        dr_helpers.wait_for_drpc_progression_completed(
+            namespace=(
+                constants.GITOPS_CLUSTER_NAMESPACE
+                if self.workload_type == constants.APPLICATION_SET
+                else self.workload_namespace
+            ),
+            resource_name=f"{self.cnv_workload_placement_name}-drpc",
+        )
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
@@ -1750,12 +1770,17 @@ class BusyboxDiscoveredApps(DRWorkload):
 
         """
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        drpc_name = vrg_name or self.discovered_apps_placement_name
         dr_helpers.wait_for_all_resources_creation(
             self.workload_pvc_count,
             self.workload_pod_count,
             self.workload_namespace,
             discovered_apps=True,
-            vrg_name=vrg_name or self.discovered_apps_placement_name,
+            vrg_name=drpc_name,
+        )
+        dr_helpers.wait_for_drpc_progression_completed(
+            namespace=constants.DR_OPS_NAMESPACE,
+            resource_name=drpc_name,
         )
 
     def create_recipe_with_checkhooks(self):
@@ -2326,6 +2351,10 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
         """
         self.check_pod_pvc_status(skip_replication_resources=False)
+        dr_helpers.wait_for_drpc_progression_completed(
+            namespace=constants.DR_OPS_NAMESPACE,
+            resource_name=self.discovered_apps_placement_name,
+        )
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
