@@ -111,6 +111,7 @@ mdr = pytest.mark.mdr
 resiliency = pytest.mark.resiliency
 chaos = pytest.mark.chaos
 ec_allowed = pytest.mark.ec_allowed
+fa_functional = pytest.mark.fa_functional
 
 tier_marks = [
     tier1,

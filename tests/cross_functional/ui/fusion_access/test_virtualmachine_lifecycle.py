@@ -16,8 +16,9 @@ from selenium.common.exceptions import WebDriverException
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
+    fa_functional,
     ignore_leftovers,
-    magenta_squad,
+    yellow_squad,
 )
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 @ui
-@magenta_squad
+@yellow_squad
 @ignore_leftovers
 class TestVirtualMachineLifecycle(ManageTest):
     """
@@ -564,6 +565,7 @@ class TestVirtualMachineLifecycle(ManageTest):
         return vm_username, vm_password
 
     @pytest.mark.polarion_id("OCS-8066")
+    @fa_functional
     def test_create_virtualmachine_from_instancetype(self):
         """
         Test to create a VirtualMachine via the new UI wizard.
@@ -620,6 +622,7 @@ class TestVirtualMachineLifecycle(ManageTest):
         logger.info("VM data write and md5sum checksum: PASS")
 
     @pytest.mark.polarion_id("OCS-8223")
+    @fa_functional
     def test_virtualmachine_snapshot_and_restore(self):
         """
         Test VM snapshot creation and restore via the UI.
@@ -787,6 +790,7 @@ class TestVirtualMachineLifecycle(ManageTest):
         )
 
     @pytest.mark.polarion_id("OCS-8091")
+    @fa_functional
     def test_clone_virtualmachine(self):
         """
         Test cloning a VirtualMachine via the UI and verifying data integrity.

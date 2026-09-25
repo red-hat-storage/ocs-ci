@@ -11,9 +11,10 @@ from ocs_ci.framework.testlib import (
     ManageTest,
 )
 from ocs_ci.framework.pytest_customization.marks import (
-    magenta_squad,
+    fa_functional,
     fusion_access_required,
     ignore_leftovers,
+    yellow_squad,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 @ui
-@magenta_squad
+@yellow_squad
 @fusion_access_required
 @ignore_leftovers
 class TestFDFSANConnection(ManageTest):
@@ -147,6 +148,7 @@ class TestFDFSANConnection(ManageTest):
         self.setup_ui_class_factory = setup_ui_class_factory
 
     @pytest.mark.polarion_id("OCS-5500")
+    @fa_functional
     def test_connect_san_storage_and_create_filesystem(
         self,
     ):
