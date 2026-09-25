@@ -3773,7 +3773,10 @@ bucket_tab = {
         By.XPATH,
     ),
     "s3_login_sign_in_button": (
-        "//button[text()='Sign in']",
+        # PF6 wraps button labels in <span class="pf-v6-c-button__text">, so the
+        # old //button[text()='Sign in'] no longer matches. normalize-space()
+        # matches the descendant span text and skips the 'Sign in to continue' h3.
+        "//button[normalize-space()='Sign in']",
         By.XPATH,
     ),
     "s3_login_success_label": (
