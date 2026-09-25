@@ -51,7 +51,15 @@ from ocs_ci.helpers.odf_cli import ODFCliRunner
 
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.helpers.virtctl import get_virtctl_tool
-from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
+from ocs_ci.ocs import (
+    constants,
+    defaults,
+    fio_artefacts,
+    md_blow,
+    node,
+    ocp,
+    platform_nodes,
+)
 from ocs_ci.ocs.constants import (
     RECLAIMSPACE_SCHEDULE_ANNOTATION,
     KEYROTATION_SCHEDULE_ANNOTATION,
@@ -149,6 +157,9 @@ from ocs_ci.ocs.resources.pod import (
     cal_md5sum,
     wait_for_pods_to_be_in_statuses,
     wait_for_noobaa_db_ready,
+    get_noobaa_db_pod,
+    get_noobaa_core_pod,
+    get_pod_obj,
 )
 from ocs_ci.ocs.resources.pvc import (
     PVC,
@@ -10639,6 +10650,203 @@ def scale_noobaa_db_pod_pv_size(request):
     return scale_noobaa_db_pv(request)
 
 
+@pytest.fixture()
+def md_blow_factory(request):
+    """
+    Factory for MdBlow objects that can fill the NooBaa DB to a usage threshold.
+    Restores the default noobaa-core resources on teardown.
+
+    Returns:
+        function: Factory returning an MdBlow object
+
+    """
+    state = {"blow_io": None, "resources_increased": False}
+
+    def teardown():
+        if not state["resources_increased"]:
+            return
+        try:
+            state["blow_io"].reduce_core_pod_cpu_memory()
+        except Exception as exc:
+            log.warning(f"Failed to restore noobaa-core resources: {exc}")
+
+    request.addfinalizer(teardown)
+
+    def factory(
+        obj_count=1000,
+        concurrency=50,
+        chunks=200,
+        chunk_size=1,
+        max_stall_batches=3,
+        max_fill_batches=500,
+        increase_core_resources=True,
+        db_pod_name=None,
+        exec_timeout=1800,
+    ):
+        """
+        Args:
+            obj_count (int): Number of objects uploaded per md_blow batch
+            concurrency (int): Number of md_blow upload threads
+            chunks (int): Number of chunks in each object.
+            chunk_size (int): Size of each chunk in bytes.
+            max_stall_batches (int): Number of consecutive batches without any
+                DB growth after which the fill is considered stalled
+            max_fill_batches (int): Hard cap on the number of batches, so that a
+                slow fill fails with a clear error instead of hanging until the
+                CI job timeout
+            increase_core_resources (bool): Bump the noobaa-core CPU and memory
+                limits for faster IO. Restored on teardown
+            db_pod_name (str): NooBaa DB instance whose usage drives the fill.
+                Defaults to the CNPG primary.
+            exec_timeout (int): Timeout of the md_blow 'oc exec'.
+
+        Returns:
+            MdBlow: Object whose upload_obj_using_md_blow fills the DB up to
+                threshold_pct when that argument is given
+
+        """
+        blow_io = md_blow.MdBlow()
+        blow_io.obj_count = obj_count
+        blow_io.concurrency = concurrency
+        blow_io.chunks = chunks
+        blow_io.chunk_size = chunk_size
+        state["blow_io"] = blow_io
+
+        if increase_core_resources:
+            state["resources_increased"] = True
+            blow_io.increase_core_pod_cpu_memory()
+
+        original_upload = blow_io.upload_obj_using_md_blow
+
+        def refresh_core_pod():
+            """
+            Re-read the noobaa-core pod and give its exec a longer timeout.
+            md_blow does not take a timeout, so it is injected here instead of
+            changing the default for every exec_cmd_on_pod caller.
+            """
+            core_pod = get_noobaa_core_pod()
+            pod_exec_cmd = core_pod.exec_cmd_on_pod
+
+            def exec_cmd_on_pod(command, **kwargs):
+                kwargs.setdefault("timeout", exec_timeout)
+                return pod_exec_cmd(command, **kwargs)
+
+            core_pod.exec_cmd_on_pod = exec_cmd_on_pod
+            blow_io.noobaa_core_pod = core_pod
+
+        refresh_core_pod()
+
+        def get_db_usage():
+            if db_pod_name:
+                blow_io.noobaa_db_pod = get_pod_obj(
+                    db_pod_name, namespace=config.ENV_DATA["cluster_namespace"]
+                )
+            else:
+                blow_io.noobaa_db_pod = get_noobaa_db_pod()
+            usage = blow_io.noobaa_db_pod.exec_cmd_on_pod(
+                "df -B1 | grep postgresql | awk '{print $3,$2}'",
+                container_name="postgres",
+                shell=True,
+            )
+            fields = usage.strip().split()
+            try:
+                used_bytes, total_bytes = (int(field) for field in fields)
+            except ValueError as exc:
+                raise UnexpectedBehaviour(
+                    "Unexpected 'df' output while reading the NooBaa DB usage "
+                    f"from {blow_io.noobaa_db_pod.name}: {usage!r}"
+                ) from exc
+            usage_pct = (used_bytes * 100) // total_bytes if total_bytes else 0
+            return used_bytes, total_bytes, usage_pct
+
+        def upload_obj_using_md_blow(
+            bucket_name="first.bucket",
+            threshold_pct=None,
+            obj_count=obj_count,
+            concurrency=concurrency,
+            chunks=chunks,
+            chunk_size=chunk_size,
+        ):
+            if threshold_pct is None:
+                original_upload(
+                    bucket_name,
+                    obj_count=obj_count,
+                    concurrency=concurrency,
+                    chunks=chunks,
+                    chunk_size=chunk_size,
+                )
+                return
+
+            used_bytes, total_bytes, current_pct = get_db_usage()
+            log.info(
+                f"md_blow fill starting at {current_pct}% "
+                f"({used_bytes}/{total_bytes} bytes), target {threshold_pct}%"
+            )
+            if current_pct >= threshold_pct:
+                log.info(f"DB already at {current_pct}%, skipping fill")
+                return
+
+            stall_batches = 0
+            batch_num = 0
+            while current_pct < threshold_pct:
+                batch_num += 1
+                if batch_num > max_fill_batches:
+                    raise UnexpectedBehaviour(
+                        f"md_blow did not reach {threshold_pct}% after "
+                        f"{max_fill_batches} batches, stopped at {current_pct}%"
+                    )
+                log.info(
+                    f"Running md_blow batch {batch_num} with count={obj_count}, "
+                    f"concur={concurrency}, chunks={chunks}, "
+                    f"chunk_size={chunk_size}"
+                )
+                refresh_core_pod()
+                original_upload(
+                    bucket_name,
+                    obj_count=obj_count,
+                    concurrency=concurrency,
+                    chunks=chunks,
+                    chunk_size=chunk_size,
+                )
+                new_used_bytes, total_bytes, current_pct = get_db_usage()
+                log.info(
+                    f"DB usage after batch {batch_num}: {current_pct}% "
+                    f"({new_used_bytes}/{total_bytes} bytes)"
+                )
+                if new_used_bytes == used_bytes:
+                    stall_batches += 1
+                    if stall_batches >= max_stall_batches:
+                        # md_blow is executed with ignore_error=True, so a core
+                        # side failure only shows up as a DB that stops growing.
+                        # The restart count tells apart a crashing core pod from
+                        # md_blow running but writing nothing.
+                        try:
+                            restarts = blow_io.noobaa_core_pod.restart_count
+                        except Exception:
+                            restarts = "unknown"
+                        raise UnexpectedBehaviour(
+                            f"md_blow stalled: DB used bytes unchanged for "
+                            f"{stall_batches} consecutive batches at "
+                            f"{current_pct}% (target {threshold_pct}%). "
+                            f"noobaa-core pod {blow_io.noobaa_core_pod.name} "
+                            f"restart count is {restarts}, check its log for "
+                            f"md_blow RPC errors"
+                        )
+                else:
+                    stall_batches = 0
+                used_bytes = new_used_bytes
+
+            log.info(
+                f"md_blow fill completed at {current_pct}% "
+                f"({used_bytes}/{total_bytes} bytes), target was {threshold_pct}%"
+            )
+
+        blow_io.upload_obj_using_md_blow = upload_obj_using_md_blow
+        return blow_io
+
+    return factory
+
+
 def scale_noobaa_db_pv(request):
     """
     This fixtue helps to scale the noobaa db pv size.
@@ -10661,19 +10869,31 @@ def scale_noobaa_db_pv(request):
     ]
     nb_pvcs = get_all_pvc_objs(selector=constants.NOOBAA_DB_LABEL_419_AND_ABOVE)
 
-    def factory(pv_size="50"):
+    def factory(pv_size="50", pvc_names=None):
         """
         Args:
             pv_size(int): Size in GB
+            pvc_names(list): Optional list of PVC names to resize. When omitted,
+                all NooBaa DB PVCs are resized.
 
         """
         pods = []
+        pvcs_to_resize = nb_pvcs
+        if pvc_names:
+            pvc_names_set = set(pvc_names)
+            pvcs_to_resize = [
+                nb_pvc for nb_pvc in nb_pvcs if nb_pvc.name in pvc_names_set
+            ]
+            assert pvcs_to_resize, (
+                f"No NooBaa DB PVCs matched pvc_names={pvc_names}. "
+                f"Available PVCs: {[nb_pvc.name for nb_pvc in nb_pvcs]}"
+            )
 
         for operator in operators:
             modify_deployment_replica_count(deployment_name=operator, replica_count=0)
         log.info(f"Scaled down operators: {operators}")
 
-        for nb_pvc in nb_pvcs:
+        for nb_pvc in pvcs_to_resize:
             nb_pvc.resize_pvc(new_size=pv_size)
             log.info(f"{nb_pvc.name} is resized to {pv_size}")
 
