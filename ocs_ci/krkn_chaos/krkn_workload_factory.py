@@ -518,6 +518,12 @@ class WorkloadOps:
             log.info("Background cluster operations stopped")
         except Exception as e:
             log.error(f"Error stopping background cluster operations: {e}")
+            from ocs_ci.krkn_chaos.background_cluster_operations import (
+                BackgroundOperationEscalationError,
+            )
+
+            if isinstance(e, BackgroundOperationEscalationError):
+                raise
         finally:
             self.background_cluster_ops = None
             self.background_cluster_validator = None
@@ -1041,12 +1047,18 @@ class KrknWorkloadFactory:
 
         workloads = []
         # Get configurable values from krkn config
-        num_pvcs = self.config.get_num_pvcs_per_interface()
+        num_rbd_pvcs = self.config.get_num_rbd_pvcs()
+        num_cephfs_pvcs = self.config.get_num_cephfs_pvcs()
+        num_pvcs_by_interface = {
+            constants.CEPHBLOCKPOOL: num_rbd_pvcs,
+            constants.CEPHFILESYSTEM: num_cephfs_pvcs,
+        }
         pvc_size = self.config.get_pvc_size()
         use_encrypted = self.config.use_encrypted_pvc()
 
         log.info(
-            f"Creating {num_pvcs} PVCs per storage interface with size {pvc_size}Gi"
+            f"Creating {num_rbd_pvcs} RBD PVCs and {num_cephfs_pvcs} CephFS PVCs "
+            f"with size {pvc_size}Gi"
         )
         if use_encrypted:
             log.info(
@@ -1102,6 +1114,7 @@ class KrknWorkloadFactory:
 
         for interface, cfg in interface_configs.items():
             try:
+                num_pvcs = num_pvcs_by_interface[interface]
                 log.info(f"Creating {num_pvcs} PVCs for {interface} interface...")
 
                 # Use encrypted storage class if available and encryption is enabled
@@ -1171,9 +1184,11 @@ class KrknWorkloadFactory:
                 log.warning("Continuing with other interfaces...")
                 continue
 
+        expected_pvcs = sum(num_pvcs_by_interface.values())
         log.info(
             f"Created {len(workloads)} total vdbench workloads "
-            f"({num_pvcs} per interface x 2 interfaces)"
+            f"(expected {expected_pvcs} from {num_rbd_pvcs} RBD + "
+            f"{num_cephfs_pvcs} CephFS)"
         )
 
         if not workloads:
@@ -1189,10 +1204,10 @@ class KrknWorkloadFactory:
             raise RuntimeError(
                 "Failed to create any VDBENCH workloads - all PVCs failed to bind"
             )
-        elif len(workloads) < (num_pvcs * 2):  # 2 interfaces
+        elif len(workloads) < expected_pvcs:
             log.warning(
                 f"Only created {len(workloads)} workloads out of "
-                f"{num_pvcs * 2} expected. Some PVCs failed to bind."
+                f"{expected_pvcs} expected. Some PVCs failed to bind."
             )
 
         return workloads

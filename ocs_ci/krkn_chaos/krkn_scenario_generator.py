@@ -743,6 +743,7 @@ class ContainerScenarios:
         instance_count=1,
         wait_duration=300,
         scenarios=None,
+        filename="container_kill.yaml",
     ):
         """Generates container kill scenario YAML.
 
@@ -760,6 +761,7 @@ class ContainerScenarios:
             scenarios (list, optional): List of scenario dicts for unified chaos.
                 Each dict should have: name, namespace, label_selector, container_name,
                 kill_signal, count, expected_recovery_time
+            filename (str): Output YAML filename (default: container_kill.yaml).
 
         Returns:
             str: Path to the generated YAML file.
@@ -796,7 +798,7 @@ class ContainerScenarios:
                 scenario_dir,
                 "openshift/container_kill.yml.j2",
                 config,
-                "container_kill.yaml",
+                filename,
             )
         else:
             # Original single scenario logic
@@ -822,7 +824,7 @@ class ContainerScenarios:
                 scenario_dir,
                 "openshift/container_kill.yml.j2",
                 config,
-                "container_kill.yaml",
+                filename,
             )
 
     @staticmethod

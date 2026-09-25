@@ -20,7 +20,7 @@ from ocs_ci.resiliency.resiliency_tools import (
     CephStatusTool,
     ceph_crash_monitor,
 )
-from ocs_ci.krkn_chaos.krkn_helpers import CephHealthHelper
+from ocs_ci.krkn_chaos.krkn_helpers import CephHealthHelper, cleanup_krkn_hog_pods
 from ocs_ci.krkn_chaos.krkn_config_generator import ensure_krkn_resiliency_support_files
 from ocs_ci.ocs import constants
 
@@ -28,6 +28,41 @@ from contextlib import suppress
 
 
 log = logging.getLogger(__name__)
+
+
+def _abort_session_if_cluster_unrecoverable():
+    """
+    Abort the entire pytest session when the ODF cluster is unrecoverable.
+
+    StorageCluster phase Error fails even when Ceph is HEALTH_OK. HEALTH_WARN /
+    single-OSD-down / StorageCluster Progressing is degraded and allowed.
+    """
+    from ocs_ci.krkn_chaos.cluster_health_gate import (
+        HEALTHY,
+        UNRECOVERABLE,
+        evaluate_odf_cluster_health,
+    )
+
+    try:
+        result = evaluate_odf_cluster_health(chaos_in_progress=False)
+    except Exception as ex:
+        log.warning(
+            "Krkn chaos test lifecycle: could not evaluate cluster health gate: %s",
+            ex,
+        )
+        return
+
+    if result.status == UNRECOVERABLE:
+        message = (
+            f"Aborting krkn chaos session: cluster is unrecoverable: {result.reason}"
+        )
+        log.error(message)
+        pytest.exit(message, returncode=1)
+    if result.status != HEALTHY:
+        log.warning(
+            "Krkn chaos test lifecycle: cluster is degraded but recoverable: %s",
+            result.reason,
+        )
 
 
 # =============================================================================
@@ -43,14 +78,33 @@ def krkn_chaos_test_lifecycle(request):
     """
     Common lifecycle for all Krkn chaos tests in this directory.
 
+    - At test start: delete leftover Krkn/krknctl hog pods so they cannot keep
+      stressing nodes from a previous hog run.
+    - At test start: abort the pytest session if the cluster is unrecoverable
+      (MDS_DAMAGE, PGs inactive, OSDs below pool min_size). Degraded HEALTH_WARN
+      during/after chaos is allowed.
     - At test start: archive any existing Ceph crashes so the test starts from a clean baseline.
     - During the entire test (workload setup, krkn/krknctl run, teardown): background
       Ceph crash monitor checks every CEPH_CRASH_POLL_INTERVAL seconds.
-    - finalizer: check for Ceph crashes introduced during the test; log them and raise AssertionError if any are found.
+    - finalizer: delete leftover hog pods, then check for Ceph crashes introduced
+      during the test; log them and raise AssertionError if any are found.
 
     Extend this fixture's setup/finalizer when adding more shared behavior for
     krkn chaos tests.
     """
+    # Remove leftover hog pods before the health gate so they cannot keep
+    # stressing nodes from a previous hog / krknctl run.
+    try:
+        cleanup_krkn_hog_pods()
+    except Exception as e:
+        log.warning(
+            "Krkn chaos test lifecycle: could not clean leftover hog pods: %s",
+            e,
+        )
+
+    # ----- Pre-test health gate: abort the session, not just this test -----
+    _abort_session_if_cluster_unrecoverable()
+
     # ----- Setup: run at beginning of test -----
     try:
         ceph_status = CephStatusTool()
@@ -66,6 +120,13 @@ def krkn_chaos_test_lifecycle(request):
 
     # ----- Finalizer: run after test (pass or fail) -----
     def _krkn_chaos_finalizer():
+        try:
+            cleanup_krkn_hog_pods()
+        except Exception as e:
+            log.warning(
+                "Krkn chaos test lifecycle: could not clean hog pods after test: %s",
+                e,
+            )
         try:
             health_helper = CephHealthHelper(
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
@@ -481,6 +542,10 @@ def workload_ops(request, project_factory, multi_pvc_factory, storageclass_facto
     try:
         yield ops
     finally:
+        # Stop background ops (including aggressive clone loop) before workload teardown
+        log.info("Stopping background cluster operations before workload finalizer")
+        with suppress(Exception):
+            ops._stop_background_cluster_operations()
         # Best-effort cleanup if the test aborted before calling validate_and_cleanup
         log.info("Performing best-effort workload cleanup")
         with suppress(Exception):

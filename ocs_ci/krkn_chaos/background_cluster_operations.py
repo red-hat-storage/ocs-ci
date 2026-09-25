@@ -7,9 +7,10 @@ performs ODF-specific validation operations while workloads are running during K
 Operations performed:
 1. PVC Snapshot Lifecycle (create → restore → delete → verify)
 2. PVC Clone Lifecycle (create → attach → verify checksums → delete)
-3. Node Taints & Tolerations Churn (force pod rescheduling)
-4. Rook/Ceph Operations (OSD in/out, MDS failover, RGW restarts, pool tweaks)
-5. CSI-Addons Operations (VolumeReplication, ReclaimSpace, NetworkFence)
+3. PVC Aggressive Clone Operations (parallel/nested clones, integrity, scale testing)
+4. Node Taints & Tolerations Churn (force pod rescheduling)
+5. Rook/Ceph Operations (OSD in/out, MDS failover, RGW restarts, pool tweaks)
+6. CSI-Addons Operations (VolumeReplication, ReclaimSpace, NetworkFence)
 
 Success Criteria:
 - No orphan PVs/images in Ceph
@@ -38,10 +39,203 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     CommandFailed,
     ResourceNotFoundError,
+    TimeoutExpiredError,
 )
 from ocs_ci.helpers import helpers
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
+
+# MDS failover: poll until rank 0 is active instead of a fixed sleep.
+MDS_FAILOVER_TIMEOUT = 300
+MDS_FAILOVER_POLL_INTERVAL = 10
+MDS_HEALTH_CODES = frozenset({"MDS_DAMAGE", "MDS_ALL_DOWN"})
+MDS_HARD_FAILURE_STATES = frozenset({"damaged"})
+
+# Escalate after this many consecutive failures of the same background op.
+DEFAULT_MAX_CONSECUTIVE_FAILURES = 5
+
+_session_metrics = None
+
+
+class BackgroundOperationEscalationError(UnexpectedBehaviour):
+    """Raised when one background operation fails consecutively past the limit."""
+
+
+def get_session_metrics():
+    """Return the process-wide background-op metrics (shared across test cycles)."""
+    global _session_metrics
+    if _session_metrics is None:
+        _session_metrics = BackgroundClusterMetrics()
+    return _session_metrics
+
+
+def reset_session_metrics():
+    """Reset session metrics. Used by unit tests and session start."""
+    global _session_metrics
+    _session_metrics = BackgroundClusterMetrics()
+
+
+# Background operations that need PVC-backed workloads (VDBENCH/FIO) as sources.
+PVC_DEPENDENT_BACKGROUND_OPERATIONS = frozenset(
+    {
+        "aggressive_clone_operation",
+        "aggressive_snapshot_operation",
+        "clone_lifecycle",
+        "snapshot_lifecycle",
+        "longevity_operations",
+        "reclaim_space",
+    }
+)
+
+# Minimal VDBENCH settings when PVC-backed bg ops are enabled but vdbench_config is absent.
+MINIMAL_VDBENCH_CONFIG_FOR_BG_OPS = {
+    "num_rbd_pvcs": 2,
+    "num_cephfs_pvcs": 2,
+    "pvc_size": 10,
+    "threads": 4,
+    "elapsed": 300,
+    "interval": 30,
+    "workload_loop": 1,
+    "block": {
+        "size": "2g",
+        "patterns": [
+            {
+                "name": "mixed_workload",
+                "rdpct": 50,
+                "seekpct": 100,
+                "xfersize": "4k",
+                "skew": 0,
+            }
+        ],
+    },
+    "filesystem": {
+        "size": "5m",
+        "depth": 2,
+        "width": 3,
+        "files": 5,
+        "file_size": "1m",
+        "openflags": "o_direct",
+        "group_all_fwds_in_one_rd": True,
+        "patterns": [
+            {
+                "name": "random_mixed",
+                "rdpct": 50,
+                "seekpct": 100,
+                "xfersize": "4k",
+                "skew": 0,
+            }
+        ],
+    },
+}
+
+
+def bg_ops_require_pvc_workloads(bg_config: Optional[Dict[str, Any]]) -> bool:
+    """Return True when enabled background ops need PVC-backed workload sources."""
+    if not bg_config or not bg_config.get("enabled", False):
+        return False
+    enabled_operations = bg_config.get("enabled_operations") or []
+    return bool(set(enabled_operations) & PVC_DEPENDENT_BACKGROUND_OPERATIONS)
+
+
+def get_mds_rank0_entry(mds_stat):
+    """Return the MDS rank 0 mdsmap entry, or None if it is missing."""
+    if not isinstance(mds_stat, dict):
+        return None
+    mdsmap = mds_stat.get("mdsmap") or []
+    for entry in mdsmap:
+        if isinstance(entry, dict) and entry.get("rank") == 0:
+            return entry
+    return None
+
+
+def extract_mds_health_codes(health_detail):
+    """Return MDS_DAMAGE / MDS_ALL_DOWN codes present in ``ceph health detail``."""
+    if not health_detail:
+        return set()
+    if isinstance(health_detail, dict):
+        checks = health_detail.get("checks") or {}
+        if isinstance(checks, dict):
+            return MDS_HEALTH_CODES.intersection(checks.keys())
+        return set()
+    text = str(health_detail)
+    return {code for code in MDS_HEALTH_CODES if code in text}
+
+
+def format_mds_failover_error(mds_stat, health_detail, reason):
+    """Build an MDS failover failure message that surfaces health codes."""
+    codes = extract_mds_health_codes(health_detail)
+    codes_msg = ", ".join(sorted(codes)) if codes else "none"
+    return (
+        f"MDS failover verification failed: {reason}. "
+        f"Health checks: {codes_msg}. "
+        f"ceph fs status: {mds_stat}. "
+        f"ceph health detail: {health_detail}"
+    )
+
+
+def evaluate_mds_rank0(mds_stat, health_detail=None):
+    """
+    Return True when MDS rank 0 is active with a named daemon.
+
+    ``failed`` (failover in progress) returns False so the caller can keep
+    polling. ``damaged`` and ``MDS_DAMAGE`` raise immediately.
+
+    Raises:
+        UnexpectedBehaviour: Rank 0 is damaged, unnamed-active, or MDS_DAMAGE
+            is reported by ``ceph health detail``.
+    """
+    health_codes = extract_mds_health_codes(health_detail)
+    if "MDS_DAMAGE" in health_codes:
+        raise UnexpectedBehaviour(
+            format_mds_failover_error(
+                mds_stat, health_detail, "MDS_DAMAGE reported by ceph health"
+            )
+        )
+
+    rank0 = get_mds_rank0_entry(mds_stat)
+    if rank0 is None:
+        return False
+
+    state = (rank0.get("state") or "").lower()
+    name = rank0.get("name")
+    if state in MDS_HARD_FAILURE_STATES:
+        raise UnexpectedBehaviour(
+            format_mds_failover_error(mds_stat, health_detail, f"rank 0 is {state}")
+        )
+    if state == "active":
+        if name:
+            return True
+        raise UnexpectedBehaviour(
+            format_mds_failover_error(
+                mds_stat,
+                health_detail,
+                "rank 0 is active but has no daemon name",
+            )
+        )
+    return False
+
+
+def assert_mds_rank0_active(mds_stat, health_detail=None):
+    """
+    Assert MDS rank 0 is active with a named daemon.
+
+    Raises:
+        UnexpectedBehaviour: Rank 0 is not active, is damaged/failed, or
+            MDS_DAMAGE / MDS_ALL_DOWN is present in health detail.
+    """
+    if evaluate_mds_rank0(mds_stat, health_detail=health_detail):
+        return
+    rank0 = get_mds_rank0_entry(mds_stat) or {}
+    state = rank0.get("state", "unknown")
+    name = rank0.get("name")
+    raise UnexpectedBehaviour(
+        format_mds_failover_error(
+            mds_stat,
+            health_detail,
+            f"rank 0 is not active (state={state!r}, name={name!r})",
+        )
+    )
 
 
 class BackgroundClusterMetrics:
@@ -51,7 +245,9 @@ class BackgroundClusterMetrics:
         self.operations = defaultdict(int)
         self.successes = defaultdict(int)
         self.failures = defaultdict(int)
+        self.consecutive_failures = defaultdict(int)
         self.errors = []
+        self.escalation_error = None
         self.start_time = time.time()
 
     def record_operation(
@@ -61,8 +257,10 @@ class BackgroundClusterMetrics:
         self.operations[operation_type] += 1
         if success:
             self.successes[operation_type] += 1
+            self.consecutive_failures[operation_type] = 0
         else:
             self.failures[operation_type] += 1
+            self.consecutive_failures[operation_type] += 1
             if error:
                 self.errors.append(
                     {
@@ -73,7 +271,7 @@ class BackgroundClusterMetrics:
                 )
 
     def get_summary(self) -> Dict[str, Any]:
-        """Get operation summary."""
+        """Get operation summary (cumulative for the whole run)."""
         duration = time.time() - self.start_time
         return {
             "duration_seconds": duration,
@@ -83,6 +281,7 @@ class BackgroundClusterMetrics:
             "operations_by_type": dict(self.operations),
             "successes_by_type": dict(self.successes),
             "failures_by_type": dict(self.failures),
+            "consecutive_failures_by_type": dict(self.consecutive_failures),
             "error_count": len(self.errors),
             "success_rate": (
                 sum(self.successes.values()) / sum(self.operations.values()) * 100
@@ -118,7 +317,6 @@ class BackgroundClusterOperations:
         """
         self.workload_ops = workload_ops
         self.namespace = workload_ops.namespace
-        self.workloads = workload_ops.workloads
         self.operation_interval = operation_interval
         self.max_concurrent_operations = max_concurrent_operations
 
@@ -127,19 +325,31 @@ class BackgroundClusterOperations:
         self._thread: Optional[threading.Thread] = None
         self._operation_threads: List[threading.Thread] = []
 
-        # Metrics and tracking
-        self.metrics = BackgroundClusterMetrics()
+        # Metrics and tracking (session-wide so counters survive per-test cycles)
+        self.metrics = get_session_metrics()
+        self.max_consecutive_failures = int(
+            self._get_background_ops_config().get(
+                "max_consecutive_operation_failures",
+                DEFAULT_MAX_CONSECUTIVE_FAILURES,
+            )
+        )
         self._resources_to_cleanup: List[Any] = []
 
         # Feature availability tracking
         self._csi_addons_available = True  # Assume available until proven otherwise
         self._cephx_rotator = None
         self._last_cephx_rotation_time = 0.0
+        self._aggressive_clone_ops = None
+        self._aggressive_clone_thread: Optional[threading.Thread] = None
+        self._aggressive_snapshot_ops = None
+        self._aggressive_snapshot_thread: Optional[threading.Thread] = None
 
         # Available operations
         self.available_operations = {
             "snapshot_lifecycle": self._snapshot_lifecycle_operation,
             "clone_lifecycle": self._clone_lifecycle_operation,
+            "aggressive_clone_operation": self._aggressive_clone_operation,
+            "aggressive_snapshot_operation": self._aggressive_snapshot_operation,
             "node_taint_churn": self._node_taint_churn_operation,
             "osd_operations": self._osd_operations,
             "mds_failover": self._mds_failover_operation,
@@ -161,12 +371,39 @@ class BackgroundClusterOperations:
             self.enabled_operations = self.available_operations
 
         self._apply_cephx_keyrotation_config()
+        self._aggressive_clone_enabled = (
+            "aggressive_clone_operation" in self.enabled_operations
+        )
+        self._aggressive_snapshot_enabled = (
+            "aggressive_snapshot_operation" in self.enabled_operations
+        )
+        self._random_operations = {
+            name: func
+            for name, func in self.enabled_operations.items()
+            if name
+            not in ("aggressive_clone_operation", "aggressive_snapshot_operation")
+        }
 
         log.info(
             f"Initialized BackgroundClusterOperations with "
             f"{len(self.enabled_operations)} operation types: "
             f"{list(self.enabled_operations.keys())}"
         )
+        if self._aggressive_clone_enabled:
+            log.info(
+                "aggressive_clone_operation runs in a dedicated loop "
+                "(not part of the random background operation scheduler)"
+            )
+        if self._aggressive_snapshot_enabled:
+            log.info(
+                "aggressive_snapshot_operation runs in a dedicated loop "
+                "(not part of the random background operation scheduler)"
+            )
+
+    @property
+    def workloads(self):
+        """Always read the live workload list (e.g. RGW added after bg ops start)."""
+        return self.workload_ops.workloads
 
     def _get_background_ops_config(self) -> Dict[str, Any]:
         """Return background_cluster_operations from krkn or resiliency config."""
@@ -239,6 +476,22 @@ class BackgroundClusterOperations:
             target=self._operation_loop, name="BackgroundClusterOperations", daemon=True
         )
         self._thread.start()
+        if self._aggressive_clone_enabled:
+            self._aggressive_clone_thread = threading.Thread(
+                target=self._aggressive_clone_loop,
+                name="AggressiveCloneOperationLoop",
+                daemon=True,
+            )
+            self._aggressive_clone_thread.start()
+            log.info("Aggressive clone operation loop started")
+        if self._aggressive_snapshot_enabled:
+            self._aggressive_snapshot_thread = threading.Thread(
+                target=self._aggressive_snapshot_loop,
+                name="AggressiveSnapshotOperationLoop",
+                daemon=True,
+            )
+            self._aggressive_snapshot_thread.start()
+            log.info("Aggressive snapshot operation loop started")
         log.info("Background cluster operations started")
 
     def stop(self, cleanup=True):
@@ -248,15 +501,79 @@ class BackgroundClusterOperations:
         Args:
             cleanup: If True, cleanup resources created during operations
         """
-        if not self._running:
+        aggressive_thread_alive = (
+            self._aggressive_clone_thread is not None
+            and self._aggressive_clone_thread.is_alive()
+        )
+        has_aggressive_resources = (
+            self._aggressive_clone_ops is not None
+            and self._aggressive_clone_ops.has_tracked_resources()
+        )
+        aggressive_snapshot_thread_alive = (
+            self._aggressive_snapshot_thread is not None
+            and self._aggressive_snapshot_thread.is_alive()
+        )
+        has_aggressive_snapshot_resources = (
+            self._aggressive_snapshot_ops is not None
+            and self._aggressive_snapshot_ops.has_tracked_resources()
+        )
+        if (
+            not self._running
+            and not aggressive_thread_alive
+            and not has_aggressive_resources
+            and not aggressive_snapshot_thread_alive
+            and not has_aggressive_snapshot_resources
+        ):
+            self._raise_if_escalated()
             return
 
         log.info("Stopping background cluster operations")
+
+        if self._aggressive_clone_ops is not None:
+            self._aggressive_clone_ops.request_shutdown()
+        if self._aggressive_snapshot_ops is not None:
+            self._aggressive_snapshot_ops.request_shutdown()
+
         self._running = False
 
         # Wait for main thread
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=30)
+
+        clone_thread_stopped = True
+        if self._aggressive_clone_thread and self._aggressive_clone_thread.is_alive():
+            join_timeout = self._get_aggressive_clone_stop_join_timeout()
+            log.info(
+                "Waiting up to %ss for aggressive clone loop to finish current work",
+                join_timeout,
+            )
+            self._aggressive_clone_thread.join(timeout=join_timeout)
+            if self._aggressive_clone_thread.is_alive():
+                clone_thread_stopped = False
+                log.error(
+                    "Aggressive clone loop did not exit within %ss; "
+                    "skipping resource cleanup while the worker is still running",
+                    join_timeout,
+                )
+
+        snapshot_thread_stopped = True
+        if (
+            self._aggressive_snapshot_thread
+            and self._aggressive_snapshot_thread.is_alive()
+        ):
+            join_timeout = self._get_aggressive_snapshot_stop_join_timeout()
+            log.info(
+                "Waiting up to %ss for aggressive snapshot loop to finish current work",
+                join_timeout,
+            )
+            self._aggressive_snapshot_thread.join(timeout=join_timeout)
+            if self._aggressive_snapshot_thread.is_alive():
+                snapshot_thread_stopped = False
+                log.warning(
+                    "Aggressive snapshot loop did not exit within %ss; "
+                    "proceeding with resource cleanup",
+                    join_timeout,
+                )
 
         # Wait for operation threads
         for thread in self._operation_threads:
@@ -264,10 +581,34 @@ class BackgroundClusterOperations:
                 thread.join(timeout=10)
 
         if cleanup:
-            self._cleanup_resources()
+            if clone_thread_stopped:
+                self._cleanup_resources()
+                if self._aggressive_clone_ops:
+                    self._aggressive_clone_ops.cleanup_all()
+            else:
+                log.error(
+                    "Deferring aggressive clone cleanup: worker thread still alive"
+                )
+            if snapshot_thread_stopped and self._aggressive_snapshot_ops:
+                self._aggressive_snapshot_ops.cleanup_all()
 
+        if clone_thread_stopped:
+            self._aggressive_clone_thread = None
+        if snapshot_thread_stopped:
+            self._aggressive_snapshot_thread = None
         log.info("Background cluster operations stopped")
         self._log_final_summary()
+        if not clone_thread_stopped:
+            raise RuntimeError(
+                "Aggressive clone worker did not stop within the join timeout; "
+                "teardown aborted to avoid racing resource cleanup"
+            )
+        self._raise_if_escalated()
+
+    def _raise_if_escalated(self):
+        """Re-raise a stored consecutive-failure escalation, if any."""
+        if self.metrics.escalation_error is not None:
+            raise self.metrics.escalation_error
 
     def _operation_loop(self):
         """Main operation loop - continuously performs background operations."""
@@ -275,16 +616,22 @@ class BackgroundClusterOperations:
 
         while self._running:
             try:
+                if self._abort_if_cluster_unrecoverable():
+                    break
+
                 # Clean up completed threads
                 self._operation_threads = [
                     t for t in self._operation_threads if t.is_alive()
                 ]
 
                 # Check if we can start new operations
-                if len(self._operation_threads) < self.max_concurrent_operations:
-                    # Select random operation
-                    operation_name = random.choice(list(self.enabled_operations.keys()))
-                    operation_func = self.enabled_operations[operation_name]
+                if (
+                    self._random_operations
+                    and len(self._operation_threads) < self.max_concurrent_operations
+                ):
+                    # Select random operation (aggressive_clone has its own loop)
+                    operation_name = random.choice(list(self._random_operations.keys()))
+                    operation_func = self._random_operations[operation_name]
 
                     # Start operation in separate thread
                     op_thread = threading.Thread(
@@ -304,6 +651,86 @@ class BackgroundClusterOperations:
                 time.sleep(10)  # Back off on error
 
         log.info("Background cluster operation loop stopped")
+
+    def _aggressive_clone_loop(self):
+        """Continuously run aggressive clone operations in a dedicated loop."""
+        log.info("Aggressive clone operation loop started")
+        interval = self._get_aggressive_clone_loop_interval()
+        log.info("Aggressive clone loop interval: %ss", interval)
+
+        while self._running:
+            try:
+                if not self._namespace_exists():
+                    log.info(
+                        "Stopping aggressive clone loop: namespace no longer exists"
+                    )
+                    break
+
+                if (
+                    self._aggressive_clone_ops is not None
+                    and self._aggressive_clone_ops.is_shutdown_requested()
+                ):
+                    break
+
+                self._run_operation_safe(
+                    "aggressive_clone_operation", self._aggressive_clone_operation
+                )
+
+                if not self._running or (
+                    self._aggressive_clone_ops is not None
+                    and self._aggressive_clone_ops.is_shutdown_requested()
+                ):
+                    break
+
+                if not self._sleep_interruptible_aggressive_loop(interval):
+                    break
+
+            except Exception as e:
+                log.error(f"Error in aggressive clone operation loop: {e}")
+                if not self._sleep_interruptible_aggressive_loop(10):
+                    break
+
+        log.info("Aggressive clone operation loop stopped")
+
+    def _sleep_interruptible_aggressive_loop(self, seconds: float) -> bool:
+        """Sleep between loop iterations; return False if shutdown was requested."""
+        deadline = time.time() + seconds
+        while time.time() < deadline and self._running:
+            if (
+                self._aggressive_clone_ops is not None
+                and self._aggressive_clone_ops.is_shutdown_requested()
+            ):
+                return False
+            time.sleep(min(5, max(0, deadline - time.time())))
+        return self._running
+
+    def _get_aggressive_clone_stop_join_timeout(self) -> int:
+        """Max seconds to wait for the aggressive clone loop thread during stop()."""
+        try:
+            if self._aggressive_clone_ops is None:
+                from ocs_ci.krkn_chaos.aggressive_clone_operations import (
+                    AggressiveCloneOperations,
+                )
+
+                self._aggressive_clone_ops = AggressiveCloneOperations(self)
+            cfg = self._aggressive_clone_ops._get_config()
+            return int(cfg.get("stop_join_timeout", 300))
+        except Exception:
+            return 300
+
+    def _get_aggressive_clone_loop_interval(self) -> int:
+        """Return seconds between aggressive clone loop iterations."""
+        try:
+            if self._aggressive_clone_ops is None:
+                from ocs_ci.krkn_chaos.aggressive_clone_operations import (
+                    AggressiveCloneOperations,
+                )
+
+                self._aggressive_clone_ops = AggressiveCloneOperations(self)
+            cfg = self._aggressive_clone_ops._get_config()
+            return cfg.get("loop_interval", self.operation_interval)
+        except Exception:
+            return self.operation_interval
 
     def _namespace_exists(self) -> bool:
         """
@@ -330,16 +757,59 @@ class BackgroundClusterOperations:
             # Assume namespace exists if we can't check (to avoid false positives)
             return True
 
+    def _abort_if_cluster_unrecoverable(self) -> bool:
+        """
+        Stop background ops when the cluster is unrecoverable.
+
+        Degraded (HEALTH_WARN, MDS failover in progress, one OSD down) is
+        expected during chaos and does not abort.
+
+        Returns:
+            bool: True if the run should stop.
+        """
+        from ocs_ci.krkn_chaos.cluster_health_gate import (
+            UNRECOVERABLE,
+            evaluate_odf_cluster_health,
+        )
+
+        try:
+            result = evaluate_odf_cluster_health(chaos_in_progress=True)
+        except Exception as ex:
+            log.warning("Could not evaluate unrecoverable-cluster gate: %s", ex)
+            return False
+
+        if result.status != UNRECOVERABLE:
+            return False
+
+        escalation = BackgroundOperationEscalationError(
+            f"Cluster is unrecoverable during background operations: {result.reason}"
+        )
+        self.metrics.escalation_error = escalation
+        self._running = False
+        log.error("%s", escalation)
+        return True
+
     def _run_operation_safe(self, operation_name: str, operation_func):
         """
         Safely run an operation with error handling.
+
+        Failures are recorded and other operations continue until the same
+        operation fails ``max_consecutive_failures`` times in a row, at which
+        point the run is escalated.
 
         Args:
             operation_name: Name of the operation
             operation_func: Function to execute
         """
+        if self.metrics.escalation_error is not None:
+            log.error(
+                "Skipping %s: background operations already escalated: %s",
+                operation_name,
+                self.metrics.escalation_error,
+            )
+            return
+
         try:
-            # Check if namespace still exists before running operation
             if not self._namespace_exists():
                 log.info(f"Skipping {operation_name} - namespace no longer exists")
                 return
@@ -348,12 +818,24 @@ class BackgroundClusterOperations:
             operation_func()
             self.metrics.record_operation(operation_name, success=True)
             log.info(f"Completed background operation: {operation_name}")
+        except BackgroundOperationEscalationError:
+            raise
         except Exception as e:
             error_msg = f"{operation_name} failed: {str(e)}"
-            log.error(error_msg)
+            log.exception(error_msg)
             self.metrics.record_operation(
                 operation_name, success=False, error=error_msg
             )
+            consecutive = self.metrics.consecutive_failures[operation_name]
+            if consecutive >= self.max_consecutive_failures:
+                escalation = BackgroundOperationEscalationError(
+                    f"Background operation {operation_name} failed {consecutive} "
+                    f"consecutive times (limit={self.max_consecutive_failures}). "
+                    f"Last error: {e}"
+                )
+                self.metrics.escalation_error = escalation
+                self._running = False
+                log.error("%s", escalation)
 
     # ==========================================================================
     # PVC Snapshot Lifecycle Operations
@@ -476,8 +958,7 @@ class BackgroundClusterOperations:
             with suppress(Exception):
                 if snapshot_obj:
                     snapshot_obj.delete()
-            # Don't raise - allow other background operations to continue
-            return
+            raise
 
     # ==========================================================================
     # PVC Clone Lifecycle Operations
@@ -592,8 +1073,106 @@ class BackgroundClusterOperations:
             with suppress(Exception):
                 if clone_pvc_obj:
                     clone_pvc_obj.delete()
-            # Don't raise - allow other background operations to continue
-            return
+            raise
+
+    # ==========================================================================
+    # Aggressive PVC Clone Operations
+    # ==========================================================================
+
+    def _aggressive_clone_operation(self):
+        """Run aggressive PVC clone stress operations."""
+        if self._aggressive_clone_ops is None:
+            from ocs_ci.krkn_chaos.aggressive_clone_operations import (
+                AggressiveCloneOperations,
+            )
+
+            self._aggressive_clone_ops = AggressiveCloneOperations(self)
+        self._aggressive_clone_ops.run()
+
+    # ==========================================================================
+    # Aggressive PVC Snapshot Operations
+    # ==========================================================================
+
+    def _aggressive_snapshot_loop(self):
+        """Continuously run aggressive snapshot operations in a dedicated loop."""
+        log.info("Aggressive snapshot operation loop started")
+        interval = self._get_aggressive_snapshot_loop_interval()
+        while self._running:
+            try:
+                if not self._namespace_exists():
+                    break
+                if (
+                    self._aggressive_snapshot_ops is not None
+                    and self._aggressive_snapshot_ops.is_shutdown_requested()
+                ):
+                    break
+                self._run_operation_safe(
+                    "aggressive_snapshot_operation",
+                    self._aggressive_snapshot_operation,
+                )
+                if not self._running or (
+                    self._aggressive_snapshot_ops is not None
+                    and self._aggressive_snapshot_ops.is_shutdown_requested()
+                ):
+                    break
+                if not self._sleep_interruptible_aggressive_snapshot_loop(interval):
+                    break
+            except Exception as e:
+                log.error(f"Error in aggressive snapshot operation loop: {e}")
+                if not self._sleep_interruptible_aggressive_snapshot_loop(10):
+                    break
+        log.info("Aggressive snapshot operation loop stopped")
+
+    def _sleep_interruptible_aggressive_snapshot_loop(self, seconds: float) -> bool:
+        deadline = time.time() + seconds
+        while time.time() < deadline and self._running:
+            if (
+                self._aggressive_snapshot_ops is not None
+                and self._aggressive_snapshot_ops.is_shutdown_requested()
+            ):
+                return False
+            time.sleep(min(5, max(0, deadline - time.time())))
+        return self._running
+
+    def _get_aggressive_snapshot_stop_join_timeout(self) -> int:
+        try:
+            if self._aggressive_snapshot_ops is None:
+                from ocs_ci.krkn_chaos.aggressive_snapshot_operations import (
+                    AggressiveSnapshotOperations,
+                )
+
+                self._aggressive_snapshot_ops = AggressiveSnapshotOperations(self)
+            return int(
+                self._aggressive_snapshot_ops._get_config().get(
+                    "stop_join_timeout", 300
+                )
+            )
+        except Exception:
+            return 300
+
+    def _get_aggressive_snapshot_loop_interval(self) -> int:
+        try:
+            if self._aggressive_snapshot_ops is None:
+                from ocs_ci.krkn_chaos.aggressive_snapshot_operations import (
+                    AggressiveSnapshotOperations,
+                )
+
+                self._aggressive_snapshot_ops = AggressiveSnapshotOperations(self)
+            return self._aggressive_snapshot_ops._get_config().get(
+                "loop_interval", self.operation_interval
+            )
+        except Exception:
+            return self.operation_interval
+
+    def _aggressive_snapshot_operation(self):
+        """Run aggressive PVC snapshot stress operations."""
+        if self._aggressive_snapshot_ops is None:
+            from ocs_ci.krkn_chaos.aggressive_snapshot_operations import (
+                AggressiveSnapshotOperations,
+            )
+
+            self._aggressive_snapshot_ops = AggressiveSnapshotOperations(self)
+        self._aggressive_snapshot_ops.run()
 
     # ==========================================================================
     # Node Taint & Toleration Churn Operations
@@ -651,8 +1230,7 @@ class BackgroundClusterOperations:
                 ocp_obj = ocp.OCP()
                 command = f"adm taint node {target_node} chaos-taint-"
                 ocp_obj.exec_oc_cmd(command)
-            # Don't raise - allow other background operations to continue
-            return
+            raise
 
     # ==========================================================================
     # Rook/Ceph OSD Operations
@@ -696,8 +1274,7 @@ class BackgroundClusterOperations:
 
         except Exception as e:
             log.error(f"OSD operations failed: {e}")
-            # Don't raise - allow other background operations to continue
-            return
+            raise
 
     # ==========================================================================
     # MDS Failover Operations
@@ -707,44 +1284,82 @@ class BackgroundClusterOperations:
         """
         Perform MDS failover: fail active MDS daemon.
 
-        This validates CephFS resilience during MDS failures.
+        This validates CephFS resilience during MDS failures by polling until
+        rank 0 is active with a named daemon. A fixed sleep is not sufficient:
+        rank 0 can remain ``failed`` indefinitely (see Jenkins run 72858).
         """
         log.info("Executing MDS failover operation")
 
-        # Check if namespace still exists
         if not self._namespace_exists():
             return
 
+        ct_pod = pod_helpers.get_ceph_tools_pod()
+
         try:
-            # Get ceph tools pod
-            ct_pod = pod_helpers.get_ceph_tools_pod()
-
-            # Check if CephFS is deployed
-            try:
-                mds_stat = ct_pod.exec_ceph_cmd("ceph fs status")
-                log.info(f"CephFS status before failover:\n{mds_stat}")
-            except Exception:
-                log.info("CephFS not deployed, skipping MDS failover")
-                return
-
-            # Step 1: Fail active MDS (ID 0)
-            log.info("Failing active MDS daemon (ID 0)")
-            ct_pod.exec_ceph_cmd("ceph mds fail 0")
-
-            # Wait for MDS to recover
-            log.info("Waiting 30s for MDS failover to complete")
-            time.sleep(30)
-
-            # Verify CephFS is still healthy
             mds_stat = ct_pod.exec_ceph_cmd("ceph fs status")
-            log.info(f"CephFS status after failover:\n{mds_stat}")
-
-            log.info("MDS failover operation completed successfully")
-
-        except Exception as e:
-            log.error(f"MDS failover operation failed: {e}")
-            # Don't raise - allow other background operations to continue
+            log.info("CephFS status before failover:\n%s", mds_stat)
+        except Exception:
+            log.info("CephFS not deployed, skipping MDS failover")
             return
+
+        log.info("Failing active MDS daemon (ID 0)")
+        ct_pod.exec_ceph_cmd("ceph mds fail 0")
+
+        log.info(
+            "Waiting up to %ss for MDS rank 0 to become active",
+            MDS_FAILOVER_TIMEOUT,
+        )
+        self._wait_for_mds_rank0_active(ct_pod)
+        log.info("MDS failover operation completed successfully")
+
+    def _wait_for_mds_rank0_active(self, ct_pod, timeout=None, sleep=None):
+        """
+        Poll ``ceph fs status`` until MDS rank 0 is active with a named daemon.
+
+        Args:
+            ct_pod: Ceph toolbox pod
+            timeout (int): Seconds to wait (default: MDS_FAILOVER_TIMEOUT)
+            sleep (int): Poll interval (default: MDS_FAILOVER_POLL_INTERVAL)
+
+        Raises:
+            UnexpectedBehaviour: Rank 0 is damaged, MDS_DAMAGE is reported, or
+                rank 0 is not active when the timeout expires.
+            TimeoutExpiredError: Sampler timed out before a sample completed.
+        """
+        timeout = MDS_FAILOVER_TIMEOUT if timeout is None else timeout
+        sleep = MDS_FAILOVER_POLL_INTERVAL if sleep is None else sleep
+        last_stat = None
+        last_health = None
+
+        def _rank0_ready():
+            nonlocal last_stat, last_health
+            last_stat = ct_pod.exec_ceph_cmd("ceph fs status")
+            log.info("CephFS status during MDS failover wait:\n%s", last_stat)
+            try:
+                last_health = ct_pod.exec_ceph_cmd("ceph health detail")
+            except Exception as ex:
+                log.warning("Could not get ceph health detail during MDS wait: %s", ex)
+                last_health = None
+            return evaluate_mds_rank0(last_stat, health_detail=last_health)
+
+        try:
+            TimeoutSampler(timeout, sleep, _rank0_ready).wait_for_func_value(True)
+        except TimeoutExpiredError as ex:
+            log.error(
+                "MDS rank 0 did not become active within %ss. "
+                "Last fs status: %s. Last health: %s",
+                timeout,
+                last_stat,
+                last_health,
+            )
+            assert_mds_rank0_active(last_stat, health_detail=last_health)
+            raise UnexpectedBehaviour(
+                format_mds_failover_error(
+                    last_stat,
+                    last_health,
+                    f"rank 0 did not become active within {timeout}s",
+                )
+            ) from ex
 
     # ==========================================================================
     # RGW Restart Operations
@@ -786,8 +1401,7 @@ class BackgroundClusterOperations:
 
         except Exception as e:
             log.error(f"RGW restart operation failed: {e}")
-            # Don't raise - allow other background operations to continue
-            return
+            raise
 
     # ==========================================================================
     # CSI-Addons Reclaim Space Operations
@@ -916,8 +1530,7 @@ class BackgroundClusterOperations:
 
         except Exception as e:
             log.error(f"Reclaim space operation failed: {e}", exc_info=True)
-            # Don't raise - allow other background operations to continue
-            return
+            raise
 
     # ==========================================================================
     # CSI-Addons Volume Replication Operations
@@ -972,42 +1585,17 @@ class BackgroundClusterOperations:
                 )
                 return
 
-            num_pvcs = min(3, len(self.workloads))
-            log.info(f"Will check up to {num_pvcs} workloads for PVCs")
-
-            # Collect PVCs from workloads (coerce OCS → PVC for snapshot APIs)
-            workload_pvcs = []
-            for idx, workload in enumerate(self.workloads[:num_pvcs]):
-                log.debug(
-                    f"Checking workload {idx + 1}/{num_pvcs}: "
-                    f"type={type(workload).__name__}, "
-                    f"has_pvc_objs={hasattr(workload, 'pvc_objs')}, "
-                    f"has_pvc_obj={hasattr(workload, 'pvc_obj')}, "
-                    f"has_pvc={hasattr(workload, 'pvc')}"
-                )
-
-                raw_list = []
-                if hasattr(workload, "pvc_objs"):
-                    raw_list = workload.pvc_objs[:1]  # Take first PVC
-                    log.debug(f"  → Found {len(raw_list)} raw refs in pvc_objs")
-                elif hasattr(workload, "pvc_obj"):
-                    raw_list = [workload.pvc_obj]
-                    log.debug("  → Found 1 raw ref in pvc_obj")
-                elif hasattr(workload, "pvc"):
-                    raw_list = [workload.pvc]
-                    log.debug("  → Found 1 raw ref in pvc")
-                else:
-                    log.debug("  → No PVC attributes found")
-
-                for raw in raw_list:
-                    coerced = self._coerce_workload_pvc_to_pvc_instance(raw)
-                    if coerced is not None:
-                        workload_pvcs.append(coerced)
+            workload_pvcs = self._get_all_workload_pvcs()[:3]
+            log.info(
+                "Found %s workload PVC(s) for longevity operation (using up to 3)",
+                len(workload_pvcs),
+            )
 
             if not workload_pvcs:
                 log.warning(
-                    f"No valid PVCs found in {num_pvcs} workloads for longevity operation. "
-                    f"Workload types checked: {[type(w).__name__ for w in self.workloads[:num_pvcs]]}"
+                    "No valid PVCs found in workloads for longevity operation. "
+                    f"Workload types checked: "
+                    f"{[type(w).__name__ for w in self.workloads]}"
                 )
                 return
 
@@ -1143,8 +1731,7 @@ class BackgroundClusterOperations:
 
         except Exception as e:
             log.error(f"Longevity operations failed: {e}", exc_info=True)
-            # Don't raise - allow other background operations to continue
-            return
+            raise
 
     # ==========================================================================
     # CephX Key Rotation Operations
@@ -1280,6 +1867,46 @@ class BackgroundClusterOperations:
         )
         return None
 
+    def _collect_workload_pvc_refs(self, workload) -> List[Any]:
+        """
+        Collect PVC references from a workload wrapper (VDBENCH, FIO, CNV, etc.).
+
+        Checks ``pvc_objs``, ``pvc_obj``, and ``pvc`` on the workload object and on
+        ``workload_impl`` (e.g. :class:`~ocs_ci.resiliency.resiliency_workload.VdbenchWorkload`).
+        """
+        refs: List[Any] = []
+        seen_keys = set()
+
+        def add_ref(ref):
+            if ref is None:
+                return
+            name = getattr(ref, "name", None)
+            key = name or id(ref)
+            if key in seen_keys:
+                return
+            seen_keys.add(key)
+            refs.append(ref)
+
+        def add_from(owner):
+            if owner is None:
+                return
+            for attr in ("pvc_objs", "pvc_obj", "pvc"):
+                if not hasattr(owner, attr):
+                    continue
+                value = getattr(owner, attr, None)
+                if value is None:
+                    continue
+                if attr == "pvc_objs":
+                    items = value if isinstance(value, (list, tuple)) else [value]
+                    for item in items:
+                        add_ref(item)
+                else:
+                    add_ref(value)
+
+        add_from(workload)
+        add_from(getattr(workload, "workload_impl", None))
+        return refs
+
     def _get_random_workload_pvc(self, provisioner_type: Optional[str] = None):
         """
         Get a random workload PVC.
@@ -1290,30 +1917,63 @@ class BackgroundClusterOperations:
         Returns:
             PVC object or None
         """
-        pvcs = []
+        pvcs = self._get_all_workload_pvcs(provisioner_type=provisioner_type)
+        return random.choice(pvcs) if pvcs else None
+
+    def _get_all_workload_pvcs(
+        self, provisioner_type: Optional[str] = None
+    ) -> List[PVC]:
+        """
+        Get all workload PVCs.
+
+        Args:
+            provisioner_type: Filter by provisioner type ('rbd', 'cephfs', None for any)
+
+        Returns:
+            list: PVC objects from running workloads
+        """
+        pvcs: List[PVC] = []
+        seen_names = set()
 
         for workload in self.workloads:
-            # Get PVCs from workload
-            if hasattr(workload, "pvc_objs"):
-                workload_pvcs = workload.pvc_objs
-            elif hasattr(workload, "pvc_obj"):
-                workload_pvcs = [workload.pvc_obj]
-            elif hasattr(workload, "pvc"):
-                workload_pvcs = [workload.pvc]
-            else:
-                continue
-
-            for pvc_obj in workload_pvcs:
-                coerced = self._coerce_workload_pvc_to_pvc_instance(pvc_obj)
+            for pvc_ref in self._collect_workload_pvc_refs(workload):
+                coerced = self._coerce_workload_pvc_to_pvc_instance(pvc_ref)
                 if coerced is None:
+                    log.debug(
+                        "Could not use PVC ref from %s workload: %s",
+                        type(workload).__name__,
+                        getattr(pvc_ref, "name", pvc_ref),
+                    )
                     continue
-                if provisioner_type:
-                    if provisioner_type in coerced.provisioner:
-                        pvcs.append(coerced)
-                else:
-                    pvcs.append(coerced)
+                if coerced.name in seen_names:
+                    continue
+                if provisioner_type and provisioner_type not in coerced.provisioner:
+                    continue
+                seen_names.add(coerced.name)
+                pvcs.append(coerced)
 
-        return random.choice(pvcs) if pvcs else None
+        if pvcs:
+            log.debug(
+                "Collected %s workload PVC(s): %s",
+                len(pvcs),
+                [pvc.name for pvc in pvcs],
+            )
+        return pvcs
+
+    def _get_pvc_storage_capacity(self, pvc_obj: PVC) -> str:
+        """Return the storage capacity string for a PVC (status or spec fallback)."""
+        pvc_obj.reload()
+        source_capacity = (
+            pvc_obj.data.get("status", {}).get("capacity", {}).get("storage")
+        )
+        if not source_capacity:
+            source_capacity = (
+                pvc_obj.data.get("spec", {})
+                .get("resources", {})
+                .get("requests", {})
+                .get("storage", f"{pvc_obj.size}Gi")
+            )
+        return source_capacity
 
     def _can_attach_pod(self, pvc_obj) -> bool:
         """Check if a pod can be attached to PVC (not RWX)."""
@@ -1383,6 +2043,8 @@ class BackgroundClusterOperations:
                 )
         except Exception as e:
             log.warning(f"Data verification warning for pod {pod_obj.name}: {e}")
+            return False
+        return True
 
     def _verify_workload_pods_running(self):
         """Verify all workload pods are still running."""
@@ -1419,7 +2081,16 @@ class BackgroundClusterOperations:
             failures = summary["failures_by_type"].get(op_type, 0)
             log.info(f"  {op_type}: {count} ({successes} success, {failures} failed)")
 
+        consecutive = summary.get("consecutive_failures_by_type") or {}
+        hot = {name: n for name, n in consecutive.items() if n}
+        if hot:
+            log.warning("Consecutive failures by type: %s", hot)
+
         if summary["error_count"] > 0:
             log.warning(f"\n{summary['error_count']} errors occurred during operations")
+        if self.metrics.escalation_error is not None:
+            log.error(
+                "Background operations escalated: %s", self.metrics.escalation_error
+            )
 
         log.info("=" * 80)

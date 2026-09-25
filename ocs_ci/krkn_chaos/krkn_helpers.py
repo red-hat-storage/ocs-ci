@@ -4,6 +4,7 @@ import re
 import pytest
 from ocs_ci.ocs.constants import (
     CEPH_HEALTH_ERROR,
+    CEPH_HEALTH_WARN,
     KRKN_CHAOS_DIR,
     OPENSHIFT_STORAGE_NAMESPACE,
     # Component label constants
@@ -51,21 +52,28 @@ from ocs_ci.ocs.exceptions import NoobaaHealthException
 from ocs_ci.ocs.node import get_worker_nodes, get_master_nodes
 from ocs_ci.krkn_chaos.krkn_scenario_generator import (
     ApplicationOutageScenarios,
+    ContainerScenarios,
     NetworkOutageScenarios,
     HogScenarios,
     PodScenarios,
     NodeScenarios,
     convert_signal_to_number,
 )
-from ocs_ci.resiliency.resiliency_tools import CephStatusTool, CEPH_CRASH_POLL_INTERVAL
+from ocs_ci.resiliency.resiliency_tools import (
+    CephStatusTool,
+    CEPH_CRASH_POLL_INTERVAL,
+    is_ceph_health_acceptable,
+)
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import format_ceph_crash_summary_lines
 
 log = logging.getLogger(__name__)
 
 # Krkn output.log [ERROR] lines that must not fail the test (known benign messages).
+# Also treated as non-fatal Krkn process exits in KrKnRunner (same as exit code 2).
 KRKN_OUTPUT_IGNORED_ERROR_MESSAGES = (
     "Post scenarios are still failing at the end of all iterations",
+    "Trying to kill more containers than were found",
 )
 
 # ============================================================================
@@ -408,6 +416,23 @@ class ContainerScenarioHelper(BaseScenarioHelper):
         """Initialize container scenario helper."""
         super().__init__(scenario_dir, namespace)
 
+    def _matching_pod_count(self, label_selector, namespace):
+        """Return the number of pods matching label, or None if listing failed."""
+        from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+        try:
+            pods = get_pods_having_label(label=label_selector, namespace=namespace)
+            return len(pods)
+        except Exception as ex:
+            self.log.warning(
+                "Could not list pods for label %s in namespace %s: %s; "
+                "keeping the container-kill scenario",
+                label_selector,
+                namespace,
+                ex,
+            )
+            return None
+
     def build_unified_scenarios(
         self,
         namespace="openshift-storage",
@@ -416,6 +441,7 @@ class ContainerScenarioHelper(BaseScenarioHelper):
         expected_recovery_time=120,
         container_name="",
         components=None,
+        skip_if_no_pods=True,
     ):
         """Build unified container chaos scenarios with configurable parameters.
 
@@ -427,6 +453,8 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             container_name (str): Override container name for all scenarios when non-empty;
                 otherwise each component uses COMPONENT_PRIMARY_CONTAINERS (recommended).
             components (list): List of component configs to use (default: all components)
+            skip_if_no_pods (bool): Skip components with no matching pods so Krkn
+                does not raise "Trying to kill more containers than were found".
 
         Returns:
             list: List of scenario dictionaries ready for use in chaos testing
@@ -446,6 +474,25 @@ class ContainerScenarioHelper(BaseScenarioHelper):
                     f"No label selector found for component: {component['name']}"
                 )
                 continue
+            requested_count = component.get("count", count)
+            if skip_if_no_pods:
+                available = self._matching_pod_count(label_selector, namespace)
+                if available == 0:
+                    self.log.warning(
+                        "Skipping container-kill for %s: no pods match %s in %s",
+                        component["name"],
+                        label_selector,
+                        namespace,
+                    )
+                    continue
+                if available is not None and requested_count > available:
+                    self.log.warning(
+                        "Capping %s kill count from %s to %s (matching pods)",
+                        component["name"],
+                        requested_count,
+                        available,
+                    )
+                    requested_count = available
             resolved_container = component.get("container_name") or container_name
             if not resolved_container:
                 resolved_container = self.COMPONENT_PRIMARY_CONTAINERS.get(
@@ -457,7 +504,7 @@ class ContainerScenarioHelper(BaseScenarioHelper):
                 "label_selector": label_selector,
                 "container_name": resolved_container,
                 "kill_signal": kill_signal_number,
-                "count": component.get("count", count),
+                "count": requested_count,
                 "expected_recovery_time": component.get(
                     "expected_recovery_time", expected_recovery_time
                 ),
@@ -465,7 +512,54 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             }
             scenarios.append(scenario)
 
+        if not scenarios:
+            self.log.warning(
+                "No container-kill scenarios built for namespace %s "
+                "(all components skipped or unlabeled)",
+                namespace,
+            )
+
         return scenarios
+
+    def register_isolated_container_kill_scenarios(
+        self, config_generator, scenario_dir, scenarios
+    ):
+        """Write one YAML per component and register each as a separate plugin run.
+
+        Krkn's ContainerScenarioPlugin aborts remaining scenarios in the same YAML
+        when it raises (for example kill count exceeds found pods after a watch
+        reconnect). Isolated plugin entries keep later components running.
+
+        Args:
+            config_generator (KrknConfigGenerator): Config to register scenarios on
+            scenario_dir (str): Directory for generated YAML files
+            scenarios (list): Scenario dicts from build_unified_scenarios
+
+        Returns:
+            list: Paths of generated scenario files
+
+        Raises:
+            pytest.skip: If scenarios is empty
+        """
+        if not scenarios:
+            pytest.skip("No matching pods for container-kill components")
+
+        scenario_files = []
+        for scenario in scenarios:
+            filename = f"container_kill_{scenario['name']}.yaml"
+            path = ContainerScenarios.container_kill(
+                scenario_dir=scenario_dir,
+                scenarios=[scenario],
+                filename=filename,
+            )
+            config_generator.add_scenario("container_scenarios", path, isolated=True)
+            scenario_files.append(path)
+            self.log.info(
+                "Registered isolated container-kill scenario %s -> %s",
+                scenario["name"],
+                path,
+            )
+        return scenario_files
 
     def get_component_descriptions(self, scenarios):
         """Get a list of component descriptions from scenarios.
@@ -1092,6 +1186,123 @@ class NetworkScenarioHelper(BaseScenarioHelper):
 # HOG SCENARIO HELPER CLASS
 # ============================================================================
 
+# Krkn hog_scenarios and krknctl node-*-hog create pods with these name prefixes.
+# They are supposed to be deleted after chaos duration; OOMKilled / Completed /
+# ContainerStatusUnknown hog pods are often left behind.
+KRKN_HOG_POD_NAME_PREFIXES = (
+    "cpu-hog",
+    "memory-hog",
+    "io-hog",
+    "node-cpu-hog",
+    "node-memory-hog",
+    "node-io-hog",
+    "krkn-hog",
+)
+KRKN_HOG_POD_NAMESPACES = ("default", OPENSHIFT_STORAGE_NAMESPACE)
+
+
+def _is_krkn_hog_pod_name(name):
+    """Return True if the pod name was created by Krkn/krknctl hog scenarios."""
+    if not name:
+        return False
+    return any(
+        name == prefix or name.startswith(f"{prefix}-")
+        for prefix in KRKN_HOG_POD_NAME_PREFIXES
+    )
+
+
+def cleanup_krkn_hog_pods(namespaces=None, force=True):
+    """Delete leftover Krkn/krknctl hog pods.
+
+    Krkn hog_scenarios (namespace default) and krknctl node-*-hog pods are not
+    always removed when the hog container OOMKills, the kubelet goes Unknown,
+    or Krkn exits before plugin teardown. Leftover hog pods keep stressing
+    nodes and break later chaos and resiliency tests.
+
+    Args:
+        namespaces (list): Namespaces to scan. None scans default plus
+            openshift-storage (and all namespaces when that API succeeds).
+        force (bool): Force-delete with grace-period 0 so Unknown/Completed
+            hog pods are removed.
+
+    Returns:
+        list: Names of hog pods that were deleted (best-effort).
+    """
+    from ocs_ci.ocs import constants
+    from ocs_ci.ocs.exceptions import CommandFailed
+    from ocs_ci.ocs.ocp import OCP
+    from ocs_ci.ocs.resources.pod import Pod, get_all_pods
+
+    hog_pods = []
+    scan_namespaces = list(namespaces) if namespaces else list(KRKN_HOG_POD_NAMESPACES)
+
+    try:
+        ocp_pod = OCP(kind=constants.POD)
+        data = ocp_pod.get(all_namespaces=True)
+        for item in data.get("items", []) if isinstance(data, dict) else []:
+            name = item.get("metadata", {}).get("name", "")
+            if _is_krkn_hog_pod_name(name):
+                hog_pods.append(Pod(**item))
+    except Exception as ex:
+        log.warning(
+            "Could not list hog pods cluster-wide (%s); scanning %s",
+            ex,
+            scan_namespaces,
+        )
+        for ns in scan_namespaces:
+            try:
+                hog_pods.extend(
+                    pod
+                    for pod in get_all_pods(namespace=ns)
+                    if _is_krkn_hog_pod_name(pod.name)
+                )
+            except Exception as ns_ex:
+                log.warning(
+                    "Could not list pods in namespace %s while scanning for hog leftovers: %s",
+                    ns,
+                    ns_ex,
+                )
+
+    if not hog_pods:
+        log.info("No leftover Krkn hog pods found")
+        return []
+
+    deleted = []
+    for pod in hog_pods:
+        ns = getattr(pod, "namespace", None) or "default"
+        try:
+            phase = ""
+            try:
+                phase = (pod.data or {}).get("status", {}).get("phase", "")
+            except Exception:
+                pass
+            log.info(
+                "Deleting leftover hog pod %s in namespace %s (phase=%s)",
+                pod.name,
+                ns,
+                phase or "unknown",
+            )
+            ocp_ns = OCP(kind=constants.POD, namespace=ns)
+            ocp_ns.delete(resource_name=pod.name, wait=False, force=force, timeout=60)
+            deleted.append(f"{ns}/{pod.name}")
+        except CommandFailed as ex:
+            log.warning(
+                "Failed to delete hog pod %s/%s: %s",
+                ns,
+                pod.name,
+                ex,
+            )
+        except Exception as ex:
+            log.warning(
+                "Unexpected error deleting hog pod %s/%s: %s",
+                ns,
+                pod.name,
+                ex,
+            )
+
+    log.info("Deleted %s leftover Krkn hog pod(s): %s", len(deleted), deleted)
+    return deleted
+
 
 class HogScenarioHelper(BaseScenarioHelper):
     """Helper class for resource hog scenarios with CPU/Memory/IO stress."""
@@ -1099,6 +1310,10 @@ class HogScenarioHelper(BaseScenarioHelper):
     def __init__(self, scenario_dir=None, namespace=None):
         """Initialize hog scenario helper."""
         super().__init__(scenario_dir, namespace)
+
+    def cleanup_hog_pods(self, namespaces=None, force=True):
+        """Delete leftover hog pods created by this helper's scenarios."""
+        return cleanup_krkn_hog_pods(namespaces=namespaces, force=force)
 
     def create_cpu_hog_scenario(
         self, duration=None, namespace=None, node_selector=None, output_name=None
@@ -2156,16 +2371,16 @@ class CephHealthHelper(BaseScenarioHelper):
             # Use CephStatusTool to check health
             ceph_status = CephStatusTool()
             health_status = ceph_status.get_ceph_health()
-
-            if health_status == "HEALTH_OK":
-                self.log.info("✅ Ceph cluster health: HEALTHY")
+            if is_ceph_health_acceptable(health_status):
+                if health_status == CEPH_HEALTH_WARN:
+                    self.log.warning(
+                        "⚠️ Ceph cluster health: WARNING (acceptable during/after chaos)"
+                    )
+                else:
+                    self.log.info("✅ Ceph cluster health: HEALTHY")
                 return True
-            elif health_status == "HEALTH_WARN":
-                self.log.warning("⚠️ Ceph cluster health: WARNING (may be acceptable)")
-                return True  # Warnings are often acceptable during/after chaos
-            else:
-                self.log.error(f"❌ Ceph cluster health: {health_status}")
-                return False
+            self.log.error(f"❌ Ceph cluster health: {health_status}")
+            return False
 
         except Exception as e:
             self.log.error(f"Failed to check Ceph health: {e}")
@@ -2284,11 +2499,12 @@ def _krkn_should_run_noobaa_health_check():
 
 def krkn_exit_criteria(chaos_context="krkn chaos", namespace=None):
     """
-    Generic exit criteria: assert no Ceph crash, cluster not in HEALTH_ERR, and
-    Noobaa healthy when applicable.
+    Generic exit criteria: assert no Ceph crash, cluster not in HEALTH_ERR,
+    StorageCluster not in Error, and Noobaa healthy when applicable.
 
     Call at the end of any krkn/krknctl chaos test to fail if the cluster has
-    crashes or is in HEALTH_ERR state after chaos. Noobaa health uses
+    crashes, is in HEALTH_ERR, or StorageCluster phase is Error after chaos.
+    Noobaa health uses
     :meth:`ocs_ci.ocs.cluster.CephCluster.wait_for_noobaa_health_ok` when
     :func:`_krkn_should_run_noobaa_health_check` returns true (same gating as
     ``cluster_health_check`` except the BZ 2075422 skip, omitted for OCP > 4.10
@@ -2302,7 +2518,7 @@ def krkn_exit_criteria(chaos_context="krkn chaos", namespace=None):
 
     Raises:
         AssertionError: If Ceph crash(es) were generated, cluster is in
-            HEALTH_ERR, or Noobaa is not healthy (when checks run).
+            HEALTH_ERR, StorageCluster is Error, or Noobaa is not healthy.
     """
     if namespace is None:
         namespace = OPENSHIFT_STORAGE_NAMESPACE
@@ -2312,10 +2528,31 @@ def krkn_exit_criteria(chaos_context="krkn chaos", namespace=None):
 
     ceph_status = CephStatusTool()
     health_status = ceph_status.get_ceph_health()
-    assert health_status != CEPH_HEALTH_ERROR, (
+    assert is_ceph_health_acceptable(health_status), (
         f"Ceph cluster is in {CEPH_HEALTH_ERROR} state after test "
         f"(status: {health_status})"
     )
+
+    from ocs_ci.krkn_chaos.cluster_health_gate import (
+        STORAGECLUSTER_ERROR_PHASES,
+        get_storagecluster_phase,
+    )
+
+    try:
+        sc_phase = get_storagecluster_phase(namespace=namespace)
+    except Exception as ex:
+        log.warning(
+            "Could not get StorageCluster phase after %s: %s", chaos_context, ex
+        )
+        sc_phase = None
+    assert sc_phase is None or str(sc_phase).lower() not in (
+        STORAGECLUSTER_ERROR_PHASES
+    ), (
+        f"StorageCluster phase is {sc_phase} after {chaos_context} "
+        f"(ceph health {health_status} is not sufficient)"
+    )
+    if sc_phase:
+        log.info("StorageCluster phase after %s: %s", chaos_context, sc_phase)
 
     if _krkn_should_run_noobaa_health_check():
         log.info("Checking Noobaa health after %s", chaos_context)

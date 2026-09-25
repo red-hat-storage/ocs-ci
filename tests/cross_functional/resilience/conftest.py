@@ -13,8 +13,39 @@ from ocs_ci.resiliency.resiliency_tools import (
     ceph_crash_monitor,
     raise_if_ceph_crashes_detected,
 )
+from ocs_ci.krkn_chaos.krkn_helpers import cleanup_krkn_hog_pods
 
 log = logging.getLogger(__name__)
+
+
+def _abort_session_if_cluster_unrecoverable():
+    """Abort the pytest session when StorageCluster is Error or Ceph is unrecoverable."""
+    from ocs_ci.krkn_chaos.cluster_health_gate import (
+        HEALTHY,
+        UNRECOVERABLE,
+        evaluate_odf_cluster_health,
+    )
+
+    try:
+        result = evaluate_odf_cluster_health(chaos_in_progress=False)
+    except Exception as ex:
+        log.warning(
+            "Resiliency test lifecycle: could not evaluate cluster health gate: %s",
+            ex,
+        )
+        return
+
+    if result.status == UNRECOVERABLE:
+        message = (
+            f"Aborting resiliency session: cluster is unrecoverable: {result.reason}"
+        )
+        log.error(message)
+        pytest.exit(message, returncode=1)
+    if result.status != HEALTHY:
+        log.warning(
+            "Resiliency test lifecycle: cluster is degraded but recoverable: %s",
+            result.reason,
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -22,10 +53,25 @@ def resiliency_test_lifecycle(request):
     """
     Common lifecycle for all resiliency tests in this directory.
 
+    - At test start: abort the pytest session if StorageCluster is Error or
+      Ceph is unrecoverable. Degraded HEALTH_WARN is allowed.
+    - At test start: delete leftover Krkn/krknctl hog pods (they are not always
+      removed after hog chaos and keep stressing nodes).
     - At test start: archive any existing Ceph crashes so the test starts clean.
     - During the entire test: background Ceph crash monitor every CEPH_CRASH_POLL_INTERVAL s.
-    - finalizer: fail if Ceph crashes were introduced during the test.
+    - finalizer: delete leftover hog pods, then fail if Ceph crashes were
+      introduced during the test.
     """
+    try:
+        cleanup_krkn_hog_pods()
+    except Exception as e:
+        log.warning(
+            "Resiliency test lifecycle: could not clean leftover hog pods: %s",
+            e,
+        )
+
+    _abort_session_if_cluster_unrecoverable()
+
     try:
         ceph_status = CephStatusTool()
         ceph_status.archive_ceph_crashes()
@@ -39,6 +85,13 @@ def resiliency_test_lifecycle(request):
         )
 
     def _resiliency_finalizer():
+        try:
+            cleanup_krkn_hog_pods()
+        except Exception as e:
+            log.warning(
+                "Resiliency test lifecycle: could not clean hog pods after test: %s",
+                e,
+            )
         config = ResiliencyConfig()
         if not config.stop_when_ceph_crashed:
             return

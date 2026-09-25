@@ -8,7 +8,7 @@ from ocs_ci.ocs.exceptions import (
     NoRunningCephToolBoxException,
 )
 from ocs_ci.ocs import ocp
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.resiliency.resiliency_tools import CephStatusTool
 
 log = logging.getLogger(__name__)
 
@@ -239,8 +239,7 @@ class PlatformStress:
                 if not thread.is_alive():
                     self.active_threads.remove(thread)
 
-            if not ceph_health_check(fix_ceph_health=True):
-                log.error("Ceph health check failed after scenario execution.")
+            CephStatusTool().wait_till_ceph_status_became_healthy()
 
     def start_random_stress(self, timeout=0, node_selection="ALL"):
         """Starts random stress tests in the background.
