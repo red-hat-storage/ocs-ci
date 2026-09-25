@@ -2,6 +2,8 @@ import logging
 import math
 import re
 
+from selenium.webdriver.common.keys import Keys
+
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ui.helpers_ui import format_locator
@@ -289,12 +291,40 @@ class CephFSSubvolumeMetricsCard(BlockAndFile):
         """
         Click the 'Show related pods' button on the row matching ``namespace``.
 
+        A popover left open by a previous interaction (e.g. a prior test in the
+        same class) is dismissed first, otherwise the pod links read afterwards
+        may belong to the previously opened row instead of ``namespace``.
+
         Args:
             namespace (str): Kubernetes namespace whose row to click.
         """
+        self._dismiss_related_pods_popover()
         logger.info("Clicking name button for namespace '%s'", namespace)
         loc = format_locator(self.row_name_button_by_namespace_loc, namespace)
         self.do_click(loc)
+
+    def _dismiss_related_pods_popover(self, timeout=10):
+        """
+        Close an open 'Related pods' popover, if any, and wait for it to vanish.
+
+        No-op when no popover is open, so it is safe to call before every row
+        click to guarantee a fresh popover is read.
+
+        Args:
+            timeout (int): Seconds to wait for the popover header to disappear.
+        """
+        if not self.get_elements(self.related_pods_header_loc):
+            return
+        logger.info("Dismissing stale 'Related pods' popover")
+        self.driver.switch_to.active_element.send_keys(Keys.ESCAPE)
+        for headers in TimeoutSampler(
+            timeout=timeout,
+            sleep=1,
+            func=self.get_elements,
+            locator=self.related_pods_header_loc,
+        ):
+            if not headers:
+                return
 
     def verify_cephfs_subvolume_related_pods_visible(self, timeout=10):
         """
