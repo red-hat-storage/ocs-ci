@@ -41,10 +41,18 @@ class FillPoolJob(object):
         storage="50Gi",
         pvc_base_yaml_path=constants.FILL_POOL_PVC_YAML,
         wait_for_resource=True,
+        direct_io=False,
     ):
         """
         Create a Job that fills up cluster storage by writing data to a PVC.
         Assumes manifest is a Job (pod spec under spec.template.spec).
+
+        Args:
+            direct_io (bool): If True, add oflag=direct to the dd command to
+                bypass the page cache. Useful for callers on backends where
+                page-cache writeback stalls throttle sequential write
+                throughput. Defaults to False (unchanged dd behavior).
+
         """
         self.name = name or create_unique_resource_name("fill-pool", "job")
         sc_name = sc_name or constants.DEFAULT_STORAGECLASS_RBD
@@ -89,9 +97,11 @@ class FillPoolJob(object):
 
         # Ensure the container will run the dd command
         # Insure to handle the case of "No space left on device" error gracefully
+        direct_io_flag = " oflag=direct" if direct_io else ""
         dd_cmd = (
             f'echo "Filling PVC with {fill_mode} data..."; '
-            f"dd if={input_source} of=/mnt/fill/testfile bs=${{BLOCK_SIZE:-{block_size}}} 2>/tmp/dd_err; "
+            f"dd if={input_source} of=/mnt/fill/testfile bs=${{BLOCK_SIZE:-{block_size}}}"
+            f"{direct_io_flag} 2>/tmp/dd_err; "
             f"EXIT_STATUS=$?; "
             f"if [ $EXIT_STATUS -ne 0 ] && grep -q 'No space left on device' /tmp/dd_err; then "
             f"  cat /tmp/dd_err; echo 'Capacity reached. Exiting successfully.'; exit 0; "
