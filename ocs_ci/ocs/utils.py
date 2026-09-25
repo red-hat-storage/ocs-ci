@@ -1288,6 +1288,32 @@ def _collect_ocs_logs(
             ocs_must_gather_image_and_tag = mirror_image(
                 ocs_must_gather_image_and_tag, cluster_config
             )
+        try:
+            from ocs_ci.helpers.odf_cli import ODFCLIRetriever
+            from ocs_ci.utility.utils import exec_cmd as _exec_cmd
+
+            retriever = ODFCLIRetriever()
+            retriever.retrieve_odf_cli_binary()
+            ns = cluster_config.ENV_DATA["cluster_namespace"]
+            log.info(
+                f"Collecting 'odf get health' for cluster "
+                f"{cluster_config.ENV_DATA['cluster_name']}"
+            )
+            result = _exec_cmd(
+                f"{retriever.local_cli_path} -n {ns} get health",
+                cluster_config=cluster_config,
+                ignore_error=True,
+            )
+            odf_health_file = os.path.join(ocs_log_dir_path, "odf_get_health.log")
+            os.makedirs(ocs_log_dir_path, exist_ok=True)
+            with open(odf_health_file, "w") as f:
+                f.write(result.stdout.decode())
+                if result.stderr:
+                    f.write("\n--- stderr ---\n")
+                    f.write(result.stderr.decode())
+            log.info(f"'odf get health' output saved to {odf_health_file}")
+        except Exception as e:
+            log.warning(f"Failed to collect 'odf get health' output: {e}")
         mg_output = run_must_gather(
             ocs_log_dir_path,
             ocs_must_gather_image_and_tag,
