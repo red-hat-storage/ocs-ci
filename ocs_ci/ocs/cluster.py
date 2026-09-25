@@ -1781,14 +1781,18 @@ def validate_compression(pool_name):
 
 def get_ec_pool_ec_optimizations():
     """
-    Retrieve the ec_optimizations flag state for every EC pool in the cluster
-    and the cluster-wide default osd_pool_default_flag_ec_optimizations.
+    Retrieve the ec_optimizations and ec_overwrites flag states for every EC
+    pool in the cluster and the cluster-wide default
+    osd_pool_default_flag_ec_optimizations.
 
     Returns:
-        tuple: (dict, str) where the dict maps EC pool name to bool
-            (True if ec_optimizations flag is set), and the str is the
-            cluster-wide default value (e.g. "true" or "false").
-            Returns (None, None) if no EC pools exist.
+        tuple:
+            - dict: Mapping of EC pool name to a dict containing:
+                * "ec_optimizations" (bool): True if ec_optimizations flag is set on the pool.
+                * "ec_overwrites" (bool): True if ec_overwrites flag is set on the pool.
+            - str: The cluster-wide default value for ec_optimizations (e.g. "true" or "false").
+
+        If no EC pools exist, returns (None, None).
     """
     EC_POOL_TYPE = 3
 
@@ -1802,7 +1806,10 @@ def get_ec_pool_ec_optimizations():
             continue
         pool_name = pool_info["pool_name"]
         flags = pool_info.get("flags_names", "")
-        ec_pools[pool_name] = "ec_optimizations" in flags
+        ec_pools[pool_name] = {
+            "ec_optimizations": "ec_optimizations" in flags,
+            "ec_overwrites": "ec_overwrites" in flags,
+        }
 
     if not ec_pools:
         return None, None
@@ -1818,12 +1825,13 @@ def get_ec_pool_ec_optimizations():
 
 def verify_ec_optimizations_unchanged(baseline_pools, baseline_default, context=""):
     """
-    Verify that EC pool ec_optimizations flags and the cluster-wide default
-    have not changed compared to the provided baseline.
+    Verify that EC pool ec_optimizations and ec_overwrites flags and the
+    cluster-wide default have not changed compared to the provided baseline.
 
     Args:
-        baseline_pools (dict): Mapping of pool name to bool from a previous
-            call to get_ec_pool_ec_optimizations().
+        baseline_pools (dict): Mapping of pool name to a dict with keys
+            "ec_optimizations" (bool) and "ec_overwrites" (bool), from a
+            previous call to get_ec_pool_ec_optimizations().
         baseline_default (str): Cluster-wide default from a previous call.
         context (str): Description of what happened between snapshots
             (e.g. "OSD restart") for log messages.
@@ -1835,16 +1843,17 @@ def verify_ec_optimizations_unchanged(baseline_pools, baseline_default, context=
 
     suffix = f" after {context}" if context else ""
 
-    for pool_name, expected_flag in baseline_pools.items():
-        actual_flag = current_pools.get(pool_name)
-        assert actual_flag is not None, f"EC pool '{pool_name}' disappeared{suffix}"
-        assert actual_flag == expected_flag, (
-            f"ec_optimizations flag changed for pool '{pool_name}'{suffix}: "
-            f"expected {expected_flag}, got {actual_flag}"
-        )
+    for pool_name, expected_flags in baseline_pools.items():
+        actual_flags = current_pools.get(pool_name)
+        assert actual_flags is not None, f"EC pool '{pool_name}' disappeared{suffix}"
+        for flag in ("ec_optimizations", "ec_overwrites"):
+            assert actual_flags[flag] == expected_flags[flag], (
+                f"{flag} flag changed for pool '{pool_name}'{suffix}: "
+                f"expected {expected_flags[flag]}, got {actual_flags[flag]}"
+            )
         logger.info(
-            f"Pool '{pool_name}': ec_optimizations={actual_flag} "
-            f"(unchanged{suffix})"
+            f"Pool '{pool_name}': ec_optimizations={actual_flags['ec_optimizations']}"
+            f", ec_overwrites={actual_flags['ec_overwrites']} (unchanged{suffix})"
         )
 
     assert current_default == baseline_default, (
