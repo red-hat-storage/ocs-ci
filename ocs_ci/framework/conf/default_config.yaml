@@ -95,6 +95,9 @@ DEPLOYMENT:
   infra_nodes: False
   # How long should ocs-ci wait for `openshift-install create cluster` run?
   openshift_install_timeout: 7200
+  # How long should ocs-ci wait for `openshift-install wait-for
+  # bootstrap-complete`? Must exceed the installer's own bootstrap deadline.
+  bootstrap_complete_timeout: 5400
   # redhat-operators CatalogSource image (used for disconnected installation)
   cs_redhat_operators_image: "registry.redhat.io/redhat/redhat-operator-index"
   # Deployment with KMS (vault etc)
