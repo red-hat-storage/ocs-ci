@@ -21,18 +21,24 @@ log = logging.getLogger(__name__)
 
 def get_worker_node_names():
     """
-    Get worker node names using ocs-ci node utilities.
-    This function works on pure OCP clusters without OCS installed.
+    Get node names for iSCSI configuration using ocs-ci node utilities.
+    If arbiter/stretch cluster deployment is configured or if
+    iscsi_include_masters is True, all cluster nodes (masters + workers)
+    are returned so master nodes can also attach LUNs as disk-nodes.
+    Otherwise, returns worker nodes.
 
     Returns:
-        list: A list of worker node names (strings).
+        list: A list of node names (strings).
     """
-
     try:
-        worker_node_names = node.get_worker_nodes()
-        return worker_node_names
+        if (
+            config.DEPLOYMENT.get("arbiter_deployment")
+            or config.ENV_DATA.get("iscsi_include_masters")
+        ):
+            return node.get_node_names()
+        return node.get_worker_nodes()
     except Exception as e:
-        log.error(f"Error getting worker node names: {e}")
+        log.error(f"Error getting node names for iSCSI: {e}")
         return []
 
 
