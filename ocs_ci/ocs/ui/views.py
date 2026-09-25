@@ -519,12 +519,12 @@ generic_locators = {
     ),
     "confirm_dilog_input": ("//input[@placeholder='{}']", By.XPATH),
     "confirm_delete_resource": (
-        "//button[contains(normalize-space(), 'Delete')]",
-        By.XPATH,
+        'button[data-test="delete-action"]',
+        By.CSS_SELECTOR,
     ),
     "cancel_delete_resource": (
-        "//button[contains(normalize-space(), 'Cancel')]",
-        By.XPATH,
+        'button[data-test="cancel-action"]',
+        By.CSS_SELECTOR,
     ),
     "close_dialog": ("button[aria-label='Close']", By.XPATH),
     "submit_form": ('button[type="submit"]', By.CSS_SELECTOR),
@@ -2009,6 +2009,30 @@ attach_storage = {
     "replication_3": ("//button[contains(., '3-way Replication')]", By.XPATH),
     "new_sc_name_input": ("attach-storage-storageclass-name", By.ID),
     "confirm_action_btn": ('[data-test-id="confirm-action"]', By.CSS_SELECTOR),
+    "edit_annotations_menu_item": (
+        "//button[@role='menuitem' and normalize-space()='Edit annotations']",
+        By.XPATH,
+    ),
+    "annotation_key_input": (
+        'input[data-test="pairs-list-name"]',
+        By.CSS_SELECTOR,
+    ),
+    "annotation_value_input": (
+        'input[data-test="pairs-list-value"]',
+        By.CSS_SELECTOR,
+    ),
+    "annotation_add_row_btn": (
+        'button[data-test="add-button"]',
+        By.CSS_SELECTOR,
+    ),
+    "annotation_save_btn": (
+        "//button[normalize-space(.)='Save']",
+        By.XPATH,
+    ),
+    "annotation_alert_description": (
+        "//div[contains(@class, 'c-alert__description')]",
+        By.XPATH,
+    ),
 }
 
 add_capacity_4_11 = {
