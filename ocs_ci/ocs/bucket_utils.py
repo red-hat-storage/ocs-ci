@@ -1144,7 +1144,16 @@ def cli_create_self_ref_mcg_backingstore(
     )
 
 
-def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
+def oc_create_pv_backingstore(
+    backingstore_name,
+    vol_num,
+    size,
+    storage_class,
+    req_cpu=None,
+    req_mem=None,
+    lim_cpu=None,
+    lim_mem=None,
+):
     """
     Create a new backingstore with pv underlying storage using oc create command
 
@@ -1153,6 +1162,10 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
         vol_num (int): number of pv volumes
         size (int): each volume size in GB
         storage_class (str): which storage class to use
+        req_cpu (str): requested cpu value for the agent pods
+        req_mem (str): requested memory value for the agent pods
+        lim_cpu (str): cpu limit for the agent pods
+        lim_mem (str): memory limit for the agent pods
 
     """
     bs_data = templating.load_yaml(constants.PV_BACKINGSTORE_YAML)
@@ -1162,6 +1175,21 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     bs_data["spec"]["pvPool"]["numVolumes"] = vol_num
     if storage_class:
         bs_data["spec"]["pvPool"]["storageClass"] = storage_class
+    # spec.pvPool.resources is a VolumeResources: its cpu/memory keys override
+    # the performance profile's pvPoolResources for the agent pods, while its
+    # storage key sizes the PVC. requests.storage is always set above, which is
+    # required - the noobaa admission webhook rejects a backingstore whose
+    # volume size is unset or below the minimum.
+    if req_cpu:
+        bs_data["spec"]["pvPool"]["resources"]["requests"]["cpu"] = req_cpu
+    if req_mem:
+        bs_data["spec"]["pvPool"]["resources"]["requests"]["memory"] = req_mem
+    if lim_cpu or lim_mem:
+        limits = bs_data["spec"]["pvPool"]["resources"].setdefault("limits", {})
+        if lim_cpu:
+            limits["cpu"] = lim_cpu
+        if lim_mem:
+            limits["memory"] = lim_mem
     create_resource(**bs_data)
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
 
