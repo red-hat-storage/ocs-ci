@@ -1,0 +1,9 @@
+Convert the cluster verification report below into the required JSON schema.
+
+Issue ID: {issue_id}
+
+## Verification report
+{analysis}
+
+Return ONLY valid JSON matching the schema. Map "Issue Reproduced" to issue_reproduced
+(Yes/No/Inconclusive) and verdict (not_fixed/fixed/inconclusive).

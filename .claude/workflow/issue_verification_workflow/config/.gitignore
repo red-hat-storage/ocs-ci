@@ -1,0 +1,4 @@
+# Local workflow config (copy from workflow.example.yaml)
+workflow.yaml
+*.yaml
+!workflow.example.yaml

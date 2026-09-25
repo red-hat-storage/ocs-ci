@@ -1,0 +1,26 @@
+{# Generic plain template — any workflow context with run + issues rows #}
+# {{ run.title | default('Workflow Report') }}
+
+**Run ID:** {{ run.run_id }}
+{% if run.odf_version %}**ODF version:** {{ run.odf_version }}{% endif %}
+{% if run.issue_count is defined %}**Issues:** {{ run.issue_count }}{% endif %}
+{% if run.generated_at %}**Generated:** {{ run.generated_at }}{% endif %}
+
+{% if summary %}
+## Summary
+{% for key, value in summary.items() %}
+- **{{ key }}:** {{ value }}
+{% endfor %}
+{% endif %}
+
+{% if issues %}
+## Issues
+
+| Issue | Repro steps | Repro status | Live repro | Test match | Qualification | Observation |
+|-------|-------------|--------------|------------|------------|---------------|---------------|
+{% for row in issues %}
+| {{ row.issue_label }} | {{ row.repro_steps_summary }} | {{ row.repro_status }} | {{ row.live_repro_status }} | {{ row.test_match_summary }} | {{ row.qualification_status }} | {{ row.observation }} |
+{% endfor %}
+{% endif %}
+
+{{ footer | default('') }}
