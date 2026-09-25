@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import time
 
 from selenium.common import WebDriverException
 
@@ -110,6 +111,7 @@ STRIP_SELF_CLOSING_RE = re.compile(
     r"<(link|meta)\b[^>]*/?>",
     re.IGNORECASE,
 )
+STRIP_COMMENTS_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 WHITESPACE_RE = re.compile(r"\s{2,}")
 
 
@@ -201,15 +203,60 @@ class LocatorFallback:
     @staticmethod
     def _strip_dom(html, max_chars=DOM_MAX_CHARS_STAGE_1):
         """
-        Strips script, style, svg, noscript, link, and meta tags from HTML,
+        Strips script, style, svg, noscript, link, meta tags, and comments from HTML,
         collapses whitespace, and truncates to max_chars.
         """
         cleaned = STRIP_TAGS_RE.sub("", html)
         cleaned = STRIP_SELF_CLOSING_RE.sub("", cleaned)
+        cleaned = STRIP_COMMENTS_RE.sub("", cleaned)
         cleaned = WHITESPACE_RE.sub(" ", cleaned)
         if len(cleaned) > max_chars:
             cleaned = cleaned[:max_chars]
         return cleaned
+
+    def _check_page_health(self):
+        """
+        Performs conservative pre-checks on the browser page before invoking LLM.
+        Avoids querying LLM on obvious 404, server error, or disconnected pages.
+
+        Returns:
+            bool: True if page is in a testable state, False if unrecoverable error.
+        """
+        if not self.driver:
+            return True
+
+        try:
+            title = (getattr(self.driver, "title", None) or "").lower()
+            if any(
+                err in title
+                for err in [
+                    "404 not found",
+                    "502 bad gateway",
+                    "503 service unavailable",
+                    "server error",
+                    "problem loading page",
+                ]
+            ):
+                logger.warning(
+                    f"[AI_FALLBACK] Page title indicates unrecoverable error: '{title}'"
+                )
+                return False
+
+            url = (getattr(self.driver, "current_url", None) or "").lower()
+            if (
+                url.startswith("data:")
+                or "about:neterror" in url
+                or "about:blank" in url
+            ):
+                logger.warning(
+                    f"[AI_FALLBACK] Browser current_url indicates invalid state: '{url}'"
+                )
+                return False
+
+            return True
+        except Exception as e:
+            logger.debug(f"[AI_FALLBACK] Page health pre-check exception: {e}")
+            return True
 
     def _validate_locator(self, selector, by_type):
         """
@@ -225,38 +272,131 @@ class LocatorFallback:
             logger.debug(f"Locator validation failed: {e}")
             return False
 
+    @staticmethod
+    def _extract_json_objects(text):
+        """
+        Extracts top-level JSON object candidates from text by balancing braces,
+        properly tracking string literals and escape sequences.
+
+        Args:
+            text (str): Input text possibly containing reasoning and JSON blocks.
+
+        Returns:
+            list[dict]: List of successfully parsed JSON dictionaries.
+        """
+        results = []
+        if not text:
+            return results
+
+        cleaned = text.strip()
+        # Check markdown code fences first
+        if "```" in cleaned:
+            fence_pattern = re.compile(
+                r"```(?:json)?\s*([\s\S]*?)\s*```", re.IGNORECASE
+            )
+            fence_matches = fence_pattern.findall(cleaned)
+            for fm in fence_matches:
+                fm_stripped = fm.strip()
+                if fm_stripped.startswith("{") and fm_stripped.endswith("}"):
+                    try:
+                        parsed = json.loads(fm_stripped)
+                        if isinstance(parsed, dict):
+                            results.append(parsed)
+                    except json.JSONDecodeError:
+                        pass
+
+        in_string = False
+        escape = False
+        brace_level = 0
+        start_idx = None
+
+        for idx, char in enumerate(cleaned):
+            if in_string:
+                if escape:
+                    escape = False
+                elif char == "\\":
+                    escape = True
+                elif char == '"':
+                    in_string = False
+            else:
+                if char == '"':
+                    in_string = True
+                elif char == "{":
+                    if brace_level == 0:
+                        start_idx = idx
+                    brace_level += 1
+                elif char == "}":
+                    if brace_level > 0:
+                        brace_level -= 1
+                        if brace_level == 0 and start_idx is not None:
+                            candidate = cleaned[start_idx : idx + 1]
+                            try:
+                                parsed = json.loads(candidate)
+                                if isinstance(parsed, dict) and parsed not in results:
+                                    results.append(parsed)
+                            except json.JSONDecodeError:
+                                pass
+                            start_idx = None
+
+        return results
+
     def _parse_llm_locator(self, raw_response):
         """
         Parses the LLM response into (selector, by_type).
 
+        Accepts JSON surrounded by markdown code fences or conversational reasoning.
+        Validates required fields ('selector' and 'by_type') and strictly adheres to
+        exact locator return contract.
+
         Returns:
             tuple: (selector, by_type) or None if parsing fails.
         """
-        cleaned = raw_response.strip()
-        if cleaned.startswith("```"):
-            lines = cleaned.split("\n")
-            lines = [l for l in lines if not l.strip().startswith("```")]
-            cleaned = "\n".join(lines)
-
-        json_start = cleaned.find("{")
-        json_end = cleaned.rfind("}") + 1
-        if json_start == -1 or json_end <= json_start:
-            logger.warning(f"No JSON found in LLM response: {cleaned[:200]}")
+        if not raw_response or not isinstance(raw_response, str):
             return None
 
-        try:
-            data = json.loads(cleaned[json_start:json_end])
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to parse LLM locator JSON: {cleaned[:200]}")
+        candidates = self._extract_json_objects(raw_response)
+        if not candidates:
+            logger.warning(
+                f"No valid JSON object found in LLM response: {raw_response[:200]}"
+            )
             return None
 
-        selector = data.get("selector")
-        by_type = data.get("by_type")
-        if not selector or not by_type:
-            logger.warning(f"LLM response missing selector or by_type: {data}")
-            return None
+        valid_by_types = {
+            "xpath",
+            "css",
+            "id",
+            "name",
+            "tag name",
+            "class name",
+            "link text",
+            "partial link text",
+        }
 
-        return (selector, by_type)
+        for data in candidates:
+            if not isinstance(data, dict):
+                continue
+            selector = data.get("selector")
+            by_type = data.get("by_type")
+
+            if not isinstance(selector, str) or not selector.strip():
+                continue
+            if not isinstance(by_type, str) or not by_type.strip():
+                continue
+
+            by_type_normalized = by_type.strip().lower()
+            if by_type_normalized not in valid_by_types:
+                if by_type_normalized in ("css selector", "css_selector"):
+                    by_type_normalized = "css"
+                else:
+                    logger.warning(f"Unrecognized by_type in LLM response: {by_type}")
+                    continue
+
+            return (selector.strip(), by_type_normalized)
+
+        logger.warning(
+            f"LLM response JSON missing valid selector/by_type schema: {candidates}"
+        )
+        return None
 
     def attempt_fallback(self, locator, action="interact", stack_trace=None):
         """
@@ -273,6 +413,7 @@ class LocatorFallback:
         if not ocsci_config.UI_SELENIUM.get("ai_fallback"):
             return None
 
+        start_time = time.time()
         selector = locator[0]
         by_type = locator[1]
         cache_key = self._cache_key(locator)
@@ -285,21 +426,31 @@ class LocatorFallback:
             f"  selector={selector}  by={by_type}  action={action}"
         )
 
-        # use cached updated if available and matching current locator
+        # 1. Use cached result if available and currently valid (exact 1 match)
+        cache_start = time.time()
         cache = self._load_cache()
         if cache_key in cache:
             cached = cache[cache_key]
             cached_selector = cached["new_selector"]
             cached_by_type = cached["new_by_type"]
             if self._validate_locator(cached_selector, cached_by_type):
+                cache_duration = time.time() - cache_start
                 logger.info(
-                    "[AI_FALLBACK] cache_hit selector=%s by=%s",
+                    "[AI_FALLBACK] cache_hit selector=%s by=%s (duration=%.2fs)",
                     cached_selector,
                     cached_by_type,
+                    cache_duration,
                 )
                 return cached_selector, cached_by_type
             else:
                 logger.info("Cached locator no longer valid, proceeding to LLM query")
+
+        # 2. Conservative page-state health check
+        if not self._check_page_health():
+            logger.warning(
+                "[AI_FALLBACK] Page health pre-check failed, skipping AI fallback"
+            )
+            return None
 
         if not self.client.is_available():
             logger.warning("LLM client is not available, skipping AI fallback")
@@ -310,33 +461,58 @@ class LocatorFallback:
         except WebDriverException:
             url = "unknown"
 
+        # 3. Capture DOM
+        dom_start = time.time()
         try:
             raw_html = self.driver.page_source
         except WebDriverException as e:
             logger.error(f"Failed to capture DOM: {e}")
             return None
+        dom_capture_duration = time.time() - dom_start
+        logger.info(
+            f"[AI_FALLBACK] DOM captured (chars={len(raw_html)}, duration={dom_capture_duration:.2f}s)"
+        )
 
         cost_before = self.client.total_cost_usd
 
+        # 4. Stage 1 (DOM-only query)
+        stage_1_start = time.time()
         result = self._try_stage_1(
             selector, by_type, action, url, raw_html, stack_trace=stack_trace
         )
+        stage_1_total_duration = time.time() - stage_1_start
+
         if result:
             self._cache_result(cache_key, selector, by_type, result, url)
             self._log_cost(cost_before)
+            total_duration = time.time() - start_time
+            logger.info(
+                f"[AI_FALLBACK] completed via Stage 1 (total_duration={total_duration:.2f}s)"
+            )
             return result
 
+        # 5. Stage 2 (DOM + Screenshot query)
+        stage_2_start = time.time()
         result = self._try_stage_2(
             selector, by_type, action, url, raw_html, stack_trace=stack_trace
         )
+        stage_2_total_duration = time.time() - stage_2_start
+
         if result:
             self._cache_result(cache_key, selector, by_type, result, url)
             self._log_cost(cost_before)
+            total_duration = time.time() - start_time
+            logger.info(
+                f"[AI_FALLBACK] completed via Stage 2 (total_duration={total_duration:.2f}s)"
+            )
             return result
 
         self._log_cost(cost_before)
+        total_duration = time.time() - start_time
         logger.warning(
-            "[AI_FALLBACK] failed — no replacement found for selector=%s", selector
+            f"[AI_FALLBACK] failed — no replacement found for selector={selector} "
+            f"(stage1_duration={stage_1_total_duration:.2f}s, stage2_duration={stage_2_total_duration:.2f}s, "
+            f"total_duration={total_duration:.2f}s)"
         )
         return None
 
@@ -354,11 +530,14 @@ class LocatorFallback:
             cleaned_html=cleaned_html,
         )
 
+        llm_start = time.time()
         try:
             raw_response = self.client.query_dom(prompt)
         except Exception as e:
             logger.warning(f"Stage 1 LLM query failed: {e}")
             return None
+        llm_duration = time.time() - llm_start
+        logger.info(f"[AI_FALLBACK] stage=1 LLM query completed in {llm_duration:.2f}s")
 
         parsed = self._parse_llm_locator(raw_response)
         if not parsed:
@@ -366,18 +545,24 @@ class LocatorFallback:
             return None
 
         new_selector, new_by_type = parsed
-        if self._validate_locator(new_selector, new_by_type):
+        val_start = time.time()
+        is_valid = self._validate_locator(new_selector, new_by_type)
+        val_duration = time.time() - val_start
+
+        if is_valid:
             logger.info(
-                "[AI_FALLBACK] stage=1 success new_selector=%s new_by=%s",
+                "[AI_FALLBACK] stage=1 success new_selector=%s new_by=%s (val_duration=%.2fs)",
                 new_selector,
                 new_by_type,
+                val_duration,
             )
-            return new_selector, new_by_type
+            return (new_selector, new_by_type)
 
         logger.info(
-            "[AI_FALLBACK] stage=1 no_match selector=%s by=%s",
+            "[AI_FALLBACK] stage=1 no_match selector=%s by=%s (val_duration=%.2fs)",
             new_selector,
             new_by_type,
+            val_duration,
         )
         return None
 
@@ -386,10 +571,16 @@ class LocatorFallback:
         logger.info("[AI_FALLBACK] stage=2 (DOM+screenshot) selector=%s", selector)
         cleaned_html = self._strip_dom(raw_html, DOM_MAX_CHARS_STAGE_2)
 
+        screenshot_start = time.time()
         screenshot_path = self._capture_screenshot()
+        screenshot_duration = time.time() - screenshot_start
+
         if not screenshot_path:
             logger.warning("Stage 2: Failed to capture screenshot, aborting")
             return None
+        logger.info(
+            f"[AI_FALLBACK] stage=2 screenshot captured in {screenshot_duration:.2f}s"
+        )
 
         prompt = STAGE_2_PROMPT.format(
             selector=selector,
@@ -400,11 +591,14 @@ class LocatorFallback:
             cleaned_html=cleaned_html,
         )
 
+        llm_start = time.time()
         try:
             raw_response = self.client.query_screenshot(screenshot_path, prompt)
         except Exception as e:
             logger.warning(f"Stage 2 LLM query failed: {e}")
             return None
+        llm_duration = time.time() - llm_start
+        logger.info(f"[AI_FALLBACK] stage=2 LLM query completed in {llm_duration:.2f}s")
 
         parsed = self._parse_llm_locator(raw_response)
         if not parsed:
@@ -412,18 +606,24 @@ class LocatorFallback:
             return None
 
         new_selector, new_by_type = parsed
-        if self._validate_locator(new_selector, new_by_type):
+        val_start = time.time()
+        is_valid = self._validate_locator(new_selector, new_by_type)
+        val_duration = time.time() - val_start
+
+        if is_valid:
             logger.info(
-                "[AI_FALLBACK] stage=2 success new_selector=%s new_by=%s",
+                "[AI_FALLBACK] stage=2 success new_selector=%s new_by=%s (val_duration=%.2fs)",
                 new_selector,
                 new_by_type,
+                val_duration,
             )
             return (new_selector, new_by_type)
 
         logger.info(
-            "[AI_FALLBACK] stage=2 no_match selector=%s by=%s",
+            "[AI_FALLBACK] stage=2 no_match selector=%s by=%s (val_duration=%.2fs)",
             new_selector,
             new_by_type,
+            val_duration,
         )
         return None
 
