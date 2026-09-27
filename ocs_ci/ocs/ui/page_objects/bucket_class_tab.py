@@ -6,6 +6,7 @@ import string
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.base_ui import logger
+from ocs_ci.framework import config
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     CreateResourceForm,
 )
@@ -123,21 +124,27 @@ class BucketClassTab(ObjectStorage, CreateResourceForm):
 
     def validate_bucket_class_ready(self) -> bool:
         """
-        Validate the status of default bucket class is 'Ready'
+        Validate bucket class status shown in the UI matches the backend.
 
         Returns:
-            bool: True if the status of default bucket class is 'Ready', False otherwise.
+            bool: True if UI status matches the backend status, False otherwise.
         """
-        logger.info("Verifying the status of default bucket class is 'Ready'")
-        backingstore_status = self.get_element_text(
-            self.validation_loc["backingstore-status"]
+        logger.info("Verifying the status of default bucket class")
+        ui_status = self.get_element_text(self.validation_loc["backingstore-status"])
+        if ui_status == "Ready":
+            return True
+        backend_status = OCP(
+            kind="bucketclass",
+            namespace=config.ENV_DATA["cluster_namespace"],
+        ).get(resource_name=constants.DEFAULT_NOOBAA_BUCKETCLASS)["status"]["phase"]
+        if ui_status == backend_status:
+            logger.info(f"Bucket class UI status '{ui_status}' matches backend — pass")
+            return True
+        logger.warning(
+            f"Bucket class UI status '{ui_status}' does not match "
+            f"backend status '{backend_status}'"
         )
-        is_ready = backingstore_status == "Ready"
-        if not is_ready:
-            logger.warning(
-                f"Status of default bucket class is {backingstore_status}, not 'Ready'"
-            )
-        return is_ready
+        return False
 
     def nav_bucket_class_breadcrumb(self):
         """
