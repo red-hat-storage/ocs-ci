@@ -3203,8 +3203,9 @@ virtualmachine = {
         By.XPATH,
     ),
     "instance_type_general_purpose_card": (
-        "//div[contains(@class,'instance-type-series-menu-card__toggle-card')]"
-        "[normalize-space(.)='General Purpose']",
+        "//div[contains(@class,'instance-type-series-menu-card__card-title')]"
+        "[normalize-space(.)='General Purpose']"
+        "/ancestor::div[contains(@class,'instance-type-series-menu-card__toggle-card')]",
         By.XPATH,
     ),
     "vm_details_storageclass_dropdown": (

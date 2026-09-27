@@ -23,7 +23,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.helpers.helpers import create_project, create_unique_resource_name
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.base_ui import BaseUI
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
@@ -77,276 +76,276 @@ class TestVirtualMachineLifecycle(ManageTest):
         def cleanup():
 
             logger.info("teardown_lungroup: starting class-level cleanup")
-            ocp_generic = OCP(namespace=constants.IBM_STORAGE_SCALE_NAMESPACE)
+            # ocp_generic = OCP(namespace=constants.IBM_STORAGE_SCALE_NAMESPACE)
 
-            logger.info(
-                "Step 1: Getting filesystem name from"
-                f"{constants.IBM_STORAGE_SCALE_NAMESPACE}..."
-            )
-            filesystem_name = None
-            try:
-                fs_out = ocp_generic.exec_oc_cmd(
-                    f"get {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
-                    f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE} --no-headers",
-                    out_yaml_format=False,
-                )
-                logger.info(f"oc get filesystem output:\n{fs_out}")
-                if fs_out and fs_out.strip():
-                    for line in fs_out.splitlines():
-                        line = line.strip()
-                        if line:
-                            filesystem_name = line.split()[0]
-                            break
-                if filesystem_name:
-                    logger.info(f"Found filesystem: '{filesystem_name}'")
-                else:
-                    logger.info(
-                        "No filesystem found in "
-                        f"{constants.IBM_STORAGE_SCALE_NAMESPACE} — skipping Steps 2-4"
-                    )
-            except CommandFailed as e:
-                logger.warning(f"Could not get filesystem list: {e}")
+            # logger.info(
+            #     "Step 1: Getting filesystem name from"
+            #     f"{constants.IBM_STORAGE_SCALE_NAMESPACE}..."
+            # )
+            # filesystem_name = None
+            # try:
+            #     fs_out = ocp_generic.exec_oc_cmd(
+            #         f"get {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
+            #         f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE} --no-headers",
+            #         out_yaml_format=False,
+            #     )
+            #     logger.info(f"oc get filesystem output:\n{fs_out}")
+            #     if fs_out and fs_out.strip():
+            #         for line in fs_out.splitlines():
+            #             line = line.strip()
+            #             if line:
+            #                 filesystem_name = line.split()[0]
+            #                 break
+            #     if filesystem_name:
+            #         logger.info(f"Found filesystem: '{filesystem_name}'")
+            #     else:
+            #         logger.info(
+            #             "No filesystem found in "
+            #             f"{constants.IBM_STORAGE_SCALE_NAMESPACE} — skipping Steps 2-4"
+            #         )
+            # except CommandFailed as e:
+            #     logger.warning(f"Could not get filesystem list: {e}")
 
-            if filesystem_name:
-                logger.info(f"Step 2: Labelling filesystem '{filesystem_name}'")
-                try:
-                    ocp_generic.exec_oc_cmd(
-                        f"label {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
-                        f" {filesystem_name}"
-                        f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
-                        f" scale.spectrum.ibm.com/allowDelete=true --overwrite",
-                        out_yaml_format=False,
-                    )
-                    logger.info(
-                        f"Filesystem '{filesystem_name}' labelled with allowDelete=true"
-                    )
-                except CommandFailed as e:
-                    logger.warning(
-                        f"Could not label filesystem '{filesystem_name}': {e}"
-                    )
+            # if filesystem_name:
+            #     logger.info(f"Step 2: Labelling filesystem '{filesystem_name}'")
+            #     try:
+            #         ocp_generic.exec_oc_cmd(
+            #             f"label {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
+            #             f" {filesystem_name}"
+            #             f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+            #             f" scale.spectrum.ibm.com/allowDelete=true --overwrite",
+            #             out_yaml_format=False,
+            #         )
+            #         logger.info(
+            #             f"Filesystem '{filesystem_name}' labelled with allowDelete=true"
+            #         )
+            #     except CommandFailed as e:
+            #         logger.warning(
+            #             f"Could not label filesystem '{filesystem_name}': {e}"
+            #         )
 
-                logger.info("Step 3: Deleting StorageClasses")
-                ocp_sc = OCP(kind="StorageClass")
-                try:
-                    sc_out = ocp_sc.exec_oc_cmd(
-                        "get storageclass --no-headers",
-                        out_yaml_format=False,
-                    )
-                    sc_names_to_delete = []
-                    if sc_out and sc_out.strip():
-                        for line in sc_out.splitlines():
-                            line = line.strip()
-                            if line and filesystem_name in line:
-                                sc_name = line.split()[0]
-                                sc_names_to_delete.append(sc_name)
+            #     logger.info("Step 3: Deleting StorageClasses")
+            #     ocp_sc = OCP(kind="StorageClass")
+            #     try:
+            #         sc_out = ocp_sc.exec_oc_cmd(
+            #             "get storageclass --no-headers",
+            #             out_yaml_format=False,
+            #         )
+            #         sc_names_to_delete = []
+            #         if sc_out and sc_out.strip():
+            #             for line in sc_out.splitlines():
+            #                 line = line.strip()
+            #                 if line and filesystem_name in line:
+            #                     sc_name = line.split()[0]
+            #                     sc_names_to_delete.append(sc_name)
 
-                    if sc_names_to_delete:
-                        for sc_name in sc_names_to_delete:
-                            try:
-                                del_out = ocp_sc.exec_oc_cmd(
-                                    f"delete storageclass {sc_name}",
-                                    out_yaml_format=False,
-                                )
-                                logger.info(
-                                    f"StorageClass '{sc_name}' deleted: {del_out}"
-                                )
-                                # Confirm deletion — poll for up to 2 minutes
-                                logger.info(
-                                    f"Waiting for StorageClass '{sc_name}' to be deleted..."
-                                )
-                                deadline = time.time() + 120
-                                sc_deleted = False
-                                while time.time() < deadline:
-                                    try:
-                                        out = ocp_sc.exec_oc_cmd(
-                                            f"get storageclass {sc_name} --no-headers",
-                                            out_yaml_format=False,
-                                        )
-                                        if not out or not out.strip():
-                                            sc_deleted = True
-                                            break
-                                    except CommandFailed:
-                                        sc_deleted = True
-                                        break
-                                    time.sleep(10)
-                                if sc_deleted:
-                                    logger.info(
-                                        f"StorageClass '{sc_name}' confirmed deleted"
-                                    )
-                                else:
-                                    logger.warning(
-                                        f"StorageClass '{sc_name}' still exists "
-                                        "after 2-minute wait"
-                                    )
-                            except CommandFailed as e:
-                                logger.warning(
-                                    f"Could not delete StorageClass '{sc_name}': {e}"
-                                )
-                    else:
-                        logger.info(
-                            f"No StorageClasses found containing '{filesystem_name}'"
-                        )
-                except CommandFailed as e:
-                    logger.warning(f"Could not list StorageClasses: {e}")
+            #         if sc_names_to_delete:
+            #             for sc_name in sc_names_to_delete:
+            #                 try:
+            #                     del_out = ocp_sc.exec_oc_cmd(
+            #                         f"delete storageclass {sc_name}",
+            #                         out_yaml_format=False,
+            #                     )
+            #                     logger.info(
+            #                         f"StorageClass '{sc_name}' deleted: {del_out}"
+            #                     )
+            #                     # Confirm deletion — poll for up to 2 minutes
+            #                     logger.info(
+            #                         f"Waiting for StorageClass '{sc_name}' to be deleted..."
+            #                     )
+            #                     deadline = time.time() + 120
+            #                     sc_deleted = False
+            #                     while time.time() < deadline:
+            #                         try:
+            #                             out = ocp_sc.exec_oc_cmd(
+            #                                 f"get storageclass {sc_name} --no-headers",
+            #                                 out_yaml_format=False,
+            #                             )
+            #                             if not out or not out.strip():
+            #                                 sc_deleted = True
+            #                                 break
+            #                         except CommandFailed:
+            #                             sc_deleted = True
+            #                             break
+            #                         time.sleep(10)
+            #                     if sc_deleted:
+            #                         logger.info(
+            #                             f"StorageClass '{sc_name}' confirmed deleted"
+            #                         )
+            #                     else:
+            #                         logger.warning(
+            #                             f"StorageClass '{sc_name}' still exists "
+            #                             "after 2-minute wait"
+            #                         )
+            #                 except CommandFailed as e:
+            #                     logger.warning(
+            #                         f"Could not delete StorageClass '{sc_name}': {e}"
+            #                     )
+            #         else:
+            #             logger.info(
+            #                 f"No StorageClasses found containing '{filesystem_name}'"
+            #             )
+            #     except CommandFailed as e:
+            #         logger.warning(f"Could not list StorageClasses: {e}")
 
-                logger.info(
-                    f"Step 4: Deleting filesystem '{filesystem_name}' from "
-                    f"{constants.IBM_STORAGE_SCALE_NAMESPACE}..."
-                )
-                try:
-                    del_fs_out = ocp_generic.exec_oc_cmd(
-                        f"delete {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
-                        f" {filesystem_name}"
-                        f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
-                        out_yaml_format=False,
-                    )
-                    logger.info(f"Filesystem '{filesystem_name}' deleted: {del_fs_out}")
-                    # Confirm deletion — poll for up to 5 minutes
-                    logger.info(
-                        f"Waiting for filesystem '{filesystem_name}' to be deleted..."
-                    )
-                    deadline = time.time() + 300
-                    fs_deleted = False
-                    while time.time() < deadline:
-                        try:
-                            out = ocp_generic.exec_oc_cmd(
-                                f"get {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
-                                f" {filesystem_name}"
-                                f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
-                                f" --no-headers",
-                                out_yaml_format=False,
-                            )
-                            if not out or not out.strip():
-                                fs_deleted = True
-                                break
-                        except CommandFailed:
-                            fs_deleted = True
-                            break
-                        time.sleep(10)
-                    if fs_deleted:
-                        logger.info(f"Filesystem '{filesystem_name}' confirmed deleted")
-                    else:
-                        logger.warning(
-                            f"Filesystem '{filesystem_name}' still exists "
-                            "after 5-minute wait"
-                        )
-                except CommandFailed as e:
-                    logger.warning(
-                        f"Could not delete filesystem '{filesystem_name}': {e}"
-                    )
+            #     logger.info(
+            #         f"Step 4: Deleting filesystem '{filesystem_name}' from "
+            #         f"{constants.IBM_STORAGE_SCALE_NAMESPACE}..."
+            #     )
+            #     try:
+            #         del_fs_out = ocp_generic.exec_oc_cmd(
+            #             f"delete {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
+            #             f" {filesystem_name}"
+            #             f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
+            #             out_yaml_format=False,
+            #         )
+            #         logger.info(f"Filesystem '{filesystem_name}' deleted: {del_fs_out}")
+            #         # Confirm deletion — poll for up to 5 minutes
+            #         logger.info(
+            #             f"Waiting for filesystem '{filesystem_name}' to be deleted..."
+            #         )
+            #         deadline = time.time() + 300
+            #         fs_deleted = False
+            #         while time.time() < deadline:
+            #             try:
+            #                 out = ocp_generic.exec_oc_cmd(
+            #                     f"get {constants.IBM_STORAGE_SCALE_FILESYSTEM}"
+            #                     f" {filesystem_name}"
+            #                     f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+            #                     f" --no-headers",
+            #                     out_yaml_format=False,
+            #                 )
+            #                 if not out or not out.strip():
+            #                     fs_deleted = True
+            #                     break
+            #             except CommandFailed:
+            #                 fs_deleted = True
+            #                 break
+            #             time.sleep(10)
+            #         if fs_deleted:
+            #             logger.info(f"Filesystem '{filesystem_name}' confirmed deleted")
+            #         else:
+            #             logger.warning(
+            #                 f"Filesystem '{filesystem_name}' still exists "
+            #                 "after 5-minute wait"
+            #             )
+            #     except CommandFailed as e:
+            #         logger.warning(
+            #             f"Could not delete filesystem '{filesystem_name}': {e}"
+            #         )
 
-            logger.info(
-                "Step 5: Getting and deleting all LocalDisks from "
-                f"{constants.IBM_STORAGE_SCALE_NAMESPACE}..."
-            )
-            try:
-                ld_out = ocp_generic.exec_oc_cmd(
-                    f"get localdisk"
-                    f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE} --no-headers",
-                    out_yaml_format=False,
-                )
-                logger.info(f"oc get localdisk output:\n{ld_out}")
-                localdisk_names = []
-                if ld_out and ld_out.strip():
-                    for line in ld_out.splitlines():
-                        line = line.strip()
-                        if line:
-                            localdisk_names.append(line.split()[0])
+            # logger.info(
+            #     "Step 5: Getting and deleting all LocalDisks from "
+            #     f"{constants.IBM_STORAGE_SCALE_NAMESPACE}..."
+            # )
+            # try:
+            #     ld_out = ocp_generic.exec_oc_cmd(
+            #         f"get localdisk"
+            #         f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE} --no-headers",
+            #         out_yaml_format=False,
+            #     )
+            #     logger.info(f"oc get localdisk output:\n{ld_out}")
+            #     localdisk_names = []
+            #     if ld_out and ld_out.strip():
+            #         for line in ld_out.splitlines():
+            #             line = line.strip()
+            #             if line:
+            #                 localdisk_names.append(line.split()[0])
 
-                if localdisk_names:
-                    for ld_name in localdisk_names:
-                        try:
-                            del_ld_out = ocp_generic.exec_oc_cmd(
-                                f"delete localdisk {ld_name}"
-                                f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
-                                out_yaml_format=False,
-                            )
-                            logger.info(f"LocalDisk '{ld_name}' deleted: {del_ld_out}")
-                            # Confirm deletion — poll for up to 2 minutes
-                            logger.info(
-                                f"Waiting for LocalDisk '{ld_name}' to be deleted..."
-                            )
-                            deadline = time.time() + 120
-                            ld_deleted = False
-                            while time.time() < deadline:
-                                try:
-                                    out = ocp_generic.exec_oc_cmd(
-                                        f"get localdisk {ld_name}"
-                                        f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
-                                        f" --no-headers",
-                                        out_yaml_format=False,
-                                    )
-                                    if not out or not out.strip():
-                                        ld_deleted = True
-                                        break
-                                except CommandFailed:
-                                    ld_deleted = True
-                                    break
-                                time.sleep(10)
-                            if ld_deleted:
-                                logger.info(f"LocalDisk '{ld_name}' confirmed deleted")
-                            else:
-                                logger.warning(
-                                    f"LocalDisk '{ld_name}' still exists "
-                                    "after 2-minute wait"
-                                )
-                        except CommandFailed as e:
-                            logger.warning(
-                                f"Could not delete LocalDisk '{ld_name}': {e}"
-                            )
-                else:
-                    logger.info(
-                        f"No LocalDisks found in {constants.IBM_STORAGE_SCALE_NAMESPACE}"
-                    )
-            except CommandFailed as e:
-                logger.warning(f"Could not list LocalDisks: {e}")
+            #     if localdisk_names:
+            #         for ld_name in localdisk_names:
+            #             try:
+            #                 del_ld_out = ocp_generic.exec_oc_cmd(
+            #                     f"delete localdisk {ld_name}"
+            #                     f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
+            #                     out_yaml_format=False,
+            #                 )
+            #                 logger.info(f"LocalDisk '{ld_name}' deleted: {del_ld_out}")
+            #                 # Confirm deletion — poll for up to 2 minutes
+            #                 logger.info(
+            #                     f"Waiting for LocalDisk '{ld_name}' to be deleted..."
+            #                 )
+            #                 deadline = time.time() + 120
+            #                 ld_deleted = False
+            #                 while time.time() < deadline:
+            #                     try:
+            #                         out = ocp_generic.exec_oc_cmd(
+            #                             f"get localdisk {ld_name}"
+            #                             f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+            #                             f" --no-headers",
+            #                             out_yaml_format=False,
+            #                         )
+            #                         if not out or not out.strip():
+            #                             ld_deleted = True
+            #                             break
+            #                     except CommandFailed:
+            #                         ld_deleted = True
+            #                         break
+            #                     time.sleep(10)
+            #                 if ld_deleted:
+            #                     logger.info(f"LocalDisk '{ld_name}' confirmed deleted")
+            #                 else:
+            #                     logger.warning(
+            #                         f"LocalDisk '{ld_name}' still exists "
+            #                         "after 2-minute wait"
+            #                     )
+            #             except CommandFailed as e:
+            #                 logger.warning(
+            #                     f"Could not delete LocalDisk '{ld_name}': {e}"
+            #                 )
+            #     else:
+            #         logger.info(
+            #             f"No LocalDisks found in {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+            #         )
+            # except CommandFailed as e:
+            #     logger.warning(f"Could not list LocalDisks: {e}")
 
-            logger.info(
-                "Step 6: Deleting IBM Spectrum Scale cluster resource "
-                f"from {constants.IBM_STORAGE_SCALE_NAMESPACE}..."
-            )
-            try:
-                ocp_cluster = OCP(
-                    kind=constants.IBM_STORAGE_SCALE_CLUSTER_KIND,
-                    namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
-                )
-                del_cluster_out = ocp_cluster.exec_oc_cmd(
-                    f"delete {constants.IBM_STORAGE_SCALE_CLUSTER_KIND}"
-                    f" ibm-spectrum-scale"
-                    f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
-                    out_yaml_format=False,
-                )
-                logger.info(f"IBM Spectrum Scale cluster deleted: {del_cluster_out}")
-                # Confirm deletion — poll for up to 5 minutes
-                logger.info("Waiting for IBM Spectrum Scale cluster to be deleted...")
-                deadline = time.time() + 300
-                cluster_deleted = False
-                while time.time() < deadline:
-                    try:
-                        out = ocp_cluster.exec_oc_cmd(
-                            f"get {constants.IBM_STORAGE_SCALE_CLUSTER_KIND}"
-                            f" ibm-spectrum-scale"
-                            f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
-                            f" --no-headers",
-                            out_yaml_format=False,
-                        )
-                        if not out or not out.strip():
-                            cluster_deleted = True
-                            break
-                    except CommandFailed:
-                        cluster_deleted = True
-                        break
-                    time.sleep(10)
-                if cluster_deleted:
-                    logger.info("IBM Spectrum Scale cluster confirmed deleted")
-                else:
-                    logger.warning(
-                        "IBM Spectrum Scale cluster still exists " "after 5-minute wait"
-                    )
-            except CommandFailed as e:
-                logger.warning(
-                    f"Could not delete IBM Spectrum Scale cluster resource: {e}"
-                )
+            # logger.info(
+            #     "Step 6: Deleting IBM Spectrum Scale cluster resource "
+            #     f"from {constants.IBM_STORAGE_SCALE_NAMESPACE}..."
+            # )
+            # try:
+            #     ocp_cluster = OCP(
+            #         kind=constants.IBM_STORAGE_SCALE_CLUSTER_KIND,
+            #         namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
+            #     )
+            #     del_cluster_out = ocp_cluster.exec_oc_cmd(
+            #         f"delete {constants.IBM_STORAGE_SCALE_CLUSTER_KIND}"
+            #         f" ibm-spectrum-scale"
+            #         f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}",
+            #         out_yaml_format=False,
+            #     )
+            #     logger.info(f"IBM Spectrum Scale cluster deleted: {del_cluster_out}")
+            #     # Confirm deletion — poll for up to 5 minutes
+            #     logger.info("Waiting for IBM Spectrum Scale cluster to be deleted...")
+            #     deadline = time.time() + 300
+            #     cluster_deleted = False
+            #     while time.time() < deadline:
+            #         try:
+            #             out = ocp_cluster.exec_oc_cmd(
+            #                 f"get {constants.IBM_STORAGE_SCALE_CLUSTER_KIND}"
+            #                 f" ibm-spectrum-scale"
+            #                 f" -n {constants.IBM_STORAGE_SCALE_NAMESPACE}"
+            #                 f" --no-headers",
+            #                 out_yaml_format=False,
+            #             )
+            #             if not out or not out.strip():
+            #                 cluster_deleted = True
+            #                 break
+            #         except CommandFailed:
+            #             cluster_deleted = True
+            #             break
+            #         time.sleep(10)
+            #     if cluster_deleted:
+            #         logger.info("IBM Spectrum Scale cluster confirmed deleted")
+            #     else:
+            #         logger.warning(
+            #             "IBM Spectrum Scale cluster still exists " "after 5-minute wait"
+            #         )
+            # except CommandFailed as e:
+            #     logger.warning(
+            #         f"Could not delete IBM Spectrum Scale cluster resource: {e}"
+            #     )
 
             logger.info("teardown_lungroup: complete")
 
