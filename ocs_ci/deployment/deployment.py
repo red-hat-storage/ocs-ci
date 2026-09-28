@@ -884,6 +884,15 @@ class Deployment(object):
             deploy_dr = get_multicluster_dr_deployment()(dr_conf)
             deploy_dr.deploy()
 
+    def get_rdr_conf(self):
+        """
+        Get RDR configuration for DR deployment.
+
+        Returns:
+            None: RDR deployment class handles configuration internally
+        """
+        return None
+
     def do_deploy_agnostic_dr(self):
         """
         Deploy agnostic DR infrastructure on managed clusters.
