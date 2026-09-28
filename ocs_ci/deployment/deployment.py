@@ -880,18 +880,8 @@ class Deployment(object):
             if config.ENV_DATA.get("agnostic_dr", False):
                 self.do_deploy_agnostic_dr()
                 return
-            dr_conf = self.get_rdr_conf()
-            deploy_dr = get_multicluster_dr_deployment()(dr_conf)
+            deploy_dr = get_multicluster_dr_deployment()()
             deploy_dr.deploy()
-
-    def get_rdr_conf(self):
-        """
-        Get RDR configuration for DR deployment.
-
-        Returns:
-            None: RDR deployment class handles configuration internally
-        """
-        return None
 
     def do_deploy_agnostic_dr(self):
         """
@@ -959,8 +949,7 @@ class Deployment(object):
                 create_catalog_source()
             config.switch_ctx(restore_index)
 
-        dr_conf = self.get_rdr_conf()
-        rdr_deploy = RDRMultiClusterDROperatorsDeploy(dr_conf)
+        rdr_deploy = RDRMultiClusterDROperatorsDeploy()
 
         acm_indexes = get_all_acm_indexes()
         for i in acm_indexes:
