@@ -27,6 +27,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.resource_debug import describe_on_failure
 from ocs_ci.utility.status_logger import log_status_change
 from ocs_ci.utility.utils import ceph_health_check, run_cmd
 
@@ -412,6 +413,12 @@ class FusionDataFoundationDeployment:
         run_cmd(f"oc create -f {odfcluster_data_yaml.name}")
 
 
+@describe_on_failure(
+    kind="FusionServiceInstance",
+    resource_name=constants.FDF_SERVICE_NAME,
+    namespace=constants.FDF_NAMESPACE,
+    logger=logger,
+)
 @retry((AssertionError, KeyError), 20, 60, backoff=1)
 def fusion_service_instance_health_check():
     """
@@ -442,6 +449,12 @@ def fusion_service_instance_health_check():
     assert install_percent == 100
 
 
+@describe_on_failure(
+    kind="OdfCluster",
+    resource_name="odfcluster",
+    namespace="ibm-spectrum-fusion-ns",
+    logger=logger,
+)
 @retry((AssertionError, KeyError), 20, 60, backoff=1)
 def odfcluster_status_check():
     """
@@ -554,6 +567,12 @@ def run_patch_cmd(cmd):
     assert "patched" in out
 
 
+@describe_on_failure(
+    kind="StorageCluster",
+    resource_name="ocs-storagecluster",
+    namespace="openshift-storage",
+    logger=logger,
+)
 @retry((AssertionError, KeyError), 20, 60, backoff=1)
 def storagecluster_health_check():
     """
@@ -591,6 +610,11 @@ def wait_for_storageclusters_crd():
     """
     logger.info("Waiting for the StorageClusters CRD to exist")
 
+    @describe_on_failure(
+        kind="CustomResourceDefinition",
+        resource_name="storageclusters.ocs.openshift.io",
+        logger=logger,
+    )
     @retry((CommandFailed, AssertionError, KeyError), 30, 30, backoff=1)
     def _wait_for_storageclusters_crd():
         storageclusters_crd = CustomResourceDefinition(
