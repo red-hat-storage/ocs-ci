@@ -1174,7 +1174,7 @@ class HostedClients(HyperShiftBase):
             )
 
         # stage 2 download all available kubeconfig files
-        log_step("Download kubeconfig for all clusters")
+        logger.test_step("Download kubeconfig for all clusters")
         kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
         password_paths = self.download_hosted_clusters_kubeadmin_password_files()
         if not password_paths or not all(password_paths):
@@ -1184,7 +1184,7 @@ class HostedClients(HyperShiftBase):
             )
 
         # stage 3 verify OCP clusters are ready
-        log_step(
+        logger.test_step(
             "Ensure clusters were deployed successfully, wait for them to be ready"
         )
         hosted_ocp_verification_passed = self.verify_hosted_ocp_clusters_from_provider()
@@ -1218,39 +1218,40 @@ class HostedClients(HyperShiftBase):
                             "Skipping and continuing with remaining clusters."
                         )
 
+        any_cluster_needs_storage = any(
+            config_has_hosted_odf_image(n) for n in cluster_names
+        )
+
         # Need to create networkpolicy as mentioned in bug 2281536,
         # https://bugzilla.redhat.com/show_bug.cgi?id=2281536#c21
+        if any_cluster_needs_storage:
+            storage_client = StorageClient()
+            failed_network_policy = []
+            for cluster_name in cluster_names:
+                try:
+                    storage_client.create_network_policy(
+                        namespace_to_create_storage_client=f"clusters-{cluster_name}"
+                    )
+                except (CommandFailed, AssertionError) as e:
+                    logger.error(
+                        f"Failed to create network policy for cluster '{cluster_name}': {e}. "
+                        "Dropping cluster from further deployment stages."
+                    )
+                    failed_network_policy.append(cluster_name)
 
-        # Create Network Policy
-        storage_client = StorageClient()
-        failed_network_policy = []
-        for cluster_name in cluster_names:
-            try:
-                storage_client.create_network_policy(
-                    namespace_to_create_storage_client=f"clusters-{cluster_name}"
+            if failed_network_policy:
+                cluster_names = [
+                    name for name in cluster_names if name not in failed_network_policy
+                ]
+                logger.warning(
+                    f"Clusters dropped due to network policy failure: {failed_network_policy}. "
+                    f"Remaining clusters: {cluster_names}"
                 )
-            except (CommandFailed, AssertionError) as e:
-                logger.error(
-                    f"Failed to create network policy for cluster '{cluster_name}': {e}. "
-                    "Dropping cluster from further deployment stages."
-                )
-                failed_network_policy.append(cluster_name)
-
-        if failed_network_policy:
-            cluster_names = [
-                name for name in cluster_names if name not in failed_network_policy
-            ]
-            logger.warning(
-                f"Clusters dropped due to network policy failure: {failed_network_policy}. "
-                f"Remaining clusters: {cluster_names}"
-            )
-
-        check_odf_prerequisites()
 
         # stage 3.5: Setup data replication separation network configuration
         # This must be done before ODF deployment to avoid node reboots after ODF is deployed
         if config.DEPLOYMENT.get("enable_data_replication_separation_public"):
-            log_step(
+            logger.test_step(
                 "Setup data replication separation (MachineConfig and NetworkAttachmentDefinition)"
             )
             create_drs_machine_config()
@@ -1259,7 +1260,7 @@ class HostedClients(HyperShiftBase):
 
             # Re-verify only this job's hosted clusters after MachineConfig-induced node reboots
             # to avoid race conditions with parallel jobs
-            log_step(
+            logger.test_step(
                 "Re-verify hosted OCP clusters after data replication separation setup"
             )
             logger.info(
@@ -1278,7 +1279,7 @@ class HostedClients(HyperShiftBase):
 
         # stage 3.6: Setup VPC peering, routing, and security groups for AWS HCP clusters
         # This must be done before ODF deployment to ensure network connectivity
-        log_step(
+        logger.test_step(
             "Setup network for AWS HCP clusters (VPC peering, routing, security groups)"
         )
         for cluster_name in cluster_names:
@@ -1302,31 +1303,40 @@ class HostedClients(HyperShiftBase):
                     )
 
         # stage 4 deploy ODF/FDF client on all hosted clusters if not already deployed
-        fdf_on_provider = is_fdf_on_provider()
-        if fdf_on_provider:
-            logger.info(
-                "FDF detected on provider, will deploy FDF Client on spoke clusters"
-            )
-        log_step("Deploy storage client on hosted OCP clusters")
-        for cluster_name in cluster_names:
-
-            if not config_has_hosted_odf_image(cluster_name):
-                logger.info(
-                    f"Hosted ODF image not set for cluster '{cluster_name}', skipping deployment"
-                )
-                continue
-
+        fdf_on_provider = False
+        logger.test_step("Deploy storage client on hosted OCP clusters")
+        if any_cluster_needs_storage:
+            check_odf_prerequisites()
+            fdf_on_provider = is_fdf_on_provider()
             if fdf_on_provider:
-                logger.info(f"Setup FDF client on hosted OCP cluster '{cluster_name}'")
-                hosted_odf = HostedFDF(cluster_name)
-            else:
-                logger.info(f"Setup ODF client on hosted OCP cluster '{cluster_name}'")
-                hosted_odf = HostedODF(cluster_name)
-            hosted_odf.do_deploy()
+                logger.info(
+                    "FDF detected on provider, will deploy FDF Client on spoke clusters"
+                )
+            for cluster_name in cluster_names:
+
+                if not config_has_hosted_odf_image(cluster_name):
+                    logger.info(
+                        f"Hosted ODF image not set for cluster '{cluster_name}', skipping deployment"
+                    )
+                    continue
+
+                if fdf_on_provider:
+                    logger.info(
+                        f"Setup FDF client on hosted OCP cluster '{cluster_name}'"
+                    )
+                    hosted_odf = HostedFDF(cluster_name)
+                else:
+                    logger.info(
+                        f"Setup ODF client on hosted OCP cluster '{cluster_name}'"
+                    )
+                    hosted_odf = HostedODF(cluster_name)
+                hosted_odf.do_deploy()
 
         # stage 5 verify ODF/FDF client is installed on all hosted clusters
         odf_installed = []
-        log_step("Verify storage client is installed on all hosted OCP clusters")
+        logger.test_step(
+            "Verify storage client is installed on all hosted OCP clusters"
+        )
         for cluster_name in cluster_names:
             if config_has_hosted_odf_image(cluster_name):
                 logger.info(
@@ -1347,7 +1357,7 @@ class HostedClients(HyperShiftBase):
                 odf_installed.append(hosted_odf.odf_client_installed())
 
         # stage 6 setup storage client on all requested hosted clusters
-        log_step("Setup storage client on hosted OCP clusters")
+        logger.test_step("Setup storage client on hosted OCP clusters")
         client_setup_res = []
         hosted_odf_clusters_installed = []
         for cluster_name in cluster_names:
@@ -1388,7 +1398,7 @@ class HostedClients(HyperShiftBase):
             )
         )
 
-        log_step("Verify storage is available on all hosted ODF clusters")
+        logger.test_step("Verify storage is available on all hosted ODF clusters")
         hosted_odf_storage_verified = []
 
         for name in cluster_names:
@@ -1398,7 +1408,9 @@ class HostedClients(HyperShiftBase):
                     hosted_odf.verify_storage_classes_on_client()
                 )
 
-        log_step("Verify storage consumers and configmaps for newly deployed clients")
+        logger.test_step(
+            "Verify storage consumers and configmaps for newly deployed clients"
+        )
         storage_consumers_verified = []
         for hosted_odf_obj in hosted_odf_clusters_installed:
             cluster_name = hosted_odf_obj.name
@@ -1418,7 +1430,7 @@ class HostedClients(HyperShiftBase):
                 )
                 storage_consumers_verified.append(False)
 
-        log_step("verify backing Ceph storage for newly deployed clients")
+        logger.test_step("verify backing Ceph storage for newly deployed clients")
 
         rns_for_consumer_verified, svg_for_consumer_verified = check_ceph_resources(
             cluster_names
