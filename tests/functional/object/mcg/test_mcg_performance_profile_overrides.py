@@ -132,6 +132,10 @@ class TestMCGPerformanceProfileOverrides:
         spec = sc_ocp.get().get("spec", {})
         original_resources = spec.get("resources") or {}
         original_endpoints = (spec.get("multiCloudGateway") or {}).get("endpoints")
+        had_overrides = bool(
+            any(original_resources.get(key) for key in OVERRIDE_KEYS)
+            or original_endpoints
+        )
 
         def finalizer():
             restored = {
@@ -149,12 +153,16 @@ class TestMCGPerformanceProfileOverrides:
                 ),
                 format_type="merge",
             )
+            if had_overrides:
+                # Putting real overrides back rolls the NooBaa pods once more.
+                # This is the last finalizer to run, so wait for that rollout
+                # instead of leaving it in flight for the next test module.
+                logger.info("Waiting for the restored overrides to settle")
+                profiles.verify_noobaa_pods_healthy()
 
         request.addfinalizer(finalizer)
 
-        if any(original_resources.get(key) for key in OVERRIDE_KEYS) or (
-            original_endpoints
-        ):
+        if had_overrides:
             logger.info("Clearing pre-existing MCG resource and endpoint overrides")
             _clear_overrides()
         return original_resources
