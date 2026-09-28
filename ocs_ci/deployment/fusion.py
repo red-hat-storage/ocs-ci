@@ -19,6 +19,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.resource_debug import describe_on_failure
 from ocs_ci.utility.status_logger import log_status_change
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.utility.version import VERSION_2_12, get_semantic_version
@@ -298,6 +299,12 @@ def wait_for_csv(csv_name, namespace):
             logger.debug(f"Still waiting for the CSV: {csv_name}")
 
 
+@describe_on_failure(
+    kind="SpectrumFusion",
+    resource_name="spectrumfusion",
+    namespace=defaults.FUSION_NAMESPACE,
+    logger=logger,
+)
 @retry((AssertionError, KeyError), 10, 5)
 def spectrum_fusion_status_check():
     """
