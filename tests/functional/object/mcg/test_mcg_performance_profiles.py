@@ -1,3 +1,4 @@
+import json
 import logging
 import pytest
 
@@ -48,7 +49,13 @@ class TestMCGPerformanceProfiles:
         restore it afterwards, so the cluster is always left as it was found
         even if the test fails part-way through a profile switch.
         """
-        original_profile = profiles.get_storagecluster_profile()
+        original_profile = (
+            profiles.get_storagecluster_ocp()
+            .get()
+            .get("spec", {})
+            .get("multiCloudGateway", {})
+            .get("performanceProfile")
+        )
         logger.info(f"Original MCG performance profile: '{original_profile}'")
 
         def finalizer():
@@ -83,8 +90,11 @@ class TestMCGPerformanceProfiles:
             if original_endpoints is None:
                 return
             logger.info(f"Restoring endpoints override: {original_endpoints}")
-            profiles.patch_storagecluster(
-                {"spec": {"multiCloudGateway": {"endpoints": original_endpoints}}}
+            profiles.get_storagecluster_ocp().patch(
+                params=json.dumps(
+                    {"spec": {"multiCloudGateway": {"endpoints": original_endpoints}}}
+                ),
+                format_type="merge",
             )
 
         request.addfinalizer(finalizer)
@@ -94,8 +104,9 @@ class TestMCGPerformanceProfiles:
                 f"Clearing pre-existing endpoints override {original_endpoints} "
                 "so the endpoint count is free to follow the profile"
             )
-            profiles.patch_storagecluster(
-                {"spec": {"multiCloudGateway": {"endpoints": None}}}
+            profiles.get_storagecluster_ocp().patch(
+                params=json.dumps({"spec": {"multiCloudGateway": {"endpoints": None}}}),
+                format_type="merge",
             )
         return original_endpoints
 
@@ -330,11 +341,24 @@ class TestMCGPerformanceProfiles:
             Invalid profile values are rejected by CRD validation and the
             StorageCluster CR keeps the value it had.
         """
-        profile_before = profiles.get_storagecluster_profile()
+        sc_ocp = profiles.get_storagecluster_ocp()
+        profile_before = (
+            sc_ocp.get()
+            .get("spec", {})
+            .get("multiCloudGateway", {})
+            .get("performanceProfile")
+        )
 
         with pytest.raises(CommandFailed) as exc_info:
-            profiles.patch_storagecluster(
-                {"spec": {"multiCloudGateway": {"performanceProfile": invalid_profile}}}
+            sc_ocp.patch(
+                params=json.dumps(
+                    {
+                        "spec": {
+                            "multiCloudGateway": {"performanceProfile": invalid_profile}
+                        }
+                    }
+                ),
+                format_type="merge",
             )
         message = str(exc_info.value)
         assert "performanceProfile" in message and "Unsupported value" in message, (
@@ -343,7 +367,12 @@ class TestMCGPerformanceProfiles:
         )
         logger.info(f"Profile '{invalid_profile}' rejected: {message}")
 
-        profile_after = profiles.get_storagecluster_profile()
+        profile_after = (
+            sc_ocp.get()
+            .get("spec", {})
+            .get("multiCloudGateway", {})
+            .get("performanceProfile")
+        )
         assert profile_after == profile_before, (
             f"A rejected patch changed the stored profile from "
             f"'{profile_before}' to '{profile_after}'"
@@ -365,8 +394,8 @@ class TestMCGPerformanceProfiles:
             Invalid profile values are rejected by CRD validation on the NooBaa
             CR as well.
         """
-        profile_before = profiles.get_noobaa_profile()
         noobaa_ocp = profiles.get_noobaa_ocp()
+        profile_before = noobaa_ocp.get().get("spec", {}).get("performanceProfile")
 
         with pytest.raises(CommandFailed) as exc_info:
             noobaa_ocp.patch(
@@ -386,7 +415,7 @@ class TestMCGPerformanceProfiles:
             )
 
         assert (
-            profiles.get_noobaa_profile() == profile_before
+            noobaa_ocp.get().get("spec", {}).get("performanceProfile") == profile_before
         ), "A rejected patch changed the profile stored on the NooBaa CR"
 
     @pytest.fixture
@@ -483,7 +512,9 @@ class TestMCGPerformanceProfiles:
         )
 
         def _reverted():
-            return profiles.get_noobaa_profile() == sc_profile
+            return (
+                noobaa_ocp.get().get("spec", {}).get("performanceProfile") == sc_profile
+            )
 
         for reverted in TimeoutSampler(timeout=180, sleep=10, func=_reverted):
             if reverted:
@@ -507,7 +538,9 @@ class TestMCGPerformanceProfiles:
         ), f"Failed to patch the NooBaa CR with profile '{direct_profile}'"
 
         profiles.wait_for_profile_settled(direct_profile)
-        assert profiles.get_noobaa_profile() == direct_profile, (
+        assert (
+            noobaa_ocp.get().get("spec", {}).get("performanceProfile") == direct_profile
+        ), (
             "NooBaa CR profile did not stay at the directly set value while "
             "ocs-operator was scaled down"
         )

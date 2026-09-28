@@ -587,6 +587,7 @@ DEFAULT_MCG_BUCKET_LOGS_PVC = "noobaa-bucket-logging-pvc"
 DEFAULT_MCG_BUCKET_NOTIFS_PVC = "noobaa-bucket-notifications-pvc"
 CUSTOM_MCG_LABEL = "custom=mcg-label"
 NOOBAA_RESOURCE_NAME = "noobaa"
+NOOBAA_KIND = "NooBaa"
 NOOBAA_DB_PVC_NAME = "noobaa-db-pg-cluster-1"
 NOOBAA_INITIALIZING_REASON = "NoobaaInitializing"
 NOOBAA_HEALTH_CHECK_DELAY = 30

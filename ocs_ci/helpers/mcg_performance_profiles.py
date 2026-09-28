@@ -19,15 +19,11 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
-
-NOOBAA_CR_NAME = "noobaa"
-NOOBAA_KIND = "NooBaa"
-HPA_KIND = "HorizontalPodAutoscaler"
-DEFAULT_BACKINGSTORE_NAME = "noobaa-default-backing-store"
 
 # StorageCluster keys under spec.resources that override a profile for a single
 # component. Note that these live in the top level spec.resources map and NOT
@@ -45,112 +41,74 @@ SC_RESOURCE_KEY_ENDPOINT = "noobaa-endpoint"
 SC_PROFILES = ("default", "mixed-workload", "small-objects")
 NOOBAA_ONLY_PROFILES = ("dev-env", "mini-env")
 
-# Kubernetes memory suffixes. Binary suffixes come first so that "Ki" is
-# matched before "K" when scanning for the suffix of a quantity.
+# Binary memory suffixes, the only ones the profile specs and the NooBaa CRs use
 MEMORY_UNITS = {
-    "Ki": 2**10,
-    "Mi": 2**20,
-    "Gi": 2**30,
-    "Ti": 2**40,
-    "Pi": 2**50,
-    "Ei": 2**60,
-    "k": 10**3,
-    "K": 10**3,
-    "M": 10**6,
-    "G": 10**9,
-    "T": 10**12,
-    "P": 10**15,
-    "E": 10**18,
+    "Ki": constants.BYTES_IN_KB,
+    "Mi": constants.BYTES_IN_MB,
+    "Gi": constants.BYTES_IN_GB,
+    "Ti": constants.BYTES_IN_TB,
 }
+
+QOS_BURSTABLE = "Burstable"
+QOS_GUARANTEED = "Guaranteed"
+
+
+def _resources(req_cpu, lim_cpu, req_mem, lim_mem, qos):
+    """
+    Build one component entry of a profile specification.
+
+    Args:
+        req_cpu (str): Expected CPU request
+        lim_cpu (str): Expected CPU limit
+        req_mem (str): Expected memory request
+        lim_mem (str): Expected memory limit
+        qos (str): Expected pod QoS class
+
+    Returns:
+        dict: Component specification
+    """
+    return {
+        "req_cpu": req_cpu,
+        "lim_cpu": lim_cpu,
+        "req_mem": req_mem,
+        "lim_mem": lim_mem,
+        "qos": qos,
+    }
+
 
 # Profile specifications as per RHSTOR-9144 and NooBaa operator source code
 # (https://github.com/noobaa/noobaa-operator/blob/master/pkg/system/performance_profiles.go)
 PROFILE_SPECS = {
     "default": {
-        "core": {
-            "req_cpu": "500m",
-            "lim_cpu": "1",
-            "req_mem": "1Gi",
-            "lim_mem": "4Gi",
-            "qos": "Burstable",
-        },
-        "db": {
-            "req_cpu": "1",
-            "lim_cpu": "1",
-            "req_mem": "2Gi",
-            "lim_mem": "2Gi",
-            "qos": "Guaranteed",
-        },
-        "endpoint": {
-            "req_cpu": "500m",
-            "lim_cpu": "2",
-            "req_mem": "1Gi",
-            "lim_mem": "3Gi",
-            "qos": "Burstable",
-        },
+        "core": _resources("500m", "1", "1Gi", "4Gi", QOS_BURSTABLE),
+        "db": _resources("1", "1", "2Gi", "2Gi", QOS_GUARANTEED),
+        "endpoint": _resources("500m", "2", "1Gi", "3Gi", QOS_BURSTABLE),
         "endpoint_count": {"min": 1, "max": 2},
         "db_instances": 2,
         "pv_pool": {"cpu": "400m", "mem": "800Mi"},
     },
     "mixed-workload": {
-        "core": {
-            "req_cpu": "1",
-            "lim_cpu": "2",
-            "req_mem": "2Gi",
-            "lim_mem": "4Gi",
-            "qos": "Burstable",
-        },
-        "db": {
-            "req_cpu": "4",
-            "lim_cpu": "4",
-            "req_mem": "8Gi",
-            "lim_mem": "8Gi",
-            "qos": "Guaranteed",
-        },
-        "endpoint": {
-            "req_cpu": "2",
-            "lim_cpu": "4",
-            "req_mem": "2Gi",
-            "lim_mem": "4Gi",
-            "qos": "Burstable",
-        },
+        "core": _resources("1", "2", "2Gi", "4Gi", QOS_BURSTABLE),
+        "db": _resources("4", "4", "8Gi", "8Gi", QOS_GUARANTEED),
+        "endpoint": _resources("2", "4", "2Gi", "4Gi", QOS_BURSTABLE),
         "endpoint_count": {"min": 2, "max": 4},
         "db_instances": 2,
         "pv_pool": {"cpu": "1", "mem": "2Gi"},
     },
     "small-objects": {
-        "core": {
-            "req_cpu": "1",
-            "lim_cpu": "2",
-            "req_mem": "2Gi",
-            "lim_mem": "6Gi",
-            "qos": "Burstable",
-        },
-        "db": {
-            "req_cpu": "6",
-            "lim_cpu": "6",
-            "req_mem": "16Gi",
-            "lim_mem": "16Gi",
-            "qos": "Guaranteed",
-        },
-        "endpoint": {
-            "req_cpu": "1",  # Note: Lower than mixed-workload due to single-process saturation
-            "lim_cpu": "4",
-            "req_mem": "2Gi",
-            "lim_mem": "4Gi",
-            "qos": "Burstable",
-        },
+        "core": _resources("1", "2", "2Gi", "6Gi", QOS_BURSTABLE),
+        "db": _resources("6", "6", "16Gi", "16Gi", QOS_GUARANTEED),
+        # Endpoint CPU request is lower than mixed-workload on purpose: a single
+        # endpoint process saturates before it can use more.
+        "endpoint": _resources("1", "4", "2Gi", "4Gi", QOS_BURSTABLE),
         "endpoint_count": {"min": 2, "max": 4},
         "db_instances": 2,
         "pv_pool": {"cpu": "1", "mem": "2Gi"},
     },
 }
 
-# Number of PVs the default pv-pool backingstore is created with, per profile.
-# Kept apart from PROFILE_SPECS because it also covers the two NooBaa-only
-# profiles, and because it is only applied when the backingstore is created -
-# getPVPoolNumVolumes returns the existing count for an existing backingstore
-# and never lowers it.
+# Volume count the default pv-pool backingstore is created with, per profile.
+# Stamped at creation only - getPVPoolNumVolumes never lowers an existing count.
 PV_POOL_NUM_VOLUMES = {
     "default": 3,
     "mixed-workload": 3,
@@ -159,72 +117,41 @@ PV_POOL_NUM_VOLUMES = {
     "mini-env": 1,
 }
 
-# Core resources for every profile, including the two the StorageCluster CRD
-# does not accept. Useful as a cheap probe that a profile change was picked up,
-# since the core StatefulSet is reconciled on every profile change.
+# Expected noobaa-core resources for all five profiles - the three in
+# PROFILE_SPECS plus dev-env and mini-env, which only the NooBaa CR accepts.
+# The core StatefulSet is rolled on every profile change, so comparing the
+# running core pod against this table tells us a profile change took effect.
+# Only core is listed because that is all the "did it apply?" check needs.
 CORE_SPECS = dict(
     {profile: PROFILE_SPECS[profile]["core"] for profile in SC_PROFILES},
     **{
-        "dev-env": {
-            "req_cpu": "500m",
-            "lim_cpu": "500m",
-            "req_mem": "1Gi",
-            "lim_mem": "1Gi",
-            "qos": "Guaranteed",
-        },
-        "mini-env": {
-            "req_cpu": "100m",
-            "lim_cpu": "100m",
-            "req_mem": "1Gi",
-            "lim_mem": "1Gi",
-            "qos": "Guaranteed",
-        },
+        "dev-env": _resources("500m", "500m", "1Gi", "1Gi", QOS_GUARANTEED),
+        "mini-env": _resources("100m", "100m", "1Gi", "1Gi", QOS_GUARANTEED),
     },
 )
 
 
-def normalize_cpu(value):
+def normalize_quantity(value):
     """
-    Normalize a CPU quantity so equivalent values compare equal
-    (e.g. "500m" == 0.5, "1" == "1000m").
-
-    Kubernetes CPU quantities only ever carry the "m" (milli) suffix, so no
-    other unit is accepted here; memory quantities go through normalize_memory.
+    Normalize a Kubernetes resource quantity so equivalent notations compare
+    equal: CPU to cores ("500m" == 0.5, "1" == "1000m") and memory to bytes
+    ("1Gi" == "1024Mi"). The "m" (milli) suffix is CPU-only and the binary
+    suffixes are memory-only, so one function covers both.
 
     Args:
-        value: CPU quantity as a string (e.g. "500m", "1") or number
+        value: Quantity as a string (e.g. "500m", "1", "800Mi") or a number
 
     Returns:
-        float or None: Normalized CPU value in cores, or None if value is None
-    """
-    if value is None:
-        return None
-    if isinstance(value, str):
-        value = value.strip()
-        if value.endswith("m"):
-            return float(value[:-1]) / 1000
-        return float(value)
-    return float(value)
-
-
-def normalize_memory(value):
-    """
-    Normalize a memory quantity to bytes so equivalent values compare equal
-    (e.g. "1Gi" == "1024Mi").
-
-    Args:
-        value: Memory quantity as a string (e.g. "1Gi", "800Mi") or a number
-            of bytes
-
-    Returns:
-        float or None: Normalized memory value in bytes, or None if value is
-            None
+        float or None: Cores for a CPU quantity, bytes for a memory quantity,
+            or None if value is None
     """
     if value is None:
         return None
     if not isinstance(value, str):
         return float(value)
     value = value.strip()
+    if value.endswith("m"):
+        return float(value[:-1]) / 1000
     for suffix, multiplier in MEMORY_UNITS.items():
         if value.endswith(suffix):
             return float(value[: -len(suffix)]) * multiplier
@@ -265,22 +192,22 @@ def verify_resources(
 
     errors = []
 
-    if normalize_cpu(req_cpu) != normalize_cpu(expected_req_cpu):
+    if normalize_quantity(req_cpu) != normalize_quantity(expected_req_cpu):
         errors.append(
             f"{component_name} CPU request: expected {expected_req_cpu}, got {req_cpu}"
         )
 
-    if normalize_cpu(lim_cpu) != normalize_cpu(expected_lim_cpu):
+    if normalize_quantity(lim_cpu) != normalize_quantity(expected_lim_cpu):
         errors.append(
             f"{component_name} CPU limit: expected {expected_lim_cpu}, got {lim_cpu}"
         )
 
-    if normalize_memory(req_mem) != normalize_memory(expected_req_mem):
+    if normalize_quantity(req_mem) != normalize_quantity(expected_req_mem):
         errors.append(
             f"{component_name} Memory request: expected {expected_req_mem}, got {req_mem}"
         )
 
-    if normalize_memory(lim_mem) != normalize_memory(expected_lim_mem):
+    if normalize_quantity(lim_mem) != normalize_quantity(expected_lim_mem):
         errors.append(
             f"{component_name} Memory limit: expected {expected_lim_mem}, got {lim_mem}"
         )
@@ -314,22 +241,22 @@ def resources_match(actual, req_cpu, lim_cpu, req_mem, lim_mem):
     requests = actual.get("requests", {})
     limits = actual.get("limits", {})
     return (
-        normalize_cpu(requests.get("cpu")) == normalize_cpu(req_cpu)
-        and normalize_cpu(limits.get("cpu")) == normalize_cpu(lim_cpu)
-        and normalize_memory(requests.get("memory")) == normalize_memory(req_mem)
-        and normalize_memory(limits.get("memory")) == normalize_memory(lim_mem)
+        normalize_quantity(requests.get("cpu")) == normalize_quantity(req_cpu)
+        and normalize_quantity(limits.get("cpu")) == normalize_quantity(lim_cpu)
+        and normalize_quantity(requests.get("memory")) == normalize_quantity(req_mem)
+        and normalize_quantity(limits.get("memory")) == normalize_quantity(lim_mem)
     )
 
 
 def get_storagecluster_ocp():
     """
     Returns:
-        ocs_ci.ocs.ocp.OCP: Handle for the default StorageCluster CR
+        ocs_ci.ocs.resources.storage_cluster.StorageCluster: Handle for the
+            default StorageCluster CR
     """
-    return OCP(
-        kind=constants.STORAGECLUSTER,
-        namespace=config.ENV_DATA["cluster_namespace"],
+    return StorageCluster(
         resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
 
 
@@ -339,49 +266,10 @@ def get_noobaa_ocp():
         ocs_ci.ocs.ocp.OCP: Handle for the NooBaa CR
     """
     return OCP(
-        kind=NOOBAA_KIND,
+        kind=constants.NOOBAA_KIND,
         namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=NOOBAA_CR_NAME,
+        resource_name=constants.NOOBAA_RESOURCE_NAME,
     )
-
-
-def patch_storagecluster(patch, format_type="merge"):
-    """
-    Patch the StorageCluster CR.
-
-    Args:
-        patch (dict): Patch body, serialized to JSON before being applied
-        format_type (str): Patch type passed to ``oc patch --type``
-
-    Returns:
-        bool: True if the resource reported as patched
-    """
-    return get_storagecluster_ocp().patch(
-        params=json.dumps(patch), format_type=format_type
-    )
-
-
-def get_storagecluster_profile():
-    """
-    Returns:
-        str or None: spec.multiCloudGateway.performanceProfile, or None when
-            the field is not set
-    """
-    return (
-        get_storagecluster_ocp()
-        .get()
-        .get("spec", {})
-        .get("multiCloudGateway", {})
-        .get("performanceProfile")
-    )
-
-
-def get_noobaa_profile():
-    """
-    Returns:
-        str or None: spec.performanceProfile on the NooBaa CR
-    """
-    return get_noobaa_ocp().get().get("spec", {}).get("performanceProfile")
 
 
 def set_storagecluster_profile(profile):
@@ -393,8 +281,11 @@ def set_storagecluster_profile(profile):
             JSON merge patch deletes a key whose value is null.
     """
     logger.info(f"Setting MCG performance profile to '{profile}'")
-    patched = patch_storagecluster(
-        {"spec": {"multiCloudGateway": {"performanceProfile": profile}}}
+    patched = get_storagecluster_ocp().patch(
+        params=json.dumps(
+            {"spec": {"multiCloudGateway": {"performanceProfile": profile}}}
+        ),
+        format_type="merge",
     )
     # patch() returns False when nothing changed, which is a valid no-op when
     # the field already holds the requested value.
@@ -670,7 +561,7 @@ def verify_endpoint_hpa(expected_min, expected_max):
         expected_min (int): Expected minReplicas
         expected_max (int): Expected maxReplicas
     """
-    hpa_ocp = OCP(kind=HPA_KIND, namespace=config.ENV_DATA["cluster_namespace"])
+    hpa_ocp = OCP(kind=constants.HPA, namespace=config.ENV_DATA["cluster_namespace"])
     hpas = hpa_ocp.get(selector=constants.NOOBAA_ENDPOINT_POD_LABEL).get("items", [])
     if not hpas:
         logger.info("No HPA found (static replica count)")
@@ -803,7 +694,7 @@ def verify_pv_pool(spec, profile):
         profile (str): Profile name being verified
     """
     logger.info("Checking for PV pool backingstore")
-    default_bs = get_backingstore(DEFAULT_BACKINGSTORE_NAME)
+    default_bs = get_backingstore(constants.DEFAULT_NOOBAA_BACKINGSTORE)
     if default_bs is None:
         logger.info("Default backingstore not found, skipping PV pool verification")
         return

@@ -40,10 +40,6 @@ from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 logger = logging.getLogger(__name__)
 
 
-NOOBAA_CR_NAME = "noobaa"
-NOOBAA_KIND = "NooBaa"
-DEFAULT_BACKINGSTORE_NAME = "noobaa-default-backing-store"
-CORE_STATEFULSET_NAME = "noobaa-core"
 CORE_CONTAINER_NAME = "core"
 
 # Where the CLI extracted from the running operator pod is cached.
@@ -233,12 +229,14 @@ class StandaloneNooBaa:
         self.storage_class = storage_class or get_non_ceph_storage_class()
         self.images = get_noobaa_images()
         self.noobaa_ocp = OCP(
-            kind=NOOBAA_KIND, namespace=namespace, resource_name=NOOBAA_CR_NAME
+            kind=constants.NOOBAA_KIND,
+            namespace=namespace,
+            resource_name=constants.NOOBAA_RESOURCE_NAME,
         )
         self.backingstore_ocp = OCP(
             kind=constants.BACKINGSTORE,
             namespace=namespace,
-            resource_name=DEFAULT_BACKINGSTORE_NAME,
+            resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
         )
 
     def _render_operator_manifest(self, path):
@@ -282,8 +280,11 @@ class StandaloneNooBaa:
         """
         return {
             "apiVersion": "noobaa.io/v1alpha1",
-            "kind": NOOBAA_KIND,
-            "metadata": {"name": NOOBAA_CR_NAME, "namespace": self.namespace},
+            "kind": constants.NOOBAA_KIND,
+            "metadata": {
+                "name": constants.NOOBAA_RESOURCE_NAME,
+                "namespace": self.namespace,
+            },
             "spec": {
                 "performanceProfile": self.profile,
                 "image": self.images["core"],
@@ -395,7 +396,7 @@ class StandaloneNooBaa:
         return sorted(
             pvc["metadata"]["name"]
             for pvc in pvcs
-            if pvc["metadata"]["name"].startswith(DEFAULT_BACKINGSTORE_NAME)
+            if pvc["metadata"]["name"].startswith(constants.DEFAULT_NOOBAA_BACKINGSTORE)
         )
 
     def get_agent_pod_names(self):
@@ -444,7 +445,7 @@ class StandaloneNooBaa:
             statefulset = OCP(
                 kind=constants.STATEFULSET,
                 namespace=self.namespace,
-                resource_name=CORE_STATEFULSET_NAME,
+                resource_name=constants.NOOBAA_CORE_STATEFULSET,
             ).get(retry=0)
         except CommandFailed as ex:
             if "not found" in str(ex).lower():
@@ -488,8 +489,8 @@ class StandaloneNooBaa:
         """
         logger.info(f"Deleting the standalone NooBaa in {self.namespace}")
         exec_cmd(
-            f"oc delete {NOOBAA_KIND} {NOOBAA_CR_NAME} -n {self.namespace} "
-            "--ignore-not-found --wait=false",
+            f"oc delete {constants.NOOBAA_KIND} {constants.NOOBAA_RESOURCE_NAME} "
+            f"-n {self.namespace} --ignore-not-found --wait=false",
             ignore_error=True,
             timeout=300,
         )
@@ -530,7 +531,7 @@ class StandaloneNooBaa:
         Strip finalizers from the namespaced NooBaa resources that can block
         namespace termination once the core pod is gone.
         """
-        for kind in (constants.BACKINGSTORE, "bucketclass", NOOBAA_KIND):
+        for kind in (constants.BACKINGSTORE, "bucketclass", constants.NOOBAA_KIND):
             exec_cmd(
                 f"oc patch {kind} --all -n {self.namespace} --type merge "
                 '-p \'{"metadata": {"finalizers": null}}\'',

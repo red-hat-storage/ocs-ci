@@ -1,3 +1,4 @@
+import json
 import logging
 import pytest
 
@@ -87,13 +88,16 @@ def _clear_overrides():
     Remove the NooBaa resource overrides and the MCG endpoints section from the
     StorageCluster CR, handing every component back to the active profile.
     """
-    profiles.patch_storagecluster(
-        {
-            "spec": {
-                "resources": {key: None for key in OVERRIDE_KEYS},
-                "multiCloudGateway": {"endpoints": None},
+    profiles.get_storagecluster_ocp().patch(
+        params=json.dumps(
+            {
+                "spec": {
+                    "resources": {key: None for key in OVERRIDE_KEYS},
+                    "multiCloudGateway": {"endpoints": None},
+                }
             }
-        }
+        ),
+        format_type="merge",
     )
 
 
@@ -134,10 +138,16 @@ class TestMCGPerformanceProfileOverrides:
                 key: original_resources.get(key) or None for key in OVERRIDE_KEYS
             }
             logger.info(f"Restoring StorageCluster resource overrides: {restored}")
-            profiles.patch_storagecluster({"spec": {"resources": restored}})
+            profiles.get_storagecluster_ocp().patch(
+                params=json.dumps({"spec": {"resources": restored}}),
+                format_type="merge",
+            )
             logger.info(f"Restoring MCG endpoints section: {original_endpoints}")
-            profiles.patch_storagecluster(
-                {"spec": {"multiCloudGateway": {"endpoints": original_endpoints}}}
+            profiles.get_storagecluster_ocp().patch(
+                params=json.dumps(
+                    {"spec": {"multiCloudGateway": {"endpoints": original_endpoints}}}
+                ),
+                format_type="merge",
             )
 
         request.addfinalizer(finalizer)
@@ -162,7 +172,13 @@ class TestMCGPerformanceProfileOverrides:
         Returns:
             str: The profile that was set
         """
-        original_profile = profiles.get_storagecluster_profile()
+        original_profile = (
+            profiles.get_storagecluster_ocp()
+            .get()
+            .get("spec", {})
+            .get("multiCloudGateway", {})
+            .get("performanceProfile")
+        )
 
         def finalizer():
             logger.info(f"Restoring MCG performance profile to '{original_profile}'")
@@ -219,16 +235,19 @@ class TestMCGPerformanceProfileOverrides:
         profiles.verify_all_components(profile_spec, base_profile, check_pv_pool=False)
 
         logger.info("Overriding noobaa-core resources")
-        profiles.patch_storagecluster(
-            {
-                "spec": {
-                    "resources": {
-                        profiles.SC_RESOURCE_KEY_CORE: _as_k8s_resources(
-                            OVERRIDE_SPEC["core"]
-                        )
+        profiles.get_storagecluster_ocp().patch(
+            params=json.dumps(
+                {
+                    "spec": {
+                        "resources": {
+                            profiles.SC_RESOURCE_KEY_CORE: _as_k8s_resources(
+                                OVERRIDE_SPEC["core"]
+                            )
+                        }
                     }
                 }
-            }
+            ),
+            format_type="merge",
         )
         profiles.wait_for_pods_with_resources(
             constants.NOOBAA_CORE_POD_LABEL, OVERRIDE_SPEC["core"]
@@ -239,37 +258,43 @@ class TestMCGPerformanceProfileOverrides:
         profiles.verify_endpoints(profile_spec, base_profile)
 
         logger.info("Overriding noobaa-db resources")
-        profiles.patch_storagecluster(
-            {
-                "spec": {
-                    "resources": {
-                        profiles.SC_RESOURCE_KEY_DB: _as_k8s_resources(
-                            OVERRIDE_SPEC["db"]
-                        )
+        profiles.get_storagecluster_ocp().patch(
+            params=json.dumps(
+                {
+                    "spec": {
+                        "resources": {
+                            profiles.SC_RESOURCE_KEY_DB: _as_k8s_resources(
+                                OVERRIDE_SPEC["db"]
+                            )
+                        }
                     }
                 }
-            }
+            ),
+            format_type="merge",
         )
         profiles.verify_db(OVERRIDE_SPEC, "noobaa-db override")
         profiles.verify_core(OVERRIDE_SPEC, "noobaa-core override")
 
         logger.info("Overriding noobaa-endpoint resources and the endpoint count")
-        profiles.patch_storagecluster(
-            {
-                "spec": {
-                    "resources": {
-                        profiles.SC_RESOURCE_KEY_ENDPOINT: _as_k8s_resources(
-                            OVERRIDE_SPEC["endpoint"]
-                        )
-                    },
-                    "multiCloudGateway": {
-                        "endpoints": {
-                            "minCount": OVERRIDE_SPEC["endpoint_count"]["min"],
-                            "maxCount": OVERRIDE_SPEC["endpoint_count"]["max"],
-                        }
-                    },
+        profiles.get_storagecluster_ocp().patch(
+            params=json.dumps(
+                {
+                    "spec": {
+                        "resources": {
+                            profiles.SC_RESOURCE_KEY_ENDPOINT: _as_k8s_resources(
+                                OVERRIDE_SPEC["endpoint"]
+                            )
+                        },
+                        "multiCloudGateway": {
+                            "endpoints": {
+                                "minCount": OVERRIDE_SPEC["endpoint_count"]["min"],
+                                "maxCount": OVERRIDE_SPEC["endpoint_count"]["max"],
+                            }
+                        },
+                    }
                 }
-            }
+            ),
+            format_type="merge",
         )
         profiles.verify_endpoints(OVERRIDE_SPEC, "noobaa-endpoint override")
         profiles.verify_core(OVERRIDE_SPEC, "noobaa-core override")
