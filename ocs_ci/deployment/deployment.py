@@ -924,15 +924,6 @@ class Deployment(object):
                     logger.error(f"Failed to collect OCS logs: {e}")
             raise
 
-    def get_rdr_conf(self):
-        """
-        Get RDR configuration for DR deployment.
-
-        Returns:
-            None: RDR deployment class handles configuration internally
-        """
-        return None
-
     def do_deploy_agnostic_dr(self):
         """
         Deploy agnostic DR infrastructure on managed clusters.
@@ -999,8 +990,7 @@ class Deployment(object):
                 create_catalog_source()
             config.switch_ctx(restore_index)
 
-        dr_conf = self.get_rdr_conf()
-        rdr_deploy = RDRMultiClusterDROperatorsDeploy(dr_conf)
+        rdr_deploy = RDRMultiClusterDROperatorsDeploy()
 
         acm_indexes = get_all_acm_indexes()
         for i in acm_indexes:
