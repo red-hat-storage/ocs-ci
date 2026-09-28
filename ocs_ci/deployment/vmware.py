@@ -1291,7 +1291,9 @@ class VSPHEREUPI(VSPHEREBASE):
                 logger.info("waiting for bootstrap to complete")
                 try:
                     bootstrap_timeout = (
-                        7200 if config.DEPLOYMENT.get("dual_stack") else 3600
+                        7200
+                        if config.DEPLOYMENT.get("dual_stack")
+                        else config.DEPLOYMENT.get("bootstrap_complete_timeout", 5400)
                     )
                     run_cmd(
                         f"{self.installer} wait-for bootstrap-complete "
