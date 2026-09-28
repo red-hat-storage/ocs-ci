@@ -924,6 +924,15 @@ class Deployment(object):
                     logger.error(f"Failed to collect OCS logs: {e}")
             raise
 
+    def get_rdr_conf(self):
+        """
+        Get RDR configuration for DR deployment.
+
+        Returns:
+            None: RDR deployment class handles configuration internally
+        """
+        return None
+
     def do_deploy_agnostic_dr(self):
         """
         Deploy agnostic DR infrastructure on managed clusters.
