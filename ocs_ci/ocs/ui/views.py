@@ -3298,7 +3298,7 @@ virtualmachine = {
         By.XPATH,
     ),
     "snapshot_kebab_restore_option": (
-        "//button[@role='menuitem'][normalize-space(.)='Restore VirtualMachine from snapshot']",
+        "//button[@role='menuitem'][.//span[text()='Restore VirtualMachine from snapshot']]",
         By.XPATH,
     ),
     "restore_snapshot_confirm_button": (
