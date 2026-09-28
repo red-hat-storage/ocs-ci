@@ -844,42 +844,46 @@ class IBMCloudVPCBM(IBMCloudBM):
             f"Timeout waiting for server to reach {expected_status} (stuck in: {final_status})"
         )
 
-    def generate_rhcos_ipxe_script(self, kernel_url, initrd_url, ai_kernel_args):
+    def generate_rhcos_ipxe_script(
+        self,
+        ai_ipxe_content=None,
+        kernel_url=None,
+        initrd_url=None,
+        ai_kernel_args=None,
+    ):
         """
         Generate inline iPXE script for Assisted Installer discovery boot
 
-        Uses Jinja2 template from ocs_ci/templates/ipxe/rhcos-boot.ipxe.j2
+        Prepends DHCP retry loop to the Assisted Installer iPXE script.
         The script uses DHCP for network configuration (both iPXE and initramfs phases).
         This inline script is passed directly to the IBM Cloud API as user_data.
 
-        For Assisted Installer: boots discovery image from AI service URLs,
-        server registers with AI service. NO helper node needed.
-
         Args:
-            kernel_url (str): Full URL to kernel from AI iPXE script
-            initrd_url (str): Full URL to initrd from AI iPXE script
-            ai_kernel_args (str): Kernel arguments from AI-generated iPXE script
+            ai_ipxe_content (str): Full iPXE script content downloaded from AI service
+            kernel_url (str, optional): Full URL to kernel (legacy fallback)
+            initrd_url (str, optional): Full URL to initrd (legacy fallback)
+            ai_kernel_args (str, optional): Kernel arguments (legacy fallback)
 
         Returns:
-            str: iPXE script content (suitable for inline use as user_data)
+            str: iPXE script content with DHCP retry header (suitable for user_data)
         """
-        from ocs_ci.utility import templating
+        # Legacy fallback if URLs/args passed individually
+        if kernel_url is not None or initrd_url is not None:
+            from ocs_ci.utility import templating
 
-        # Use AI's kernel args as-is (includes all ignition params)
-        # Prepare template data with full URLs
-        template_data = {
-            "kernel_url": kernel_url,
-            "initrd_url": initrd_url,
-            "kernel_args": ai_kernel_args,
-        }
+            template_data = {
+                "kernel_url": ai_ipxe_content,
+                "initrd_url": kernel_url,
+                "kernel_args": initrd_url,
+            }
+            _templating = templating.Templating()
+            return _templating.render_template("ipxe/rhcos-boot.ipxe.j2", template_data)
 
-        # Render template
-        _templating = templating.Templating()
-        ipxe_script = _templating.render_template(
-            "ipxe/rhcos-boot.ipxe.j2", template_data
-        )
+        content = (ai_ipxe_content or "").strip()
+        if content.startswith("#!ipxe"):
+            content = content[len("#!ipxe") :].strip()
 
-        return ipxe_script
+        return f"#!ipxe\n\n:retry_dhcp\ndhcp || goto retry_dhcp\n\n{content}\n"
 
     def reinitialize_with_ipxe(
         self, server_id, script_content, ssh_key_ids=None, wait_for_stop=True
@@ -1238,7 +1242,7 @@ class IBMCloudVPCBM(IBMCloudBM):
         )
         return lb_ip, lb_id
 
-    def create_alb_for_api(self, cluster_name, subnet_id, server_ips):
+    def create_alb_for_api(self, cluster_name, subnet_id, server_ips=None):
         """
         Create Application Load Balancer for OpenShift API/MCS
 
@@ -1277,7 +1281,7 @@ class IBMCloudVPCBM(IBMCloudBM):
         )
 
     def create_alb_for_ingress(
-        self, cluster_name, subnet_id, server_ips, is_public=True
+        self, cluster_name, subnet_id, server_ips=None, is_public=True
     ):
         """
         Create Application Load Balancer for OpenShift Ingress

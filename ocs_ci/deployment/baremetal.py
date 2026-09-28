@@ -912,18 +912,31 @@ class BAREMETALAI(BAREMETALBASE):
                     region=config.ENV_DATA.get("region")
                 )
 
-                # Extract server IPs from config
-                server_ips = [
+                # Extract server IPs from config by role
+                master_ips = [
                     srv["private_ip"]
                     for srv in config.ENV_DATA["baremetal"]["servers"].values()
+                    if srv.get("role") == constants.MASTER_MACHINE
                 ]
+                worker_ips = [
+                    srv["private_ip"]
+                    for srv in config.ENV_DATA["baremetal"]["servers"].values()
+                    if srv.get("role") == constants.WORKER_MACHINE
+                ]
+                if not master_ips:
+                    # Fallback to all servers if roles are not yet differentiated
+                    master_ips = [
+                        srv["private_ip"]
+                        for srv in config.ENV_DATA["baremetal"]["servers"].values()
+                    ]
+                ingress_ips = worker_ips if worker_ips else master_ips
                 subnet_id = config.ENV_DATA["baremetal"]["subnet_id"]
 
                 # Create Internal API ALB (ports 6443, 22623)
                 api_int_lb_ip, api_int_lb_id = vpc_bm_manager.create_alb_for_api(
                     cluster_name=self.cluster_name,
                     subnet_id=subnet_id,
-                    server_ips=server_ips,
+                    server_ips=master_ips,
                 )
 
                 # Create Public API ALB for external client access (port 6443 only)
@@ -931,7 +944,7 @@ class BAREMETALAI(BAREMETALBASE):
                     vpc_bm_manager.create_alb_for_public_api(
                         cluster_name=self.cluster_name,
                         subnet_id=subnet_id,
-                        server_ips=server_ips,
+                        server_ips=master_ips,
                     )
                 )
 
@@ -939,7 +952,7 @@ class BAREMETALAI(BAREMETALBASE):
                 ingress_lb_ip, ingress_lb_id = vpc_bm_manager.create_alb_for_ingress(
                     cluster_name=self.cluster_name,
                     subnet_id=subnet_id,
-                    server_ips=server_ips,
+                    server_ips=ingress_ips,
                 )
 
                 # Override VIPs with ALB IPs:
@@ -1139,7 +1152,7 @@ class BAREMETALAI(BAREMETALBASE):
             rootfs_match = re.search(r"coreos\.live\.rootfs_url=(\S+)", ai_kernel_args)
             rootfs_url = rootfs_match.group(1) if rootfs_match else None
 
-            # IBM Cloud VPC Bare Metal: Use direct iPXE boot with AI URLs
+            # IBM Cloud VPC Bare Metal: Use direct iPXE boot with AI script
             if is_vpc_infra():
                 logger.info(
                     "IBM Cloud VPC BM detected - using direct iPXE boot from AI service"
@@ -1150,12 +1163,8 @@ class BAREMETALAI(BAREMETALBASE):
                     region=config.ENV_DATA.get("region", "us-south")
                 )
 
-                # Generate inline iPXE script using AI service URLs and kernel args
-                ipxe_script = vpc_bm_manager.generate_rhcos_ipxe_script(
-                    kernel_url=kernel_url,
-                    initrd_url=initrd_url,
-                    ai_kernel_args=ai_kernel_args,
-                )
+                # Generate inline iPXE script by prepending DHCP retry loop to AI script
+                ipxe_script = vpc_bm_manager.generate_rhcos_ipxe_script(content)
                 logger.info(
                     f"Generated iPXE script for VPC BM ({len(ipxe_script)} bytes)"
                 )
@@ -1205,25 +1214,41 @@ class BAREMETALAI(BAREMETALBASE):
                 # Add servers as members to ALB pools now that they are running
                 if hasattr(self, "api_lb_id") and hasattr(self, "ingress_lb_id"):
                     logger.info("Adding servers to ALB pools")
-                    server_ips = [
+                    master_ips = [
                         self.srv_details[machine]["private_ip"]
-                        for machine in master_nodes + worker_nodes
+                        for machine in master_nodes
                     ]
+                    worker_ips = [
+                        self.srv_details[machine]["private_ip"]
+                        for machine in worker_nodes
+                    ]
+
+                    # API ALBs (Internal & Public) always point to master nodes (6443: API, 22623: MCS)
+                    api_ips = master_ips
+
+                    # Ingress ALB points to worker nodes; fallback to master nodes in compact mode
+                    ingress_ips = worker_ips if worker_ips else master_ips
+
+                    logger.info(f"API ALB backend targets (master nodes): {api_ips}")
+                    logger.info(
+                        "Ingress ALB backend targets"
+                        f"({'worker nodes' if worker_ips else 'master nodes (compact mode)'}): {ingress_ips}"
+                    )
 
                     # Add members to Internal API ALB (ports 6443 and 22623)
                     vpc_bm_manager.add_alb_pool_members(
-                        self.api_lb_id, server_ips, [6443, 22623]
+                        self.api_lb_id, api_ips, [6443, 22623]
                     )
 
                     # Add members to Public API ALB (port 6443)
                     if hasattr(self, "public_api_lb_id") and self.public_api_lb_id:
                         vpc_bm_manager.add_alb_pool_members(
-                            self.public_api_lb_id, server_ips, [6443]
+                            self.public_api_lb_id, api_ips, [6443]
                         )
 
                     # Add members to Ingress ALB (ports 80 and 443)
                     vpc_bm_manager.add_alb_pool_members(
-                        self.ingress_lb_id, server_ips, [80, 443]
+                        self.ingress_lb_id, ingress_ips, [80, 443]
                     )
 
                     logger.info("Successfully added all servers to ALB pools")
