@@ -63,14 +63,11 @@ spec:
             readOnly: false
       containers:
         - name: minio
-          image: quay.io/minio/aistor/minio:latest
+          image: quay.io/ocsci/minio_ocs:latest
           imagePullPolicy: IfNotPresent
           resources:
             limits:
               memory: "300Mi"
-          args:
-            - server
-            - /storage
           env:
             - name: MINIO_ACCESS_KEY
               value: "minio"
