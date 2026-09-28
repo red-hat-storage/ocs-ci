@@ -111,7 +111,7 @@ def deploy_minio():
             cluster_config=cluster,
         )
         run_cmd(
-            f"oc run mc-client --image=quay.io/minio/mc --restart=Never"
+            f"oc run mc-client --image=quay.io/minio/aistor/mc:latest --restart=Never"
             f" -n {constants.MINIO_NAMESPACE} --command"
             f" -- /bin/sh -c"
             f" 'mc alias set myminio {constants.MINIO_INTERNAL_ENDPOINT}"
