@@ -1198,6 +1198,13 @@ class HostedClients(HyperShiftBase):
                 self.verify_hosted_ocp_clusters_from_provider()
             )
 
+        if not hosted_ocp_verification_passed:
+            logger.warning(
+                "OCP verification did not pass for all hosted clusters. "
+                "Continuing with storage deployment stages since API server "
+                "may still be available."
+            )
+
         # configure proxy object with trusted ca bundle for custom ingress ssl certificate
         if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
             ssl_ca_cert = get_root_ca_cert()
@@ -1227,7 +1234,9 @@ class HostedClients(HyperShiftBase):
         if any_cluster_needs_storage:
             storage_client = StorageClient()
             failed_network_policy = []
-            for cluster_name in cluster_names:
+            for cluster_name in [
+                n for n in cluster_names if config_has_hosted_odf_image(n)
+            ]:
                 try:
                     storage_client.create_network_policy(
                         namespace_to_create_storage_client=f"clusters-{cluster_name}"
@@ -1235,7 +1244,7 @@ class HostedClients(HyperShiftBase):
                 except (CommandFailed, AssertionError) as e:
                     logger.error(
                         f"Failed to create network policy for cluster '{cluster_name}': {e}. "
-                        "Dropping cluster from further deployment stages."
+                        "Dropping cluster from storage deployment stages."
                     )
                     failed_network_policy.append(cluster_name)
 
@@ -1247,6 +1256,11 @@ class HostedClients(HyperShiftBase):
                     f"Clusters dropped due to network policy failure: {failed_network_policy}. "
                     f"Remaining clusters: {cluster_names}"
                 )
+
+        if any_cluster_needs_storage:
+            any_cluster_needs_storage = any(
+                config_has_hosted_odf_image(n) for n in cluster_names
+            )
 
         # stage 3.5: Setup data replication separation network configuration
         # This must be done before ODF deployment to avoid node reboots after ODF is deployed
@@ -1361,7 +1375,9 @@ class HostedClients(HyperShiftBase):
         client_setup_res = []
         hosted_odf_clusters_installed = []
         for cluster_name in cluster_names:
-            if storage_installation_requested(cluster_name):
+            if storage_installation_requested(
+                cluster_name
+            ) and config_has_hosted_odf_image(cluster_name):
                 logger.info(
                     f"Setting up Storage client on hosted OCP cluster '{cluster_name}'"
                 )
@@ -1402,7 +1418,7 @@ class HostedClients(HyperShiftBase):
         hosted_odf_storage_verified = []
 
         for name in cluster_names:
-            hosted_odf = HostedODF(name)
+            hosted_odf = HostedFDF(name) if fdf_on_provider else HostedODF(name)
             if storage_installation_requested(name):
                 hosted_odf_storage_verified.append(
                     hosted_odf.verify_storage_classes_on_client()
@@ -1430,42 +1446,46 @@ class HostedClients(HyperShiftBase):
                 )
                 storage_consumers_verified.append(False)
 
-        logger.test_step("verify backing Ceph storage for newly deployed clients")
-
-        rns_for_consumer_verified, svg_for_consumer_verified = check_ceph_resources(
-            cluster_names
-        )
-
+        rns_for_consumer_verified = []
+        svg_for_consumer_verified = []
         heartbeat_stable = []
-        for cluster_name in cluster_names:
-            if storage_installation_requested(cluster_name):
-                heartbeat_stable.append(verify_last_heartbeat_timestamp(cluster_name))
+        if any_cluster_needs_storage:
+            logger.test_step("verify backing Ceph storage for newly deployed clients")
+            rns_for_consumer_verified, svg_for_consumer_verified = check_ceph_resources(
+                cluster_names
+            )
+            for cluster_name in cluster_names:
+                if storage_installation_requested(cluster_name):
+                    heartbeat_stable.append(
+                        verify_last_heartbeat_timestamp(cluster_name)
+                    )
 
         assert (
             hosted_ocp_verification_passed
         ), "Some of the hosted OCP clusters are not ready"
-        assert all(
-            odf_installed
-        ), "ODF client was not deployed on all hosted OCP clusters"
-        assert all(
-            client_setup_res
-        ), "Storage client was not set up on all hosted ODF clusters"
-        assert all(
-            hosted_odf_storage_verified
-        ), "Storage is not available on all hosted ODF clusters"
-        assert all(
-            rns_for_consumer_verified
-        ), "RNS for consumers of deployed clusters failed verification"
-        assert all(
-            svg_for_consumer_verified
-        ), "SVG for consumers of deployed clusters failed verification"
-        assert all(
-            storage_consumers_verified
-        ), "Storage consumer resources verification failed for some of the clusters"
 
-        assert all(
-            heartbeat_stable
-        ), "Last heartbeat timestamp verification failed on some of the consumer clusters"
+        if any_cluster_needs_storage:
+            assert all(
+                odf_installed
+            ), "ODF client was not deployed on all hosted OCP clusters"
+            assert all(
+                client_setup_res
+            ), "Storage client was not set up on all hosted ODF clusters"
+            assert all(
+                hosted_odf_storage_verified
+            ), "Storage is not available on all hosted ODF clusters"
+            assert all(
+                rns_for_consumer_verified
+            ), "RNS for consumers of deployed clusters failed verification"
+            assert all(
+                svg_for_consumer_verified
+            ), "SVG for consumers of deployed clusters failed verification"
+            assert all(
+                storage_consumers_verified
+            ), "Storage consumer resources verification failed for some of the clusters"
+            assert all(
+                heartbeat_stable
+            ), "Last heartbeat timestamp verification failed on some of the consumer clusters"
 
         return hosted_odf_clusters_installed
 
@@ -2329,6 +2349,12 @@ class HypershiftHostedOCP(
             f"deploy_metallb={deploy_metallb}, download_hcp_binary={download_hcp_binary}, "
             f"deploy_mce={deploy_mce}, deploy_hyperconverged={deploy_hyperconverged}"
         )
+
+        # local import to avoid circular import issues
+        from ocs_ci.deployment.deployment import enable_wildcard_routes
+
+        enable_wildcard_routes()
+
         initial_default_sc = helpers.get_default_storage_class()
         logger.info(f"Initial default StorageClass: {initial_default_sc}")
         if not initial_default_sc == constants.CEPHBLOCKPOOL_SC:
