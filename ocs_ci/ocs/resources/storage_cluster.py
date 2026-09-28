@@ -2,7 +2,9 @@
 StorageCluster related functionalities
 """
 
+import base64
 import copy
+import hashlib
 import ipaddress
 import logging
 import re
@@ -2407,6 +2409,49 @@ def get_noobaa_external_pgsql_secret_name():
         .get("externalPgConfig", {})
         .get("pgSecretName")
     )
+
+
+def get_noobaa_external_pgsql_config():
+    """
+    Get the full external PostgreSQL config block configured on the StorageCluster.
+
+    Returns:
+        dict: spec.multiCloudGateway.externalPgConfig (empty dict if not set)
+
+    """
+    sc = get_storage_cluster()
+    sc_data = sc.get().get("items")[0]
+    return (
+        sc_data["spec"].get("multiCloudGateway", {}).get("externalPgConfig", {}) or {}
+    )
+
+
+def get_noobaa_external_pgsql_db_url_digest():
+    """
+    Return a SHA-256 digest of the decoded external PostgreSQL ``db_url``.
+
+    The digest lets callers detect whether the connection string / credential
+    changed (for example across an upgrade) without ever handling or logging the
+    secret value itself.
+
+    Returns:
+        str: Hex SHA-256 digest of the decoded db_url, or None if it is not
+            available
+
+    """
+    pg_secret_name = get_noobaa_external_pgsql_secret_name()
+    if not pg_secret_name:
+        return None
+    secret_obj = OCP(
+        kind=constants.SECRET,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=pg_secret_name,
+    )
+    db_url_b64 = secret_obj.get().get("data", {}).get("db_url")
+    if not db_url_b64:
+        return None
+    db_url = base64.b64decode(db_url_b64).decode("utf-8")
+    return hashlib.sha256(db_url.encode("utf-8")).hexdigest()
 
 
 def verify_noobaa_external_pgsql_config():

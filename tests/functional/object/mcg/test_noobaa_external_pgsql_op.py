@@ -1,5 +1,6 @@
 import base64
 import logging
+import time
 from urllib.parse import urlparse
 
 import yaml
@@ -15,7 +16,11 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_pods_having_label, get_pod_logs
+from ocs_ci.ocs.resources.pod import (
+    get_pods_having_label,
+    get_pod_logs,
+    wait_for_noobaa_pods_running,
+)
 from ocs_ci.ocs.resources.storage_cluster import get_noobaa_external_pgsql_secret_name
 
 logger = logging.getLogger(__name__)
@@ -48,6 +53,8 @@ def search_for_sensitive_values(text, sensitive_values):
 @tier2
 @skipif_managed_service
 @skipif_noobaa_external_pgsql_not_set
+# TODO: add @pytest.mark.polarion_id("OCS-XXXXX") on the test method below once
+# the Polarion case is created
 class TestNoobaaExternalPgsqlOp(MCGTest):
     """
     Verify that the external PostgreSQL credentials configured for NooBaa are not
@@ -102,22 +109,55 @@ class TestNoobaaExternalPgsqlOp(MCGTest):
 
         sensitive_values = {"password": password, "db_url": db_url}
 
-        # The Secret manifest itself must not carry the credential in plaintext -
-        # only the base64-encoded ``data`` field is allowed to hold it.
-        secret_manifest = yaml.safe_dump(secret_data)
-        assert not search_for_sensitive_values(
-            secret_manifest, sensitive_values
-        ), f"Secret '{pg_secret_name}' exposes the credential in plaintext"
+        # The credential must live ONLY base64-encoded in ``data``. Scan the parts
+        # of the manifest that can actually hold plaintext: ``stringData``
+        # (write-only, normally absent once applied) and the metadata annotations -
+        # notably ``kubectl.kubernetes.io/last-applied-configuration``, which
+        # records the applied manifest verbatim and would expose the credential if
+        # the Secret was ever applied with a plaintext ``stringData``. The base64
+        # ``data`` field is deliberately excluded: searching it for plaintext is
+        # structurally impossible and would make this assertion vacuous.
+        plaintext_surfaces = {
+            "stringData": secret_data.get("stringData", {}) or {},
+            "metadata.annotations": (
+                secret_data.get("metadata", {}).get("annotations", {}) or {}
+            ),
+        }
+        for surface_name, surface_content in plaintext_surfaces.items():
+            surface_text = yaml.safe_dump(surface_content)
+            assert not search_for_sensitive_values(surface_text, sensitive_values), (
+                f"Secret '{pg_secret_name}' exposes the credential in plaintext "
+                f"via {surface_name}"
+            )
         logger.info(
-            f"Secret '{pg_secret_name}' holds the credential base64-encoded "
-            "only; no plaintext exposure in the manifest"
+            f"Secret '{pg_secret_name}' holds the credential only in the base64 "
+            "'data' field; no plaintext in stringData or annotations"
         )
+
+        # Force a fresh reconcile so the log/event scan runs against current
+        # output instead of logs/events that may have already rotated or aged out
+        # (NooBaa runs long before a tier2 test does, and Events have a limited
+        # TTL). Restart the noobaa-operator pod, then scan only output produced
+        # since the restart.
+        logger.info("Restarting the noobaa-operator pod to trigger a fresh reconcile")
+        reconcile_start = time.time()
+        pod_ocp = OCP(kind=constants.POD, namespace=namespace)
+        for op_pod in get_pods_having_label(
+            constants.NOOBAA_OPERATOR_POD_LABEL, namespace=namespace
+        ):
+            pod_ocp.delete(resource_name=op_pod["metadata"]["name"], wait=True)
+        wait_for_noobaa_pods_running(timeout=600)
+        # oc logs --since takes a relative duration; add a buffer for restart time.
+        since = f"{int(time.time() - reconcile_start) + 30}s"
 
         # Collect (source_name -> text) for every place the credential could leak
         sources = {}
 
-        # Steps 3 & 5: operator, core and endpoint pod logs
-        logger.info("Collecting NooBaa operator, core and endpoint pod logs")
+        # Steps 3 & 5: operator, core and endpoint pod logs (only the fresh output)
+        logger.info(
+            "Collecting NooBaa operator, core and endpoint pod logs "
+            f"produced in the last {since}"
+        )
         pod_log_labels = {
             "noobaa-operator logs": constants.NOOBAA_OPERATOR_POD_LABEL,
             "noobaa-core logs": constants.NOOBAA_CORE_POD_LABEL,
@@ -128,13 +168,15 @@ class TestNoobaaExternalPgsqlOp(MCGTest):
             for pod in pods:
                 pod_name = pod["metadata"]["name"]
                 sources[f"{source_name} ({pod_name})"] = get_pod_logs(
-                    pod_name, namespace=namespace, all_containers=True
+                    pod_name, namespace=namespace, all_containers=True, since=since
                 )
         logger.info("Collected logs from NooBaa operator, core and endpoint pods")
 
-        # Step 4: namespace events
+        # Step 4: namespace events. Best-effort: Events have a limited TTL, so this
+        # scans whatever events currently exist (including any just produced by the
+        # reconcile above) rather than the full history.
         logger.info(f"Collecting events from namespace {namespace}")
-        events = OCP(kind="Event", namespace=namespace).get()
+        events = OCP(kind=constants.EVENT, namespace=namespace).get()
         sources["events"] = yaml.safe_dump(events)
 
         # Step 6: the NooBaa CR must reference the Secret by name, not embed inline
