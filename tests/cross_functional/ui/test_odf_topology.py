@@ -302,6 +302,10 @@ class TestODFTopology(object):
 
             return re.sub(r"[\s\-_.:/]", "", str(text).strip().lower())
 
+        def ocr_normalize(text):
+            """Replace common OCR confusables so that e.g. 'l6' matches '16'."""
+            return normalize(text).replace("l", "1").replace("o", "0")
+
         max_llm_attempts = 1
         mismatches = {}
         for attempt in range(1, max_llm_attempts + 1):
@@ -324,8 +328,10 @@ class TestODFTopology(object):
                 llm_val = str(node_details_llm.get(field, "")).strip().lower()
                 cli_norm = normalize(cli_val)
                 llm_norm = normalize(llm_val)
+                cli_ocr = ocr_normalize(cli_val)
+                llm_ocr = ocr_normalize(llm_val)
 
-                if cli_norm in llm_norm or llm_norm in cli_norm:
+                if cli_norm in llm_norm or llm_norm in cli_norm or cli_ocr in llm_ocr:
                     logger.info(
                         f"  [PASS] {field}: CLI='{cli_val}' matches LLM='{llm_val}'"
                     )
