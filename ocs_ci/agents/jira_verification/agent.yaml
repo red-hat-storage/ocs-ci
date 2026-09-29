@@ -1,0 +1,10 @@
+name: jira_verification
+description: Check whether a Jira issue is covered by an ocs-ci test
+mcp_servers:
+  - jira
+  - reportportal
+tools:
+  allow:
+    - jira_get_issue
+    - reportportal_get_launch
+prompt: prompt.md
