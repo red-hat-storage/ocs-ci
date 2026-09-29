@@ -15,7 +15,14 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import list_objects_from_bucket, rm_object_recursive
+from ocs_ci.ocs.cluster import (
+    CephCluster,
+    get_osd_utilization,
+    get_percent_used_capacity,
+)
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import get_noobaa_core_pod, get_pod_obj
 from ocs_ci.ocs.resources.pvc import get_pvc_objs, get_pvc_size
 from ocs_ci.utility.prometheus import PrometheusAPI, check_alert_list
 from ocs_ci.utility.utils import (
@@ -28,11 +35,18 @@ logger = logging.getLogger(__name__)
 
 DB_CAPACITY_WARNING_THRESHOLD = 80
 DB_CAPACITY_CRITICAL_THRESHOLD = 90
-DB_FILL_WARNING_THRESHOLD = 85
+DB_FILL_TARGET_PCT = 84
+EXPANSION_FACTOR = 1.08
 NOOBAA_PODS_RUNNING_TIMEOUT_AFTER_DB_FILL = 1800
 ALERT_FIRING_TIMEOUT = 900
 ALERT_SAMPLING_INTERVAL = 15
 DB_FILL_CLEANUP_TIMEOUT = 3600
+CORE_READY_TIMEOUT = 900
+CORE_READY_SAMPLING_INTERVAL = 15
+MAX_STALL_BATCHES = 5
+MAX_FILL_BATCHES = 500
+MAX_DB_DISK_PCT = 98
+MAX_OSD_USED_PCT = 80
 WARNING_ALERT_MSG = (
     "The NooBaa database on pod {pod} is consuming 80% of its PVC capacity. "
     "Plan to increase the PVC size soon to prevent service impact."
@@ -48,6 +62,240 @@ CRITICAL_ALERT_DESCRIPTION = (
     "The NooBaa database on pod {pod} has exceeded 90% of its PVC capacity. "
     "Immediate action is required"
 )
+
+
+def db_instance_pods():
+    return (get_primary_nb_db_pod(), get_secondary_nb_db_pod())
+
+
+def core_pod_is_ready():
+    """
+    Report whether the noobaa-core pod md_blow execs into is ready.
+
+    Returns:
+        bool: True if every container of the pod is ready
+
+    """
+    try:
+        statuses = (
+            get_noobaa_core_pod().get().get("status", {}).get("containerStatuses") or []
+        )
+    except Exception as exc:
+        logger.warning(f"Could not read the noobaa-core pod status: {exc}")
+        return False
+    return bool(statuses) and all(status.get("ready") for status in statuses)
+
+
+def wait_for_core_pod_ready(timeout=CORE_READY_TIMEOUT):
+    for is_ready in TimeoutSampler(
+        timeout, CORE_READY_SAMPLING_INTERVAL, core_pod_is_ready
+    ):
+        if is_ready:
+            return
+
+
+def get_db_usage(db_pod_name):
+    """
+    Return the value the NooBaa DB capacity alert rules evaluate.
+
+    Args:
+        db_pod_name (str): NooBaa DB instance to measure. The CNPG PVC name is
+            the instance pod name
+
+    Returns:
+        tuple: (used bytes, PVC requested bytes, usage percentage)
+
+    """
+    db_pod = get_pod_obj(db_pod_name, namespace=config.ENV_DATA["cluster_namespace"])
+    total_bytes = get_pvc_size(get_pvc_objs(pvc_names=[db_pod_name])[0]) * constants.GB
+    usage = db_pod.exec_cmd_on_pod(
+        "psql -U postgres -tAc \"select pg_database_size('nbcore') + "
+        "least(coalesce((select sum(size) from pg_ls_waldir()), 0)::bigint, "
+        "pg_size_bytes(current_setting('wal_keep_size')))\"",
+        container_name="postgres",
+        shell=True,
+    )
+    try:
+        used_bytes = int(str(usage).strip())
+    except ValueError as exc:
+        raise UnexpectedBehaviour(
+            "Unexpected psql output while reading the NooBaa DB size from "
+            f"{db_pod_name}: {usage!r}"
+        ) from exc
+    usage_pct = (used_bytes * 100) // total_bytes if total_bytes else 0
+    return used_bytes, total_bytes, usage_pct
+
+
+def most_full_osd():
+    """
+    Return the fullest OSD in the cluster.
+
+    Returns:
+        tuple: (osd name, used percentage)
+
+    """
+    utilization = get_osd_utilization()
+    if not utilization:
+        return "", 0
+    name = max(utilization, key=utilization.get)
+    return name, utilization[name]
+
+
+def most_full_db_filesystem():
+    """
+    Return the fullest of the two NooBaa DB instance filesystems.
+
+    Returns:
+        tuple: (pod name, used percentage)
+
+    """
+    fullest = ("", 0)
+    for pod_obj in db_instance_pods():
+        output = pod_obj.exec_cmd_on_pod(
+            "df -B1 | grep postgresql | awk '{print $3,$2}'",
+            container_name="postgres",
+            shell=True,
+        )
+        try:
+            used, total = (int(field) for field in str(output).split())
+        except ValueError as exc:
+            raise UnexpectedBehaviour(
+                "Unexpected 'df' output while checking free space on "
+                f"{pod_obj.name}: {output!r}"
+            ) from exc
+        used_pct = used * 100 // total if total else 0
+        if used_pct > fullest[1]:
+            fullest = (pod_obj.name, used_pct)
+    return fullest
+
+
+def check_ceph_headroom(bytes_needed):
+    """
+    Fail before the fill if Ceph cannot hold the data it would write.
+
+    Args:
+        bytes_needed (int): Bytes the fill still has to write on one instance
+
+    Raises:
+        UnexpectedBehaviour: If the capacity left under the cap is short
+
+    """
+    instances = len(db_instance_pods())
+    required_gb = bytes_needed * instances / constants.GB
+    budget_gb = (
+        CephCluster().get_ceph_capacity()
+        * (MAX_OSD_USED_PCT - get_percent_used_capacity())
+        / 100
+    )
+    logger.info(
+        f"The fill needs {required_gb:.1f}GB of usable Ceph capacity across "
+        f"{instances} DB instances, {budget_gb:.1f}GB is left under the "
+        f"{MAX_OSD_USED_PCT}% cap"
+    )
+    if required_gb > budget_gb:
+        raise UnexpectedBehaviour(
+            f"Not enough Ceph capacity for the NooBaa DB fill: it needs "
+            f"{required_gb:.1f}GB usable across {instances} DB instances and "
+            f"only {budget_gb:.1f}GB is left under the {MAX_OSD_USED_PCT}% OSD "
+            "cap. Run this test on a cluster with more storage"
+        )
+
+
+def fill_noobaa_db(blow_io, bucket_name, db_pod_name, threshold_pct):
+    """
+    Fill a NooBaa DB instance with md_blow up to threshold_pct.
+
+    Args:
+        blow_io (MdBlow): Object from the md_blow_factory fixture
+        bucket_name (str): Bucket the objects are uploaded to
+        db_pod_name (str): NooBaa DB instance the fill is measured against
+        threshold_pct (int): Usage percentage to fill up to
+
+    Raises:
+        UnexpectedBehaviour: If the fill stalls, exceeds MAX_FILL_BATCHES, runs
+            the cluster out of Ceph capacity, or cannot reach the threshold
+
+    """
+    used_bytes, total_bytes, current_pct = get_db_usage(db_pod_name)
+    logger.info(
+        f"md_blow fill of {db_pod_name} starting at {current_pct}% "
+        f"({used_bytes}/{total_bytes} bytes), target {threshold_pct}%"
+    )
+    check_ceph_headroom((threshold_pct - current_pct) * total_bytes // 100)
+
+    stall_batches = 0
+    batch_num = 0
+    fullest_pod, disk_pct = "", 0
+    while current_pct < threshold_pct:
+        batch_num += 1
+        if batch_num > MAX_FILL_BATCHES:
+            raise UnexpectedBehaviour(
+                f"md_blow did not reach {threshold_pct}% after "
+                f"{MAX_FILL_BATCHES} batches, stopped at {current_pct}%"
+            )
+        logger.info(f"Running md_blow batch {batch_num}")
+        blow_io.noobaa_core_pod = get_noobaa_core_pod()
+        blow_io.upload_obj_using_md_blow(bucket_name)
+
+        new_used_bytes, total_bytes, current_pct = get_db_usage(db_pod_name)
+        logger.info(
+            f"DB usage after batch {batch_num}: {current_pct}% "
+            f"({new_used_bytes}/{total_bytes} bytes)"
+        )
+        if new_used_bytes == used_bytes:
+            if not core_pod_is_ready():
+                logger.warning(
+                    f"Batch {batch_num} wrote nothing while the noobaa-core "
+                    "pod was not ready, waiting for it before the next batch"
+                )
+                wait_for_core_pod_ready()
+                continue
+            stall_batches += 1
+            if stall_batches >= MAX_STALL_BATCHES:
+                try:
+                    restarts = blow_io.noobaa_core_pod.restart_count
+                except Exception:
+                    restarts = "unknown"
+                raise UnexpectedBehaviour(
+                    f"md_blow stalled: DB used bytes unchanged for "
+                    f"{stall_batches} consecutive batches at {current_pct}% "
+                    f"(target {threshold_pct}%). noobaa-core pod "
+                    f"{blow_io.noobaa_core_pod.name} restart count is "
+                    f"{restarts}, check its log for md_blow RPC errors"
+                )
+        else:
+            stall_batches = 0
+        used_bytes = new_used_bytes
+
+        osd_name, osd_pct = most_full_osd()
+        if osd_pct >= MAX_OSD_USED_PCT:
+            raise UnexpectedBehaviour(
+                f"Stopped the NooBaa DB fill at {current_pct}% of the "
+                f"{threshold_pct}% target: OSD {osd_name} is {osd_pct:.1f}% "
+                f"used, at the {MAX_OSD_USED_PCT}% cap. Filling further would "
+                "make Ceph block IO on every pool"
+            )
+
+        fullest_pod, disk_pct = most_full_db_filesystem()
+        if disk_pct >= MAX_DB_DISK_PCT:
+            logger.warning(
+                f"Stopping the fill, the {fullest_pod} filesystem is "
+                f"{disk_pct}% used, at the {MAX_DB_DISK_PCT}% cap"
+            )
+            break
+
+    if current_pct < threshold_pct:
+        raise UnexpectedBehaviour(
+            f"md_blow reached {current_pct}% of the {threshold_pct}% target "
+            f"before the {fullest_pod} filesystem hit {disk_pct}%. The DB "
+            "instances cannot hold enough data to raise the capacity alerts "
+            "at their current PVC sizes"
+        )
+
+    logger.info(
+        f"md_blow fill completed at {current_pct}% "
+        f"({used_bytes}/{total_bytes} bytes), target was {threshold_pct}%"
+    )
 
 
 def verify_db_capacity_alerts(
@@ -148,7 +396,7 @@ class TestMCGRecovery(E2ETest):
         argnames=["bucket_amount", "object_amount"],
         argvalues=[pytest.param(5, 5)],
     )
-    def test_mcg_recovery_with_dual_noobaa_db_fill_alerts(
+    def test_mcg_recovery_with_noobaa_db_fill_alerts(
         self,
         request,
         setup_mcg_bg_features,
@@ -168,10 +416,11 @@ class TestMCGRecovery(E2ETest):
 
         Steps:
         1. Run MCG background features and IOs
-        2. Expand the PVC of the CNPG primary DB instance by a factor of
-           90/80, so that the same amount of data is 80% of the expanded PVC
-           and at least 90% of the replica PVC, which keeps its default size
-        3. Fill the primary DB instance to 80% of its PVC using md_blow
+        2. Expand the PVC of the CNPG primary DB instance, so that one fill
+           reads as between 80% and 90% of the expanded PVC and as over 90%
+           of the replica PVC, which keeps its default size
+        3. Fill the primary DB instance to DB_FILL_TARGET_PCT of its PVC using
+           md_blow, measured the way the alert rules measure it
         4. Verify the capacity alerts before backup and recovery:
            - Expanded PVC pod: NooBaaDatabaseReachingCapacity (80%, warning)
            - Default PVC pod: NooBaaDatabaseStorageFull (90%, critical)
@@ -208,13 +457,20 @@ class TestMCGRecovery(E2ETest):
         )
         logger.info(f"Current NooBaa DB PVC capacity is {default_pvc_capacity}GB")
 
-        # Round up, so that 80% of the expanded PVC is guaranteed to be at least
-        # 90% of the PVC that keeps its default size.
-        expansion_factor = (
-            DB_CAPACITY_CRITICAL_THRESHOLD / DB_CAPACITY_WARNING_THRESHOLD
+        expanded_pvc_size = math.ceil(default_pvc_capacity * EXPANSION_FACTOR)
+        fill_pct_of_default = (
+            DB_FILL_TARGET_PCT * expanded_pvc_size / default_pvc_capacity
         )
-        expanded_pvc_size = math.ceil(default_pvc_capacity * expansion_factor)
-        logger.info(f"Expanding {expanded_pvc_name} to {expanded_pvc_size}GB")
+        assert fill_pct_of_default > DB_CAPACITY_CRITICAL_THRESHOLD, (
+            f"Filling {expanded_pvc_size}GB to {DB_FILL_TARGET_PCT}% is only "
+            f"{fill_pct_of_default:.1f}% of the {default_pvc_capacity}GB default "
+            f"PVC, which cannot raise the {DB_CAPACITY_CRITICAL_THRESHOLD}% alert"
+        )
+        logger.info(
+            f"Expanding {expanded_pvc_name} to {expanded_pvc_size}GB, where a "
+            f"{DB_FILL_TARGET_PCT}% fill is {fill_pct_of_default:.1f}% of "
+            f"{default_pvc_name}"
+        )
 
         scale_noobaa_db_pod_pv_size(
             pv_size=expanded_pvc_size,
@@ -240,10 +496,9 @@ class TestMCGRecovery(E2ETest):
         logger.info(f"{default_pvc_name} PVC size remains {default_pvc_capacity}GB")
 
         logger.test_step(
-            f"Fill the primary NooBaa DB to ~{DB_FILL_WARNING_THRESHOLD}% "
-            f"capacity using md_blow"
+            f"Fill the primary NooBaa DB to {DB_FILL_TARGET_PCT}% of its "
+            f"expanded PVC using md_blow"
         )
-        blow_io = md_blow_factory(db_pod_name=expanded_pvc_name)
         fill_bucket = bucket_factory_session(1)[0].name
 
         def cleanup_db_fill():
@@ -265,8 +520,12 @@ class TestMCGRecovery(E2ETest):
 
         request.addfinalizer(cleanup_db_fill)
 
-        blow_io.upload_obj_using_md_blow(
-            fill_bucket, threshold_pct=DB_FILL_WARNING_THRESHOLD
+        wait_for_core_pod_ready()
+        fill_noobaa_db(
+            blow_io=md_blow_factory,
+            bucket_name=fill_bucket,
+            db_pod_name=expanded_pvc_name,
+            threshold_pct=DB_FILL_TARGET_PCT,
         )
 
         obj_count_pre_recovery = len(

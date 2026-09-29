@@ -127,6 +127,7 @@ class MdBlow(object):
         concurrency=50,
         chunks=200,
         chunk_size=1,
+        exec_timeout=1800,
     ):
         """
         Upload objects directly into DB using MD Blow script present in core pod
@@ -138,6 +139,8 @@ class MdBlow(object):
             concurrency (int): Number of threads to be used while uploading data
             chunks (int): Chunk numbers in each object
             chunk_size (int): Chunk size in each object
+            exec_timeout (int): Timeout in seconds of the md_blow 'oc exec'.
+                A batch filling a large DB outlasts the 600 second default
         """
         base_cmd = (
             "node /root/node_modules/noobaa-core/src/tools/md_blow.js --system=noobaa "
@@ -153,7 +156,10 @@ class MdBlow(object):
                 f"--chunk_size={chunk_size}"
             )
             self.noobaa_core_pod.exec_cmd_on_pod(
-                base_cmd + cmd, container_name="core", ignore_error=True
+                base_cmd + cmd,
+                container_name="core",
+                ignore_error=True,
+                timeout=exec_timeout,
             )
             logger.info("Workload executed successfully")
         else:
@@ -190,7 +196,10 @@ class MdBlow(object):
                 logger.info("Initiating IO dump directly into DB")
                 while not self.stop_dumping.is_set():
                     self.noobaa_core_pod.exec_cmd_on_pod(
-                        base_cmd + cmd, container_name="core", ignore_error=True
+                        base_cmd + cmd,
+                        container_name="core",
+                        ignore_error=True,
+                        timeout=exec_timeout,
                     )
                     sleep(5)
                 t1.join()
