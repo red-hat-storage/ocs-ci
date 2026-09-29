@@ -1102,9 +1102,7 @@ def alert_collection(threading_lock, alert_list=None, interval=10):
     finally:
         if subscriber is not None:
             subscriber.unsubscribe()
-            logger.info(
-                f"Collected {len(alerts)} alerts: {get_alert_names(alerts)}",
-            )
+        logger.info(f"Collected {len(alerts)} alerts: {get_alert_names(alerts)}")
 
 
 def get_alert_names(alerts):

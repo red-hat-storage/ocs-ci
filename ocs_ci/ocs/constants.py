@@ -1881,6 +1881,27 @@ CEPHX_KEY_GENERATION_DECREASE_ERROR = "keyGeneration cannot be decreased"
 CEPHX_KEY_GENERATION_REMOVE_ERROR = "keyGeneration cannot be removed once set"
 CEPHX_KEY_GENERATION_TYPE_ERROR = "must be of type integer"
 
+# OCP platform alert labels
+ALERT_WATCHDOG = "Watchdog"
+ALERT_ALERTMANAGER_RECEIVERS_NOT_CONFIGURED = "AlertmanagerReceiversNotConfigured"
+ALERT_INSIGHTS_RECOMMENDATION_ACTIVE = "InsightsRecommendationActive"
+ALERT_UPDATE_AVAILABLE = "UpdateAvailable"
+ALERT_CLUSTER_NOT_UPGRADEABLE = "ClusterNotUpgradeable"
+ALERT_CLUSTER_OPERATOR_DOWN = "ClusterOperatorDown"
+ALERT_CLUSTER_OPERATOR_DEGRADED = "ClusterOperatorDegraded"
+ALERT_KUBE_DAEMONSET_ROLLOUT_STUCK = "KubeDaemonSetRolloutStuck"
+ALERT_KUBE_DEPLOYMENT_REPLICAS_MISMATCH = "KubeDeploymentReplicasMismatch"
+ALERT_KUBE_STATEFULSET_REPLICAS_MISMATCH = "KubeStatefulSetReplicasMismatch"
+ALERT_KUBE_POD_NOT_READY = "KubePodNotReady"
+ALERT_KUBE_CONTAINER_WAITING = "KubeContainerWaiting"
+ALERT_TARGET_DOWN = "TargetDown"
+ALERT_POD_DISRUPTION_BUDGET_AT_LIMIT = "PodDisruptionBudgetAtLimit"
+ALERT_POD_DISRUPTION_BUDGET_LIMIT = "PodDisruptionBudgetLimit"
+ALERT_KUBE_NODE_NOT_READY = "KubeNodeNotReady"
+ALERT_KUBE_NODE_UNREACHABLE = "KubeNodeUnreachable"
+ALERT_KUBE_API_ERROR_BUDGET_BURN = "KubeAPIErrorBudgetBurn"
+ALERT_ETCD_HIGH_NUMBER_OF_LEADER_CHANGES = "etcdHighNumberOfLeaderChanges"
+
 # Alerts that are known to be fired during OCP or ODF upgrade because pods,
 # nodes and operators are restarted in a rolling manner. Alerts collected
 # during an upgrade that are not listed here are reported as unexpected by
@@ -1888,30 +1909,30 @@ CEPHX_KEY_GENERATION_TYPE_ERROR = "must be of type integer"
 # UPGRADE/expected_alerts config option.
 EXPECTED_UPGRADE_ALERTS = [
     # dead man's switch alert that is firing all the time by design
-    "Watchdog",
+    ALERT_WATCHDOG,
     # informational alerts not related to the health of the cluster
-    "AlertmanagerReceiversNotConfigured",
-    "InsightsRecommendationActive",
-    "UpdateAvailable",
-    "ClusterNotUpgradeable",
+    ALERT_ALERTMANAGER_RECEIVERS_NOT_CONFIGURED,
+    ALERT_INSIGHTS_RECOMMENDATION_ACTIVE,
+    ALERT_UPDATE_AVAILABLE,
+    ALERT_CLUSTER_NOT_UPGRADEABLE,
     # workloads and operators are restarted during upgrade
-    "ClusterOperatorDown",
-    "ClusterOperatorDegraded",
-    "KubeDaemonSetRolloutStuck",
-    "KubeDeploymentReplicasMismatch",
-    "KubeStatefulSetReplicasMismatch",
-    "KubePodNotReady",
-    "KubeContainerWaiting",
-    "TargetDown",
-    "PodDisruptionBudgetAtLimit",
-    "PodDisruptionBudgetLimit",
+    ALERT_CLUSTER_OPERATOR_DOWN,
+    ALERT_CLUSTER_OPERATOR_DEGRADED,
+    ALERT_KUBE_DAEMONSET_ROLLOUT_STUCK,
+    ALERT_KUBE_DEPLOYMENT_REPLICAS_MISMATCH,
+    ALERT_KUBE_STATEFULSET_REPLICAS_MISMATCH,
+    ALERT_KUBE_POD_NOT_READY,
+    ALERT_KUBE_CONTAINER_WAITING,
+    ALERT_TARGET_DOWN,
+    ALERT_POD_DISRUPTION_BUDGET_AT_LIMIT,
+    ALERT_POD_DISRUPTION_BUDGET_LIMIT,
     # nodes are drained and rebooted during OCP upgrade
-    "KubeNodeNotReady",
-    "KubeNodeUnreachable",
+    ALERT_KUBE_NODE_NOT_READY,
+    ALERT_KUBE_NODE_UNREACHABLE,
     ALERT_NODEDOWN,
     # control plane components are restarted during OCP upgrade
-    "KubeAPIErrorBudgetBurn",
-    "etcdHighNumberOfLeaderChanges",
+    ALERT_KUBE_API_ERROR_BUDGET_BURN,
+    ALERT_ETCD_HIGH_NUMBER_OF_LEADER_CHANGES,
     # Ceph daemons are restarted one by one and run mixed versions until the
     # ODF upgrade is finished
     ALERT_CLUSTERWARNINGSTATE,
