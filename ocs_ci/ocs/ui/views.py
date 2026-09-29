@@ -597,6 +597,17 @@ generic_locators = {
     "openshift-operators": (
         "//a[@data-test-operator-row='ODF Multicluster Orchestrator']"
     ),
+    "error_boundary_test": ("[data-test='error-boundary']", By.CSS_SELECTOR),
+    "error_boundary_test_id": ("[data-test-id='error-boundary']", By.CSS_SELECTOR),
+    "co_error_boundary": (".co-error-boundary", By.CSS_SELECTOR),
+    "error_boundary_test_contains": (
+        "[data-test*='error-boundary']",
+        By.CSS_SELECTOR,
+    ),
+    "empty_state_danger": (
+        "[class*='empty-state--danger'], [class*='empty-state'][class*='danger']",
+        By.CSS_SELECTOR,
+    ),
 }
 
 generic_locators_4_19 = {

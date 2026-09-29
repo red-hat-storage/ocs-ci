@@ -8,6 +8,7 @@ from selenium.common import WebDriverException
 
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.helpers.helpers import get_current_test_name
+from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 
 logger = logging.getLogger(__name__)
 
@@ -233,17 +234,19 @@ class LocatorFallback:
 
         try:
             # 1. Check for web console / dynamic plugin crash screen via structural attributes
-            error_boundary_selectors = [
-                ("css selector", "[data-test='error-boundary']"),
-                ("css selector", "[data-test-id='error-boundary']"),
-                ("css selector", ".co-error-boundary"),
-                ("css selector", "[data-test*='error-boundary']"),
-                (
-                    "css selector",
-                    "[class*='empty-state--danger'], [class*='empty-state'][class*='danger']",
-                ),
+            generic = locators_for_current_ocp_version().get("generic", {})
+            error_boundary_keys = [
+                "error_boundary_test",
+                "error_boundary_test_id",
+                "co_error_boundary",
+                "error_boundary_test_contains",
+                "empty_state_danger",
             ]
-            for by_type, selector in error_boundary_selectors:
+            for key in error_boundary_keys:
+                loc = generic.get(key)
+                if not loc:
+                    continue
+                selector, by_type = loc
                 elements = self.driver.find_elements(by=by_type, value=selector)
                 if elements:
                     error_msg = ""
@@ -301,7 +304,7 @@ class LocatorFallback:
             return True
         except Exception as e:
             logger.debug(f"[AI_FALLBACK] Page health pre-check exception: {e}")
-            return True
+            return False
 
     def _validate_locator(self, selector, by_type):
         """
@@ -476,7 +479,14 @@ class LocatorFallback:
             f"  selector={selector}  by={by_type}  action={action}"
         )
 
-        # 1. Use cached result if available and currently valid (exact 1 match)
+        # 1. Conservative page-state health check
+        if not self._check_page_health():
+            logger.warning(
+                "[AI_FALLBACK] Page health pre-check failed, skipping AI fallback"
+            )
+            return None
+
+        # 2. Use cached result if available and currently valid (exact 1 match)
         cache = self._load_cache()
         if cache_key in cache:
             cached = cache[cache_key]
@@ -491,13 +501,6 @@ class LocatorFallback:
                 return cached_selector, cached_by_type
             else:
                 logger.info("Cached locator no longer valid, proceeding to LLM query")
-
-        # 2. Conservative page-state health check
-        if not self._check_page_health():
-            logger.warning(
-                "[AI_FALLBACK] Page health pre-check failed, skipping AI fallback"
-            )
-            return None
 
         if not self.client.is_available():
             logger.warning("LLM client is not available, skipping AI fallback")
