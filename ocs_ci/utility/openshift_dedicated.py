@@ -80,10 +80,7 @@ def download_ocm_cli():
     Returns:
         str: path to the installer
     """
-    force_download = (
-        config.RUN["cli_params"].get("deploy")
-        and config.DEPLOYMENT["force_download_ocm_cli"]
-    )
+    force_download = config.DEPLOYMENT["force_download_ocm_cli"]
     return utils.get_ocm_cli(
         config.DEPLOYMENT["ocm_cli_version"], force_download=force_download
     )
