@@ -134,6 +134,16 @@ class EncryptionModule(DataFoundationTabBar):
                 return True
         return False
 
+    def nav_block_and_file_tab(self):
+        result = super().nav_block_and_file_tab()
+        self.wait_for_encryption_summary_ready("file_and_block")
+        return result
+
+    def nav_object_tab(self):
+        result = super().nav_object_tab()
+        self.wait_for_encryption_summary_ready("object_storage")
+        return result
+
     def wait_for_encryption_summary_ready(self, context_key):
         """
         Wait until the encryption summary control is present on the dashboard.

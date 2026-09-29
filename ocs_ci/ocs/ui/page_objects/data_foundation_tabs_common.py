@@ -625,7 +625,6 @@ class DataFoundationTabBar(PageNavigator):
         self.wait_for_element_to_be_present(
             self.validation_loc["block-and-file-tab-active"], timeout=60
         )
-        self.wait_for_encryption_summary_ready("file_and_block")
 
         from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 
@@ -650,7 +649,6 @@ class DataFoundationTabBar(PageNavigator):
         self.wait_for_element_to_be_present(
             self.validation_loc["object-tab-active"], timeout=60
         )
-        self.wait_for_encryption_summary_ready("object_storage")
 
         from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
 
