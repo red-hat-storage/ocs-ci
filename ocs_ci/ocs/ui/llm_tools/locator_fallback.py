@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import re
-import time
 
 from selenium.common import WebDriverException
 
@@ -465,7 +464,6 @@ class LocatorFallback:
         if not ocsci_config.UI_SELENIUM.get("ai_fallback"):
             return None
 
-        start_time = time.time()
         selector = locator[0]
         by_type = locator[1]
         cache_key = self._cache_key(locator)
@@ -479,19 +477,16 @@ class LocatorFallback:
         )
 
         # 1. Use cached result if available and currently valid (exact 1 match)
-        cache_start = time.time()
         cache = self._load_cache()
         if cache_key in cache:
             cached = cache[cache_key]
             cached_selector = cached["new_selector"]
             cached_by_type = cached["new_by_type"]
             if self._validate_locator(cached_selector, cached_by_type):
-                cache_duration = time.time() - cache_start
                 logger.info(
-                    "[AI_FALLBACK] cache_hit selector=%s by=%s (duration=%.2fs)",
+                    "[AI_FALLBACK] cache_hit selector=%s by=%s",
                     cached_selector,
                     cached_by_type,
-                    cache_duration,
                 )
                 return cached_selector, cached_by_type
             else:
@@ -514,57 +509,40 @@ class LocatorFallback:
             url = "unknown"
 
         # 3. Capture DOM
-        dom_start = time.time()
         try:
             raw_html = self.driver.page_source
         except WebDriverException as e:
             logger.error(f"Failed to capture DOM: {e}")
             return None
-        dom_capture_duration = time.time() - dom_start
-        logger.info(
-            f"[AI_FALLBACK] DOM captured (chars={len(raw_html)}, duration={dom_capture_duration:.2f}s)"
-        )
+        logger.info(f"[AI_FALLBACK] DOM captured (chars={len(raw_html)})")
 
         cost_before = self.client.total_cost_usd
 
         # 4. Stage 1 (DOM-only query)
-        stage_1_start = time.time()
         result = self._try_stage_1(
             selector, by_type, action, url, raw_html, stack_trace=stack_trace
         )
-        stage_1_total_duration = time.time() - stage_1_start
 
         if result:
             self._cache_result(cache_key, selector, by_type, result, url)
             self._log_cost(cost_before)
-            total_duration = time.time() - start_time
-            logger.info(
-                f"[AI_FALLBACK] completed via Stage 1 (total_duration={total_duration:.2f}s)"
-            )
+            logger.info("[AI_FALLBACK] completed via Stage 1")
             return result
 
         # 5. Stage 2 (DOM + Screenshot query)
-        stage_2_start = time.time()
         result = self._try_stage_2(
             selector, by_type, action, url, raw_html, stack_trace=stack_trace
         )
-        stage_2_total_duration = time.time() - stage_2_start
 
         if result:
             self._cache_result(cache_key, selector, by_type, result, url)
             self._log_cost(cost_before)
-            total_duration = time.time() - start_time
-            logger.info(
-                f"[AI_FALLBACK] completed via Stage 2 (total_duration={total_duration:.2f}s)"
-            )
+            logger.info("[AI_FALLBACK] completed via Stage 2")
             return result
 
         self._log_cost(cost_before)
-        total_duration = time.time() - start_time
         logger.warning(
-            f"[AI_FALLBACK] failed — no replacement found for selector={selector} "
-            f"(stage1_duration={stage_1_total_duration:.2f}s, stage2_duration={stage_2_total_duration:.2f}s, "
-            f"total_duration={total_duration:.2f}s)"
+            f"[AI_FALLBACK] failed — no replacement found for selector={selector}"
         )
         return None
 
@@ -582,14 +560,11 @@ class LocatorFallback:
             cleaned_html=cleaned_html,
         )
 
-        llm_start = time.time()
         try:
             raw_response = self.client.query_dom(prompt)
         except Exception as e:
             logger.warning(f"Stage 1 LLM query failed: {e}")
             return None
-        llm_duration = time.time() - llm_start
-        logger.info(f"[AI_FALLBACK] stage=1 LLM query completed in {llm_duration:.2f}s")
 
         parsed = self._parse_llm_locator(raw_response)
         if not parsed:
@@ -597,24 +572,20 @@ class LocatorFallback:
             return None
 
         new_selector, new_by_type = parsed
-        val_start = time.time()
         is_valid = self._validate_locator(new_selector, new_by_type)
-        val_duration = time.time() - val_start
 
         if is_valid:
             logger.info(
-                "[AI_FALLBACK] stage=1 success new_selector=%s new_by=%s (val_duration=%.2fs)",
+                "[AI_FALLBACK] stage=1 success new_selector=%s new_by=%s",
                 new_selector,
                 new_by_type,
-                val_duration,
             )
             return (new_selector, new_by_type)
 
         logger.info(
-            "[AI_FALLBACK] stage=1 no_match selector=%s by=%s (val_duration=%.2fs)",
+            "[AI_FALLBACK] stage=1 no_match selector=%s by=%s",
             new_selector,
             new_by_type,
-            val_duration,
         )
         return None
 
@@ -623,16 +594,10 @@ class LocatorFallback:
         logger.info("[AI_FALLBACK] stage=2 (DOM+screenshot) selector=%s", selector)
         cleaned_html = self._strip_dom(raw_html, DOM_MAX_CHARS_STAGE_2)
 
-        screenshot_start = time.time()
         screenshot_path = self._capture_screenshot()
-        screenshot_duration = time.time() - screenshot_start
-
         if not screenshot_path:
             logger.warning("Stage 2: Failed to capture screenshot, aborting")
             return None
-        logger.info(
-            f"[AI_FALLBACK] stage=2 screenshot captured in {screenshot_duration:.2f}s"
-        )
 
         prompt = STAGE_2_PROMPT.format(
             selector=selector,
@@ -643,14 +608,11 @@ class LocatorFallback:
             cleaned_html=cleaned_html,
         )
 
-        llm_start = time.time()
         try:
             raw_response = self.client.query_screenshot(screenshot_path, prompt)
         except Exception as e:
             logger.warning(f"Stage 2 LLM query failed: {e}")
             return None
-        llm_duration = time.time() - llm_start
-        logger.info(f"[AI_FALLBACK] stage=2 LLM query completed in {llm_duration:.2f}s")
 
         parsed = self._parse_llm_locator(raw_response)
         if not parsed:
@@ -658,24 +620,20 @@ class LocatorFallback:
             return None
 
         new_selector, new_by_type = parsed
-        val_start = time.time()
         is_valid = self._validate_locator(new_selector, new_by_type)
-        val_duration = time.time() - val_start
 
         if is_valid:
             logger.info(
-                "[AI_FALLBACK] stage=2 success new_selector=%s new_by=%s (val_duration=%.2fs)",
+                "[AI_FALLBACK] stage=2 success new_selector=%s new_by=%s",
                 new_selector,
                 new_by_type,
-                val_duration,
             )
             return (new_selector, new_by_type)
 
         logger.info(
-            "[AI_FALLBACK] stage=2 no_match selector=%s by=%s (val_duration=%.2fs)",
+            "[AI_FALLBACK] stage=2 no_match selector=%s by=%s",
             new_selector,
             new_by_type,
-            val_duration,
         )
         return None
 
