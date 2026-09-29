@@ -1,4 +1,5 @@
 import base64
+import contextlib
 import logging
 import os
 import requests
@@ -999,9 +1000,19 @@ class PrometheusAPI(object):
 
 class PrometheusAlertSubscriber(Timer):
 
-    prometheus_alert_list = []
+    def __init__(self, threading_lock, interval: float, alert_list=None):
+        """
+        Args:
+            threading_lock (threading.RLock): Lock used for synchronization of
+                the threads in Prometheus calls
+            interval (float): Number of seconds between Prometheus polls
+            alert_list (list): List to be populated with collected alerts. When
+                not provided, a new list is created. Providing own list is
+                useful when the caller needs to access collected alerts also
+                before the subscriber is unsubscribed.
 
-    def __init__(self, threading_lock, interval: float):
+        """
+        self.prometheus_alert_list = alert_list if alert_list is not None else []
         self.prometheus_api = PrometheusAPI(threading_lock=threading_lock)
         super().__init__(
             interval,
@@ -1015,7 +1026,13 @@ class PrometheusAlertSubscriber(Timer):
         ! This method is called by Timer class, do not call it directly !
         """
         while not self.finished.wait(self.interval):
-            self.function(*self.args, **self.kwargs)
+            try:
+                self.function(*self.args, **self.kwargs)
+            except Exception:
+                # Prometheus might be temporarily unavailable, for example when
+                # the monitoring stack itself is being upgraded. One failed
+                # poll must not terminate the whole collection.
+                logger.exception("Collection of prometheus alerts failed")
 
     def get_alerts(self):
         """
@@ -1027,7 +1044,7 @@ class PrometheusAlertSubscriber(Timer):
         """
         Clear alert list
         """
-        self.prometheus_alert_list = []
+        self.prometheus_alert_list.clear()
 
     def subscribe(self):
         """
@@ -1043,3 +1060,90 @@ class PrometheusAlertSubscriber(Timer):
         """
         self.cancel()
         logger.info("Logging of all prometheus alerts stopped")
+
+
+@contextlib.contextmanager
+def alert_collection(threading_lock, alert_list=None, interval=10):
+    """
+    Context manager that collects all Prometheus alerts fired during the
+    execution of the wrapped block of code.
+
+    Problems with Prometheus (e.g. unreachable endpoint during an upgrade of
+    the monitoring stack) are logged but they do not interrupt the wrapped
+    operation because alert collection is only a supplementary activity.
+
+    Args:
+        threading_lock (threading.RLock): Lock used for synchronization of the
+            threads in Prometheus calls
+        alert_list (list): List to be populated with collected alerts. When not
+            provided, a new list is created.
+        interval (float): Number of seconds between Prometheus polls
+
+    Yields:
+        list: Alerts collected so far. The list is complete once the context
+            manager is left.
+
+    """
+    alerts = alert_list if alert_list is not None else []
+    try:
+        subscriber = PrometheusAlertSubscriber(
+            threading_lock=threading_lock, interval=interval, alert_list=alerts
+        )
+        subscriber.subscribe()
+    except Exception:
+        logger.exception(
+            "Prometheus alert collection could not be started. Alerts fired "
+            "during the following operation will not be collected."
+        )
+        subscriber = None
+
+    try:
+        yield alerts
+    finally:
+        if subscriber is not None:
+            subscriber.unsubscribe()
+            logger.info(
+                f"Collected {len(alerts)} alerts: {get_alert_names(alerts)}",
+            )
+
+
+def get_alert_names(alerts):
+    """
+    Get sorted names of provided alerts.
+
+    Args:
+        alerts (list): List of alerts as returned by Prometheus API
+
+    Returns:
+        list: Sorted unique alert names
+
+    """
+    return sorted({alert.get("labels", {}).get("alertname") or "" for alert in alerts})
+
+
+def get_unexpected_alerts(alerts, expected_alerts=None, ignored_severities=None):
+    """
+    Filter out expected alerts from the provided list of alerts.
+
+    Args:
+        alerts (list): List of alerts as returned by Prometheus API
+        expected_alerts (list): Names of alerts that are not considered
+            unexpected
+        ignored_severities (list): Alerts with a severity label from this list
+            are not considered unexpected
+
+    Returns:
+        list: Alerts that are neither expected nor ignored
+
+    """
+    expected_alerts = expected_alerts or []
+    ignored_severities = ignored_severities or []
+    unexpected_alerts = []
+    for alert in alerts:
+        labels = alert.get("labels", {})
+        if labels.get("alertname") in expected_alerts:
+            continue
+        if labels.get("severity") in ignored_severities:
+            continue
+        unexpected_alerts.append(alert)
+    return unexpected_alerts

@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import logging
@@ -61,6 +62,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
 )
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_expected_nb_db_psql_version
 from ocs_ci.utility import version
+from ocs_ci.utility.prometheus import alert_collection
 from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
@@ -976,6 +978,7 @@ class OCSUpgrade(object):
 def run_ocs_upgrade(
     operation=None,
     upgrade_stats=None,
+    threading_lock=None,
     *operation_args,
     **operation_kwargs,
 ):
@@ -986,6 +989,10 @@ def run_ocs_upgrade(
         operation: (function): Function to run
         upgrade_stats: (dict): Dictionary where can be stored statistics
             gathered during the upgrade
+        threading_lock: (threading.RLock): Lock used for synchronization of the
+            threads in Prometheus calls. When provided, alerts fired during the
+            upgrade are collected and stored in
+            upgrade_stats["odf_upgrade"]["alerts"].
         operation_args: (iterable): Function's arguments
         operation_kwargs: (map): Function's keyword arguments
 
@@ -1071,7 +1078,25 @@ def run_ocs_upgrade(
         )
         log.info(f"Disconnected upgrade - new image: {upgrade_ocs.ocs_registry_image}")
 
-    with CephHealthMonitor(ceph_cluster):
+    # Collect alerts fired during the upgrade so that they can be checked by
+    # post upgrade test cases.
+    if threading_lock:
+        alert_collector = alert_collection(
+            threading_lock=threading_lock,
+            alert_list=(
+                upgrade_stats["odf_upgrade"].setdefault("alerts", [])
+                if upgrade_stats is not None
+                else None
+            ),
+        )
+    else:
+        log.warning(
+            "threading_lock was not provided, alerts fired during the ODF "
+            "upgrade will not be collected"
+        )
+        alert_collector = contextlib.nullcontext()
+
+    with alert_collector, CephHealthMonitor(ceph_cluster):
         channel = upgrade_ocs.set_upgrade_channel()
         upgrade_ocs.set_upgrade_images()
 

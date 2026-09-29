@@ -1881,6 +1881,49 @@ CEPHX_KEY_GENERATION_DECREASE_ERROR = "keyGeneration cannot be decreased"
 CEPHX_KEY_GENERATION_REMOVE_ERROR = "keyGeneration cannot be removed once set"
 CEPHX_KEY_GENERATION_TYPE_ERROR = "must be of type integer"
 
+# Alerts that are known to be fired during OCP or ODF upgrade because pods,
+# nodes and operators are restarted in a rolling manner. Alerts collected
+# during an upgrade that are not listed here are reported as unexpected by
+# post upgrade alert check. The list can be extended for a particular run by
+# UPGRADE/expected_alerts config option.
+EXPECTED_UPGRADE_ALERTS = [
+    # dead man's switch alert that is firing all the time by design
+    "Watchdog",
+    # informational alerts not related to the health of the cluster
+    "AlertmanagerReceiversNotConfigured",
+    "InsightsRecommendationActive",
+    "UpdateAvailable",
+    "ClusterNotUpgradeable",
+    # workloads and operators are restarted during upgrade
+    "ClusterOperatorDown",
+    "ClusterOperatorDegraded",
+    "KubeDaemonSetRolloutStuck",
+    "KubeDeploymentReplicasMismatch",
+    "KubeStatefulSetReplicasMismatch",
+    "KubePodNotReady",
+    "KubeContainerWaiting",
+    "TargetDown",
+    "PodDisruptionBudgetAtLimit",
+    "PodDisruptionBudgetLimit",
+    # nodes are drained and rebooted during OCP upgrade
+    "KubeNodeNotReady",
+    "KubeNodeUnreachable",
+    ALERT_NODEDOWN,
+    # control plane components are restarted during OCP upgrade
+    "KubeAPIErrorBudgetBurn",
+    "etcdHighNumberOfLeaderChanges",
+    # Ceph daemons are restarted one by one and run mixed versions until the
+    # ODF upgrade is finished
+    ALERT_CLUSTERWARNINGSTATE,
+    ALERT_CEPH_OSD_VERSION_MISMATCH,
+    ALERT_CEPH_MON_VERSION_MISMATCH,
+    ALERT_CEPH_MON_HIGH_NUMBER_OF_LEADER_CHANGES,
+    ALERT_MGRISABSENT,
+    ALERT_MGRISMISSINGREPLICAS,
+    ALERT_CEPH_MDS_MISSING_REPLICAS,
+    ALERT_ODF_CORE_POD_RESTART,
+]
+
 # DR Pending Cleanup Alert (OCS 4.22+)
 ALERT_APPLICATION_CLEANUP_PENDING = "ApplicationCleanupPending"
 ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD = 15 * 60  # 15 minutes in seconds
