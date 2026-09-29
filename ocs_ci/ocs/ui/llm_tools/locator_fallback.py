@@ -233,20 +233,30 @@ class LocatorFallback:
             return True
 
         try:
-            # 1. Check for web console / dynamic plugin crash screen (React Error Boundary)
+            # 1. Check for web console / dynamic plugin crash screen via structural attributes
             error_boundary_selectors = [
                 ("css selector", "[data-test='error-boundary']"),
                 ("css selector", "[data-test-id='error-boundary']"),
                 ("css selector", ".co-error-boundary"),
+                ("css selector", "[data-test*='error-boundary']"),
+                (
+                    "css selector",
+                    "[class*='empty-state--danger'], [class*='empty-state'][class*='danger']",
+                ),
             ]
             for by_type, selector in error_boundary_selectors:
                 elements = self.driver.find_elements(by=by_type, value=selector)
                 if elements:
                     error_msg = ""
                     try:
-                        error_msg = (elements[0].text or "").strip().replace("\n", " ")
-                        if len(error_msg) > 200:
-                            error_msg = error_msg[:200] + "..."
+                        raw_text = (
+                            elements[0].text
+                            or elements[0].get_attribute("textContent")
+                            or ""
+                        )
+                        error_msg = raw_text.strip().replace("\n", " ")
+                        if len(error_msg) > 300:
+                            error_msg = error_msg[:300] + "..."
                     except Exception:
                         pass
 
