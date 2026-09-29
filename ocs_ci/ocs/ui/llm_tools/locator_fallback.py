@@ -279,7 +279,7 @@ class LocatorFallback:
                     "problem loading page",
                 ]
             ):
-                logger.warning(
+                logger.error(
                     f"[AI_FALLBACK] Web page is showing a server error ('{title}'). "
                     f"Skipping AI fallback."
                 )
@@ -291,8 +291,9 @@ class LocatorFallback:
                 url.startswith("data:")
                 or "about:neterror" in url
                 or "about:blank" in url
+                or "chrome-error://" in url
             ):
-                logger.warning(
+                logger.error(
                     f"[AI_FALLBACK] Browser is disconnected or on an empty page ('{url}'). "
                     f"Skipping AI fallback."
                 )
