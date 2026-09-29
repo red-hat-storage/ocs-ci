@@ -3151,7 +3151,7 @@ data_foundation_overview = {
         By.XPATH,
     ),
 }
-# VirtualMachine Page Locators
+
 virtualmachine = {
     "virtualization_menu": (
         "//button[text()='Virtualization']",
@@ -3272,7 +3272,6 @@ virtualmachine = {
         "//*[@role='dialog']",
         By.XPATH,
     ),
-    # --- Snapshot / Restore locators ---
     "actions_take_snapshot_option": (
         "//li//button[normalize-space(.)='Take snapshot']",
         By.XPATH,
@@ -3302,7 +3301,7 @@ virtualmachine = {
         By.XPATH,
     ),
     "restore_snapshot_confirm_button": (
-        "//button[@data-test='save-button']" "[ancestor::*[@role='dialog']]",
+        "//button[@data-test='save-button'][ancestor::*[@role='dialog']]",
         By.XPATH,
     ),
 }

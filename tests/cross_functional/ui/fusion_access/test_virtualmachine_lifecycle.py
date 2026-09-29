@@ -24,9 +24,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers.helpers import create_project, create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.ui.base_ui import BaseUI
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
-from ocs_ci.ocs.ui.page_objects.virtualmachine_ui import VirtualMachineUI
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -53,9 +51,7 @@ class TestVirtualMachineLifecycle(ManageTest):
         self._test_vm_name = None
         self._test_namespace = None
 
-        self.page_nav = PageNavigator()
-        self.base_ui = BaseUI()
-        self.vm_ui = VirtualMachineUI()
+        self.vm_ui = PageNavigator().navigate_virtualmachines_page()
 
     @pytest.fixture(autouse=True, scope="class")
     def teardown_lungroup(self, request):
@@ -599,32 +595,32 @@ class TestVirtualMachineLifecycle(ManageTest):
         namespace = project_obj.namespace
 
         self.vm_ui.navigate_to_workloads_pods()
-        self.base_ui.take_screenshot("workloads_pods_page")
+        self.vm_ui.take_screenshot("workloads_pods_page")
 
         logger.info(f"Selecting namespace '{namespace}' from All Projects dropdown")
         self.vm_ui.select_project_from_all_projects(namespace)
-        self.base_ui.take_screenshot("namespace_selected")
+        self.vm_ui.take_screenshot("namespace_selected")
 
         logger.info("\nStep 2: Navigate to Virtualization > VirtualMachines")
         logger.info("-" * 80)
         self.vm_ui.navigate_to_virtualmachines_page()
-        self.base_ui.page_has_loaded()
-        self.base_ui.take_screenshot("virtualmachines_page")
+        self.vm_ui.page_has_loaded()
+        self.vm_ui.take_screenshot("virtualmachines_page")
 
         logger.info("\nStep 3: Click Create > From InstanceType")
         logger.info("-" * 80)
         self.vm_ui.click_create_virtualmachine()
-        self.base_ui.take_screenshot("instancetype_wizard_opened")
+        self.vm_ui.take_screenshot("instancetype_wizard_opened")
 
         logger.info("\nStep 4: Select volume to boot from — first available row")
         logger.info("-" * 80)
         self.vm_ui.select_boot_volume_first_row()
-        self.base_ui.take_screenshot("boot_volume_selected")
+        self.vm_ui.take_screenshot("boot_volume_selected")
 
         logger.info("\nStep 5: Select InstanceType — General Purpose")
         logger.info("-" * 80)
         self.vm_ui.select_instance_type_general_purpose()
-        self.base_ui.take_screenshot("instance_type_selected")
+        self.vm_ui.take_screenshot("instance_type_selected")
 
         logger.info(
             "\nStep 6: VirtualMachine details — enter VM name, "
@@ -634,21 +630,21 @@ class TestVirtualMachineLifecycle(ManageTest):
         vm_name = create_unique_resource_name("test", "vm")[:63]
         logger.info(f"Generated VM name: {vm_name}")
         self.vm_ui.enter_instancetype_vm_name(vm_name)
-        self.base_ui.take_screenshot("vm_name_entered")
+        self.vm_ui.take_screenshot("vm_name_entered")
         self.vm_ui.select_storageclass_ending_with_vm()
-        self.base_ui.take_screenshot("storageclass_selected")
+        self.vm_ui.take_screenshot("storageclass_selected")
 
         logger.info("\nStep 7: Click Create VirtualMachine")
         logger.info("-" * 80)
         self.vm_ui.click_create_virtualmachine_submit()
-        self.base_ui.take_screenshot("vm_creation_initiated")
+        self.vm_ui.take_screenshot("vm_creation_initiated")
 
         logger.info("\nStep 8: Wait for VM status: Running")
         logger.info("-" * 80)
-        self.base_ui.page_has_loaded()
+        self.vm_ui.page_has_loaded()
         logger.info("Waiting for Running status ...")
         self.vm_ui.wait_for_vm_running()
-        self.base_ui.take_screenshot("vm_running")
+        self.vm_ui.take_screenshot("vm_running")
         logger.info(f"VirtualMachine '{vm_name}' is now Running")
 
         # Store on the instance so teardown_vm can clean up even on test failure.
@@ -733,7 +729,6 @@ class TestVirtualMachineLifecycle(ManageTest):
 
         vm_name, namespace = self._create_vm_and_wait_for_running()
         logger.info("VM Created: PASS")
-        logger.info("VM Running: PASS")
 
         logger.info("\nStep 9: Add data to the VM and compute md5sum via CLI")
         logger.info("-" * 80)
@@ -815,13 +810,13 @@ class TestVirtualMachineLifecycle(ManageTest):
         logger.info("\nStep 4: Take snapshot of the vm")
         logger.info("-" * 80)
         self.vm_ui.click_actions_menu()
-        self.base_ui.take_screenshot("snapshot_test_actions_menu_open")
+        self.vm_ui.take_screenshot("snapshot_test_actions_menu_open")
 
         self.vm_ui.click_actions_take_snapshot()
-        self.base_ui.take_screenshot("snapshot_test_take_snapshot_popup")
+        self.vm_ui.take_screenshot("snapshot_test_take_snapshot_popup")
 
         self.vm_ui.click_take_snapshot_save()
-        self.base_ui.take_screenshot("snapshot_test_snapshot_save_clicked")
+        self.vm_ui.take_screenshot("snapshot_test_snapshot_save_clicked")
         logger.info("Snapshot creation initiated successfully")
 
         logger.info(
@@ -829,10 +824,10 @@ class TestVirtualMachineLifecycle(ManageTest):
         )
         logger.info("-" * 80)
         self.vm_ui.click_vm_detail_snapshots_tab()
-        self.base_ui.take_screenshot("snapshot_test_snapshots_tab")
+        self.vm_ui.take_screenshot("snapshot_test_snapshots_tab")
 
         self.vm_ui.wait_for_snapshot_succeeded()
-        self.base_ui.take_screenshot("snapshot_test_snapshot_succeeded")
+        self.vm_ui.take_screenshot("snapshot_test_snapshot_succeeded")
         logger.info("Snapshot status reached: Succeeded ")
 
         logger.info("Waiting for VM guest agent to be ready before modifying data...")
@@ -858,14 +853,14 @@ class TestVirtualMachineLifecycle(ManageTest):
         logger.info("\nStep 6: Power off VM via Actions > Control > Stop")
         logger.info("-" * 80)
         self.vm_ui.click_vm_detail_overview_tab()
-        self.base_ui.take_screenshot("snapshot_test_overview_before_stop")
+        self.vm_ui.take_screenshot("snapshot_test_overview_before_stop")
         self.vm_ui.click_actions_menu()
-        self.base_ui.take_screenshot("snapshot_test_actions_stop_menu")
+        self.vm_ui.take_screenshot("snapshot_test_actions_stop_menu")
         self.vm_ui.click_actions_control_then_stop()
-        self.base_ui.take_screenshot("snapshot_test_stop_clicked")
+        self.vm_ui.take_screenshot("snapshot_test_stop_clicked")
 
         self.vm_ui.wait_for_vm_stopped()
-        self.base_ui.take_screenshot("snapshot_test_vm_stopped")
+        self.vm_ui.take_screenshot("snapshot_test_vm_stopped")
         logger.info("VM status reached: Stopped")
 
         logger.info(
@@ -873,31 +868,31 @@ class TestVirtualMachineLifecycle(ManageTest):
         )
         logger.info("-" * 80)
         self.vm_ui.click_vm_detail_snapshots_tab()
-        self.base_ui.take_screenshot("snapshot_test_snapshots_tab_before_restore")
+        self.vm_ui.take_screenshot("snapshot_test_snapshots_tab_before_restore")
 
         self.vm_ui.click_snapshot_kebab_and_restore()
-        self.base_ui.take_screenshot("snapshot_test_restore_popup")
+        self.vm_ui.take_screenshot("snapshot_test_restore_popup")
 
         self.vm_ui.click_restore_snapshot_confirm()
-        self.base_ui.take_screenshot("snapshot_test_restore_confirmed")
+        self.vm_ui.take_screenshot("snapshot_test_restore_confirmed")
         logger.info("Restore initiated from snapshot")
 
         logger.info("\nStep 8: Navigate to Overview; wait for Stopped, then Start")
         logger.info("-" * 80)
         self.vm_ui.click_vm_detail_overview_tab()
-        self.base_ui.take_screenshot("snapshot_test_overview_after_restore")
+        self.vm_ui.take_screenshot("snapshot_test_overview_after_restore")
 
         self.vm_ui.wait_for_vm_stopped_long()
-        self.base_ui.take_screenshot("snapshot_test_vm_stopped_after_restore")
+        self.vm_ui.take_screenshot("snapshot_test_vm_stopped_after_restore")
         logger.info("VM status after restore: Stopped — PASS")
 
         logger.info("Starting VM via Actions > Control > Start")
         self.vm_ui.click_actions_menu()
         self.vm_ui.click_actions_control_then_start()
-        self.base_ui.take_screenshot("snapshot_test_start_clicked")
+        self.vm_ui.take_screenshot("snapshot_test_start_clicked")
 
         self.vm_ui.wait_for_vm_running()
-        self.base_ui.take_screenshot("snapshot_test_vm_running_after_restore")
+        self.vm_ui.take_screenshot("snapshot_test_vm_running_after_restore")
         logger.info("VM status after restore and start: Running — PASS")
 
         logger.info("\nStep 9: Validate restore — verify file content matches original")
@@ -976,22 +971,22 @@ class TestVirtualMachineLifecycle(ManageTest):
         logger.info("\nStep 4: Navigate to Virtualization > VirtualMachines")
         logger.info("-" * 80)
         self.vm_ui.navigate_to_virtualmachines_page()
-        self.base_ui.take_screenshot("clone_test_vms_page")
+        self.vm_ui.take_screenshot("clone_test_vms_page")
 
         logger.info(f"\nStep 4b: Click VM '{vm_name}'")
         logger.info("-" * 80)
         self.vm_ui.click_virtual_machines_tab_and_open_vm(vm_name)
-        self.base_ui.take_screenshot("clone_test_original_vm_detail")
+        self.vm_ui.take_screenshot("clone_test_original_vm_detail")
 
         logger.info(
             "\nStep 5: Actions > Clone — read clone name, tick checkbox, submit"
         )
         logger.info("-" * 80)
         self.vm_ui.click_actions_menu()
-        self.base_ui.take_screenshot("clone_test_actions_menu_open")
+        self.vm_ui.take_screenshot("clone_test_actions_menu_open")
 
         self.vm_ui.click_actions_clone()
-        self.base_ui.take_screenshot("clone_test_clone_popup_open")
+        self.vm_ui.take_screenshot("clone_test_clone_popup_open")
 
         # Read the pre-filled clone name before clicking anything
         clone_vm_name = self.vm_ui.get_clone_vm_name()
@@ -999,25 +994,25 @@ class TestVirtualMachineLifecycle(ManageTest):
 
         # Tick 'Start VirtualMachine once created' so the clone starts automatically
         self.vm_ui.tick_start_vm_once_created()
-        self.base_ui.take_screenshot("clone_test_popup_ready")
+        self.vm_ui.take_screenshot("clone_test_popup_ready")
 
         self.vm_ui.click_clone_submit_button()
-        self.base_ui.take_screenshot("clone_test_clone_submitted")
+        self.vm_ui.take_screenshot("clone_test_clone_submitted")
         logger.info(f"Clone submitted — clone VM name: '{clone_vm_name}'")
 
         logger.info(
             "\nStep 6: Wait for clone detail page to load, verify cloned VM is Running"
         )
         logger.info("-" * 80)
-        self.base_ui.page_has_loaded()
+        self.vm_ui.page_has_loaded()
         logger.info("Waiting 30 s for cloned VM detail page to fully render...")
         time.sleep(30)
-        self.base_ui.page_has_loaded()
-        self.base_ui.take_screenshot("clone_test_clone_vm_detail")
+        self.vm_ui.page_has_loaded()
+        self.vm_ui.take_screenshot("clone_test_clone_vm_detail")
 
         # If Running within 4 min — proceed. If Stopped — start via Actions > Control > Start.
         self.vm_ui.ensure_cloned_vm_running()
-        self.base_ui.take_screenshot("clone_test_clone_vm_running")
+        self.vm_ui.take_screenshot("clone_test_clone_vm_running")
         logger.info(f"Cloned VM '{clone_vm_name}' is now Running — PASS")
 
         logger.info(
