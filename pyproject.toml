@@ -124,6 +124,7 @@ docs = [
 ]
 
 [project.scripts]
+run-agent = "ocs_ci.agents.runtime.run:main"
 run-ci = "ocs_ci.framework.main:main"
 run-ci-deploy = "ocs_ci.framework.deploy:main"
 report-version = "ocs_ci.ocs.version:main"
