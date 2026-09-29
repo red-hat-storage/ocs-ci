@@ -224,7 +224,7 @@ class LocatorFallback:
     def _check_page_health(self):
         """
         Performs conservative pre-checks on the browser page before invoking LLM.
-        Avoids querying LLM on obvious 404, server error, or disconnected pages.
+        Avoids querying LLM on obvious 404, server error, disconnected, or crashed pages.
 
         Returns:
             bool: True if page is in a testable state, False if unrecoverable error.
@@ -233,6 +233,31 @@ class LocatorFallback:
             return True
 
         try:
+            # 1. Check for web console / dynamic plugin crash screen (React Error Boundary)
+            error_boundary_selectors = [
+                ("css selector", "[data-test='error-boundary']"),
+                ("css selector", "[data-test-id='error-boundary']"),
+                ("css selector", ".co-error-boundary"),
+            ]
+            for by_type, selector in error_boundary_selectors:
+                elements = self.driver.find_elements(by=by_type, value=selector)
+                if elements:
+                    error_msg = ""
+                    try:
+                        error_msg = (elements[0].text or "").strip().replace("\n", " ")
+                        if len(error_msg) > 200:
+                            error_msg = error_msg[:200] + "..."
+                    except Exception:
+                        pass
+
+                    details = f" Error details: '{error_msg}'." if error_msg else ""
+                    logger.warning(
+                        f"[AI_FALLBACK] Web console page or plugin crashed with an error screen.{details} "
+                        f"Skipping AI fallback."
+                    )
+                    return False
+
+            # 2. Check for server HTTP error titles
             title = (getattr(self.driver, "title", None) or "").lower()
             if any(
                 err in title
@@ -245,10 +270,12 @@ class LocatorFallback:
                 ]
             ):
                 logger.warning(
-                    f"[AI_FALLBACK] Page title indicates unrecoverable error: '{title}'"
+                    f"[AI_FALLBACK] Web page is showing a server error ('{title}'). "
+                    f"Skipping AI fallback."
                 )
                 return False
 
+            # 3. Check for disconnected / empty browser state
             url = (getattr(self.driver, "current_url", None) or "").lower()
             if (
                 url.startswith("data:")
@@ -256,7 +283,8 @@ class LocatorFallback:
                 or "about:blank" in url
             ):
                 logger.warning(
-                    f"[AI_FALLBACK] Browser current_url indicates invalid state: '{url}'"
+                    f"[AI_FALLBACK] Browser is disconnected or on an empty page ('{url}'). "
+                    f"Skipping AI fallback."
                 )
                 return False
 

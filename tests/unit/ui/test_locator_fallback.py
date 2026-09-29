@@ -230,6 +230,19 @@ def test_page_health_invalid_urls():
         assert fb._check_page_health() is False
 
 
+def test_page_health_error_boundary_detected():
+    """Tests page health check returns False when React error boundary crash container is present."""
+    mock_elem = MagicMock()
+    mock_elem.text = (
+        "Something wrong happened. TypeError: Cannot read property of undefined."
+    )
+    driver = DummyDriver(
+        elements_map={("css selector", "[data-test='error-boundary']"): [mock_elem]}
+    )
+    fb = LocatorFallback(driver=driver)
+    assert fb._check_page_health() is False
+
+
 # 4. Fallback Execution Flow (Cache, Stage 1, Stage 2, Failure)
 @patch.dict(ocsci_config.UI_SELENIUM, {"ai_fallback": True})
 def test_fallback_cache_hit(monkeypatch):
