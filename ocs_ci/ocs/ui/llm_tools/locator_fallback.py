@@ -261,7 +261,7 @@ class LocatorFallback:
                         pass
 
                     details = f" Error details: '{error_msg}'." if error_msg else ""
-                    logger.warning(
+                    logger.error(
                         f"[AI_FALLBACK] Web console page or plugin crashed with an error screen.{details} "
                         f"Skipping AI fallback."
                     )
