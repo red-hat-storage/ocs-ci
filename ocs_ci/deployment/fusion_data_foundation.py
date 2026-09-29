@@ -438,15 +438,53 @@ class FusionDataFoundationDeployment:
     @staticmethod
     def create_odfcluster():
         """
-        Create OdfCluster CR
+        Create OdfCluster CR.
+
+        The OdfCluster spec differs by platform:
+
+        - **IBM HCI** (bare-metal): uses ``localVolumeSetSpec`` so LSO
+          discovers the raw local disks already attached to each node and
+          creates PVs from them.  ``deviceSets`` is removed from the spec.
+
+        - **All other platforms** (e.g. AWS, vSphere with dynamic
+          provisioning): uses ``deviceSets`` with a CSI StorageClass so OSD
+          PVCs are fulfilled by the cloud/virtualised block-storage driver.
+          No raw disks are required on the nodes.
         """
 
         logger.info("Creating OdfCluster CR")
+        platform = config.ENV_DATA.get("platform", "").lower()
         worker_nodes = node.get_worker_nodes()
         with open(constants.FDF_ODFCLUSTER_CR, "r") as f:
             odfcluster_data = yaml.safe_load(f.read())
 
         odfcluster_data["spec"]["storageNodes"] = worker_nodes
+
+        if platform == constants.IBM_HCI_PLATFORM:
+            # IBM HCI bare-metal: replace deviceSets with localVolumeSetSpec
+            # so LSO provisions PVs from the raw local disks on each node.
+            logger.info(
+                "IBM HCI platform: configuring OdfCluster with localVolumeSetSpec"
+            )
+            odfcluster_data["spec"].pop("deviceSets", None)
+            odfcluster_data["spec"]["localVolumeSetSpec"] = {
+                "deviceTypes": ["disk", "part"],
+                "diskType": "SSD",
+            }
+            odfcluster_data["spec"]["autoScaleUp"] = True
+            odfcluster_data["spec"]["allowRemoteStorageConsumers"] = True
+            odfcluster_data["spec"]["storageClient"] = {"enable": True}
+        else:
+            # Dynamic-provisioning platforms (AWS, vSphere, …): keep deviceSets
+            # and fill in the CSI StorageClass so OSD PVCs are provisioned from
+            # cloud/virtualised block storage.  No raw disks needed on nodes.
+            storageclass = storage_class.get_storageclass()
+            logger.info(
+                "Dynamic-provisioning platform: configuring OdfCluster "
+                "deviceSets with StorageClass '%s'",
+                storageclass,
+            )
+            odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
 
         if config.ENV_DATA.get("erasureCoding"):
             odfcluster_data["spec"]["erasureCoding"] = {
