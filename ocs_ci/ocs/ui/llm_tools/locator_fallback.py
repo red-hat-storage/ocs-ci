@@ -113,6 +113,7 @@ STRIP_SELF_CLOSING_RE = re.compile(
 )
 STRIP_COMMENTS_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 WHITESPACE_RE = re.compile(r"\s{2,}")
+PF_VERSION_PREFIX_RE = re.compile(r"\bpf-v\d+-", re.IGNORECASE)
 
 
 def _locator_cache_dir():
@@ -139,6 +140,7 @@ class LocatorFallback:
     """
 
     def __init__(self, driver):
+        """Initializes LocatorFallback with a WebDriver instance."""
         self.driver = driver
         self._client = None
         self._cache = None
@@ -148,6 +150,7 @@ class LocatorFallback:
 
     @property
     def client(self):
+        """Lazy-loaded LLM client instance based on configuration."""
         if self._client is None:
             from ocs_ci.ocs.ui.llm_tools.llm_helper import get_llm_client
 
@@ -156,6 +159,7 @@ class LocatorFallback:
         return self._client
 
     def _get_cache_path(self):
+        """Returns the per-test cache file path."""
         if self._cache_path is None:
             test_name = get_current_test_name()
             self._cache_path = os.path.join(
@@ -176,6 +180,7 @@ class LocatorFallback:
             return {}
 
     def _load_cache(self):
+        """Loads cached fallback locators from session and per-test files."""
         if self._cache is not None:
             return self._cache
         session_data = self._read_json_file(get_session_cache_path())
@@ -184,6 +189,7 @@ class LocatorFallback:
         return self._cache
 
     def _save_cache(self):
+        """Persists current cache entries to per-test and session cache files."""
         cache_dir = _locator_cache_dir()
         os.makedirs(cache_dir, exist_ok=True)
 
@@ -198,6 +204,7 @@ class LocatorFallback:
 
     @staticmethod
     def _cache_key(locator):
+        """Generates a composite lookup key for a locator tuple."""
         return f"{locator[0]}|{locator[1]}"
 
     @staticmethod
@@ -363,7 +370,7 @@ class LocatorFallback:
 
         valid_by_types = {
             "xpath",
-            "css",
+            "css selector",
             "id",
             "name",
             "tag name",
@@ -383,15 +390,21 @@ class LocatorFallback:
             if not isinstance(by_type, str) or not by_type.strip():
                 continue
 
-            by_type_normalized = by_type.strip().lower()
-            if by_type_normalized not in valid_by_types:
-                if by_type_normalized in ("css selector", "css_selector"):
-                    by_type_normalized = "css"
-                else:
-                    logger.warning(f"Unrecognized by_type in LLM response: {by_type}")
-                    continue
+            cleaned_selector = selector.strip()
+            if PF_VERSION_PREFIX_RE.search(cleaned_selector):
+                logger.warning(
+                    f"Rejecting LLM locator with version-prefixed PatternFly class: {cleaned_selector}"
+                )
+                continue
 
-            return (selector.strip(), by_type_normalized)
+            by_type_normalized = by_type.strip().lower()
+            if by_type_normalized in ("css", "css_selector", "css selector"):
+                by_type_normalized = "css selector"
+            elif by_type_normalized not in valid_by_types:
+                logger.warning(f"Unrecognized by_type in LLM response: {by_type}")
+                continue
+
+            return (cleaned_selector, by_type_normalized)
 
         logger.warning(
             f"LLM response JSON missing valid selector/by_type schema: {candidates}"
