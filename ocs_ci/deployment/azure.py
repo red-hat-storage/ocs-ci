@@ -17,7 +17,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility import cco
 from ocs_ci.utility.azure_utils import AZURE as AzureUtil, AzureAroUtil
 from ocs_ci.utility.deployment import get_ocp_release_image_from_installer
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.utils import exec_cmd, get_openshift_installer
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +140,19 @@ class AZUREIPI(AZUREBase):
 
         """
         if config.DEPLOYMENT.get("sts_enabled"):
+            # Ensure installer is available (needed to extract ccoctl for cleanup)
+            if not config.ENV_DATA.get("installer_path"):
+                logger.info(
+                    "Installer not available. Downloading installer to enable CCO cleanup."
+                )
+                get_openshift_installer()
+
+            # Extract ccoctl if not already available
+            pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+            release_image = get_ocp_release_image_from_installer()
+            cco_image = cco.get_cco_container_image(release_image, pull_secret_path)
+            cco.extract_ccoctl_binary(cco_image, pull_secret_path)
+
             self.azure_util.set_auth_env_vars()
             cco.delete_oidc_resource_group(
                 self.cluster_name,
