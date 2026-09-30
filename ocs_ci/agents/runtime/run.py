@@ -7,9 +7,16 @@ import json
 import logging
 import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 from ocs_ci.agents.runtime.discover import iter_agent_dirs, load_agent_spec
+from ocs_ci.agents.runtime.dry_run import activate_dry_run, env_requests_dry_run
+from ocs_ci.agents.runtime.logging import (
+    agent_run_callbacks,
+    configure_agent_logging,
+    describe_run,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +57,70 @@ def build_request(argv, env):
         default=None,
         help="JSON result path. Overrides OCS_AGENT_RESULT_FILE. Defaults to WORKSPACE/agent-result.json.",
     )
+    parser.add_argument(
+        "--issue",
+        action="append",
+        default=None,
+        help="Verify only this Jira issue. Repeat for more than one. Overrides OCS_AGENT_ISSUE.",
+    )
+    parser.add_argument(
+        "--cluster",
+        default=None,
+        help=(
+            "Jenkins cluster for verification. When set with --release and "
+            "--issue, the run collects the report and then verifies the bug. "
+            "Overrides OCS_AGENT_CLUSTER."
+        ),
+    )
+    parser.add_argument(
+        "--release",
+        default=None,
+        help="Target Release whose ON_QA bugs are retrieved. Overrides OCS_AGENT_RELEASE.",
+    )
+    parser.add_argument(
+        "--arg",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        help="Extra argument passed to the agent. Repeat for more than one.",
+    )
+    parser.add_argument(
+        "--provider",
+        default=None,
+        choices=["openai", "claude", "claude_code"],
+        help=(
+            "Chat model. openai is the default. claude_code runs Claude Code "
+            "on Vertex with agents_credentials.claude_code. "
+            "Overrides OCS_AGENT_PROVIDER."
+        ),
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Read and write the local verification report only. "
+            "Do not run cluster commands, update Jira, or open a GitHub issue. "
+            "Also enabled by OCS_AGENT_DRY_RUN=1."
+        ),
+    )
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help=(
+            "Skip the Jira collection and run a verification report that was "
+            "already saved. Copies the cluster kubeconfig from Jenkins. A "
+            "kubeconfig response of OK means the cluster is online."
+        ),
+    )
+    parser.add_argument(
+        "--kubeconfig",
+        default=None,
+        help=(
+            "Optional local kubeconfig for --execute. When omitted, the "
+            "kubeconfig is copied from the Jenkins build for --cluster. "
+            "Overrides OCS_AGENT_KUBECONFIG."
+        ),
+    )
     args = parser.parse_args(argv)
     agent = args.agent or env.get("OCS_AGENT_NAME")
     if not agent:
@@ -61,9 +132,15 @@ def build_request(argv, env):
     result_file = args.result_file or env.get("OCS_AGENT_RESULT_FILE")
     if not result_file and env.get("WORKSPACE"):
         result_file = str(Path(env["WORKSPACE"]) / "agent-result.json")
+    execute = args.execute or _truthy(env.get("OCS_AGENT_EXECUTE"))
+    kubeconfig = args.kubeconfig or env.get("OCS_AGENT_KUBECONFIG") or ""
     return {
         "agent": agent,
         "message": message,
+        "provider": args.provider,
+        "execute": execute,
+        "kubeconfig": str(kubeconfig).strip(),
+        "args": _agent_args(args, env),
         "result_file": result_file,
         "jenkins": {
             "job_name": env.get("JOB_NAME"),
@@ -72,6 +149,98 @@ def build_request(argv, env):
             "workspace": env.get("WORKSPACE"),
         },
     }
+
+
+def _agent_args(args, env):
+    """
+    Collect named arguments from the environment and the CLI.
+
+    OCS_AGENT_ARGS is a whitespace-separated list of KEY=VALUE pairs.
+    OCS_AGENT_ISSUE is a comma-separated list of issue keys. OCS_AGENT_CLUSTER
+    is one kube context. OCS_AGENT_RELEASE is a Target Release name.
+    OCS_AGENT_DRY_RUN=1 is a dry run. --arg, --issue, --cluster, --release,
+    and --dry-run replace those values. A dry run reads Jira and may write
+    the local verification report. It does not update Jira or any other
+    application.
+
+    Args:
+        args: Parsed CLI arguments.
+        env (dict): Process environment.
+
+    Returns:
+        dict: Argument names and values. issues is a list when any issue was given.
+
+    Raises:
+        ValueError: A pair is not KEY=VALUE.
+    """
+    collected = {}
+    for token in str(env.get("OCS_AGENT_ARGS") or "").split():
+        key, value = _split_arg(token)
+        collected[key] = value
+    issues = [
+        part.strip()
+        for part in str(env.get("OCS_AGENT_ISSUE") or "").split(",")
+        if part.strip()
+    ]
+    cluster = str(env.get("OCS_AGENT_CLUSTER") or "").strip()
+    release = str(env.get("OCS_AGENT_RELEASE") or "").strip()
+    if issues:
+        collected["issues"] = issues
+    if cluster:
+        collected["cluster"] = cluster
+    if release:
+        collected["release"] = release
+    for token in args.arg or []:
+        key, value = _split_arg(token)
+        collected[key] = value
+    if args.cluster:
+        collected["cluster"] = args.cluster
+    if args.release:
+        collected["release"] = args.release
+    if args.issue:
+        collected["issues"] = [part.strip() for part in args.issue if part.strip()]
+    if args.dry_run or env_requests_dry_run(env) or _truthy(collected.get("dry_run")):
+        collected["dry_run"] = True
+    elif "dry_run" in collected:
+        del collected["dry_run"]
+    return collected
+
+
+def _truthy(value):
+    """
+    Return whether an argument value turns dry-run on.
+
+    Args:
+        value: Raw argument value.
+
+    Returns:
+        bool: True for True and for 1, true, or yes.
+    """
+    if value is True:
+        return True
+    return isinstance(value, str) and value.strip().lower() in {"1", "true", "yes"}
+
+
+def _split_arg(token):
+    """
+    Split one KEY=VALUE argument.
+
+    Args:
+        token (str): Raw pair.
+
+    Returns:
+        tuple: Key and value.
+
+    Raises:
+        ValueError: The token has no equals sign or no key.
+    """
+    if "=" not in token:
+        raise ValueError(f"argument must be KEY=VALUE: {token}")
+    key, value = token.split("=", 1)
+    key = key.strip()
+    if not key:
+        raise ValueError(f"argument must be KEY=VALUE: {token}")
+    return key, value.strip()
 
 
 def resolve_agent_dir(name, root=None):
@@ -124,10 +293,19 @@ def agent_state(request):
     Returns:
         dict: Messages plus the Jenkins build fields.
     """
-    return {
-        "messages": [{"role": "user", "content": request["message"]}],
+    message = request["message"] or ""
+    agent_args = request.get("args") or {}
+    if agent_args:
+        message = (
+            f"{message.rstrip()}\n{json.dumps(agent_args, sort_keys=True)}".strip()
+        )
+    state = {
+        "messages": [{"role": "user", "content": message}],
         "jenkins": request["jenkins"],
     }
+    if agent_args:
+        state["args"] = agent_args
+    return state
 
 
 def invoke_agent(agent_dir, request):
@@ -139,19 +317,146 @@ def invoke_agent(agent_dir, request):
         request (dict): Value returned by build_request.
 
     Returns:
-        dict: JSON-ready result with ok, the agent name, and the graph state.
+        dict: JSON-ready result with ok, the agent name, the final reply, and
+            the graph state.
 
     Raises:
         NotImplementedError: The shared LangGraph builder is not connected yet.
     """
-    make_graph = load_make_graph(agent_dir)
-    graph = asyncio.run(make_graph())
-    state = asyncio.run(graph.ainvoke(agent_state(request)))
+
+    async def _run():
+        make_graph = load_make_graph(agent_dir)
+        graph = await make_graph()
+        return await graph.ainvoke(
+            agent_state(request),
+            config={
+                "recursion_limit": _recursion_limit(),
+                "callbacks": agent_run_callbacks(),
+            },
+        )
+
+    configure_agent_logging()
+    logger.info(f"Starting {describe_run(request)}")
+    with activate_provider(request), activate_dry_run(request):
+        state = asyncio.run(_run())
+    reply = _final_reply(state)
+    logger.info(f"Agent {request['agent']} finished: {_reply_for_log(reply)}")
     return {
         "ok": True,
         "agent": request["agent"],
         "jenkins": request["jenkins"],
-        "state": state,
+        "reply": reply,
+        "state": _public_state(state),
+    }
+
+
+@contextmanager
+def activate_provider(request):
+    """
+    Select the chat model for one agent run.
+
+    Args:
+        request (dict): Value returned by build_request. provider is set when
+            --provider was passed.
+    """
+    provider = (request.get("provider") or "").strip()
+    if not provider:
+        yield
+        return
+    previous = os.environ.get("OCS_AGENT_PROVIDER")
+    os.environ["OCS_AGENT_PROVIDER"] = provider
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("OCS_AGENT_PROVIDER", None)
+        else:
+            os.environ["OCS_AGENT_PROVIDER"] = previous
+
+
+def _recursion_limit():
+    """
+    Return how many graph steps one run may take.
+
+    OCS_AGENT_RECURSION_LIMIT overrides the default. The default covers one
+    search plus a get for every ON_QA issue in a release.
+
+    Returns:
+        int: LangGraph recursion limit.
+    """
+    raw = os.environ.get("OCS_AGENT_RECURSION_LIMIT", "1000")
+    try:
+        return int(raw)
+    except ValueError:
+        return 1000
+
+
+def _public_state(state):
+    """
+    Convert graph state into JSON-ready values.
+
+    Args:
+        state (dict): Value returned by the compiled graph.
+
+    Returns:
+        dict: State with messages reduced to role and content.
+    """
+    if not isinstance(state, dict):
+        return state
+    public = {}
+    for key, value in state.items():
+        if key == "messages":
+            public[key] = [_message_dict(message) for message in value]
+        else:
+            public[key] = value
+    return public
+
+
+def _final_reply(state):
+    """
+    Return the text of the last graph message.
+
+    Args:
+        state (dict): Value returned by the compiled graph.
+
+    Returns:
+        str: Final assistant text, or an empty string when there is no message.
+    """
+    if not isinstance(state, dict):
+        return ""
+    messages = state.get("messages") or []
+    if not messages:
+        return ""
+    return _message_dict(messages[-1]).get("content") or ""
+
+
+def _message_dict(message):
+    """
+    Reduce one chat message to role and text.
+
+    Args:
+        message: A LangChain message or a role/content dict.
+
+    Returns:
+        dict: role and content.
+    """
+    if isinstance(message, dict):
+        return {
+            "role": message.get("role") or message.get("type"),
+            "content": message.get("content"),
+        }
+    content = getattr(message, "content", "")
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text") or "")
+        content = "\n".join(part for part in parts if part)
+    return {
+        "role": getattr(message, "type", None) or getattr(message, "role", None),
+        "content": content,
     }
 
 
@@ -172,24 +477,36 @@ def main(argv=None, env=None, invoke=None):
         argv = sys.argv[1:]
     if env is None:
         env = os.environ
-    _ensure_console_logging()
+    configure_agent_logging()
     try:
         request = build_request(argv, env)
     except ValueError as exc:
+        logger.error(str(exc))
         _emit({"ok": False, "error": str(exc)}, None)
         return EXIT_USAGE
     try:
         agent_dir = resolve_agent_dir(request["agent"])
         load_agent_spec(agent_dir)
-        runner = invoke or invoke_agent
-        result = runner(agent_dir, request)
+        if request.get("execute"):
+            if request["agent"] != "jira_verification":
+                raise ValueError("--execute is only available for jira_verification")
+            from ocs_ci.agents.jira_verification.execute import execute_saved_reports
+
+            with activate_dry_run(request):
+                result = execute_saved_reports(request)
+        else:
+            runner = invoke or invoke_agent
+            with activate_provider(request):
+                result = runner(agent_dir, request)
+            result = _verify_collected_reports(request, result)
         result.setdefault("ok", True)
         code = EXIT_OK if result["ok"] else EXIT_AGENT_ERROR
     except LookupError as exc:
+        logger.error(f"Unknown agent {request['agent']}: {exc}")
         result = {"ok": False, "agent": request["agent"], "error": str(exc)}
         code = EXIT_USAGE
     except Exception as exc:
-        logger.error("Agent %s failed: %s", request["agent"], exc)
+        logger.exception(f"Agent {request['agent']} failed: {exc}")
         result = {
             "ok": False,
             "agent": request["agent"],
@@ -201,14 +518,63 @@ def main(argv=None, env=None, invoke=None):
     return code
 
 
-def _ensure_console_logging():
-    """Show agent logs in the Jenkins console when the framework logger is not configured."""
-    if logging.getLogger().handlers:
-        return
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+def _verify_collected_reports(request, collected):
+    """
+    Verify the bugs just collected when the run names a cluster.
+
+    The collection step writes the local report. This step copies the
+    kubeconfig, runs the verification, comments on Jira, and opens the GitHub
+    automation issue. A dry run stops after the local report.
+
+    Args:
+        request (dict): Value returned by build_request.
+        collected (dict): Result from the collection agent.
+
+    Returns:
+        dict: Collection result, with verification results when they ran.
+    """
+    if request.get("agent") != "jira_verification":
+        return collected
+    if not isinstance(collected, dict) or not collected.get("ok", True):
+        return collected
+    args = request.get("args") or {}
+    if args.get("dry_run"):
+        logger.info("Dry run: cluster verification was not started")
+        return collected
+    release = str(args.get("release") or "").strip()
+    issues = [
+        str(key).strip() for key in (args.get("issues") or []) if str(key).strip()
+    ]
+    cluster = str(args.get("cluster") or "").strip()
+    if not release or not issues or not cluster:
+        logger.info(
+            "Verification was not started. Pass --release, --issue, and --cluster."
+        )
+        return collected
+    logger.info(f"Collected {', '.join(issues)}. Verifying on {cluster} for {release}.")
+    from ocs_ci.agents.jira_verification.execute import execute_saved_reports
+
+    with activate_dry_run(request):
+        executed = execute_saved_reports(request)
+    merged = dict(collected)
+    merged["verification"] = executed.get("results") or []
+    return merged
+
+
+def _reply_for_log(reply):
+    """
+    Return the final reply clipped to one log line.
+
+    Args:
+        reply (str): Final assistant text.
+
+    Returns:
+        str: Whitespace-collapsed reply, clipped when it is long.
+    """
+    text = " ".join(str(reply or "").split())
+    if len(text) <= 300:
+        return text or "no reply"
+    return text[:300] + "..."
 
 
 def _emit(result, result_file):
