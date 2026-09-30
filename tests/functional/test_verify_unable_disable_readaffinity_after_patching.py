@@ -1,7 +1,6 @@
 import json
 import logging
 import pytest
-import time
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -12,7 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import ManageTest, tier4
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.resources.storage_cluster import (
+from ocs_ci.ocs.resources.storage_cluster_readaffinity import (
     get_storage_cluster_name,
     get_read_affinity_enabled,
     get_read_affinity_spec,
@@ -20,10 +19,12 @@ from ocs_ci.ocs.resources.storage_cluster import (
     patch_read_affinity,
     wait_for_read_affinity_state,
 )
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
 TIMEOUT_CONFIGMAP_UPDATE = 300
+TIMEOUT_RESTORE = 120
 POLL_INTERVAL = 10
 
 
@@ -72,30 +73,44 @@ class TestDisableReadAffinityAfterPatching(ManageTest):
         def finalizer():
             """Restore the original ReadAffinity state on the StorageCluster CR."""
             logger.info("Restoring original ReadAffinity state on StorageCluster CR")
-            try:
-                if original_exists and original_enabled is not None:
-                    patch_read_affinity(
-                        self.storage_cluster_name,
-                        enabled=original_enabled,
-                        namespace=self.namespace,
+            if original_exists and original_enabled is not None:
+                patch_read_affinity(
+                    self.storage_cluster_name,
+                    enabled=original_enabled,
+                    namespace=self.namespace,
+                )
+                logger.info(f"Restored ReadAffinity enabled to {original_enabled}")
+                # Poll to confirm the restored state has propagated
+                _wait_for_restored_state(
+                    self.storage_cluster_name,
+                    expected_enabled=original_enabled,
+                    namespace=self.namespace,
+                )
+            elif not original_exists:
+                remove_patch = '[{"op": "remove", "path": "/spec/csi/readAffinity"}]'
+                try:
+                    self.storage_cluster_obj.patch(
+                        resource_name=self.storage_cluster_name,
+                        params=remove_patch,
+                        format_type="json",
                     )
-                    logger.info(f"Restored ReadAffinity enabled to {original_enabled}")
-                elif not original_exists:
-                    remove_patch = '[{"op": "remove", "path": "/spec/csi/readAffinity"}]'
-                    try:
-                        self.storage_cluster_obj.patch(
-                            resource_name=self.storage_cluster_name,
-                            params=remove_patch,
-                            format_type="json",
-                        )
-                        logger.info("Removed ReadAffinity spec (restored to original absent state)")
-                    except CommandFailed:
-                        logger.warning("ReadAffinity spec already absent, nothing to remove")
-            except Exception as e:
-                logger.warning(f"Failed to restore original ReadAffinity state: {e}")
-
-            # Wait for the configmap to settle after restoration
-            time.sleep(30)
+                    logger.info("Removed ReadAffinity spec (restored to original absent state)")
+                except CommandFailed as e:
+                    # Verify the field is actually absent before suppressing
+                    current_exists, _ = get_read_affinity_spec(
+                        self.storage_cluster_name, namespace=self.namespace
+                    )
+                    if current_exists:
+                        raise RuntimeError(
+                            f"Failed to remove ReadAffinity spec and it still exists: {e}"
+                        ) from e
+                    logger.info("ReadAffinity spec already absent, nothing to remove")
+                # Poll to confirm readAffinity is absent from cluster config
+                _wait_for_restored_state(
+                    self.storage_cluster_name,
+                    expected_enabled=None,
+                    namespace=self.namespace,
+                )
 
         request.addfinalizer(finalizer)
 
@@ -188,3 +203,60 @@ class TestDisableReadAffinityAfterPatching(ManageTest):
             )
 
         logger.info("ReadAffinity was successfully disabled after patching StorageCluster CR")
+
+
+def _wait_for_restored_state(storage_cluster_name, expected_enabled, namespace, timeout=TIMEOUT_RESTORE):
+    """
+    Poll to confirm the StorageCluster ReadAffinity state has been restored
+    and propagated after finalizer cleanup.
+
+    Args:
+        storage_cluster_name (str): Name of the StorageCluster CR.
+        expected_enabled (bool or None): The expected enabled state. None means
+            readAffinity should be absent.
+        namespace (str): The namespace of the StorageCluster.
+        timeout (int): Maximum time to wait in seconds.
+
+    Raises:
+        RuntimeError: If the restored state does not converge within the timeout.
+    """
+    logger.info(f"Polling to confirm restored ReadAffinity state (expected_enabled={expected_enabled})")
+
+    if expected_enabled is None:
+        # Expect readAffinity to be absent from StorageCluster spec
+        try:
+            for sample in TimeoutSampler(
+                timeout=timeout,
+                sleep=POLL_INTERVAL,
+                func=get_read_affinity_spec,
+                storage_cluster_name=storage_cluster_name,
+                namespace=namespace,
+            ):
+                exists, _ = sample
+                if not exists:
+                    logger.info("Confirmed ReadAffinity is absent from StorageCluster spec")
+                    return
+        except TimeoutError:
+            raise RuntimeError(
+                f"ReadAffinity was not removed from StorageCluster spec within {timeout}s during teardown"
+            )
+    else:
+        # Confirm the enabled state in StorageCluster spec
+        try:
+            for sample in TimeoutSampler(
+                timeout=timeout,
+                sleep=POLL_INTERVAL,
+                func=get_read_affinity_enabled,
+                storage_cluster_name=storage_cluster_name,
+                namespace=namespace,
+            ):
+                if sample == expected_enabled:
+                    logger.info(
+                        f"Confirmed ReadAffinity enabled={expected_enabled} in StorageCluster spec"
+                    )
+                    return
+        except TimeoutError:
+            raise RuntimeError(
+                f"ReadAffinity enabled={expected_enabled} was not restored in StorageCluster spec "
+                f"within {timeout}s during teardown"
+            )
