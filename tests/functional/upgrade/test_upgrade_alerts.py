@@ -57,12 +57,12 @@ def test_no_unexpected_alerts(upgrade_stats, upgrade_type):
             f"({collection_status}) so it is not possible to verify that no "
             "unexpected alert was fired"
         )
-        if not collection_status.get("complete"):
-            log.warning(
-                f"Collection of alerts fired during {upgrade_type} was not "
-                f"finished properly ({collection_status}) so some alerts might "
-                "be missing"
-            )
+        assert collection_status.get("complete"), (
+            f"Collection of alerts fired during {upgrade_type} was not "
+            f"finished properly ({collection_status}) so collected alerts are "
+            "incomplete and it is not possible to verify that no unexpected "
+            "alert was fired"
+        )
 
     firing_alerts = [alert for alert in alerts if alert.get("state") == "firing"]
     pending_alerts = [alert for alert in alerts if alert.get("state") == "pending"]
