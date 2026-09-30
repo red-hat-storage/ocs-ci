@@ -99,7 +99,7 @@ class TestDisableReadAffinityAfterPatching(ManageTest):
                     )
                     logger.info("Removed ReadAffinity spec (restored to original absent state)")
                 except CommandFailed as e:
-                    # Only suppress if readAffinity is already absent
+                    # Only suppress if readAffinity is already confirmed absent
                     current_exists, _ = get_read_affinity_spec(
                         self.storage_cluster_name, namespace=self.namespace
                     )
@@ -228,44 +228,33 @@ def _wait_for_restored_spec(
 
     if expected_spec is None:
         # Expect readAffinity to be absent
-        try:
-            for sample in TimeoutSampler(
-                timeout=timeout,
-                sleep=POLL_INTERVAL,
-                func=get_read_affinity_spec,
-                storage_cluster_name=storage_cluster_name,
-                namespace=namespace,
-            ):
-                exists, _ = sample
-                if not exists:
-                    logger.info("Confirmed ReadAffinity is absent from StorageCluster spec")
-                    return
-        except TimeoutError:
-            raise RuntimeError(
-                f"ReadAffinity was not removed from StorageCluster spec within {timeout}s during teardown"
-            )
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=POLL_INTERVAL,
+            func=get_read_affinity_spec,
+            storage_cluster_name=storage_cluster_name,
+            namespace=namespace,
+        ):
+            exists, _ = sample
+            if not exists:
+                logger.info("Confirmed ReadAffinity is absent from StorageCluster spec")
+                return
     else:
         # Expect readAffinity to match the original spec exactly
-        try:
-            for sample in TimeoutSampler(
-                timeout=timeout,
-                sleep=POLL_INTERVAL,
-                func=get_read_affinity_spec,
-                storage_cluster_name=storage_cluster_name,
-                namespace=namespace,
-            ):
-                exists, current_spec = sample
-                if exists and current_spec == expected_spec:
-                    logger.info(
-                        f"Confirmed ReadAffinity spec restored to {expected_spec} in StorageCluster"
-                    )
-                    return
-                logger.debug(
-                    f"Current ReadAffinity spec: exists={exists}, spec={current_spec}, "
-                    f"expected={expected_spec}"
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=POLL_INTERVAL,
+            func=get_read_affinity_spec,
+            storage_cluster_name=storage_cluster_name,
+            namespace=namespace,
+        ):
+            exists, current_spec = sample
+            if exists and current_spec == expected_spec:
+                logger.info(
+                    f"Confirmed ReadAffinity spec restored to {expected_spec} in StorageCluster"
                 )
-        except TimeoutError:
-            raise RuntimeError(
-                f"ReadAffinity spec was not restored to {expected_spec} in StorageCluster spec "
-                f"within {timeout}s during teardown"
+                return
+            logger.debug(
+                f"Current ReadAffinity spec: exists={exists}, spec={current_spec}, "
+                f"expected={expected_spec}"
             )
