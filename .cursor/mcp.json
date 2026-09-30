@@ -8,12 +8,9 @@
       "command": "python3",
       "args": ["-m", "ocs_ci.agents.mcp.servers.cluster"]
     },
-    "ocs-ci-reportportal": {
+    "ocs-ci-jenkins": {
       "command": "python3",
-      "args": ["-m", "ocs_ci.agents.mcp.servers.reportportal"]
-    },
-    "atlassian-rovo": {
-      "url": "https://mcp.atlassian.com/v2/mcp"
+      "args": ["-m", "ocs_ci.agents.mcp.servers.jenkins"]
     }
   }
 }

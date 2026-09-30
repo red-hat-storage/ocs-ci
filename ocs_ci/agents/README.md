@@ -9,12 +9,12 @@ ocs_ci/agents/
 ├── langgraph.json          # generated registry of agent graphs
 ├── runtime/                # shared graph builder, model, discovery, Jenkins runner
 ├── mcp/
-│   ├── registry.py         # local servers and remote Rovo
+│   ├── registry.py         # MCP server connections
 │   ├── client.py           # loads MCP servers as LangChain tools
 │   └── servers/            # local tool implementations
 │       ├── jira.py
-│       ├── cluster.py
-│       └── reportportal.py
+│       ├── jenkins.py
+│       └── cluster.py
 ├── _template/              # copy this folder to add an agent
 ├── jira_verification/      # first agent
 ├── workflows/              # parent graphs that call other agents
@@ -28,8 +28,7 @@ Tools stay in `mcp/servers/`. An agent lists the tool names it may call in
 
 1. Copy `_template/` to `<agent_name>/`.
 2. Edit `agent.yaml` and `prompt.md`. Set `name` to the directory name.
-3. Set `mcp_servers` and `tools.allow` to local servers under `mcp/servers/`,
-   or to `rovo` and the Rovo tool names that agent may call.
+3. Set `mcp_servers` and `tools.allow` to local servers under `mcp/servers/`.
 4. Leave `graph.py` as it is. It calls the shared LangGraph builder.
 5. Regenerate the registry:
 
@@ -48,37 +47,112 @@ The last line of the console log is a JSON result. When WORKSPACE is set, the
 same JSON is written to `agent-result.json` in the workspace so the job can
 archive it.
 
+Install the agent runtime in the job environment before the first run. The
+packages are the `agents` dependency group in `pyproject.toml`:
+
+```bash
+uv sync --inexact --no-dev --group agents
+```
+
+The chat model is OpenAI. Put the key in `data/auth.yaml`:
+
+```yaml
+agents_credentials:
+  openai:
+    api_key: <openai-api-key>
+  claude_code: <base64-service-account-json>
+  jira:
+    url: https://redhat.atlassian.net
+    email: <jira-email>
+    token: <jira-api-token>
+  jenkins:
+    email: <jenkins-email>
+    token: <jenkins-api-token>
+```
+
+`OPENAI_API_KEY` is used when that file entry is empty. `OCS_AGENT_MODEL`
+overrides the model name. The default is `gpt-4o`. Set
+`OCS_AGENT_PROVIDER=claude` to use a logged-in Claude CLI instead. Set
+`OCS_AGENT_PROVIDER=claude_code` or `--provider claude_code` to run Claude
+Code on Vertex. That option reads `agents_credentials.claude_code` in
+`data/auth.yaml`, a base64-encoded service account JSON. `OCS_AGENT_CLOUD_ML_REGION`
+overrides the Vertex region. The default is `us-east5`. The local
+Jira server reads `agents_credentials.jira` in `data/auth.yaml` (`url`,
+`email`, `token`). When the report names a cluster, Jenkins is read with
+`agents_credentials.jenkins` (`email`, `token`), or the top-level `jenkins`
+section, to record whether that deploy can run the verification. Other
+ocs-ci callers still use `config.AUTH.jira`, the
+top-level `jira` section, or `/etc/jira.cfg`. `jira_verification` reads issues
+with the local Jira server and writes each verification report from that
+issue. The summary has `issue`, `reproduction_steps`, and `expected_results`.
+When the Jira verification text has no command, the report steps are oc
+commands that follow those reproduction steps and check the expected result.
+A step that already has a command is kept.
+
 ```bash
 python3 -m ocs_ci.agents.runtime.run \
   --agent "${OCS_AGENT_NAME}" \
   --message "${OCS_AGENT_MESSAGE}"
 ```
 
-The same command with no flags reads `OCS_AGENT_NAME` and `OCS_AGENT_MESSAGE`
-from the environment. `JOB_NAME`, `BUILD_NUMBER`, `BUILD_URL`, and `WORKSPACE`
-are passed into the agent. Local MCP servers start with the same Python as
-the job and inherit the job environment, including the ocs-ci config,
-kubeconfig, and credentials the job already injects.
+Named arguments are optional. `--release` retrieves ON_QA bugs whose Target
+Release equals that name. `--issue` limits the run to those Jira keys.
+`--cluster` is the Jenkins cluster name. Together, those three flags run the
+whole verification: the report is collected from Jira, the bug is verified on
+the cluster, a Jira comment is added, and a GitHub automation issue is opened
+when verification passes and the plan lists no test. `--dry-run` reads Jira
+and writes the local verification report, and it does not update Jira, run
+cluster commands, or open a GitHub issue. `OCS_AGENT_DRY_RUN=1` is the same
+switch. `--arg KEY=VALUE` passes any other value. Repeat `--issue` and
+`--arg` for more than one.
 
-`.cursor/mcp.json` is for the editor. The Jenkins job does not read it.
-
-## Atlassian Rovo
-
-Rovo is Atlassian's remote MCP server. It is not a module under `mcp/servers/`.
-An agent uses it by adding `rovo` to `mcp_servers` and naming the Rovo tools it
-may call in `tools.allow`.
-
-The Jenkins job reads the token from `data/auth.yaml`:
-
-```yaml
-agents_credentials:
-  rovo_mcp:
-    token: <atlassian-api-token>
+```bash
+python3 -m ocs_ci.agents.runtime.run \
+  --agent jira_verification \
+  --release odf-4.22.6 \
+  --issue DFBUGS-10854 \
+  --cluster pakamble-422-ch1
 ```
 
-That token is sent as a Bearer token. `ATLASSIAN_ROVO_MCP_AUTHORIZATION`
-overrides the file when it holds a full Authorization header value. Cursor still
-signs in with OAuth through `.cursor/mcp.json`.
+The kubeconfig is copied from that cluster's deploy build. A kubeconfig
+response of OK means the cluster is online, and the verification steps run.
+A failed download blocks the run. The saved `cluster_check` is not used to
+stop execution. `--kubeconfig` supplies a local file and skips that copy.
+Claude Code receives the report reproduction steps and the cluster
+kubeconfig, and it verifies the bug on the cluster. The Markdown report is
+`reports/<release>/<issue>-verification.md`. A Jira comment records whether
+verification succeeded and mentions the QA Contact. When that report is long,
+the file is attached and the comment names the attachment. The YAML result is
+`reports/<release>/<issue>-result.yaml`. When the result is `passed` and the
+plan lists no test, an issue titled `Automation_<Jira key>` is opened on
+`agents_credentials.github.upstream_repository` with the label
+`verification_agent_bug`. The issue lists the steps to automate and includes
+the result YAML and the verification Markdown. `--dry-run` writes the local
+report only. A report whose steps have no command is `blocked`.
+
+`--execute` skips the Jira collection and verifies a report that was already
+saved. Use it to repeat the cluster step without reading Jira again.
+
+```bash
+python3 -m ocs_ci.agents.runtime.run \
+  --agent jira_verification \
+  --execute \
+  --release odf-4.22.6 \
+  --issue DFBUGS-10854 \
+  --cluster pakamble-422-ch1
+```
+
+The same command with no flags reads `OCS_AGENT_NAME` and `OCS_AGENT_MESSAGE`
+from the environment. `OCS_AGENT_RELEASE` is the Target Release,
+`OCS_AGENT_ISSUE` is a comma-separated issue list, `OCS_AGENT_CLUSTER` is the
+Jenkins cluster name, and `OCS_AGENT_ARGS` is a whitespace-separated list of
+`KEY=VALUE` pairs. CLI flags replace those values. `JOB_NAME`,
+`BUILD_NUMBER`, `BUILD_URL`, and `WORKSPACE` are passed
+into the agent. Local MCP servers start with the same Python as the job and
+inherit the job environment, including the ocs-ci config, kubeconfig, and
+credentials the job already injects.
+
+`.cursor/mcp.json` is for the editor. The Jenkins job does not read it.
 
 ## Add a tool
 
@@ -88,6 +162,14 @@ line in `mcp/registry.py`. Agents then name that server in `mcp_servers`.
 
 Server modules call the helpers that already exist in `ocs_ci.utility` and
 `ocs_ci.ocs`. The cluster server stays read-only.
+
+The Jenkins server is shared. Any agent lists `jenkins` in `mcp_servers` and
+allows the tools it needs. `jenkins_find_cluster` and `jenkins_get_build` read
+the OCS QE Jenkins server. `jenkins_trigger_build` starts a job with
+`buildWithParameters` and is refused during `--dry-run`. Credentials are
+`agents_credentials.jenkins`, then the top-level `jenkins` section. The
+verification agent does not call these tools. It still reads the deploy build
+itself when `--cluster` is set and stores `cluster_check` on the report.
 
 ## Multi-agent workflows
 
