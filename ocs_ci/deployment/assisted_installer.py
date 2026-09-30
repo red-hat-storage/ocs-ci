@@ -278,6 +278,17 @@ class AssistedInstallerCluster(object):
             f"Created infrastructure environment {self.name} (id: {self.infra_id}) for cluster {self.id}"
         )
 
+    def get_discovery_iso_url(self):
+        """
+        Get Assisted Installer discovery ISO URL for this cluster's infra-env.
+
+        Returns:
+            str: HTTPS URL of the discovery ISO image
+        """
+        iso_url = self.api.get_discovery_iso_url(self.infra_id)
+        logger.info(f"Discovery ISO URL for infra-env {self.infra_id}: {iso_url}")
+        return iso_url
+
     def download_discovery_iso(self, local_path):
         """
         Download the discovery iso image
@@ -286,7 +297,7 @@ class AssistedInstallerCluster(object):
             local_path (str): path where to store the discovery iso image
 
         """
-        iso_url = self.api.get_discovery_iso_url(self.infra_id)
+        iso_url = self.get_discovery_iso_url()
         download_file(iso_url, local_path)
         logger.info(f"Downloaded discovery iso from '{iso_url}' to {local_path}")
 
@@ -425,12 +436,15 @@ class AssistedInstallerCluster(object):
             mac_role_mapping (dict): host mac address to host role mapping
 
         """
+        # normalize MAC case — AI and conf may disagree on upper/lower
+        mac_name_mapping = {k.lower(): v for k, v in mac_name_mapping.items()}
+        mac_role_mapping = {k.lower(): v for k, v in mac_role_mapping.items()}
         host_id_mac_mapping = self.get_host_id_mac_mapping()
         for host_id, mac in host_id_mac_mapping:
             try:
                 update_data = {
-                    "host_name": mac_name_mapping[mac],
-                    "host_role": mac_role_mapping[mac],
+                    "host_name": mac_name_mapping[mac.lower()],
+                    "host_role": mac_role_mapping[mac.lower()],
                 }
                 self.api.update_infra_env_host(self.infra_id, host_id, update_data)
                 logger.info(f"Updated host {host_id} configuration: {update_data}")
