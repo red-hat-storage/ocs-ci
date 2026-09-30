@@ -38,18 +38,37 @@ class ResiliencyWorkloadConfig:
         """
         self.config = config
 
-    def get_workloads(self) -> List[str]:
-        """
-        Get list of enabled workload types.
-
-        Returns:
-            list: List of workload type strings (empty list if not configured)
-        """
+    def _get_configured_workloads(self) -> List[str]:
+        """Return workload types from resiliency_config without PVC/bg-op adjustments."""
         resiliency_config = self.config.ENV_DATA.get("resiliency_config", {})
         workloads = resiliency_config.get("workloads", [])
 
         if isinstance(workloads, str):
             return [workloads]
+        return list(workloads)
+
+    def get_workloads(self) -> List[str]:
+        """
+        Get list of enabled workload types.
+
+        Automatically adds VDBENCH when PVC-backed background operations are enabled
+        (e.g. aggressive_clone_operation) but no PVC workload type is configured.
+
+        Returns:
+            list: List of workload type strings (empty list if not configured)
+        """
+        from ocs_ci.krkn_chaos.background_cluster_operations import (
+            bg_ops_require_pvc_workloads,
+        )
+
+        workloads = self._get_configured_workloads()
+        bg_config = self.get_background_operations_config()
+        if bg_ops_require_pvc_workloads(bg_config) and self.VDBENCH not in workloads:
+            log.info(
+                "Adding VDBENCH workload: PVC-backed background operations are "
+                "enabled but no PVC workload type is configured"
+            )
+            workloads.append(self.VDBENCH)
         return workloads
 
     def should_run_workload(self) -> bool:
@@ -79,12 +98,58 @@ class ResiliencyWorkloadConfig:
         Returns:
             dict: VDBENCH configuration dictionary
         """
+        from ocs_ci.krkn_chaos.background_cluster_operations import (
+            MINIMAL_VDBENCH_CONFIG_FOR_BG_OPS,
+            bg_ops_require_pvc_workloads,
+        )
+
         resiliency_config = self.config.ENV_DATA.get("resiliency_config", {})
-        return resiliency_config.get("vdbench_config", {})
+        vdbench_config = resiliency_config.get("vdbench_config", {})
+        if vdbench_config:
+            return vdbench_config
+
+        if bg_ops_require_pvc_workloads(self.get_background_operations_config()):
+            log.info(
+                "Using minimal vdbench_config defaults for PVC-backed background "
+                "operations"
+            )
+            return dict(MINIMAL_VDBENCH_CONFIG_FOR_BG_OPS)
+
+        return {}
+
+    def get_num_rbd_pvcs(self) -> int:
+        """
+        Get number of RBD (CephBlockPool) PVCs to create.
+
+        Falls back to ``num_pvcs_per_interface`` when ``num_rbd_pvcs`` is not set.
+
+        Returns:
+            int: Number of RBD PVCs (default: 4)
+        """
+        vdbench_config = self.get_vdbench_config()
+        if "num_rbd_pvcs" in vdbench_config:
+            return vdbench_config["num_rbd_pvcs"]
+        return vdbench_config.get("num_pvcs_per_interface", 4)
+
+    def get_num_cephfs_pvcs(self) -> int:
+        """
+        Get number of CephFS PVCs to create.
+
+        Falls back to ``num_pvcs_per_interface`` when ``num_cephfs_pvcs`` is not set.
+
+        Returns:
+            int: Number of CephFS PVCs (default: 4)
+        """
+        vdbench_config = self.get_vdbench_config()
+        if "num_cephfs_pvcs" in vdbench_config:
+            return vdbench_config["num_cephfs_pvcs"]
+        return vdbench_config.get("num_pvcs_per_interface", 4)
 
     def get_num_pvcs_per_interface(self) -> int:
         """
         Get number of PVCs to create per storage interface.
+
+        Deprecated: use :meth:`get_num_rbd_pvcs` and :meth:`get_num_cephfs_pvcs`.
 
         Returns:
             int: Number of PVCs per interface (default: 4)

@@ -28,7 +28,6 @@ from ocs_ci.krkn_chaos.krkn_helpers import (
     PodScenarioHelper,  # Pod scenario helper for pod kill tests
     ContainerScenarioHelper,  # Helper for building unified scenarios
 )
-from ocs_ci.krkn_chaos.krkn_scenario_generator import ContainerScenarios
 from ocs_ci.krkn_chaos.logging_helpers import log_test_start
 
 log = logging.getLogger(__name__)
@@ -126,17 +125,12 @@ class TestKrKnContainerChaosScenarios:
                 style="detailed",
             )
 
-            # Create unified container chaos scenario file using enhanced container_kill
-            scenario_file = ContainerScenarios.container_kill(
-                scenario_dir=scenario_dir,
-                scenarios=unified_scenarios,
-            )
-
-            log.info(f"Created unified scenario file: {scenario_file}")
-
-            # Create a unified Krkn configuration
+            # One YAML / plugin entry per component so a single kill-count miss
+            # (e.g. RGW after a watch reconnect) cannot abort MON/MDS/OSD.
             unified_config = KrknConfigGenerator()
-            unified_config.add_scenario("container_scenarios", scenario_file)
+            scenario_helper.register_isolated_container_kill_scenarios(
+                unified_config, scenario_dir, unified_scenarios
+            )
 
             # =================================================================
             # UNIFIED EXECUTION: Single Krkn run with specified kill signal

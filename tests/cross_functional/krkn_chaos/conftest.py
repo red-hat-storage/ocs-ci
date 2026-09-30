@@ -20,7 +20,10 @@ from ocs_ci.resiliency.resiliency_tools import (
     CephStatusTool,
     ceph_crash_monitor,
 )
-from ocs_ci.krkn_chaos.krkn_helpers import CephHealthHelper
+from ocs_ci.krkn_chaos.cluster_health_gate import (
+    skip_test_if_cluster_unrecoverable,
+)
+from ocs_ci.krkn_chaos.krkn_helpers import CephHealthHelper, cleanup_krkn_hog_pods
 from ocs_ci.krkn_chaos.krkn_config_generator import ensure_krkn_resiliency_support_files
 from ocs_ci.ocs import constants
 
@@ -28,6 +31,18 @@ from contextlib import suppress
 
 
 log = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def krkn_netem_session_cleanup():
+    """Sweep leftover tc netem once at the end of the Krkn chaos session."""
+    yield
+    from ocs_ci.resiliency.netem_cleanup import cleanup_session_netem_and_chaos_pods
+
+    cleanup_session_netem_and_chaos_pods(
+        "Krkn chaos session",
+        "krkn chaos session finalizer",
+    )
 
 
 # =============================================================================
@@ -43,14 +58,51 @@ def krkn_chaos_test_lifecycle(request):
     """
     Common lifecycle for all Krkn chaos tests in this directory.
 
+    - At test start: delete leftover Krkn hog / network-chaos Jobs and
+      completed oc debug pods so they cannot keep stressing nodes or clutter
+      default.
+    - At test start: skip this test, before chaos, if the cluster is
+      unrecoverable (MDS_DAMAGE, PGs inactive, OSDs below pool min_size, or
+      StorageCluster still Error after the recovery wait). Later tests skip
+      with the same reason. Degraded HEALTH_WARN during/after chaos is allowed.
+    - At test start: fail if leftover tc netem is already on any node.
     - At test start: archive any existing Ceph crashes so the test starts from a clean baseline.
     - During the entire test (workload setup, krkn/krknctl run, teardown): background
       Ceph crash monitor checks every CEPH_CRASH_POLL_INTERVAL seconds.
-    - finalizer: check for Ceph crashes introduced during the test; log them and raise AssertionError if any are found.
+    - finalizer: copy Krkn scenario/output logs into the pytest log directory,
+      sweep leftover netem (fail if residue remains), delete leftover hog /
+      network-chaos / debug pods, then check for Ceph crashes introduced
+      during the test.
 
     Extend this fixture's setup/finalizer when adding more shared behavior for
     krkn chaos tests.
     """
+    # Remove leftover hog / network-chaos / debug pods before the health gate.
+    try:
+        cleanup_krkn_hog_pods()
+    except Exception as e:
+        log.warning(
+            "Krkn chaos test lifecycle: could not clean leftover chaos pods: %s",
+            e,
+        )
+
+    # Runs before the StorageCluster gate on purpose. A node that cannot reach
+    # the apiserver ClusterIP keeps StorageCluster in Error, so the gate below
+    # would otherwise wait an hour and then skip the whole session blaming ODF
+    # instead of naming the SDN as the cause.
+    from ocs_ci.resiliency.service_connectivity import (
+        assert_cluster_service_connectivity,
+    )
+
+    assert_cluster_service_connectivity(
+        tries=2,
+        delay=10,
+        context="krkn chaos test pre-flight",
+    )
+
+    # ----- Pre-test health gate: skip before chaos if the cluster cannot recover -----
+    skip_test_if_cluster_unrecoverable("Krkn chaos")
+
     # ----- Setup: run at beginning of test -----
     try:
         ceph_status = CephStatusTool()
@@ -66,6 +118,24 @@ def krkn_chaos_test_lifecycle(request):
 
     # ----- Finalizer: run after test (pass or fail) -----
     def _krkn_chaos_finalizer():
+        try:
+            from ocs_ci.krkn_chaos.krkn_log_collector import (
+                collect_krkn_run_logs_for_current_test,
+            )
+
+            collect_krkn_run_logs_for_current_test()
+        except Exception as e:
+            log.warning(
+                "Krkn chaos test lifecycle: could not copy Krkn run logs: %s",
+                e,
+            )
+        try:
+            cleanup_krkn_hog_pods()
+        except Exception as e:
+            log.warning(
+                "Krkn chaos test lifecycle: could not clean leftover chaos pods after test: %s",
+                e,
+            )
         try:
             health_helper = CephHealthHelper(
                 namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
@@ -86,6 +156,33 @@ def krkn_chaos_test_lifecycle(request):
             )
 
     request.addfinalizer(_krkn_chaos_finalizer)
+
+    from ocs_ci.resiliency.netem_cleanup import (
+        assert_cluster_free_of_netem,
+        sweep_cluster_netem,
+    )
+
+    # Registered before the netem finalizer so it runs after it (LIFO): the
+    # faults must be gone before we can call a lingering outage a failure.
+    def _service_connectivity_finalizer():
+        assert_cluster_service_connectivity(
+            context="krkn chaos test finalizer",
+        )
+
+    request.addfinalizer(_service_connectivity_finalizer)
+
+    def _netem_finalizer():
+        try:
+            sweep_cluster_netem(
+                fail_on_residue=True,
+                context="krkn chaos test finalizer",
+            )
+        except Exception:
+            log.exception("Krkn chaos test lifecycle: netem sweep failed")
+            raise
+
+    request.addfinalizer(_netem_finalizer)
+    assert_cluster_free_of_netem(context="krkn chaos test pre-flight")
 
     with ceph_crash_monitor(enabled=True, context="krkn chaos test"):
         log.info(
@@ -481,6 +578,10 @@ def workload_ops(request, project_factory, multi_pvc_factory, storageclass_facto
     try:
         yield ops
     finally:
+        # Stop background ops (including aggressive clone loop) before workload teardown
+        log.info("Stopping background cluster operations before workload finalizer")
+        with suppress(Exception):
+            ops._stop_background_cluster_operations()
         # Best-effort cleanup if the test aborted before calling validate_and_cleanup
         log.info("Performing best-effort workload cleanup")
         with suppress(Exception):
