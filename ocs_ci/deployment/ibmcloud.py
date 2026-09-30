@@ -34,6 +34,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     get_infra_id_from_openshift_install_state,
     get_infra_id,
+    get_openshift_installer,
 )
 
 
@@ -246,6 +247,12 @@ class IBMCloudIPI(CloudDeploymentBase):
                 )
             try:
                 # Make sure ccoctl is downloaded before using it in destroy job.
+                # Ensure installer is available (needed to download ccoctl)
+                if not config.ENV_DATA.get("installer_path"):
+                    logger.info(
+                        "Installer not available. Downloading installer to enable CCO cleanup."
+                    )
+                    get_openshift_installer()
                 cco.configure_cloud_credential_operator()
                 cco.delete_service_id(self.cluster_name, self.credentials_requests_dir)
                 if resource_group:
