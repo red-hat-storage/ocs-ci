@@ -1,0 +1,31 @@
+# Files that must never be read/indexed by AI tooling.
+# Keep in sync with the "deny" rules in .claude/settings.json.
+
+# Cluster credentials, pull secrets and other runtime data
+data/
+!data/.gitkeep
+
+# Local ocs-ci configuration (often contains tokens, passwords, cluster paths)
+ocsci_conf.yaml
+custom-ocsci-conf.yaml
+config.yaml
+bugzilla.cfg
+
+# Kubeconfigs and kubeadmin passwords
+**/kubeconfig
+**/auth/kubeconfig
+**/kubeadmin-password
+**/*kubeconfig*
+
+# Generic secret material
+**/pull-secret*
+**/auth.yaml
+**/*secret*
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/id_rsa*
+**/.netrc
+.env
+.env.*
