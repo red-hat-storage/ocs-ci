@@ -2,13 +2,17 @@
 This module contains functionality required for disconnected installation.
 """
 
+import codecs
 import glob
 import json
 import logging
 import os
 from pathlib import Path
+import re
+import signal
 import subprocess
 import tempfile
+import threading
 
 import yaml
 
@@ -162,12 +166,20 @@ def mirror_images_from_mapping_file(mapping_file, idms=None, ignore_image=None):
     )
 
 
-def _channel_from_version(version):
-    """Return the OLM subscription channel name for a given ODF version string.
+# `opm render` fetches and renders every bundle in the catalog image. For
+# v4.16+ catalogs with hundreds of operators this routinely takes 10-30 minutes
+# at lab/CI bandwidth, so the deadline is deliberately generous.
+OPM_RENDER_TIMEOUT = 1800
 
-    ODF channels follow the pattern "stable-{major}.{minor}". This helper
-    derives the channel purely from the version string so callers do not need
-    to parse it themselves.
+
+def _channel_from_version(version):
+    """Return the conventional ODF channel name for a given version string.
+
+    ODF channels follow the pattern "stable-{major}.{minor}". This is only a
+    fallback/preference hint — the authoritative channel of a bundle is read
+    from the catalog itself (see _render_catalog). Non-ODF packages present in
+    the disconnected package list (cluster-logging, elasticsearch-operator, …)
+    do NOT follow this pattern, so never apply it to them blindly.
 
     Args:
         version (str): ODF version string, e.g. "4.16.30-rhodf"
@@ -179,103 +191,321 @@ def _channel_from_version(version):
     return f"stable-{major_minor}"
 
 
-def get_catalog_package_versions(index_image, package, minor_version):
+def _version_from_bundle_name(package, bundle_name):
+    """Extract the version part out of an OLM bundle name.
+
+    Bundle names are "{package}.v{version}", e.g. "odf-operator.v4.20.10-rhodf".
+
+    Args:
+        package (str): OLM package name the bundle belongs to
+        bundle_name (str): full bundle name
+
+    Returns:
+        str: version string, or None if the name doesn't match the convention
     """
-    Stream-parse opm render output and return all available bundle versions
-    for a package, filtered to a specific major.minor (e.g. "4.16").
+    prefix = f"{package}."
+    if not bundle_name.startswith(prefix):
+        return None
+    return bundle_name[len(prefix) :].lstrip("v") or None
+
+
+def _iter_json_documents(stream, chunk_size=1 << 20, max_buffer=256 << 20):
+    """
+    Yield top-level JSON values from a byte stream of concatenated JSON
+    documents, without buffering the whole stream.
+
+    WHY this is not a `for line in stream: json.loads(line)` loop:
+        `opm render --output=json` does NOT emit NDJSON. It pretty-prints every
+        declarative-config blob over many lines and concatenates them, so most
+        lines are not valid JSON on their own — and some, such as an element of
+        a string array, decode to a bare str rather than a dict. A line-based
+        parser therefore blows up with
+        "AttributeError: 'str' object has no attribute 'get'".
+        json.JSONDecoder.raw_decode consumes exactly one document at a time and
+        handles both the pretty-printed and NDJSON shapes.
+
+    Args:
+        stream (io.RawIOBase): binary stream of concatenated JSON documents
+        chunk_size (int): bytes read per iteration
+        max_buffer (int): abort if a single document exceeds this size, rather
+            than growing the buffer without bound on malformed output
+
+    Yields:
+        object: each decoded top-level JSON value
+
+    Raises:
+        CommandFailed: on unparsable output or an oversized document
+    """
+    decoder = json.JSONDecoder()
+    # incremental UTF-8 decoder: a fixed-size read can split a multi-byte
+    # character across two chunks, and decoding each chunk independently would
+    # corrupt it. Catalog CSV descriptions routinely contain non-ASCII.
+    text_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    buffer = ""
+    # index of the first not-yet-consumed character in buffer; slicing happens
+    # once per chunk rather than once per document so large documents don't
+    # turn the scan quadratic
+    pos = 0
+
+    def _decode_ready(final):
+        nonlocal pos
+        while True:
+            while pos < len(buffer) and buffer[pos].isspace():
+                pos += 1
+            if pos >= len(buffer):
+                return
+            try:
+                value, end = decoder.raw_decode(buffer, pos)
+            except ValueError:
+                # either a partial document (more data is coming) or, once the
+                # stream is exhausted, genuinely broken output
+                if final:
+                    raise CommandFailed(
+                        "Unparsable trailing output from `opm render`, refusing "
+                        "to resolve versions from a partial catalog: "
+                        f"{buffer[pos : pos + 200]!r}"
+                    )
+                return
+            pos = end
+            yield value
+
+    while True:
+        chunk = stream.read(chunk_size)
+        if not chunk:
+            break
+        buffer = buffer[pos:] + text_decoder.decode(chunk)
+        pos = 0
+        yield from _decode_ready(final=False)
+        if len(buffer) - pos > max_buffer:
+            raise CommandFailed(
+                f"`opm render` produced a JSON document larger than {max_buffer} "
+                "bytes; output is most likely not valid JSON."
+            )
+
+    buffer = buffer[pos:] + text_decoder.decode(b"", final=True)
+    pos = 0
+    yield from _decode_ready(final=True)
+
+
+def _render_catalog(index_image, packages):
+    """
+    Stream-parse `opm render` output once and collect version + channel data
+    for the requested packages.
+
+    WHY a single render for all packages:
+        `opm render` on a full catalog takes 10-30 minutes. Rendering once per
+        package would multiply that by the number of packages (15+ for 4.20).
+
+    WHY subprocess.Popen instead of exec_cmd:
+        exec_cmd buffers the entire stdout before returning. opm render output
+        for a full catalog can be several hundred MB. Streaming it document by
+        document via Popen keeps memory constant regardless of catalog size.
+        Only the (small) data of the requested packages is retained.
+
+    WHY stderr goes to a temp file and a watchdog kills the process:
+        `opm render` logs progress to stderr. With stderr=PIPE and nothing
+        draining it, opm blocks once the ~64 KiB pipe buffer fills, which also
+        stops stdout and deadlocks the read loop below forever. A wait(timeout=)
+        placed after the loop can never fire in that state, so the deadline is
+        enforced by a watchdog timer that kills the process instead.
+
+    Args:
+        index_image (str): Full catalog index image URL, e.g.
+            "registry.redhat.io/redhat/redhat-operator-index:v4.20"
+        packages (list): OLM package names to collect data for
+
+    Returns:
+        dict: {package: {"versions": {version: set(channel names)},
+                         "default_channel": str or None}}
+            Packages absent from the catalog map to empty data.
+
+    Raises:
+        CommandFailed: if opm render exits non-zero or exceeds
+            OPM_RENDER_TIMEOUT seconds
+    """
+    get_opm_tool()
+    wanted = set(packages)
+    logger.info(
+        f"Rendering catalog {index_image} to collect builds of "
+        f"{len(wanted)} package(s). Streaming full catalog — may take "
+        f"several minutes depending on registry bandwidth."
+    )
+
+    # bundle name -> version, and bundle name -> channels it is listed in;
+    # both are keyed per package and joined once the whole stream is consumed,
+    # because opm render does not guarantee any ordering between the
+    # olm.bundle and olm.channel blobs of a package.
+    bundle_versions = {pkg: {} for pkg in wanted}
+    bundle_channels = {pkg: {} for pkg in wanted}
+    default_channels = {}
+
+    stderr_file = tempfile.TemporaryFile()
+    proc = subprocess.Popen(
+        ["opm", "render", index_image, "--output=json"],
+        stdout=subprocess.PIPE,
+        stderr=stderr_file,
+        # own process group, so the watchdog can take down the whole tree;
+        # killing only the direct child would leave grandchildren holding the
+        # stdout pipe open and the read loop below would still never end
+        start_new_session=True,
+    )
+    timed_out = threading.Event()
+
+    def _kill_on_timeout():
+        timed_out.set()
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            proc.kill()
+
+    watchdog = threading.Timer(OPM_RENDER_TIMEOUT, _kill_on_timeout)
+    watchdog.start()
+    parse_error = None
+    try:
+        try:
+            for obj in _iter_json_documents(proc.stdout):
+                if not isinstance(obj, dict):
+                    continue
+
+                _collect_catalog_blob(
+                    obj, wanted, bundle_versions, bundle_channels, default_channels
+                )
+        except CommandFailed as ex:
+            # A killed or failed opm truncates its output mid-document. Hold the
+            # parse error and report the underlying process failure first — it
+            # is the actionable one.
+            parse_error = ex
+        proc.wait()
+    finally:
+        watchdog.cancel()
+        proc.stdout.close()
+
+    if timed_out.is_set():
+        raise CommandFailed(
+            f"opm render {index_image} timed out after {OPM_RENDER_TIMEOUT}s. "
+            f"Check registry connectivity and available bandwidth."
+        )
+
+    if proc.returncode != 0:
+        stderr_file.seek(0)
+        # tail rather than head: the actual failure is at the end of the log
+        stderr_snippet = stderr_file.read().decode("utf-8", errors="replace")[-1000:]
+        raise CommandFailed(
+            f"opm render {index_image} failed (rc={proc.returncode}): {stderr_snippet}"
+        )
+
+    if parse_error:
+        raise parse_error
+
+    catalog = {}
+    for pkg in wanted:
+        versions = {}
+        for bundle_name, version in bundle_versions[pkg].items():
+            versions.setdefault(version, set()).update(
+                bundle_channels[pkg].get(bundle_name, set())
+            )
+        catalog[pkg] = {
+            "versions": versions,
+            "default_channel": default_channels.get(pkg),
+        }
+        logger.debug(f"Catalog {index_image}: {pkg} has {len(versions)} build(s)")
+    return catalog
+
+
+def _collect_catalog_blob(
+    obj, wanted, bundle_versions, bundle_channels, default_channels
+):
+    """Accumulate one declarative-config blob into the per-package maps.
+
+    Args:
+        obj (dict): a single decoded `opm render` document
+        wanted (set): package names we care about
+        bundle_versions (dict): pkg -> {bundle name: version}, updated in place
+        bundle_channels (dict): pkg -> {bundle name: set(channels)}, updated
+            in place
+        default_channels (dict): pkg -> defaultChannel, updated in place
+    """
+    schema = obj.get("schema")
+    # olm.package blobs name the package in "name", everything else references
+    # it via "package"
+    pkg = obj.get("name") if schema == "olm.package" else obj.get("package")
+    if pkg not in wanted:
+        return
+
+    if schema == "olm.package":
+        default_channels[pkg] = obj.get("defaultChannel")
+    elif schema == "olm.channel":
+        channel_name = obj.get("name")
+        for entry in obj.get("entries") or []:
+            if not isinstance(entry, dict):
+                continue
+            entry_name = entry.get("name")
+            if entry_name:
+                bundle_channels[pkg].setdefault(entry_name, set()).add(channel_name)
+    elif schema == "olm.bundle":
+        bundle_name = obj.get("name", "")
+        version = _version_from_bundle_name(pkg, bundle_name)
+        if version:
+            bundle_versions[pkg][bundle_name] = version
+
+
+def _sort_versions(versions):
+    """Sort version strings numerically so 4.20.9 < 4.20.10 (not lexicographic).
+
+    All numeric groups are compared, not just the x.y.z prefix, so the build
+    number of downstream dev builds still orders correctly:
+    4.22.5-6.konflux < 4.22.5-10.konflux. The version string itself is the
+    final tiebreaker to keep the order deterministic.
+
+    Args:
+        versions (iterable): version strings, e.g. ["4.20.10-rhodf", "4.20.9-rhodf"]
+
+    Returns:
+        list[str]: ascending, duplicates removed
+    """
+
+    def _sort_key(version):
+        return (tuple(int(x) for x in re.findall(r"\d+", version)), version)
+
+    return sorted(set(versions), key=_sort_key)
+
+
+def get_catalog_package_versions(index_image, package, minor_version, catalog=None):
+    """
+    Return all available bundle versions of a package in the catalog, filtered
+    to a specific major.minor (e.g. "4.16").
 
     WHY minor_version filtering is required:
         The redhat-operator-index is a cumulative catalog — e.g. v4.20 carries
         bundles for both 4.19.x AND 4.20.x. Without filtering, z-n on a v4.20
         catalog could silently resolve to a 4.19 build, which is wrong.
 
-    WHY subprocess.Popen instead of exec_cmd:
-        exec_cmd buffers the entire stdout before returning. opm render output
-        for a full catalog can be several hundred MB. Streaming line-by-line
-        via Popen keeps memory constant regardless of catalog size.
-
-    WHY the timeout is 1800s:
-        opm render fetches and renders every bundle in the catalog image.
-        For v4.16+ catalogs with hundreds of operators this routinely takes
-        10-30 minutes at lab/CI bandwidth. The caller should not reduce this.
-
     Args:
-        index_image (str): Full catalog index image URL, e.g.
-            "registry.redhat.io/redhat/redhat-operator-index:v4.20"
+        index_image (str): Full catalog index image URL
         package (str): OLM package name to filter for, e.g. "odf-operator"
         minor_version (str): major.minor to restrict results to, e.g. "4.20".
             Only bundles whose version starts with "{minor_version}." are kept.
+        catalog (dict): Optional pre-rendered catalog data from
+            _render_catalog(). Pass it to avoid re-running `opm render`.
 
     Returns:
         list[str]: Version strings sorted ascending by numeric components, e.g.
             ["4.20.0-rhodf", "4.20.1-rhodf", ..., "4.20.16-rhodf"].
-            Sort is numeric-aware: 4.20.9 < 4.20.10 (not lexicographic).
 
     Raises:
         NotFoundError: if no matching versions are found
-        CommandFailed: if opm render exits non-zero or exceeds 1800s
+        CommandFailed: if opm render exits non-zero or exceeds
+            OPM_RENDER_TIMEOUT seconds
     """
-    get_opm_tool()
-    logger.info(
-        f"Rendering catalog {index_image} to list {package} builds for "
-        f"minor version {minor_version}. Streaming full catalog — may take "
-        f"several minutes depending on registry bandwidth."
-    )
+    if catalog is None or package not in catalog:
+        catalog = _render_catalog(index_image, [package])
 
-    proc = subprocess.Popen(
-        ["opm", "render", index_image, "--output=json"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-
-    versions = []
-    # Pre-build the version prefix to avoid repeated string formatting per line
     prefix = f"{minor_version}."
-
-    for raw_line in proc.stdout:
-        # opm render --output=json emits one compact JSON object per line (NDJSON).
-        # Occasional non-JSON progress lines are silently skipped.
-        try:
-            obj = json.loads(raw_line)
-        except json.JSONDecodeError:
-            continue
-
-        # Skip schemas other than olm.bundle (olm.package, olm.channel, etc.)
-        # and bundles belonging to other packages
-        if obj.get("schema") != "olm.bundle" or obj.get("package") != package:
-            continue
-
-        # Bundle name format: "{package}.v{version}", e.g. "odf-operator.v4.20.10-rhodf"
-        name = obj.get("name", "")
-        if "." not in name:
-            continue
-        ver = name.split(".", 1)[1].lstrip("v")
-
-        # Apply minor_version filter inline so 4.19.x entries (present in the
-        # v4.20 cumulative catalog) are never accumulated in memory
-        if ver.startswith(prefix):
-            versions.append(ver)
-
-    try:
-        proc.wait(timeout=1800)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        raise CommandFailed(
-            f"opm render {index_image} timed out after 1800s. "
-            f"Check registry connectivity and available bandwidth."
-        )
-
-    if proc.returncode != 0:
-        stderr_snippet = proc.stderr.read().decode("utf-8", errors="replace")[:500]
-        raise CommandFailed(
-            f"opm render {index_image} failed (rc={proc.returncode}): {stderr_snippet}"
-        )
-
-    # Numeric-aware sort: "4.20.10-rhodf" → (4, 20, 10) so 4.20.9 < 4.20.10
-    def _sort_key(v):
-        return tuple(int(x) for x in v.split("-")[0].split("."))
-
-    versions = sorted(set(versions), key=_sort_key)
+    versions = _sort_versions(
+        version
+        for version in catalog[package]["versions"]
+        if version.startswith(prefix)
+    )
 
     if not versions:
         raise NotFoundError(
@@ -292,7 +522,7 @@ def get_catalog_package_versions(index_image, package, minor_version):
 
 
 def resolve_z_minus_n_version(
-    index_image, z_minus_n, minor_version, package="odf-operator"
+    index_image, z_minus_n, minor_version, package="odf-operator", catalog=None
 ):
     """
     Resolve the ODF build that is z_minus_n positions behind the latest
@@ -315,6 +545,7 @@ def resolve_z_minus_n_version(
         z_minus_n (int or str): Builds behind latest to target (0 = latest)
         minor_version (str): major.minor string, e.g. "4.20"
         package (str): OLM package used as version anchor (default: "odf-operator")
+        catalog (dict): Optional pre-rendered catalog data from _render_catalog()
 
     Returns:
         str: Resolved version string, e.g. "4.20.14-rhodf"
@@ -326,7 +557,9 @@ def resolve_z_minus_n_version(
         z-999 → "4.20.0-rhodf"   (fallback, with warning)
     """
     n = int(z_minus_n)
-    versions = get_catalog_package_versions(index_image, package, minor_version)
+    versions = get_catalog_package_versions(
+        index_image, package, minor_version, catalog=catalog
+    )
 
     ideal_idx = len(versions) - 1 - n
     if ideal_idx < 0:
@@ -344,6 +577,129 @@ def resolve_z_minus_n_version(
         f"(latest={versions[-1]}, {len(versions)} builds in catalog)"
     )
     return resolved
+
+
+def _pick_channel(package_data, version):
+    """Pick the channel to pin a package version to, based on catalog data.
+
+    Preference order:
+        1. the conventional ODF channel ("stable-X.Y") if the bundle is in it
+        2. the package's defaultChannel if the bundle is in it
+        3. any channel containing the bundle (deterministic: first sorted)
+
+    Args:
+        package_data (dict): single package entry from _render_catalog()
+        version (str): version to pin
+
+    Returns:
+        str: channel name, or None if the version is in no channel
+    """
+    channels = package_data["versions"].get(version) or set()
+    if not channels:
+        return None
+    preferred = _channel_from_version(version)
+    if preferred in channels:
+        return preferred
+    default_channel = package_data.get("default_channel")
+    if default_channel in channels:
+        return default_channel
+    return sorted(channels)[0]
+
+
+def resolve_pinned_versions(
+    index_image,
+    packages,
+    z_minus_n,
+    minor_version,
+    anchor_package="odf-operator",
+):
+    """
+    Build the per-package z-n pin map used to constrain the ImageSetConfig.
+
+    The target build is anchored on odf-operator (all ODF components are
+    released together and share a version number), then each requested package
+    is pinned to *its own* matching build and *its own* catalog channel.
+
+    WHY per-package and not one shared pin:
+        The disconnected package list is not purely ODF. For ODF <= 4.15 it
+        contains cluster-logging, elasticsearch-operator and
+        local-storage-operator, which version and channel independently
+        (elasticsearch-operator ships in "stable-5.7"/"stable", never in
+        "stable-4.12"). Applying the odf-operator pin to them would emit
+        constraints no bundle satisfies and leave those packages missing from
+        the mirrored catalog.
+
+    Packages with no build matching the anchored version are left out of the
+    returned map, which means they are mirrored unpinned (all versions) — the
+    same behaviour as before pinning existed.
+
+    Args:
+        index_image (str): Catalog index image URL
+        packages (list): OLM package names to be mirrored
+        z_minus_n (int or str): Builds behind latest to target (0 = latest)
+        minor_version (str): major.minor string, e.g. "4.20"
+        anchor_package (str): package used as version anchor
+
+    Returns:
+        tuple(dict, str): (pin map, resolved anchor version), where the pin map
+            is {package: {"to": {"channel": ..., "version": ...}}}
+    """
+    catalog = _render_catalog(index_image, set(packages) | {anchor_package})
+    anchor_version = resolve_z_minus_n_version(
+        index_image,
+        z_minus_n,
+        minor_version,
+        package=anchor_package,
+        catalog=catalog,
+    )
+    # numeric part only, so a package whose builds carry a different suffix
+    # (e.g. "-konflux" vs "-rhodf") still matches the anchored z-build
+    anchor_numeric = anchor_version.split("-")[0]
+
+    pinned_versions = {}
+    unpinned = []
+    for package in packages:
+        package_data = catalog.get(package) or {"versions": {}}
+        if anchor_version in package_data["versions"]:
+            version = anchor_version
+        else:
+            candidates = [
+                other
+                for other in package_data["versions"]
+                if other.split("-")[0] == anchor_numeric
+            ]
+            if not candidates:
+                unpinned.append(package)
+                continue
+            version = _sort_versions(candidates)[-1]
+        channel = _pick_channel(package_data, version)
+        if not channel:
+            unpinned.append(package)
+            continue
+        pinned_versions[package] = {"to": {"channel": channel, "version": version}}
+
+    logger.info(
+        "Pinned %s package(s) to the z-%s build of %s (%s): %s",
+        len(pinned_versions),
+        z_minus_n,
+        anchor_package,
+        anchor_version,
+        ", ".join(
+            f"{package}={pin['to']['version']}@{pin['to']['channel']}"
+            for package, pin in sorted(pinned_versions.items())
+        ),
+    )
+    if unpinned:
+        # Not an error: these packages version independently of ODF (logging,
+        # elasticsearch, LSO, …) or simply have no build at the anchored
+        # version. They are mirrored unpinned, exactly as without z-n pinning.
+        logger.warning(
+            "No %s build available for: %s. These packages will be mirrored "
+            "unpinned (all catalog versions).",
+            anchor_version,
+            ", ".join(unpinned),
+        )
+    return pinned_versions, anchor_version
 
 
 def prune_and_mirror_index_image(
@@ -478,25 +834,25 @@ def mirror_index_image_via_oc_mirror(
         idms_name_prefix (str): Prefix for IDMS name (default: "odf")
         configure_registries (bool): Whether to configure /etc/containers/registries.conf
         mirror_registry (str): Target mirror registry. If None, uses config.DEPLOYMENT['mirror_registry']
-        pinned_versions (dict): Optional version pinning for z-n disconnected deploy/upgrade.
-            When provided, each package entry in the ISC includes explicit channel and
-            minVersion/maxVersion constraints so oc-mirror mirrors only the specified
-            build(s) rather than all available versions. Without pinning, OLM may select
-            any available version from the catalog.
+        pinned_versions (dict): Optional per-package version pinning for a z-n
+            disconnected install, keyed by package name. For each pinned package
+            the ISC entry gets an explicit channel and minVersion/maxVersion
+            constraint so oc-mirror mirrors only that build rather than all
+            available versions. Without pinning, OLM may select any available
+            version from the catalog.
 
-            For fresh install (pin to a single build):
-                {
-                    "to": {"channel": "stable-4.20", "version": "4.20.14-rhodf"},
-                }
+            Packages missing from this dict are mirrored unpinned. The pins are
+            per package on purpose: the disconnected package list also contains
+            operators that version independently of ODF (elasticsearch-operator,
+            cluster-logging, …), for which the ODF channel/version is invalid.
+            Build the map with resolve_pinned_versions().
 
-            For upgrade (pin from-version for graph continuity + to-version as target):
                 {
-                    "from": {"channel": "stable-4.20", "version": "4.20.10-rhodf"},
-                    "to":   {"channel": "stable-4.20", "version": "4.20.16-rhodf"},
+                    "odf-operator": {
+                        "to": {"channel": "stable-4.20", "version": "4.20.14-rhodf"},
+                    },
+                    ...
                 }
-            The "from" entry is required for upgrades because OLM needs the
-            currently-installed version present in the catalog to build a valid
-            upgrade graph. Omitting it causes ConstraintsNotSatisfiable errors.
 
     Returns:
         str: mirrored index image
@@ -573,42 +929,39 @@ def mirror_index_image_via_oc_mirror(
     catalog_entry = {"catalog": index_image}
     if packages:
         if pinned_versions:
-            to_entry = pinned_versions["to"]
-            from_entry = pinned_versions.get("from")
-
             _packages = []
             for pkg in packages:
-                channels = []
+                pin = pinned_versions.get(pkg)
+                if not pin:
+                    # package versions independently of the pinned ones (or has
+                    # no build at the pinned version) — mirror all its versions
+                    _packages.append({"name": pkg})
+                    continue
 
-                if from_entry:
-                    # Include the currently-installed version in its channel.
-                    # OLM requires the from-version to be present in the catalog
-                    # to construct a valid upgrade graph. Without it, OLM raises
-                    # ConstraintsNotSatisfiable and the upgrade stalls.
-                    channels.append(
-                        {
-                            "name": from_entry["channel"],
-                            "minVersion": from_entry["version"],
-                            "maxVersion": from_entry["version"],
-                        }
-                    )
-
-                # Target version: the build we want OLM to install or upgrade to.
+                # Target version: the build we want OLM to install.
                 # minVersion == maxVersion pins oc-mirror to exactly one build,
-                # ensuring the disconnected catalog has no other resolvable version.
-                channels.append(
+                # so the disconnected catalog has no other resolvable version.
+                to_entry = pin["to"]
+                _packages.append(
                     {
-                        "name": to_entry["channel"],
-                        "minVersion": to_entry["version"],
-                        "maxVersion": to_entry["version"],
+                        "name": pkg,
+                        "channels": [
+                            {
+                                "name": to_entry["channel"],
+                                "minVersion": to_entry["version"],
+                                "maxVersion": to_entry["version"],
+                            }
+                        ],
                     }
                 )
 
-                _packages.append({"name": pkg, "channels": channels})
-
             logger.info(
-                f"Pinned ISC: from={from_entry['version'] if from_entry else 'N/A'} "
-                f"to={to_entry['version']} for {len(_packages)} package(s)"
+                "Pinned ISC entries: %s",
+                ", ".join(
+                    f"{pkg}={pinned_versions[pkg]['to']['version']}"
+                    for pkg in packages
+                    if pkg in pinned_versions
+                ),
             )
         else:
             # No pinning — mirror all available versions for each package.
@@ -813,6 +1166,9 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         # z-0 pins to the latest available build (same result as no pinning but
         # explicit). If n exceeds available builds, oldest available is used
         # and a warning is logged.
+        required_packages = constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+            f"{ocs_version}"
+        ]
         pinned_versions = None
         if not upgrade:
             z_minus_n = config.DEPLOYMENT.get("disconnected_z_minus_n")
@@ -821,11 +1177,9 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
                 # It is used to filter catalog bundles to only the target minor
                 # — catalogs are cumulative and carry prior-minor bundles too.
                 minor_version = ".".join(str(ocs_version).split(".")[:2])
-                to_ver = resolve_z_minus_n_version(
-                    index_image, z_minus_n, minor_version
+                pinned_versions, to_ver = resolve_pinned_versions(
+                    index_image, required_packages, z_minus_n, minor_version
                 )
-                to_chan = _channel_from_version(to_ver)
-                pinned_versions = {"to": {"channel": to_chan, "version": to_ver}}
                 logger.info(
                     f"Pinned disconnected install: z-{z_minus_n} → {to_ver} "
                     f"(catalog: {index_image})"
@@ -833,7 +1187,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
 
         mirrored_index_image = mirror_index_image_via_oc_mirror(
             index_image,
-            constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[f"{ocs_version}"],
+            required_packages,
             idms=idms,
             pinned_versions=pinned_versions,
         )
