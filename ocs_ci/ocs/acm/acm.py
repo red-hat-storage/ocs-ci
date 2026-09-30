@@ -1138,33 +1138,15 @@ def import_clusters_via_cli(clusters, max_retries=3):
                         None,
                     )
 
-                    if (
+                    joined = bool(
+                        joined_condition and joined_condition.get("status") == "True"
+                    )
+                    available = bool(
                         available_condition
                         and available_condition.get("status") == "True"
-                    ):
-                        log.info(f"Cluster '{cluster[0]}' reached Available state")
-                        break
-                    if joined_condition and joined_condition.get("status") == "True":
-                        log.info(f"Cluster '{cluster[0]}' already at Joined state")
-                        break
-
-                # Ensure cluster is joined
-                for sample in TimeoutSampler(
-                    timeout=1200,
-                    sleep=15,
-                    func=lambda: ocp_obj.get(resource_name=cluster[0]),
-                ):
-                    conditions = sample.get("status", {}).get("conditions", [])
-                    joined_condition = next(
-                        (
-                            c
-                            for c in conditions
-                            if c.get("type") == "ManagedClusterJoined"
-                        ),
-                        None,
                     )
-                    if joined_condition and joined_condition.get("status") == "True":
-                        log.info(f"Cluster '{cluster[0]}' is joined")
+                    if joined and available:
+                        log.info(f"Cluster '{cluster[0]}' is Joined and Available")
                         break
 
                 log.info("Creating klusterlet addon configuration")
