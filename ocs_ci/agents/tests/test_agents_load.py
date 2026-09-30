@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from ocs_ci.agents.mcp.servers import SERVER_TOOLS, cluster, jira, reportportal
 from ocs_ci.agents.runtime import discover
 
 REQUIRED_FILES = discover.REQUIRED_FILES
@@ -12,6 +13,13 @@ REQUIRED_FILES = discover.REQUIRED_FILES
 
 def _agent_dirs():
     return list(discover.iter_agent_dirs())
+
+
+def test_server_catalog_matches_tool_modules():
+    """The package catalog stays aligned with each server module."""
+    assert SERVER_TOOLS["jira"] == jira.TOOL_NAMES
+    assert SERVER_TOOLS["cluster"] == cluster.TOOL_NAMES
+    assert SERVER_TOOLS["reportportal"] == reportportal.TOOL_NAMES
 
 
 def test_template_is_not_registered():

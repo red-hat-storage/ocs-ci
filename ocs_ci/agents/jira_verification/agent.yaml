@@ -1,10 +1,10 @@
 name: jira_verification
-description: Check whether a Jira issue is covered by an ocs-ci test
+description: List ON_QA Jira issues for a version and write a verification report for each
 mcp_servers:
   - jira
-  - reportportal
 tools:
   allow:
+    - jira_search_issues
     - jira_get_issue
-    - reportportal_get_launch
+    - jira_save_verification_report
 prompt: prompt.md

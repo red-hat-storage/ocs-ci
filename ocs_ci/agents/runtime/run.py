@@ -139,19 +139,114 @@ def invoke_agent(agent_dir, request):
         request (dict): Value returned by build_request.
 
     Returns:
-        dict: JSON-ready result with ok, the agent name, and the graph state.
+        dict: JSON-ready result with ok, the agent name, the final reply, and
+            the graph state.
 
     Raises:
         NotImplementedError: The shared LangGraph builder is not connected yet.
     """
-    make_graph = load_make_graph(agent_dir)
-    graph = asyncio.run(make_graph())
-    state = asyncio.run(graph.ainvoke(agent_state(request)))
+
+    async def _run():
+        make_graph = load_make_graph(agent_dir)
+        graph = await make_graph()
+        return await graph.ainvoke(
+            agent_state(request),
+            config={"recursion_limit": _recursion_limit()},
+        )
+
+    state = asyncio.run(_run())
     return {
         "ok": True,
         "agent": request["agent"],
         "jenkins": request["jenkins"],
-        "state": state,
+        "reply": _final_reply(state),
+        "state": _public_state(state),
+    }
+
+
+def _recursion_limit():
+    """
+    Return how many graph steps one run may take.
+
+    OCS_AGENT_RECURSION_LIMIT overrides the default. The default covers one
+    search plus a get for every ON_QA issue in a release.
+
+    Returns:
+        int: LangGraph recursion limit.
+    """
+    raw = os.environ.get("OCS_AGENT_RECURSION_LIMIT", "1000")
+    try:
+        return int(raw)
+    except ValueError:
+        return 1000
+
+
+def _public_state(state):
+    """
+    Convert graph state into JSON-ready values.
+
+    Args:
+        state (dict): Value returned by the compiled graph.
+
+    Returns:
+        dict: State with messages reduced to role and content.
+    """
+    if not isinstance(state, dict):
+        return state
+    public = {}
+    for key, value in state.items():
+        if key == "messages":
+            public[key] = [_message_dict(message) for message in value]
+        else:
+            public[key] = value
+    return public
+
+
+def _final_reply(state):
+    """
+    Return the text of the last graph message.
+
+    Args:
+        state (dict): Value returned by the compiled graph.
+
+    Returns:
+        str: Final assistant text, or an empty string when there is no message.
+    """
+    if not isinstance(state, dict):
+        return ""
+    messages = state.get("messages") or []
+    if not messages:
+        return ""
+    return _message_dict(messages[-1]).get("content") or ""
+
+
+def _message_dict(message):
+    """
+    Reduce one chat message to role and text.
+
+    Args:
+        message: A LangChain message or a role/content dict.
+
+    Returns:
+        dict: role and content.
+    """
+    if isinstance(message, dict):
+        return {
+            "role": message.get("role") or message.get("type"),
+            "content": message.get("content"),
+        }
+    content = getattr(message, "content", "")
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text") or "")
+        content = "\n".join(part for part in parts if part)
+    return {
+        "role": getattr(message, "type", None) or getattr(message, "role", None),
+        "content": content,
     }
 
 

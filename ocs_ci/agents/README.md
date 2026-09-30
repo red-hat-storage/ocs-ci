@@ -48,6 +48,29 @@ The last line of the console log is a JSON result. When WORKSPACE is set, the
 same JSON is written to `agent-result.json` in the workspace so the job can
 archive it.
 
+Install the agent runtime in the job environment before the first run. The
+packages are the `agents` dependency group in `pyproject.toml`:
+
+```bash
+uv pip install --python python3 \
+  "langgraph>=1.0" "langchain>=1.0" \
+  "langchain-openai>=1.0" "langchain-mcp-adapters>=0.1"
+```
+
+The chat model is OpenAI. Put the key in `data/auth.yaml`:
+
+```yaml
+agents_credentials:
+  openai:
+    api_key: <openai-api-key>
+```
+
+`OPENAI_API_KEY` is used when that file entry is empty. `OCS_AGENT_MODEL`
+overrides the model name. The default is `gpt-4o`. Set
+`OCS_AGENT_PROVIDER=claude` to use a logged-in Claude CLI instead. Jira
+credentials come from `config.AUTH.jira`, from the `jira` section of
+`data/auth.yaml` (`url`, `email`, `token`), or from `/etc/jira.cfg`.
+
 ```bash
 python3 -m ocs_ci.agents.runtime.run \
   --agent "${OCS_AGENT_NAME}" \

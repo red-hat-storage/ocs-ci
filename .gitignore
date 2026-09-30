@@ -17,6 +17,7 @@ bin/
 dist
 .coverage
 data/*
+ocs_ci/agents/jira_verification/reports/
 external/
 apidoc/*
 _build/*

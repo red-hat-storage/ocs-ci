@@ -122,6 +122,12 @@ docs = [
     "sphinx-autopackagesummary==1.3",
     "sphinx-rtd-theme==2.0.0",
 ]
+agents = [
+    "langgraph>=1.0",
+    "langchain>=1.0",
+    "langchain-openai>=1.0",
+    "langchain-mcp-adapters>=0.1",
+]
 
 [project.scripts]
 run-agent = "ocs_ci.agents.runtime.run:main"

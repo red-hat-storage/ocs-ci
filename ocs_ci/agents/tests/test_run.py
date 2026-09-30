@@ -8,7 +8,7 @@ import pytest
 
 from ocs_ci.agents.mcp import registry
 from ocs_ci.agents.mcp.registry import servers_for
-from ocs_ci.agents.runtime import run
+from ocs_ci.agents.runtime import llm, run
 
 
 def test_build_request_reads_jenkins_environment():
@@ -112,9 +112,10 @@ def test_invoke_agent_passes_the_jenkins_build(monkeypatch):
         def __init__(self):
             self.state = None
 
-        async def ainvoke(self, state):
+        async def ainvoke(self, state, config=None):
             self.state = state
-            return {"verdict": "covered"}
+            self.config = config
+            return {"verdict": "covered", "messages": []}
 
     graph = Graph()
 
@@ -129,6 +130,8 @@ def test_invoke_agent_passes_the_jenkins_build(monkeypatch):
     }
     result = run.invoke_agent(Path("jira_verification"), request)
     assert result["ok"] is True
+    assert result["reply"] == ""
+    assert graph.config["recursion_limit"] == 1000
     assert graph.state["messages"][0]["content"] == "DFBUGS-1"
     assert graph.state["jenkins"]["build_number"] == "7"
 
@@ -184,3 +187,41 @@ def test_mcp_server_modules_match_the_registry(module):
     """Each registered server is started as python -m that module."""
     name = module.rsplit(".", 1)[-1]
     assert servers_for([name])[name]["args"] == ["-m", module]
+
+
+def test_openai_key_prefers_auth_yaml(monkeypatch):
+    """agents_credentials.openai.api_key wins over a shell OPENAI_API_KEY."""
+    monkeypatch.setattr(
+        llm,
+        "_load_auth_config",
+        lambda: {"agents_credentials": {"openai": {"api_key": "from-file"}}},
+    )
+    monkeypatch.setenv("OPENAI_API_KEY", "from-env")
+    assert llm._openai_api_key() == "from-file"
+
+
+def test_openai_key_falls_back_to_the_environment(monkeypatch):
+    """OPENAI_API_KEY is used when auth.yaml has no OpenAI key."""
+    monkeypatch.setattr(llm, "_load_auth_config", lambda: {})
+    monkeypatch.setenv("OPENAI_API_KEY", "from-env")
+    assert llm._openai_api_key() == "from-env"
+
+
+def test_openai_model_receives_the_auth_yaml_key(monkeypatch):
+    """ChatOpenAI is constructed with the resolved key, not the process environment."""
+    pytest.importorskip("langchain_openai")
+    monkeypatch.setattr(llm, "_openai_api_key", lambda: "from-file")
+    monkeypatch.delenv("OCS_AGENT_MODEL", raising=False)
+    created = {}
+
+    class FakeChat:
+        def __init__(self, model, api_key, temperature):
+            created["model"] = model
+            created["api_key"] = api_key
+            created["temperature"] = temperature
+
+    import langchain_openai
+
+    monkeypatch.setattr(langchain_openai, "ChatOpenAI", FakeChat)
+    llm._openai_model()
+    assert created == {"model": "gpt-4o", "api_key": "from-file", "temperature": 0}
