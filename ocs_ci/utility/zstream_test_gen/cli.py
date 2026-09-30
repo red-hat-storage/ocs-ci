@@ -70,6 +70,21 @@ Examples:
         action="store_true",
         help="Create a sample configuration file at ~/.zstream_test_gen.yaml",
     )
+    group.add_argument(
+        "--learn-only",
+        action="store_true",
+        help="Only collect feedback from previous PRs (no test generation)",
+    )
+    group.add_argument(
+        "--fix-reviews",
+        action="store_true",
+        help="Fix CodeRabbit review comments on open PRs and learn from them",
+    )
+    group.add_argument(
+        "--maintain",
+        action="store_true",
+        help="Run maintenance only: fix reviews + collect feedback, no test generation",
+    )
 
     parser.add_argument(
         "--dry-run",
@@ -104,7 +119,16 @@ Examples:
 
     args = parser.parse_args()
 
-    if not any([args.fix_version, args.bug, args.init_config]):
+    if not any(
+        [
+            args.fix_version,
+            args.bug,
+            args.init_config,
+            args.learn_only,
+            args.fix_reviews,
+            args.maintain,
+        ]
+    ):
         parser.print_help()
         sys.exit(1)
 
@@ -126,6 +150,48 @@ Examples:
 
     # Load configuration
     cfg = load_config()
+
+    # Handle --learn-only
+    if args.learn_only:
+        pipeline = ZStreamTestPipeline(cfg)
+        summary = pipeline.run_feedback_only()
+        print("\nFeedback collection complete:")
+        print(f"  PRs processed:      {summary['processed']}")
+        print(f"  With corrections:   {summary['corrected']}")
+        print(f"  Merged clean:       {summary['merged_clean']}")
+        print(f"  Rejected:           {summary['rejected']}")
+        print(f"  New rules learned:  {summary['new_rules']}")
+        sys.exit(0)
+
+    # Handle --fix-reviews
+    if args.fix_reviews:
+        pipeline = ZStreamTestPipeline(cfg)
+        summary = pipeline.run_fix_reviews()
+        print("\nReview fix complete:")
+        print(f"  PRs checked:        {summary['prs_checked']}")
+        print(f"  PRs fixed:          {summary['prs_fixed']}")
+        print(f"  Commits pushed:     {summary['commits_pushed']}")
+        print(f"  New rules learned:  {summary['new_rules']}")
+        sys.exit(0)
+
+    # Handle --maintain (fix reviews + collect feedback, no generation)
+    if args.maintain:
+        pipeline = ZStreamTestPipeline(cfg)
+        print("\n--- Fix reviews ---")
+        review_summary = pipeline.run_fix_reviews()
+        print(f"  PRs checked:        {review_summary['prs_checked']}")
+        print(f"  PRs fixed:          {review_summary['prs_fixed']}")
+        print(f"  Commits pushed:     {review_summary['commits_pushed']}")
+        print(f"  New rules learned:  {review_summary['new_rules']}")
+
+        print("\n--- Collect feedback ---")
+        feedback_summary = pipeline.run_feedback_only()
+        print(f"  PRs processed:      {feedback_summary['processed']}")
+        print(f"  With corrections:   {feedback_summary['corrected']}")
+        print(f"  Merged clean:       {feedback_summary['merged_clean']}")
+        print(f"  Rejected:           {feedback_summary['rejected']}")
+        print(f"  New rules learned:  {feedback_summary['new_rules']}")
+        sys.exit(0)
 
     # Apply CLI overrides
     if args.dry_run:

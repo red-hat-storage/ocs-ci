@@ -107,6 +107,17 @@ class TestPublisher:
         pr_title = f"Add verification test for {bug.bug_id}"
         pr_body = self._build_pr_body(test, fix_version)
 
+        # Final secrets gate — scan all content before pushing to GitHub
+        secrets_found = self._scan_for_secrets(commit_files, pr_body, commit_message)
+        if secrets_found:
+            for finding in secrets_found:
+                log.error("SECRETS GATE: %s", finding)
+            log.error(
+                "Blocking PR for %s: sensitive data detected in generated content",
+                bug.bug_id,
+            )
+            return published
+
         # Build labels: base labels + bug ID + target versions
         labels = list(self.cfg.pr_labels)
         labels.append(bug.bug_id)
@@ -462,6 +473,41 @@ class TestPublisher:
         body_parts.extend(checklist)
 
         return "\n".join(body_parts)
+
+    def _scan_for_secrets(
+        self, commit_files: list, pr_body: str, commit_message: str
+    ) -> list:
+        """
+        Scan all PR content for secrets before pushing to GitHub.
+
+        Args:
+            commit_files: List of file dicts with 'path' and 'content'.
+            pr_body: The PR description text.
+            commit_message: The commit message.
+
+        Returns:
+            list[str]: Descriptions of detected secrets, empty if clean.
+
+        """
+        from ocs_ci.utility.zstream_test_gen.validator import TestValidator
+
+        findings = []
+        for file_entry in commit_files:
+            file_findings = TestValidator.scan_content_for_secrets(
+                file_entry["content"]
+            )
+            for f in file_findings:
+                findings.append(f"File {file_entry['path']}: {f}")
+
+        body_findings = TestValidator.scan_content_for_secrets(pr_body)
+        for f in body_findings:
+            findings.append(f"PR body: {f}")
+
+        msg_findings = TestValidator.scan_content_for_secrets(commit_message)
+        for f in msg_findings:
+            findings.append(f"Commit message: {f}")
+
+        return findings
 
     def _post_jira_comment(self, bug: BugInfo, published: list):
         """

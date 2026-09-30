@@ -14,6 +14,7 @@ class BugClassification(enum.Enum):
     NEEDS_DR_SETUP = "needs-dr-setup"
     MANUAL_ONLY = "manual-only"
     ALREADY_COVERED = "already-covered"
+    HAS_OPEN_PR = "has-open-pr"
     GENERATION_FAILED = "generation-failed"
 
 
@@ -214,6 +215,7 @@ class BugInfo:
     execution_spec: Optional[ExecutionSpec] = None
     confidence: Optional[ConfidenceScore] = None
     existing_test_path: Optional[str] = None
+    existing_pr_url: Optional[str] = None
 
     @property
     def is_backport(self):
@@ -349,6 +351,7 @@ class ZStreamReport:
     manual_only: list = field(default_factory=list)
     needs_dr_setup: list = field(default_factory=list)
     generation_failed: list = field(default_factory=list)
+    pr_already_open: list = field(default_factory=list)
     published_prs: list = field(default_factory=list)
 
     def to_text(self):
@@ -391,6 +394,15 @@ class ZStreamReport:
             for bug in self.manual_only:
                 lines.append(f"  {bug.bug_id}  {bug.summary}")
                 lines.append(f"    Reason: {bug.classification_reason}")
+            lines.append("")
+
+        if self.pr_already_open:
+            lines.append(f"PR already open ({len(self.pr_already_open)}):")
+            for bug in self.pr_already_open:
+                lines.append(f"  {bug.bug_id}  {bug.summary}")
+                pr_url = getattr(bug, "existing_pr_url", None)
+                if pr_url:
+                    lines.append(f"    PR: {pr_url}")
             lines.append("")
 
         if self.generation_failed:

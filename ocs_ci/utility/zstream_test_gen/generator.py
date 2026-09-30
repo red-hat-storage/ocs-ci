@@ -412,9 +412,37 @@ class TestGenerator:
             insertion_point=insertion_point,
         )
 
-    def _call_claude(self, prompt: str) -> str:
+    def call_claude(self, prompt: str, system_prompt: str = "") -> str:
         """
         Make a call to Claude and return the response text.
+
+        Args:
+            prompt: The user prompt.
+            system_prompt: Optional system prompt override. If empty,
+                uses the default SYSTEM_PROMPT with learned corrections.
+
+        Returns:
+            str: Claude's response text.
+
+        """
+        if not system_prompt:
+            from ocs_ci.utility.zstream_test_gen.feedback import FeedbackCollector
+
+            corrections = FeedbackCollector.format_corrections_for_prompt()
+            system_prompt = SYSTEM_PROMPT + corrections
+
+        message = self.client.messages.create(
+            model=self.cfg.claude.model,
+            max_tokens=self.cfg.claude.max_tokens,
+            temperature=self.cfg.claude.temperature,
+            system=system_prompt,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return message.content[0].text
+
+    def _call_claude(self, prompt: str) -> str:
+        """
+        Internal wrapper for backwards compatibility.
 
         Args:
             prompt: The user prompt.
@@ -423,14 +451,7 @@ class TestGenerator:
             str: Claude's response text.
 
         """
-        message = self.client.messages.create(
-            model=self.cfg.claude.model,
-            max_tokens=self.cfg.claude.max_tokens,
-            temperature=self.cfg.claude.temperature,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return message.content[0].text
+        return self.call_claude(prompt)
 
     def _parse_sections(self, text: str) -> dict:
         """

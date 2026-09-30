@@ -110,6 +110,12 @@ class ZStreamTestPipeline:
         log.info("Starting z-stream test generation for %s", fix_version)
         log.info("=" * 60)
 
+        # Stage 0a: Fix CodeRabbit review comments on open PRs
+        self._fix_reviews()
+
+        # Stage 0b: Collect feedback from previously submitted PRs
+        self._collect_feedback()
+
         report = ZStreamReport(fix_version=fix_version)
 
         # Stage 1: Collect bugs from Jira
@@ -143,8 +149,28 @@ class ZStreamTestPipeline:
             bug.classification = BugClassification.ALREADY_COVERED
             report.already_covered.append(bug)
 
-        # Stage 3.6: Score confidence
-        log.info("Stage 3.6: Scoring confidence for %d unique bugs", len(unique_bugs))
+        # Stage 3.7: Skip bugs that already have open PRs
+        if self.cfg.create_prs:
+            bug_ids = [b.bug_id for b in unique_bugs]
+            open_prs = self.github.find_open_prs_for_bugs(bug_ids)
+            if open_prs:
+                log.info(
+                    "Skipping %d bugs with existing open PRs: %s",
+                    len(open_prs),
+                    list(open_prs.keys()),
+                )
+                remaining = []
+                for bug in unique_bugs:
+                    if bug.bug_id in open_prs:
+                        bug.classification = BugClassification.HAS_OPEN_PR
+                        bug.existing_pr_url = open_prs[bug.bug_id]
+                        report.pr_already_open.append(bug)
+                    else:
+                        remaining.append(bug)
+                unique_bugs = remaining
+
+        # Stage 3.8: Score confidence
+        log.info("Stage 3.8: Scoring confidence for %d unique bugs", len(unique_bugs))
         for bug in unique_bugs:
             self.classifier.score_confidence(bug)
 
@@ -175,6 +201,8 @@ class ZStreamTestPipeline:
                 report.manual_only.append(bug)
             elif bug.classification == BugClassification.GENERATION_FAILED:
                 report.generation_failed.append(bug)
+            elif bug.classification == BugClassification.HAS_OPEN_PR:
+                pass  # already added in stage 3.7
 
         # Save report
         self._save_report(report)
@@ -184,6 +212,77 @@ class ZStreamTestPipeline:
         log.info(report.to_text())
 
         return report
+
+    def run_feedback_only(self) -> dict:
+        """
+        Run only the feedback collection stage.
+
+        Returns:
+            dict: Feedback summary with counts.
+
+        """
+        return self._collect_feedback()
+
+    def run_fix_reviews(self) -> dict:
+        """
+        Fix CodeRabbit review comments on open PRs.
+
+        Returns:
+            dict: Summary with prs_fixed, commits_pushed, new_rules.
+
+        """
+        from ocs_ci.utility.zstream_test_gen.feedback import ReviewFixer
+
+        log.info("Fixing CodeRabbit review comments on open PRs")
+        fixer = ReviewFixer(self.cfg, self.github, self.generator)
+        return fixer.fix_open_prs()
+
+    def _fix_reviews(self) -> dict:
+        """
+        Fix CodeRabbit review comments on open PRs.
+
+        Returns:
+            dict: Summary of review fixes applied.
+
+        """
+        from ocs_ci.utility.zstream_test_gen.feedback import ReviewFixer
+
+        log.info("Stage 0a: Fixing CodeRabbit review comments on open PRs")
+        fixer = ReviewFixer(self.cfg, self.github, self.generator)
+        summary = fixer.fix_open_prs()
+        if summary["prs_fixed"] > 0:
+            log.info(
+                "Review fixes: %d PRs fixed, %d commits pushed, %d new rules",
+                summary["prs_fixed"],
+                summary["commits_pushed"],
+                summary["new_rules"],
+            )
+        return summary
+
+    def _collect_feedback(self) -> dict:
+        """
+        Collect feedback from previously submitted PRs.
+
+        Returns:
+            dict: Summary with processed/corrected/rejected counts.
+
+        """
+        from ocs_ci.utility.zstream_test_gen.feedback import FeedbackCollector
+
+        log.info("Stage 0: Collecting feedback from previous PRs")
+        collector = FeedbackCollector(self.cfg, self.generator)
+        summary = collector.collect_feedback()
+        if summary["processed"] > 0:
+            log.info(
+                "Feedback: %d PRs processed (%d corrected, %d clean, "
+                "%d rejected, %d new rules)",
+                summary["processed"],
+                summary["corrected"],
+                summary["merged_clean"],
+                summary["rejected"],
+                summary["new_rules"],
+            )
+        return summary
 
     def process_single_bug(self, bug_id: str) -> Optional[GeneratedTest]:
         """

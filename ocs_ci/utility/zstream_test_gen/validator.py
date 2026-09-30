@@ -48,6 +48,51 @@ REQUIRED_PATTERNS = {
     ),
 }
 
+# Patterns that indicate hardcoded secrets or sensitive data
+SECRET_PATTERNS = [
+    (
+        r"(?:pull[_-]?secret|auth[_-]?token|api[_-]?key|password|secret[_-]?key)"
+        r"\s*[:=]\s*['\"][^'\"]{8,}['\"]",
+        "Possible hardcoded secret or credential",
+    ),
+    (
+        r"-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----",
+        "Embedded private key",
+    ),
+    (
+        r"-----BEGIN\s+CERTIFICATE-----",
+        "Embedded certificate",
+    ),
+    (
+        r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}",
+        "Possible JWT token",
+    ),
+    (
+        r"['\"]auths['\"]:\s*\{",
+        "Possible pull secret (auths block)",
+    ),
+    (
+        r"(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{30,}",
+        "GitHub personal access token",
+    ),
+    (
+        r"(?:AKIA|ASIA)[A-Z0-9]{16}",
+        "AWS access key",
+    ),
+    (
+        r"(?:cloud\.openshift\.com|sso\.redhat\.com)/[^\s'\"]*token=[^\s'\"]+",
+        "Red Hat SSO or OpenShift token URL",
+    ),
+    (
+        r"Bearer\s+[A-Za-z0-9_\-.]{20,}",
+        "Hardcoded Bearer token",
+    ),
+    (
+        r"(?:registry\.redhat\.io|quay\.io)/[^\s'\"]*:[^\s'\"]*@",
+        "Registry credential in URL",
+    ),
+]
+
 # Known valid import prefixes in ocs-ci
 VALID_IMPORT_PREFIXES = [
     "ocs_ci.",
@@ -128,7 +173,11 @@ class TestValidator:
         lint_errors = self._run_flake8(test.code)
         errors.extend(lint_errors)
 
-        # 6. pytest --collect-only dry-run (non-blocking, warnings only)
+        # 6. Secrets check (blocking)
+        secret_errors = self._check_secrets(test.code)
+        errors.extend(secret_errors)
+
+        # 7. pytest --collect-only dry-run (non-blocking, warnings only)
         # The ocs-ci conftest has heavy dependencies (pandas, etc.) that may
         # not be installed locally, so collect failures are logged as warnings
         # rather than hard errors.
@@ -351,6 +400,50 @@ class TestValidator:
                             continue
 
         return errors
+
+    def _check_secrets(self, code: str) -> list:
+        """
+        Scan code for hardcoded secrets, credentials, and sensitive data.
+
+        Args:
+            code: Python code to scan.
+
+        Returns:
+            list[str]: List of secret-related error messages.
+
+        """
+        errors = []
+        for pattern, description in SECRET_PATTERNS:
+            matches = re.finditer(pattern, code, re.IGNORECASE)
+            for match in matches:
+                line_num = code[: match.start()].count("\n") + 1
+                snippet = match.group()[:40]
+                errors.append(
+                    f"SECRET DETECTED at line {line_num}: {description} "
+                    f"(matched: '{snippet}...')"
+                )
+        return errors
+
+    @staticmethod
+    def scan_content_for_secrets(content: str) -> list:
+        """
+        Scan arbitrary content (PR body, commit message) for secrets.
+
+        This is a static method so it can be called from the publisher
+        without a full validator instance.
+
+        Args:
+            content: Text to scan.
+
+        Returns:
+            list[str]: Descriptions of detected secrets.
+
+        """
+        findings = []
+        for pattern, description in SECRET_PATTERNS:
+            if re.search(pattern, content, re.IGNORECASE):
+                findings.append(description)
+        return findings
 
     def _run_flake8(self, code: str) -> list:
         """
