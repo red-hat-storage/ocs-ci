@@ -941,12 +941,13 @@ class PrometheusAPI(object):
                 logger.error(error_msg)
                 raise AlertingError(error_msg)
 
-    def prometheus_log(self, prometheus_alert_list):
+    def prometheus_log(self, prometheus_alert_list, log_level=logging.INFO):
         """
         Log all alerts from Prometheus API to list
 
         Args:
             prometheus_alert_list (list): List to be populated with alerts
+            log_level (int): Level used for logging of newly collected alerts
         """
 
         with self._cluster_context():
@@ -957,7 +958,7 @@ class PrometheusAPI(object):
             if alerts_response.ok:
                 for alert in alerts_response.json().get("data").get("alerts"):
                     if alert not in prometheus_alert_list:
-                        logger.info(f"Adding {alert} to alert list")
+                        logger.log(log_level, f"Adding {alert} to alert list")
                         prometheus_alert_list.append(alert)
             else:
                 # no need raise Assertion error or Exception here:
@@ -1000,7 +1001,9 @@ class PrometheusAPI(object):
 
 class PrometheusAlertSubscriber(Timer):
 
-    def __init__(self, threading_lock, interval: float, alert_list=None):
+    def __init__(
+        self, threading_lock, interval: float, alert_list=None, log_level=logging.INFO
+    ):
         """
         Args:
             threading_lock (threading.RLock): Lock used for synchronization of
@@ -1010,13 +1013,16 @@ class PrometheusAlertSubscriber(Timer):
                 not provided, a new list is created. Providing own list is
                 useful when the caller needs to access collected alerts also
                 before the subscriber is unsubscribed.
+            log_level (int): Level used for logging of newly collected alerts
 
         """
         self.prometheus_alert_list = alert_list if alert_list is not None else []
         self.prometheus_api = PrometheusAPI(threading_lock=threading_lock)
         super().__init__(
             interval,
-            lambda: self.prometheus_api.prometheus_log(self.prometheus_alert_list),
+            lambda: self.prometheus_api.prometheus_log(
+                self.prometheus_alert_list, log_level=log_level
+            ),
         )
 
     def run(self):
@@ -1063,7 +1069,9 @@ class PrometheusAlertSubscriber(Timer):
 
 
 @contextlib.contextmanager
-def alert_collection(threading_lock, alert_list=None, interval=10):
+def alert_collection(
+    threading_lock, alert_list=None, interval=10, log_level=logging.DEBUG
+):
     """
     Context manager that collects all Prometheus alerts fired during the
     execution of the wrapped block of code.
@@ -1078,6 +1086,9 @@ def alert_collection(threading_lock, alert_list=None, interval=10):
         alert_list (list): List to be populated with collected alerts. When not
             provided, a new list is created.
         interval (float): Number of seconds between Prometheus polls
+        log_level (int): Level used for logging of each newly collected alert.
+            Alerts are logged with DEBUG level by default because the summary
+            of all collected alerts is logged when the context manager is left.
 
     Yields:
         list: Alerts collected so far. The list is complete once the context
@@ -1087,7 +1098,10 @@ def alert_collection(threading_lock, alert_list=None, interval=10):
     alerts = alert_list if alert_list is not None else []
     try:
         subscriber = PrometheusAlertSubscriber(
-            threading_lock=threading_lock, interval=interval, alert_list=alerts
+            threading_lock=threading_lock,
+            interval=interval,
+            alert_list=alerts,
+            log_level=log_level,
         )
         subscriber.subscribe()
     except Exception:

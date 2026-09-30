@@ -46,6 +46,7 @@ def test_no_unexpected_alerts(upgrade_stats, upgrade_type):
         )
 
     log.info(f"Alerts fired during {upgrade_type}: {get_alert_names(alerts)}")
+    log.debug(f"Alerts collected during {upgrade_type}: {alerts}")
     ignored_severities = config.UPGRADE.get("ignored_alert_severities", [])
     unexpected_alerts = get_unexpected_alerts(
         alerts,
