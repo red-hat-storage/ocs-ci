@@ -48,11 +48,33 @@ def test_no_unexpected_alerts(upgrade_stats, upgrade_type):
             "the upgrade was not executed in this test run"
         )
 
-    log.info(f"Alerts fired during {upgrade_type}: {get_alert_names(alerts)}")
+    collection_status = upgrade_stats[upgrade_type].get("alert_collection")
+    if collection_status is not None:
+        assert collection_status.get("started") and collection_status.get(
+            "successful_polls"
+        ), (
+            f"Collection of alerts fired during {upgrade_type} failed "
+            f"({collection_status}) so it is not possible to verify that no "
+            "unexpected alert was fired"
+        )
+        if not collection_status.get("complete"):
+            log.warning(
+                f"Collection of alerts fired during {upgrade_type} was not "
+                f"finished properly ({collection_status}) so some alerts might "
+                "be missing"
+            )
+
+    firing_alerts = [alert for alert in alerts if alert.get("state") == "firing"]
+    pending_alerts = [alert for alert in alerts if alert.get("state") == "pending"]
+    log.info(f"Alerts fired during {upgrade_type}: {get_alert_names(firing_alerts)}")
+    log.info(
+        f"Alerts in pending state during {upgrade_type}: "
+        f"{get_alert_names(pending_alerts)}"
+    )
     log.debug(f"Alerts collected during {upgrade_type}: {alerts}")
     ignored_severities = config.UPGRADE.get("ignored_alert_severities", [])
     unexpected_alerts = get_unexpected_alerts(
-        alerts,
+        firing_alerts,
         expected_alerts=get_expected_alerts(),
         ignored_severities=ignored_severities,
     )

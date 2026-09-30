@@ -1088,6 +1088,11 @@ def run_ocs_upgrade(
                 if upgrade_stats is not None
                 else None
             ),
+            status=(
+                upgrade_stats["odf_upgrade"].setdefault("alert_collection", {})
+                if upgrade_stats is not None
+                else None
+            ),
         )
     else:
         log.warning(
@@ -1096,247 +1101,251 @@ def run_ocs_upgrade(
         )
         alert_collector = contextlib.nullcontext()
 
-    with alert_collector, CephHealthMonitor(ceph_cluster):
-        channel = upgrade_ocs.set_upgrade_channel()
-        upgrade_ocs.set_upgrade_images()
+    with alert_collector:
+        with CephHealthMonitor(ceph_cluster):
+            channel = upgrade_ocs.set_upgrade_channel()
+            upgrade_ocs.set_upgrade_images()
 
-        # Check for unexpected catalog builds during y-stream upgrades only
-        # Y-stream: 4.21 -> 4.22 (version changes), Z-stream: 4.21 -> 4.21 (same version, different patch)
-        parsed_versions = upgrade_ocs.get_parsed_versions()
-        version_change = (
-            parsed_versions[1].major != parsed_versions[0].major
-            or parsed_versions[1].minor != parsed_versions[0].minor
-        )
-
-        if version_change and not upgrade_in_current_source:
-            # Y-stream upgrade: check for unexpected builds in current channel
-            log.info(
-                f"Y-stream upgrade ({original_ocs_version} -> {upgrade_version}). "
-                "Checking for unexpected builds in current channel."
+            # Check for unexpected catalog builds during y-stream upgrades only
+            # Y-stream: 4.21 -> 4.22 (version changes), Z-stream: 4.21 -> 4.21 (same version, different patch)
+            parsed_versions = upgrade_ocs.get_parsed_versions()
+            version_change = (
+                parsed_versions[1].major != parsed_versions[0].major
+                or parsed_versions[1].minor != parsed_versions[0].minor
             )
 
-            subscription_name = constants.ODF_SUBSCRIPTION
-            subscription_obj = OCP(
-                resource_name=subscription_name,
-                kind="subscription.operators.coreos.com",
-                namespace=namespace,
-            )
-            current_channel = subscription_obj.data["spec"]["channel"]
-
-            operator_selector = get_selector_for_ocs_operator()
-            package_manifest = PackageManifest(
-                resource_name=defaults.ODF_OPERATOR_NAME,
-                selector=operator_selector,
-            )
-            try:
-                csv_after_catalog_update = package_manifest.get_current_csv(
-                    channel=current_channel
+            if version_change and not upgrade_in_current_source:
+                # Y-stream upgrade: check for unexpected builds in current channel
+                log.info(
+                    f"Y-stream upgrade ({original_ocs_version} -> {upgrade_version}). "
+                    "Checking for unexpected builds in current channel."
                 )
-                if csv_name_pre_upgrade != csv_after_catalog_update:
-                    version_pre = version.get_semantic_version(
-                        version.extract_version_from_csv_name(csv_name_pre_upgrade)
-                    )
-                    version_after = version.get_semantic_version(
-                        version.extract_version_from_csv_name(csv_after_catalog_update)
-                    )
 
-                    # Only block if the new version is HIGHER (which would cause unwanted upgrade)
-                    # Allow if version is lower or same (downgrade scenario is OK)
-                    if version_after > version_pre:
-                        error_msg = (
-                            "UPGRADE BLOCKED: Detected unexpected build in catalog. "
-                            f"Current channel '{current_channel}' had CSV '{csv_name_pre_upgrade}' "
-                            f"before catalog update, but now shows '{csv_after_catalog_update}'. "
-                            f"This would cause OLM to upgrade to '{csv_after_catalog_update}' before "
-                            "the channel change, creating conflicting upgrade paths."
+                subscription_name = constants.ODF_SUBSCRIPTION
+                subscription_obj = OCP(
+                    resource_name=subscription_name,
+                    kind="subscription.operators.coreos.com",
+                    namespace=namespace,
+                )
+                current_channel = subscription_obj.data["spec"]["channel"]
+
+                operator_selector = get_selector_for_ocs_operator()
+                package_manifest = PackageManifest(
+                    resource_name=defaults.ODF_OPERATOR_NAME,
+                    selector=operator_selector,
+                )
+                try:
+                    csv_after_catalog_update = package_manifest.get_current_csv(
+                        channel=current_channel
+                    )
+                    if csv_name_pre_upgrade != csv_after_catalog_update:
+                        version_pre = version.get_semantic_version(
+                            version.extract_version_from_csv_name(csv_name_pre_upgrade)
                         )
-                        log.error(error_msg)
-                        raise UnexpectedCatalogBuildException(error_msg)
+                        version_after = version.get_semantic_version(
+                            version.extract_version_from_csv_name(
+                                csv_after_catalog_update
+                            )
+                        )
+
+                        # Only block if the new version is HIGHER (which would cause unwanted upgrade)
+                        # Allow if version is lower or same (downgrade scenario is OK)
+                        if version_after > version_pre:
+                            error_msg = (
+                                "UPGRADE BLOCKED: Detected unexpected build in catalog. "
+                                f"Current channel '{current_channel}' had CSV '{csv_name_pre_upgrade}' "
+                                f"before catalog update, but now shows '{csv_after_catalog_update}'. "
+                                f"This would cause OLM to upgrade to '{csv_after_catalog_update}' before "
+                                "the channel change, creating conflicting upgrade paths."
+                            )
+                            log.error(error_msg)
+                            raise UnexpectedCatalogBuildException(error_msg)
+                        else:
+                            log.info(
+                                f"CSV changed in channel '{current_channel}' from "
+                                f"'{csv_name_pre_upgrade}' to '{csv_after_catalog_update}', "
+                                f"but version decreased ({version_pre} -> {version_after}). "
+                                "This is acceptable and won't cause conflicting upgrade paths."
+                            )
                     else:
                         log.info(
-                            f"CSV changed in channel '{current_channel}' from "
-                            f"'{csv_name_pre_upgrade}' to '{csv_after_catalog_update}', "
-                            f"but version decreased ({version_pre} -> {version_after}). "
-                            "This is acceptable and won't cause conflicting upgrade paths."
+                            f"Catalog build check passed. CSV in channel '{current_channel}' "
+                            f"remains '{csv_name_pre_upgrade}'."
                         )
-                else:
+                except ChannelNotFound:
                     log.info(
-                        f"Catalog build check passed. CSV in channel '{current_channel}' "
-                        f"remains '{csv_name_pre_upgrade}'."
+                        f"Channel '{current_channel}' not found in updated catalog. "
+                        "Skipping build check."
                     )
-            except ChannelNotFound:
-                log.info(
-                    f"Channel '{current_channel}' not found in updated catalog. "
-                    "Skipping build check."
-                )
-        else:
-            log.info(
-                f"Z-stream or same-source upgrade ({original_ocs_version} -> {upgrade_version}). "
-                "Skipping catalog build check."
-            )
-
-        if platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
-            HostedClients().apply_idms_to_hosted_clusters()
-            wait_for_machineconfigpool_status(node_type="all")
-
-        live_deployment = config.DEPLOYMENT["live_deployment"]
-        disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
-        managed_ibmcloud_platform = (
-            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and config.ENV_DATA["deployment_type"] == "managed"
-        )
-        if managed_ibmcloud_platform and live_deployment and not disable_addon:
-            clustername = config.ENV_DATA.get("cluster_name")
-            cmd = f"ibmcloud ks cluster addon disable openshift-data-foundation --cluster {clustername} -f"
-            run_ibmcloud_cmd(cmd)
-            time.sleep(120)
-            cmd = (
-                f"ibmcloud ks cluster addon enable openshift-data-foundation --cluster {clustername} -f --version "
-                f"{upgrade_version}.0 --param ocsUpgrade=true"
-            )
-            run_ibmcloud_cmd(cmd)
-            time.sleep(120)
-        else:
-            ui_upgrade_supported = False
-            if config.UPGRADE.get("ui_upgrade"):
-                if (
-                    version.get_semantic_ocp_version_from_config()
-                    == version.VERSION_4_9
-                    and original_ocs_version == "4.8"
-                    and upgrade_version == "4.9"
-                ):
-                    ui_upgrade_supported = True
-                else:
-                    log.warning(
-                        "UI upgrade combination is not supported. It will fallback to CLI upgrade"
-                    )
-            if ui_upgrade_supported:
-                ocs_odf_upgrade_ui()
             else:
-                if managed_ibmcloud_platform and not upgrade_in_current_source:
-                    create_ocs_secret(config.ENV_DATA["cluster_namespace"])
-                if upgrade_version != "4.9":
-                    # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
-                    # OCS automatically.
-                    upgrade_ocs.update_subscription(channel)
-                if original_ocs_version == "4.8" and upgrade_version == "4.9":
-                    deployment = Deployment()
-                    deployment.subscribe_ocs()
-                else:
-                    # In the case upgrade is not from 4.8 to 4.9 and we have manual approval strategy
-                    # we need to wait and approve install plan, otherwise it's approved in the
-                    # subscribe_ocs method.
-                    subscription_plan_approval = config.DEPLOYMENT.get(
-                        "subscription_plan_approval"
-                    )
-                    if subscription_plan_approval == "Manual":
-                        wait_for_install_plan_and_approve(
-                            config.ENV_DATA["cluster_namespace"]
-                        )
-                if managed_ibmcloud_platform and not upgrade_in_current_source:
-                    for attempt in range(2):
-                        # We need to do it twice, because some of the SA are updated
-                        # after the first load of OCS pod after upgrade. So we need to
-                        # link updated SA again.
-                        log.info(
-                            f"Sleep 1 minute before attempt: {attempt + 1}/2 "
-                            "of linking secret/SAs"
-                        )
-                        time.sleep(60)
-                        link_all_sa_and_secret_and_delete_pods(
-                            constants.OCS_SECRET, config.ENV_DATA["cluster_namespace"]
-                        )
-        if operation:
-            log.info(f"Calling test function: {operation}")
-            _ = operation(*operation_args, **operation_kwargs)
-            # Workaround for issue #2531
-            time.sleep(30)
-            # End of workaround
+                log.info(
+                    f"Z-stream or same-source upgrade ({original_ocs_version} -> {upgrade_version}). "
+                    "Skipping catalog build check."
+                )
 
-        for sample in TimeoutSampler(
-            timeout=725,
-            sleep=5,
-            func=upgrade_ocs.check_if_upgrade_completed,
-            channel=channel,
-            csv_name_pre_upgrade=csv_name_pre_upgrade,
-        ):
-            if upgrade_stats:
-                rbd_daemonset_status = rbd_daemonset.get_status()
-                cephfs_daemonset_status = cephfs_daemonset.get_status()
-                rbd_unavailable = (
-                    rbd_daemonset_status["desiredNumberScheduled"]
-                    - rbd_daemonset_status["numberReady"]
-                )
-                cephfs_unavailable = (
-                    cephfs_daemonset_status["desiredNumberScheduled"]
-                    - cephfs_daemonset_status["numberReady"]
-                )
-                if (
-                    rbd_unavailable
-                    > upgrade_stats["odf_upgrade"]["rbd_max_unavailable"]
-                ):
-                    upgrade_stats["odf_upgrade"][
-                        "rbd_max_unavailable"
-                    ] = rbd_unavailable
-                if (
-                    cephfs_unavailable
-                    > upgrade_stats["odf_upgrade"]["cephfs_max_unavailable"]
-                ):
-                    upgrade_stats["odf_upgrade"][
-                        "cephfs_max_unavailable"
-                    ] = cephfs_unavailable
-                log.debug(f"rbd daemonset status: {rbd_daemonset_status}")
-                log.debug(f"cephfs daemonset status: {cephfs_daemonset_status}")
-            try:
-                if sample:
-                    log.info("Upgrade success!")
-                    break
-            except TimeoutException:
-                raise TimeoutException("No new CSV found after upgrade!")
-        if config.UPGRADE.get(
-            "csi_rbd_plugin_update_strategy_max_unavailable_upgrade_middle"
-        ) or config.UPGRADE.get(
-            "csi_cephfs_plugin_update_strategy_max_unavailable_upgrade_middle"
-        ):
-            set_update_strategy(
-                config.UPGRADE.get(
-                    "csi_rbd_plugin_update_strategy_max_unavailable_upgrade_middle"
-                ),
-                config.UPGRADE.get(
-                    "csi_cephfs_plugin_update_strategy_max_unavailable_upgrade_middle"
-                ),
+            if platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+                HostedClients().apply_idms_to_hosted_clusters()
+                wait_for_machineconfigpool_status(node_type="all")
+
+            live_deployment = config.DEPLOYMENT["live_deployment"]
+            disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
+            managed_ibmcloud_platform = (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
             )
-        stop_time = time.time()
-        time_taken = stop_time - start_time
-        log.info(f"Upgrade took {time_taken} seconds to complete")
-        if upgrade_stats:
-            upgrade_stats["odf_upgrade"]["upgrade_time"] = time_taken
-        old_image = upgrade_ocs.get_images_post_upgrade(
-            channel, pre_upgrade_images, upgrade_version
+            if managed_ibmcloud_platform and live_deployment and not disable_addon:
+                clustername = config.ENV_DATA.get("cluster_name")
+                cmd = f"ibmcloud ks cluster addon disable openshift-data-foundation --cluster {clustername} -f"
+                run_ibmcloud_cmd(cmd)
+                time.sleep(120)
+                cmd = (
+                    f"ibmcloud ks cluster addon enable openshift-data-foundation --cluster {clustername} -f --version "
+                    f"{upgrade_version}.0 --param ocsUpgrade=true"
+                )
+                run_ibmcloud_cmd(cmd)
+                time.sleep(120)
+            else:
+                ui_upgrade_supported = False
+                if config.UPGRADE.get("ui_upgrade"):
+                    if (
+                        version.get_semantic_ocp_version_from_config()
+                        == version.VERSION_4_9
+                        and original_ocs_version == "4.8"
+                        and upgrade_version == "4.9"
+                    ):
+                        ui_upgrade_supported = True
+                    else:
+                        log.warning(
+                            "UI upgrade combination is not supported. It will fallback to CLI upgrade"
+                        )
+                if ui_upgrade_supported:
+                    ocs_odf_upgrade_ui()
+                else:
+                    if managed_ibmcloud_platform and not upgrade_in_current_source:
+                        create_ocs_secret(config.ENV_DATA["cluster_namespace"])
+                    if upgrade_version != "4.9":
+                        # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
+                        # OCS automatically.
+                        upgrade_ocs.update_subscription(channel)
+                    if original_ocs_version == "4.8" and upgrade_version == "4.9":
+                        deployment = Deployment()
+                        deployment.subscribe_ocs()
+                    else:
+                        # In the case upgrade is not from 4.8 to 4.9 and we have manual approval strategy
+                        # we need to wait and approve install plan, otherwise it's approved in the
+                        # subscribe_ocs method.
+                        subscription_plan_approval = config.DEPLOYMENT.get(
+                            "subscription_plan_approval"
+                        )
+                        if subscription_plan_approval == "Manual":
+                            wait_for_install_plan_and_approve(
+                                config.ENV_DATA["cluster_namespace"]
+                            )
+                    if managed_ibmcloud_platform and not upgrade_in_current_source:
+                        for attempt in range(2):
+                            # We need to do it twice, because some of the SA are updated
+                            # after the first load of OCS pod after upgrade. So we need to
+                            # link updated SA again.
+                            log.info(
+                                f"Sleep 1 minute before attempt: {attempt + 1}/2 "
+                                "of linking secret/SAs"
+                            )
+                            time.sleep(60)
+                            link_all_sa_and_secret_and_delete_pods(
+                                constants.OCS_SECRET,
+                                config.ENV_DATA["cluster_namespace"],
+                            )
+            if operation:
+                log.info(f"Calling test function: {operation}")
+                _ = operation(*operation_args, **operation_kwargs)
+                # Workaround for issue #2531
+                time.sleep(30)
+                # End of workaround
+
+            for sample in TimeoutSampler(
+                timeout=725,
+                sleep=5,
+                func=upgrade_ocs.check_if_upgrade_completed,
+                channel=channel,
+                csv_name_pre_upgrade=csv_name_pre_upgrade,
+            ):
+                if upgrade_stats:
+                    rbd_daemonset_status = rbd_daemonset.get_status()
+                    cephfs_daemonset_status = cephfs_daemonset.get_status()
+                    rbd_unavailable = (
+                        rbd_daemonset_status["desiredNumberScheduled"]
+                        - rbd_daemonset_status["numberReady"]
+                    )
+                    cephfs_unavailable = (
+                        cephfs_daemonset_status["desiredNumberScheduled"]
+                        - cephfs_daemonset_status["numberReady"]
+                    )
+                    if (
+                        rbd_unavailable
+                        > upgrade_stats["odf_upgrade"]["rbd_max_unavailable"]
+                    ):
+                        upgrade_stats["odf_upgrade"][
+                            "rbd_max_unavailable"
+                        ] = rbd_unavailable
+                    if (
+                        cephfs_unavailable
+                        > upgrade_stats["odf_upgrade"]["cephfs_max_unavailable"]
+                    ):
+                        upgrade_stats["odf_upgrade"][
+                            "cephfs_max_unavailable"
+                        ] = cephfs_unavailable
+                    log.debug(f"rbd daemonset status: {rbd_daemonset_status}")
+                    log.debug(f"cephfs daemonset status: {cephfs_daemonset_status}")
+                try:
+                    if sample:
+                        log.info("Upgrade success!")
+                        break
+                except TimeoutException:
+                    raise TimeoutException("No new CSV found after upgrade!")
+            if config.UPGRADE.get(
+                "csi_rbd_plugin_update_strategy_max_unavailable_upgrade_middle"
+            ) or config.UPGRADE.get(
+                "csi_cephfs_plugin_update_strategy_max_unavailable_upgrade_middle"
+            ):
+                set_update_strategy(
+                    config.UPGRADE.get(
+                        "csi_rbd_plugin_update_strategy_max_unavailable_upgrade_middle"
+                    ),
+                    config.UPGRADE.get(
+                        "csi_cephfs_plugin_update_strategy_max_unavailable_upgrade_middle"
+                    ),
+                )
+            stop_time = time.time()
+            time_taken = stop_time - start_time
+            log.info(f"Upgrade took {time_taken} seconds to complete")
+            if upgrade_stats:
+                upgrade_stats["odf_upgrade"]["upgrade_time"] = time_taken
+            old_image = upgrade_ocs.get_images_post_upgrade(
+                channel, pre_upgrade_images, upgrade_version
+            )
+
+        # verify all required CSV's
+        ocs_operator_names = get_required_csvs()
+        channel = config.DEPLOYMENT.get("ocs_csv_channel")
+        operator_selector = get_selector_for_ocs_operator()
+        subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
+
+        for ocs_operator_name in ocs_operator_names:
+            package_manifest = PackageManifest(
+                resource_name=ocs_operator_name,
+                selector=operator_selector,
+                subscription_plan_approval=subscription_plan_approval,
+            )
+            package_manifest.wait_for_resource(timeout=300)
+            csv_name = package_manifest.get_current_csv(channel=channel)
+            csv = CSV(resource_name=csv_name, namespace=namespace)
+            csv.wait_for_phase("Succeeded", timeout=720)
+
+        verify_image_versions(
+            old_image,
+            upgrade_ocs.get_parsed_versions()[1],
+            upgrade_ocs.version_before_upgrade,
         )
-
-    # verify all required CSV's
-    ocs_operator_names = get_required_csvs()
-    channel = config.DEPLOYMENT.get("ocs_csv_channel")
-    operator_selector = get_selector_for_ocs_operator()
-    subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-
-    for ocs_operator_name in ocs_operator_names:
-        package_manifest = PackageManifest(
-            resource_name=ocs_operator_name,
-            selector=operator_selector,
-            subscription_plan_approval=subscription_plan_approval,
-        )
-        package_manifest.wait_for_resource(timeout=300)
-        csv_name = package_manifest.get_current_csv(channel=channel)
-        csv = CSV(resource_name=csv_name, namespace=namespace)
-        csv.wait_for_phase("Succeeded", timeout=720)
-
-    verify_image_versions(
-        old_image,
-        upgrade_ocs.get_parsed_versions()[1],
-        upgrade_ocs.version_before_upgrade,
-    )
 
     verify_nb_db_psql_version(check_image_name_version=False)
 

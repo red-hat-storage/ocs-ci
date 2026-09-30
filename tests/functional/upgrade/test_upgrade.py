@@ -118,9 +118,7 @@ def config_index(request):
 @ocs_upgrade
 @polarion_id(get_polarion_id(upgrade=True))
 @multicluster_roles(["mdr-all-odf", "rdr-all-odf"])
-def test_upgrade(
-    zone_rank, role_rank, config_index, threading_lock, upgrade_stats=None
-):
+def test_upgrade(zone_rank, role_rank, config_index, threading_lock, upgrade_stats):
     """
     Tests upgrade procedure of OCS cluster
 
