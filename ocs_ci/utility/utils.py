@@ -7576,28 +7576,31 @@ def create_kubeconfig(kubeconfig_path):
             f"{ocp_api_url} "
             "--insecure-skip-tls-verify=true"
         )
-        result = exec_cmd(cmd, secrets=(config.RUN["kubeadmin_password"],))
+        secrets = (config.RUN["kubeadmin_password"],)
+        # ignore_error is required here, otherwise exec_cmd raises CommandFailed
+        # on its own and the more descriptive AuthError below is never raised
+        result = exec_cmd(cmd, secrets=secrets, ignore_error=True)
         if result.returncode:
-            log.warning(f"executed command: {cmd}")
+            log.warning(f"executed command: {mask_secrets(cmd, secrets)}")
             log.warning(f"returncode: {result.returncode}")
-            log.warning(f"stdout: {result.stdout}")
-            log.warning(f"stderr: {result.stderr}")
+            log.warning(f"stdout: {mask_secrets(result.stdout.decode(), secrets)}")
+            log.warning(f"stderr: {mask_secrets(result.stderr.decode(), secrets)}")
             raise AuthError(f"Failed to login to OCP cluster at {ocp_api_url}")
 
         kubeconfig_dir = os.path.dirname(kubeconfig_path)
         os.makedirs(kubeconfig_dir, exist_ok=True)
         cmd = f"oc config new-admin-kubeconfig > {kubeconfig_path}"
-        result = exec_cmd(cmd, shell=True)
+        result = exec_cmd(cmd, shell=True, ignore_error=True)
         if result.returncode:
             log.warning(f"executed command: {cmd}")
             log.warning(f"returncode: {result.returncode}")
-            log.warning(f"stdout: {result.stdout}")
-            log.warning(f"stderr: {result.stderr}")
+            log.warning(f"stdout: {result.stdout.decode()}")
+            log.warning(f"stderr: {result.stderr.decode()}")
             raise CommandFailed(
                 f"Failed to create permanent kubeconfig at {kubeconfig_path}"
             )
         else:
-            log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
+            log.info(f"Kubeconfig file was created: {kubeconfig_path}.")
         update_kubeconfig_with_proxy_url_for_client(kubeconfig_path)
 
         kubeadmin_password_file = os.path.join(
