@@ -1000,38 +1000,24 @@ def _cleanup_failed_cluster_import(cluster_name):
                 f"Failed to delete {kind} '{cluster_name}' during cleanup: {ex}"
             )
 
-    # Poll for namespace deletion with increasing timeouts and backoff
-    # Total wait: 300s + 300s + 600s = 1200s (20 minutes)
+    # Poll for namespace deletion with a total of 1200s (20 minutes)
     # Only proceed with retry after confirmed deletion
     log.info(f"Waiting for namespace '{cluster_name}' to be fully removed")
-    timeouts = [300, 300, 600]
     namespace_obj = OCP(kind="namespace")
 
-    for attempt, timeout in enumerate(timeouts, start=1):
-        try:
-            namespace_obj.wait_for_delete(
-                resource_name=cluster_name, timeout=timeout, sleep=15
-            )
-            log.info(
-                f"Namespace '{cluster_name}' fully removed after "
-                f"{sum(timeouts[:attempt])}s"
-            )
-            return
-        except (CommandFailed, TimeoutError) as ex:
-            elapsed = sum(timeouts[:attempt])
-            if attempt < len(timeouts):
-                log.warning(
-                    f"Namespace '{cluster_name}' not deleted after {elapsed}s, "
-                    f"extending wait by {timeouts[attempt]}s more..."
-                )
-            else:
-                log.error(
-                    f"Namespace '{cluster_name}' still not deleted after {elapsed}s. "
-                    f"It may be stuck with finalizers. Cannot proceed with retry."
-                )
-                raise TimeoutError(
-                    f"Namespace '{cluster_name}' deletion timed out after {elapsed}s"
-                ) from ex
+    try:
+        namespace_obj.wait_for_delete(
+            resource_name=cluster_name, timeout=1200, sleep=15
+        )
+        log.info(f"Namespace '{cluster_name}' fully removed")
+    except (CommandFailed, TimeoutError) as ex:
+        log.error(
+            f"Namespace '{cluster_name}' still not deleted after 1200s. "
+            f"It may be stuck with finalizers. Cannot proceed with retry."
+        )
+        raise TimeoutError(
+            f"Namespace '{cluster_name}' deletion timed out after 1200s"
+        ) from ex
 
 
 def import_clusters_via_cli(clusters, max_retries=3):
@@ -1124,21 +1110,62 @@ def import_clusters_via_cli(clusters, max_retries=3):
                     else:
                         raise
 
-                log.info("Wait managedcluster move to Available state")
+                log.info("Wait for managedcluster to reach Available state")
                 time.sleep(60)
                 ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
-                ocp_obj.wait_for_resource(
+
+                # Wait for cluster to reach AVAILABLE state (accepts JOINED too in case of fast transition)
+                for sample in TimeoutSampler(
                     timeout=2000,
-                    condition="True",
-                    column="AVAILABLE",
-                    resource_name=cluster[0],
-                )
-                ocp_obj.wait_for_resource(
+                    sleep=15,
+                    func=lambda: ocp_obj.get(resource_name=cluster[0]),
+                ):
+                    conditions = sample.get("status", {}).get("conditions", [])
+                    available_condition = next(
+                        (
+                            c
+                            for c in conditions
+                            if c.get("type") == "ManagedClusterConditionAvailable"
+                        ),
+                        None,
+                    )
+                    joined_condition = next(
+                        (
+                            c
+                            for c in conditions
+                            if c.get("type") == "ManagedClusterJoined"
+                        ),
+                        None,
+                    )
+
+                    if (
+                        available_condition
+                        and available_condition.get("status") == "True"
+                    ):
+                        log.info(f"Cluster '{cluster[0]}' reached Available state")
+                        break
+                    if joined_condition and joined_condition.get("status") == "True":
+                        log.info(f"Cluster '{cluster[0]}' already at Joined state")
+                        break
+
+                # Ensure cluster is joined
+                for sample in TimeoutSampler(
                     timeout=1200,
-                    condition="True",
-                    column="JOINED",
-                    resource_name=cluster[0],
-                )
+                    sleep=15,
+                    func=lambda: ocp_obj.get(resource_name=cluster[0]),
+                ):
+                    conditions = sample.get("status", {}).get("conditions", [])
+                    joined_condition = next(
+                        (
+                            c
+                            for c in conditions
+                            if c.get("type") == "ManagedClusterJoined"
+                        ),
+                        None,
+                    )
+                    if joined_condition and joined_condition.get("status") == "True":
+                        log.info(f"Cluster '{cluster[0]}' is joined")
+                        break
 
                 log.info("Creating klusterlet addon configuration")
                 klusterlet_config = templating.load_yaml(
@@ -1147,7 +1174,7 @@ def import_clusters_via_cli(clusters, max_retries=3):
                 klusterlet_config["metadata"]["name"] = cluster[0]
                 klusterlet_config["metadata"]["namespace"] = cluster[0]
                 klusterlet_config_obj = OCS(**klusterlet_config)
-                klusterlet_config_obj.create()
+                klusterlet_config_obj.apply(**klusterlet_config)
 
                 log.info("Waiting for addon pods to be in running state")
                 config.switch_to_cluster_by_name(cluster[0])
