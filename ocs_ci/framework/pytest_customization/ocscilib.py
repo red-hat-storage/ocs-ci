@@ -37,6 +37,10 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.cluster import check_clusters
 from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs import utils
+from ocs_ci.ocs.must_gather.report_generator_hook import (
+    MUST_GATHER_ANALYSIS_URL_PROPERTY,
+    trigger_reports_after_collect_ocs_logs,
+)
 from ocs_ci.utility.utils import (
     dump_config_to_file,
     get_ceph_version,
@@ -964,6 +968,11 @@ def pytest_runtest_makereport(item, call):
         )
         return
 
+    # Attach must-gather URLs stored during deployment
+    if rep.failed and ocsci_config.RUN.get("deployment_mg_report_urls"):
+        for url in ocsci_config.RUN.pop("deployment_mg_report_urls"):
+            item.user_properties.append((MUST_GATHER_ANALYSIS_URL_PROPERTY, url))
+
     # we only look at actual failing test calls, not setup/teardown
     # Don't collect must-gather for deployment here since its already
     # handled in deployment
@@ -1035,6 +1044,17 @@ def pytest_runtest_makereport(item, call):
                     timeout=timeout,
                     since_time=since_time_str,
                 )
+                # Must-gather (OCS) is complete when collect_ocs_logs returns
+                if ocs_logs_collection:
+                    mg_report_infos = trigger_reports_after_collect_ocs_logs(
+                        dir_name=test_case_name,
+                        status_failure=True,
+                        cluster_configs=ocsci_config.clusters,
+                    )
+                    for report_info in mg_report_infos:
+                        item.user_properties.append(
+                            (MUST_GATHER_ANALYSIS_URL_PROPERTY, report_info["text_url"])
+                        )
         except Exception:
             log.exception("Failed to collect OCS logs")
 
