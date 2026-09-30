@@ -523,14 +523,12 @@ hci_provider_required = pytest.mark.skipif(
     ),
     reason="Test runs ONLY on Fusion HCI Provider cluster",
 )
-hci_provider_and_client_required = pytest.mark.skipif(
-    not (
-        config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
-        and config.hci_provider_exist()
-        and config.hci_client_exist()
-    ),
-    reason="Test runs ONLY on Fusion HCI provider and client clusters",
-)
+# The condition of this marker depends on the MultiCluster config, which can
+# still be updated after this module is imported (e.g. when client configs are
+# pushed during the session, see the FIXME in setup_multicluster_marker above).
+# Therefore the marker carries no condition here and the actual check is done at
+# test setup time, in ocscilib._check_hci_provider_and_client.
+hci_provider_and_client_required = pytest.mark.hci_provider_and_client_required
 
 data_replication_separation_required = pytest.mark.skipif(
     not (
