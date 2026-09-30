@@ -29,7 +29,10 @@ def get_expected_alerts():
 @blue_squad
 @pytest.mark.parametrize(
     argnames="upgrade_type",
-    argvalues=["ocp_upgrade", "odf_upgrade"],
+    argvalues=[
+        pytest.param("ocp_upgrade", marks=pytest.mark.polarion_id("OCS-8298")),
+        pytest.param("odf_upgrade", marks=pytest.mark.polarion_id("OCS-8297")),
+    ],
 )
 def test_no_unexpected_alerts(upgrade_stats, upgrade_type):
     """
