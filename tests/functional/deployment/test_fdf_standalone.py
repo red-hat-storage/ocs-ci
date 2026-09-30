@@ -63,7 +63,9 @@ class TestFDFStandaloneInstallation:
         catsrc.wait_for_state("READY", timeout=120)
 
         logger.test_step("Verify catalog image matches config")
-        expected_image = config.DEPLOYMENT.get("fdf_standalone_catalog_image", "")
+        expected_image = config.DEPLOYMENT.get(
+            "fdf_standalone_catalog_image"
+        ) or config.DEPLOYMENT.get("ocs_registry_image", "")
         if expected_image:
             url = catsrc.get_image_url() or ""
             tag = catsrc.get_image_name() or ""
@@ -72,7 +74,7 @@ class TestFDFStandaloneInstallation:
                 f"CatalogSource image: expected='{expected_image}', "
                 f"actual='{actual_image}'"
             )
-            assert expected_image in actual_image, (
+            assert actual_image == expected_image, (
                 f"CatalogSource image mismatch: "
                 f"expected='{expected_image}', actual='{actual_image}'"
             )
@@ -130,7 +132,7 @@ class TestFDFStandaloneInstallation:
             selector=constants.FDF_STANDALONE_OPERATOR_SELECTOR,
         )
         pm_data = pm.get()
-        items = pm_data.get("items", []) if pm_data.get("kind") == "List" else []
+        items = pm_data.get("items", [])
         odf_items = [i for i in items if i["metadata"]["name"] == "odf-operator"]
         logger.assertion(
             f"odf-operator PackageManifest: found={bool(odf_items)}, "
@@ -156,16 +158,36 @@ class TestFDFStandaloneInstallation:
         """
         logger.test_step("Verify InstallPlan includes expected OLM dependencies")
         namespace = config.ENV_DATA["cluster_namespace"]
-        ip_ocp = OCP(kind="installplan", namespace=namespace)
-        install_plans = ip_ocp.get().get("items", [])
-        logger.assertion(f"InstallPlans in '{namespace}': count={len(install_plans)}")
-        assert install_plans, f"No InstallPlans found in {namespace}"
 
-        all_csv_names = set()
-        for ip in install_plans:
-            csv_names = ip.get("spec", {}).get("clusterServiceVersionNames", [])
-            all_csv_names.update(csv_names)
-        logger.info("All CSVs across InstallPlans: %s", sorted(all_csv_names))
+        logger.test_step("Resolve ODF Subscription installPlanRef")
+        sub_ocp = OCP(
+            kind="subscription",
+            namespace=namespace,
+            resource_name="odf-operator",
+        )
+        try:
+            sub_data = sub_ocp.get()
+        except CommandFailed:
+            subs = OCP(kind="subscription", namespace=namespace).get()
+            odf_subs = [
+                s
+                for s in subs.get("items", [])
+                if s["metadata"]["name"] == "odf-operator"
+            ]
+            assert odf_subs, "No odf-operator Subscription found"
+            sub_data = odf_subs[0]
+
+        ip_ref = sub_data.get("status", {}).get("installPlanRef", {})
+        ip_name = ip_ref.get("name", "")
+        logger.info("ODF Subscription installPlanRef: %s", ip_name)
+        assert ip_name, "ODF Subscription has no installPlanRef in status"
+
+        ip_ocp = OCP(kind="installplan", namespace=namespace, resource_name=ip_name)
+        ip_data = ip_ocp.get()
+        all_csv_names = set(
+            ip_data.get("spec", {}).get("clusterServiceVersionNames", [])
+        )
+        logger.info("ODF InstallPlan '%s' CSVs: %s", ip_name, sorted(all_csv_names))
 
         for dep in constants.FDF_STANDALONE_EXPECTED_OLM_DEPS:
             found = any(dep in csv_name for csv_name in all_csv_names)
@@ -218,11 +240,21 @@ class TestFDFStandaloneInstallation:
                 )
 
         logger.info("Rebranded CSVs verified: %s", rebranded_found)
+        matched_prefixes = set()
+        for name in rebranded_found:
+            for prefix in constants.FDF_STANDALONE_REBRANDED_CSV_PREFIXES:
+                if name.startswith(prefix):
+                    matched_prefixes.add(prefix)
+        missing = (
+            set(constants.FDF_STANDALONE_REBRANDED_CSV_PREFIXES) - matched_prefixes
+        )
         logger.assertion(
             f"Rebranded CSVs found: count={len(rebranded_found)}, "
-            f"names={rebranded_found}"
+            f"names={rebranded_found}, "
+            f"matched_prefixes={sorted(matched_prefixes)}, "
+            f"missing_prefixes={sorted(missing)}"
         )
-        assert rebranded_found, "No rebranded FDF CSVs found"
+        assert not missing, f"Missing rebranded CSVs for prefixes: {sorted(missing)}"
 
     def test_subscription_source(self):
         """
@@ -240,12 +272,14 @@ class TestFDFStandaloneInstallation:
         except CommandFailed:
             subs = OCP(kind="subscription", namespace=namespace).get()
             odf_subs = [
-                s for s in subs.get("items", []) if "odf" in s["metadata"]["name"]
+                s
+                for s in subs.get("items", [])
+                if s["metadata"]["name"] == "odf-operator"
             ]
             logger.assertion(
                 f"ODF subscription fallback lookup: found={bool(odf_subs)}"
             )
-            assert odf_subs, "No ODF subscription found"
+            assert odf_subs, "No odf-operator subscription found"
             sub_data = odf_subs[0]
 
         actual_source = sub_data["spec"]["source"]
@@ -295,15 +329,25 @@ class TestFDFImageMirroring:
 
         items = idms_data.get("items", [])
         logger.assertion(
-            f"IDMS resources: count={len(items)}, " f"has_resources={bool(items)}"
+            f"IDMS resources: count={len(items)}, has_resources={bool(items)}"
         )
-        assert items, (
-            "No ImageDigestMirrorSet found — " "FDF image mirroring not configured"
-        )
-        logger.info(
-            "IDMS resources found: %s",
-            [item["metadata"]["name"] for item in items],
-        )
+        assert (
+            items
+        ), "No ImageDigestMirrorSet found — FDF image mirroring not configured"
+
+        fdf_idms = []
+        for item in items:
+            mirrors = item.get("spec", {}).get("imageDigestMirrors", [])
+            for mirror in mirrors:
+                source = mirror.get("source", "")
+                if "ibm" in source.lower() or "icr.io" in source.lower():
+                    fdf_idms.append(item["metadata"]["name"])
+                    break
+        logger.assertion(f"FDF-specific IDMS: count={len(fdf_idms)}, names={fdf_idms}")
+        assert (
+            fdf_idms
+        ), "No FDF-specific ImageDigestMirrorSet found with IBM mirror entries"
+        logger.info("FDF IDMS resources verified: %s", fdf_idms)
 
     def test_no_imagepullbackoff_pods(self):
         """
