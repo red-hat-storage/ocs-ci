@@ -11,8 +11,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import ManageTest, tier4
 from ocs_ci.helpers.dr_helpers import (
     get_current_primary_cluster_name,
-)
-from ocs_ci.helpers.dr_helpers_zstream import (
     wait_for_drpc_phase,
     wait_for_first_kube_object_protection,
     monitor_drpc_protected_condition_stability,

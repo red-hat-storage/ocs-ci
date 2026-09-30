@@ -1,15 +1,11 @@
-# NOTE: This file shows ONLY the new functions to be APPENDED to the end of
-# the existing ocs_ci/helpers/dr_helpers.py file. The existing content of
-# dr_helpers.py must be preserved above these additions.
-#
-# Since the existing dr_helpers.py already imports:
-#   import logging
-#   from ocs_ci.utility.utils import TimeoutSampler
-#   logger = logging.getLogger(__name__)
-#
-# No additional imports are needed for these functions.
-#
-# ---- APPEND THE FOLLOWING TO THE END OF dr_helpers.py ----
+"""
+IMPORTANT: The contents of this file must be appended to the END of
+ocs_ci/helpers/dr_helpers.py, then this file must be deleted.
+
+These three functions are new helpers for DFBUGS-8924 verification.
+They belong in dr_helpers.py alongside existing DR helper functions.
+"""
+# ---- CUT HERE: append everything below to the end of dr_helpers.py ----
 
 
 def wait_for_drpc_phase(drpc_obj, phase, timeout=300, sleep=15):
