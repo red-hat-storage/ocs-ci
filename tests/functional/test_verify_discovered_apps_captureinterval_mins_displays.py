@@ -9,10 +9,11 @@ from ocs_ci.framework.pytest_customization.marks import (
     mdr,
 )
 from ocs_ci.framework.testlib import ManageTest, tier4
-from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers import (
     set_current_primary_cluster_context,
     get_current_primary_cluster_name,
+)
+from ocs_ci.helpers.dr_helpers_zstream_additions import (
     wait_for_drpc_phase,
     wait_for_first_kube_object_protection,
     monitor_drpc_protected_condition_stability,
@@ -26,8 +27,6 @@ logger = logging.getLogger(__name__)
 OBSERVATION_WINDOW = 600
 # Polling interval for DRPC status checks (seconds)
 POLL_INTERVAL = 30
-# captureInterval to use for the test (the problematic interval from the bug)
-CAPTURE_INTERVAL = "5m"
 # Maximum allowed transitions between Protecting and Healthy during observation
 MAX_ALLOWED_TRANSITIONS = 2
 
@@ -51,49 +50,44 @@ class TestDiscoveredAppsCaptureIntervalStability(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup_and_teardown(self, request, dr_workload):
+    def setup_and_teardown(self, request, discovered_apps_dr_workload):
         """
-        Setup fixture to deploy a discovered app workload with 5-minute
-        captureInterval and register cleanup.
+        Setup fixture to deploy a discovered app workload with kube object
+        protection enabled and register cleanup.
+
+        The captureInterval is derived from the DRPolicy schedulingInterval.
+        The discovered_apps_dr_workload fixture deploys a BusyboxDiscoveredApps
+        workload with kube object protection enabled (kubeobject=1).
 
         Args:
             request: pytest request object for finalizer registration.
-            dr_workload: Factory fixture for DR workload deployment.
+            discovered_apps_dr_workload: Factory fixture for discovered app
+                DR workload deployment.
 
         Returns:
             None. Sets self.workload and self.drpc_name on the instance.
         """
-        logger.test_step("Deploy discovered app workload with 5-minute captureInterval")
-        self.workloads = dr_workload(
-            num_of_subscription=0,
-            num_of_appset=0,
-            num_of_discovered_apps=1,
-            pvc_interface=constants.CEPHBLOCKPOOL,
-            capture_interval=CAPTURE_INTERVAL,
-        )
-        self.workload = self.workloads[0]
+        logger.test_step("Deploy discovered app workload with kube object protection")
+        self.workload = discovered_apps_dr_workload(kubeobject=1)
         self.namespace = self.workload.workload_namespace
         self.drpc_name = self.workload.drpc_name
 
         logger.info(
             f"Deployed discovered app workload: drpc_name={self.drpc_name}, "
-            f"namespace={self.namespace}, captureInterval={CAPTURE_INTERVAL}"
+            f"namespace={self.namespace}"
         )
 
         def finalizer():
             """Clean up the DR workload resources."""
             logger.info(f"Cleaning up DR workload {self.drpc_name}")
-            try:
-                dr_helpers.delete_discovered_apps(self.workloads)
-            except Exception as ex:
-                logger.warning(f"Cleanup encountered an error: {ex}")
+            self.workload.delete()
 
         request.addfinalizer(finalizer)
 
-    def test_discovered_app_captureinterval_5min_stability(self):
+    def test_discovered_app_captureinterval_stability(self):
         """
-        Verify that a discovered app with captureInterval=5m remains stable
-        and does not oscillate between Protecting and Healthy states.
+        Verify that a discovered app with kube object protection remains
+        stable and does not oscillate between Protecting and Healthy states.
 
         Bug: DFBUGS-8924
         When captureInterval was set to 5 minutes, the DRPC would juggle
@@ -102,7 +96,7 @@ class TestDiscoveredAppsCaptureIntervalStability(ManageTest):
         the condition reports 'Uploading' instead of 'CaptureNotStarted'.
 
         Steps:
-            1. Deploy a discovered app with captureInterval=5m.
+            1. Deploy a discovered app with kube object protection.
             2. Wait for the DRPC to reach initial 'Deployed' phase.
             3. Wait for the first successful kube object protection cycle.
             4. Monitor DRPC Protected condition over an observation window.
@@ -113,27 +107,28 @@ class TestDiscoveredAppsCaptureIntervalStability(ManageTest):
                'KubeObjectsCaptureNotStarted' persistently.
         """
         primary_cluster_name = get_current_primary_cluster_name(
-            self.workload.workload_namespace, self.workload.discovered_apps_placement_name
+            self.workload.workload_namespace,
+            self.workload.discovered_apps_placement_name,
         )
         logger.info(f"Primary cluster: {primary_cluster_name}")
 
         logger.test_step("Wait for DRPC to reach Deployed phase")
-        set_current_primary_cluster_context(
-            self.workload.workload_namespace, self.workload.discovered_apps_placement_name
-        )
 
         drpc_obj = DRPC(
-            namespace=constants.DR_OPS_NAMESAPCE,
+            namespace=constants.DR_OPS_NAMESPACE,
             resource_name=self.drpc_name,
         )
 
         wait_for_drpc_phase(drpc_obj, phase="Deployed", timeout=300, sleep=15)
 
         logger.test_step("Wait for first successful kube object protection cycle")
-        protection_time = wait_for_first_kube_object_protection(drpc_obj, timeout=600, sleep=20)
+        protection_time = wait_for_first_kube_object_protection(
+            drpc_obj, timeout=600, sleep=20
+        )
 
         logger.assertion(
-            f"expected=first kube object protection seen, actual={protection_time is not None}"
+            f"expected=first kube object protection seen, "
+            f"actual={protection_time is not None}"
         )
         assert protection_time is not None, (
             f"DRPC {self.drpc_name} never completed first kube object protection "
@@ -212,7 +207,7 @@ class TestDiscoveredAppsCaptureIntervalStability(ManageTest):
         )
 
         logger.info(
-            f"DRPC {self.drpc_name} remained stable with captureInterval={CAPTURE_INTERVAL}. "
+            f"DRPC {self.drpc_name} remained stable. "
             f"Total transitions: {transitions}, BSL errors: {len(bsl_errors_seen)}, "
             f"CaptureNotStarted occurrences: {capture_not_started_count}, "
             f"Uploading state seen: {uploading_seen}"
