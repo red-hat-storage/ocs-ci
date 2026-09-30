@@ -3931,7 +3931,10 @@ locate_aws_regions = {
 }
 locate_noobaa_regions = {"regions_list": '//*[@id="read-only-cursor-text-area"]'}
 data_foundation_overview = {
-    "view_storage_link": ("//a[contains(normalize-space(.),'View storage')]", By.XPATH),
+    "view_storage_link": (
+        "//a[contains(normalize-space(.),'View storage INVALID_LOCATOR_TEST')]",
+        By.XPATH,
+    ),
     "view_buckets_link": ("//a[contains(normalize-space(.),'View buckets')]", By.XPATH),
     "used_capacity_legend": (
         "//*[name()='text' and @id='legend-labels-0']//*[name()='tspan' and contains(text(), 'Used:')]",
