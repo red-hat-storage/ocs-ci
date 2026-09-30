@@ -125,9 +125,7 @@ class RedfishClient:
             return
 
         eject_uri = (
-            vm.dict.get("Actions", {})
-            .get("#VirtualMedia.EjectMedia", {})
-            .get("target")
+            vm.dict.get("Actions", {}).get("#VirtualMedia.EjectMedia", {}).get("target")
         )
         if eject_uri:
             self._check(self.client.post(eject_uri, body={}), "eject ISO")
@@ -153,17 +151,55 @@ class RedfishClient:
         resp = self._check(self.client.get(system_uri), "get system state")
         return resp.dict.get("PowerState", "Unknown")
 
-    def power_on_or_restart(self, system_uri=DEFAULT_SYSTEM_URI):
-        power_state = self.get_power_state(system_uri)
+    def _reset(self, reset_type, system_uri=DEFAULT_SYSTEM_URI):
         reset_uri = f"{system_uri}/Actions/ComputerSystem.Reset"
-        if power_state == "Off":
-            payload = {"ResetType": "On"}
-            action = "power on"
-        else:
-            payload = {"ResetType": "ForceRestart"}
-            action = "force restart"
-        self._check(self.client.post(reset_uri, body=payload), action)
-        logger.info("[%s] %s issued (was %s)", self.bmc_ip, action, power_state)
+        return self.client.post(reset_uri, body={"ResetType": reset_type})
+
+    @staticmethod
+    def _is_chassis_off_error(response):
+        """True when XCC rejects reset because chassis/system is powered off."""
+        if response.status not in (400, 409):
+            return False
+        text = (response.text or "").lower()
+        return (
+            "chassispowerstateonrequired" in text
+            or "requires to be powered on" in text
+            or "powered off" in text
+        )
+
+    def power_on_or_restart(self, system_uri=DEFAULT_SYSTEM_URI):
+        """
+        Power on if the host is off; ForceRestart if it is on.
+
+        Lenovo XCC sometimes reports PowerState inconsistently with chassis
+        power. If ForceRestart fails because the chassis is off, fall back to On.
+        """
+        power_state = self.get_power_state(system_uri)
+        logger.info("[%s] PowerState=%s", self.bmc_ip, power_state)
+
+        # Only restart when clearly On; any other state (Off, Unknown, ...) -> On
+        if power_state == "On":
+            response = self._reset("ForceRestart", system_uri=system_uri)
+            if self._is_chassis_off_error(response):
+                logger.warning(
+                    "[%s] ForceRestart rejected (chassis off); falling back to On. "
+                    "Body: %s",
+                    self.bmc_ip,
+                    response.text,
+                )
+                self._check(self._reset("On", system_uri=system_uri), "power on")
+                logger.info(
+                    "[%s] power on issued after ForceRestart fallback (reported %s)",
+                    self.bmc_ip,
+                    power_state,
+                )
+                return
+            self._check(response, "force restart")
+            logger.info("[%s] force restart issued (was %s)", self.bmc_ip, power_state)
+            return
+
+        self._check(self._reset("On", system_uri=system_uri), "power on")
+        logger.info("[%s] power on issued (was %s)", self.bmc_ip, power_state)
 
 
 def attach_iso_and_boot(bmc_ip, username, password, iso_url):

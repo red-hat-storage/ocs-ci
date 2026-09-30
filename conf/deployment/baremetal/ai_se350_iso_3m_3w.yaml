@@ -10,7 +10,7 @@ DEPLOYMENT:
 ENV_DATA:
   platform: 'baremetal'
   deployment_type: 'ai'
-  worker_replicas: 3
+  worker_replicas: 0
   master_replicas: 3
   # Cluster networking — replace with lab values
   base_domain: 'qe.rh-ocs.com'
@@ -20,15 +20,10 @@ ENV_DATA:
     # iso = Redfish VirtualMedia discovery ISO (SE350)
     # ipxe = existing helper-node PXE/iPXE path (IBM Cloud Classic / legacy BM)
     boot_method: 'iso'
-    # Temporary interactive pauses (Enter to continue, Ctrl+C to abort).
-    # Set to false / remove once the SE350 ISO flow is stable.
-    manual_checkpoints: true
     env_name: 'se350-lab'
     # Used for MAC -> hostname/role mapping in Assisted Installer
     bm_provisioning_network: 'public'
     redfish_max_workers: 6
-    # Optional: skip disks cleanup after install
-    # skip_disks_cleanup is under ENV_DATA root if used elsewhere
     servers:
       se350-master-0-farm2:
         role: 'master'
@@ -51,24 +46,3 @@ ENV_DATA:
         mgmt_username: 'USERID'
         mgmt_password: 'REPLACE_ME'
         public_mac: '04:7b:cb:8c:40:58'
-      se350-worker-0-farm2:
-        role: 'worker'
-        mgmt_provider: 'redfish'
-        mgmt_console: '10.48.115.149'
-        mgmt_username: 'USERID'
-        mgmt_password: 'REPLACE_ME'
-        public_mac: '04:7b:cb:fe:bd:ab'
-      se350-worker-1-farm2:
-        role: 'worker'
-        mgmt_provider: 'redfish'
-        mgmt_console: '10.48.115.150'
-        mgmt_username: 'USERID'
-        mgmt_password: 'REPLACE_ME'
-        public_mac: '04:7b:cb:fe:bd:26'
-      se350-worker-2-farm2:
-        role: 'worker'
-        mgmt_provider: 'redfish'
-        mgmt_console: '10.48.115.155'
-        mgmt_username: 'USERID'
-        mgmt_password: 'REPLACE_ME'
-        public_mac: '04:7b:cb:fe:ee:5e'

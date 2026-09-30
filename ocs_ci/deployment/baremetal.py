@@ -880,51 +880,6 @@ class BAREMETALAI(BAREMETALBASE):
             """Return discovery boot method: 'iso' or 'ipxe' (default)."""
             return self.bm_config.get("boot_method", "ipxe")
 
-        def _manual_checkpoints_enabled(self):
-            """
-            Temporary interactive pauses for SE350 ISO bring-up.
-
-            Set baremetal.manual_checkpoints: false (or remove) once the flow is stable.
-            """
-            return self.bm_config.get("manual_checkpoints", False)
-
-        def _manual_checkpoint(self, title, instructions):
-            """
-            Pause deployment and print what to verify manually.
-
-            Press Enter to continue, or Ctrl+C to abort.
-            """
-            if not self._manual_checkpoints_enabled():
-                return
-
-            separator = "=" * 78
-            message_lines = [
-                "",
-                separator,
-                f"MANUAL CHECKPOINT: {title}",
-                separator,
-            ]
-            message_lines.extend(f"  - {item}" for item in instructions)
-            message_lines.extend(
-                [
-                    "",
-                    "If anything above looks wrong: Ctrl+C to abort.",
-                    "If everything looks good: press Enter to continue.",
-                    separator,
-                    "",
-                ]
-            )
-            message = "\n".join(message_lines)
-            logger.info(message)
-            print(message)
-            try:
-                input(">>> ")
-            except EOFError:
-                # Non-interactive run; do not block forever
-                logger.warning(
-                    "EOF on manual checkpoint input; continuing without confirmation"
-                )
-
         def _servers_subset(self, machines):
             """Return srv_details subset for the given machine names."""
             return {m: self.srv_details[m] for m in machines}
@@ -1035,14 +990,10 @@ class BAREMETALAI(BAREMETALBASE):
                 ):
                     master_nodes.append(machine)
                     mac_name_mapping[
-                        self.srv_details[machine][
-                            f"{provisioning_network}_mac"
-                        ].lower()
+                        self.srv_details[machine][f"{provisioning_network}_mac"].lower()
                     ] = machine
                     mac_role_mapping[
-                        self.srv_details[machine][
-                            f"{provisioning_network}_mac"
-                        ].lower()
+                        self.srv_details[machine][f"{provisioning_network}_mac"].lower()
                     ] = "master"
                     master_count += 1
                 elif (
@@ -1051,14 +1002,10 @@ class BAREMETALAI(BAREMETALBASE):
                 ):
                     worker_nodes.append(machine)
                     mac_name_mapping[
-                        self.srv_details[machine][
-                            f"{provisioning_network}_mac"
-                        ].lower()
+                        self.srv_details[machine][f"{provisioning_network}_mac"].lower()
                     ] = machine
                     mac_role_mapping[
-                        self.srv_details[machine][
-                            f"{provisioning_network}_mac"
-                        ].lower()
+                        self.srv_details[machine][f"{provisioning_network}_mac"].lower()
                     ] = "worker"
                     worker_count += 1
 
@@ -1152,21 +1099,6 @@ class BAREMETALAI(BAREMETALBASE):
             if self._boot_method() == "iso":
                 # Eject ISO so later reboots hit disk; do not restart here.
                 self._eject_discovery_isos(target_nodes, restart=False)
-                discovered = self.ai_cluster.get_infra_env_hosts()
-                self._manual_checkpoint(
-                    "Discovery complete",
-                    [
-                        f"Expected {expected_node_num} hosts in Assisted Installer; "
-                        f"found {len(discovered)}.",
-                        "In AI console / API, confirm every node is discovered.",
-                        "Confirm reported NIC MACs match public_mac values in conf:",
-                        *[
-                            f"{name}: {self.srv_details[name].get('public_mac')}"
-                            for name in target_nodes
-                        ],
-                        "Confirm discovery ISO is ejected on each XCC VirtualMedia slot.",
-                    ],
-                )
             else:
                 # configure pxelinux.cfg files for each server (named based on MAC address)
                 # to boot from the first disk (without this change, if the servers are configured
@@ -1192,18 +1124,6 @@ class BAREMETALAI(BAREMETALBASE):
             self.ai_cluster.update_hosts_config(
                 mac_name_mapping=mac_name_mapping, mac_role_mapping=mac_role_mapping
             )
-
-            if self._boot_method() == "iso":
-                self._manual_checkpoint(
-                    "Hostnames and roles configured",
-                    [
-                        "In Assisted Installer, confirm each host has the expected hostname.",
-                        "Confirm roles are correct (3 masters, 3 workers).",
-                        f"MAC→name map: {mac_name_mapping}",
-                        f"MAC→role map: {mac_role_mapping}",
-                        "Next step will start OCP installation (long running).",
-                    ],
-                )
 
             # install the OCP cluster
             self.ai_cluster.install_cluster(
@@ -1241,16 +1161,6 @@ class BAREMETALAI(BAREMETALBASE):
                 return
             if not self.discovery_iso_url:
                 self.discovery_iso_url = self.ai_cluster.get_discovery_iso_url()
-                self._manual_checkpoint(
-                    "Discovery ISO URL ready",
-                    [
-                        f"Cluster: {self.cluster_name}",
-                        f"ISO URL: {self.discovery_iso_url}",
-                        "In Assisted Installer UI, open this cluster/infra-env and confirm "
-                        "the discovery ISO / image URL is available.",
-                        "Next step will mount this ISO on each SE350 via Redfish and reboot.",
-                    ],
-                )
             logger.info(
                 "Booting %s node(s) from discovery ISO via Redfish", len(machines)
             )
@@ -1258,16 +1168,6 @@ class BAREMETALAI(BAREMETALBASE):
                 self._servers_subset(machines),
                 self.discovery_iso_url,
                 max_workers=self._redfish_max_workers(),
-            )
-            self._manual_checkpoint(
-                "Redfish ISO attach + reboot issued",
-                [
-                    f"Nodes targeted: {', '.join(machines)}",
-                    "On each XCC: VirtualMedia shows the discovery ISO Inserted=True.",
-                    "On each XCC/KVM: host is rebooting / booting from CD once.",
-                    "Nodes should start the Assisted discovery agent and appear in AI shortly.",
-                    "Next step waits for all nodes to be discovered in Assisted Installer.",
-                ],
             )
 
         def _boot_nodes_with_ipxe(self, machines):
@@ -1620,9 +1520,13 @@ class BAREMETALAI(BAREMETALBASE):
             if self._boot_method() == "iso":
                 # Best-effort eject of any leftover discovery ISOs on BMCs
                 try:
-                    self._eject_discovery_isos(list(self.srv_details.keys()), restart=False)
+                    self._eject_discovery_isos(
+                        list(self.srv_details.keys()), restart=False
+                    )
                 except Exception as exc:
-                    logger.warning("Failed to eject discovery ISOs during destroy: %s", exc)
+                    logger.warning(
+                        "Failed to eject discovery ISOs during destroy: %s", exc
+                    )
             else:
                 # cleanup ipxe provisioning files
                 cmd = f"rm -rf {self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
