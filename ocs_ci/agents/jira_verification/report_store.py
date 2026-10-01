@@ -51,10 +51,13 @@ def write_verification_report(version, issue_key, report, root=None):
     directory = root / version_name
     directory.mkdir(parents=True, exist_ok=True)
     document = {"key": key, "url": report.get("url") or _issue_url(key)}
+    document["summary"] = str(report.get("summary") or "").strip()
     for name in REPORT_FIELDS:
         document[name] = report[name]
         if name == "fix_version":
             document["parent_issues"] = _parent_issues(report.get("parent_issues"))
+        if name == "verification_steps":
+            document["tests"] = _tests(report.get("tests"))
     for name in OPTIONAL_REPORT_FIELDS:
         if report.get(name):
             document[name] = report[name]
@@ -96,6 +99,39 @@ def _parent_issues(value):
                 "relation": item.get("relation") or "",
             }
         )
+    return cleaned
+
+
+def _tests(value):
+    """
+    Normalize tests stored on a verification report.
+
+    Args:
+        value (list): Test mappings from the bug report.
+
+    Returns:
+        list: name and location. Empty when the bug names no test under tests/.
+
+    """
+    if not isinstance(value, list):
+        return []
+    cleaned = []
+    seen = set()
+    for item in value:
+        if isinstance(item, str):
+            name = item
+            location = item
+        elif isinstance(item, dict):
+            name = str(item.get("name") or "").strip()
+            location = str(item.get("location") or name).strip()
+        else:
+            continue
+        if not name or not location or location in seen:
+            continue
+        if not location.startswith("tests/") and not name.startswith("test_"):
+            continue
+        seen.add(location)
+        cleaned.append({"name": name, "location": location})
     return cleaned
 
 
