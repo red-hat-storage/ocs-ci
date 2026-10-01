@@ -481,6 +481,21 @@ class PageNavigator(BaseUI):
         else:
             logger.error("Unknown user role selected by default")
 
+    def navigate_virtualmachines_page(self):
+        """
+        Navigate to Virtualization > VirtualMachines in the left-side navigation
+        menu
+
+        Returns:
+            VirtualMachineUI: Page object for the VirtualMachines list page.
+        """
+        from ocs_ci.ocs.ui.page_objects.virtualmachine_ui import VirtualMachineUI
+
+        logger.info("Navigate to Virtualization > VirtualMachines")
+        vm_ui = VirtualMachineUI()
+        vm_ui.navigate_to_virtualmachines_page()
+        return vm_ui
+
     def nav_to_storageclients_page(self):
         """
         Navigate to Storage Clients Page
