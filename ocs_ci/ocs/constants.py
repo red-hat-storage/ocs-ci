@@ -600,6 +600,7 @@ DEFAULT_MCG_BUCKET_LOGS_PVC = "noobaa-bucket-logging-pvc"
 DEFAULT_MCG_BUCKET_NOTIFS_PVC = "noobaa-bucket-notifications-pvc"
 CUSTOM_MCG_LABEL = "custom=mcg-label"
 NOOBAA_RESOURCE_NAME = "noobaa"
+NOOBAA_KIND = "NooBaa"
 NOOBAA_DB_PVC_NAME = "noobaa-db-pg-cluster-1"
 NOOBAA_INITIALIZING_REASON = "NoobaaInitializing"
 NOOBAA_HEALTH_CHECK_DELAY = 30
@@ -4309,3 +4310,22 @@ FUSION_ACCESS_CR_YAML = os.path.join(
 )
 
 CONFIRM_DELETION_ANNOTATION = "uninstall.ocs.openshift.io/confirm-deletion"
+
+# Deployment names
+OCS_OPERATOR_DEPLOYMENT = "ocs-operator"
+
+# MCG Performance Profiles
+# Profiles accepted by the StorageCluster CRD enum. The NooBaa CRD additionally
+# accepts "dev-env" and "mini-env", which must be rejected on the StorageCluster CR.
+MCG_PROFILES = ("default", "mixed-workload", "small-objects")
+MCG_ONLY_PROFILES = ("dev-env", "mini-env")
+
+# Volume count the default pv-pool backingstore is created with, per profile.
+# Stamped at creation only - getPVPoolNumVolumes never lowers an existing count.
+MCG_PV_POOL_NUM_VOLUMES = {
+    "default": 3,
+    "mixed-workload": 3,
+    "small-objects": 3,
+    "dev-env": 1,
+    "mini-env": 1,
+}
