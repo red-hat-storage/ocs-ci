@@ -1,5 +1,6 @@
 import configparser
 import os
+import re
 from logging import getLogger
 
 import yaml
@@ -29,6 +30,67 @@ VERIFICATION_ISSUE_FIELDS = ON_QA_SEARCH_FIELDS + (
     "description",
     "environment",
     "versions",
+    "issuetype",
+    "priority",
+    "resolution",
+    "labels",
+    "components",
+    "attachment",
+    "issuelinks",
+    "parent",
+)
+MAX_SOURCE_ISSUES = 3
+_SOURCE_RELATIONS = {
+    "clones",
+    "parent",
+    "is a backport of",
+    "backports",
+    "cloned from",
+}
+_SOURCE_CONTEXT = re.compile(
+    r"(?:backport of|original issue|cloned from|clone of|cherry-?pick of)"
+    r"\s*:?\s*(?:https?://\S*?/browse/)?"
+    r"([A-Z][A-Z0-9]+-\d+)",
+    re.IGNORECASE,
+)
+_COMMAND_LINE = re.compile(r"^(?:oc|kubectl|ceph|rbd|rados)\b")
+_NOTE_PATTERNS = (
+    (
+        "command",
+        re.compile(
+            r"(?m)^(?:\$ |# )?(?:oc|kubectl|ceph|rbd|rados)\b"
+            r"|\b(?:oc|kubectl) (?:get|describe|exec|logs|delete|apply|create|adm)\b"
+        ),
+    ),
+    (
+        "verification steps",
+        re.compile(
+            r"\b(how to verify|steps to verify|verification steps)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "environment",
+        re.compile(
+            r"\b(?:vmware|vsphere|baremetal|bare metal|lso|regional[- ]dr|"
+            r"metro[- ]dr|external mode|provider mode|ipi|upi|"
+            r"arbiter|compact cluster)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "test result",
+        re.compile(
+            r"\b(verified on|tested on|reproduced|cannot reproduce|still fails|"
+            r"no longer fails|confirmed (?:the )?fix|check is present)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    ("workaround", re.compile(r"\bworkaround\b", re.IGNORECASE)),
+    (
+        "pull request",
+        re.compile(r"github\.com/\S+/pull/\d+", re.IGNORECASE),
+    ),
 )
 _SECTION_HEADINGS = {
     "verification steps": "verification_steps",
@@ -154,7 +216,11 @@ class JiraHelper:
 
     def issue_for_verification(self, issue_key):
         """
-        Return the description, headed sections, and comments for one issue.
+        Return the description, headed sections, comments, and source issues.
+
+        A backport or clone also includes the original issue it was taken
+        from, so verification steps that live only on that issue are present.
+        Source issues are not followed further.
 
         Args:
             issue_key (str): Jira issue key, for example DFBUGS-10425.
@@ -164,6 +230,33 @@ class JiraHelper:
 
         """
         log.info(f"Fetching verification content for {issue_key}")
+        payload = self._fetch_issue_bundle(issue_key)
+        payload["source_issues"] = []
+        for key in source_issue_keys(payload)[:MAX_SOURCE_ISSUES]:
+            log.info(f"Fetching source issue {key} for {issue_key}")
+            try:
+                source = self._fetch_issue_bundle(key)
+            except Exception as error:
+                log.warning(
+                    f"Could not fetch source issue {key} for {issue_key}: {error}"
+                )
+                payload["source_issues"].append({"key": key, "error": str(error)})
+                continue
+            payload["source_issues"].append(source_issue_summary(source))
+        payload["parent_issues"] = parent_issues_for_report(payload)
+        return payload
+
+    def _fetch_issue_bundle(self, issue_key):
+        """
+        Read one issue, its comments, and its remote links.
+
+        Args:
+            issue_key (str): Jira issue key.
+
+        Returns:
+            dict: Verification payload without followed source issues.
+
+        """
         issue = self.jira.issue(
             issue_key,
             fields=",".join(VERIFICATION_ISSUE_FIELDS),
@@ -428,7 +521,8 @@ def issue_verification_payload(issue, comments=None, remote_links=None):
             copied into git_prs.
 
     Returns:
-        dict: Description, versions, environment, headed sections, and comments.
+        dict: Description, versions, environment, links, headed sections,
+            comments, and the comments that change how the fix is checked.
 
     """
     fields = issue.get("fields") or {}
@@ -437,6 +531,7 @@ def issue_verification_payload(issue, comments=None, remote_links=None):
         description = html_to_text(rendered.get("description"))
     else:
         description = adf_to_text(fields.get("description")).strip()
+    description = description.strip()
     comment_entries = []
     for comment in comments or []:
         author = comment.get("author") or {}
@@ -447,19 +542,209 @@ def issue_verification_payload(issue, comments=None, remote_links=None):
                 "body": comment_body_text(comment),
             }
         )
-    return {
+    sections = extract_headed_sections(description)
+    payload = {
         "key": issue.get("key"),
         "summary": fields.get("summary") or "",
         "status": (fields.get("status") or {}).get("name"),
+        "issue_type": _named(fields.get("issuetype")),
+        "priority": _named(fields.get("priority")),
+        "resolution": _named(fields.get("resolution")),
+        "labels": [label for label in (fields.get("labels") or []) if label],
+        "components": _component_names(fields.get("components")),
+        "attachments": _attachment_names(fields.get("attachment")),
         "affected_version": _version_name_list(fields.get("versions")),
         "fix_version": _version_name_list(fields.get("fixVersions")),
         "versions": issue_versions(fields),
         "environment": _environment_text(fields, rendered),
+        "links": issue_links(fields),
         "git_prs": github_pull_requests(remote_links),
-        "description": description.strip(),
-        "sections": extract_headed_sections(description),
+        "description": description,
+        "sections": sections,
         "comments": comment_entries,
+        "verification_notes": verification_notes(comment_entries),
     }
+    payload["parent_issues"] = parent_issues_for_report(payload)
+    return payload
+
+
+def verification_notes(comments):
+    """
+    Keep comments that change how a fix is checked.
+
+    A comment is kept when it has a command, a verification heading, an
+    environment, a test result, a workaround, or a pull request. Status-only
+    and release-process comments are left out.
+
+    Args:
+        comments (list): Comment dicts with author, created, and body.
+
+    Returns:
+        list: Notes with author, created, reasons, body, and commands when
+            the comment contains a command.
+
+    """
+    notes = []
+    for comment in comments or []:
+        body = (comment.get("body") or "").strip()
+        if not body:
+            continue
+        reasons = _note_reasons(body)
+        if extract_headed_sections(body) and "verification steps" not in reasons:
+            reasons.append("verification steps")
+        if not reasons:
+            continue
+        note = {
+            "author": comment.get("author"),
+            "created": comment.get("created"),
+            "reasons": reasons,
+            "body": body,
+        }
+        commands = _commands_in_text(body)
+        if commands:
+            note["commands"] = commands
+        notes.append(note)
+    return notes
+
+
+def parent_issues_for_report(payload):
+    """
+    List parent and original issues with the status to show on the report.
+
+    A Jira parent, a cloned issue, and an original bug named in the
+    description are included. A child clone is not.
+
+    Args:
+        payload (dict): Verification payload, including links and source_issues.
+
+    Returns:
+        list: key, summary, status, and relation for each parent. Empty when
+            the issue has none.
+
+    """
+    parents = []
+    seen = set()
+    sources = {}
+    for source in payload.get("source_issues") or []:
+        key = source.get("key")
+        if key:
+            sources[key] = source
+    for link in payload.get("links") or []:
+        relation = (link.get("relation") or "").strip()
+        key = link.get("key")
+        if not key or relation.lower() not in _SOURCE_RELATIONS or key in seen:
+            continue
+        seen.add(key)
+        entry = _parent_entry(key, link.get("summary"), link.get("status"), relation)
+        source = sources.get(key) or {}
+        if source.get("summary"):
+            entry["summary"] = source["summary"]
+        if source.get("status"):
+            entry["status"] = source["status"]
+        parents.append(entry)
+    for key, source in sources.items():
+        if key in seen:
+            continue
+        seen.add(key)
+        parents.append(
+            _parent_entry(key, source.get("summary"), source.get("status"), "original")
+        )
+    return parents
+
+
+def source_issue_keys(payload):
+    """
+    Return the original issues a backport or clone was taken from.
+
+    Args:
+        payload (dict): Verification payload for the issue being read.
+
+    Returns:
+        list: Issue keys, in first-seen order, excluding the payload key.
+
+    """
+    own = payload.get("key")
+    keys = []
+    for link in payload.get("links") or []:
+        relation = (link.get("relation") or "").lower()
+        if relation in _SOURCE_RELATIONS:
+            _append_key(keys, link.get("key"), own)
+    for match in _SOURCE_CONTEXT.finditer(payload.get("description") or ""):
+        _append_key(keys, match.group(1), own)
+    return keys
+
+
+def source_issue_summary(payload):
+    """
+    Reduce a followed issue to the text needed to verify the backport.
+
+    Args:
+        payload (dict): Verification payload of the original issue.
+
+    Returns:
+        dict: Summary, environment, sections, notes, and a capped description.
+
+    """
+    description = payload.get("description") or ""
+    if len(description) > 4000:
+        description = description[:4000]
+    return {
+        "key": payload.get("key"),
+        "summary": payload.get("summary") or "",
+        "status": payload.get("status"),
+        "environment": payload.get("environment") or "",
+        "affected_version": payload.get("affected_version") or [],
+        "fix_version": payload.get("fix_version") or [],
+        "git_prs": payload.get("git_prs") or [],
+        "sections": payload.get("sections") or {},
+        "description": description,
+        "verification_notes": payload.get("verification_notes") or [],
+    }
+
+
+def issue_links(fields):
+    """
+    Return parent and issue-link relations.
+
+    Args:
+        fields (dict): Jira issue fields.
+
+    Returns:
+        list: relation, key, summary, and status for each linked issue.
+
+    """
+    links = []
+    parent = (fields or {}).get("parent") or {}
+    if parent.get("key"):
+        parent_fields = parent.get("fields") or {}
+        links.append(
+            {
+                "relation": "parent",
+                "key": parent.get("key"),
+                "summary": parent_fields.get("summary") or "",
+                "status": (parent_fields.get("status") or {}).get("name"),
+            }
+        )
+    for link in (fields or {}).get("issuelinks") or []:
+        link_type = link.get("type") or {}
+        if link.get("outwardIssue"):
+            linked = link["outwardIssue"]
+            relation = link_type.get("outward") or link_type.get("name") or ""
+        elif link.get("inwardIssue"):
+            linked = link["inwardIssue"]
+            relation = link_type.get("inward") or link_type.get("name") or ""
+        else:
+            continue
+        linked_fields = linked.get("fields") or {}
+        links.append(
+            {
+                "relation": relation,
+                "key": linked.get("key"),
+                "summary": linked_fields.get("summary") or "",
+                "status": (linked_fields.get("status") or {}).get("name"),
+            }
+        )
+    return links
 
 
 def github_pull_requests(remote_links):
@@ -682,6 +967,135 @@ def _names_from_versions(value):
             names.extend(_names_from_versions(item))
         return names
     return []
+
+
+def _note_reasons(body):
+    """
+    List why a comment is useful for verification.
+
+    Args:
+        body (str): Plain-text comment.
+
+    Returns:
+        list: Reason names, in pattern order.
+
+    """
+    reasons = []
+    for name, pattern in _NOTE_PATTERNS:
+        if pattern.search(body) and name not in reasons:
+            reasons.append(name)
+    return reasons
+
+
+def _commands_in_text(text):
+    """
+    Return command lines from a comment or description.
+
+    Args:
+        text (str): Plain text.
+
+    Returns:
+        list: Commands, in first-seen order.
+
+    """
+    found = []
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("$ ", "# ")):
+            stripped = stripped[2:].strip()
+        if _COMMAND_LINE.match(stripped) and stripped not in found:
+            found.append(stripped)
+    return found
+
+
+def _parent_entry(key, summary, status, relation):
+    """
+    Build one parent-issue row for a verification report.
+
+    Args:
+        key (str): Parent issue key.
+        summary (str): Parent summary.
+        status (str): Parent status name.
+        relation (str): How this issue relates to the parent.
+
+    Returns:
+        dict: key, summary, status, and relation.
+
+    """
+    return {
+        "key": key,
+        "summary": summary or "",
+        "status": status or "",
+        "relation": relation or "",
+    }
+
+
+def _append_key(keys, key, own):
+    """
+    Add an issue key when it is new and is not the issue being read.
+
+    Args:
+        keys (list): Keys collected so far.
+        key (str): Candidate issue key.
+        own (str): Key of the issue being read.
+
+    """
+    if key and key != own and key not in keys:
+        keys.append(key)
+
+
+def _named(value):
+    """
+    Return the name of a Jira object field.
+
+    Args:
+        value (dict): Field such as issuetype, priority, or resolution.
+
+    Returns:
+        str: Name, or an empty string when the field is empty.
+
+    """
+    if isinstance(value, dict):
+        return value.get("name") or ""
+    return ""
+
+
+def _component_names(components):
+    """
+    Return component names.
+
+    Args:
+        components (list): Jira component objects.
+
+    Returns:
+        list: Component names.
+
+    """
+    names = []
+    for component in components or []:
+        name = component.get("name") if isinstance(component, dict) else component
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _attachment_names(attachments):
+    """
+    Return attachment file names.
+
+    Args:
+        attachments (list): Jira attachment objects.
+
+    Returns:
+        list: File names.
+
+    """
+    names = []
+    for attachment in attachments or []:
+        name = attachment.get("filename") if isinstance(attachment, dict) else ""
+        if name and name not in names:
+            names.append(name)
+    return names
 
 
 def _heading_key(line):
