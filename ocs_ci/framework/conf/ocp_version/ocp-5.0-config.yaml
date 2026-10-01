@@ -14,9 +14,9 @@ ENV_DATA:
   # To use RHCOS 9, set rhcos_version: "9" in your custom config.
   vm_templates:
     "9": "rhcos-9.8.20260428-0-vmware.x86_64"
-    "10": "rhcos-10.2.20260423-0-vmware.x86_64"
+    "10": "rhcos-10.2.20260922-0-vmware.x86_64"
   # Legacy single template (fallback if vm_templates not defined)
-  vm_template: "rhcos-10.2.20260423-0-vmware.x86_64"
+  vm_template: "rhcos-10.2.20260922-0-vmware.x86_64"
   rhcos_version: "10"
   acm_hub_channel: "release-5.0"
   acm_version: "5.0"
