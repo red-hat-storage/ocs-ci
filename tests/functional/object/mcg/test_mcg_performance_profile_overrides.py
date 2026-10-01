@@ -22,27 +22,13 @@ BASE_PROFILE = "mixed-workload"
 # StorageCluster CR. Shaped like a PROFILE_SPECS entry so the same component
 # verifiers can be reused.
 OVERRIDE_SPEC = {
-    "core": {
-        "req_cpu": "750m",
-        "lim_cpu": "1500m",
-        "req_mem": "1536Mi",
-        "lim_mem": "3Gi",
-        "qos": "Burstable",
-    },
-    "db": {
-        "req_cpu": "2",
-        "lim_cpu": "2",
-        "req_mem": "3Gi",
-        "lim_mem": "3Gi",
-        "qos": "Guaranteed",
-    },
-    "endpoint": {
-        "req_cpu": "600m",
-        "lim_cpu": "1200m",
-        "req_mem": "1200Mi",
-        "lim_mem": "2560Mi",
-        "qos": "Burstable",
-    },
+    "core": profiles._resources(
+        "750m", "1500m", "1536Mi", "3Gi", profiles.QOS_BURSTABLE
+    ),
+    "db": profiles._resources("2", "2", "3Gi", "3Gi", profiles.QOS_GUARANTEED),
+    "endpoint": profiles._resources(
+        "600m", "1200m", "1200Mi", "2560Mi", profiles.QOS_BURSTABLE
+    ),
     "endpoint_count": {"min": 3, "max": 5},
     "db_instances": profiles.PROFILE_SPECS[BASE_PROFILE]["db_instances"],
 }
@@ -203,16 +189,25 @@ class TestMCGPerformanceProfileOverrides:
         """
         Drop the overrides the test itself applied.
 
-        Set up after base_profile so that its finalizer runs first: the
-        profile restoration in base_profile waits for the original profile to
-        settle, which cannot happen while an explicit override is still
-        pinning a component's resources. The pre-existing overrides, if any,
-        are put back afterwards by clear_preexisting_overrides.
+        Fixture order guarantees LIFO cleanup: this fixture's finalizer runs
+        first (removing test overrides), then base_profile's finalizer restores
+        the original profile. This order is critical because profile restoration
+        cannot settle while an explicit override pins a component's resources.
+
+        After the test-applied overrides are dropped, NooBaa pods will roll
+        back to the active profile's resources. The base_profile finalizer
+        then waits for that profile to settle before restoring the original
+        profile, ensuring clean state between tests.
+
+        The pre-existing overrides (if any) are restored last by
+        clear_preexisting_overrides's finalizer.
         """
 
         def finalizer():
             logger.info("Dropping the resource and endpoint overrides set by the test")
             _clear_overrides()
+            # Wait for NooBaa to settle on the active profile after overrides are removed
+            profiles.verify_noobaa_pods_healthy()
 
         request.addfinalizer(finalizer)
 

@@ -69,6 +69,12 @@ def get_noobaa_cli():
     Return a local path to the noobaa CLI, extracting it from the running
     noobaa-operator pod on first use.
 
+    Note: This differs from get_noobaa_cli_config() in utils.py, which returns
+    the mcg-cli or odf-cli path. We cannot reuse that function here because
+    mcg-cli from ODF 4.20 onwards is a thin redirect to odf-cli and does not
+    expose the `install yaml` command needed for the standalone harness.
+    The operator binary itself is the only CLI that exposes this command.
+
     The CLI shipped by ocs-ci helpers is mcg-cli, which from ODF 4.20 on is a
     thin redirect to odf-cli and does not expose `install yaml`. The operator
     binary is the CLI, and taking it from the running pod guarantees it matches
@@ -441,20 +447,26 @@ class StandaloneNooBaa:
             dict: The core container's resources, empty while the StatefulSet
                 does not exist
         """
-        try:
-            statefulset = OCP(
-                kind=constants.STATEFULSET,
-                namespace=self.namespace,
-                resource_name=constants.NOOBAA_CORE_STATEFULSET,
-            ).get(retry=0)
-        except CommandFailed as ex:
-            if "not found" in str(ex).lower():
-                return {}
-            raise
-        for container in statefulset["spec"]["template"]["spec"]["containers"]:
-            if container["name"] == CORE_CONTAINER_NAME:
-                return container.get("resources", {})
-        return {}
+
+        def _fetch_resources():
+            try:
+                statefulset = OCP(
+                    kind=constants.STATEFULSET,
+                    namespace=self.namespace,
+                    resource_name=constants.NOOBAA_CORE_STATEFULSET,
+                ).get(retry=0)
+            except CommandFailed as ex:
+                if "not found" in str(ex).lower():
+                    return {}
+                raise
+            for container in statefulset["spec"]["template"]["spec"]["containers"]:
+                if container["name"] == CORE_CONTAINER_NAME:
+                    return container.get("resources", {})
+            return {}
+
+        # Use TimeoutSampler to handle transient failures during StatefulSet updates
+        for resources in TimeoutSampler(timeout=30, sleep=1, func=_fetch_resources):
+            return resources
 
     def wait_for_core_resources(self, match, timeout=600, sleep=15):
         """

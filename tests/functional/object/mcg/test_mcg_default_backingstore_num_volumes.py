@@ -49,7 +49,7 @@ DEPLOY_TIMEOUT = 1800
 @mcg
 @red_squad
 @runs_on_provider
-@on_prem_platform_required
+@on_prem_platform_required  # Cloud platforms create cloud-backed default backingstores, not pv-pools
 class TestDefaultBackingStoreNumVolumes:
     """
     Verify that the default pv-pool backingstore follows the performance
@@ -59,11 +59,17 @@ class TestDefaultBackingStoreNumVolumes:
     @pytest.fixture()
     def standalone_noobaa_factory(self, request):
         """
-        Factory for standalone NooBaa systems, each in a namespace of its own,
-        all removed when the test ends.
+        Factory for creating isolated standalone NooBaa systems.
+
+        Creates independent NooBaa systems deployed into isolated namespaces,
+        each configured with a specified performance profile. This allows testing
+        profile-specific behavior (like pv-pool volume counts) without interfering
+        with the ODF-managed NooBaa. All created systems are cleaned up when the
+        test ends.
 
         Returns:
-            callable: Takes a profile name, returns a deployed StandaloneNooBaa
+            callable: Takes a profile name (str), returns a deployed StandaloneNooBaa
+                instance ready for testing
         """
         systems = []
 

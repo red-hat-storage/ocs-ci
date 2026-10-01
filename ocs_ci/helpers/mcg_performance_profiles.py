@@ -35,18 +35,15 @@ SC_RESOURCE_KEY_CORE = "noobaa-core"
 SC_RESOURCE_KEY_DB = "noobaa-db"
 SC_RESOURCE_KEY_ENDPOINT = "noobaa-endpoint"
 
-# Profiles accepted by the StorageCluster CRD enum. The NooBaa CRD additionally
-# accepts "dev-env" and "mini-env", which must therefore be rejected on the
-# StorageCluster CR.
-SC_PROFILES = ("default", "mixed-workload", "small-objects")
-NOOBAA_ONLY_PROFILES = ("dev-env", "mini-env")
+# Import MCG profile constants from constants.py
+SC_PROFILES = constants.MCG_PROFILES
+NOOBAA_ONLY_PROFILES = constants.MCG_ONLY_PROFILES
 
 # Binary memory suffixes, the only ones the profile specs and the NooBaa CRs use
 MEMORY_UNITS = {
     "Ki": constants.BYTES_IN_KB,
     "Mi": constants.BYTES_IN_MB,
     "Gi": constants.BYTES_IN_GB,
-    "Ti": constants.BYTES_IN_TB,
 }
 
 QOS_BURSTABLE = "Burstable"
@@ -76,6 +73,13 @@ def _resources(req_cpu, lim_cpu, req_mem, lim_mem, qos):
     }
 
 
+# Common defaults for non-default profiles to eliminate duplication
+_PROFILE_DEFAULTS = {
+    "endpoint_count": {"min": 2, "max": 4},
+    "db_instances": 2,
+    "pv_pool": {"cpu": "1", "mem": "2Gi"},
+}
+
 # Profile specifications as per RHSTOR-9144 and NooBaa operator source code
 # (https://github.com/noobaa/noobaa-operator/blob/master/pkg/system/performance_profiles.go)
 PROFILE_SPECS = {
@@ -91,9 +95,7 @@ PROFILE_SPECS = {
         "core": _resources("1", "2", "2Gi", "4Gi", QOS_BURSTABLE),
         "db": _resources("4", "4", "8Gi", "8Gi", QOS_GUARANTEED),
         "endpoint": _resources("2", "4", "2Gi", "4Gi", QOS_BURSTABLE),
-        "endpoint_count": {"min": 2, "max": 4},
-        "db_instances": 2,
-        "pv_pool": {"cpu": "1", "mem": "2Gi"},
+        **_PROFILE_DEFAULTS,
     },
     "small-objects": {
         "core": _resources("1", "2", "2Gi", "6Gi", QOS_BURSTABLE),
@@ -101,21 +103,12 @@ PROFILE_SPECS = {
         # Endpoint CPU request is lower than mixed-workload on purpose: a single
         # endpoint process saturates before it can use more.
         "endpoint": _resources("1", "4", "2Gi", "4Gi", QOS_BURSTABLE),
-        "endpoint_count": {"min": 2, "max": 4},
-        "db_instances": 2,
-        "pv_pool": {"cpu": "1", "mem": "2Gi"},
+        **_PROFILE_DEFAULTS,
     },
 }
 
-# Volume count the default pv-pool backingstore is created with, per profile.
-# Stamped at creation only - getPVPoolNumVolumes never lowers an existing count.
-PV_POOL_NUM_VOLUMES = {
-    "default": 3,
-    "mixed-workload": 3,
-    "small-objects": 3,
-    "dev-env": 1,
-    "mini-env": 1,
-}
+# Import PV pool volume count from constants.py
+PV_POOL_NUM_VOLUMES = constants.MCG_PV_POOL_NUM_VOLUMES
 
 # Expected noobaa-core resources for all five profiles - the three in
 # PROFILE_SPECS plus dev-env and mini-env, which only the NooBaa CR accepts.
@@ -291,6 +284,35 @@ def set_storagecluster_profile(profile):
     # the field already holds the requested value.
     if not patched:
         logger.warning(f"Profile patch to '{profile}' reported no change")
+
+
+def set_storagecluster_endpoint_override(min_replicas=None, max_replicas=None):
+    """
+    Set explicit min/max endpoint replica count on the StorageCluster CR.
+
+    Endpoint replica overrides take precedence over the count the active
+    profile would otherwise apply.
+
+    Args:
+        min_replicas (int or None): Min endpoint replicas, or None to clear
+        max_replicas (int or None): Max endpoint replicas, or None to clear
+    """
+    endpoints_spec = None
+    if min_replicas is not None and max_replicas is not None:
+        endpoints_spec = {"minCount": min_replicas, "maxCount": max_replicas}
+        logger.info(
+            f"Setting endpoint replica override: "
+            f"min={min_replicas}, max={max_replicas}"
+        )
+    else:
+        logger.info("Clearing endpoint replica override")
+
+    get_storagecluster_ocp().patch(
+        params=json.dumps(
+            {"spec": {"multiCloudGateway": {"endpoints": endpoints_spec}}}
+        ),
+        format_type="merge",
+    )
 
 
 def remove_storagecluster_profile():
