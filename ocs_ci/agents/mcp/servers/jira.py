@@ -54,7 +54,7 @@ def jira_get_issue(issue_key: str) -> str:
 
     Use this to read how the fix should be verified. Headed sections include
     verification_steps, steps_to_reproduce, and expected_results when those
-    headings are present.     verification_notes are the comments that change how
+    headings are present. verification_notes are the comments that change how
     the fix is checked. source_issues are the original bugs for a backport or
     clone, including their sections and verification notes. parent_issues lists
     each parent or original issue with its key, summary, status, and relation.
@@ -80,7 +80,10 @@ def jira_save_verification_report(
     Call this after jira_get_issue, once bug_description, versions,
     environments, upgrade_scenario, verification_steps, additional_info, and
     git_prs are filled. parent_issues is copied from the issue just read,
-    including each parent's status. The file is reports/<version>/<issue_key>.yaml.
+    including each parent's status. OpenAI writes the summary stored on the
+    report. tests lists pytest tests under tests/ whose names, paths, or
+    Polarion ids appear exactly in the bug. The file is
+    reports/<version>/<issue_key>.yaml.
     This writes a local file. It does not update Jira. During --dry-run the
     saved report records dry_run so a later run can see that Jira and other
     applications were left unchanged.
@@ -95,12 +98,17 @@ def jira_save_verification_report(
 
     """
     from ocs_ci.agents.jira_verification.report_store import write_verification_report
+    from ocs_ci.agents.jira_verification.summary import summarize_issue
+    from ocs_ci.agents.jira_verification.test_index import matching_tests
     from ocs_ci.agents.runtime.dry_run import dry_run_enabled
 
     report = json.loads(report_json)
     fetched = _fetched_issues.get(issue_key)
     if isinstance(fetched, dict) and "parent_issues" in fetched:
         report["parent_issues"] = fetched["parent_issues"]
+    source = fetched if isinstance(fetched, dict) else report
+    report["summary"] = summarize_issue(source)
+    report["tests"] = matching_tests(source)
     if dry_run_enabled():
         report["dry_run"] = True
     path = write_verification_report(version, issue_key, report)
