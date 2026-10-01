@@ -14,26 +14,32 @@ TOOL_NAMES = (
 )
 
 
-def jira_search_issues(version: str, project: str = "DFBUGS") -> str:
+def jira_search_issues(
+    version: str = "", project: str = "DFBUGS", release: str = ""
+) -> str:
     """
-    List Jira issues in ON_QA for one version.
+    List Jira issues in ON_QA for one version or one Target Release.
 
-    An issue matches when its Target Version, Target Release, or Fix Version
-    equals version.
+    Without release, an issue matches when its Target Version, Target Release,
+    or Fix Version equals version. With release, only that Target Release matches.
 
     Args:
         version (str): Version name, for example odf-5.0.
         project (str): Jira project key. Defaults to DFBUGS.
+        release (str): Target Release name. When set, this selects the bugs.
 
     Returns:
         str: JSON with count and issues. Each issue has key, summary, status,
             and versions.
 
     """
-    issues = _jira_helper().search_on_qa(version, project=project)
+    issues = _jira_helper().search_on_qa(
+        version, project=project, release=release or None
+    )
     return json.dumps(
         {
             "version": version,
+            "release": release,
             "project": project,
             "count": len(issues),
             "issues": issues,
@@ -68,6 +74,9 @@ def jira_save_verification_report(
     Call this after jira_get_issue, once bug_description, versions,
     environments, upgrade_scenario, verification_steps, additional_info, and
     git_prs are filled. The file is reports/<version>/<issue_key>.yaml.
+    This writes a local file. It does not update Jira. During --dry-run the
+    saved report records dry_run so a later run can see that Jira and other
+    applications were left unchanged.
 
     Args:
         version (str): Version name, for example odf-5.0.
@@ -79,23 +88,39 @@ def jira_save_verification_report(
 
     """
     from ocs_ci.agents.jira_verification.report_store import write_verification_report
+    from ocs_ci.agents.runtime.dry_run import dry_run_enabled
 
     report = json.loads(report_json)
+    if dry_run_enabled():
+        report["dry_run"] = True
     path = write_verification_report(version, issue_key, report)
-    return json.dumps({"key": issue_key, "saved": str(path)})
+    return json.dumps(
+        {
+            "key": issue_key,
+            "saved": str(path),
+            "dry_run": bool(report.get("dry_run")),
+        }
+    )
 
 
 def _jira_helper():
     """
-    Return a Jira helper using the job credentials.
+    Return a Jira helper using the agent credentials.
+
+    During --dry-run the client can search and fetch issues. Comment, edit,
+    transition, and every other Jira write is refused.
 
     Returns:
         JiraHelper: Connected helper.
 
     """
-    from ocs_ci.utility.jira import JiraHelper
+    from ocs_ci.agents.runtime.dry_run import ReadOnlyJira, dry_run_enabled
+    from ocs_ci.utility.jira import JiraHelper, resolve_agent_jira_auth
 
-    return JiraHelper()
+    helper = JiraHelper(auth=resolve_agent_jira_auth())
+    if dry_run_enabled():
+        helper.jira = ReadOnlyJira(helper.jira)
+    return helper
 
 
 def build_server():

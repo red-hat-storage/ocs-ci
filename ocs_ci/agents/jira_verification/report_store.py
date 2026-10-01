@@ -16,6 +16,7 @@ REPORT_FIELDS = (
     "additional_info",
     "git_prs",
 )
+OPTIONAL_REPORT_FIELDS = ("cluster", "dry_run")
 REPORTS_ROOT = Path(__file__).resolve().parent / "reports"
 _ISSUE_KEY = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
 
@@ -52,6 +53,9 @@ def write_verification_report(version, issue_key, report, root=None):
     document = {"key": key, "url": report.get("url") or _issue_url(key)}
     for name in REPORT_FIELDS:
         document[name] = report[name]
+    for name in OPTIONAL_REPORT_FIELDS:
+        if report.get(name):
+            document[name] = report[name]
     path = directory / f"{key}.yaml"
     path.write_text(
         yaml.safe_dump(document, sort_keys=False, allow_unicode=True),

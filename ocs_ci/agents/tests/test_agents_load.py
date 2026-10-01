@@ -50,6 +50,17 @@ def test_agent_folder_loads(agent_dir):
     assert callable(module.make_graph)
 
 
+def test_jira_verification_uses_only_the_jira_api():
+    """The Jira API retrieves each issue and supplies the report text."""
+    spec = discover.load_agent_spec(discover.AGENTS_ROOT / "jira_verification")
+    assert spec["mcp_servers"] == ["jira"]
+    assert spec["tools"]["allow"] == [
+        "jira_search_issues",
+        "jira_get_issue",
+        "jira_save_verification_report",
+    ]
+
+
 def test_rovo_tools_are_allowed_without_a_local_catalog(tmp_path):
     """A remote Rovo tool name is valid because Atlassian owns that catalog."""
     agent_dir = tmp_path / "rovo_lookup"
