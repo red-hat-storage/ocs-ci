@@ -6,6 +6,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 from ocs_ci.helpers.scc_helpers import (
     get_pod_scc_annotations,
     verify_pod_scc_pinning,
@@ -13,7 +14,6 @@ from ocs_ci.helpers.scc_helpers import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
-    jira,
     polarion_id,
     post_upgrade,
     skipif_external_mode,
@@ -48,6 +48,11 @@ class TestSCCEnforcement(ManageTest):
         match the expected value. Components with no running pods are
         logged as warnings and skipped.
 
+        Succeeded/Failed pods created before the current rook-ceph-operator
+        CSV (e.g. osd-prepare left over from before an upgrade) are never
+        recreated, so they keep the previous version's annotations. They are
+        logged and skipped.
+
         Args:
             components (list): List of (label, name, expected_scc) tuples.
             category_name (str): Category name for logging.
@@ -55,6 +60,16 @@ class TestSCCEnforcement(ManageTest):
         """
         namespace = config.ENV_DATA["cluster_namespace"]
         checked_count = 0
+        # Kubernetes timestamps are UTC RFC 3339, so they sort chronologically as strings
+        rook_csv_created = max(
+            (
+                csv["metadata"]["creationTimestamp"]
+                for csv in get_csvs_start_with_prefix(
+                    constants.ROOK_CEPH_OPERATOR, namespace
+                )
+            ),
+            default=None,
+        )
 
         for label, component_name, expected_scc in components:
             pods = get_pods_having_label(label=label, namespace=namespace)
@@ -73,6 +88,23 @@ class TestSCCEnforcement(ManageTest):
                 component_name,
             )
             for pod_data in pods:
+                phase = pod_data.get("status", {}).get("phase")
+                created = pod_data.get("metadata", {}).get("creationTimestamp")
+                if (
+                    rook_csv_created
+                    and phase in (constants.STATUS_SUCCEED, constants.STATUS_FAILED)
+                    and created < rook_csv_created
+                ):
+                    logger.warning(
+                        "Skipping %s pod '%s': %s, created %s, before the current "
+                        "rook-ceph-operator CSV (%s). Leftover from a previous version.",
+                        component_name,
+                        pod_data.get("metadata", {}).get("name", "unknown"),
+                        phase,
+                        created,
+                        rook_csv_created,
+                    )
+                    continue
                 result = verify_pod_scc_pinning(pod_data, expected_scc)
                 assert result["required_match"], (
                     f"Pod '{result['pod_name']}' ({component_name}): "
@@ -99,7 +131,6 @@ class TestSCCEnforcement(ManageTest):
 
     @tier1
     @polarion_id("OCS-8070")
-    @jira("DFBUGS-10771")
     def test_rook_ceph_daemons_scc(self):
         """
         Verify all Rook-Ceph daemon pods are pinned to rook-ceph SCC.
@@ -206,7 +237,6 @@ class TestSCCEnforcement(ManageTest):
 
     @tier1
     @polarion_id("OCS-8068")
-    @jira("DFBUGS-10771")
     def test_odf_operators_scc(self):
         """
         Verify all ODF operator pods are pinned to their expected SCCs.
@@ -414,7 +444,6 @@ class TestSCCEnforcement(ManageTest):
 
     @tier1
     @polarion_id("OCS-8076")
-    @jira("DFBUGS-10771")
     def test_full_cluster_scc_audit(self):
         """
         Safety-net audit: zero running pods in openshift-storage without
