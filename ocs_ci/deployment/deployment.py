@@ -946,7 +946,8 @@ class Deployment(object):
         Create the Fusion Access for SAN storage cluster via the OpenShift Console UI.
 
         Runs only when ``DEPLOYMENT.fusion_access_deployment`` is ``True`` in the
-        active config.  The UI automation is performed by
+        active config and UI deployment conditions are met.  The UI automation is
+        performed by
         :class:`~ocs_ci.ocs.ui.page_objects.premigration_fusion_access_ui.PreMigrationFusionAccessUI`
         which drives the storage cluster wizard:
 
@@ -955,6 +956,13 @@ class Deployment(object):
         3. Submit the storage cluster creation form.
         """
         if not config.DEPLOYMENT.get("fusion_access_deployment"):
+            return
+
+        if not ui_deployment_conditions():
+            logger.warning(
+                "Skipping Fusion Access storage cluster UI creation — "
+                "UI deployment conditions are not met"
+            )
             return
 
         logger.info(
