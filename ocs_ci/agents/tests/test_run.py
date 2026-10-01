@@ -1,6 +1,7 @@
 """Jenkins entrypoint for ODF agents."""
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -9,6 +10,10 @@ import pytest
 from ocs_ci.agents.mcp import registry
 from ocs_ci.agents.mcp.registry import servers_for
 from ocs_ci.agents.runtime import llm, run
+from ocs_ci.agents.runtime.tool_calls import (
+    limit_tool_calls_for_model,
+    split_tool_call_messages,
+)
 
 
 def test_build_request_reads_jenkins_environment():
@@ -57,6 +62,162 @@ def test_cli_overrides_jenkins_parameters():
     assert request["agent"] == "jira_verification"
     assert request["message"] == "from-cli"
     assert request["result_file"] == "out.json"
+
+
+def test_issue_cluster_and_extra_args_reach_the_agent():
+    """Issue keys, the kube context, and other KEY=VALUE pairs are named arguments."""
+    request = run.build_request(
+        [
+            "--agent",
+            "jira_verification",
+            "--message",
+            "odf-5.0",
+            "--issue",
+            "DFBUGS-487",
+            "--issue",
+            "DFBUGS-376",
+            "--cluster",
+            "amagrawa-c1",
+            "--arg",
+            "project=DFBUGS",
+        ],
+        {
+            "OCS_AGENT_ISSUE": "DFBUGS-1",
+            "OCS_AGENT_CLUSTER": "from-env",
+            "OCS_AGENT_ARGS": "project=STOR note=keep",
+        },
+    )
+    assert request["args"] == {
+        "issues": ["DFBUGS-487", "DFBUGS-376"],
+        "cluster": "amagrawa-c1",
+        "project": "DFBUGS",
+        "note": "keep",
+    }
+
+
+def test_release_selects_the_target_release():
+    """--release names the Target Release, and it replaces OCS_AGENT_RELEASE."""
+    request = run.build_request(
+        ["--agent", "jira_verification", "--release", "odf-5.0"],
+        {"OCS_AGENT_RELEASE": "odf-4.16", "OCS_AGENT_ARGS": "release=odf-4.15"},
+    )
+    assert request["args"]["release"] == "odf-5.0"
+    state = run.agent_state(request)
+    assert '"release": "odf-5.0"' in state["messages"][0]["content"]
+
+
+def test_dry_run_reaches_the_agent():
+    """--dry-run tells the agent not to update Jira or any other application."""
+    request = run.build_request(
+        ["--agent", "jira_verification", "--release", "odf-5.0", "--dry-run"],
+        {},
+    )
+    assert request["args"]["dry_run"] is True
+    state = run.agent_state(request)
+    assert '"dry_run": true' in state["messages"][0]["content"]
+
+
+def test_dry_run_comes_from_the_environment():
+    """OCS_AGENT_DRY_RUN=1 is the same switch as --dry-run."""
+    request = run.build_request(
+        ["--agent", "jira_verification"],
+        {"OCS_AGENT_DRY_RUN": "1"},
+    )
+    assert request["args"]["dry_run"] is True
+
+
+def test_oversized_tool_call_message_is_split_for_openai():
+    """An assistant message with more than 128 tool calls is split before the API call."""
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+    calls = [
+        {
+            "id": f"call_{index}",
+            "name": "jira_get_issue",
+            "args": {"issue_key": f"DFBUGS-{index}"},
+            "type": "tool_call",
+        }
+        for index in range(166)
+    ]
+    history = [
+        HumanMessage(content="odf-5.0"),
+        AIMessage(content="Fetching issues.", tool_calls=calls),
+        *[
+            ToolMessage(content="{}", tool_call_id=f"call_{index}")
+            for index in range(166)
+        ],
+    ]
+    prepared = limit_tool_calls_for_model({"messages": history})["llm_input_messages"]
+    assistant_messages = [
+        message for message in prepared if isinstance(message, AIMessage)
+    ]
+    assert [len(message.tool_calls) for message in assistant_messages] == [128, 38]
+    assert assistant_messages[0].content == "Fetching issues."
+    assert assistant_messages[1].content == ""
+    seen = [
+        message.tool_call_id for message in prepared if isinstance(message, ToolMessage)
+    ]
+    assert seen == [f"call_{index}" for index in range(166)]
+    assert split_tool_call_messages(history[:1]) == history[:1]
+
+
+def test_dry_run_is_omitted_unless_requested():
+    """A normal run does not claim to be a dry run."""
+    request = run.build_request(["--agent", "jira_verification"], {})
+    assert "dry_run" not in request["args"]
+
+
+def test_invoke_exports_dry_run_and_restores_the_environment(monkeypatch):
+    """Tool processes started during the run inherit OCS_AGENT_DRY_RUN."""
+    monkeypatch.delenv("OCS_AGENT_DRY_RUN", raising=False)
+
+    def load_make_graph(agent_dir):
+        async def make_graph():
+            raise RuntimeError(os.environ.get("OCS_AGENT_DRY_RUN") or "")
+
+        return make_graph
+
+    monkeypatch.setattr(run, "load_make_graph", load_make_graph)
+    with pytest.raises(RuntimeError, match="^1$"):
+        run.invoke_agent(
+            Path("."),
+            {"agent": "jira_verification", "args": {"dry_run": True}, "jenkins": {}},
+        )
+    assert "OCS_AGENT_DRY_RUN" not in os.environ
+
+
+def test_environment_supplies_args_when_the_cli_omits_them():
+    """Jenkins can pass the issue list and cluster without CLI flags."""
+    request = run.build_request(
+        ["--agent", "jira_verification", "--message", "odf-5.0"],
+        {"OCS_AGENT_ISSUE": "DFBUGS-487, DFBUGS-378", "OCS_AGENT_CLUSTER": "hub"},
+    )
+    assert request["args"]["issues"] == ["DFBUGS-487", "DFBUGS-378"]
+    assert request["args"]["cluster"] == "hub"
+
+
+def test_malformed_arg_is_a_usage_error():
+    """A pair without an equals sign exits 2."""
+    code = run.main(
+        ["--agent", "jira_verification", "--message", "odf-5.0", "--arg", "cluster"],
+        {},
+    )
+    assert code == run.EXIT_USAGE
+
+
+def test_agent_state_appends_args_for_the_model():
+    """The graph message ends with the argument JSON, and state keeps the mapping."""
+    state = run.agent_state(
+        {
+            "message": "odf-5.0",
+            "args": {"cluster": "hub", "issues": ["DFBUGS-487"]},
+            "jenkins": {},
+        }
+    )
+    assert state["messages"][0]["content"] == (
+        'odf-5.0\n{"cluster": "hub", "issues": ["DFBUGS-487"]}'
+    )
+    assert state["args"]["issues"] == ["DFBUGS-487"]
 
 
 def test_missing_agent_name_is_a_usage_error():

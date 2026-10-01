@@ -5,6 +5,7 @@ from pathlib import Path
 from ocs_ci.agents.mcp.client import load_tools
 from ocs_ci.agents.runtime.discover import load_agent_spec
 from ocs_ci.agents.runtime.llm import get_chat_model
+from ocs_ci.agents.runtime.tool_calls import limit_tool_calls_for_model
 
 
 def make_agent_graph(graph_file):
@@ -42,6 +43,8 @@ def make_agent_graph(graph_file):
             messages: Annotated[list, add_messages]
             remaining_steps: NotRequired[RemainingSteps]
             jenkins: NotRequired[dict]
+            args: NotRequired[dict]
+            llm_input_messages: NotRequired[list]
 
         tools = await load_tools(spec["mcp_servers"], spec["tools"]["allow"])
         prompt = (agent_dir / spec["prompt"]).read_text(encoding="utf-8")
@@ -50,6 +53,7 @@ def make_agent_graph(graph_file):
             tools,
             prompt=prompt,
             state_schema=AgentRunState,
+            pre_model_hook=limit_tool_calls_for_model,
         )
 
     return make_graph

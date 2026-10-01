@@ -9,7 +9,7 @@ ocs_ci/agents/
 ├── langgraph.json          # generated registry of agent graphs
 ├── runtime/                # shared graph builder, model, discovery, Jenkins runner
 ├── mcp/
-│   ├── registry.py         # local servers and remote Rovo
+│   ├── registry.py         # MCP server connections
 │   ├── client.py           # loads MCP servers as LangChain tools
 │   └── servers/            # local tool implementations
 │       ├── jira.py
@@ -28,8 +28,7 @@ Tools stay in `mcp/servers/`. An agent lists the tool names it may call in
 
 1. Copy `_template/` to `<agent_name>/`.
 2. Edit `agent.yaml` and `prompt.md`. Set `name` to the directory name.
-3. Set `mcp_servers` and `tools.allow` to local servers under `mcp/servers/`,
-   or to `rovo` and the Rovo tool names that agent may call.
+3. Set `mcp_servers` and `tools.allow` to local servers under `mcp/servers/`.
 4. Leave `graph.py` as it is. It calls the shared LangGraph builder.
 5. Regenerate the registry:
 
@@ -63,13 +62,20 @@ The chat model is OpenAI. Put the key in `data/auth.yaml`:
 agents_credentials:
   openai:
     api_key: <openai-api-key>
+  jira:
+    url: https://redhat.atlassian.net
+    email: <jira-email>
+    token: <jira-api-token>
 ```
 
 `OPENAI_API_KEY` is used when that file entry is empty. `OCS_AGENT_MODEL`
 overrides the model name. The default is `gpt-4o`. Set
-`OCS_AGENT_PROVIDER=claude` to use a logged-in Claude CLI instead. Jira
-credentials come from `config.AUTH.jira`, from the `jira` section of
-`data/auth.yaml` (`url`, `email`, `token`), or from `/etc/jira.cfg`.
+`OCS_AGENT_PROVIDER=claude` to use a logged-in Claude CLI instead. The local
+Jira server reads `agents_credentials.jira` in `data/auth.yaml` (`url`,
+`email`, `token`). Other ocs-ci callers still use `config.AUTH.jira`, the
+top-level `jira` section, or `/etc/jira.cfg`. `jira_verification` reads issues
+with the local Jira server and writes each verification report from that
+issue.
 
 ```bash
 python3 -m ocs_ci.agents.runtime.run \
@@ -77,31 +83,34 @@ python3 -m ocs_ci.agents.runtime.run \
   --message "${OCS_AGENT_MESSAGE}"
 ```
 
-The same command with no flags reads `OCS_AGENT_NAME` and `OCS_AGENT_MESSAGE`
-from the environment. `JOB_NAME`, `BUILD_NUMBER`, `BUILD_URL`, and `WORKSPACE`
-are passed into the agent. Local MCP servers start with the same Python as
-the job and inherit the job environment, including the ocs-ci config,
-kubeconfig, and credentials the job already injects.
+Named arguments are optional. `--release` retrieves ON_QA bugs whose Target
+Release equals that name. `--issue` limits the run to those Jira keys.
+`--cluster` is the kube context verification commands must use. `--dry-run`
+reads Jira and writes the local verification report, and it does not update
+Jira or any other application. `OCS_AGENT_DRY_RUN=1` is the same switch.
+`--arg KEY=VALUE` passes any other value. Repeat `--issue` and `--arg` for
+more than one.
 
-`.cursor/mcp.json` is for the editor. The Jenkins job does not read it.
-
-## Atlassian Rovo
-
-Rovo is Atlassian's remote MCP server. It is not a module under `mcp/servers/`.
-An agent uses it by adding `rovo` to `mcp_servers` and naming the Rovo tools it
-may call in `tools.allow`.
-
-The Jenkins job reads the token from `data/auth.yaml`:
-
-```yaml
-agents_credentials:
-  rovo_mcp:
-    token: <atlassian-api-token>
+```bash
+python3 -m ocs_ci.agents.runtime.run \
+  --agent jira_verification \
+  --release odf-5.0 \
+  --issue DFBUGS-487 \
+  --cluster amagrawa-c1 \
+  --dry-run
 ```
 
-That token is sent as a Bearer token. `ATLASSIAN_ROVO_MCP_AUTHORIZATION`
-overrides the file when it holds a full Authorization header value. Cursor still
-signs in with OAuth through `.cursor/mcp.json`.
+The same command with no flags reads `OCS_AGENT_NAME` and `OCS_AGENT_MESSAGE`
+from the environment. `OCS_AGENT_RELEASE` is the Target Release,
+`OCS_AGENT_ISSUE` is a comma-separated issue list, `OCS_AGENT_CLUSTER` is the
+kube context, and `OCS_AGENT_ARGS` is a whitespace-separated list of
+`KEY=VALUE` pairs. CLI flags replace those values. `JOB_NAME`,
+`BUILD_NUMBER`, `BUILD_URL`, and `WORKSPACE` are passed
+into the agent. Local MCP servers start with the same Python as the job and
+inherit the job environment, including the ocs-ci config, kubeconfig, and
+credentials the job already injects.
+
+`.cursor/mcp.json` is for the editor. The Jenkins job does not read it.
 
 ## Add a tool
 

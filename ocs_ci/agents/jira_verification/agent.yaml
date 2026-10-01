@@ -1,5 +1,5 @@
 name: jira_verification
-description: List ON_QA Jira issues for a version and write a verification report for each
+description: Retrieve ON_QA Jira issues with the Jira API and write a verification report for each one
 mcp_servers:
   - jira
 tools:

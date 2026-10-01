@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from ocs_ci.agents.runtime.discover import iter_agent_dirs, load_agent_spec
+from ocs_ci.agents.runtime.dry_run import activate_dry_run, env_requests_dry_run
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,38 @@ def build_request(argv, env):
         default=None,
         help="JSON result path. Overrides OCS_AGENT_RESULT_FILE. Defaults to WORKSPACE/agent-result.json.",
     )
+    parser.add_argument(
+        "--issue",
+        action="append",
+        default=None,
+        help="Verify only this Jira issue. Repeat for more than one. Overrides OCS_AGENT_ISSUE.",
+    )
+    parser.add_argument(
+        "--cluster",
+        default=None,
+        help="Kube context where verification commands run. Overrides OCS_AGENT_CLUSTER.",
+    )
+    parser.add_argument(
+        "--release",
+        default=None,
+        help="Target Release whose ON_QA bugs are retrieved. Overrides OCS_AGENT_RELEASE.",
+    )
+    parser.add_argument(
+        "--arg",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        help="Extra argument passed to the agent. Repeat for more than one.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Read and write the local verification report only. "
+            "Do not update Jira or any other application. "
+            "Also enabled by OCS_AGENT_DRY_RUN=1."
+        ),
+    )
     args = parser.parse_args(argv)
     agent = args.agent or env.get("OCS_AGENT_NAME")
     if not agent:
@@ -64,6 +97,7 @@ def build_request(argv, env):
     return {
         "agent": agent,
         "message": message,
+        "args": _agent_args(args, env),
         "result_file": result_file,
         "jenkins": {
             "job_name": env.get("JOB_NAME"),
@@ -72,6 +106,98 @@ def build_request(argv, env):
             "workspace": env.get("WORKSPACE"),
         },
     }
+
+
+def _agent_args(args, env):
+    """
+    Collect named arguments from the environment and the CLI.
+
+    OCS_AGENT_ARGS is a whitespace-separated list of KEY=VALUE pairs.
+    OCS_AGENT_ISSUE is a comma-separated list of issue keys. OCS_AGENT_CLUSTER
+    is one kube context. OCS_AGENT_RELEASE is a Target Release name.
+    OCS_AGENT_DRY_RUN=1 is a dry run. --arg, --issue, --cluster, --release,
+    and --dry-run replace those values. A dry run reads Jira and may write
+    the local verification report. It does not update Jira or any other
+    application.
+
+    Args:
+        args: Parsed CLI arguments.
+        env (dict): Process environment.
+
+    Returns:
+        dict: Argument names and values. issues is a list when any issue was given.
+
+    Raises:
+        ValueError: A pair is not KEY=VALUE.
+    """
+    collected = {}
+    for token in str(env.get("OCS_AGENT_ARGS") or "").split():
+        key, value = _split_arg(token)
+        collected[key] = value
+    issues = [
+        part.strip()
+        for part in str(env.get("OCS_AGENT_ISSUE") or "").split(",")
+        if part.strip()
+    ]
+    cluster = str(env.get("OCS_AGENT_CLUSTER") or "").strip()
+    release = str(env.get("OCS_AGENT_RELEASE") or "").strip()
+    if issues:
+        collected["issues"] = issues
+    if cluster:
+        collected["cluster"] = cluster
+    if release:
+        collected["release"] = release
+    for token in args.arg or []:
+        key, value = _split_arg(token)
+        collected[key] = value
+    if args.cluster:
+        collected["cluster"] = args.cluster
+    if args.release:
+        collected["release"] = args.release
+    if args.issue:
+        collected["issues"] = [part.strip() for part in args.issue if part.strip()]
+    if args.dry_run or env_requests_dry_run(env) or _truthy(collected.get("dry_run")):
+        collected["dry_run"] = True
+    elif "dry_run" in collected:
+        del collected["dry_run"]
+    return collected
+
+
+def _truthy(value):
+    """
+    Return whether an argument value turns dry-run on.
+
+    Args:
+        value: Raw argument value.
+
+    Returns:
+        bool: True for True and for 1, true, or yes.
+    """
+    if value is True:
+        return True
+    return isinstance(value, str) and value.strip().lower() in {"1", "true", "yes"}
+
+
+def _split_arg(token):
+    """
+    Split one KEY=VALUE argument.
+
+    Args:
+        token (str): Raw pair.
+
+    Returns:
+        tuple: Key and value.
+
+    Raises:
+        ValueError: The token has no equals sign or no key.
+    """
+    if "=" not in token:
+        raise ValueError(f"argument must be KEY=VALUE: {token}")
+    key, value = token.split("=", 1)
+    key = key.strip()
+    if not key:
+        raise ValueError(f"argument must be KEY=VALUE: {token}")
+    return key, value.strip()
 
 
 def resolve_agent_dir(name, root=None):
@@ -124,10 +250,19 @@ def agent_state(request):
     Returns:
         dict: Messages plus the Jenkins build fields.
     """
-    return {
-        "messages": [{"role": "user", "content": request["message"]}],
+    message = request["message"] or ""
+    agent_args = request.get("args") or {}
+    if agent_args:
+        message = (
+            f"{message.rstrip()}\n{json.dumps(agent_args, sort_keys=True)}".strip()
+        )
+    state = {
+        "messages": [{"role": "user", "content": message}],
         "jenkins": request["jenkins"],
     }
+    if agent_args:
+        state["args"] = agent_args
+    return state
 
 
 def invoke_agent(agent_dir, request):
@@ -154,7 +289,8 @@ def invoke_agent(agent_dir, request):
             config={"recursion_limit": _recursion_limit()},
         )
 
-    state = asyncio.run(_run())
+    with activate_dry_run(request):
+        state = asyncio.run(_run())
     return {
         "ok": True,
         "agent": request["agent"],

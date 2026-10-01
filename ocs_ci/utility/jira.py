@@ -49,15 +49,20 @@ class JiraHelper:
     Requires a dict with keys: url, username, password.
     """
 
-    def __init__(self):
+    def __init__(self, auth=None):
         """
         Initialize JiraHelper.
 
         Provide credentials in config.AUTH.jira, in data/auth.yaml under jira,
         or in /etc/jira.cfg. data/auth.yaml may use email and token in place of
-        username and password.
+        username and password. Pass auth to use a credential set that was
+        already resolved, such as agents_credentials.jira for the agent.
+
+        Args:
+            auth (dict): url, username, and password. When omitted, credentials
+                are resolved from config, data/auth.yaml, or /etc/jira.cfg.
         """
-        jira_auth = resolve_jira_auth()
+        jira_auth = auth if auth is not None else resolve_jira_auth()
         self.url = jira_auth["url"]
         self.username = jira_auth["username"]
         self.password = jira_auth["password"]
@@ -123,19 +128,24 @@ class JiraHelper:
         log.info(f"Adding comment to {issue_key}: {text}")
         return self.jira.issue_add_comment(issue_key, text, visibility=self.visibility)
 
-    def search_on_qa(self, version, project=DEFAULT_JIRA_PROJECT):
+    def search_on_qa(self, version, project=DEFAULT_JIRA_PROJECT, release=None):
         """
         List issues in ON_QA for one target, release, or fix version.
 
+        When release is set, only issues whose Target Release equals that
+        name are returned.
+
         Args:
-            version (str): Version name, for example odf-5.0.
+            version (str): Version name, for example odf-5.0. Ignored for the
+                match when release is set.
             project (str): Jira project key. Defaults to DFBUGS.
+            release (str): Target Release name. When set, this selects the bugs.
 
         Returns:
             list: One dict per issue, with key, summary, status, and versions.
 
         """
-        jql = on_qa_jql(version, project)
+        jql = on_qa_jql(version, project, release=release)
         log.info(f"Searching ON_QA issues with JQL: {jql}")
         issues = self.jira.enhanced_jql_get_list_of_tickets(
             jql, fields=list(ON_QA_SEARCH_FIELDS)
@@ -265,6 +275,53 @@ def _normalize_jira_auth(raw):
     return normalized
 
 
+def resolve_agent_jira_auth():
+    """
+    Find Jira credentials for the agent.
+
+    The agent uses agents_credentials.jira in data/auth.yaml. email and token
+    are accepted as username and password. The top-level jira section is left
+    for the rest of ocs-ci.
+
+    Returns:
+        dict: url, username, password, and visibility when set.
+
+    Raises:
+        ValueError: agents_credentials.jira is missing or incomplete.
+
+    """
+    loaded = _load_auth_yaml()
+    credentials = loaded.get("agents_credentials") or {}
+    raw = credentials.get("jira") if isinstance(credentials, dict) else None
+    normalized = _normalize_jira_auth(raw)
+    if normalized:
+        return normalized
+    raise ValueError(
+        "Jira credentials for the agent were not provided. Set "
+        "agents_credentials.jira.url, agents_credentials.jira.email, and "
+        "agents_credentials.jira.token in data/auth.yaml."
+    )
+
+
+def _load_auth_yaml():
+    """
+    Read data/auth.yaml.
+
+    Returns:
+        dict: Parsed file, or an empty dict when the file is missing or invalid.
+
+    """
+    auth_file = os.path.join(DATA_DIR, AUTHYAML)
+    try:
+        with open(auth_file, encoding="utf-8") as handle:
+            loaded = yaml.safe_load(handle) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    if not isinstance(loaded, dict):
+        return {}
+    return loaded
+
+
 def _jira_auth_from_auth_yaml():
     """
     Read the jira section from data/auth.yaml.
@@ -273,14 +330,7 @@ def _jira_auth_from_auth_yaml():
         dict: Normalized credentials, or None when the file or section is absent.
 
     """
-    auth_file = os.path.join(DATA_DIR, AUTHYAML)
-    try:
-        with open(auth_file, encoding="utf-8") as handle:
-            loaded = yaml.safe_load(handle) or {}
-    except (OSError, yaml.YAMLError):
-        return None
-    if not isinstance(loaded, dict):
-        return None
+    loaded = _load_auth_yaml()
     raw = loaded.get("jira")
     if not raw and isinstance(loaded.get("AUTH"), dict):
         raw = loaded["AUTH"].get("jira")
@@ -303,33 +353,45 @@ def _jira_auth_from_cfg(path):
     return _normalize_jira_auth(JiraHelper._load_from_file(path))
 
 
-def on_qa_jql(version, project=DEFAULT_JIRA_PROJECT):
+def on_qa_jql(version, project=DEFAULT_JIRA_PROJECT, release=None):
     """
-    Build JQL for ON_QA issues of one version.
+    Build JQL for ON_QA issues of one version or one Target Release.
 
-    An issue matches when Target Version, Target Release, or Fix Version equals
-    the given version name.
+    Without a release, an issue matches when Target Version, Target Release,
+    or Fix Version equals the version name. With a release, an issue matches
+    only when Target Release equals that name.
 
     Args:
         version (str): Version name, for example odf-5.0.
         project (str): Jira project key.
+        release (str): Target Release name. Selects bugs for that release.
 
     Returns:
         str: JQL query.
 
+    Raises:
+        ValueError: Neither a version nor a release was given.
+
     """
-    version_name = str(version).strip()
-    project_key = str(project).strip()
-    if not version_name:
-        raise ValueError("version is required")
+    release_name = str(release or "").strip()
+    version_name = str(version or "").strip()
+    project_key = str(project or "").strip()
     if not project_key:
         raise ValueError("project is required")
-    version_jql = _jql_string(version_name)
+    if release_name:
+        match = f"{_jql_string(TARGET_RELEASE_FIELD)} = {_jql_string(release_name)}"
+    elif version_name:
+        version_jql = _jql_string(version_name)
+        match = (
+            f"({_jql_string(TARGET_VERSION_FIELD)} = {version_jql} "
+            f"OR {_jql_string(TARGET_RELEASE_FIELD)} = {version_jql} "
+            f"OR fixVersion = {version_jql})"
+        )
+    else:
+        raise ValueError("version or release is required")
     return (
         f"project = {_jql_string(project_key)} AND status = {_jql_string(ON_QA_STATUS)} "
-        f"AND ({_jql_string(TARGET_VERSION_FIELD)} = {version_jql} "
-        f"OR {_jql_string(TARGET_RELEASE_FIELD)} = {version_jql} "
-        f"OR fixVersion = {version_jql}) "
+        f"AND {match} "
         "ORDER BY key ASC"
     )
 
