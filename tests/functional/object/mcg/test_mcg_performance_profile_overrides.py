@@ -212,6 +212,7 @@ class TestMCGPerformanceProfileOverrides:
         request.addfinalizer(finalizer)
 
     @tier2
+    @pytest.mark.polarion_id("OCS-8315")
     def test_component_resource_overrides(self, restore_overrides, base_profile):
         """
         Verify explicit per-component resources win over the active profile.
@@ -316,6 +317,7 @@ class TestMCGPerformanceProfileOverrides:
         )
 
     @tier2
+    @pytest.mark.polarion_id("OCS-8316")
     def test_pv_pool_volume_resources_override(
         self, restore_overrides, base_profile, backingstore_factory
     ):

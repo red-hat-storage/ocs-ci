@@ -4293,6 +4293,9 @@ FUSION_ACCESS_CR_YAML = os.path.join(
 
 CONFIRM_DELETION_ANNOTATION = "uninstall.ocs.openshift.io/confirm-deletion"
 
+# Deployment names
+OCS_OPERATOR_DEPLOYMENT = "ocs-operator"
+
 # MCG Performance Profiles
 # Profiles accepted by the StorageCluster CRD enum. The NooBaa CRD additionally
 # accepts "dev-env" and "mini-env", which must be rejected on the StorageCluster CR.

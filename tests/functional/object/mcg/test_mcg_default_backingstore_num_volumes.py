@@ -124,11 +124,11 @@ class TestDefaultBackingStoreNumVolumes:
     @pytest.mark.parametrize(
         argnames=["profile"],
         argvalues=[
-            pytest.param("default"),
-            pytest.param("mixed-workload"),
-            pytest.param("small-objects"),
-            pytest.param("dev-env"),
-            pytest.param("mini-env"),
+            pytest.param("default", marks=pytest.mark.polarion_id("OCS-8309")),
+            pytest.param("mixed-workload", marks=pytest.mark.polarion_id("OCS-8310")),
+            pytest.param("small-objects", marks=pytest.mark.polarion_id("OCS-8311")),
+            pytest.param("dev-env", marks=pytest.mark.polarion_id("OCS-8312")),
+            pytest.param("mini-env", marks=pytest.mark.polarion_id("OCS-8313")),
         ],
     )
     def test_default_backingstore_num_volumes_at_creation(
@@ -148,6 +148,7 @@ class TestDefaultBackingStoreNumVolumes:
         self._assert_pv_pool(system, profiles.PV_POOL_NUM_VOLUMES[profile])
 
     @tier3
+    @pytest.mark.polarion_id("OCS-8314")
     def test_default_backingstore_num_volumes_immutable(
         self, standalone_noobaa_factory
     ):

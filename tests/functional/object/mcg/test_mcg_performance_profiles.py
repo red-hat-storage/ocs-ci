@@ -20,8 +20,6 @@ from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
-OCS_OPERATOR_DEPLOYMENT = "ocs-operator"
-
 # Number of volumes for the user-created PV pool backingstore. Deliberately
 # different from the 3 volumes the profile logic gives the default
 # backingstore, so a profile leaking into a user-created store is visible.
@@ -250,6 +248,7 @@ class TestMCGPerformanceProfiles:
         logger.info(f"✅ All verifications passed for '{profile}' profile")
 
     @tier3
+    @pytest.mark.polarion_id("OCS-8300")
     def test_mcg_profile_switching(
         self, clear_endpoint_overrides, restore_profile, user_pv_pool_backingstore
     ):
@@ -314,17 +313,17 @@ class TestMCGPerformanceProfiles:
         "invalid_profile",
         [
             # Not a profile at all
-            "high-performance",
+            pytest.param("high-performance", marks=pytest.mark.polarion_id("OCS-8301")),
             # The enum is case sensitive
-            "Default",
-            "DEFAULT",
+            pytest.param("Default", marks=pytest.mark.polarion_id("OCS-8302")),
+            pytest.param("DEFAULT", marks=pytest.mark.polarion_id("OCS-8303")),
             # Underscore instead of hyphen
-            "small_objects",
+            pytest.param("small_objects", marks=pytest.mark.polarion_id("OCS-8304")),
             # Valid on the NooBaa CR but not on the StorageCluster CR
-            "dev-env",
+            pytest.param("dev-env", marks=pytest.mark.polarion_id("OCS-8305")),
             # The empty string is not in the enum either, so the field cannot
             # be cleared by blanking it - it has to be removed
-            "",
+            pytest.param("", marks=pytest.mark.polarion_id("OCS-8306")),
         ],
     )
     def test_invalid_profile_value_rejected(self, invalid_profile):
@@ -379,6 +378,7 @@ class TestMCGPerformanceProfiles:
         )
 
     @tier2
+    @pytest.mark.polarion_id("OCS-8307")
     def test_invalid_profile_value_rejected_on_noobaa_cr(self):
         """
         Verify the NooBaa CR enforces its own performanceProfile enum, which is
@@ -434,13 +434,15 @@ class TestMCGPerformanceProfiles:
         deployment_ocp = OCP(
             kind=constants.DEPLOYMENT,
             namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=OCS_OPERATOR_DEPLOYMENT,
+            resource_name=constants.OCS_OPERATOR_DEPLOYMENT,
         )
         original_replicas = deployment_ocp.get()["spec"]["replicas"]
 
         def _scale(replicas):
-            logger.info(f"Scaling {OCS_OPERATOR_DEPLOYMENT} to {replicas} replicas")
-            modify_deployment_replica_count(OCS_OPERATOR_DEPLOYMENT, replicas)
+            logger.info(
+                f"Scaling {constants.OCS_OPERATOR_DEPLOYMENT} to {replicas} replicas"
+            )
+            modify_deployment_replica_count(constants.OCS_OPERATOR_DEPLOYMENT, replicas)
 
             def _at_replicas():
                 pods = get_pods_having_label(
@@ -454,13 +456,13 @@ class TestMCGPerformanceProfiles:
                 if scaled:
                     break
                 logger.info(
-                    f"Waiting for {OCS_OPERATOR_DEPLOYMENT} to reach "
+                    f"Waiting for {constants.OCS_OPERATOR_DEPLOYMENT} to reach "
                     f"{replicas} running pods"
                 )
 
         def finalizer():
             logger.info(
-                f"Restoring {OCS_OPERATOR_DEPLOYMENT} to {original_replicas} replicas"
+                f"Restoring {constants.OCS_OPERATOR_DEPLOYMENT} to {original_replicas} replicas"
             )
             _scale(original_replicas)
 
@@ -468,6 +470,7 @@ class TestMCGPerformanceProfiles:
         return _scale
 
     @tier3
+    @pytest.mark.polarion_id("OCS-8308")
     def test_profile_set_directly_on_noobaa_cr(
         self, clear_endpoint_overrides, restore_profile, ocs_operator_replicas
     ):
