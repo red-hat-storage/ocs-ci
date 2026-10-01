@@ -53,6 +53,8 @@ def write_verification_report(version, issue_key, report, root=None):
     document = {"key": key, "url": report.get("url") or _issue_url(key)}
     for name in REPORT_FIELDS:
         document[name] = report[name]
+        if name == "fix_version":
+            document["parent_issues"] = _parent_issues(report.get("parent_issues"))
     for name in OPTIONAL_REPORT_FIELDS:
         if report.get(name):
             document[name] = report[name]
@@ -63,6 +65,38 @@ def write_verification_report(version, issue_key, report, root=None):
     )
     _update_index(directory, version_name, path.name)
     return path
+
+
+def _parent_issues(value):
+    """
+    Normalize parent issues stored on a verification report.
+
+    Args:
+        value (list): Parent issue mappings from the report.
+
+    Returns:
+        list: key, summary, status, and relation. Empty when the issue has
+            no parent.
+
+    """
+    if not isinstance(value, list):
+        return []
+    cleaned = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("key") or "").strip()
+        if not _ISSUE_KEY.fullmatch(key):
+            continue
+        cleaned.append(
+            {
+                "key": key,
+                "summary": item.get("summary") or "",
+                "status": item.get("status") or "",
+                "relation": item.get("relation") or "",
+            }
+        )
+    return cleaned
 
 
 def _version_dirname(version):

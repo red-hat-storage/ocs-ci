@@ -12,6 +12,7 @@ TOOL_NAMES = (
     "jira_save_verification_report",
     "jira_search_issues",
 )
+_fetched_issues = {}
 
 
 def jira_search_issues(
@@ -49,11 +50,14 @@ def jira_search_issues(
 
 def jira_get_issue(issue_key: str) -> str:
     """
-    Return one issue's description, headed sections, and comments.
+    Return one issue's description, headed sections, links, and comments.
 
     Use this to read how the fix should be verified. Headed sections include
     verification_steps, steps_to_reproduce, and expected_results when those
-    headings are present.
+    headings are present.     verification_notes are the comments that change how
+    the fix is checked. source_issues are the original bugs for a backport or
+    clone, including their sections and verification notes. parent_issues lists
+    each parent or original issue with its key, summary, status, and relation.
 
     Args:
         issue_key (str): Jira issue key, for example DFBUGS-10425.
@@ -62,7 +66,9 @@ def jira_get_issue(issue_key: str) -> str:
         str: JSON for that issue.
 
     """
-    return json.dumps(_jira_helper().issue_for_verification(issue_key))
+    payload = _jira_helper().issue_for_verification(issue_key)
+    _fetched_issues[issue_key] = payload
+    return json.dumps(payload)
 
 
 def jira_save_verification_report(
@@ -73,7 +79,8 @@ def jira_save_verification_report(
 
     Call this after jira_get_issue, once bug_description, versions,
     environments, upgrade_scenario, verification_steps, additional_info, and
-    git_prs are filled. The file is reports/<version>/<issue_key>.yaml.
+    git_prs are filled. parent_issues is copied from the issue just read,
+    including each parent's status. The file is reports/<version>/<issue_key>.yaml.
     This writes a local file. It does not update Jira. During --dry-run the
     saved report records dry_run so a later run can see that Jira and other
     applications were left unchanged.
@@ -91,6 +98,9 @@ def jira_save_verification_report(
     from ocs_ci.agents.runtime.dry_run import dry_run_enabled
 
     report = json.loads(report_json)
+    fetched = _fetched_issues.get(issue_key)
+    if isinstance(fetched, dict) and "parent_issues" in fetched:
+        report["parent_issues"] = fetched["parent_issues"]
     if dry_run_enabled():
         report["dry_run"] = True
     path = write_verification_report(version, issue_key, report)
