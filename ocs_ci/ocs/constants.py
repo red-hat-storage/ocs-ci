@@ -1901,6 +1901,8 @@ ALERT_KUBE_NODE_NOT_READY = "KubeNodeNotReady"
 ALERT_KUBE_NODE_UNREACHABLE = "KubeNodeUnreachable"
 ALERT_KUBE_API_ERROR_BUDGET_BURN = "KubeAPIErrorBudgetBurn"
 ALERT_ETCD_HIGH_NUMBER_OF_LEADER_CHANGES = "etcdHighNumberOfLeaderChanges"
+ALERT_ETCD_GRPC_REQUESTS_SLOW = "etcdGRPCRequestsSlow"
+ALERT_CSV_ABNORMAL_FAILED_OVER_2_MIN = "CsvAbnormalFailedOver2Min"
 
 # Alerts that are known to be fired during OCP or ODF upgrade because pods,
 # nodes and operators are restarted in a rolling manner. Alerts collected
@@ -1933,6 +1935,11 @@ EXPECTED_UPGRADE_ALERTS = [
     # control plane components are restarted during OCP upgrade
     ALERT_KUBE_API_ERROR_BUDGET_BURN,
     ALERT_ETCD_HIGH_NUMBER_OF_LEADER_CHANGES,
+    # etcd members are restarted one by one and the remaining members serve
+    # the whole load, which increases the request latency
+    ALERT_ETCD_GRPC_REQUESTS_SLOW,
+    # CSVs go through Failed/Replacing phases while operators are upgraded
+    ALERT_CSV_ABNORMAL_FAILED_OVER_2_MIN,
     # Ceph daemons are restarted one by one and run mixed versions until the
     # ODF upgrade is finished
     ALERT_CLUSTERWARNINGSTATE,
@@ -1943,6 +1950,9 @@ EXPECTED_UPGRADE_ALERTS = [
     ALERT_MGRISMISSINGREPLICAS,
     ALERT_CEPH_MDS_MISSING_REPLICAS,
     ALERT_ODF_CORE_POD_RESTART,
+    # the provider server and the client operator are restarted during the
+    # upgrade, so the client heartbeat is missed for a while
+    ALERT_STORAGECLIENTHEARTBEATMISSED,
 ]
 
 # DR Pending Cleanup Alert (OCS 4.22+)
