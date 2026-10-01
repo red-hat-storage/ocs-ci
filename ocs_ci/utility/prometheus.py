@@ -941,19 +941,26 @@ class PrometheusAPI(object):
                 logger.error(error_msg)
                 raise AlertingError(error_msg)
 
-    def prometheus_log(self, prometheus_alert_list, log_level=logging.INFO):
+    def prometheus_log(
+        self, prometheus_alert_list, log_level=logging.INFO, ignored_alert_ids=None
+    ):
         """
         Log all alerts from Prometheus API to list
 
         Args:
             prometheus_alert_list (list): List to be populated with alerts
             log_level (int): Level used for logging of newly collected alerts
+            ignored_alert_ids (set): Identifiers of alerts (as returned by
+                get_alert_id) that are not added to the list. Useful for
+                ignoring alerts that were already raised before the collection
+                started.
 
         Returns:
             bool: True if alerts were successfully collected from Prometheus,
                 False if the Prometheus request failed
 
         """
+        ignored_alert_ids = ignored_alert_ids or set()
 
         with self._cluster_context():
             alerts_response = self.get(
@@ -962,6 +969,8 @@ class PrometheusAPI(object):
             msg = f"Request {alerts_response.request.url} failed"
             if alerts_response.ok:
                 for alert in alerts_response.json().get("data").get("alerts"):
+                    if get_alert_id(alert) in ignored_alert_ids:
+                        continue
                     if alert not in prometheus_alert_list:
                         logger.log(log_level, f"Adding {alert} to alert list")
                         prometheus_alert_list.append(alert)
@@ -1009,7 +1018,12 @@ class PrometheusAPI(object):
 class PrometheusAlertSubscriber(Timer):
 
     def __init__(
-        self, threading_lock, interval: float, alert_list=None, log_level=logging.INFO
+        self,
+        threading_lock,
+        interval: float,
+        alert_list=None,
+        log_level=logging.INFO,
+        ignored_alerts=None,
     ):
         """
         Args:
@@ -1021,9 +1035,14 @@ class PrometheusAlertSubscriber(Timer):
                 useful when the caller needs to access collected alerts also
                 before the subscriber is unsubscribed.
             log_level (int): Level used for logging of newly collected alerts
+            ignored_alerts (list): Alerts that are not collected. Typically
+                alerts that were already raised before the subscription
+                started and therefore were not caused by the measured
+                operation.
 
         """
         self.prometheus_alert_list = alert_list if alert_list is not None else []
+        self.ignored_alert_ids = {get_alert_id(alert) for alert in ignored_alerts or []}
         self.prometheus_api = PrometheusAPI(threading_lock=threading_lock)
         # Numbers of Prometheus polls that succeeded and failed. They allow the
         # consumer of collected alerts to distinguish an empty alert list
@@ -1045,7 +1064,9 @@ class PrometheusAlertSubscriber(Timer):
 
         """
         if self.prometheus_api.prometheus_log(
-            self.prometheus_alert_list, log_level=log_level
+            self.prometheus_alert_list,
+            log_level=log_level,
+            ignored_alert_ids=self.ignored_alert_ids,
         ):
             self.successful_polls += 1
         else:
@@ -1103,10 +1124,14 @@ def alert_collection(
     log_level=logging.DEBUG,
     status=None,
     stop_timeout=360,
+    pre_existing_alert_list=None,
 ):
     """
     Context manager that collects all Prometheus alerts fired during the
-    execution of the wrapped block of code.
+    execution of the wrapped block of code. Alerts that were already raised
+    before the wrapped block of code started were not caused by it, so they
+    are not collected. They are provided separately via
+    pre_existing_alert_list.
 
     Problems with Prometheus (e.g. unreachable endpoint during an upgrade of
     the monitoring stack) are logged but they do not interrupt the wrapped
@@ -1134,6 +1159,9 @@ def alert_collection(
             thread to terminate when the context manager is left. When the
             thread is still running after this timeout, the collection is
             recorded as incomplete.
+        pre_existing_alert_list (list): List to be populated with alerts that
+            were already raised when the collection started. Those alerts are
+            excluded from alert_list.
 
     Yields:
         list: Alerts collected so far. The list is complete once the context
@@ -1141,16 +1169,28 @@ def alert_collection(
 
     """
     alerts = alert_list if alert_list is not None else []
+    pre_existing_alerts = (
+        pre_existing_alert_list if pre_existing_alert_list is not None else []
+    )
     collection_status = status if status is not None else {}
     collection_status.update(
         {"started": False, "successful_polls": 0, "failed_polls": 0, "complete": False}
     )
     try:
+        PrometheusAPI(threading_lock=threading_lock).prometheus_log(
+            pre_existing_alerts, log_level=log_level
+        )
+        logger.info(
+            f"{len(pre_existing_alerts)} alerts were already raised before the "
+            "alert collection started and they will not be collected: "
+            f"{get_alert_names(pre_existing_alerts)}"
+        )
         subscriber = PrometheusAlertSubscriber(
             threading_lock=threading_lock,
             interval=interval,
             alert_list=alerts,
             log_level=log_level,
+            ignored_alerts=pre_existing_alerts,
         )
         subscriber.subscribe()
         collection_status["started"] = True
@@ -1186,6 +1226,27 @@ def alert_collection(
                     "alerts cannot be considered as complete."
                 )
         logger.info(f"Collected {len(alerts)} alerts: {get_alert_names(alerts)}")
+
+
+def get_alert_id(alert):
+    """
+    Get identifier of the provided alert. The identifier consists of all alert
+    labels and of the alert state, so that the same alert raised for two
+    different resources (or the same alert in a different state) is not
+    considered to be one alert. Parts of the alert that change over time
+    (e.g. the measured value or the activation timestamp) are not included.
+
+    Args:
+        alert (dict): Alert as returned by Prometheus API
+
+    Returns:
+        tuple: Hashable identifier of the alert
+
+    """
+    return (
+        tuple(sorted(alert.get("labels", {}).items())),
+        alert.get("state"),
+    )
 
 
 def get_alert_names(alerts):

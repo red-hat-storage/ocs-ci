@@ -1093,6 +1093,11 @@ def run_ocs_upgrade(
                 if upgrade_stats is not None
                 else None
             ),
+            pre_existing_alert_list=(
+                upgrade_stats["odf_upgrade"].setdefault("pre_existing_alerts", [])
+                if upgrade_stats is not None
+                else None
+            ),
         )
     else:
         log.warning(

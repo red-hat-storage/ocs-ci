@@ -159,6 +159,9 @@ class TestUpgradeOCP(ManageTest):
             threading_lock=threading_lock,
             alert_list=upgrade_stats["ocp_upgrade"].setdefault("alerts", []),
             status=upgrade_stats["ocp_upgrade"].setdefault("alert_collection", {}),
+            pre_existing_alert_list=upgrade_stats["ocp_upgrade"].setdefault(
+                "pre_existing_alerts", []
+            ),
         )
 
         with alert_collector, health_monitor(ceph_cluster):

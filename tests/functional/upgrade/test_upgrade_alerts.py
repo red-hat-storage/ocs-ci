@@ -37,9 +37,10 @@ def get_expected_alerts():
 def test_no_unexpected_alerts(upgrade_stats, upgrade_type):
     """
     Test that no unexpected alert was fired during the upgrade. Alerts that
-    are known to be fired during an upgrade are listed in
-    constants.EXPECTED_UPGRADE_ALERTS and can be extended by UPGRADE/
-    expected_alerts config option.
+    were already raised before the upgrade started are not considered to be
+    fired during the upgrade. Alerts that are known to be fired during an
+    upgrade are listed in constants.EXPECTED_UPGRADE_ALERTS and can be
+    extended by UPGRADE/expected_alerts config option.
     """
     alerts = upgrade_stats[upgrade_type].get("alerts")
     if alerts is None:
@@ -63,6 +64,13 @@ def test_no_unexpected_alerts(upgrade_stats, upgrade_type):
             "incomplete and it is not possible to verify that no unexpected "
             "alert was fired"
         )
+
+    pre_existing_alerts = upgrade_stats[upgrade_type].get("pre_existing_alerts") or []
+    log.info(
+        f"Alerts raised before {upgrade_type} that are not considered as "
+        f"alerts fired during the upgrade: {get_alert_names(pre_existing_alerts)}"
+    )
+    log.debug(f"Alerts raised before {upgrade_type}: {pre_existing_alerts}")
 
     firing_alerts = [alert for alert in alerts if alert.get("state") == "firing"]
     pending_alerts = [alert for alert in alerts if alert.get("state") == "pending"]
