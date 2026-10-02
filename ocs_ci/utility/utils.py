@@ -5832,24 +5832,92 @@ def configure_chrony_and_wait_for_machineconfig_status(
         wait_for_machineconfigpool_status(role, timeout=timeout)
 
 
-def modify_csv(csv, replace_from, replace_to):
+def modify_csv(csv, replace_from, replace_to, namespace=None):
     """
-    Modify the CSV
+    Modify the CSV with support for pattern-based image replacement.
+
+    This function supports two modes:
+    1. Exact replacement (backward compatible): If replace_from contains
+       '@sha256:' or ':tag', it performs exact string replacement.
+    2. Pattern-based replacement: If replace_from is just the base image path
+       (e.g., 'registry.redhat.io/odf4/ocs-rhel9-operator'), it will match
+       and replace ALL occurrences of that image regardless of tag or SHA.
 
     Args:
         csv (str): The CSV name
-        replace_from (str): The pattern to replace from in the CSV
-        replace_to (str): The pattern to replace to in the CSV
+        replace_from (str): The image to replace. Can be:
+            - Exact image with digest: 'image@sha256:abc123...'
+            - Exact image with tag: 'image:tag'
+            - Base image path: 'image' (will match any tag/digest)
+        replace_to (str): The replacement image (can include tag or digest)
+        namespace (str, optional): Namespace where CSV is located.
+            If None, uses config.ENV_DATA["cluster_namespace"].
+            Defaults to None.
+
+    Examples:
+        # Pattern-based (replaces all SHAs/tags for this image):
+        modify_csv(
+            csv="ocs-operator.v4.19.0",
+            replace_from="registry.redhat.io/odf4/ocs-rhel9-operator",
+            replace_to="quay.io/custom/ocs-operator:latest"
+        )
+
+        # Exact replacement (backward compatible):
+        modify_csv(
+            csv="ocs-operator.v4.19.0",
+            replace_from="registry.redhat.io/odf4/ocs-rhel9-operator@sha256:582e236...",
+            replace_to="quay.io/custom/ocs-operator@sha256:abc123..."
+        )
+
+        # Custom namespace:
+        modify_csv(
+            csv="ocs-operator.v4.19.0",
+            replace_from="registry.redhat.io/odf4/ocs-rhel9-operator",
+            replace_to="quay.io/custom/ocs-operator:latest",
+            namespace="openshift-storage"
+        )
 
     """
+    # Use provided namespace or fallback to cluster_namespace from config
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    # Determine if this is pattern-based or exact replacement
+    # If replace_from contains @ or : (after last /), it's exact replacement
+    image_name = replace_from.split("/")[-1] if "/" in replace_from else replace_from
+    is_exact_replacement = "@" in image_name or ":" in image_name
+
+    if is_exact_replacement:
+        # Backward compatible: exact string replacement using simple sed
+        sed_pattern = f"s,{replace_from},{replace_to},g"
+        log.info(
+            f"CSV {csv} in namespace {namespace} will be modified using exact replacement:\n"
+            f"  From: {replace_from}\n"
+            f"  To:   {replace_to}"
+        )
+    else:
+        # Pattern-based: match image path with any tag or digest
+        # Escape special regex characters in the image path
+        escaped_from = re.escape(replace_from)
+        # Create pattern that matches: <image>@sha256:<hash> OR <image>:<tag>
+        # The pattern captures either @sha256:HASH or :TAG and replaces entire match
+        sed_pattern = (
+            f"s,{escaped_from}(@sha256:[a-f0-9]{{64}}|:[^[:space:]@,\"']+),"
+            f"{replace_to},g"
+        )
+        log.info(
+            f"CSV {csv} in namespace {namespace} will be modified using pattern-based replacement:\n"
+            f"  Pattern: {replace_from}(@sha256:* OR :*)\n"
+            f"  To:      {replace_to}\n"
+            "This will replace ALL occurrences of the image regardless of tag/digest."
+        )
+
     data = (
-        f"oc -n openshift-storage get csv {csv} -o yaml | sed"
-        f" 's,{replace_from},{replace_to},g' | oc replace -f -"
+        f"oc -n {namespace} get csv {csv} -o yaml | "
+        f"sed -E '{sed_pattern}' | "
+        "oc replace -f -"
     )
-    log.info(
-        f"CSV {csv} will be modified: {replace_from} will be replaced "
-        f"with {replace_to}.\nThe command that will be used for that is:\n{data}"
-    )
+
+    log.info(f"Command to be executed:\n{data}")
 
     temp_file = NamedTemporaryFile(mode="w+", prefix="csv_modification", suffix=".sh")
 
