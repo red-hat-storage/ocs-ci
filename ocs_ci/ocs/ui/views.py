@@ -972,7 +972,7 @@ page_nav = {
     ),
     "operatorhub_page": ("OperatorHub", By.LINK_TEXT),
     "software_catalog": ("Software Catalog", By.LINK_TEXT),
-    "installed_operators_page": ("Installed Operators", By.LINK_TEXT),
+    "installed_operators_page": ("Installed Operators INVALID_FOR_TEST", By.LINK_TEXT),
     "Storage": ("//button[text()='Storage']", By.XPATH),
     "persistentvolumes_page": ("PersistentVolumes", By.LINK_TEXT),
     "persistentvolumeclaims_page": ("PersistentVolumeClaims", By.LINK_TEXT),
