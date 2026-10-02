@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 from ocs_ci.agents.runtime.discover import iter_agent_dirs, load_agent_spec
@@ -75,6 +76,16 @@ def build_request(argv, env):
         help="Extra argument passed to the agent. Repeat for more than one.",
     )
     parser.add_argument(
+        "--provider",
+        default=None,
+        choices=["openai", "claude", "claude_code"],
+        help=(
+            "Chat model. openai is the default. claude_code runs Claude Code "
+            "on Vertex with agents_credentials.claude_code. "
+            "Overrides OCS_AGENT_PROVIDER."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help=(
@@ -97,6 +108,7 @@ def build_request(argv, env):
     return {
         "agent": agent,
         "message": message,
+        "provider": args.provider,
         "args": _agent_args(args, env),
         "result_file": result_file,
         "jenkins": {
@@ -289,7 +301,7 @@ def invoke_agent(agent_dir, request):
             config={"recursion_limit": _recursion_limit()},
         )
 
-    with activate_dry_run(request):
+    with activate_provider(request), activate_dry_run(request):
         state = asyncio.run(_run())
     return {
         "ok": True,
@@ -298,6 +310,30 @@ def invoke_agent(agent_dir, request):
         "reply": _final_reply(state),
         "state": _public_state(state),
     }
+
+
+@contextmanager
+def activate_provider(request):
+    """
+    Select the chat model for one agent run.
+
+    Args:
+        request (dict): Value returned by build_request. provider is set when
+            --provider was passed.
+    """
+    provider = (request.get("provider") or "").strip()
+    if not provider:
+        yield
+        return
+    previous = os.environ.get("OCS_AGENT_PROVIDER")
+    os.environ["OCS_AGENT_PROVIDER"] = provider
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("OCS_AGENT_PROVIDER", None)
+        else:
+            os.environ["OCS_AGENT_PROVIDER"] = previous
 
 
 def _recursion_limit():
@@ -413,7 +449,8 @@ def main(argv=None, env=None, invoke=None):
         agent_dir = resolve_agent_dir(request["agent"])
         load_agent_spec(agent_dir)
         runner = invoke or invoke_agent
-        result = runner(agent_dir, request)
+        with activate_provider(request):
+            result = runner(agent_dir, request)
         result.setdefault("ok", True)
         code = EXIT_OK if result["ok"] else EXIT_AGENT_ERROR
     except LookupError as exc:

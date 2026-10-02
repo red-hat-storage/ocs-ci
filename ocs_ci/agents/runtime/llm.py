@@ -12,6 +12,8 @@ def get_chat_model():
     The default provider is OpenAI. The API key is
     agents_credentials.openai.api_key in data/auth.yaml, with OPENAI_API_KEY
     as a fallback. OCS_AGENT_PROVIDER=claude selects the Claude CLI.
+    OCS_AGENT_PROVIDER=claude_code selects Claude Code on Vertex and reads
+    the base64 service account in agents_credentials.claude_code.
     OCS_AGENT_MODEL overrides the model name. The OpenAI default is gpt-4o.
 
     Returns:
@@ -19,12 +21,21 @@ def get_chat_model():
 
     Raises:
         NotImplementedError: The selected provider's package is not installed.
-        ValueError: OpenAI was selected and no API key is configured.
+        ValueError: OpenAI was selected and no API key is configured, Claude
+            Code was selected and agents_credentials.claude_code is unusable,
+            or the provider name is unknown.
     """
     provider = os.environ.get("OCS_AGENT_PROVIDER", "").strip().lower()
+    provider = provider.replace("-", "_")
+    if provider in {"", "openai"}:
+        return _openai_model()
     if provider == "claude":
         return _claude_model()
-    return _openai_model()
+    if provider == "claude_code":
+        return _claude_code_model()
+    raise ValueError(
+        f"Unknown OCS_AGENT_PROVIDER {provider}. Use openai, claude, or claude_code."
+    )
 
 
 def _openai_model():
@@ -86,7 +97,35 @@ def _claude_model():
     """
     from ocs_ci.agents.runtime.claude_cli import ClaudeCliChat
 
+    return ClaudeCliChat(model_name=_claude_model_name())
+
+
+def _claude_code_model():
+    """
+    Return Claude Code authenticated with the Vertex service account.
+
+    Returns:
+        ClaudeCliChat: Print-mode Claude Code model using Vertex.
+
+    Raises:
+        ValueError: agents_credentials.claude_code is missing or not a
+            base64-encoded service account.
+    """
+    from ocs_ci.agents.runtime.claude_cli import ClaudeCliChat
+    from ocs_ci.agents.runtime.claude_code import load_claude_code_account
+
+    load_claude_code_account()
+    return ClaudeCliChat(model_name=_claude_model_name(), use_vertex=True)
+
+
+def _claude_model_name():
+    """
+    Return the Claude model name, ignoring an OpenAI model name.
+
+    Returns:
+        str: OCS_AGENT_MODEL, or an empty string when it is unset or a gpt model.
+    """
     model_name = os.environ.get("OCS_AGENT_MODEL") or ""
     if model_name.startswith("gpt-"):
-        model_name = ""
-    return ClaudeCliChat(model_name=model_name)
+        return ""
+    return model_name
