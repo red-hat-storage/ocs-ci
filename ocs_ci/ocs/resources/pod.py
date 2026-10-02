@@ -2503,6 +2503,13 @@ def wait_for_noobaa_db_ready(timeout=300, sleep=10, stability_count=3):
         stability_count (int): Number of consecutive ready checks required
 
     """
+    if config.ENV_DATA.get("noobaa_external_pgsql"):
+        logger.info(
+            "NooBaa is configured with an external PostgreSQL DB; there is no "
+            "internal CNPG DB cluster to wait for. Skipping NooBaa DB readiness check."
+        )
+        return
+
     namespace = config.ENV_DATA["cluster_namespace"]
     stable_checks = 0
 
