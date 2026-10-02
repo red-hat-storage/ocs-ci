@@ -719,7 +719,8 @@ obc = {
         By.XPATH,
     ),
     "obc_menu_name": (
-        "//a[normalize-space()='Object Bucket Claims'] | //span[normalize-space()='Object Bucket Claims']/..",
+        "//*[@data-test='horizontal-link-Object Bucket Claims']"
+        " | //a[normalize-space()='Object Bucket Claims']",
         By.XPATH,
     ),
     "storageclass_dropdown": ("sc-dropdown", By.ID),
