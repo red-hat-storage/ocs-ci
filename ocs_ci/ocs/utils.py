@@ -2088,6 +2088,8 @@ def get_nb_db_psql_version_from_image():
         )
 
 
+# Retry on failures as during upgrades we may encounter transient errors like "the database system is shutting down"
+@retry(UnexpectedBehaviour, tries=10, delay=10, backoff=1)
 def query_nb_db_psql_version():
     """
     Query the NooBaa DB for its PostgreSQL version
