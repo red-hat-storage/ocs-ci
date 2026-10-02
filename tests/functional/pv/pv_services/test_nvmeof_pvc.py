@@ -9,12 +9,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
 )
 from ocs_ci.framework.testlib import ManageTest
-from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.nvmeof import (
+    get_nvmeof_storageclass,
+    wait_for_nvmeof_gateway_pods_running,
+)
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
 
@@ -36,30 +37,10 @@ class TestNvmeofPvc(ManageTest):
             - NVMe-oF StorageClass exists.
 
         """
-        namespace = config.ENV_DATA["cluster_namespace"]
-
-        # NVMe-oF StorageClass must exist
-        sc_ocp_obj = OCP(kind=constants.STORAGECLASS, namespace=namespace)
-        assert sc_ocp_obj.is_exist(resource_name=constants.CEPH_NVMEOF_SC), (
-            f"NVMe-oF StorageClass {constants.CEPH_NVMEOF_SC} does not exist. "
-            "Ensure the StorageCluster was deployed with nvmeof enabled."
-        )
-        logger.assertion("NVMe-oF StorageClass %s exists", constants.CEPH_NVMEOF_SC)
-
-        # NVMe-oF Gateway pods must be deployed and healthy
-        gateway_pods = pod.get_pods_having_label(
-            label=constants.NVMEOF_APP_LABEL, namespace=namespace
-        )
-        assert gateway_pods, (
-            "No NVMe-oF Gateway pods found with label "
-            f"{constants.NVMEOF_APP_LABEL} in namespace {namespace}"
-        )
-        gateway_pod_names = [pod_data["metadata"]["name"] for pod_data in gateway_pods]
-        logger.info("Found NVMe-oF Gateway pods: %s", gateway_pod_names)
-        assert pod.wait_for_pods_to_be_running(
-            namespace=namespace, pod_names=gateway_pod_names, timeout=300
-        ), "NVMe-oF Gateway pods are not in Running state"
+        wait_for_nvmeof_gateway_pods_running()
         logger.assertion("All NVMe-oF Gateway pods are healthy (Running)")
+        get_nvmeof_storageclass()
+        logger.assertion(f"NVMe-oF StorageClass {constants.CEPH_NVMEOF_SC} exists")
 
     @pytest.fixture()
     def nvmeof_storageclass(self):
@@ -71,12 +52,7 @@ class TestNvmeofPvc(ManageTest):
             OCS: OCS instance of the NVMe-oF StorageClass
 
         """
-        sc_ocp_obj = OCP(
-            kind=constants.STORAGECLASS,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=constants.CEPH_NVMEOF_SC,
-        )
-        return OCS(**sc_ocp_obj.get())
+        return get_nvmeof_storageclass()
 
     @polarion_id("OCS-8237")
     def test_nvmeof_pvc_data_integrity_and_reclaim(
