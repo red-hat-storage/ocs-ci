@@ -1154,14 +1154,17 @@ def alert_collection(
             "successful_polls" (int) and "failed_polls" (int) - numbers of
             successful and failed Prometheus polls, "complete" (bool) -
             collection thread finished before the context manager was left and
-            the collected alerts are complete.
+            the collected alerts are complete, "baseline_collected" (bool) -
+            alerts that were already raised before the collection started were
+            successfully collected and therefore excluded from alert_list.
         stop_timeout (float): Number of seconds to wait for the collection
             thread to terminate when the context manager is left. When the
             thread is still running after this timeout, the collection is
             recorded as incomplete.
         pre_existing_alert_list (list): List to be populated with alerts that
             were already raised when the collection started. Those alerts are
-            excluded from alert_list.
+            excluded from alert_list. When they cannot be collected, the list
+            stays empty and "baseline_collected" in status is False.
 
     Yields:
         list: Alerts collected so far. The list is complete once the context
@@ -1174,17 +1177,35 @@ def alert_collection(
     )
     collection_status = status if status is not None else {}
     collection_status.update(
-        {"started": False, "successful_polls": 0, "failed_polls": 0, "complete": False}
+        {
+            "started": False,
+            "successful_polls": 0,
+            "failed_polls": 0,
+            "complete": False,
+            "baseline_collected": False,
+        }
     )
     try:
-        PrometheusAPI(threading_lock=threading_lock).prometheus_log(
+        if PrometheusAPI(threading_lock=threading_lock).prometheus_log(
             pre_existing_alerts, log_level=log_level
-        )
-        logger.info(
-            f"{len(pre_existing_alerts)} alerts were already raised before the "
-            "alert collection started and they will not be collected: "
-            f"{get_alert_names(pre_existing_alerts)}"
-        )
+        ):
+            collection_status["baseline_collected"] = True
+            logger.info(
+                f"{len(pre_existing_alerts)} alerts were already raised before "
+                "the alert collection started and they will not be collected: "
+                f"{get_alert_names(pre_existing_alerts)}"
+            )
+        else:
+            # The wrapped operation is not interrupted because the alert
+            # collection is only a supplementary activity. The consumer of
+            # the collected alerts is informed via the status that the
+            # collected alerts can contain alerts that were raised before.
+            logger.error(
+                "Alerts that were already raised before the alert collection "
+                "started could not be collected, so it is not possible to "
+                "distinguish them from alerts raised during the following "
+                "operation."
+            )
         subscriber = PrometheusAlertSubscriber(
             threading_lock=threading_lock,
             interval=interval,

@@ -64,6 +64,11 @@ def test_no_unexpected_alerts(upgrade_stats, upgrade_type):
             "incomplete and it is not possible to verify that no unexpected "
             "alert was fired"
         )
+        assert collection_status.get("baseline_collected"), (
+            f"Alerts that were already raised before {upgrade_type} could not "
+            f"be collected ({collection_status}) so it is not possible to "
+            "distinguish them from alerts fired during the upgrade"
+        )
 
     pre_existing_alerts = upgrade_stats[upgrade_type].get("pre_existing_alerts") or []
     log.info(
