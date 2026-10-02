@@ -13,11 +13,13 @@ class ClaudeCliChat(BaseChatModel):
     """
     Claude Code print mode as a LangChain chat model.
 
-    The CLI is already authenticated on the machine. Each turn asks for either
-    tool calls or a final reply as JSON.
+    With use_vertex, the CLI authenticates to Vertex from
+    agents_credentials.claude_code. Otherwise the CLI is already authenticated
+    on the machine. Each turn asks for either tool calls or a final reply as JSON.
     """
 
     model_name: str = ""
+    use_vertex: bool = False
 
     @property
     def _llm_type(self):
@@ -49,7 +51,7 @@ class ClaudeCliChat(BaseChatModel):
             ChatResult: One assistant message.
         """
         prompt = _conversation_prompt(messages, kwargs.get("tools") or [])
-        text = _run_claude(prompt, self.model_name)
+        text = _run_claude(prompt, self.model_name, vertex=self.use_vertex)
         return ChatResult(
             generations=[ChatGeneration(message=parse_agent_message(text))]
         )
@@ -128,13 +130,14 @@ def _conversation_prompt(messages, tools):
     return "\n".join(lines)
 
 
-def _run_claude(prompt, model_name):
+def _run_claude(prompt, model_name, vertex=False):
     """
     Run Claude print mode and return stdout.
 
     Args:
         prompt (str): Full prompt, passed on stdin.
         model_name (str): Optional --model value.
+        vertex (bool): Authenticate with the Claude Code service account.
 
     Returns:
         str: CLI stdout.
@@ -145,6 +148,11 @@ def _run_claude(prompt, model_name):
     command = ["claude", "-p", "--output-format", "text"]
     if model_name:
         command.extend(["--model", model_name])
+    env = None
+    if vertex:
+        from ocs_ci.agents.runtime.claude_code import claude_code_environment
+
+        env = claude_code_environment()
     completed = subprocess.run(
         command,
         input=prompt,
@@ -152,6 +160,7 @@ def _run_claude(prompt, model_name):
         capture_output=True,
         timeout=180,
         check=False,
+        env=env,
     )
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or "").strip()

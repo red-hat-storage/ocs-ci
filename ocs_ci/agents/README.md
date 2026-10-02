@@ -62,6 +62,7 @@ The chat model is OpenAI. Put the key in `data/auth.yaml`:
 agents_credentials:
   openai:
     api_key: <openai-api-key>
+  claude_code: <base64-service-account-json>
   jira:
     url: https://redhat.atlassian.net
     email: <jira-email>
@@ -70,7 +71,11 @@ agents_credentials:
 
 `OPENAI_API_KEY` is used when that file entry is empty. `OCS_AGENT_MODEL`
 overrides the model name. The default is `gpt-4o`. Set
-`OCS_AGENT_PROVIDER=claude` to use a logged-in Claude CLI instead. The local
+`OCS_AGENT_PROVIDER=claude` to use a logged-in Claude CLI instead. Set
+`OCS_AGENT_PROVIDER=claude_code` or `--provider claude_code` to run Claude
+Code on Vertex. That option reads `agents_credentials.claude_code` in
+`data/auth.yaml`, a base64-encoded service account JSON. `OCS_AGENT_CLOUD_ML_REGION`
+overrides the Vertex region. The default is `us-east5`. The local
 Jira server reads `agents_credentials.jira` in `data/auth.yaml` (`url`,
 `email`, `token`). Other ocs-ci callers still use `config.AUTH.jira`, the
 top-level `jira` section, or `/etc/jira.cfg`. `jira_verification` reads issues
