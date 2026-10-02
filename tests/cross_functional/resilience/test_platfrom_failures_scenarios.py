@@ -1,14 +1,14 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import green_squad, resiliency
+from ocs_ci.framework.pytest_customization.marks import white_squad, resiliency
 from ocs_ci.resiliency.resiliency_helper import Resiliency
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 log = logging.getLogger(__name__)
 
 
-@green_squad
+@white_squad
 @resiliency
 class TestPlatformFailureScenarios:
     """
