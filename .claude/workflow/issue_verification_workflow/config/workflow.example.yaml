@@ -1,0 +1,115 @@
+# Shared issue verification workflow config
+#
+# Copy to workflow.yaml (gitignored) and customize:
+#   cp .claude/workflow/issue_verification_workflow/config/workflow.example.yaml \
+#      .claude/workflow/issue_verification_workflow/config/workflow.yaml
+#
+# Used by:
+#   - pipeline_cli.py (full workflow)
+#   - ocs_ci_live_repro/verify_cli.py
+#   - ocs_ci_test_match/test_match_cli.py
+#
+# Keep secrets in data/auth.yaml (jira + jenkins). This file holds run parameters only.
+
+pipeline: issue_verification
+description: ODF issue verification run
+
+# Optional credential file paths (secrets live in data/auth.yaml)
+auth:
+  auth_file: data/auth.yaml
+  jira_config: null
+  # reporting.slack / reporting.email — see ocs_ci_reporting/README.md
+
+# Pipeline parameters (passed to workflow stages)
+parameters:
+  odf_version: "4.22"
+  deploy_job_url: null
+  # Example:
+  # deploy_job_url: https://jenkins-csb-odf-qe-ocs4.dno.corp.redhat.com/job/qe-deploy-ocs-cluster/123/
+  force_live_repro: false
+  # Optional: explicit issue list (skips ON_QA JQL search in stage 1)
+  # issues:
+  #   - DFBUGS-784
+  #   - DFBUGS-1234
+
+# Workflow defaults (override issue_verification.yaml defaults)
+defaults:
+  dry_run: true
+  top_n: 10
+  use_claude: false
+  test_match_backend: auto
+  refresh_jira: true
+  include_fix_prs: true
+  live_repro_dry_run: true
+  skip_on_env_mismatch: true
+  oc_command_path: oc
+  live_repro_model: null
+  live_repro_max_turns: 40
+  live_repro_backend: auto
+  tests_per_issue: 1
+  repro_steps_backend: auto
+  repro_claude_model: null
+  repro_claude_max_turns: 20
+  reporting_dry_run: true
+  reporting_template: issue_verification.md.j2
+  reporting_channels:
+    - type: file
+  issue_summary_enabled: true
+  issue_summary_use_claude: true
+  issue_summary_model: null
+
+# Per-agent settings (workflow + standalone agent CLIs)
+agents:
+  jira_intake:
+    project: "Data Foundation Bugs"
+    issue_type: Bug
+    status: ON_QA
+    # Alternative location for explicit issues (parameters.issues takes precedence):
+    # issues:
+    #   - DFBUGS-784
+
+  repro_steps:
+    refresh_jira: true
+    include_fix_prs: true
+    backend: auto
+    model: null
+    max_turns: 20
+
+  live_repro:
+    dry_run: true
+    oc_command_path: oc
+    skip_on_env_mismatch: true
+    backend: auto
+    max_turns: 40
+    model: null
+
+  test_match:
+    top_n: 10
+    backend: auto
+    model: null
+
+  ocs_ci_run:
+    dry_run: true
+    tests_per_issue: 1
+    run_teardown: false
+
+  reporting:
+    template: issue_verification.md.j2
+    format: markdown
+    dry_run: true
+    channels:
+      - type: file
+    issue_summary_enabled: true
+    issue_summary_use_claude: true
+    issue_summary_model: null
+      # - type: slack
+      # - type: email
+      #   to: [team@example.com]
+    # auth_file: data/auth.yaml
+
+# Run control (CLI flags override when set)
+run:
+  run_id: null
+  from_stage: null
+  until_stage: null
+  force: false
