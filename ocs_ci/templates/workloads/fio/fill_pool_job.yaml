@@ -13,24 +13,23 @@ spec:
       restartPolicy: Never
       containers:
       - name: filler
-        image: quay.io/ocsci/busybox:latest
+        # fedora:fio provides GNU dd and fio. FillPoolJob.create overrides command.
+        image: quay.io/ocsci/fedora:fio
         imagePullPolicy: IfNotPresent
         command:
           - sh
           - -c
-          - |
-            echo "Filling PVC with zeros..."
-            dd if=${INPUT_FILE:-/dev/zero} of=/mnt/fill/testfile bs=${BLOCK_SIZE:-1M}
+          - echo "Filling PVC..."
         env:
         - name: BLOCK_SIZE
-          value: "1M"
+          value: "4M"
         resources:
           requests:
-            cpu: "100m"
-            memory: "128Mi"
-          limits:
             cpu: "500m"
-            memory: "256Mi"
+            memory: "512Mi"
+          limits:
+            cpu: "2"
+            memory: "2Gi"
         volumeMounts:
           - name: volume
             mountPath: /mnt/fill
