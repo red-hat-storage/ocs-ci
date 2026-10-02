@@ -32,6 +32,8 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
 )
 from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.ocs.resources.drpc import DRPC
+
 from ocs_ci.ocs.utils import get_primary_cluster_config, get_non_acm_cluster_config
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import clone_repo, run_cmd, TimeoutSampler
@@ -510,7 +512,7 @@ class BusyBox(DRWorkload):
                     self.managed_clusterset_binding_file,
                 )
             run_cmd(
-                f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}"
+                f"oc delete --wait=false -k {self.workload_subscription_dir}/{self.workload_name}"
             )
 
             for cluster in get_non_acm_cluster_config():
@@ -529,6 +531,7 @@ class BusyBox(DRWorkload):
             TimeoutExpired,
             TimeoutExpiredError,
             TimeoutError,
+            AssertionError,
         ) as ex:
             err_msg = (
                 f"Failed to delete the workload: {self.workload_name}, namespace: {self.workload_namespace}, "
@@ -683,7 +686,7 @@ class BusyBox_AppSet(DRWorkload):
             if _app_set["kind"] == constants.APPLICATION_SET:
                 return _app_set["spec"]["template"]["spec"]["destination"]["namespace"]
 
-    def _get_applicaionset_name(self):
+    def _get_applicationset_name(self):
         """
         Get ApplicationSet name
 
@@ -704,11 +707,11 @@ class BusyBox_AppSet(DRWorkload):
 
         self.check_pod_pvc_status(skip_replication_resources=False)
 
-        appset_resource_name = (
-            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
-        )
-
         if self.appset_model == "pull":
+            config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+            appset_resource_name = (
+                self._get_applicationset_name() + "-" + self.preferred_primary_cluster
+            )
             sampler = TimeoutSampler(
                 120, sleep=5, func=self.check_workload_health_status
             )
@@ -719,14 +722,14 @@ class BusyBox_AppSet(DRWorkload):
 
     def check_workload_health_status(self):
         """
-        Checks the health status of the workload and returns whether it is healthy.
+        Checks workload health on the primary managed cluster.
 
         Returns:
             bool: True if the health status is "Healthy", False otherwise
 
         """
         appset_resource_name = (
-            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
+            self._get_applicationset_name() + "-" + self.preferred_primary_cluster
         )
         appset_obj = ocp.OCP(
             kind=constants.APPLICATION_ARGOCD,
@@ -734,7 +737,10 @@ class BusyBox_AppSet(DRWorkload):
             namespace=constants.GITOPS_CLUSTER_NAMESPACE,
         )
         health_status = appset_obj.get().get("status").get("health").get("status")
-        log.info(f"{appset_resource_name} health status: {health_status}")
+        log.info(
+            f"{appset_resource_name} health status on cluster "
+            f"{self.preferred_primary_cluster}: {health_status}"
+        )
         return health_status == "Healthy"
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
@@ -769,7 +775,14 @@ class BusyBox_AppSet(DRWorkload):
         )
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
-            run_cmd(cmd=f"oc delete -f {self.appset_yaml_file}", timeout=900)
+            run_cmd(f"oc delete --wait=false -f {self.appset_yaml_file}")
+
+            DRPC(
+                namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+                resource_name=f"{self.appset_placement_name}-drpc",
+            ).wait_for_progression_status(
+                constants.STATUS_DELETING, success_if_deleted=True
+            )
 
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
@@ -787,6 +800,7 @@ class BusyBox_AppSet(DRWorkload):
             TimeoutExpired,
             TimeoutExpiredError,
             TimeoutError,
+            AssertionError,
         ) as ex:
             err_msg = (
                 f"Failed to delete the workload: {self.workload_name}, namespace: {self.workload_namespace}, "
@@ -1084,9 +1098,20 @@ class CnvWorkload(DRWorkload):
         """
         try:
             config.switch_acm_ctx()
-            run_cmd(cmd=f"oc delete -f {self.cnv_workload_yaml_file}", timeout=900)
-            if self.workload_type == constants.SUBSCRIPTION:
-                run_cmd(f"oc delete -f {self.channel_yaml_file}")
+            run_cmd(f"oc delete --wait=false -f {self.cnv_workload_yaml_file}")
+
+            if self.workload_type == constants.APPLICATION_SET:
+                DRPC(
+                    namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+                    resource_name=f"{self.cnv_workload_placement_name}-drpc",
+                ).wait_for_progression_status(
+                    constants.STATUS_DELETING, success_if_deleted=True
+                )
+            else:
+                DRPC(namespace=self.workload_namespace).wait_for_progression_status(
+                    constants.STATUS_DELETING, success_if_deleted=True
+                )
+
             for cluster, secret_obj in zip(
                 get_non_acm_cluster_config(), self.vm_secret_obj
             ):
@@ -1104,10 +1129,15 @@ class CnvWorkload(DRWorkload):
                 )
                 vm_obj.wait_for_delete(timeout=300)
 
+            if self.workload_type == constants.SUBSCRIPTION:
+                config.switch_acm_ctx()
+                run_cmd(f"oc delete -f {self.channel_yaml_file}")
+
         except (
             TimeoutExpired,
             TimeoutExpiredError,
             TimeoutError,
+            AssertionError,
             UnexpectedBehaviour,
         ) as ex:
             err_msg = f"Failed to delete the workload: {ex}"

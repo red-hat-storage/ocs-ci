@@ -1,4 +1,5 @@
 import logging
+import platform
 import pytest
 import time
 
@@ -8,8 +9,19 @@ from ocs_ci.deployment import acm
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility.utils import run_cmd
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    CephHealthException,
+    CephHealthNotRecoveredException,
+    CephHealthRecoveredException,
+    TimeoutExpiredError,
+    UnexpectedDeploymentConfiguration,
+)
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.dr_helpers import (
+    check_rbd_mirror_running,
+    wait_for_mirroring_status_ok,
+)
 
 log = logging.getLogger(__name__)
 
@@ -31,10 +43,12 @@ def pytest_collection_modifyitems(items):
                 items.remove(item)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True, scope="session")
 def check_subctl_cli():
-    # Check whether subctl cli is present
     if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        return
+    if platform.system() == "Darwin":
+        log.warning("subctl binary is not available for macOS, skipping download")
         return
     try:
         run_cmd("./bin/subctl")
@@ -42,6 +56,57 @@ def check_subctl_cli():
         log.debug("subctl binary not found, downloading now...")
         submariner = acm.Submariner()
         submariner.download_binary()
+
+
+@pytest.fixture(autouse=True, scope="function")
+def rdr_health_check():
+    """
+    Verify cluster health on both managed clusters before each RDR test.
+    Checks Ceph health, rbd-mirror daemon status, and mirroring health.
+
+    """
+    if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        return
+
+    if config.RUN["cli_params"].get("dev_mode"):
+        log.info("Skipping RDR health checks for development mode")
+        return
+
+    restore_index = config.cur_index
+    try:
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            if not config.RUN.get("cephcluster"):
+                continue
+            cluster_name = config.ENV_DATA.get("cluster_name")
+            log.info(f"Running RDR health check on managed cluster: {cluster_name}")
+            try:
+                helpers.ceph_health_check_with_toolbox_recovery(
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    tries=5,
+                    delay=10,
+                )
+                log.info(f"Ceph health check passed on {cluster_name}")
+            except (CephHealthException, CephHealthNotRecoveredException) as e:
+                log.error(f"Ceph health check failed on {cluster_name}: {e}")
+                pytest.skip(f"Ceph health check failed on {cluster_name}")
+            except CephHealthRecoveredException:
+                log.warning(
+                    f"Ceph health was not OK but recovered on {cluster_name}. "
+                    "Proceeding with test execution."
+                )
+            try:
+                check_rbd_mirror_running()
+            except UnexpectedDeploymentConfiguration as e:
+                log.error(f"rbd-mirror daemon check failed on {cluster_name}: {e}")
+                pytest.skip(f"rbd-mirror daemon check failed on {cluster_name}")
+        try:
+            wait_for_mirroring_status_ok(timeout=120)
+        except TimeoutExpiredError:
+            log.error("Mirroring health is not OK on managed clusters")
+            pytest.skip("Mirroring health is not OK on managed clusters")
+    finally:
+        config.switch_ctx(restore_index)
 
 
 @pytest.fixture()
@@ -146,7 +211,11 @@ def scale_deployments(request):
         },
     ]
 
+    cluster_name = []
+
     def _scale(status="down"):
+        if status == "down":
+            cluster_name.append(config.current_cluster_name())
         replica_count = 0 if status == "down" else 1
         for dep in deployments_to_scale:
             try:
@@ -162,6 +231,9 @@ def scale_deployments(request):
 
     def teardown():
         log.info("Finalizer: scaling up deployments")
+        if cluster_name:
+            log.info(f"Switching to cluster '{cluster_name[0]}' before scaling up")
+            config.switch_to_cluster_by_name(cluster_name[0])
         _scale("up")
 
     request.addfinalizer(teardown)
