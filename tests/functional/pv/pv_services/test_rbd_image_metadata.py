@@ -1,5 +1,7 @@
 import logging
 
+import pytest
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name, get_snapshot_content_obj
@@ -9,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     polarion_id,
     green_squad,
+    skipif_no_nvmeof,
 )
 
 log = logging.getLogger(__name__)
@@ -19,8 +22,20 @@ class TestRbdImageMetadata:
     @tier2
     @polarion_id("OCS-4465")
     @polarion_id("OCS-4675")
+    @pytest.mark.parametrize(
+        argnames=["block_storageclass"],
+        argvalues=[
+            pytest.param(None),
+            pytest.param(constants.CEPH_NVMEOF_SC, marks=skipif_no_nvmeof),
+        ],
+        indirect=True,
+    )
     def test_rbd_image_metadata(
-        self, pvc_factory, pvc_clone_factory, snapshot_restore_factory
+        self,
+        pvc_factory,
+        pvc_clone_factory,
+        snapshot_restore_factory,
+        block_storageclass,
     ):
         """
         Test by default the rbd images doesnot have metdata details for,
@@ -29,12 +44,18 @@ class TestRbdImageMetadata:
         3. volume snapshot
         4. Restore volume from snapshot
 
+        Runs against both the default Ceph RBD StorageClass and, when NVMe-oF
+        is enabled on the cluster, the NVMe-oF (block-backed) StorageClass. The
+        NVMe-oF StorageClass is RBD-backed on the default cephblockpool, so the
+        image metadata assertions below apply unchanged.
+
         """
 
         rbd_images = []
-        # create a pvc with ceph-rbd sc
+        # create a pvc with ceph-rbd sc (or the NVMe-oF SC when parametrized)
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
+            storageclass=block_storageclass,
             status=constants.STATUS_BOUND,
             volume_mode="Block",
         )
