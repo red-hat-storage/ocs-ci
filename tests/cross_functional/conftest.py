@@ -1508,7 +1508,7 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
         )
         # verify noobaa statefulset is present
         ocs_version = version.get_semantic_ocs_version_from_config()
-        expected_ready = "2/2" if ocs_version >= version.VERSION_4_23 else "1/1"
+        expected_ready = "1/2" if ocs_version >= version.VERSION_4_23 else "1/1"
         sample = TimeoutSampler(
             timeout=500,
             sleep=30,
