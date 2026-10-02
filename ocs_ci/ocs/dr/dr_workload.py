@@ -142,21 +142,21 @@ class BusyBox(DRWorkload):
         self.target_clone_dir = config.ENV_DATA.get(
             "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
         )
-        self.workload_subscription_dir = os.path.join(
-            self.target_clone_dir, kwargs.get("workload_dir"), "subscriptions"
-        )
-        self.drpc_yaml_file = os.path.join(
-            self.workload_subscription_dir, self.workload_name, "drpc.yaml"
-        )
-        self.drpc_yaml_file_placement = os.path.join(constants.DRPC_PATH)
-        self.channel_yaml_file = os.path.join(
-            self.workload_subscription_dir, "channel.yaml"
-        )
         workload_details = kwargs.get("workload_details")
         self.is_placement = workload_details.get("is_placement")
-        if self.is_placement:
+        self.drpc_yaml_file_placement = os.path.join(constants.DRPC_PATH)
 
-            if not config.ENV_DATA.get("deploy_via_cli"):
+        if not config.ENV_DATA.get("deploy_via_cli"):
+            self.workload_subscription_dir = os.path.join(
+                self.target_clone_dir, kwargs.get("workload_dir"), "subscriptions"
+            )
+            self.drpc_yaml_file = os.path.join(
+                self.workload_subscription_dir, self.workload_name, "drpc.yaml"
+            )
+            self.channel_yaml_file = os.path.join(
+                self.workload_subscription_dir, "channel.yaml"
+            )
+            if self.is_placement:
                 self.placement_yaml_file = os.path.join(
                     self.workload_subscription_dir, self.workload_name, "placement.yaml"
                 )
@@ -165,29 +165,26 @@ class BusyBox(DRWorkload):
                     self.workload_name,
                     "managedclustersetbinding.yaml",
                 )
-            else:
-                self.placement_yaml_file = os.path.join(
-                    constants.PLACEMENT_SUBSCRIPTION_PATH
-                )
-                self.managed_clusterset_binding_file = os.path.join(
-                    constants.MANAGEDCLUSTER_SETBINDING_PATH
-                )
-            self.workload_pvc_selector = workload_details.get(
-                "dr_workload_app_pvc_selector"
+            self.git_repo_kustomization_yaml_file = os.path.join(
+                self.workload_subscription_dir, "kustomization.yaml"
             )
-
-        self.git_repo_kustomization_yaml_file = os.path.join(
-            self.workload_subscription_dir, "kustomization.yaml"
-        )
-        self.git_repo_namespace_yaml_file = os.path.join(
-            self.workload_subscription_dir, "namespace.yaml"
-        )
-        if not config.ENV_DATA.get("deploy_via_cli"):
-            self.drpc_yaml_file = os.path.join(
-                self.workload_subscription_dir, self.workload_name, "drpc.yaml"
+            self.git_repo_namespace_yaml_file = os.path.join(
+                self.workload_subscription_dir, "namespace.yaml"
             )
-            self.channel_yaml_file = os.path.join(
-                self.workload_subscription_dir, "channel.yaml"
+            self.app_yaml_file = os.path.join(
+                self.workload_subscription_dir, self.workload_name, "app.yaml"
+            )
+            self.namespace_yaml_file = os.path.join(
+                self.workload_subscription_dir, self.workload_name, "namespace.yaml"
+            )
+            self.workload_kustomization_yaml_file = os.path.join(
+                self.workload_subscription_dir, self.workload_name, "kustomization.yaml"
+            )
+            self.subscription_yaml_file = os.path.join(
+                self.workload_subscription_dir, self.workload_name, "subscription.yaml"
+            )
+            self.placementrule_yaml_file = os.path.join(
+                self.workload_subscription_dir, self.workload_name, "placementrule.yaml"
             )
         else:
             self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
@@ -199,22 +196,18 @@ class BusyBox(DRWorkload):
             self.subscription_namespace_file = os.path.join(
                 constants.SUBSCRIPTION_NAMESPACE_TEMPLATE_PATH
             )
+            if self.is_placement:
+                self.placement_yaml_file = os.path.join(
+                    constants.PLACEMENT_SUBSCRIPTION_PATH
+                )
+                self.managed_clusterset_binding_file = os.path.join(
+                    constants.MANAGEDCLUSTER_SETBINDING_PATH
+                )
 
-        self.app_yaml_file = os.path.join(
-            self.workload_subscription_dir, self.workload_name, "app.yaml"
-        )
-        self.namespace_yaml_file = os.path.join(
-            self.workload_subscription_dir, self.workload_name, "namespace.yaml"
-        )
-        self.workload_kustomization_yaml_file = os.path.join(
-            self.workload_subscription_dir, self.workload_name, "kustomization.yaml"
-        )
-        self.subscription_yaml_file = os.path.join(
-            self.workload_subscription_dir, self.workload_name, "subscription.yaml"
-        )
-        self.placementrule_yaml_file = os.path.join(
-            self.workload_subscription_dir, self.workload_name, "placementrule.yaml"
-        )
+        if self.is_placement:
+            self.workload_pvc_selector = workload_details.get(
+                "dr_workload_app_pvc_selector"
+            )
 
     def deploy_workload(self):
         """
@@ -811,10 +804,10 @@ class BusyBox_AppSet(DRWorkload):
         self.target_clone_dir = config.ENV_DATA.get(
             "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
         )
-        self.workload_appset_dir = os.path.join(
-            self.target_clone_dir, kwargs.get("workload_dir")
-        )
         if not config.ENV_DATA.get("deploy_via_cli"):
+            self.workload_appset_dir = os.path.join(
+                self.target_clone_dir, kwargs.get("workload_dir")
+            )
             self.appset_yaml_file = os.path.join(
                 self.workload_appset_dir,
             )
