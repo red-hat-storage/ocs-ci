@@ -47,6 +47,7 @@ class NSFS:
     bucket_obj: ObjectBucket = None
     bucket_name: str = None
     mounted_bucket_path: str = None
+    account_name: str = None
     s3_creds: dict = None
     s3_resource: object = None
     s3_client: object = None
