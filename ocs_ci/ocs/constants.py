@@ -1850,6 +1850,7 @@ ALERT_ODF_MIRROR_DAEMON_STATUS = "OdfMirrorDaemonStatus"
 ALERT_ODF_MIRRORING_IMAGE_HEALTH = "OdfPoolMirroringImageHealth"
 ALERT_CEPH_OSD_FLAPPING = "CephOSDFlapping"
 ALERT_CEPH_OSD_NEAR_FULL = "CephOSDNearFull"
+ALERT_CEPH_OSD_DOWN = "CephOSDDown"
 ALERT_PERSISTENT_VOLUME_USAGE_NEAR_FULL = "PersistentVolumeUsageNearFull"
 ALERT_ODF_PERSISTENT_VOLUME_MIRROR_STATUS = "ODFPersistentVolumeMirrorStatus"
 ALERT_OBC_QUOTA_BYTES_ALERT = "ObcQuotaBytesAlert"
@@ -1902,6 +1903,8 @@ ALERT_KUBE_NODE_UNREACHABLE = "KubeNodeUnreachable"
 ALERT_KUBE_API_ERROR_BUDGET_BURN = "KubeAPIErrorBudgetBurn"
 ALERT_ETCD_HIGH_NUMBER_OF_LEADER_CHANGES = "etcdHighNumberOfLeaderChanges"
 ALERT_ETCD_GRPC_REQUESTS_SLOW = "etcdGRPCRequestsSlow"
+ALERT_ETCD_GRPC_WRITE_REQUESTS_SLOW = "etcdGRPCWriteRequestsSlow"
+ALERT_ETCD_MEMBER_COMMUNICATION_SLOW = "etcdMemberCommunicationSlow"
 ALERT_CSV_ABNORMAL_FAILED_OVER_2_MIN = "CsvAbnormalFailedOver2Min"
 
 # Alerts that are known to be fired during OCP or ODF upgrade because pods,
@@ -1932,12 +1935,19 @@ EXPECTED_UPGRADE_ALERTS = [
     ALERT_KUBE_NODE_NOT_READY,
     ALERT_KUBE_NODE_UNREACHABLE,
     ALERT_NODEDOWN,
+    # OSDs running on a drained or rebooted node are down for a while. A real
+    # problem with an OSD is detected by the Ceph health monitor that runs
+    # during the whole upgrade.
+    ALERT_CEPH_OSD_DOWN,
     # control plane components are restarted during OCP upgrade
     ALERT_KUBE_API_ERROR_BUDGET_BURN,
     ALERT_ETCD_HIGH_NUMBER_OF_LEADER_CHANGES,
     # etcd members are restarted one by one and the remaining members serve
-    # the whole load, which increases the request latency
+    # the whole load, which increases the request latency and the round trip
+    # time between the members
     ALERT_ETCD_GRPC_REQUESTS_SLOW,
+    ALERT_ETCD_GRPC_WRITE_REQUESTS_SLOW,
+    ALERT_ETCD_MEMBER_COMMUNICATION_SLOW,
     # CSVs go through Failed/Replacing phases while operators are upgraded
     ALERT_CSV_ABNORMAL_FAILED_OVER_2_MIN,
     # Ceph daemons are restarted one by one and run mixed versions until the
