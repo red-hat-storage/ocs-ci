@@ -8,6 +8,8 @@ import os
 import shlex
 import time
 
+from subprocess import TimeoutExpired
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import uuid4
 
@@ -38,6 +40,10 @@ from ocs_ci.utility import version
 from ocs_ci.utility.prometheus import PrometheusAPI
 
 logger = logging.getLogger(__name__)
+
+# The noobaa CLI waits for the backingstore to become healthy by itself. It only needs
+# to stay alive long enough to create the CR, so cap its share of the create timeout
+PV_BACKINGSTORE_CLI_CREATE_TIMEOUT = 120
 
 
 def craft_s3_command(
@@ -1176,6 +1182,7 @@ def cli_create_pv_backingstore(
     req_mem=None,
     lim_cpu=None,
     lim_mem=None,
+    timeout=600,
 ):
     """
     Create a new backingstore with pv underlying storage using noobaa cli command
@@ -1189,6 +1196,7 @@ def cli_create_pv_backingstore(
         req_mem (str): requested memory value
         lim_cpu (str): limit cpu value
         lim_mem (str): limit memory value
+        timeout (int): total time to wait for the backingstore to become healthy
 
     """
     cmd = (
@@ -1205,23 +1213,41 @@ def cli_create_pv_backingstore(
         cmd += f" --limit-cpu {lim_cpu}"
     if lim_mem:
         cmd += f" --limit-memory {lim_mem}"
-    mcg_obj.exec_mcg_cmd(cmd)
-    wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
+
+    # The noobaa CLI blocks until the backingstore is healthy, so on a slow cluster
+    # the subprocess timeout kills it and raises an opaque TimeoutExpired even though
+    # the backingstore CR itself was created. Keep the CLI on a short leash and let
+    # wait_for_pv_backingstore decide whether the creation actually succeeded.
+    cli_timeout = min(PV_BACKINGSTORE_CLI_CREATE_TIMEOUT, timeout // 2)
+    try:
+        mcg_obj.exec_mcg_cmd(cmd, timeout=cli_timeout)
+    except TimeoutExpired:
+        logger.warning(
+            f"The noobaa CLI did not return within {cli_timeout} seconds while waiting "
+            f"for backingstore {backingstore_name} to become healthy. Falling back to "
+            "polling the backingstore CR."
+        )
+    wait_for_pv_backingstore(
+        backingstore_name,
+        config.ENV_DATA["cluster_namespace"],
+        timeout=max(timeout - cli_timeout, 60),
+    )
 
 
-def wait_for_pv_backingstore(backingstore_name, namespace=None):
+def wait_for_pv_backingstore(backingstore_name, namespace=None, timeout=360):
     """
     wait for existing pv backing store to reach OPTIMAL state
 
     Args:
         backingstore_name (str): backingstore name
         namespace (str): backing store's namespace
+        timeout (int): time to wait for the backing store to become healthy
 
     """
 
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     sample = TimeoutSampler(
-        timeout=360,
+        timeout=timeout,
         sleep=15,
         func=check_pv_backingstore_status,
         backingstore_name=backingstore_name,
@@ -1229,10 +1255,67 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
     )
     if not sample.wait_for_func_status(result=True):
         raise TimeoutExpiredError(
-            f"Backing Store {backingstore_name} never reached OPTIMAL state"
+            f"Backing Store {backingstore_name} never reached OPTIMAL state. "
+            f"{get_pv_backingstore_unhealthy_reason(backingstore_name, namespace)}"
         )
     else:
         logger.info(f"Backing Store {backingstore_name} created successfully")
+
+
+def get_pv_backingstore_unhealthy_reason(backingstore_name, namespace=None):
+    """
+    Collect why a pv backing store hasn't become healthy.
+
+    Meant for enriching timeout messages, so it never raises - a failure to collect
+    the details is reported in the returned string instead.
+
+    Args:
+        backingstore_name (str): backingstore name
+        namespace (str): backing store's namespace
+
+    Returns:
+        str: The backing store phase and conditions, plus the phase and the
+            scheduling reason of every pv pool pod that isn't running
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    details = []
+    try:
+        status = (
+            OCP(
+                kind=constants.BACKINGSTORE,
+                namespace=namespace,
+                resource_name=backingstore_name,
+            )
+            .get()
+            .get("status", {})
+        )
+        details.append(f"Backing store phase: {status.get('phase')}")
+        for condition in status.get("conditions", []):
+            details.append(
+                f"condition {condition.get('type')}={condition.get('status')} "
+                f"({condition.get('reason')}): {condition.get('message')}"
+            )
+
+        pods = OCP(kind=constants.POD, namespace=namespace).get(
+            selector=f"pool={backingstore_name}"
+        )["items"]
+        for pod_data in pods:
+            pod_status = pod_data.get("status", {})
+            if pod_status.get("phase") == constants.STATUS_RUNNING:
+                continue
+            reasons = [
+                f"{cond.get('reason')}: {cond.get('message')}"
+                for cond in pod_status.get("conditions", [])
+                if cond.get("reason")
+            ]
+            details.append(
+                f"pod {pod_data['metadata']['name']} is "
+                f"{pod_status.get('phase')} - {'; '.join(reasons) or 'no reason given'}"
+            )
+    except Exception as ex:
+        details.append(f"Could not collect the backing store details: {ex}")
+    return " | ".join(details)
 
 
 def check_pv_backingstore_status(
