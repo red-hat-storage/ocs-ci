@@ -1,11 +1,11 @@
 """Match test names cited in a Jira bug to tests under tests/."""
 
 import ast
+import logging
 import re
-from logging import getLogger
 from pathlib import Path
 
-log = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _TEST_NAME = re.compile(r"(?<![A-Za-z0-9_])(test_[A-Za-z0-9_]+)")
@@ -60,7 +60,15 @@ def matching_tests(issue, tests_root=None):
     for match in _POLARION.finditer(text):
         for node in catalog["by_polarion"].get(match.group(1), []):
             add(node)
-    log.info(f"Matched {len(found)} tests from the bug report")
+    locations = [item["location"] for item in found]
+    key = (issue or {}).get("key") or "the issue"
+    if not locations:
+        logger.info(f"Matched no tests for {key}")
+    elif len(locations) <= 10:
+        logger.info(f"Matched {len(locations)} tests for {key}: {', '.join(locations)}")
+    else:
+        shown = ", ".join(locations[:10])
+        logger.info(f"Matched {len(locations)} tests for {key}: {shown}, ...")
     return found
 
 

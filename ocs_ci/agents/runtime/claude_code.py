@@ -4,13 +4,13 @@ import atexit
 import base64
 import binascii
 import json
+import logging
 import os
 import tempfile
-from logging import getLogger
 
 from ocs_ci.agents.mcp.registry import _load_auth_config
 
-log = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 _credential_path = None
 
@@ -83,7 +83,9 @@ def claude_code_environment():
     env["ANTHROPIC_VERTEX_PROJECT_ID"] = account["project_id"]
     env["GOOGLE_CLOUD_PROJECT"] = account["project_id"]
     env["CLOUD_ML_REGION"] = region
-    log.info(f"Claude Code will use Vertex project {account['project_id']} in {region}")
+    logger.info(
+        f"Claude Code will use Vertex project {account['project_id']} in {region}"
+    )
     return env
 
 

@@ -1,8 +1,11 @@
 """LangChain chat model shared by standard agents."""
 
+import logging
 import os
 
 from ocs_ci.agents.mcp.registry import _load_auth_config
+
+logger = logging.getLogger(__name__)
 
 
 def get_chat_model():
@@ -28,8 +31,11 @@ def get_chat_model():
     provider = os.environ.get("OCS_AGENT_PROVIDER", "").strip().lower()
     provider = provider.replace("-", "_")
     if provider in {"", "openai"}:
+        model_name = os.environ.get("OCS_AGENT_MODEL") or "gpt-4o"
+        logger.info(f"Using OpenAI model {model_name}")
         return _openai_model()
     if provider == "claude":
+        logger.info("Using the Claude CLI")
         return _claude_model()
     if provider == "claude_code":
         return _claude_code_model()

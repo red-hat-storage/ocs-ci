@@ -1,11 +1,11 @@
 """Read an OCS Jenkins deploy build and decide if that cluster can verify a bug."""
 
+import logging
 import re
-from logging import getLogger
 
 from ocs_ci.agents.jenkins_api import JenkinsClient
 
-log = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 _PLATFORM_ALIASES = {
     "vmware": "vsphere",
@@ -48,7 +48,7 @@ def cluster_check(report):
         build = client.latest_deploy(name)
         agent_online = client.agent_online(name)
     except Exception as error:
-        log.warning(f"Could not read Jenkins cluster {name}: {error}")
+        logger.warning(f"Could not read Jenkins cluster {name}: {error}")
         return {
             "cluster": name,
             "fits": False,
@@ -57,6 +57,9 @@ def cluster_check(report):
             "details": {},
         }
     if not build:
+        logger.warning(
+            f"No deploy build for {name} was found in the recent Jenkins jobs"
+        )
         return {
             "cluster": name,
             "fits": False,
@@ -66,7 +69,17 @@ def cluster_check(report):
             "jenkins": {},
             "details": {"agent_online": agent_online},
         }
-    return _fitness(name, build, agent_online, report)
+    checked = _fitness(name, build, agent_online, report)
+    jenkins = checked.get("jenkins") or {}
+    where = f"{jenkins.get('job') or 'unknown'} #{jenkins.get('build') or ''}".strip()
+    if checked["fits"]:
+        logger.info(f"Cluster {name} can run verification on {where}")
+    else:
+        logger.warning(
+            f"Cluster {name} cannot run verification on {where}: "
+            + "; ".join(checked["reasons"])
+        )
+    return checked
 
 
 def _fitness(name, build, agent_online, report):

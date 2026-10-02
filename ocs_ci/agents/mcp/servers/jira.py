@@ -167,6 +167,9 @@ def build_server():
 
 def main():
     """Start the Jira MCP server on stdio."""
+    from ocs_ci.agents.runtime.logging import configure_agent_logging
+
+    configure_agent_logging()
     try:
         server = build_server()
     except ImportError as error:

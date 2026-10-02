@@ -12,6 +12,11 @@ from pathlib import Path
 
 from ocs_ci.agents.runtime.discover import iter_agent_dirs, load_agent_spec
 from ocs_ci.agents.runtime.dry_run import activate_dry_run, env_requests_dry_run
+from ocs_ci.agents.runtime.logging import (
+    agent_run_callbacks,
+    configure_agent_logging,
+    describe_run,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -298,16 +303,23 @@ def invoke_agent(agent_dir, request):
         graph = await make_graph()
         return await graph.ainvoke(
             agent_state(request),
-            config={"recursion_limit": _recursion_limit()},
+            config={
+                "recursion_limit": _recursion_limit(),
+                "callbacks": agent_run_callbacks(),
+            },
         )
 
+    configure_agent_logging()
+    logger.info(f"Starting {describe_run(request)}")
     with activate_provider(request), activate_dry_run(request):
         state = asyncio.run(_run())
+    reply = _final_reply(state)
+    logger.info(f"Agent {request['agent']} finished: {_reply_for_log(reply)}")
     return {
         "ok": True,
         "agent": request["agent"],
         "jenkins": request["jenkins"],
-        "reply": _final_reply(state),
+        "reply": reply,
         "state": _public_state(state),
     }
 
@@ -439,10 +451,11 @@ def main(argv=None, env=None, invoke=None):
         argv = sys.argv[1:]
     if env is None:
         env = os.environ
-    _ensure_console_logging()
+    configure_agent_logging()
     try:
         request = build_request(argv, env)
     except ValueError as exc:
+        logger.error(str(exc))
         _emit({"ok": False, "error": str(exc)}, None)
         return EXIT_USAGE
     try:
@@ -454,10 +467,11 @@ def main(argv=None, env=None, invoke=None):
         result.setdefault("ok", True)
         code = EXIT_OK if result["ok"] else EXIT_AGENT_ERROR
     except LookupError as exc:
+        logger.error(f"Unknown agent {request['agent']}: {exc}")
         result = {"ok": False, "agent": request["agent"], "error": str(exc)}
         code = EXIT_USAGE
     except Exception as exc:
-        logger.error("Agent %s failed: %s", request["agent"], exc)
+        logger.exception(f"Agent {request['agent']} failed: {exc}")
         result = {
             "ok": False,
             "agent": request["agent"],
@@ -469,14 +483,20 @@ def main(argv=None, env=None, invoke=None):
     return code
 
 
-def _ensure_console_logging():
-    """Show agent logs in the Jenkins console when the framework logger is not configured."""
-    if logging.getLogger().handlers:
-        return
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+def _reply_for_log(reply):
+    """
+    Return the final reply clipped to one log line.
+
+    Args:
+        reply (str): Final assistant text.
+
+    Returns:
+        str: Whitespace-collapsed reply, clipped when it is long.
+    """
+    text = " ".join(str(reply or "").split())
+    if len(text) <= 300:
+        return text or "no reply"
+    return text[:300] + "..."
 
 
 def _emit(result, result_file):
