@@ -13,6 +13,7 @@ ocs_ci/agents/
 │   ├── client.py           # loads MCP servers as LangChain tools
 │   └── servers/            # local tool implementations
 │       ├── jira.py
+│       ├── jenkins.py
 │       ├── cluster.py
 │       └── reportportal.py
 ├── _template/              # copy this folder to add an agent
@@ -67,6 +68,9 @@ agents_credentials:
     url: https://redhat.atlassian.net
     email: <jira-email>
     token: <jira-api-token>
+  jenkins:
+    email: <jenkins-email>
+    token: <jenkins-api-token>
 ```
 
 `OPENAI_API_KEY` is used when that file entry is empty. `OCS_AGENT_MODEL`
@@ -77,7 +81,10 @@ Code on Vertex. That option reads `agents_credentials.claude_code` in
 `data/auth.yaml`, a base64-encoded service account JSON. `OCS_AGENT_CLOUD_ML_REGION`
 overrides the Vertex region. The default is `us-east5`. The local
 Jira server reads `agents_credentials.jira` in `data/auth.yaml` (`url`,
-`email`, `token`). Other ocs-ci callers still use `config.AUTH.jira`, the
+`email`, `token`). When the report names a cluster, Jenkins is read with
+`agents_credentials.jenkins` (`email`, `token`), or the top-level `jenkins`
+section, to record whether that deploy can run the verification. Other
+ocs-ci callers still use `config.AUTH.jira`, the
 top-level `jira` section, or `/etc/jira.cfg`. `jira_verification` reads issues
 with the local Jira server and writes each verification report from that
 issue.
@@ -125,6 +132,14 @@ line in `mcp/registry.py`. Agents then name that server in `mcp_servers`.
 
 Server modules call the helpers that already exist in `ocs_ci.utility` and
 `ocs_ci.ocs`. The cluster server stays read-only.
+
+The Jenkins server is shared. Any agent lists `jenkins` in `mcp_servers` and
+allows the tools it needs. `jenkins_find_cluster` and `jenkins_get_build` read
+the OCS QE Jenkins server. `jenkins_trigger_build` starts a job with
+`buildWithParameters` and is refused during `--dry-run`. Credentials are
+`agents_credentials.jenkins`, then the top-level `jenkins` section. The
+verification agent does not call these tools. It still reads the deploy build
+itself when `--cluster` is set and stores `cluster_check` on the report.
 
 ## Multi-agent workflows
 

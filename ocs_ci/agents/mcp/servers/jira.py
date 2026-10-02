@@ -97,6 +97,7 @@ def jira_save_verification_report(
         str: JSON with the saved path.
 
     """
+    from ocs_ci.agents.jira_verification.jenkins_cluster import cluster_check
     from ocs_ci.agents.jira_verification.report_store import write_verification_report
     from ocs_ci.agents.jira_verification.summary import summarize_issue
     from ocs_ci.agents.jira_verification.test_index import matching_tests
@@ -109,6 +110,9 @@ def jira_save_verification_report(
     source = fetched if isinstance(fetched, dict) else report
     report["summary"] = summarize_issue(source)
     report["tests"] = matching_tests(source)
+    checked = cluster_check(report)
+    if checked:
+        report["cluster_check"] = checked
     if dry_run_enabled():
         report["dry_run"] = True
     path = write_verification_report(version, issue_key, report)

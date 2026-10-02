@@ -35,6 +35,7 @@ LOCAL_SERVERS = {
     "jira": "ocs_ci.agents.mcp.servers.jira",
     "cluster": "ocs_ci.agents.mcp.servers.cluster",
     "reportportal": "ocs_ci.agents.mcp.servers.reportportal",
+    "jenkins": "ocs_ci.agents.mcp.servers.jenkins",
 }
 
 
