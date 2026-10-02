@@ -1,5 +1,8 @@
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.ui.base_ui import logger
+from ocs_ci.ocs.ui.base_ui import (
+    logger,
+    wait_for_element_to_be_clickable,
+)
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 from ocs_ci.ocs.ui.page_objects.block_pools import StoragePools
 from ocs_ci.ocs.ui.page_objects.encryption_module import EncryptionModule
@@ -62,6 +65,116 @@ class StorageClusterPage(
         from ocs_ci.ocs.ui.page_objects.block_pools import StoragePools
 
         return StoragePools()
+
+    def set_storagecluster_annotation(self, key, value):
+        """
+        Set (add or update) an annotation on the StorageCluster CR via the
+        OCP Console Edit Annotations dialog.
+
+        Opens Actions → Edit Annotations, then either:
+        - Edits the existing key row if the key is already present, or
+        - Adds a new row and types the key and value.
+
+        Saves and closes the dialog when done.
+
+        Args:
+            key (str): Annotation key (e.g. "uninstall.ocs.openshift.io/confirm-deletion")
+            value (str): Annotation value (e.g. "false")
+        """
+        logger.info("Click Actions menu on StorageCluster detail page")
+        self.do_click(
+            self.attach_storage_loc["storage_cluster_actions"],
+            enable_screenshot=True,
+        )
+        logger.info("Click 'Edit Annotations' menu item")
+        self.do_click(
+            self.attach_storage_loc["edit_annotations_menu_item"],
+            enable_screenshot=True,
+        )
+
+        # Wait for the Edit Annotations dialog to open
+        self.wait_for_element_to_be_visible(
+            self.attach_storage_loc["annotation_key_input"],
+            timeout=15,
+        )
+
+        # Find if key already exists among the key inputs
+        key_inputs = self.get_elements(self.attach_storage_loc["annotation_key_input"])
+        target_index = None
+        for i, inp in enumerate(key_inputs):
+            if inp.get_attribute("value") == key:
+                target_index = i
+                break
+
+        if target_index is None:
+            # Key not present — click Add More to create a new row
+            logger.info(f"Annotation key '{key}' not found; adding a new row")
+            self.do_click(
+                self.attach_storage_loc["annotation_add_row_btn"],
+                enable_screenshot=False,
+            )
+            # Re-fetch inputs after the new row appears
+            key_inputs = self.get_elements(
+                self.attach_storage_loc["annotation_key_input"]
+            )
+            target_index = len(key_inputs) - 1
+            # Type into the specific new row — get_elements returns all inputs,
+            # use the last one which is the newly added row
+            key_inputs[target_index].clear()
+            key_inputs[target_index].send_keys(key)
+            logger.info(f"Typed annotation key '{key}' into row {target_index}")
+        else:
+            logger.info(
+                f"Annotation key '{key}' found at row {target_index}; editing value"
+            )
+
+        # Locate the value input at the same row index and set the value
+        value_inputs = self.get_elements(
+            self.attach_storage_loc["annotation_value_input"]
+        )
+        value_inputs[target_index].clear()
+        value_inputs[target_index].send_keys(value)
+        logger.info(f"Set annotation {key}={value}")
+
+        # Save
+        logger.info("Click Save to apply annotations")
+        self.do_click(
+            self.attach_storage_loc["annotation_save_btn"],
+            enable_screenshot=True,
+        )
+        # Wait for the page to fully reload after save before returning
+        self.page_has_loaded(retries=15, sleep_time=2)
+        return self
+
+    def initiate_storagecluster_delete(self):
+        """
+        Open the Actions menu on the StorageCluster detail page and click
+        Delete StorageCluster.
+
+        Returns:
+            ConfirmDialog: dialog instance so the caller can confirm or cancel.
+        """
+        from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
+
+        # Ensure page is fully loaded and any post-save overlay is gone
+        self.page_has_loaded(retries=15, sleep_time=2)
+        logger.info("Click Actions menu on StorageCluster detail page")
+        self.do_click(
+            self.attach_storage_loc["storage_cluster_actions"],
+            enable_screenshot=True,
+        )
+        logger.info("Actions menu opened")
+        logger.info("Click 'Delete StorageCluster' menu item")
+        self.do_click(
+            self.generic_locators["delete_resource"],
+            enable_screenshot=True,
+        )
+        logger.info("Delete StorageCluster menu item clicked")
+        logger.info("Waiting for delete-action button in confirmation dialog")
+        wait_for_element_to_be_clickable(
+            self.generic_locators["confirm_delete_resource"], timeout=30
+        )
+        return ConfirmDialog()
 
     def get_blockpools_compression_status_from_storagesystem(self) -> tuple:
         """
