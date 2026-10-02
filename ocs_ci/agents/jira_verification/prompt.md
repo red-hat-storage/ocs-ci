@@ -15,7 +15,7 @@ The message may end with one JSON object of arguments. Use it this way:
 1. When issues is empty or absent, call jira_search_issues once. Pass release when the arguments include it, otherwise pass the version from the message. It returns every matching issue whose status is ON_QA. When issues is present, use that list instead.
 2. For each key, call jira_get_issue, then immediately call jira_save_verification_report. Do not wait until every issue has been read before saving. Request at most 60 tool calls in one response. OpenAI rejects an assistant message with more than 128 tool calls. When issues remain, continue them on the next turn.
 
-Do not put a summary field or a tests field in report_json. jira_save_verification_report asks OpenAI for a short summary of the issue and writes that summary into the report. It also lists tests under tests/ whose function name, module path, or Polarion id appears exactly in the bug.
+Do not put a summary field, a tests field, or a cluster_check field in report_json. jira_save_verification_report asks OpenAI for a short summary of the issue and writes that summary into the report. It also lists tests under tests/ whose function name, module path, or Polarion id appears exactly in the bug. When cluster is set, it reads that cluster from Jenkins and records whether the cluster can run the verification.
 
 Copy affected_version, fix_version, git_prs, and parent_issues from the jira_get_issue response. When git_prs is empty, also copy git_prs from source_issues. Leave git_prs empty when neither has a pull request. Do not invent a pull request URL.
 

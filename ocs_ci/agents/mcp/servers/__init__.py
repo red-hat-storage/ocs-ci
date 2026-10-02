@@ -16,4 +16,9 @@ SERVER_TOOLS = {
         "reportportal_get_launch",
         "reportportal_get_test_log",
     ),
+    "jenkins": (
+        "jenkins_find_cluster",
+        "jenkins_get_build",
+        "jenkins_trigger_build",
+    ),
 }

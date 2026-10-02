@@ -61,6 +61,8 @@ def write_verification_report(version, issue_key, report, root=None):
     for name in OPTIONAL_REPORT_FIELDS:
         if report.get(name):
             document[name] = report[name]
+        if name == "cluster" and report.get("cluster_check"):
+            document["cluster_check"] = _cluster_check(report.get("cluster_check"))
     path = directory / f"{key}.yaml"
     path.write_text(
         yaml.safe_dump(document, sort_keys=False, allow_unicode=True),
@@ -133,6 +135,43 @@ def _tests(value):
         seen.add(location)
         cleaned.append({"name": name, "location": location})
     return cleaned
+
+
+def _cluster_check(value):
+    """
+    Normalize the Jenkins cluster fitness stored on a report.
+
+    Args:
+        value (dict): Cluster check from the Jenkins deploy build.
+
+    Returns:
+        dict: cluster, fits, reasons, jenkins, and details.
+    """
+    if not isinstance(value, dict):
+        return {
+            "cluster": "",
+            "fits": False,
+            "reasons": [],
+            "jenkins": {},
+            "details": {},
+        }
+    jenkins = value.get("jenkins") if isinstance(value.get("jenkins"), dict) else {}
+    details = value.get("details") if isinstance(value.get("details"), dict) else {}
+    reasons = [
+        str(reason) for reason in (value.get("reasons") or []) if str(reason).strip()
+    ]
+    return {
+        "cluster": str(value.get("cluster") or ""),
+        "fits": bool(value.get("fits")),
+        "reasons": reasons,
+        "jenkins": {
+            "job": str(jenkins.get("job") or ""),
+            "build": jenkins.get("build") or "",
+            "result": str(jenkins.get("result") or ""),
+            "url": str(jenkins.get("url") or ""),
+        },
+        "details": details,
+    }
 
 
 def _version_dirname(version):
