@@ -10,8 +10,8 @@ The tools are built from source inside pods using the upstream
 repository at github.com/red-hat-storage/external-snapshot-metadata.
 
 Requirements:
-    - ODF 5.0 or later
-    - SnapshotMetadataService CR deployed (automatic in ODF 5.0+)
+    - SnapshotMetadataService CR and its connection ConfigMap
+      present in openshift-storage (automatic on ODF 5.0+)
     - RBD CSI controller pods running the snapshot-metadata sidecar
 """
 
@@ -504,6 +504,33 @@ class ListerTool:
             f"--audience {self.audience}"
         )
 
+    @staticmethod
+    def _base_snapshot_flag(base_snap_name, base_snap_id):
+        """
+        Build the CLI flag that identifies the base snapshot.
+
+        Args:
+            base_snap_name (str): Base VolumeSnapshot name, passed
+                to the tools as -p
+            base_snap_id (str): Base CSI snapshot handle, passed to
+                the tools as -P
+
+        Returns:
+            str: The base snapshot flag
+
+        Raises:
+            ValueError: If both or neither argument is given
+        """
+        if bool(base_snap_name) == bool(base_snap_id):
+            raise ValueError(
+                "Exactly one of base_snap_name and base_snap_id must be "
+                f"given, got base_snap_name='{base_snap_name}' "
+                f"base_snap_id='{base_snap_id}'"
+            )
+        if base_snap_name:
+            return f"-p {base_snap_name}"
+        return f"-P {base_snap_id}"
+
     def run_lister_allocated(
         self,
         snapshot_name,
@@ -540,27 +567,39 @@ class ListerTool:
     def run_lister_delta(
         self,
         target_snap,
-        base_snap,
+        base_snap_name=None,
+        base_snap_id=None,
         starting_offset=None,
         max_results=None,
     ):
         """
         Run the lister in delta mode via exec.
 
+        The base snapshot is referenced either by name
+        (base_snap_name, passed as -p) or by CSI snapshot handle
+        (base_snap_id, passed as -P). Exactly one of the two must
+        be given.
+
         Args:
             target_snap (str): Target VolumeSnapshot name
-            base_snap (str): Base VolumeSnapshot name
+            base_snap_name (str): Base VolumeSnapshot name
+            base_snap_id (str): Base CSI snapshot handle, used
+                instead of base_snap_name
             starting_offset (int): Optional starting byte offset
             max_results (int): Optional max results per message
 
         Returns:
             list: Parsed block metadata entries (list of dicts)
+
+        Raises:
+            ValueError: If both or neither of base_snap_name and
+                base_snap_id are given
         """
         cmd = (
             f"{self.build_dir}/snapshot-metadata-lister "
             f"-n {self.namespace} "
             f"-s {target_snap} "
-            f"-p {base_snap} "
+            f"{self._base_snapshot_flag(base_snap_name, base_snap_id)} "
             f"{self._common_flags()} "
             f"-o table"
         )
@@ -660,6 +699,7 @@ class VerifierTool(ListerTool):
         source_pvc_name,
         dest_pvc_name,
         previous_snapshot=None,
+        previous_snapshot_id=None,
         timeout=900,
     ):
         """
@@ -670,6 +710,14 @@ class VerifierTool(ListerTool):
         the CBT metadata API, verifies byte-level correctness,
         and returns the result.
 
+        Delta mode is selected by giving either previous_snapshot
+        (base snapshot name) or previous_snapshot_id (base CSI
+        snapshot handle). Omit both for allocated mode.
+
+        The verifier tool prints nothing of its own on success, so
+        the returned exit code is the only pass/fail signal. The
+        returned logs hold the build output of the pod.
+
         Args:
             snapshot_name (str): Target VolumeSnapshot name
             source_pvc_name (str): Source PVC (restored snapshot,
@@ -678,17 +726,24 @@ class VerifierTool(ListerTool):
                 Block mode)
             previous_snapshot (str): Base snapshot name for delta
                 mode. Omit for allocated mode.
+            previous_snapshot_id (str): Base CSI snapshot handle
+                for delta mode, used instead of previous_snapshot
             timeout (int): Timeout in seconds for pod completion
 
         Returns:
             tuple: (exit_code, logs) where exit_code is an int
                 and logs is the pod's stdout/stderr as a string
+
+        Raises:
+            ValueError: If both previous_snapshot and
+                previous_snapshot_id are given
         """
         self.verifier_pod_name = self._deploy_verifier_pod(
             snapshot_name,
             source_pvc_name,
             dest_pvc_name,
             previous_snapshot,
+            previous_snapshot_id,
         )
         return self._wait_for_pod_completion(self.verifier_pod_name, timeout)
 
@@ -698,6 +753,7 @@ class VerifierTool(ListerTool):
         source_pvc_name,
         dest_pvc_name,
         previous_snapshot=None,
+        previous_snapshot_id=None,
     ):
         """
         Deploy a verifier pod that builds and runs the verifier.
@@ -706,10 +762,17 @@ class VerifierTool(ListerTool):
             snapshot_name (str): Target VolumeSnapshot name
             source_pvc_name (str): Source PVC (Block mode)
             dest_pvc_name (str): Destination PVC (Block mode)
-            previous_snapshot (str): Base snapshot for delta mode
+            previous_snapshot (str): Base snapshot name for delta
+                mode
+            previous_snapshot_id (str): Base CSI snapshot handle
+                for delta mode, used instead of previous_snapshot
 
         Returns:
             str: Name of the deployed verifier pod
+
+        Raises:
+            ValueError: If both previous_snapshot and
+                previous_snapshot_id are given
         """
         pod_name = helpers.create_unique_resource_name("cbt-verifier", "pod")
 
@@ -720,8 +783,10 @@ class VerifierTool(ListerTool):
             f"-tgt /dev/target "
             f"{self._common_flags()}"
         )
-        if previous_snapshot:
-            verifier_flags += f" -p {previous_snapshot}"
+        if previous_snapshot or previous_snapshot_id:
+            verifier_flags += " " + self._base_snapshot_flag(
+                previous_snapshot, previous_snapshot_id
+            )
 
         build_and_run = (
             "set -e && "
@@ -757,12 +822,13 @@ class VerifierTool(ListerTool):
         self._created_ns_resources.append(pod)
 
         logger.info(
-            "Deployed verifier pod %s (snap=%s, src=%s, dst=%s, prev=%s)",
+            "Deployed verifier pod %s (snap=%s, src=%s, dst=%s, prev=%s, prev_id=%s)",
             pod_name,
             snapshot_name,
             source_pvc_name,
             dest_pvc_name,
             previous_snapshot,
+            previous_snapshot_id,
         )
         return pod_name
 
