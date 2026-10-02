@@ -624,12 +624,6 @@ UPGRADE_TEST_ORDER = {
 ### Configuration Parameters
 
 ```python
-# DR configuration dictionary
-dr_conf = {
-    "rbd_dr_scenario": True/False,      # Enable RBD DR
-    "cephfs_dr_scenario": True/False,   # Enable CephFS DR
-}
-
 # Environment variables
 ENV_DATA = {
     "skip_dr_deployment": False,
