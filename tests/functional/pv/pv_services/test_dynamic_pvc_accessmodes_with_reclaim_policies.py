@@ -67,21 +67,22 @@ class TestDynamicPvc(ManageTest):
         return sc_obj, worker_nodes_list
 
     @retry(UnexpectedBehaviour, tries=10, delay=5, backoff=1)
-    def verify_expected_failure_event(self, ocs_obj, failure_str):
+    def verify_expected_failure_event(self, ocs_obj, failure_strs):
         """
         Checks for the expected failure event message in oc describe command
 
         """
         logger.info("Check expected failure event message in oc describe command")
-        if failure_str in ocs_obj.describe():
-            logger.info(
-                f"Failure string {failure_str} is present in oc describe" f" command"
-            )
-            return True
-        else:
-            raise UnexpectedBehaviour(
-                f"Failure string {failure_str} is not found in oc describe" f" command"
-            )
+        describe_output = ocs_obj.describe()
+        for failure_str in failure_strs:
+            if failure_str in describe_output:
+                logger.info(
+                    f"Failure string {failure_str} is present in oc describe command"
+                )
+                return True
+        raise UnexpectedBehaviour(
+            f"None of the failure strings {failure_strs} were found in oc describe command"
+        )
 
     @tier1
     @pytest.mark.parametrize(
@@ -127,7 +128,13 @@ class TestDynamicPvc(ManageTest):
         """
         # ocs_version = config.ENV_DATA["ocs_version"]
         access_mode = constants.ACCESS_MODE_RWO
-        expected_failure_str = "Multi-Attach error for volume"
+        # kubernetes/kubernetes#138837 updated the FailedAttachVolume event message.
+        # Older clusters: "Multi-Attach error for volume ..."
+        # Newer clusters: "Waiting for detach for volume ..."
+        expected_failure_strs = (
+            "Multi-Attach error for volume",
+            "Waiting for detach for volume",
+        )
         storage_type = "fs"
         sc_obj, worker_nodes_list = setup
 
@@ -195,7 +202,7 @@ class TestDynamicPvc(ManageTest):
                 timeout=timeout,
             )
             self.verify_expected_failure_event(
-                ocs_obj=pod_obj2, failure_str=expected_failure_str
+                ocs_obj=pod_obj2, failure_strs=expected_failure_strs
             )
 
         logger.info(
