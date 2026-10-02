@@ -3591,6 +3591,17 @@ def check_clusters():
         )
         return
 
+    # OCP-only upgrades or skip_ocs_deployment have no CephCluster / StorageCluster
+    if config.ENV_DATA.get("skip_ocs_deployment", False) or config.DEPLOYMENT.get(
+        "ocp_only_upgrade", False
+    ):
+        config.RUN["cephcluster"] = False
+        logger.info(
+            "OCP-only cluster detected (skip_ocs_deployment or ocp_only_upgrade) — "
+            "skipping CephCluster check, setting cephcluster=False"
+        )
+        return
+
     try:
         cephcluster_obj = OCP(
             kind="cephcluster",
@@ -3606,7 +3617,9 @@ def check_clusters():
         logger.info(
             "This is deployment, will try to check from ENV_DATA and DEPLOYMENT"
         )
-        if config.ENV_DATA["skip_ocs_deployment"]:
+        if config.ENV_DATA["skip_ocs_deployment"] or config.DEPLOYMENT.get(
+            "ocp_only_upgrade", False
+        ):
             config.RUN["cephcluster"] = False
         else:
             config.RUN["cephcluster"] = True
