@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_provider_and_client,
     brown_squad,
     black_squad,
+    zstream_4_18_1,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -129,6 +130,7 @@ def add_capacity_test(ui_flag=False):
 @skipif_ibm_power
 @skipif_managed_service
 @skipif_hci_provider_and_client
+@zstream_4_18_1
 class TestAddCapacity(ManageTest):
     """
     Automates adding variable capacity to the cluster
@@ -163,6 +165,7 @@ class TestAddCapacity(ManageTest):
 @skipif_hci_provider_and_client
 @skipif_no_lso
 @skipif_stretch_cluster
+@zstream_4_18_1
 class TestAddCapacityLSO(ManageTest):
     """
     Add capacity on lso cluster
@@ -196,6 +199,7 @@ class TestAddCapacityLSO(ManageTest):
 @cloud_platform_required
 @skipif_managed_service
 @skipif_hci_provider_and_client
+@zstream_4_18_1
 class TestAddCapacityPreUpgrade(ManageTest):
     """
     Automates adding variable capacity to the cluster pre upgrade
