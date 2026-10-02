@@ -1,0 +1,25 @@
+# FDF Standalone Encryption Testing Configuration (RHSTOR-8290 / TC-14)
+#
+# Overlay for running cluster-wide and per-PVC encryption tests on FDF
+# standalone clusters. Stack with KMS deployment config:
+#
+#   Cluster-wide encryption at rest:
+#     run-ci ... --ocsci-conf conf/ocsci/fdf_standalone_deployment.yaml \
+#                --ocsci-conf conf/ocsci/fdf_standalone_encryption.yaml \
+#                --ocsci-conf conf/ocsci/encryption_at_rest.yaml \
+#                tests/functional/encryption/
+#
+#   Per-PVC (StorageClass) encryption with KMS:
+#     run-ci ... --ocsci-conf conf/ocsci/fdf_standalone_deployment.yaml \
+#                --ocsci-conf conf/ocsci/fdf_standalone_encryption.yaml \
+#                --ocsci-conf conf/ocsci/kms_deployment.yaml \
+#                --ocsci-conf conf/ocsci/sc_encryption.yaml \
+#                tests/functional/encryption/
+#
+# The existing encryption tests are architecture-agnostic (same LUKS/dmcrypt
+# stack on OSD and RBD volumes).
+---
+DEPLOYMENT:
+  fdf_standalone_deployment: true
+ENV_DATA:
+  encryption_at_rest: true
