@@ -131,7 +131,6 @@ class VSPHEREBASE(Deployment):
         self.cluster = config.ENV_DATA["vsphere_cluster"]
         self.datacenter = config.ENV_DATA["vsphere_datacenter"]
         self.datastore = config.ENV_DATA["vsphere_datastore"]
-        self.vsphere = VSPHEREUtil(self.server, self.user, self.password)
         self.upi_repo_path = os.path.join(constants.EXTERNAL_DIR, "installer")
         self.upi_scale_up_repo_path = os.path.join(
             constants.EXTERNAL_DIR, "openshift-misc"
@@ -139,17 +138,26 @@ class VSPHEREBASE(Deployment):
         self.cluster_launcer_repo_path = os.path.join(
             constants.EXTERNAL_DIR, "v4-scaleup"
         )
-        os.environ["TF_LOG"] = config.ENV_DATA.get("TF_LOG_LEVEL", "TRACE")
-        os.environ["TF_LOG_PATH"] = os.path.join(
-            config.ENV_DATA.get("cluster_path"), config.ENV_DATA.get("TF_LOG_FILE")
-        )
 
-        # pre-checks for the vSphere environment
-        # skip pre-checks for destroying cluster
-        teardown = config.RUN["cli_params"].get("teardown")
-        if not teardown:
-            vsphere_prechecks = VSpherePreChecks()
-            vsphere_prechecks.get_all_checks()
+        skip_prechecks = config.ENV_DATA.get("skip_vsphere_prechecks", False)
+        if skip_prechecks:
+            logger.info(
+                "Skipping vSphere connection and pre-checks as per configuration"
+            )
+            self.vsphere = None
+        else:
+            self.vsphere = VSPHEREUtil(self.server, self.user, self.password)
+            os.environ["TF_LOG"] = config.ENV_DATA.get("TF_LOG_LEVEL", "TRACE")
+            os.environ["TF_LOG_PATH"] = os.path.join(
+                config.ENV_DATA.get("cluster_path"),
+                config.ENV_DATA.get("TF_LOG_FILE"),
+            )
+            # pre-checks for the vSphere environment
+            # skip pre-checks for destroying cluster
+            teardown = config.RUN["cli_params"].get("teardown")
+            if not teardown:
+                vsphere_prechecks = VSpherePreChecks()
+                vsphere_prechecks.get_all_checks()
 
         self.ocp_version = get_ocp_version()
         config.ENV_DATA["ocp_version"] = self.ocp_version
