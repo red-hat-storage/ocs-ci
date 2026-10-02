@@ -27,6 +27,7 @@ class CephXAuthHelper:
                 return str(value).lower()
         return None
 
+    @retry(CommandFailed, tries=5, delay=10, backoff=1)
     def get_auth_entity_key_type(self, entity, toolbox_pod=None):
         """Return the CephX key type for *entity* when exposed by Ceph."""
         toolbox = toolbox_pod or self.get_ceph_cli_pod()
@@ -328,9 +329,15 @@ class CephXAuthHelper:
         """Return True if *entity* exists in the Ceph auth store."""
         return self._auth_entity_exists(entity, toolbox_pod=toolbox_pod)
 
+    @retry(CommandFailed, tries=5, delay=10, backoff=1)
     def get_auth_caps(self, entity, toolbox_pod=None):
         """
         Return capability map for a Ceph auth entity.
+
+        Retries the same transient toolbox auth failures as
+        :meth:`get_auth_key` and :meth:`_get_auth_entities_dict`
+        (``handle_auth_bad_method`` / RADOS permission denied while mons are
+        hunting). Missing entities (ENOENT) are not retried.
 
         Returns:
             dict: capability name to value (e.g. mon, mgr, osd).
