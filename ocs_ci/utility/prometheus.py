@@ -1,4 +1,5 @@
 import base64
+import contextlib
 import logging
 import os
 import requests
@@ -940,13 +941,26 @@ class PrometheusAPI(object):
                 logger.error(error_msg)
                 raise AlertingError(error_msg)
 
-    def prometheus_log(self, prometheus_alert_list):
+    def prometheus_log(
+        self, prometheus_alert_list, log_level=logging.INFO, ignored_alert_ids=None
+    ):
         """
         Log all alerts from Prometheus API to list
 
         Args:
             prometheus_alert_list (list): List to be populated with alerts
+            log_level (int): Level used for logging of newly collected alerts
+            ignored_alert_ids (set): Identifiers of alerts (as returned by
+                get_alert_id) that are not added to the list. Useful for
+                ignoring alerts that were already raised before the collection
+                started.
+
+        Returns:
+            bool: True if alerts were successfully collected from Prometheus,
+                False if the Prometheus request failed
+
         """
+        ignored_alert_ids = ignored_alert_ids or set()
 
         with self._cluster_context():
             alerts_response = self.get(
@@ -955,9 +969,12 @@ class PrometheusAPI(object):
             msg = f"Request {alerts_response.request.url} failed"
             if alerts_response.ok:
                 for alert in alerts_response.json().get("data").get("alerts"):
+                    if get_alert_id(alert) in ignored_alert_ids:
+                        continue
                     if alert not in prometheus_alert_list:
-                        logger.info(f"Adding {alert} to alert list")
+                        logger.log(log_level, f"Adding {alert} to alert list")
                         prometheus_alert_list.append(alert)
+                return True
             else:
                 # no need raise Assertion error or Exception here:
                 # 1. It will not lead to a test failure, fixture is in parallel Thread, in SetUp
@@ -965,6 +982,7 @@ class PrometheusAPI(object):
                 # 3. If Prometheus stopped responding, or we missed alert the test will fail anyway
                 #    on checking alert list
                 logger.error(msg)
+                return False
 
     def verify_alerts_via_prometheus(self, expected_alerts, threading_lock):
         """
@@ -999,14 +1017,60 @@ class PrometheusAPI(object):
 
 class PrometheusAlertSubscriber(Timer):
 
-    prometheus_alert_list = []
+    def __init__(
+        self,
+        threading_lock,
+        interval: float,
+        alert_list=None,
+        log_level=logging.INFO,
+        ignored_alerts=None,
+    ):
+        """
+        Args:
+            threading_lock (threading.RLock): Lock used for synchronization of
+                the threads in Prometheus calls
+            interval (float): Number of seconds between Prometheus polls
+            alert_list (list): List to be populated with collected alerts. When
+                not provided, a new list is created. Providing own list is
+                useful when the caller needs to access collected alerts also
+                before the subscriber is unsubscribed.
+            log_level (int): Level used for logging of newly collected alerts
+            ignored_alerts (list): Alerts that are not collected. Typically
+                alerts that were already raised before the subscription
+                started and therefore were not caused by the measured
+                operation.
 
-    def __init__(self, threading_lock, interval: float):
+        """
+        self.prometheus_alert_list = alert_list if alert_list is not None else []
+        self.ignored_alert_ids = {get_alert_id(alert) for alert in ignored_alerts or []}
         self.prometheus_api = PrometheusAPI(threading_lock=threading_lock)
+        # Numbers of Prometheus polls that succeeded and failed. They allow the
+        # consumer of collected alerts to distinguish an empty alert list
+        # caused by unavailable Prometheus from a successful collection where
+        # no alert was fired.
+        self.successful_polls = 0
+        self.failed_polls = 0
         super().__init__(
             interval,
-            lambda: self.prometheus_api.prometheus_log(self.prometheus_alert_list),
+            lambda: self._poll(log_level),
         )
+
+    def _poll(self, log_level):
+        """
+        Collect alerts from Prometheus and record the result of the poll.
+
+        Args:
+            log_level (int): Level used for logging of newly collected alerts
+
+        """
+        if self.prometheus_api.prometheus_log(
+            self.prometheus_alert_list,
+            log_level=log_level,
+            ignored_alert_ids=self.ignored_alert_ids,
+        ):
+            self.successful_polls += 1
+        else:
+            self.failed_polls += 1
 
     def run(self):
         """
@@ -1015,7 +1079,14 @@ class PrometheusAlertSubscriber(Timer):
         ! This method is called by Timer class, do not call it directly !
         """
         while not self.finished.wait(self.interval):
-            self.function(*self.args, **self.kwargs)
+            try:
+                self.function(*self.args, **self.kwargs)
+            except Exception:
+                # Prometheus might be temporarily unavailable, for example when
+                # the monitoring stack itself is being upgraded. One failed
+                # poll must not terminate the whole collection.
+                self.failed_polls += 1
+                logger.exception("Collection of prometheus alerts failed")
 
     def get_alerts(self):
         """
@@ -1027,7 +1098,7 @@ class PrometheusAlertSubscriber(Timer):
         """
         Clear alert list
         """
-        self.prometheus_alert_list = []
+        self.prometheus_alert_list.clear()
 
     def subscribe(self):
         """
@@ -1043,3 +1114,199 @@ class PrometheusAlertSubscriber(Timer):
         """
         self.cancel()
         logger.info("Logging of all prometheus alerts stopped")
+
+
+@contextlib.contextmanager
+def alert_collection(
+    threading_lock,
+    alert_list=None,
+    interval=10,
+    log_level=logging.DEBUG,
+    status=None,
+    stop_timeout=360,
+    pre_existing_alert_list=None,
+):
+    """
+    Context manager that collects all Prometheus alerts fired during the
+    execution of the wrapped block of code. Alerts that were already raised
+    before the wrapped block of code started were not caused by it, so they
+    are not collected. They are provided separately via
+    pre_existing_alert_list.
+
+    Problems with Prometheus (e.g. unreachable endpoint during an upgrade of
+    the monitoring stack) are logged but they do not interrupt the wrapped
+    operation because alert collection is only a supplementary activity.
+
+    Args:
+        threading_lock (threading.RLock): Lock used for synchronization of the
+            threads in Prometheus calls
+        alert_list (list): List to be populated with collected alerts. When not
+            provided, a new list is created.
+        interval (float): Number of seconds between Prometheus polls
+        log_level (int): Level used for logging of each newly collected alert.
+            Alerts are logged with DEBUG level by default because the summary
+            of all collected alerts is logged when the context manager is left.
+        status (dict): Dictionary to be populated with the status of the
+            collection so that the consumer of collected alerts is able to
+            distinguish a failed or unavailable collection from a successful
+            collection where no alert was fired. Following keys are provided:
+            "started" (bool) - collection thread was started,
+            "successful_polls" (int) and "failed_polls" (int) - numbers of
+            successful and failed Prometheus polls, "complete" (bool) -
+            collection thread finished before the context manager was left and
+            the collected alerts are complete, "baseline_collected" (bool) -
+            alerts that were already raised before the collection started were
+            successfully collected and therefore excluded from alert_list.
+        stop_timeout (float): Number of seconds to wait for the collection
+            thread to terminate when the context manager is left. When the
+            thread is still running after this timeout, the collection is
+            recorded as incomplete.
+        pre_existing_alert_list (list): List to be populated with alerts that
+            were already raised when the collection started. Those alerts are
+            excluded from alert_list. When they cannot be collected, the list
+            stays empty and "baseline_collected" in status is False.
+
+    Yields:
+        list: Alerts collected so far. The list is complete once the context
+            manager is left.
+
+    """
+    alerts = alert_list if alert_list is not None else []
+    pre_existing_alerts = (
+        pre_existing_alert_list if pre_existing_alert_list is not None else []
+    )
+    collection_status = status if status is not None else {}
+    collection_status.update(
+        {
+            "started": False,
+            "successful_polls": 0,
+            "failed_polls": 0,
+            "complete": False,
+            "baseline_collected": False,
+        }
+    )
+    try:
+        if PrometheusAPI(threading_lock=threading_lock).prometheus_log(
+            pre_existing_alerts, log_level=log_level
+        ):
+            collection_status["baseline_collected"] = True
+            logger.info(
+                f"{len(pre_existing_alerts)} alerts were already raised before "
+                "the alert collection started and they will not be collected: "
+                f"{get_alert_names(pre_existing_alerts)}"
+            )
+        else:
+            # The wrapped operation is not interrupted because the alert
+            # collection is only a supplementary activity. The consumer of
+            # the collected alerts is informed via the status that the
+            # collected alerts can contain alerts that were raised before.
+            logger.error(
+                "Alerts that were already raised before the alert collection "
+                "started could not be collected, so it is not possible to "
+                "distinguish them from alerts raised during the following "
+                "operation."
+            )
+        subscriber = PrometheusAlertSubscriber(
+            threading_lock=threading_lock,
+            interval=interval,
+            alert_list=alerts,
+            log_level=log_level,
+            ignored_alerts=pre_existing_alerts,
+        )
+        subscriber.subscribe()
+        collection_status["started"] = True
+    except Exception:
+        logger.exception(
+            "Prometheus alert collection could not be started. Alerts fired "
+            "during the following operation will not be collected."
+        )
+        subscriber = None
+
+    try:
+        yield alerts
+    finally:
+        if subscriber is not None:
+            subscriber.unsubscribe()
+            # Wait for the collection thread to finish so that the alert list
+            # is not modified while it is being processed by the caller.
+            subscriber.join(timeout=stop_timeout)
+            if subscriber.is_alive():
+                logger.warning(
+                    "Prometheus alert collection did not stop within "
+                    f"{stop_timeout} seconds, collected alerts might be "
+                    "incomplete"
+                )
+            else:
+                collection_status["complete"] = True
+            collection_status["successful_polls"] = subscriber.successful_polls
+            collection_status["failed_polls"] = subscriber.failed_polls
+            if not subscriber.successful_polls:
+                logger.error(
+                    "No Prometheus poll succeeded during the alert collection "
+                    f"({subscriber.failed_polls} failed polls). Collected "
+                    "alerts cannot be considered as complete."
+                )
+        logger.info(f"Collected {len(alerts)} alerts: {get_alert_names(alerts)}")
+
+
+def get_alert_id(alert):
+    """
+    Get identifier of the provided alert. The identifier consists of all alert
+    labels and of the alert state, so that the same alert raised for two
+    different resources (or the same alert in a different state) is not
+    considered to be one alert. Parts of the alert that change over time
+    (e.g. the measured value or the activation timestamp) are not included.
+
+    Args:
+        alert (dict): Alert as returned by Prometheus API
+
+    Returns:
+        tuple: Hashable identifier of the alert
+
+    """
+    return (
+        tuple(sorted(alert.get("labels", {}).items())),
+        alert.get("state"),
+    )
+
+
+def get_alert_names(alerts):
+    """
+    Get sorted names of provided alerts.
+
+    Args:
+        alerts (list): List of alerts as returned by Prometheus API
+
+    Returns:
+        list: Sorted unique alert names
+
+    """
+    return sorted({alert.get("labels", {}).get("alertname") or "" for alert in alerts})
+
+
+def get_unexpected_alerts(alerts, expected_alerts=None, ignored_severities=None):
+    """
+    Filter out expected alerts from the provided list of alerts.
+
+    Args:
+        alerts (list): List of alerts as returned by Prometheus API
+        expected_alerts (list): Names of alerts that are not considered
+            unexpected
+        ignored_severities (list): Alerts with a severity label from this list
+            are not considered unexpected
+
+    Returns:
+        list: Alerts that are neither expected nor ignored
+
+    """
+    expected_alerts = expected_alerts or []
+    ignored_severities = ignored_severities or []
+    unexpected_alerts = []
+    for alert in alerts:
+        labels = alert.get("labels", {})
+        if labels.get("alertname") in expected_alerts:
+            continue
+        if labels.get("severity") in ignored_severities:
+            continue
+        unexpected_alerts.append(alert)
+    return unexpected_alerts

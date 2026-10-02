@@ -62,7 +62,7 @@ def teardown(request, nodes):
 
 @purple_squad
 @pytest.mark.polarion_id("OCS-1579")
-def test_worker_node_abrupt_shutdown(teardown, upgrade_stats):
+def test_worker_node_abrupt_shutdown(teardown, upgrade_stats, threading_lock):
     """
     Test OCS upgrade with disruption of shutting down worker node,
     for 5.5 minutes
@@ -70,33 +70,43 @@ def test_worker_node_abrupt_shutdown(teardown, upgrade_stats):
     """
     log.info("Starting disruptive function: test_worker_node_abrupt_shutdown")
     run_ocs_upgrade(
-        operation=worker_node_shutdown, abrupt=True, upgrade_stats=upgrade_stats
+        operation=worker_node_shutdown,
+        abrupt=True,
+        upgrade_stats=upgrade_stats,
+        threading_lock=threading_lock,
     )
 
 
 @purple_squad
 @pytest.mark.polarion_id("OCS-1575")
-def test_worker_node_permanent_shutdown(teardown, upgrade_stats):
+def test_worker_node_permanent_shutdown(teardown, upgrade_stats, threading_lock):
     """
     Test OCS upgrade with disruption of shutting down worker node
 
     """
     log.info("Starting disruptive function: test_worker_node_permanent_shutdown")
     run_ocs_upgrade(
-        operation=worker_node_shutdown, abrupt=False, upgrade_stats=upgrade_stats
+        operation=worker_node_shutdown,
+        abrupt=False,
+        upgrade_stats=upgrade_stats,
+        threading_lock=threading_lock,
     )
 
 
 @purple_squad
 @pytest.mark.polarion_id("OCS-1558")
-def test_osd_reboot(teardown, upgrade_stats):
+def test_osd_reboot(teardown, upgrade_stats, threading_lock):
     """
     OCS Upgrade with node reboot: with 1 OSD going down and back up while upgrade is running
 
     """
 
     log.info("Starting disruptive function: test_osd_reboot")
-    run_ocs_upgrade(operation=osd_node_reboot, upgrade_stats=upgrade_stats)
+    run_ocs_upgrade(
+        operation=osd_node_reboot,
+        upgrade_stats=upgrade_stats,
+        threading_lock=threading_lock,
+    )
 
 
 @pytest.fixture
@@ -108,13 +118,13 @@ def config_index(request):
 @ocs_upgrade
 @polarion_id(get_polarion_id(upgrade=True))
 @multicluster_roles(["mdr-all-odf", "rdr-all-odf"])
-def test_upgrade(zone_rank, role_rank, config_index, upgrade_stats=None):
+def test_upgrade(zone_rank, role_rank, config_index, threading_lock, upgrade_stats):
     """
     Tests upgrade procedure of OCS cluster
 
     """
 
-    run_ocs_upgrade(upgrade_stats=upgrade_stats)
+    run_ocs_upgrade(upgrade_stats=upgrade_stats, threading_lock=threading_lock)
     if config.multicluster and config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
         # Perform validation for MCO, dr hub operator and dr cluster operator here
         # in case of z stream because we wouldn't call those tests in the case of
