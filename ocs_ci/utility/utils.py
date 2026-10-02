@@ -4946,13 +4946,47 @@ def clone_notify():
 
 def add_chrony_to_ocp_deployment():
     """
-    Create and Add necessary chrony resources
+    Create and Add necessary chrony resources with dynamic NTP server configuration.
+
+    The NTP server is read from ENV_DATA['ntp_server'], with 'clock.redhat.com'
+    as the default. For disconnected deployments, ENV_DATA['disconnected_ntp_server']
+    takes precedence if defined.
+
+    This ensures the NTP server is set correctly from deployment start via MachineConfig,
+    avoiding conflicts with Machine Config Operator (MCO) that would occur if the file
+    is edited directly on nodes later.
 
     """
+    # Get NTP server from config, fallback to default
+    ntp_server = config.ENV_DATA.get("ntp_server", "clock.redhat.com")
+
+    # Handle disconnected mode
+    if config.ENV_DATA.get("disconnected_installation"):
+        ntp_server = config.ENV_DATA.get("disconnected_ntp_server", ntp_server)
+
+    log.info(f"Configuring chrony with NTP server: {ntp_server}")
+
+    # Generate chrony.conf content dynamically
+    chrony_conf_content = (
+        f"server {ntp_server} iburst\n\n"
+        "driftfile /var/lib/chrony/drift\n\n"
+        "makestep 1.0 3\n\n"
+        "rtcsync\n"
+    )
+
+    # Encode to base64 for data URL
+    chrony_conf_base64 = base64.b64encode(chrony_conf_content.encode()).decode()
+
     for role in ["master", "worker"]:
-        log.info(f"Creating and Adding Chrony file for {role}")
+        log.info(f"Creating Chrony MachineConfig for {role}")
         with open(constants.CHRONY_TEMPLATE) as file_stream:
             chrony_template_obj = yaml.safe_load(file_stream)
+
+        # Update the base64 content with dynamic NTP server
+        chrony_template_obj["spec"]["config"]["storage"]["files"][0]["contents"][
+            "source"
+        ] = f"data:text/plain;charset=utf-8;base64,{chrony_conf_base64}"
+
         chrony_template_obj["metadata"]["labels"][
             "machineconfiguration.openshift.io/role"
         ] = role
