@@ -1,11 +1,13 @@
+import json
 import os
 import platform
 import xattr
 from stat import S_IEXEC
 from logging import getLogger
+from subprocess import CompletedProcess
 from typing import Union
 
-from ocs_ci.ocs.exceptions import NotSupportedException
+from ocs_ci.ocs.exceptions import NotSupportedException, UnexpectedBehaviour
 from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_15
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
@@ -188,7 +190,9 @@ class ODFCliRunner:
     def __init__(self) -> None:
         self.binary_name = os.path.join(config.RUN["bin_dir"], "odf")
 
-    def run_command(self, command_args: Union[str, list], timeout=600) -> str:
+    def run_command(
+        self, command_args: Union[str, list], timeout=600
+    ) -> CompletedProcess:
         # by default Operator namespace is set to 'openshift-storage' in ODF CLI,
         # when -n <storage_ns> is not passed the command will fail if the namespace is not 'openshift-storage'
         args_str = (
@@ -245,6 +249,92 @@ class ODFCliRunner:
         return self.run_command(
             f" set ceph log-level {service} {subsystem} {log_level}"
         )
+
+    def run_ceph_config(self, args: str) -> CompletedProcess:
+        """
+        Run a `ceph config` subcommand through the ODF CLI passthrough.
+
+        Args:
+            args (str): `ceph config` arguments, e.g.
+                "set global osd_mclock_max_capacity_iops_hdd 80000".
+
+        Returns:
+            CompletedProcess: result from exec_cmd.
+
+        """
+        return self.run_command(f" ceph config {args}")
+
+    def get_ceph_config_value(
+        self, who: str, option: str, subcommand: str = "get"
+    ) -> str:
+        """
+        Read the value of a Ceph config option via the ODF CLI.
+
+        Args:
+            who (str): Ceph entity. With "get" it can be any section, e.g.
+                "osd", "global", "osd.0". With "show" it must name a running
+                daemon, e.g. "osd.0".
+            option (str): Ceph config option name.
+            subcommand (str): "get" resolves the value from the mon config DB,
+                "show" asks the running daemon what it is actually using.
+
+        Returns:
+            str: The value reported by the CLI.
+
+        Raises:
+            UnexpectedBehaviour: If the CLI returns no value.
+
+        """
+        output = (
+            self.run_ceph_config(f"{subcommand} {who} {option}").stdout.decode().strip()
+        )
+        if not output:
+            raise UnexpectedBehaviour(
+                f"ODF CLI returned no value for `ceph config {subcommand} {who} {option}`"
+            )
+        return output.split()[-1]
+
+    def get_osd_bdev_type(self, osd_id: Union[str, int]) -> str:
+        """
+        Get the bluestore device type of an OSD via the ODF CLI.
+
+        Ceph mClock selects `osd_mclock_max_capacity_iops_{ssd,hdd}` by this
+        value, which can differ from the OSD's CRUSH device class.
+
+        Args:
+            osd_id (Union[str, int]): OSD id, e.g. 0 or "0".
+
+        Returns:
+            str: The bluestore device type, "ssd" or "hdd".
+
+        """
+        output = self.run_command(f" ceph osd metadata {osd_id}")
+        return json.loads(output.stdout.decode())["bluestore_bdev_type"]
+
+    def get_ceph_config_dump_entries(self, option: str) -> list:
+        """
+        List the `ceph config dump` entries for a Ceph config option.
+
+        Args:
+            option (str): Ceph config option name.
+
+        Returns:
+            list: (who, value) tuples, e.g. [("global", "80000.000000")].
+                `who` carries the entry's mask when it has one, e.g.
+                "osd/class:hdd", so it can be passed straight back to
+                `ceph config set`/`rm`. Empty when the option has no entry set.
+
+        """
+        dump = json.loads(self.run_ceph_config("dump -f json").stdout.decode())
+        entries = []
+        for entry in dump:
+            if entry["name"] != option:
+                continue
+            who = entry["section"]
+            if entry["mask"]:
+                who = f"{who}/{entry['mask']}"
+            entries.append((who, entry["value"]))
+        return entries
 
     def get_recovery_profile(self):
         """
