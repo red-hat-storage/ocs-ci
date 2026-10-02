@@ -71,14 +71,14 @@ class MustGather(object):
         """
         upgrade_version = config.UPGRADE.get("upgrade_ocs_version")
         if upgrade_version:
-            ocs_version = float(upgrade_version)
+            ocs_version = version.get_semantic_version(
+                upgrade_version, only_major_minor=True
+            )
             logger.debug(
                 f"Using upgrade version for must-gather validation: {ocs_version}"
             )
         else:
-            ocs_version = float(
-                f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
-            )
+            ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
             logger.debug(f"Using CSV version for must-gather validation: {ocs_version}")
         if ocs_version not in GATHER_COMMANDS_VERSION:
             candidates = [v for v in GATHER_COMMANDS_VERSION if v <= ocs_version]
