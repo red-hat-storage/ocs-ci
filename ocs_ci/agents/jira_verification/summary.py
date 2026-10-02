@@ -1,10 +1,10 @@
 """OpenAI summary of one Jira issue for a verification report."""
 
 import json
+import logging
 import re
-from logging import getLogger
 
-log = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 _SUMMARY_INSTRUCTIONS = (
     "You summarize one ODF Jira bug for a verification report. "
@@ -37,7 +37,7 @@ def summarize_issue(issue):
     from ocs_ci.agents.runtime.llm import _openai_model
 
     source = issue_text_for_summary(issue)
-    log.info(f"Asking OpenAI to summarize {source.get('key') or 'issue'}")
+    logger.info(f"Asking OpenAI to summarize {source.get('key') or 'issue'}")
     response = _openai_model().invoke(
         [
             SystemMessage(content=_SUMMARY_INSTRUCTIONS),

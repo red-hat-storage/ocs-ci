@@ -5,15 +5,15 @@ are agents_credentials.jenkins, then the top-level jenkins section of
 data/auth.yaml. trigger_build is refused during --dry-run.
 """
 
+import logging
 import re
-from logging import getLogger
 
 import requests
 from requests.auth import HTTPBasicAuth
 
 from ocs_ci.agents.mcp.registry import _load_auth_config
 
-log = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 DEFAULT_JENKINS_URL = "https://jenkins-csb-odf-qe-ocs4.dno.corp.redhat.com"
 _DEPLOY_JOBS = (
@@ -75,6 +75,7 @@ class JenkinsClient:
             dict: Build number, url, result, and selected parameters. None
                 when no recent build matches.
         """
+        logger.info(f"Looking up the newest Jenkins deploy for {cluster_name}")
         newest = None
         for job in _DEPLOY_JOBS:
             build = self._newest_in_job(job, cluster_name)
@@ -169,7 +170,7 @@ class JenkinsClient:
                 form[str(key)] = str(value)
         if not form:
             raise ValueError("Jenkins parameters are required")
-        log.info(f"Starting Jenkins job {job}")
+        logger.info(f"Starting Jenkins job {job}")
         response = self._request(
             "POST",
             f"/job/{job}/buildWithParameters",
@@ -281,7 +282,7 @@ class JenkinsClient:
         except requests.exceptions.SSLError:
             if not self._verify:
                 raise
-            log.warning(
+            logger.warning(
                 "Jenkins certificate is not in the trust store; "
                 "retrying without verification"
             )

@@ -1,5 +1,9 @@
 """Keep OpenAI tool-call messages inside the API limit."""
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 OPENAI_MAX_TOOL_CALLS = 128
 
 
@@ -50,6 +54,7 @@ def split_tool_call_messages(messages, limit=OPENAI_MAX_TOOL_CALLS):
         while cursor < len(messages) and _tool_call_id(messages[cursor]) in pending:
             results[_tool_call_id(messages[cursor])] = messages[cursor]
             cursor += 1
+        logger.warning(f"Splitting {len(tool_calls)} tool calls into groups of {limit}")
         first = True
         for start in range(0, len(tool_calls), limit):
             chunk = tool_calls[start : start + limit]
