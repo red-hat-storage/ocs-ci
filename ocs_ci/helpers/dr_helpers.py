@@ -36,7 +36,7 @@ from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     get_ceph_tools_pod,
-    get_odf_external_snapshotter_leader,
+    get_odf_snapshotter_leader,
     get_pods_having_label,
     wait_for_matching_pattern_in_pod_logs,
 )
@@ -3547,23 +3547,38 @@ def get_vgs_name(vgs_namespace):
 
 def validate_volumegroupsnapshot(vgs_namespace):
     """
-    Validates Volume Group Snapshot resource creation from odf external snapshotter
+    Validates Volume Group Snapshot resource creation.
+
+    For ODF <= 4.22 this reads the odf external snapshotter leader pod logs.
+    For ODF > 4.22 this reads the csi-snapshot-controller leader pod logs
+    (namespace openshift-cluster-storage-operator).
 
     Args:
         vgs_namespace (str): the namespace of the Volume Group snapshot resources
 
     """
-    namespace = config.ENV_DATA["cluster_namespace"]
-    odf_external_snapshotter_leader = get_odf_external_snapshotter_leader(namespace)
+    ocs_version = version.get_semantic_ocs_version_from_config()
     vgs_name = get_vgs_name(vgs_namespace)
     expected_output_lst = (
         f"{vgs_name} was successfully created by the CSI driver",
         f"{vgs_name} is ready to use",
     )
+
+    if ocs_version > version.VERSION_4_22:
+        namespace = constants.OPENSHIFT_CLUSTER_STORAGE_OPERATOR_NAMESPACE
+        snapshotter_leader = get_odf_snapshotter_leader(
+            namespace,
+            label=constants.CSI_SNAPSHOT_CONTROLLER_LABEL,
+            container=None,
+        )
+    else:
+        namespace = config.ENV_DATA["cluster_namespace"]
+        snapshotter_leader = get_odf_snapshotter_leader(namespace)
+
     try:
         for expected_val in expected_output_lst:
             wait_for_matching_pattern_in_pod_logs(
-                pod_name=odf_external_snapshotter_leader.name,
+                pod_name=snapshotter_leader.name,
                 pattern=expected_val,
                 namespace=namespace,
                 timeout=300,
