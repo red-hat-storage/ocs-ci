@@ -15,7 +15,7 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
 )
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     skipif_external_mode,
     skipif_ocs_version,
@@ -32,6 +32,8 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.8")
 @pytest.mark.polarion_id("OCS-2754")
 @ignore_leftovers
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestHugePages(E2ETest):
     """
     Enable huge pages post ODF installation

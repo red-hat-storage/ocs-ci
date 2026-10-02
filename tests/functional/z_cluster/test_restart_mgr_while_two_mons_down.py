@@ -13,6 +13,8 @@ from ocs_ci.ocs.resources.pod import get_deployments_having_label
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     brown_squad,
+    zstream_4_18_1,
+    zstream_4_18_1_ocs_operator,
 )
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -27,6 +29,8 @@ log = logging.getLogger(__name__)
 @tier2
 @polarion_id("OCS-2696")
 @skipif_external_mode
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestRestartMgrWhileTwoMonsDown(ManageTest):
     """
     Restart mgr pod while two mon pods are down

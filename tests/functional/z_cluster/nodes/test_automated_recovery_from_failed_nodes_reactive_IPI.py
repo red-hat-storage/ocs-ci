@@ -1,6 +1,6 @@
 import logging
 import pytest
-from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_compact_mode
+from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_compact_mode, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
@@ -46,6 +46,8 @@ log = logging.getLogger(__name__)
 @ignore_leftovers
 @tier4b
 @ipi_deployment_required
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestAutomatedRecoveryFromFailedNodes(ManageTest):
     """
     Knip-678 Automated recovery from failed nodes - Reactive
@@ -222,6 +224,8 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @ipi_deployment_required
 @skipif_ibm_cloud
 @skipif_compact_mode
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
     osd_worker_node = None
