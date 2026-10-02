@@ -2962,7 +2962,10 @@ def do_discovered_apps_cleanup(
 
 
 def do_discovered_apps_cleanup_multi_ns(
-    old_primary, workload_instance, vrg_state="secondary"
+    old_primary,
+    workload_instance,
+    vrg_state="secondary",
+    skip_resource_deletion_verification=False,
 ):
     """
     Function to clean up Resources
@@ -2970,6 +2973,8 @@ def do_discovered_apps_cleanup_multi_ns(
     Args:
         old_primary (str): Name of old primary where cleanup will happen
         workload_instance (list): Workload instance
+        skip_resource_deletion_verification (bool): Skip verification of rresource deletion, VRG state and DRPC
+            progression
 
     """
     restore_index = config.cur_index
@@ -2989,22 +2994,23 @@ def do_discovered_apps_cleanup_multi_ns(
         run_cmd(
             f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
         )
-    for workload_instance_index in workload_instance:
-        workload_namespace = workload_instance_index.workload_namespace
-        wait_for_all_resources_deletion(
-            namespace=workload_namespace,
-            discovered_apps=True,
-            vrg_name=vrg_name,
-            skip_vrg_check=True,
-        )
+    if not skip_resource_deletion_verification:
+        for workload_instance_index in workload_instance:
+            workload_namespace = workload_instance_index.workload_namespace
+            wait_for_all_resources_deletion(
+                namespace=workload_namespace,
+                discovered_apps=True,
+                vrg_name=vrg_name,
+                skip_vrg_check=True,
+            )
 
-    wait_for_vrg_state(
-        vrg_state=vrg_state,
-        vrg_namespace=constants.DR_OPS_NAMESPACE,
-        resource_name=vrg_name,
-    )
-    config.switch_acm_ctx()
-    drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
+        wait_for_vrg_state(
+            vrg_state=vrg_state,
+            vrg_namespace=constants.DR_OPS_NAMESPACE,
+            resource_name=vrg_name,
+        )
+        config.switch_acm_ctx()
+        drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
     config.switch_ctx(restore_index)
 
 
