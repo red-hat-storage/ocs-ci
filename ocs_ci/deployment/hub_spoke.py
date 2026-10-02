@@ -469,6 +469,55 @@ def get_provider_address():
     return storage_provider_endpoint
 
 
+def _extract_version_from_channel_string(version_string, cluster_name):
+    """
+    Extract a numeric version from a channel-prefixed version string.
+
+    Strips known channel prefixes ("latest", "stable") and returns the
+    remaining numeric version. Falls back to the cluster's odf_version
+    config when the channel string has no numeric component.
+
+    Args:
+        version_string (str): Version string, possibly prefixed with channel
+            tags like "stable-4.23", "latest-stable-4.23", or bare "4.23.0-41".
+        cluster_name (str): Cluster name for fallback lookup.
+
+    Returns:
+        str: A version string suitable for semantic version parsing.
+
+    Raises:
+        ValueError: If no numeric version can be determined.
+
+    """
+    if any(tag in version_string for tag in ["latest", "stable"]):
+        parts = [
+            p for p in version_string.split("-") if p not in ("latest", "stable", "")
+        ]
+        if parts:
+            version_string = "-".join(parts)
+        else:
+            fallback = (
+                config.ENV_DATA.get("clusters", {})
+                .get(cluster_name, {})
+                .get("odf_version")
+            )
+            if fallback:
+                logger.warning(
+                    "hosted_odf_version '%s' has no numeric version, "
+                    "falling back to odf_version '%s'",
+                    version_string,
+                    fallback,
+                )
+                version_string = fallback
+            else:
+                raise ValueError(
+                    f"hosted_odf_version '{version_string}' for cluster "
+                    f"'{cluster_name}' contains no numeric version and no "
+                    f"odf_version fallback is available"
+                )
+    return version_string
+
+
 def config_has_hosted_odf_image(cluster_name):
     """
     Check if the config has hosted ODF image set for the cluster
@@ -7576,8 +7625,9 @@ class SpokeODF(SpokeOCP, ABC):
         hosted_odf_version = (
             config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
         )
-        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
-            hosted_odf_version = hosted_odf_version.split("-")[-1]
+        hosted_odf_version = _extract_version_from_channel_string(
+            hosted_odf_version, self.name
+        )
 
         version_semantic = version.get_semantic_version(hosted_odf_version)
 
@@ -7972,8 +8022,9 @@ class HostedFDF(HypershiftHostedOCP, SpokeODF):
         hosted_odf_version = (
             config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
         )
-        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
-            hosted_odf_version = hosted_odf_version.split("-")[-1]
+        hosted_odf_version = _extract_version_from_channel_string(
+            hosted_odf_version, self.name
+        )
 
         version_semantic = version.get_semantic_version(hosted_odf_version)
         hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
