@@ -22,6 +22,7 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
     get_external_cluster_client,
+    _external_ceph_semantic_version_or_none,
 )
 from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
@@ -1947,7 +1948,21 @@ class Deployment(object):
             mode="w+", prefix="external_cluster_storage", delete=False
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
-        run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=2400)
+        run_cmd(f"oc apply -f {cluster_data_yaml.name}", timeout=2400)
+
+        # Disable certificate check only for Ceph 19.0+ (Squid)
+        # The mgr/cephadm/certificate_check_period config option doesn't exist in earlier versions
+        ceph_version = _external_ceph_semantic_version_or_none()
+        if ceph_version and ceph_version >= version.get_semantic_version(
+            "19.0", only_major_minor=True
+        ):
+            external_cluster.disable_certificate_check()
+        else:
+            logger.info(
+                f"Skipping disable_certificate_check for Ceph version {ceph_version} "
+                "(only supported on Ceph 19.0+)"
+            )
+
         self.external_post_deploy_validation()
 
         # enable secure connection mode for in-transit encryption
