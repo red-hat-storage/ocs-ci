@@ -1,16 +1,19 @@
 import os
 import platform
+import shutil
+import tarfile
 import xattr
 from stat import S_IEXEC
 from logging import getLogger
 from typing import Union
 
-from ocs_ci.ocs.exceptions import NotSupportedException
+from ocs_ci.ocs.exceptions import NotFoundError, NotSupportedException
 from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_15
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.ocs.constants import (
+    CLI_IMAGE_RELEASES_DIR,
     ODF_CLI_DEV_IMAGE,
     LOW_RECOVERY_OPS,
     BALANCED,
@@ -182,6 +185,172 @@ class ODFCLIRetriever:
             os.environ["PATH"] = f"{cli_dir}:{current_path}"
         log.info(f"Added {cli_dir} to PATH")
         log.info(f"Current PATH: {os.environ['PATH']}")
+
+
+class NoobaaCLIRetriever:
+    """
+    Download the standalone noobaa CLI that ships in the ODF CLI image.
+
+    Unlike the "odf noobaa" wrapper, which is built against a vendored
+    noobaa-operator revision and can lag the operator on the cluster
+    (DFBUGS-11485), this binary is built from the operator sources.
+    """
+
+    def __init__(self):
+        self.semantic_version = get_semantic_ocs_version_from_config()
+        self.local_cli_path = os.path.join(config.RUN["bin_dir"], "noobaa")
+        self.version_attribute_name = "user.version"
+
+    def check_noobaa_cli_binary(self):
+        """
+        Check that the noobaa CLI binary exists, is executable and was taken
+        from the image of the version currently under test.
+
+        Returns:
+            bool: True if the local binary can be used as-is, False otherwise.
+
+        """
+        path = self.local_cli_path
+        if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+            log.warning(f"NooBaa CLI binary is not accessible at {path}")
+            return False
+
+        try:
+            binary_version = xattr.getxattr(path, self.version_attribute_name).decode()
+        except OSError:
+            log.warning("NooBaa CLI binary is not tagged with a version attribute")
+            return False
+
+        if binary_version != str(self.semantic_version):
+            log.warning(
+                f"NooBaa CLI binary is tagged {binary_version}, "
+                f"but the cluster is {self.semantic_version}"
+            )
+            return False
+
+        return True
+
+    def retrieve_noobaa_cli_binary(self):
+        """
+        Download and set up the standalone noobaa CLI binary.
+
+        Raises:
+            RuntimeError: If the binary is still unusable after the download.
+
+        """
+        if not self.check_noobaa_cli_binary():
+            self._extract_cli_binary(f"{ODF_CLI_DEV_IMAGE}:v{self.semantic_version}")
+            current_permissions = os.stat(self.local_cli_path).st_mode
+            os.chmod(self.local_cli_path, current_permissions | S_IEXEC)
+            xattr.setxattr(
+                self.local_cli_path,
+                self.version_attribute_name,
+                str(self.semantic_version).encode(),
+            )
+
+        if not self.check_noobaa_cli_binary():
+            raise RuntimeError(
+                f"Failed to retrieve and set up the noobaa CLI binary "
+                f"at {self.local_cli_path}"
+            )
+
+        log.info(f"NooBaa CLI binary is ready at {self.local_cli_path}")
+
+    def _get_archive_path(self):
+        """Get the platform-specific noobaa CLI archive path in the image."""
+        system = platform.system()
+        machine = platform.machine()
+
+        if system == "Windows":
+            archive = "noobaa-windows.tar.gz"
+        else:
+            platform_name = "darwin" if system == "Darwin" else "linux"
+            arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(machine, machine)
+            archive = f"noobaa-{platform_name}-{arch}.tar.gz"
+
+        return os.path.join(CLI_IMAGE_RELEASES_DIR, archive)
+
+    def _extract_cli_binary(self, image):
+        """
+        Pull the noobaa CLI archive out of the image and unpack the binary.
+
+        Args:
+            image (str): The ODF CLI image to extract the archive from.
+
+        """
+        pull_secret_path = download_pull_secret()
+        local_cli_dir = os.path.dirname(self.local_cli_path)
+        archive_path = self._get_archive_path()
+        os.makedirs(local_cli_dir, exist_ok=True)
+
+        exec_cmd(
+            f"oc image extract --registry-config {pull_secret_path} "
+            f"--filter-by-os=linux/amd64 "
+            f"{image} --confirm "
+            f"--path {archive_path}:{local_cli_dir}"
+        )
+
+        local_archive = os.path.join(local_cli_dir, os.path.basename(archive_path))
+        # The archive holds the binary alone, named after the architecture.
+        try:
+            with tarfile.open(local_archive) as archive:
+                member = next((m for m in archive if m.isfile()), None)
+                if member is None:
+                    raise NotFoundError(
+                        f"No binary inside the CLI archive {archive_path}"
+                    )
+                with open(self.local_cli_path, "wb") as target:
+                    shutil.copyfileobj(archive.extractfile(member), target)
+        finally:
+            # Otherwise a failed extraction leaves the tarball behind and the
+            # next run extracts on top of it.
+            if os.path.exists(local_archive):
+                os.remove(local_archive)
+
+        log.info(f"Extracted the noobaa CLI binary to {self.local_cli_path}")
+
+
+class NoobaaCliRunner:
+    """
+    Run the standalone noobaa CLI retrieved by :class:`NoobaaCLIRetriever`.
+
+    Shares the run_noobaa signature with :class:`ODFCliRunner`.
+    """
+
+    def __init__(self) -> None:
+        self.binary_name = os.path.join(config.RUN["bin_dir"], "noobaa")
+
+    def run_noobaa(
+        self,
+        command_args: Union[str, list],
+        namespace: str = None,
+        ignore_error: bool = False,
+        **kwargs,
+    ):
+        """
+        Run a noobaa command through the standalone CLI.
+
+        Args:
+            command_args (str|list): NooBaa command arguments, e.g. "status"
+            namespace (str): Override the default namespace
+            ignore_error (bool): If True, don't raise on a non-zero exit
+            **kwargs: Additional arguments to pass to exec_cmd
+
+        Returns:
+            CompletedProcess: Result object with stdout and stderr decoded
+
+        """
+        args = command_args if isinstance(command_args, str) else " ".join(command_args)
+        ns = namespace or config.ENV_DATA["cluster_namespace"]
+
+        result = exec_cmd(
+            f"{self.binary_name} {args} -n {ns}", ignore_error=ignore_error, **kwargs
+        )
+        if isinstance(result.stdout, bytes):
+            result.stdout = result.stdout.decode()
+        if isinstance(result.stderr, bytes):
+            result.stderr = result.stderr.decode()
+        return result
 
 
 class ODFCliRunner:
