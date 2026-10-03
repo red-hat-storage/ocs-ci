@@ -60,20 +60,26 @@ class BackingStoreTab(ObjectStorage, CreateResourceForm):
 
     def validate_backing_store_ready(self) -> bool:
         """
-        Validate backing store is Ready
+        Validate backing store status shown in the UI matches the backend.
         Returns:
-            bool: True if backing store is Ready, False otherwise
+            bool: True if UI status matches the backend status, False otherwise
         """
-        logger.info("Verifying the status of noobaa backing store is Ready")
-        backingstore_status = self.get_element_text(
-            self.validation_loc["bucketclass-status"]
+        logger.info("Verifying the status of noobaa backing store")
+        ui_status = self.get_element_text(self.validation_loc["bucketclass-status"])
+        if ui_status == "Ready":
+            return True
+        backend_status = OCP(
+            kind="backingstore",
+            namespace=config.ENV_DATA["cluster_namespace"],
+        ).get(resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE)["status"]["phase"]
+        if ui_status == backend_status:
+            logger.info(f"Backing store UI status '{ui_status}' matches backend — pass")
+            return True
+        logger.warning(
+            f"Backing store UI status '{ui_status}' does not match "
+            f"backend status '{backend_status}'"
         )
-        is_ready = backingstore_status == "Ready"
-        if not is_ready:
-            logger.warning(
-                f"Backing store status is {backingstore_status} and not Ready"
-            )
-        return is_ready
+        return False
 
     def nav_backing_store_list_breadcrumb(self):
         """
