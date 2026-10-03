@@ -96,7 +96,26 @@ def build_request(argv, env):
         help=(
             "Read and write the local verification report only. "
             "Do not update Jira or any other application. "
+            "With --execute, do not run cluster commands or open a GitHub issue. "
             "Also enabled by OCS_AGENT_DRY_RUN=1."
+        ),
+    )
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help=(
+            "Run the saved verification report on --cluster. Copies that "
+            "cluster's kubeconfig from Jenkins when its agent is online. "
+            "Does not fetch Jira again."
+        ),
+    )
+    parser.add_argument(
+        "--kubeconfig",
+        default=None,
+        help=(
+            "Optional local kubeconfig for --execute. When omitted, the "
+            "kubeconfig is copied from the Jenkins build for --cluster. "
+            "Overrides OCS_AGENT_KUBECONFIG."
         ),
     )
     args = parser.parse_args(argv)
@@ -110,10 +129,14 @@ def build_request(argv, env):
     result_file = args.result_file or env.get("OCS_AGENT_RESULT_FILE")
     if not result_file and env.get("WORKSPACE"):
         result_file = str(Path(env["WORKSPACE"]) / "agent-result.json")
+    execute = args.execute or _truthy(env.get("OCS_AGENT_EXECUTE"))
+    kubeconfig = args.kubeconfig or env.get("OCS_AGENT_KUBECONFIG") or ""
     return {
         "agent": agent,
         "message": message,
         "provider": args.provider,
+        "execute": execute,
+        "kubeconfig": str(kubeconfig).strip(),
         "args": _agent_args(args, env),
         "result_file": result_file,
         "jenkins": {
@@ -461,9 +484,16 @@ def main(argv=None, env=None, invoke=None):
     try:
         agent_dir = resolve_agent_dir(request["agent"])
         load_agent_spec(agent_dir)
-        runner = invoke or invoke_agent
-        with activate_provider(request):
-            result = runner(agent_dir, request)
+        if request.get("execute"):
+            if request["agent"] != "jira_verification":
+                raise ValueError("--execute is only available for jira_verification")
+            from ocs_ci.agents.jira_verification.execute import execute_saved_reports
+
+            result = execute_saved_reports(request)
+        else:
+            runner = invoke or invoke_agent
+            with activate_provider(request):
+                result = runner(agent_dir, request)
         result.setdefault("ok", True)
         code = EXIT_OK if result["ok"] else EXIT_AGENT_ERROR
     except LookupError as exc:

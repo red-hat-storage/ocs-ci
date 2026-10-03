@@ -5,6 +5,8 @@ import logging
 import re
 from pathlib import Path
 
+from ocs_ci.agents.jira_verification.summary import summary_text
+
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -85,7 +87,7 @@ def bug_report_text(issue):
     """
     issue = issue or {}
     parts = [
-        issue.get("summary") or "",
+        summary_text(issue.get("summary")),
         issue.get("description") or "",
         issue.get("environment") or "",
         issue.get("bug_description") or "",

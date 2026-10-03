@@ -6,7 +6,9 @@ data/auth.yaml. trigger_build is refused during --dry-run.
 """
 
 import logging
+import os
 import re
+import tempfile
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -25,6 +27,10 @@ _DEPLOY_JOBS = (
 )
 _PAGE = 100
 _MAX_BUILDS = 500
+_KUBECONFIG_HREF = re.compile(
+    r'href="(https?://[^"]+/openshift-cluster-dir/auth/kubeconfig)"',
+    re.IGNORECASE,
+)
 _DETAIL_PARAMS = (
     "OCP_VERSION",
     "OCS_VERSION",
@@ -103,6 +109,96 @@ class JenkinsClient:
             if isinstance(node, dict) and node.get("offline") is False:
                 return True
         return False
+
+    def copy_kubeconfig(self, cluster_name):
+        """
+        Copy the cluster kubeconfig linked from the Jenkins deploy build.
+
+        The link is the kubeconfig on the build page. It is only usable while
+        the temporary Jenkins agent for the cluster is online.
+
+        Args:
+            cluster_name (str): Jenkins CLUSTER_NAME.
+
+        Returns:
+            dict: available, path, and reason. path is a private temp file
+                when available is true.
+        """
+        if not self.agent_online(cluster_name):
+            return {
+                "available": False,
+                "path": "",
+                "reason": (
+                    f"The Jenkins agent for {cluster_name} is offline, "
+                    "so the kubeconfig is not available."
+                ),
+            }
+        build = self.latest_deploy(cluster_name)
+        if not build:
+            return {
+                "available": False,
+                "path": "",
+                "reason": (
+                    f"No deploy build for {cluster_name} was found "
+                    "in the recent Jenkins jobs."
+                ),
+            }
+        description = self._description(build["job"], build["number"])
+        url = _kubeconfig_url(description)
+        if not url:
+            return {
+                "available": False,
+                "path": "",
+                "reason": (
+                    f"The Jenkins build for {cluster_name} has no kubeconfig link."
+                ),
+            }
+        logger.info(f"Copying kubeconfig for {cluster_name} from Jenkins")
+        try:
+            response = requests.get(url, timeout=60)
+        except requests.RequestException as error:
+            logger.warning(f"Could not copy kubeconfig for {cluster_name}: {error}")
+            response = None
+        if (
+            response is None
+            or response.status_code != 200
+            or not _looks_like_kubeconfig(response.content)
+        ):
+            return {
+                "available": False,
+                "path": "",
+                "reason": f"The kubeconfig for {cluster_name} is not available.",
+            }
+        handle = tempfile.NamedTemporaryFile(
+            prefix=f"ocs-ci-{cluster_name}-",
+            suffix=".kubeconfig",
+            delete=False,
+        )
+        try:
+            handle.write(response.content)
+        finally:
+            handle.close()
+        os.chmod(handle.name, 0o600)
+        return {"available": True, "path": handle.name, "reason": ""}
+
+    def _description(self, job, number):
+        """
+        Return the HTML description shown on a Jenkins build page.
+
+        Args:
+            job (str): Jenkins job name.
+            number (int): Build number.
+
+        Returns:
+            str: Build description, or an empty string.
+        """
+        payload = self._get(
+            f"/job/{job}/{int(number)}/api/json",
+            params={"tree": "description"},
+        )
+        if not isinstance(payload, dict):
+            return ""
+        return str(payload.get("description") or "")
 
     def get_build(self, job, number):
         """
@@ -334,6 +430,42 @@ def resolve_jenkins_auth():
             "agents_credentials.jenkins.token in data/auth.yaml."
         )
     return {"url": url, "username": username, "token": token}
+
+
+def _kubeconfig_url(description):
+    """
+    Return the kubeconfig URL from a Jenkins build description.
+
+    The magna link is preferred. The backup storage link is used when magna
+    is absent.
+
+    Args:
+        description (str): HTML build description.
+
+    Returns:
+        str: Kubeconfig URL, or an empty string.
+    """
+    found = _KUBECONFIG_HREF.findall(description or "")
+    for url in found:
+        if "magna002.ceph.redhat.com" in url:
+            return url
+    return found[0] if found else ""
+
+
+def _looks_like_kubeconfig(content):
+    """
+    Return whether downloaded bytes are a kubeconfig document.
+
+    Args:
+        content (bytes): Response body.
+
+    Returns:
+        bool: True when the body contains a kubeconfig apiVersion or clusters list.
+    """
+    if not content:
+        return False
+    text = content[:2000].decode(errors="replace")
+    return "apiVersion:" in text or "clusters:" in text
 
 
 def _build_record(job, build):
