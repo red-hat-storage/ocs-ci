@@ -16,6 +16,7 @@ and functionality using AWS and other supported platforms.
    :maxdepth: 2
    :caption: Contents:
 
+   agents.md
    code_review.md
    coding_guidelines.md
    debugging.md
