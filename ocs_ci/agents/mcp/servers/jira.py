@@ -81,7 +81,10 @@ def jira_save_verification_report(
     environments, upgrade_scenario, verification_steps, additional_info, and
     git_prs are filled. parent_issues is copied from the issue just read,
     including each parent's status. OpenAI writes the summary stored on the
-    report. tests lists pytest tests under tests/ whose names, paths, or
+    report, with issue, reproduction_steps, and expected_results. When every
+    verification step has an empty command, OpenAI replaces those steps with
+    oc commands taken from that summary. A step that already has a command is
+    kept. tests lists pytest tests under tests/ whose names, paths, or
     Polarion ids appear exactly in the bug. The file is
     reports/<version>/<issue_key>.yaml.
     This writes a local file. It does not update Jira. During --dry-run the
@@ -99,7 +102,10 @@ def jira_save_verification_report(
     """
     from ocs_ci.agents.jira_verification.jenkins_cluster import cluster_check
     from ocs_ci.agents.jira_verification.report_store import write_verification_report
-    from ocs_ci.agents.jira_verification.summary import summarize_issue
+    from ocs_ci.agents.jira_verification.summary import (
+        summarize_issue,
+        verification_steps_for_report,
+    )
     from ocs_ci.agents.jira_verification.test_index import matching_tests
     from ocs_ci.agents.runtime.dry_run import dry_run_enabled
 
@@ -109,6 +115,12 @@ def jira_save_verification_report(
         report["parent_issues"] = fetched["parent_issues"]
     source = fetched if isinstance(fetched, dict) else report
     report["summary"] = summarize_issue(source)
+    report["verification_steps"] = verification_steps_for_report(
+        source,
+        report["summary"],
+        report.get("verification_steps"),
+        issue_key,
+    )
     report["tests"] = matching_tests(source)
     checked = cluster_check(report)
     if checked:

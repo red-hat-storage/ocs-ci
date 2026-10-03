@@ -21,6 +21,29 @@ REPORTS_ROOT = Path(__file__).resolve().parent / "reports"
 _ISSUE_KEY = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
 
 
+class _ReportDumper(yaml.SafeDumper):
+    """YAML dumper that keeps multiline text as a block scalar."""
+
+
+def _represent_str(dumper, data):
+    """
+    Represent a multiline string as a YAML block scalar.
+
+    Args:
+        dumper: YAML dumper.
+        data (str): String value.
+
+    Returns:
+        A YAML scalar node.
+    """
+    if "\n" in data:
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+    return yaml.representer.SafeRepresenter.represent_str(dumper, data)
+
+
+_ReportDumper.add_representer(str, _represent_str)
+
+
 def write_verification_report(version, issue_key, report, root=None):
     """
     Store one issue report under reports/<version>/<issue>.yaml.
@@ -51,7 +74,7 @@ def write_verification_report(version, issue_key, report, root=None):
     directory = root / version_name
     directory.mkdir(parents=True, exist_ok=True)
     document = {"key": key, "url": report.get("url") or _issue_url(key)}
-    document["summary"] = str(report.get("summary") or "").strip()
+    document["summary"] = _summary_document(report.get("summary"))
     for name in REPORT_FIELDS:
         document[name] = report[name]
         if name == "fix_version":
@@ -65,11 +88,141 @@ def write_verification_report(version, issue_key, report, root=None):
             document["cluster_check"] = _cluster_check(report.get("cluster_check"))
     path = directory / f"{key}.yaml"
     path.write_text(
-        yaml.safe_dump(document, sort_keys=False, allow_unicode=True),
+        yaml.dump(
+            document,
+            Dumper=_ReportDumper,
+            sort_keys=False,
+            allow_unicode=True,
+        ),
         encoding="utf-8",
     )
     _update_index(directory, version_name, path.name)
     return path
+
+
+def write_execution_result(version, issue_key, result, root=None):
+    """
+    Store the cluster execution result beside the verification plan.
+
+    The plan file is left unchanged. The result is
+    reports/<version>/<issue>-result.yaml.
+
+    Args:
+        version (str): Version directory name, for example odf-4.22.6.
+        issue_key (str): Jira issue key.
+        result (dict): status, reasons, steps, and an optional GitHub issue URL.
+        root (Path): Reports directory. Defaults to the agent reports folder.
+
+    Returns:
+        Path: Written YAML file.
+
+    Raises:
+        ValueError: The version or issue key is not usable.
+    """
+    version_name = _version_dirname(version)
+    key = str(issue_key).strip()
+    if not _ISSUE_KEY.fullmatch(key):
+        raise ValueError(f"issue key is not usable as a file name: {issue_key}")
+    root = Path(root) if root else REPORTS_ROOT
+    directory = root / version_name
+    directory.mkdir(parents=True, exist_ok=True)
+    document = {
+        "key": key,
+        "cluster": str((result or {}).get("cluster") or ""),
+        "status": str((result or {}).get("status") or ""),
+        "reasons": [
+            str(reason)
+            for reason in ((result or {}).get("reasons") or [])
+            if str(reason).strip()
+        ],
+        "steps": _execution_steps((result or {}).get("steps")),
+    }
+    issue_url = str((result or {}).get("github_issue") or "").strip()
+    if issue_url:
+        document["github_issue"] = issue_url
+    path = directory / f"{key}-result.yaml"
+    path.write_text(
+        yaml.dump(
+            document,
+            Dumper=_ReportDumper,
+            sort_keys=False,
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+    _update_index(directory, version_name, path.name)
+    return path
+
+
+def _execution_steps(value):
+    """
+    Normalize step results stored on an execution report.
+
+    Args:
+        value (list): Step mappings from the executor.
+
+    Returns:
+        list: step, command, exit_code, passed, and output_excerpt.
+    """
+    if not isinstance(value, list):
+        return []
+    cleaned = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        exit_code = item.get("exit_code")
+        cleaned.append(
+            {
+                "step": item.get("step") or "",
+                "command": str(item.get("command") or ""),
+                "exit_code": "" if exit_code is None else exit_code,
+                "passed": bool(item.get("passed")),
+                "output_excerpt": str(item.get("output_excerpt") or ""),
+            }
+        )
+    return cleaned
+
+
+def _summary_document(value):
+    """
+    Normalize the summary stored on a verification report.
+
+    Args:
+        value (dict or str): Structured summary, or an older plain summary.
+
+    Returns:
+        dict: issue, reproduction_steps, and expected_results.
+
+    """
+    if isinstance(value, dict):
+        issue = str(value.get("issue") or "").strip()
+        reproduction = _string_list(value.get("reproduction_steps"))
+        expected = _string_list(value.get("expected_results"))
+    else:
+        issue = str(value or "").strip()
+        reproduction = []
+        expected = []
+    return {
+        "issue": issue,
+        "reproduction_steps": reproduction,
+        "expected_results": expected,
+    }
+
+
+def _string_list(value):
+    """
+    Return a list of non-empty strings.
+
+    Args:
+        value (list): Text items.
+
+    Returns:
+        list: Trimmed strings.
+
+    """
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
 
 
 def _parent_issues(value):
