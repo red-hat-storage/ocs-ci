@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import tempfile
+from urllib.parse import quote
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -106,16 +107,42 @@ class JenkinsClient:
         if not isinstance(payload, dict):
             return False
         for node in payload.get("nodes") or []:
-            if isinstance(node, dict) and node.get("offline") is False:
+            if isinstance(node, dict) and self._node_online(node):
                 return True
         return False
+
+    def _node_online(self, node):
+        """
+        Return whether one Jenkins agent from a label query is connected.
+
+        The label API lists the agent name and omits offline. The computer
+        record has that field.
+
+        Args:
+            node (dict): Node from the label API.
+
+        Returns:
+            bool: True when the agent is connected.
+        """
+        if "offline" not in node:
+            name = str(node.get("nodeName") or "").strip()
+            if not name:
+                return False
+            detail = self._get(
+                f"/computer/{quote(name, safe='')}/api/json",
+                params={"tree": "offline"},
+            )
+            if not isinstance(detail, dict):
+                return False
+            node = detail
+        return node.get("offline") is False
 
     def copy_kubeconfig(self, cluster_name):
         """
         Copy the cluster kubeconfig linked from the Jenkins deploy build.
 
-        The link is the kubeconfig on the build page. It is only usable while
-        the temporary Jenkins agent for the cluster is online.
+        A kubeconfig response of OK means the cluster is online. The Jenkins
+        agent offline flag is not used.
 
         Args:
             cluster_name (str): Jenkins CLUSTER_NAME.
@@ -124,15 +151,6 @@ class JenkinsClient:
             dict: available, path, and reason. path is a private temp file
                 when available is true.
         """
-        if not self.agent_online(cluster_name):
-            return {
-                "available": False,
-                "path": "",
-                "reason": (
-                    f"The Jenkins agent for {cluster_name} is offline, "
-                    "so the kubeconfig is not available."
-                ),
-            }
         build = self.latest_deploy(cluster_name)
         if not build:
             return {
@@ -179,6 +197,7 @@ class JenkinsClient:
         finally:
             handle.close()
         os.chmod(handle.name, 0o600)
+        logger.info(f"Kubeconfig for {cluster_name} replied OK. The cluster is online.")
         return {"available": True, "path": handle.name, "reason": ""}
 
     def _description(self, job, number):

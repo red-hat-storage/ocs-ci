@@ -118,18 +118,20 @@ python3 -m ocs_ci.agents.runtime.run \
 `--execute` runs a report that was already saved. It does not fetch Jira again.
 `--release` is the report directory name and `--issue` is the file name.
 `--cluster` is the Jenkins cluster. The kubeconfig is copied from that
-cluster's deploy build when its Jenkins agent is online. An offline agent
-means the kubeconfig is not available, and the result is `blocked`.
-`--kubeconfig` supplies a local file and skips that copy. The Agent SDK may
-request a command, and `exec_cmd` runs it. A command is allowed when it is the
-exact verification step or a read-only `oc whoami`, `oc get`, `oc describe`,
-`oc logs`, or `oc adm top`. The result is
+cluster's deploy build. A kubeconfig response of OK means the cluster is
+online, and the verification steps run. A failed download blocks the run.
+The saved `cluster_check` is not used to stop execution. `--kubeconfig`
+supplies a local file and skips that copy. Claude Code receives the report
+reproduction steps and the cluster kubeconfig, and it verifies the bug on
+the cluster. The Markdown report is `reports/<release>/<issue>-verification.md`.
+A Jira comment records whether verification succeeded and mentions the
+QA Contact. When that report is long, the file is attached and the comment
+names the attachment. The YAML result is
 `reports/<release>/<issue>-result.yaml`. When the result is `passed` and the
 plan lists no test, an issue is opened on
 `agents_credentials.github.upstream_repository`. `--dry-run` writes
-`status: skipped` and does not run `oc` or open the issue. A report whose
-`cluster_check` failed for this same cluster, or whose steps have no command,
-is `blocked`.
+`status: skipped` and does not run `oc`, attach a report, or open the issue.
+A report whose steps have no command is `blocked`.
 
 ```bash
 python3 -m ocs_ci.agents.runtime.run \
@@ -137,7 +139,7 @@ python3 -m ocs_ci.agents.runtime.run \
   --execute \
   --release odf-4.22.6 \
   --issue DFBUGS-10854 \
-  --cluster pakamble-20-chup3
+  --cluster pakamble-422-ch1
 ```
 
 The same command with no flags reads `OCS_AGENT_NAME` and `OCS_AGENT_MESSAGE`
