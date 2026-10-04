@@ -9,6 +9,7 @@ ven*
 *egg*
 .idea
 *.iml
+.DS_Store
 config.yaml
 .vscode
 *.bak

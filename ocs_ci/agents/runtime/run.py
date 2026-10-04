@@ -66,7 +66,11 @@ def build_request(argv, env):
     parser.add_argument(
         "--cluster",
         default=None,
-        help="Kube context where verification commands run. Overrides OCS_AGENT_CLUSTER.",
+        help=(
+            "Jenkins cluster for verification. When set with --release and "
+            "--issue, the run collects the report and then verifies the bug. "
+            "Overrides OCS_AGENT_CLUSTER."
+        ),
     )
     parser.add_argument(
         "--release",
@@ -95,8 +99,7 @@ def build_request(argv, env):
         action="store_true",
         help=(
             "Read and write the local verification report only. "
-            "Do not update Jira or any other application. "
-            "With --execute, do not run cluster commands or open a GitHub issue. "
+            "Do not run cluster commands, update Jira, or open a GitHub issue. "
             "Also enabled by OCS_AGENT_DRY_RUN=1."
         ),
     )
@@ -104,9 +107,9 @@ def build_request(argv, env):
         "--execute",
         action="store_true",
         help=(
-            "Run the saved verification report on --cluster. Copies that "
-            "cluster's kubeconfig from Jenkins. A kubeconfig response of OK "
-            "means the cluster is online. Does not fetch Jira again."
+            "Skip the Jira collection and run a verification report that was "
+            "already saved. Copies the cluster kubeconfig from Jenkins. A "
+            "kubeconfig response of OK means the cluster is online."
         ),
     )
     parser.add_argument(
@@ -495,6 +498,7 @@ def main(argv=None, env=None, invoke=None):
             runner = invoke or invoke_agent
             with activate_provider(request):
                 result = runner(agent_dir, request)
+            result = _verify_collected_reports(request, result)
         result.setdefault("ok", True)
         code = EXIT_OK if result["ok"] else EXIT_AGENT_ERROR
     except LookupError as exc:
@@ -512,6 +516,49 @@ def main(argv=None, env=None, invoke=None):
         code = EXIT_AGENT_ERROR
     _emit(result, request.get("result_file"))
     return code
+
+
+def _verify_collected_reports(request, collected):
+    """
+    Verify the bugs just collected when the run names a cluster.
+
+    The collection step writes the local report. This step copies the
+    kubeconfig, runs the verification, comments on Jira, and opens the GitHub
+    automation issue. A dry run stops after the local report.
+
+    Args:
+        request (dict): Value returned by build_request.
+        collected (dict): Result from the collection agent.
+
+    Returns:
+        dict: Collection result, with verification results when they ran.
+    """
+    if request.get("agent") != "jira_verification":
+        return collected
+    if not isinstance(collected, dict) or not collected.get("ok", True):
+        return collected
+    args = request.get("args") or {}
+    if args.get("dry_run"):
+        logger.info("Dry run: cluster verification was not started")
+        return collected
+    release = str(args.get("release") or "").strip()
+    issues = [
+        str(key).strip() for key in (args.get("issues") or []) if str(key).strip()
+    ]
+    cluster = str(args.get("cluster") or "").strip()
+    if not release or not issues or not cluster:
+        logger.info(
+            "Verification was not started. Pass --release, --issue, and --cluster."
+        )
+        return collected
+    logger.info(f"Collected {', '.join(issues)}. Verifying on {cluster} for {release}.")
+    from ocs_ci.agents.jira_verification.execute import execute_saved_reports
+
+    with activate_dry_run(request):
+        executed = execute_saved_reports(request)
+    merged = dict(collected)
+    merged["verification"] = executed.get("results") or []
+    return merged
 
 
 def _reply_for_log(reply):

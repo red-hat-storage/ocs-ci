@@ -100,40 +100,41 @@ python3 -m ocs_ci.agents.runtime.run \
 
 Named arguments are optional. `--release` retrieves ON_QA bugs whose Target
 Release equals that name. `--issue` limits the run to those Jira keys.
-`--cluster` is the Jenkins cluster name. `--dry-run`
-reads Jira and writes the local verification report, and it does not update
-Jira or any other application. `OCS_AGENT_DRY_RUN=1` is the same switch.
-`--arg KEY=VALUE` passes any other value. Repeat `--issue` and `--arg` for
-more than one.
+`--cluster` is the Jenkins cluster name. Together, those three flags run the
+whole verification: the report is collected from Jira, the bug is verified on
+the cluster, a Jira comment is added, and a GitHub automation issue is opened
+when verification passes and the plan lists no test. `--dry-run` reads Jira
+and writes the local verification report, and it does not update Jira, run
+cluster commands, or open a GitHub issue. `OCS_AGENT_DRY_RUN=1` is the same
+switch. `--arg KEY=VALUE` passes any other value. Repeat `--issue` and
+`--arg` for more than one.
 
 ```bash
 python3 -m ocs_ci.agents.runtime.run \
   --agent jira_verification \
-  --release odf-5.0 \
-  --issue DFBUGS-487 \
-  --cluster amagrawa-c1 \
-  --dry-run
+  --release odf-4.22.6 \
+  --issue DFBUGS-10854 \
+  --cluster pakamble-422-ch1
 ```
 
-`--execute` runs a report that was already saved. It does not fetch Jira again.
-`--release` is the report directory name and `--issue` is the file name.
-`--cluster` is the Jenkins cluster. The kubeconfig is copied from that
-cluster's deploy build. A kubeconfig response of OK means the cluster is
-online, and the verification steps run. A failed download blocks the run.
-The saved `cluster_check` is not used to stop execution. `--kubeconfig`
-supplies a local file and skips that copy. Claude Code receives the report
-reproduction steps and the cluster kubeconfig, and it verifies the bug on
-the cluster. The Markdown report is `reports/<release>/<issue>-verification.md`.
-A Jira comment records whether verification succeeded and mentions the
-QA Contact. When that report is long, the file is attached and the comment
-names the attachment. The YAML result is
+The kubeconfig is copied from that cluster's deploy build. A kubeconfig
+response of OK means the cluster is online, and the verification steps run.
+A failed download blocks the run. The saved `cluster_check` is not used to
+stop execution. `--kubeconfig` supplies a local file and skips that copy.
+Claude Code receives the report reproduction steps and the cluster
+kubeconfig, and it verifies the bug on the cluster. The Markdown report is
+`reports/<release>/<issue>-verification.md`. A Jira comment records whether
+verification succeeded and mentions the QA Contact. When that report is long,
+the file is attached and the comment names the attachment. The YAML result is
 `reports/<release>/<issue>-result.yaml`. When the result is `passed` and the
 plan lists no test, an issue titled `Automation_<Jira key>` is opened on
 `agents_credentials.github.upstream_repository` with the label
 `verification_agent_bug`. The issue lists the steps to automate and includes
-the result YAML and the verification Markdown. `--dry-run` writes
-`status: skipped` and does not run `oc`, attach a report, or open the issue.
-A report whose steps have no command is `blocked`.
+the result YAML and the verification Markdown. `--dry-run` writes the local
+report only. A report whose steps have no command is `blocked`.
+
+`--execute` skips the Jira collection and verifies a report that was already
+saved. Use it to repeat the cluster step without reading Jira again.
 
 ```bash
 python3 -m ocs_ci.agents.runtime.run \
