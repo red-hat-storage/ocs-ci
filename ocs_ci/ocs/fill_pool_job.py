@@ -1,5 +1,4 @@
 import logging
-import re
 
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -19,18 +18,18 @@ log = logging.getLogger(__name__)
 # as real used capacity and can issue multiple outstanding IOs.
 FILL_MODES = ("zero", "random", "incompressible")
 
-# fio 3.21 in fedora:fio is OOMKilled at 1Gi. incompressible mode raises the
-# caller-supplied resources to at least these values; larger requests are kept.
-INCOMPRESSIBLE_MIN_CPU_REQUEST = "500m"
-INCOMPRESSIBLE_MIN_CPU_LIMIT = "2"
-INCOMPRESSIBLE_MIN_MEM_REQUEST = "512Mi"
-INCOMPRESSIBLE_MIN_MEM_LIMIT = "2Gi"
-_MEMORY_UNIT_BYTES = {
-    "Ki": 1024,
-    "Mi": 1024**2,
-    "Gi": 1024**3,
-    "Ti": 1024**4,
-}
+# create() defaults for dd-based fills (zero/random).
+DEFAULT_CPU_REQUEST = "100m"
+DEFAULT_CPU_LIMIT = "500m"
+DEFAULT_MEM_REQUEST = "128Mi"
+DEFAULT_MEM_LIMIT = "256Mi"
+
+# fio 3.21 in fedora:fio is OOMKilled at 1Gi. These are the incompressible
+# defaults; callers may pass larger values.
+INCOMPRESSIBLE_CPU_REQUEST = "500m"
+INCOMPRESSIBLE_CPU_LIMIT = "2"
+INCOMPRESSIBLE_MEM_REQUEST = "512Mi"
+INCOMPRESSIBLE_MEM_LIMIT = "2Gi"
 
 
 def _fio_size_from_pvc_storage(storage):
@@ -42,61 +41,21 @@ def _fio_size_from_pvc_storage(storage):
     return f"{max(1, int(gib * 1024 * 0.92))}M"
 
 
-def _cpu_millicores(quantity):
-    """Convert a Kubernetes CPU quantity to millicores."""
-    text = str(quantity).strip().lower()
-    if text.endswith("m"):
-        return float(text[:-1])
-    return float(text) * 1000
-
-
-def _memory_bytes(quantity):
-    """
-    Convert a Kubernetes binary memory quantity (Ki/Mi/Gi/Ti) to bytes.
-
-    Accepts fractional values such as 1.5Gi. convert_device_size() cannot,
-    because it parses the number with int().
-    """
-    memory_quantity_regex = re.compile(
-        r"^(?P<value>\d+(?:\.\d+)?)(?P<unit>Ki|Mi|Gi|Ti)$"
-    )
-    match = memory_quantity_regex.fullmatch(str(quantity).strip())
-    if not match:
-        raise ValueError(
-            f"incompressible memory expects a Ki/Mi/Gi/Ti quantity, got {quantity!r}"
+def _default_resources(fill_mode):
+    """Return (cpu_request, cpu_limit, mem_request, mem_limit) for fill_mode."""
+    if fill_mode == "incompressible":
+        return (
+            INCOMPRESSIBLE_CPU_REQUEST,
+            INCOMPRESSIBLE_CPU_LIMIT,
+            INCOMPRESSIBLE_MEM_REQUEST,
+            INCOMPRESSIBLE_MEM_LIMIT,
         )
-    return float(match.group("value")) * _MEMORY_UNIT_BYTES[match.group("unit")]
-
-
-def _raise_to_floor(value, floor, to_number):
-    """Return value when it already meets the floor; otherwise return floor."""
-    return value if to_number(value) >= to_number(floor) else floor
-
-
-def _apply_incompressible_resource_floors(
-    cpu_request, cpu_limit, mem_request, mem_limit
-):
-    """
-    Raise incompressible FillPoolJob CPU/memory to the measured fio floors.
-
-    Callers may pass larger values; those are kept. If a floored request would
-    exceed its limit, the limit is raised to match so the pod spec stays valid.
-    """
-    cpu_request = _raise_to_floor(
-        cpu_request, INCOMPRESSIBLE_MIN_CPU_REQUEST, _cpu_millicores
+    return (
+        DEFAULT_CPU_REQUEST,
+        DEFAULT_CPU_LIMIT,
+        DEFAULT_MEM_REQUEST,
+        DEFAULT_MEM_LIMIT,
     )
-    cpu_limit = _raise_to_floor(
-        cpu_limit, INCOMPRESSIBLE_MIN_CPU_LIMIT, _cpu_millicores
-    )
-    mem_request = _raise_to_floor(
-        mem_request, INCOMPRESSIBLE_MIN_MEM_REQUEST, _memory_bytes
-    )
-    mem_limit = _raise_to_floor(mem_limit, INCOMPRESSIBLE_MIN_MEM_LIMIT, _memory_bytes)
-    if _cpu_millicores(cpu_request) > _cpu_millicores(cpu_limit):
-        cpu_limit = cpu_request
-    if _memory_bytes(mem_request) > _memory_bytes(mem_limit):
-        mem_limit = mem_request
-    return cpu_request, cpu_limit, mem_request, mem_limit
 
 
 class FillPoolJob(object):
@@ -115,10 +74,10 @@ class FillPoolJob(object):
         self,
         name=None,
         block_size="1M",
-        cpu_request="100m",
-        mem_request="128Mi",
-        cpu_limit="500m",
-        mem_limit="256Mi",
+        cpu_request=None,
+        mem_request=None,
+        cpu_limit=None,
+        mem_limit=None,
         fill_mode="zero",
         base_yaml_path=constants.FILL_POOL_JOB_YAML,
         pvc_name=None,
@@ -131,20 +90,23 @@ class FillPoolJob(object):
         Create a Job that fills up cluster storage by writing data to a PVC.
         Assumes manifest is a Job (pod spec under spec.template.spec).
 
+        The Job YAML is a skeleton. This method sets image, command, resources,
+        and BLOCK_SIZE on the pod spec.
+
         Args:
             fill_mode (str): How to generate write data:
                 'zero' - dd from /dev/zero (does not increase Ceph used-raw on RBD).
                 'random' - dd from /dev/urandom (slow; CPU-bound).
                 'incompressible' - fio libaio write (queue depth 16). Prefer this
                 to increase Ceph used-raw capacity on RBD.
-            cpu_request (str): CPU request. Incompressible mode raises this to
-                at least 500m.
-            cpu_limit (str): CPU limit. Incompressible mode raises this to
-                at least 2.
-            mem_request (str): Memory request (Ki/Mi/Gi/Ti). Incompressible
-                mode raises this to at least 512Mi.
-            mem_limit (str): Memory limit (Ki/Mi/Gi/Ti). Incompressible mode
-                raises this to at least 2Gi (fio 3.21 OOMKills below that).
+            cpu_request (str): CPU request. Defaults to 500m for incompressible,
+                100m otherwise.
+            cpu_limit (str): CPU limit. Defaults to 2 for incompressible,
+                500m otherwise.
+            mem_request (str): Memory request. Defaults to 512Mi for
+                incompressible, 128Mi otherwise.
+            mem_limit (str): Memory limit. Defaults to 2Gi for incompressible
+                (fio 3.21 OOMKills below that), 256Mi otherwise.
         """
         self.name = name or create_unique_resource_name("fill-pool", "job")
         sc_name = sc_name or constants.DEFAULT_STORAGECLASS_RBD
@@ -154,12 +116,16 @@ class FillPoolJob(object):
         if fill_mode not in FILL_MODES:
             raise ValueError(f"fill_mode must be one of {FILL_MODES}")
 
-        if fill_mode == "incompressible":
-            cpu_request, cpu_limit, mem_request, mem_limit = (
-                _apply_incompressible_resource_floors(
-                    cpu_request, cpu_limit, mem_request, mem_limit
-                )
-            )
+        (
+            default_cpu_request,
+            default_cpu_limit,
+            default_mem_request,
+            default_mem_limit,
+        ) = _default_resources(fill_mode)
+        cpu_request = cpu_request or default_cpu_request
+        cpu_limit = cpu_limit or default_cpu_limit
+        mem_request = mem_request or default_mem_request
+        mem_limit = mem_limit or default_mem_limit
 
         log.info(
             f"Creating FillPoolJob {self.name} fill_mode={fill_mode} "
