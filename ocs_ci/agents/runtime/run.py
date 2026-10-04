@@ -489,7 +489,8 @@ def main(argv=None, env=None, invoke=None):
                 raise ValueError("--execute is only available for jira_verification")
             from ocs_ci.agents.jira_verification.execute import execute_saved_reports
 
-            result = execute_saved_reports(request)
+            with activate_dry_run(request):
+                result = execute_saved_reports(request)
         else:
             runner = invoke or invoke_agent
             with activate_provider(request):
