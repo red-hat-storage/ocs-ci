@@ -128,8 +128,10 @@ A Jira comment records whether verification succeeded and mentions the
 QA Contact. When that report is long, the file is attached and the comment
 names the attachment. The YAML result is
 `reports/<release>/<issue>-result.yaml`. When the result is `passed` and the
-plan lists no test, an issue is opened on
-`agents_credentials.github.upstream_repository`. `--dry-run` writes
+plan lists no test, an issue titled `Automation_<Jira key>` is opened on
+`agents_credentials.github.upstream_repository` with the label
+`verification_agent_bug`. The issue lists the steps to automate and includes
+the result YAML and the verification Markdown. `--dry-run` writes
 `status: skipped` and does not run `oc`, attach a report, or open the issue.
 A report whose steps have no command is `blocked`.
 

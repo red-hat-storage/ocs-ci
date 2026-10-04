@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 from ocs_ci.agents.jenkins_api import JenkinsClient
+from ocs_ci.agents.runtime.dry_run import dry_run_enabled
 from ocs_ci.agents.jira_verification.command_policy import command_allowed
 from ocs_ci.agents.jira_verification.summary import summary_text
 from ocs_ci.agents.jira_verification.report_store import (
@@ -55,7 +56,7 @@ def execute_saved_reports(request):
         raise ValueError("--release is required with --execute")
     if not issues:
         raise ValueError("--issue is required with --execute")
-    dry_run = bool(args.get("dry_run"))
+    dry_run = dry_run_enabled(args.get("dry_run"))
     kubeconfig = str(request.get("kubeconfig") or "").strip()
     cluster_name = str(args.get("cluster") or "").strip()
     if not dry_run and not kubeconfig and not cluster_name:
@@ -144,8 +145,15 @@ def _execute_one(version, issue_key, kubeconfig, dry_run, cluster_arg):
                 result["jira_attachment"] = attach_verification_report(
                     issue_key, report_path, result["status"], result
                 )
-                if result["status"] == "passed" and not report.get("tests"):
-                    result["github_issue"] = _open_issue(report, result)
+                if (
+                    result["status"] == "passed"
+                    and not report.get("tests")
+                    and not dry_run
+                ):
+                    result_path = write_execution_result(version, issue_key, result)
+                    result["github_issue"] = _open_issue(
+                        report, result, [result_path, report_path]
+                    )
         finally:
             if copied and os.path.isfile(copied):
                 os.remove(copied)
@@ -449,13 +457,14 @@ def _prepare_cluster(kubeconfig):
     config.RUN["kubeconfig"] = str(Path(kubeconfig).resolve())
 
 
-def _open_issue(report, result):
+def _open_issue(report, result, attachments):
     """
     Open the automation issue. A GitHub failure stays on the result.
 
     Args:
         report (dict): Verification plan.
         result (dict): Passed execution result.
+        attachments (list): Result YAML and verification Markdown paths.
 
     Returns:
         str: Issue URL, or an empty string.
@@ -463,7 +472,7 @@ def _open_issue(report, result):
     from ocs_ci.agents.github_api import create_automation_issue
 
     try:
-        return create_automation_issue(report, result)
+        return create_automation_issue(report, result, attachments)
     except ValueError as error:
         logger.error(str(error))
         result.setdefault("reasons", []).append(str(error))
