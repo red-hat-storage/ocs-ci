@@ -303,6 +303,146 @@ def validate_snapshot_metadata_sidecar(pod):
     return pod_name, pod_ip
 
 
+# ---- Lister entry range helpers -----------------------------------
+
+
+def get_lister_entries_block_ranges(entries):
+    """
+    Reduce lister entries to the block ranges they report.
+
+    The ranges are taken exactly as the tool printed them, so two
+    entry lists only compare equal if the tool split the changed
+    bytes into the same extents. Use
+    get_merged_lister_entries_byte_ranges instead when the
+    comparison should not depend on the extent boundaries.
+
+    Args:
+        entries (list): Parsed lister entries, each a dict with
+            ByteOffset and SizeBytes keys
+
+    Returns:
+        set: Set of (ByteOffset, SizeBytes) tuples
+
+    Example:
+        get_lister_entries_block_ranges([
+            {"ByteOffset": 0, "SizeBytes": 100},
+            {"ByteOffset": 100, "SizeBytes": 50},
+        ])
+        {(0, 100), (100, 50)}
+    """
+    return {(entry["ByteOffset"], entry["SizeBytes"]) for entry in entries}
+
+
+def get_merged_lister_entries_byte_ranges(entries):
+    """
+    Merge lister entries into non-overlapping byte ranges.
+
+    The API reports VARIABLE_LENGTH extents, so the same bytes can
+    be returned with different extent boundaries. Merging adjacent
+    and overlapping extents makes a comparison depend on the
+    covered bytes rather than on where the tool chose to split
+    them.
+
+    Args:
+        entries (list): Parsed lister entries, each a dict with
+            ByteOffset and SizeBytes keys
+
+    Returns:
+        list: Sorted (start, end) tuples, end exclusive
+
+    Example:
+        # one 150 byte write reported as two touching extents
+        get_merged_lister_entries_byte_ranges([
+            {"ByteOffset": 0, "SizeBytes": 100},
+            {"ByteOffset": 100, "SizeBytes": 50},
+        ])
+        [(0, 150)]
+        # the same bytes reported as a single extent merge to the
+        # identical result
+        get_merged_lister_entries_byte_ranges([
+            {"ByteOffset": 0, "SizeBytes": 150},
+        ])
+        [(0, 150)]
+    """
+    intervals = sorted(
+        (entry["ByteOffset"], entry["ByteOffset"] + entry["SizeBytes"])
+        for entry in entries
+    )
+    merged = []
+    for start, end in intervals:
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def get_uncovered_byte_ranges(inner_ranges, outer_ranges):
+    """
+    Return the parts of inner_ranges that outer_ranges misses.
+
+    An empty result means outer_ranges covers every byte of
+    inner_ranges. Both arguments must be sorted and
+    non-overlapping, as returned by
+    get_merged_lister_entries_byte_ranges.
+
+    Args:
+        inner_ranges (list): Merged (start, end) tuples that
+            should be covered
+        outer_ranges (list): Merged (start, end) tuples expected
+            to cover inner_ranges
+
+    Returns:
+        list: (start, end) tuples of inner_ranges left uncovered
+
+    Example:
+        # outer covers inner completely
+        get_uncovered_byte_ranges([(0, 100)], [(0, 200)])
+        []
+        # outer misses the middle of inner
+        get_uncovered_byte_ranges([(0, 100)], [(0, 20), (80, 100)])
+        [(20, 80)]
+    """
+    uncovered = []
+    for start, end in inner_ranges:
+        position = start
+        for other_start, other_end in outer_ranges:
+            if other_end <= position:
+                continue
+            if other_start >= end:
+                break
+            if other_start > position:
+                uncovered.append((position, min(other_start, end)))
+            position = max(position, other_end)
+            if position >= end:
+                break
+        if position < end:
+            uncovered.append((position, end))
+    return uncovered
+
+
+def get_total_covered_bytes(merged_ranges):
+    """
+    Total number of bytes covered by merged byte ranges.
+
+    The ranges must be non-overlapping, as returned by
+    get_merged_lister_entries_byte_ranges, otherwise the overlap
+    is counted twice.
+
+    Args:
+        merged_ranges (list): Merged (start, end) tuples, end
+            exclusive
+
+    Returns:
+        int: Sum of the range lengths
+
+    Example:
+        get_total_covered_bytes([(0, 150), (200, 250)])
+        200
+    """
+    return sum(end - start for start, end in merged_ranges)
+
+
 # ---- ListerTool ---------------------------------------------------
 
 

@@ -31,6 +31,10 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources.cbt_metadata import (
     VerifierTool,
+    get_lister_entries_block_ranges,
+    get_merged_lister_entries_byte_ranges,
+    get_total_covered_bytes,
+    get_uncovered_byte_ranges,
     validate_snapshot_metadata_sidecar,
 )
 from ocs_ci.ocs.resources.snapshots import (
@@ -232,19 +236,6 @@ class TestRbdCBTMetadata(ManageTest):
             self.cbt_runner.delete_pod(self.cbt_runner.verifier_pod_name)
         restored_pvc.delete()
         restored_pvc.ocp.wait_for_delete(restored_pvc.name, timeout=120)
-
-    @staticmethod
-    def _block_ranges(entries):
-        """
-        Reduce lister entries to their block ranges.
-
-        Args:
-            entries (list): Parsed lister entries
-
-        Returns:
-            set: Set of (ByteOffset, SizeBytes) tuples
-        """
-        return {(entry["ByteOffset"], entry["SizeBytes"]) for entry in entries}
 
     # -- Test 1 ----------------------------------------------------
 
@@ -574,16 +565,26 @@ class TestRbdCBTMetadata(ManageTest):
         assert len(entries_1_to_2) > 0, "Delta lister returned no blocks for write B"
         assert len(entries_1_to_3) > 0, "Delta lister returned no blocks for writes B+C"
 
-        ranges_1_to_2 = self._block_ranges(entries_1_to_2)
-        ranges_1_to_3 = self._block_ranges(entries_1_to_3)
-        assert ranges_1_to_2 <= ranges_1_to_3, (
+        coverage_1_to_2 = get_merged_lister_entries_byte_ranges(entries_1_to_2)
+        coverage_1_to_3 = get_merged_lister_entries_byte_ranges(entries_1_to_3)
+        uncovered = get_uncovered_byte_ranges(coverage_1_to_2, coverage_1_to_3)
+        assert not uncovered, (
             f"Delta snap-1 to snap-3 does not cover the snap-1 to snap-2 "
-            f"delta. Missing block ranges: {sorted(ranges_1_to_2 - ranges_1_to_3)}"
+            f"delta. Uncovered byte ranges: {uncovered}"
         )
-        assert len(ranges_1_to_3) > len(ranges_1_to_2), (
-            f"Delta snap-1 to snap-3 has the same {len(ranges_1_to_3)} block "
-            f"range(s) as the snap-1 to snap-2 delta, so the changes of "
-            f"write C were not reported"
+
+        bytes_1_to_2 = get_total_covered_bytes(coverage_1_to_2)
+        bytes_1_to_3 = get_total_covered_bytes(coverage_1_to_3)
+        log.info(
+            "Delta snap-1 to snap-2 covers %d byte(s), "
+            "delta snap-1 to snap-3 covers %d byte(s)",
+            bytes_1_to_2,
+            bytes_1_to_3,
+        )
+        assert bytes_1_to_3 > bytes_1_to_2, (
+            f"Delta snap-1 to snap-3 covers the same {bytes_1_to_3} byte(s) "
+            f"as the snap-1 to snap-2 delta, so the changes of write C were "
+            f"not reported"
         )
 
         log.test_step(
@@ -801,8 +802,8 @@ class TestRbdCBTMetadata(ManageTest):
         )
         assert len(entries_by_name) > 0, "Delta lister by name returned no blocks"
 
-        ranges_by_name = self._block_ranges(entries_by_name)
-        ranges_by_handle = self._block_ranges(entries_by_handle)
+        ranges_by_name = get_lister_entries_block_ranges(entries_by_name)
+        ranges_by_handle = get_lister_entries_block_ranges(entries_by_handle)
         assert ranges_by_name == ranges_by_handle, (
             f"Delta by CSI handle returned different block ranges than delta "
             f"by name. Only by name: {sorted(ranges_by_name - ranges_by_handle)}, "
