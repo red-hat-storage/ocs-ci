@@ -105,8 +105,8 @@ def build_request(argv, env):
         action="store_true",
         help=(
             "Run the saved verification report on --cluster. Copies that "
-            "cluster's kubeconfig from Jenkins when its agent is online. "
-            "Does not fetch Jira again."
+            "cluster's kubeconfig from Jenkins. A kubeconfig response of OK "
+            "means the cluster is online. Does not fetch Jira again."
         ),
     )
     parser.add_argument(

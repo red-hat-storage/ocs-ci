@@ -140,6 +140,9 @@ def write_execution_result(version, issue_key, result, root=None):
     issue_url = str((result or {}).get("github_issue") or "").strip()
     if issue_url:
         document["github_issue"] = issue_url
+    report_path = str((result or {}).get("verification_report") or "").strip()
+    if report_path:
+        document["verification_report"] = report_path
     path = directory / f"{key}-result.yaml"
     path.write_text(
         yaml.dump(
@@ -150,6 +153,35 @@ def write_execution_result(version, issue_key, result, root=None):
         ),
         encoding="utf-8",
     )
+    _update_index(directory, version_name, path.name)
+    return path
+
+
+def write_verification_markdown(version, issue_key, text, root=None):
+    """
+    Store the Markdown verification report beside the plan.
+
+    Args:
+        version (str): Version directory name.
+        issue_key (str): Jira issue key.
+        text (str): Markdown report.
+        root (Path): Reports directory. Defaults to the agent reports folder.
+
+    Returns:
+        Path: Written Markdown file.
+
+    Raises:
+        ValueError: The version or issue key is not usable.
+    """
+    version_name = _version_dirname(version)
+    key = str(issue_key).strip()
+    if not _ISSUE_KEY.fullmatch(key):
+        raise ValueError(f"issue key is not usable as a file name: {issue_key}")
+    root = Path(root) if root else REPORTS_ROOT
+    directory = root / version_name
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{key}-verification.md"
+    path.write_text(str(text or "").rstrip() + "\n", encoding="utf-8")
     _update_index(directory, version_name, path.name)
     return path
 

@@ -14,6 +14,12 @@ from ocs_ci.agents.jira_verification.summary import summary_text
 from ocs_ci.agents.jira_verification.report_store import (
     REPORTS_ROOT,
     write_execution_result,
+    write_verification_markdown,
+)
+from ocs_ci.agents.jira_verification.run_steps import (
+    attach_verification_report,
+    render_verification_markdown,
+    verify_with_claude,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,7 +35,8 @@ def execute_saved_reports(request):
     Args:
         request (dict): Value returned by build_request. args.issues and
             args.release select the plan files. args.cluster is the Jenkins
-            CLUSTER_NAME whose kubeconfig is copied when its agent is online.
+            CLUSTER_NAME whose kubeconfig is copied from the deploy build.
+            A kubeconfig response of OK means the cluster is online.
             kubeconfig overrides that copy. args.dry_run skips the cluster
             and GitHub.
 
@@ -124,14 +131,19 @@ def _execute_one(version, issue_key, kubeconfig, dry_run, cluster_arg):
         else:
             kubeconfig_reason = ""
         try:
-            reasons = _block_reasons(report, plan_steps, cluster_arg, kubeconfig_reason)
+            reasons = _block_reasons(plan_steps, kubeconfig_reason)
             if reasons:
                 result = _stopped(cluster, "blocked", reasons, plan_steps, "not run")
             else:
                 _prepare_cluster(kubeconfig)
-                cluster = _cluster_name(cluster)
-                executed = _run_commands(report, plan_steps)
-                result = _finished(cluster, plan_steps, executed)
+                result = verify_with_claude(report, kubeconfig, cluster)
+                markdown = render_verification_markdown(report, result)
+                report_path = write_verification_markdown(version, issue_key, markdown)
+                result["verification_report"] = str(report_path)
+                logger.info(f"Wrote verification report {report_path}")
+                result["jira_attachment"] = attach_verification_report(
+                    issue_key, report_path, result["status"], result
+                )
                 if result["status"] == "passed" and not report.get("tests"):
                     result["github_issue"] = _open_issue(report, result)
         finally:
@@ -146,20 +158,20 @@ def _execute_one(version, issue_key, kubeconfig, dry_run, cluster_arg):
         "status": result["status"],
         "saved": str(path),
         "github_issue": result.get("github_issue") or "",
+        "verification_report": result.get("verification_report") or "",
     }
 
 
-def _block_reasons(report, plan_steps, cluster_arg, kubeconfig_reason):
+def _block_reasons(plan_steps, kubeconfig_reason):
     """
     Return reasons that stop execution before any cluster command.
 
-    A failed cluster_check is used when it names the cluster being executed.
-    A different --cluster is judged by whether Jenkins can supply its kubeconfig.
+    A kubeconfig response of OK means the cluster is online. The saved
+    cluster_check, including agent offline, teardown, and platform, does not
+    stop execution.
 
     Args:
-        report (dict): Verification plan.
         plan_steps (list): Verification steps.
-        cluster_arg (str): Cluster name from --cluster.
         kubeconfig_reason (str): Why the Jenkins kubeconfig could not be copied.
 
     Returns:
@@ -168,18 +180,6 @@ def _block_reasons(report, plan_steps, cluster_arg, kubeconfig_reason):
     reasons = []
     if kubeconfig_reason:
         reasons.append(kubeconfig_reason)
-    check = report.get("cluster_check")
-    checked = ""
-    if isinstance(check, dict):
-        checked = str(check.get("cluster") or report.get("cluster") or "")
-    same_cluster = not cluster_arg or not checked or checked == cluster_arg
-    if same_cluster and isinstance(check, dict) and not check.get("fits"):
-        listed = [
-            str(reason)
-            for reason in (check.get("reasons") or [])
-            if str(reason).strip()
-        ]
-        reasons.extend(listed or ["The cluster cannot run this verification."])
     if not any(str(step.get("command") or "").strip() for step in plan_steps):
         reasons.append("Every verification step has an empty command.")
     return reasons
@@ -426,9 +426,13 @@ def _run_exec(command):
         logger.error(f"Cluster command failed to start: {error}")
         return _step_record("", command, None, False, str(error))
     code = completed.returncode
-    excerpt = _excerpt(_output_text(completed.stdout), _output_text(completed.stderr))
+    stdout = _output_text(completed.stdout)
+    stderr = _output_text(completed.stderr)
+    excerpt = _excerpt(stdout, stderr)
     logger.info(f"Cluster command exited {code}")
-    return _step_record("", " ".join(command.split()), code, code == 0, excerpt)
+    record = _step_record("", " ".join(command.split()), code, code == 0, excerpt)
+    record["output"] = "\n".join(part for part in (stdout, stderr) if part).rstrip()
+    return record
 
 
 def _prepare_cluster(kubeconfig):
@@ -443,22 +447,6 @@ def _prepare_cluster(kubeconfig):
 
     set_log_record_factory()
     config.RUN["kubeconfig"] = str(Path(kubeconfig).resolve())
-
-
-def _cluster_name(fallback):
-    """
-    Return the current oc context name.
-
-    Args:
-        fallback (str): Name from the report when oc cannot answer.
-
-    Returns:
-        str: Context name, or the fallback.
-    """
-    record = _run_exec("oc config current-context")
-    if record["passed"] and record["output_excerpt"]:
-        return record["output_excerpt"].split()[0]
-    return fallback
 
 
 def _open_issue(report, result):
