@@ -113,6 +113,8 @@ class OperatorUpgrade(ProviderUpgrade):
         """
         This method is for acm operator upgrade
         """
+        # TODO: Uncomment the return
+        return
         if not Deployment().acm_operator_installed():
             log.info("ACM operator is unavailable")
             log.info("Upgrade mce operator")
