@@ -8204,13 +8204,18 @@ def assert_pvc_volume_health_event(pvc_obj, reason, event_type, message_substr):
     return matching
 
 
-def blocklist_cephfs_client(pvc_obj):
+def blocklist_cephfs_client(pvc_obj, subvolume_path=None):
     """
     Find the CephFS client for a PVC's subvolume, add it to the
     Ceph OSD blocklist, and evict it from the active MDS.
 
     Args:
-        pvc_obj: PVC object (must be CephFS-backed and have a bound PV)
+        pvc_obj: PVC object (must be CephFS-backed and have a bound PV).
+            Only used for logging if subvolume_path is provided.
+        subvolume_path (str, optional): Pre-resolved subvolume path.
+            If provided, skips PVC/PV lookup. Required for HCI platforms
+            where PVC/PV exist on client cluster but blocklisting happens
+            on provider cluster.
 
     Returns:
         tuple: (client_id, client_addr) for use in cleanup
@@ -8218,13 +8223,15 @@ def blocklist_cephfs_client(pvc_obj):
     from ocs_ci.ocs.ocp import OCP
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
-    pvc_obj.reload()
-    pv_name = pvc_obj.backed_pv
-    assert pv_name, f"PVC {pvc_obj.name} has no bound PV"
+    if subvolume_path is None:
+        pvc_obj.reload()
+        pv_name = pvc_obj.backed_pv
+        assert pv_name, f"PVC {pvc_obj.name} has no bound PV"
 
-    pv_ocp = OCP(kind="pv", resource_name=pv_name)
-    pv_data = pv_ocp.get()
-    subvolume_path = pv_data["spec"]["csi"]["volumeAttributes"]["subvolumePath"]
+        pv_ocp = OCP(kind="pv", resource_name=pv_name)
+        pv_data = pv_ocp.get()
+        subvolume_path = pv_data["spec"]["csi"]["volumeAttributes"]["subvolumePath"]
+
     logger.info(f"Subvolume path: {subvolume_path}")
 
     toolbox = get_ceph_tools_pod()

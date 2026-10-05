@@ -935,6 +935,15 @@ class TestPVCVolumeHealthUnhealthy(PVCVolumeHealthTestHelpers, ManageTest):
             in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         )
 
+        subvolume_path = None
+        if is_hci:
+            pvc_a.reload()
+            pv_name = pvc_a.backed_pv
+            pv_ocp = ocp.OCP(kind="pv", resource_name=pv_name)
+            pv_data = pv_ocp.get()
+            subvolume_path = pv_data["spec"]["csi"]["volumeAttributes"]["subvolumePath"]
+            logger.info(f"Pre-resolved subvolume path for HCI: {subvolume_path}")
+
         logger.test_step(
             "Blocklist CephFS client for PVC-A only " "(evicts it from the active MDS)"
         )
@@ -943,7 +952,9 @@ class TestPVCVolumeHealthUnhealthy(PVCVolumeHealthTestHelpers, ManageTest):
                 logger.info("HCI platform: switching to provider for blocklisting")
                 config.switch_to_provider()
 
-            _, client_addr = blocklist_cephfs_client(pvc_a)
+            _, client_addr = blocklist_cephfs_client(
+                pvc_a, subvolume_path=subvolume_path
+            )
             logger.info(f"PVC-A client blocklisted; addr={client_addr}")
         finally:
             if is_hci:
