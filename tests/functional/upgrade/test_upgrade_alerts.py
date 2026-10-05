@@ -8,21 +8,55 @@ from ocs_ci.framework.pytest_customization.marks import (
     post_upgrade,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.utility.prometheus import get_alert_names, get_unexpected_alerts
+from ocs_ci.utility.prometheus import (
+    get_alert_names,
+    get_firing_alert_names,
+    get_unexpected_alerts,
+)
 
 log = logging.getLogger(__name__)
 
 
-def get_expected_alerts():
+def get_expected_alerts(threading_lock):
     """
     Get names of alerts that are not reported as unexpected when fired during
-    an upgrade.
+    an upgrade. Alerts from constants.EXPECTED_UPGRADE_ALERTS_IF_RECOVERED are
+    expected only when they are not firing anymore, because the condition that
+    fired them has to be resolved by the end of the upgrade.
+
+    Args:
+        threading_lock (threading.RLock): Lock used for synchronization of the
+            threads in Prometheus calls
 
     Returns:
         list: Names of expected alerts
 
     """
-    return constants.EXPECTED_UPGRADE_ALERTS + config.UPGRADE.get("expected_alerts", [])
+    expected_alerts = constants.EXPECTED_UPGRADE_ALERTS + config.UPGRADE.get(
+        "expected_alerts", []
+    )
+    firing_alerts = get_firing_alert_names(threading_lock)
+    if firing_alerts is None:
+        # Without the current state of the alerts it is not possible to tell
+        # which of the alerts recovered, so none of them is tolerated.
+        log.error(
+            "Alerts currently firing could not be collected from Prometheus, "
+            "so alerts that are expected only when they recovered "
+            f"({constants.EXPECTED_UPGRADE_ALERTS_IF_RECOVERED}) are reported "
+            "as unexpected"
+        )
+        return expected_alerts
+    log.info(f"Alerts firing during the post upgrade check: {firing_alerts}")
+    for alert_name in constants.EXPECTED_UPGRADE_ALERTS_IF_RECOVERED:
+        if alert_name in firing_alerts:
+            log.error(
+                f"Alert {alert_name} is expected during an upgrade but it is "
+                "still firing after the upgrade finished, so it is reported "
+                "as unexpected"
+            )
+        else:
+            expected_alerts.append(alert_name)
+    return expected_alerts
 
 
 @post_upgrade
@@ -34,7 +68,7 @@ def get_expected_alerts():
         pytest.param("odf_upgrade", marks=pytest.mark.polarion_id("OCS-8297")),
     ],
 )
-def test_no_unexpected_alerts(upgrade_stats, upgrade_type):
+def test_no_unexpected_alerts(upgrade_stats, upgrade_type, threading_lock):
     """
     Test that no unexpected alert was fired during the upgrade. Alerts that
     were already raised before the upgrade started are not considered to be
@@ -88,7 +122,7 @@ def test_no_unexpected_alerts(upgrade_stats, upgrade_type):
     ignored_severities = config.UPGRADE.get("ignored_alert_severities", [])
     unexpected_alerts = get_unexpected_alerts(
         firing_alerts,
-        expected_alerts=get_expected_alerts(),
+        expected_alerts=get_expected_alerts(threading_lock),
         ignored_severities=ignored_severities,
     )
     for alert in unexpected_alerts:

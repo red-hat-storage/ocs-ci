@@ -1284,6 +1284,31 @@ def get_alert_names(alerts):
     return sorted({alert.get("labels", {}).get("alertname") or "" for alert in alerts})
 
 
+def get_firing_alert_names(threading_lock):
+    """
+    Get names of alerts that are firing at the moment.
+
+    Args:
+        threading_lock (threading.RLock): Lock used for synchronization of the
+            threads in Prometheus calls
+
+    Returns:
+        list: Sorted names of currently firing alerts. None is returned when
+            the alerts could not be collected from Prometheus, so that the
+            caller is able to distinguish it from a cluster without any
+            firing alert.
+
+    """
+    alerts = []
+    if not PrometheusAPI(threading_lock=threading_lock).prometheus_log(
+        alerts, log_level=logging.DEBUG
+    ):
+        return None
+    return get_alert_names(
+        [alert for alert in alerts if alert.get("state") == "firing"]
+    )
+
+
 def get_unexpected_alerts(alerts, expected_alerts=None, ignored_severities=None):
     """
     Filter out expected alerts from the provided list of alerts.

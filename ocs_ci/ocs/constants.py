@@ -1936,10 +1936,6 @@ EXPECTED_UPGRADE_ALERTS = [
     ALERT_KUBE_NODE_NOT_READY,
     ALERT_KUBE_NODE_UNREACHABLE,
     ALERT_NODEDOWN,
-    # OSDs running on a drained or rebooted node are down for a while. A real
-    # problem with an OSD is detected by the Ceph health monitor that runs
-    # during the whole upgrade.
-    ALERT_CEPH_OSD_DOWN,
     # control plane components are restarted during OCP upgrade
     ALERT_KUBE_API_ERROR_BUDGET_BURN,
     ALERT_ETCD_HIGH_NUMBER_OF_LEADER_CHANGES,
@@ -1965,6 +1961,20 @@ EXPECTED_UPGRADE_ALERTS = [
     # the provider server and the client operator are restarted during the
     # upgrade, so the client heartbeat is missed for a while
     ALERT_STORAGECLIENTHEARTBEATMISSED,
+]
+
+# Alerts that are tolerated only when they are not firing anymore at the time
+# of the post upgrade alert check. They are fired during an upgrade for a
+# legitimate reason, but the condition that fired them has to be resolved by
+# the end of the upgrade. When such an alert is still firing, it is reported
+# as unexpected even though it is listed here.
+EXPECTED_UPGRADE_ALERTS_IF_RECOVERED = [
+    # OSDs running on a drained or rebooted node are down for a while, but all
+    # of them have to be up again once the upgrade is finished. A single OSD
+    # that stays down keeps the cluster in HEALTH_WARN, which is not detected
+    # by the Ceph health monitor running during the upgrade because the
+    # monitor only reacts to HEALTH_ERR.
+    ALERT_CEPH_OSD_DOWN,
 ]
 
 # DR Pending Cleanup Alert (OCS 4.22+)
