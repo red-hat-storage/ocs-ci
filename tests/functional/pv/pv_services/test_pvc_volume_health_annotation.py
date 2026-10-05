@@ -324,19 +324,29 @@ class PVCVolumeHealthTestHelpers:
         self, pvc_obj, expected_key, expected_state, pvc_label="PVC"
     ):
         """
-        Assert PVC volume health annotation has expected state.
+        Validate PVC volume health annotation key exists and has expected state.
 
-        Parses the annotation JSON once and validates both presence and state,
-        avoiding repeated JSON parsing.
+        Volume health annotations are added by the CSI driver's csi-addons
+        sidecar to track the health of mounted volumes on each node. Each
+        annotation key is unique per-node and contains JSON with health
+        metadata including state ('healthy' or 'unhealthy').
+
+        This helper performs two validations:
+        1. Checks that the expected annotation key exists on the PVC
+        2. Parses the JSON value and verifies the 'state' field matches
 
         Args:
-            pvc_obj: PVC object to check
-            expected_key (str): Expected annotation key (includes node UID)
-            expected_state (str): Expected state ('healthy' or 'unhealthy')
-            pvc_label (str): Label for logging (e.g., "PVC-A", "PVC-B")
+            pvc_obj: PVC object to check for health annotations
+            expected_key (str): The full annotation key to validate.
+                Format: "volumehealth.storage.openshift.io/<node-uid>"
+            expected_state (str): Expected health state value.
+                Valid values: 'healthy', 'unhealthy'
+            pvc_label (str): Human-readable label for logging context.
+                Used to distinguish multiple PVCs in tests (e.g., "PVC-A")
 
         Returns:
-            dict: Parsed annotation content for further validation if needed
+            dict: Parsed annotation JSON (contains 'state', 'type', 'message')
+                for additional validation if needed by the caller.
         """
         ann = pvc_obj.get_volume_health_annotations()
 
@@ -847,7 +857,6 @@ class TestPVCVolumeHealthUnhealthy(PVCVolumeHealthTestHelpers, ManageTest):
 
     @tier2
     @pytest.mark.polarion_id("OCS-8318")
-    @skipif_mcg_only
     @skipif_external_mode
     def test_rwo_cephfs_dual_pvc_same_node_health(
         self, pvc_factory, pod_factory, request
@@ -983,7 +992,7 @@ class TestPVCVolumeHealthUnhealthy(PVCVolumeHealthTestHelpers, ManageTest):
             logger.info(f"Pre-resolved subvolume path for HCI: {subvolume_path}")
 
         logger.test_step(
-            "Blocklist CephFS client for PVC-A only " "(evicts it from the active MDS)"
+            "Blocklist CephFS client for PVC-A only (evicts it from the active MDS)"
         )
         try:
             if is_hci:

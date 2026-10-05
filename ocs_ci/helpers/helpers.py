@@ -8211,7 +8211,7 @@ def blocklist_cephfs_client(pvc_obj, subvolume_path=None):
 
     Args:
         pvc_obj: PVC object (must be CephFS-backed and have a bound PV).
-            Only used for logging if subvolume_path is provided.
+            Not used when subvolume_path is provided.
         subvolume_path (str, optional): Pre-resolved subvolume path.
             If provided, skips PVC/PV lookup. Required for HCI platforms
             where PVC/PV exist on client cluster but blocklisting happens
