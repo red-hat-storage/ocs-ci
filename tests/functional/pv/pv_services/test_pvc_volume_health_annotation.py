@@ -807,6 +807,180 @@ class TestPVCVolumeHealthUnhealthy(PVCVolumeHealthTestHelpers, ManageTest):
         card.take_screenshot("mds_recovery_confirmed")
         logger.info("PVC health unhealthy via MDS scale-down test passed")
 
+    @tier2
+    @pytest.mark.polarion_id("OCS-8318")
+    @skipif_mcg_only
+    @skipif_external_mode
+    def test_rwo_cephfs_dual_pvc_same_node_health(
+        self, pvc_factory, pod_factory, request
+    ):
+        """
+        Verify that blocklisting the CephFS client for one RWO PVC on a
+        shared node causes only that PVC to transition to 'unhealthy'
+        while a second RWO PVC on the same node remains 'healthy'.
+
+        Steps:
+            1. Verify Ceph health is HEALTH_OK.
+            2. Create PVC-A and PVC-B (CephFS, RWO, 5Gi).
+            3. Create pod-A and pod-B, both pinned to the same
+               worker node; run FIO I/O on both.
+            4. Wait ~1 min for reporter tick.
+            5. Assert both PVCs have a volumehealth annotation keyed by
+               the same node UID suffix and state == 'healthy'.
+            6. Blocklist the CephFS client for PVC-A only (evicts it
+               from the active MDS).
+            7. Wait ~1 min for reporter tick.
+            8. Assert PVC-A state == 'unhealthy', PVC-B state == 'healthy'.
+        """
+        logger.test_step("Verify Ceph health is HEALTH_OK")
+        ceph_health_check(tries=3, delay=10)
+
+        logger.test_step("Create PVC-A and PVC-B (CephFS, RWO, 5Gi)")
+        pvc_a = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            size=5,
+            access_mode=constants.ACCESS_MODE_RWO,
+        )
+        logger.info(f"PVC-A {pvc_a.name} created and Bound")
+        pvc_b = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            size=5,
+            access_mode=constants.ACCESS_MODE_RWO,
+        )
+        logger.info(f"PVC-B {pvc_b.name} created and Bound")
+
+        logger.test_step("Pin pod-A and pod-B to the same worker node")
+        worker_nodes = node.get_worker_nodes()
+        logger.assertion(
+            f"Worker node count: expected >= 1, actual={len(worker_nodes)}"
+        )
+        assert (
+            len(worker_nodes) >= 1
+        ), f"Need at least 1 worker node, found {len(worker_nodes)}"
+        target_node = worker_nodes[0]
+
+        pod_a = pod_factory(
+            pvc=pvc_a,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=target_node,
+        )
+        pod_b = pod_factory(
+            pvc=pvc_b,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=target_node,
+        )
+        actual_node_a = pod_a.get()["spec"]["nodeName"]
+        actual_node_b = pod_b.get()["spec"]["nodeName"]
+        logger.info(
+            f"Pod-A {pod_a.name} on {actual_node_a}, "
+            f"Pod-B {pod_b.name} on {actual_node_b}"
+        )
+        logger.assertion(
+            f"Both pods on same node: "
+            f"expected={target_node}, "
+            f"actual_a={actual_node_a}, actual_b={actual_node_b}"
+        )
+        assert (
+            actual_node_a == target_node
+        ), f"Pod-A landed on {actual_node_a}, expected {target_node}"
+        assert (
+            actual_node_b == target_node
+        ), f"Pod-B landed on {actual_node_b}, expected {target_node}"
+
+        logger.test_step("Run FIO I/O on both pods")
+        pod_a.run_io(
+            storage_type="fs",
+            size="512M",
+            fio_filename=pod_a.name,
+        )
+        pod_b.run_io(
+            storage_type="fs",
+            size="512M",
+            fio_filename=pod_b.name,
+        )
+        pod.get_fio_rw_iops(pod_a)
+        pod.get_fio_rw_iops(pod_b)
+        logger.info("FIO I/O completed on both pods")
+
+        logger.test_step(f"Wait {REPORTER_TICK_WAIT}s for reporter tick")
+        time.sleep(REPORTER_TICK_WAIT)
+
+        logger.test_step(
+            "Resolve node UID and assert both PVCs have "
+            "a healthy annotation keyed by the same node UID"
+        )
+        node_ocp = ocp.OCP(kind="node", resource_name=target_node)
+        uid = node_ocp.get()["metadata"]["uid"]
+        expected_key = f"{constants.VOLUME_HEALTH_ANNOTATION_PREFIX}{uid}"
+        logger.info(f"Node {target_node} UID={uid}, expected_key={expected_key}")
+
+        pvc_a.wait_for_volume_health_state(
+            expected_state="healthy",
+            timeout=ANNOTATION_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+        )
+        pvc_b.wait_for_volume_health_state(
+            expected_state="healthy",
+            timeout=ANNOTATION_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+        )
+
+        self._assert_pvc_health_state(pvc_a, expected_key, "healthy", "PVC-A")
+        self._assert_pvc_health_state(pvc_b, expected_key, "healthy", "PVC-B")
+        logger.info("Both PVCs carry healthy annotation with same node UID suffix")
+
+        initial_cluster_index = config.cur_index
+        is_hci = (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        )
+
+        logger.test_step(
+            "Blocklist CephFS client for PVC-A only " "(evicts it from the active MDS)"
+        )
+        try:
+            if is_hci:
+                logger.info("HCI platform: switching to provider for blocklisting")
+                config.switch_to_provider()
+
+            _, client_addr = blocklist_cephfs_client(pvc_a)
+            logger.info(f"PVC-A client blocklisted; addr={client_addr}")
+        finally:
+            if is_hci:
+                config.switch_ctx(initial_cluster_index)
+
+        def finalizer():
+            logger.info("Finalizer: remove CephFS client blocklist")
+            try:
+                if is_hci:
+                    config.switch_to_provider()
+                remove_cephfs_client_blocklist(client_addr)
+            finally:
+                if is_hci:
+                    config.switch_ctx(initial_cluster_index)
+
+        request.addfinalizer(finalizer)
+
+        logger.test_step(
+            "Wait for PVC-A to transition to 'unhealthy' "
+            "while PVC-B remains 'healthy'"
+        )
+        pvc_a.wait_for_volume_health_state(
+            expected_state="unhealthy",
+            timeout=UNHEALTHY_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+        )
+        pvc_b.wait_for_volume_health_state(
+            expected_state="healthy",
+            timeout=ANNOTATION_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+        )
+
+        self._assert_pvc_health_state(pvc_a, expected_key, "unhealthy", "PVC-A")
+        self._assert_pvc_health_state(pvc_b, expected_key, "healthy", "PVC-B")
+
+        logger.info("RWO CephFS dual-PVC same-node health isolation test passed")
+
 
 @tier2
 @green_squad
