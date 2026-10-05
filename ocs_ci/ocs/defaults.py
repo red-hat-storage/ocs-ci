@@ -188,6 +188,7 @@ IBM_CLOUD_REGIONS = {"us-south", "us-east"}
 HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT = 3
 HYPERSHIFT_MEMORY_DEFAULT = "12Gi"
 HYPERSHIFT_CPU_CORES_DEFAULT = 6
+HYPERSHIFT_NODE_UPGRADE_TYPE_DEFAULT = constants.NODE_UPGRADE_TYPE_INPLACE
 HOSTED_ODF_REGISTRY_DEFAULT = "quay.io/rhceph-dev/ocs-registry"
 
 # Custom Ingress SSL certificate, key and CA certificate related defaults
