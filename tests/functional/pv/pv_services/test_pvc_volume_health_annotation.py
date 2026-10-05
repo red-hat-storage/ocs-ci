@@ -320,6 +320,44 @@ class PVCVolumeHealthTestHelpers:
             f"{sorted(targets - set(restarted))}"
         )
 
+    def _assert_pvc_health_state(
+        self, pvc_obj, expected_key, expected_state, pvc_label="PVC"
+    ):
+        """
+        Assert PVC volume health annotation has expected state.
+
+        Parses the annotation JSON once and validates both presence and state,
+        avoiding repeated JSON parsing.
+
+        Args:
+            pvc_obj: PVC object to check
+            expected_key (str): Expected annotation key (includes node UID)
+            expected_state (str): Expected state ('healthy' or 'unhealthy')
+            pvc_label (str): Label for logging (e.g., "PVC-A", "PVC-B")
+
+        Returns:
+            dict: Parsed annotation content for further validation if needed
+        """
+        ann = pvc_obj.get_volume_health_annotations()
+
+        logger.assertion(f"{pvc_label} annotation key {expected_key} present")
+        assert expected_key in ann, (
+            f"{pvc_label} {pvc_obj.name}: expected key {expected_key} missing. "
+            f"Found: {list(ann.keys())}"
+        )
+
+        parsed = json.loads(ann[expected_key])
+        actual_state = parsed.get("state")
+
+        logger.assertion(
+            f"{pvc_label} state: expected='{expected_state}', actual='{actual_state}'"
+        )
+        assert actual_state == expected_state, (
+            f"{pvc_label} {pvc_obj.name}: expected '{expected_state}', "
+            f"got {actual_state}"
+        )
+        return parsed
+
 
 @green_squad
 @skipif_ocs_version("<4.23")
