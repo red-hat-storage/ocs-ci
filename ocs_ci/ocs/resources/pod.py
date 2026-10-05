@@ -4390,3 +4390,77 @@ def get_ocs_client_operator_controller_manager(
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocs_client_operator_controller_manager = get_pods_having_label(label, namespace)
     return [Pod(**pod) for pod in ocs_client_operator_controller_manager]
+
+
+def get_csi_addons_controller_manager_pod():
+    """
+    Get  csi_addons_controller_manager_pod pod
+
+    Returns:
+        list: The schedule precedence value
+    """
+    # from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
+
+    pods = get_pods_having_label(
+        label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+
+    if not pods:
+        return []
+
+    return [Pod(**pod) for pod in pods]
+
+
+def wait_for_matching_pattern_in_pod_logs(
+    pod_name,
+    pattern,
+    namespace=None,
+    container=None,
+    all_containers=False,
+    since=None,
+    timeout=300,
+    sleep=20,
+):
+    """
+    Waits for a matching pattern in the logs of a pod until timeout is reached.
+
+    Args:
+        pod_name (str): The name of the pod.
+        pattern (str): The regular expression pattern to search for.
+        namespace (str, optional): The namespace of the pod. Defaults to None.
+        container (str, optional): The name of the container to search logs for. Defaults to None.
+        all_containers (bool, optional): Whether to search logs for all containers in the pod. Defaults to False.
+        since (str, optional): Only return logs newer than a relative duration like 5s, 2m, or 3h.
+            Defaults to None.
+        timeout (int): Maximum time to wait for the pattern to appear in seconds.
+        sleep (int): Time in seconds to sleep between attempts.
+
+    Returns:
+        list: The list of matched lines with the pattern if found within timeout, else False.
+
+    Raises:
+        TimeoutExpiredError: If the pattern is not found within the specified timeout.
+
+    """
+    logger.info(f"Waiting for pattern '{pattern}' in logs of pod '{pod_name}'")
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=search_pattern_in_pod_logs,
+        pod_name=pod_name,
+        pattern=pattern,
+        namespace=namespace,
+        container=container,
+        all_containers=all_containers,
+        since=since,
+    )
+    try:
+        for matched_lines in sampler:
+            if matched_lines:
+                logger.info(f"Pattern '{pattern}' found in logs of pod '{pod_name}'.")
+                return matched_lines
+    except TimeoutExpiredError as e:
+        raise TimeoutExpiredError(
+            f"Pattern '{pattern}' not found in logs of pod '{pod_name}' within {timeout} seconds."
+        ) from e
