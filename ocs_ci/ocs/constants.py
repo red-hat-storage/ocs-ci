@@ -1903,6 +1903,7 @@ ALERT_KUBE_NODE_UNREACHABLE = "KubeNodeUnreachable"
 ALERT_KUBE_API_ERROR_BUDGET_BURN = "KubeAPIErrorBudgetBurn"
 ALERT_ETCD_HIGH_NUMBER_OF_LEADER_CHANGES = "etcdHighNumberOfLeaderChanges"
 ALERT_ETCD_GRPC_REQUESTS_SLOW = "etcdGRPCRequestsSlow"
+ALERT_ETCD_GRPC_READ_REQUESTS_SLOW = "etcdGRPCReadRequestsSlow"
 ALERT_ETCD_GRPC_WRITE_REQUESTS_SLOW = "etcdGRPCWriteRequestsSlow"
 ALERT_ETCD_MEMBER_COMMUNICATION_SLOW = "etcdMemberCommunicationSlow"
 ALERT_CSV_ABNORMAL_FAILED_OVER_2_MIN = "CsvAbnormalFailedOver2Min"
@@ -1946,6 +1947,7 @@ EXPECTED_UPGRADE_ALERTS = [
     # the whole load, which increases the request latency and the round trip
     # time between the members
     ALERT_ETCD_GRPC_REQUESTS_SLOW,
+    ALERT_ETCD_GRPC_READ_REQUESTS_SLOW,
     ALERT_ETCD_GRPC_WRITE_REQUESTS_SLOW,
     ALERT_ETCD_MEMBER_COMMUNICATION_SLOW,
     # CSVs go through Failed/Replacing phases while operators are upgraded
