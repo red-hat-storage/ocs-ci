@@ -4,11 +4,13 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
     tier2,
     tier3,
     red_squad,
     mcg,
     runs_on_provider,
+    post_ocs_upgrade,
 )
 from ocs_ci.helpers import mcg_performance_profiles as profiles
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
@@ -556,3 +558,98 @@ class TestMCGPerformanceProfiles:
             f"✅ NooBaa operator resolved '{direct_profile}' resources from a "
             "profile set directly on the NooBaa CR"
         )
+
+    @tier2
+    @post_ocs_upgrade
+    def test_profile_resources_after_ocs_upgrade(self, restore_profile):
+        """
+        Verify MCG performance profile resource specifications are preserved
+        after an OCS upgrade from pre-4.23 to 4.23.
+
+        This test runs after the cluster has been upgraded. It verifies that:
+        1. The profile set before upgrade is still active
+        2. All component resources match the profile specification
+        3. Pod scaling and endpoint counts follow the profile
+        4. No degradation or loss of profile settings occurred during upgrade
+
+        Expected Results:
+            Profile resources remain consistent across upgrade and match the
+            specification from RHSTOR-9144.
+        """
+        # Get the current profile (should be preserved from pre-upgrade state)
+        current_profile = (
+            profiles.get_storagecluster_ocp()
+            .get()
+            .get("spec", {})
+            .get("multiCloudGateway", {})
+            .get("performanceProfile")
+        )
+        assert current_profile, (
+            "No MCG performance profile is set after upgrade; expected the "
+            "profile from before upgrade to be preserved"
+        )
+
+        logger.info(
+            f"Verifying MCG profile '{current_profile}' resources after upgrade"
+        )
+        spec = self.PROFILE_SPECS.get(current_profile)
+        assert spec, f"Profile '{current_profile}' not found in PROFILE_SPECS"
+
+        # Verify the profile propagated correctly post-upgrade
+        profiles.verify_profile_propagated(current_profile)
+
+        # Verify all components match the profile
+        profiles.verify_all_components(spec, current_profile, check_pv_pool=False)
+
+        logger.info(f"✅ Profile '{current_profile}' resources verified after upgrade")
+
+    @tier1
+    @post_ocs_upgrade
+    def test_profile_switching_after_ocs_upgrade(self, restore_profile):
+        """
+        Verify profile switching works correctly after an OCS upgrade.
+
+        This test runs after the cluster has been upgraded. It verifies that:
+        1. Profile switching still works on the upgraded cluster
+        2. Pods are recreated with new resources when profile changes
+        3. Endpoint count adjusts according to the new profile
+        4. The upgrade did not break the profile reconciliation logic
+
+        Test Steps:
+            1. Switch through multiple profiles (if current != default, start with default)
+            2. After each switch, verify pods have the new resources
+            3. Verify endpoint count follows the profile
+            4. Verify NooBaa stays healthy throughout
+
+        Expected Results:
+            Profile switching works seamlessly post-upgrade, all components
+            update correctly, and no pods get stuck.
+        """
+        # Get current profile to start with a known baseline
+        current_profile = (
+            profiles.get_storagecluster_ocp()
+            .get()
+            .get("spec", {})
+            .get("multiCloudGateway", {})
+            .get("performanceProfile")
+        )
+
+        # Switch through a couple of profiles to verify switching works
+        profiles_to_test = ["default", "mixed-workload", "small-objects"]
+
+        for target_profile in profiles_to_test:
+            if target_profile == current_profile:
+                continue
+
+            logger.info(f"Switching to '{target_profile}' profile after upgrade")
+            profiles.apply_profile(target_profile)
+
+            # Verify the switch took effect
+            spec = self.PROFILE_SPECS[target_profile]
+            profiles.verify_profile_propagated(target_profile)
+            profiles.verify_all_components(spec, target_profile, check_pv_pool=False)
+            profiles.verify_noobaa_pods_healthy()
+
+            logger.info(f"Switch to '{target_profile}' verified ✓")
+
+        logger.info("✅ Profile switching works correctly after upgrade")
