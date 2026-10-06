@@ -152,6 +152,13 @@ version.
 * `disconnected_env_skip_image_mirroring` - skip index image prune and mirroring on disconnected environment (this expects that all the required images will be mirrored outside of ocs-ci)
 * `disconnected_dns_server` - DNS server accessible from disconnected cluster (should be on the same network)
 * `disconnected_false_gateway` - false gateway used to make cluster effectively disconnected
+* `disconnected_z_minus_n` - install the ODF build which is N positions behind the latest one
+  available in the catalog for the target minor version (z-N pinning), for example `2` installs
+  the third newest build. `0` pins to the latest build. Applies to fresh disconnected installs
+  only (upgrades keep mirroring all versions and let OLM resolve to the latest). If N exceeds the
+  number of available builds, the oldest available build is used and a warning is logged.
+  Catalogs are cumulative, so the build is picked only from the ODF minor version the run is
+  already targeting via `ENV_DATA.ocs_version`.
 * `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 * `ibmcloud_disable_addon` - Disable OCS addon
 * `sc_encryption` - Enable StorageClass encryption.
