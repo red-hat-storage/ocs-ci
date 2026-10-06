@@ -2393,6 +2393,49 @@ def get_storage_cluster(namespace=None):
     return sc_obj
 
 
+def get_nvmeof_gateway_resources(namespace=None):
+    """
+    Get the resource requirements configured for the NVMe-oF gateway.
+
+    Args:
+        namespace (str): Namespace of the StorageCluster
+
+    Returns:
+        dict: Value of spec.resources.nvmeof on the StorageCluster, None if no
+            resource requirements are configured for the gateway
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    storage_cluster = sc_obj.get()["items"][0]
+    return storage_cluster["spec"].get("resources", {}).get("nvmeof")
+
+
+def set_nvmeof_gateway_resources(resources, namespace=None):
+    """
+    Set the resource requirements of the NVMe-oF gateway, which makes the
+    ocs-operator roll out new gateway pods.
+
+    Args:
+        resources (dict): The resource requirements to set, for example
+            {"requests": {"cpu": "1", "memory": "4Gi"}}. None removes the
+            nvmeof entry, which is how a merge patch expresses a deletion.
+        namespace (str): Namespace of the StorageCluster
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    sc_name = sc_obj.get()["items"][0]["metadata"]["name"]
+    log.info(
+        f"Setting the NVMe-oF gateway resources of StorageCluster {sc_name} "
+        f"to {resources}"
+    )
+    patch_body = json.dumps({"spec": {"resources": {"nvmeof": resources}}})
+    assert sc_obj.patch(
+        resource_name=sc_name, params=patch_body, format_type="merge"
+    ), f"Failed to set the NVMe-oF gateway resources to {resources}"
+
+
 def get_nvmeof_gateway_instances(namespace=None):
     """
     Get the configured number of NVMe-oF gateway instances.

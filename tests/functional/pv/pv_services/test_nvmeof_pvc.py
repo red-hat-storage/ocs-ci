@@ -16,10 +16,11 @@ from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, storage_cluster
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,14 @@ MULTI_ATTACH_FAILURE_STRS = (
     "Multi-Attach error for volume",
     "Waiting for detach for volume",
 )
+
+# Resource requirements set on the NVMe-oF gateway to make the ocs-operator
+# roll out new gateway pods
+UPDATE_GATEWAY_RESOURCES = {"requests": {"cpu": "1", "memory": "4Gi"}}
+# Time to wait for all the gateway pods to be replaced by the rollout
+GATEWAY_ROLLOUT_TIMEOUT = 900
+# Interval between two observations of the consumer IO during the rollout
+GATEWAY_ROLLOUT_OBSERVATION_INTERVAL = 30
 
 
 def verify_pv_reclaim(pv_obj, reclaim_policy):
@@ -180,6 +189,80 @@ def verify_nvmeof_consumer_healthy(pod_obj, file_name, md5sum):
     assert pod.verify_data_integrity(
         pod_obj, file_name, md5sum
     ), f"Data of file {file_name} is corrupted on pod {pod_obj.name}"
+
+
+def get_nvmeof_gateway_pods(statuses=None):
+    """
+    Get the NVMe-oF gateway pods.
+
+    Args:
+        statuses (list): If given, only pods in one of these statuses are
+            returned
+
+    Returns:
+        list: Info of the NVMe-oF gateway pods
+
+    """
+    return pod.get_pods_having_label(
+        label=constants.NVMEOF_APP_LABEL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        statuses=statuses,
+    )
+
+
+def monitor_nvmeof_gateway_rollout(pod_obj, initial_uids, expected_count):
+    """
+    Wait for every NVMe-oF gateway pod to be replaced by a new one while
+    observing the IO of a consumer pod.
+
+    The IO of a consumer can pause while the gateway it is connected to is
+    being replaced, so the observations are only logged. The health of the
+    consumer is verified once the rollout is complete.
+
+    Args:
+        pod_obj (Pod): The consumer pod to observe during the rollout
+        initial_uids (set): UIDs of the gateway pods before the rollout
+        expected_count (int): The number of gateway pods expected at the end
+            of the rollout
+
+    Raises:
+        TimeoutExpiredError: If the gateway pods were not all replaced within
+            GATEWAY_ROLLOUT_TIMEOUT
+
+    """
+    try:
+        for gateway_pods in TimeoutSampler(
+            timeout=GATEWAY_ROLLOUT_TIMEOUT,
+            sleep=GATEWAY_ROLLOUT_OBSERVATION_INTERVAL,
+            func=get_nvmeof_gateway_pods,
+            statuses=[constants.STATUS_RUNNING],
+        ):
+            current_uids = {
+                gateway_pod["metadata"]["uid"] for gateway_pod in gateway_pods
+            }
+            io_served = is_pod_io_responsive(pod_obj, timeout=60)
+            logger.info(
+                "Gateway rollout in progress: %s running pods, %s of them "
+                "new, IO served by pod %s: %s",
+                len(gateway_pods),
+                len(current_uids - initial_uids),
+                pod_obj.name,
+                io_served,
+            )
+            if len(gateway_pods) == expected_count and not current_uids & initial_uids:
+                logger.info("All %s NVMe-oF gateway pods were replaced", expected_count)
+                return
+    except TimeoutExpiredError:
+        raise TimeoutExpiredError(
+            GATEWAY_ROLLOUT_TIMEOUT,
+            custom_message=(
+                "The NVMe-oF gateway pods were not all replaced within "
+                f"{GATEWAY_ROLLOUT_TIMEOUT}s. Either the rollout is stuck or "
+                "the change of the gateway resource requirements on the "
+                "StorageCluster is not propagated to the gateway by this "
+                "version of the operator."
+            ),
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -1039,3 +1122,210 @@ class TestNvmeofGatewayScaling(ManageTest):
                 new_pvc_obj.name,
                 target_instances,
             )
+
+
+@green_squad
+@tier4a
+@ignore_leftovers
+@skipif_no_nvmeof
+class TestNvmeofGatewayUpdateStrategy(ManageTest):
+    """
+    Tests for the rolling update of the NVMe-oF Gateway pods.
+    """
+
+    @pytest.fixture()
+    def nvmeof_gateway_resources(self, request):
+        """
+        Restore the resource requirements of the NVMe-oF gateway after the
+        test, which rolls the gateway pods back to their original spec.
+
+        Returns:
+            dict: The gateway resource requirements configured before the
+                test, None if none were configured
+
+        """
+        original_resources = storage_cluster.get_nvmeof_gateway_resources()
+
+        def finalizer():
+            if storage_cluster.get_nvmeof_gateway_resources() == original_resources:
+                return
+            logger.info(
+                "Restoring the NVMe-oF gateway resources to %s", original_resources
+            )
+            storage_cluster.set_nvmeof_gateway_resources(original_resources)
+            gateway_instances = storage_cluster.get_nvmeof_gateway_instances()
+            assert pod.wait_for_pods_by_label_count(
+                label=constants.NVMEOF_APP_LABEL,
+                expected_count=gateway_instances,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                timeout=GATEWAY_ROLLOUT_TIMEOUT,
+            ), "NVMe-oF gateway pods were not restored after the test"
+
+        request.addfinalizer(finalizer)
+        return original_resources
+
+    def test_nvmeof_gateway_update_strategy(
+        self,
+        nvmeof_gateway_resources,
+        nvmeof_storageclass,
+        project_factory,
+        pvc_factory,
+        pod_factory,
+    ):
+        """
+        Verify that the NVMe-oF gateway pods can be rolled out and that the
+        consumers are functional once the rollout is complete.
+
+        Steps:
+            1. Provision a PVC with a pod running continuous IO on it.
+            2. Trigger a rollout of the gateway pods by changing the resource
+               requirements of the gateway.
+            3. Observe the IO of the consumer while the gateway pods are
+               replaced.
+            4. Verify all gateway pods are healthy and that the existing and
+               the newly created PVCs and pods are functional.
+
+        """
+        assert nvmeof_gateway_resources != UPDATE_GATEWAY_RESOURCES, (
+            "The NVMe-oF gateway already requests "
+            f"{UPDATE_GATEWAY_RESOURCES}, which would not trigger a rollout"
+        )
+
+        # Step 1: A PVC with a pod running continuous IO on it
+        logger.test_step("Provision a PVC with a pod running continuous IO on it")
+        gateway_instances = storage_cluster.get_nvmeof_gateway_instances()
+        project_obj = project_factory()
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            project=project_obj,
+            storageclass=nvmeof_storageclass,
+            size=5,
+            access_mode=constants.ACCESS_MODE_RWO,
+            status=constants.STATUS_BOUND,
+        )
+        pod_obj = pod_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            pvc=pvc_obj,
+            status=constants.STATUS_RUNNING,
+        )
+
+        data_file = "pre_update_data"
+        data_path = pod.get_file_path(pod_obj, data_file)
+        pod_obj.exec_sh_cmd_on_pod(
+            command=(
+                f"dd if=/dev/urandom of={data_path} bs=1M "
+                f"count={SCALE_DATA_SIZE_MIB} oflag=direct && sync"
+            )
+        )
+        data_md5sum = pod.cal_md5sum(pod_obj, data_file)
+
+        pod_obj.run_io(
+            storage_type="fs",
+            size="1G",
+            io_direction="rw",
+            runtime=SCALE_FIO_RUNTIME,
+            fio_filename="fio_continuous",
+        )
+        logger.assertion(
+            "Pod %s runs continuous IO on PVC %s", pod_obj.name, pvc_obj.name
+        )
+
+        initial_uids = {
+            gateway_pod["metadata"]["uid"]
+            for gateway_pod in get_nvmeof_gateway_pods(
+                statuses=[constants.STATUS_RUNNING]
+            )
+        }
+        logger.info(
+            "NVMe-oF gateway is running %s pods before the rollout",
+            len(initial_uids),
+        )
+
+        # Step 2: Trigger the rollout by changing the gateway resources
+        logger.test_step(
+            "Trigger a rollout of the gateway pods by setting their resource "
+            "requirements to %s",
+            UPDATE_GATEWAY_RESOURCES,
+        )
+        storage_cluster.set_nvmeof_gateway_resources(UPDATE_GATEWAY_RESOURCES)
+
+        # Step 3: Observe the IO of the consumer during the rollout
+        logger.test_step(
+            "Observe the IO of pod %s while the gateway pods are replaced",
+            pod_obj.name,
+        )
+        monitor_nvmeof_gateway_rollout(pod_obj, initial_uids, gateway_instances)
+        log_pod_events(pod_obj)
+        logger.assertion(
+            "All %s NVMe-oF gateway pods were replaced by the rollout",
+            gateway_instances,
+        )
+
+        # Step 4: The gateways and the consumers have to be healthy again
+        logger.test_step(
+            "Verify the gateway pods are healthy and the consumers are " "functional"
+        )
+        gateway_pods = get_nvmeof_gateway_pods(statuses=[constants.STATUS_RUNNING])
+        gateway_pod_names = [
+            gateway_pod["metadata"]["name"] for gateway_pod in gateway_pods
+        ]
+        assert len(gateway_pods) == gateway_instances, (
+            f"Found {len(gateway_pods)} NVMe-oF gateway pods instead of "
+            f"{gateway_instances} after the rollout"
+        )
+        assert pod.wait_for_pods_to_be_running(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            pod_names=gateway_pod_names,
+            timeout=300,
+        ), f"NVMe-oF gateway pods {gateway_pod_names} are not Running"
+        assert storage_cluster.get_nvmeof_gateway_resources() == (
+            UPDATE_GATEWAY_RESOURCES
+        ), "The NVMe-oF gateway does not request the updated resources"
+        logger.assertion(
+            "All %s NVMe-oF gateway pods are healthy after the rollout",
+            gateway_instances,
+        )
+
+        # fio is expected to be disrupted by the rollout, its outcome is only
+        # recorded, the consumer is verified by the checks below.
+        try:
+            fio_result = pod_obj.get_fio_results(timeout=SCALE_FIO_RUNTIME)
+            logger.info(
+                "fio on pod %s completed with error count %s",
+                pod_obj.name,
+                fio_result.get("jobs")[0].get("error"),
+            )
+        except Exception as ex:
+            logger.warning(
+                "fio on pod %s did not complete cleanly: %s", pod_obj.name, ex
+            )
+
+        verify_nvmeof_consumer_healthy(pod_obj, data_file, data_md5sum)
+        logger.assertion(
+            "Pod %s serves IO and the data of PVC %s is intact after the " "rollout",
+            pod_obj.name,
+            pvc_obj.name,
+        )
+
+        # A new PVC and pod have to be functional as well
+        new_pvc_obj = pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            project=project_obj,
+            storageclass=nvmeof_storageclass,
+            size=1,
+            access_mode=constants.ACCESS_MODE_RWO,
+            status=constants.STATUS_BOUND,
+        )
+        new_pod_obj = pod_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            pvc=new_pvc_obj,
+            status=constants.STATUS_RUNNING,
+        )
+        assert is_pod_io_responsive(
+            new_pod_obj
+        ), f"Pod {new_pod_obj.name} does not serve IO on PVC {new_pvc_obj.name}"
+        logger.assertion(
+            "PVC %s is provisioned and pod %s serves IO on it after the " "rollout",
+            new_pvc_obj.name,
+            new_pod_obj.name,
+        )
