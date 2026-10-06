@@ -530,9 +530,20 @@ class VSPHEREBASE(Deployment):
                 logger.info(
                     f"Storage policy not found or failed to delete: {storage_policy_name}"
                 )
+
+            # delete tag and tag category created by OCP installer
+            tag_name = self.infra_id
+            tag_category_name = f"openshift-{self.infra_id}"
+            logger.info(
+                f"Deleting tag '{tag_name}' from category '{tag_category_name}'"
+            )
+            self.vsphere.delete_tag(tag_name, tag_category_name)
+            logger.info(f"Deleting tag category '{tag_category_name}'")
+            self.vsphere.delete_tag_category(tag_category_name)
         else:
             logger.warning(
-                "infra_id not available, skipping folder and storage policy deletion"
+                "infra_id not available, skipping folder, storage policy,"
+                " tag, and tag category deletion"
             )
 
         # remove .terraform directory ( this is only to reclaim space )
@@ -1917,6 +1928,25 @@ class VSPHEREIPI(VSPHEREBASE):
         logger.debug("post destroy checks for vSphere IPI ")
         # destroy the folder in templates
         self.vsphere.destroy_folder(template_folder, self.cluster, self.datacenter)
+
+        # delete storage policy created by OCP installer
+        storage_policy_name = f"openshift-storage-policy-{template_folder}"
+        logger.info(f"Deleting storage policy: {storage_policy_name}")
+        deleted = self.vsphere.delete_storage_policy_by_exact_name(storage_policy_name)
+        if deleted:
+            logger.info(f"Successfully deleted storage policy: {storage_policy_name}")
+        else:
+            logger.info(
+                f"Storage policy not found or failed to delete: {storage_policy_name}"
+            )
+
+        # delete tag and tag category created by OCP installer
+        tag_name = template_folder
+        tag_category_name = f"openshift-{template_folder}"
+        logger.info(f"Deleting tag '{tag_name}' from category '{tag_category_name}'")
+        self.vsphere.delete_tag(tag_name, tag_category_name)
+        logger.info(f"Deleting tag category '{tag_category_name}'")
+        self.vsphere.delete_tag_category(tag_category_name)
 
 
 class VSPHEREAI(VSPHEREBASE):
