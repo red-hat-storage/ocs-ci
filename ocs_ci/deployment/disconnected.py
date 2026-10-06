@@ -1305,8 +1305,9 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         #
         #   DEPLOYMENT:
         #     disconnected_z_minus_n: 2   # install the build 2 behind latest
-        #   ENV_DATA:
-        #     ocs_version: "4.20"
+        #
+        # The minor version to pin within comes from ENV_DATA.ocs_version, which
+        # the run already sets via --ocs-version / --ocs-registry-image.
         #
         # z-0 pins to the latest available build (same result as no pinning but
         # explicit). If n exceeds available builds, oldest available is used
