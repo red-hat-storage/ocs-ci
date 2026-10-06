@@ -215,9 +215,9 @@ def get_nvmeof_gateway_pods(statuses=None):
     )
 
 
-def monitor_nvmeof_gateway_rollout(pod_obj, initial_uids, expected_count):
+def monitor_nvmeof_gateway_rollout(initial_uids, expected_count, pod_obj=None):
     """
-    Wait for every NVMe-oF gateway pod to be replaced by a new one while
+    Wait for every NVMe-oF gateway pod to be replaced by a new one, optionally
     observing the IO of a consumer pod.
 
     The IO of a consumer can pause while the gateway it is connected to is
@@ -225,10 +225,11 @@ def monitor_nvmeof_gateway_rollout(pod_obj, initial_uids, expected_count):
     consumer is verified once the rollout is complete.
 
     Args:
-        pod_obj (Pod): The consumer pod to observe during the rollout
         initial_uids (set): UIDs of the gateway pods before the rollout
         expected_count (int): The number of gateway pods expected at the end
             of the rollout
+        pod_obj (Pod): The consumer pod to observe during the rollout. No IO is
+            observed if it is not given, which is the case during cleanup.
 
     Raises:
         TimeoutExpiredError: If the gateway pods were not all replaced within
@@ -245,14 +246,16 @@ def monitor_nvmeof_gateway_rollout(pod_obj, initial_uids, expected_count):
             current_uids = {
                 gateway_pod["metadata"]["uid"] for gateway_pod in gateway_pods
             }
-            io_served = is_pod_io_responsive(pod_obj, timeout=60)
+            if pod_obj is not None:
+                logger.info(
+                    "IO served by pod %s during the rollout: %s",
+                    pod_obj.name,
+                    is_pod_io_responsive(pod_obj, timeout=60),
+                )
             logger.info(
-                "Gateway rollout in progress: %s running pods, %s of them "
-                "new, IO served by pod %s: %s",
+                "Gateway rollout in progress: %s running pods, %s of them new",
                 len(gateway_pods),
                 len(current_uids - initial_uids),
-                pod_obj.name,
-                io_served,
             )
             if len(gateway_pods) == expected_count and not current_uids & initial_uids:
                 logger.info("All %s NVMe-oF gateway pods were replaced", expected_count)
@@ -1202,14 +1205,19 @@ class TestNvmeofGatewayUpdateStrategy(ManageTest):
             logger.info(
                 "Restoring the NVMe-oF gateway resources to %s", original_resources
             )
-            storage_cluster.set_nvmeof_gateway_resources(original_resources)
+            # The pods running with the test resources are recorded before the
+            # restore so that the cleanup waits for the rollout it triggers. A
+            # plain pod count would already be satisfied by those pods and the
+            # cleanup would finish while they are still running.
+            pre_restore_uids = {
+                gateway_pod["metadata"]["uid"]
+                for gateway_pod in get_nvmeof_gateway_pods(
+                    statuses=[constants.STATUS_RUNNING]
+                )
+            }
             gateway_instances = storage_cluster.get_nvmeof_gateway_instances()
-            assert pod.wait_for_pods_by_label_count(
-                label=constants.NVMEOF_APP_LABEL,
-                expected_count=gateway_instances,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                timeout=GATEWAY_ROLLOUT_TIMEOUT,
-            ), "NVMe-oF gateway pods were not restored after the test"
+            storage_cluster.set_nvmeof_gateway_resources(original_resources)
+            monitor_nvmeof_gateway_rollout(pre_restore_uids, gateway_instances)
 
         request.addfinalizer(finalizer)
         return original_resources
@@ -1304,7 +1312,7 @@ class TestNvmeofGatewayUpdateStrategy(ManageTest):
             "Observe the IO of pod %s while the gateway pods are replaced",
             pod_obj.name,
         )
-        monitor_nvmeof_gateway_rollout(pod_obj, initial_uids, gateway_instances)
+        monitor_nvmeof_gateway_rollout(initial_uids, gateway_instances, pod_obj=pod_obj)
         log_pod_events(pod_obj)
         logger.assertion(
             "All %s NVMe-oF gateway pods were replaced by the rollout",
