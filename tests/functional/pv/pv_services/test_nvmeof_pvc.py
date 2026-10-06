@@ -1,19 +1,24 @@
 import logging
+import subprocess
+from time import sleep
 
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
+    ignore_leftovers,
     skipif_no_nvmeof,
     tier1,
+    tier4a,
     polarion_id,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources import pod, storage_cluster
 from ocs_ci.ocs.resources.ocs import OCS
 
 logger = logging.getLogger(__name__)
@@ -24,6 +29,14 @@ NVMEOF_RAW_BLOCK_DEVICE = "/dev/xvda"
 RAW_BLOCK_IO_SIZE_MIB = 100
 # In-pod path the raw data is read back to
 RAW_BLOCK_READBACK_PATH = "/tmp/readback"
+
+# Size of the data files written before and after the gateway outage
+SCALE_DATA_SIZE_MIB = 50
+# Runtime of the continuous fio, long enough to span the gateway outage
+SCALE_FIO_RUNTIME = 600
+# Time the new PVC is observed to confirm it is not provisioned while the
+# gateways are scaled to 0
+PENDING_PVC_OBSERVATION_TIME = 60
 
 
 def verify_pv_reclaim(pv_obj, reclaim_policy):
@@ -85,6 +98,115 @@ def md5sum_of_device_head(pod_obj, device_path, size_mib):
     return md5sum
 
 
+def log_pod_events(pod_obj):
+    """
+    Log the events of a pod. Used to record the observed behaviour of a pod
+    during a disruption, no assertion is made on the events.
+
+    Args:
+        pod_obj (Pod): The pod to log the events of
+
+    """
+    event_ocp = OCP(kind="Event", namespace=pod_obj.namespace)
+    events = event_ocp.get(
+        field_selector=f"involvedObject.name={pod_obj.name}",
+    )["items"]
+    if not events:
+        logger.info("No events recorded for pod %s", pod_obj.name)
+        return
+    for event in events:
+        logger.info(
+            "Event on pod %s: type=%s reason=%s message=%s",
+            pod_obj.name,
+            event.get("type"),
+            event.get("reason"),
+            event.get("message"),
+        )
+
+
+def is_pod_io_responsive(pod_obj, timeout=120):
+    """
+    Check whether the volume mounted in the pod still serves IO.
+
+    A pod whose NVMe-oF volume lost its gateway does not necessarily fail, its
+    IO can also block, hence the probe is bounded by a timeout and both a
+    failing and a blocking command mean that IO is not served.
+
+    Args:
+        pod_obj (Pod): The pod to probe
+        timeout (int): Time in seconds to wait for the probe to complete
+
+    Returns:
+        bool: True if the probe wrote to the volume, False otherwise
+
+    """
+    probe_path = pod.get_file_path(pod_obj, "io_probe")
+    try:
+        pod_obj.exec_sh_cmd_on_pod(
+            command=(
+                f"dd if=/dev/urandom of={probe_path} bs=1M count=1 oflag=direct "
+                f"&& sync && rm -f {probe_path}"
+            ),
+            timeout=timeout,
+        )
+    except (CommandFailed, subprocess.TimeoutExpired) as ex:
+        logger.warning("IO is not served by pod %s: %s", pod_obj.name, ex)
+        return False
+    return True
+
+
+@pytest.fixture(autouse=True)
+def nvmeof_prerequisites():
+    """
+    Verify NVMe-oF prerequisites before running the test:
+        - NVMe-oF Gateway pods are deployed and healthy (Running).
+        - NVMe-oF StorageClass exists.
+
+    """
+    namespace = config.ENV_DATA["cluster_namespace"]
+
+    # NVMe-oF StorageClass must exist
+    sc_ocp_obj = OCP(kind=constants.STORAGECLASS, namespace=namespace)
+    assert sc_ocp_obj.is_exist(resource_name=constants.CEPH_NVMEOF_SC), (
+        f"NVMe-oF StorageClass {constants.CEPH_NVMEOF_SC} does not exist. "
+        "Ensure the StorageCluster was deployed with nvmeof enabled."
+    )
+    logger.assertion("NVMe-oF StorageClass %s exists", constants.CEPH_NVMEOF_SC)
+
+    # NVMe-oF Gateway pods must be deployed and healthy
+    gateway_pods = pod.get_pods_having_label(
+        label=constants.NVMEOF_APP_LABEL, namespace=namespace
+    )
+    assert gateway_pods, (
+        "No NVMe-oF Gateway pods found with label "
+        f"{constants.NVMEOF_APP_LABEL} in namespace {namespace}"
+    )
+    gateway_pod_names = [pod_data["metadata"]["name"] for pod_data in gateway_pods]
+    logger.info("Found NVMe-oF Gateway pods: %s", gateway_pod_names)
+    assert pod.wait_for_pods_to_be_running(
+        namespace=namespace, pod_names=gateway_pod_names, timeout=300
+    ), "NVMe-oF Gateway pods are not in Running state"
+    logger.assertion("All NVMe-oF Gateway pods are healthy (Running)")
+
+
+@pytest.fixture()
+def nvmeof_storageclass():
+    """
+    Return the existing NVMe-oF StorageClass as an OCS object so that it can
+    be consumed by the pvc_factory fixture.
+
+    Returns:
+        OCS: OCS instance of the NVMe-oF StorageClass
+
+    """
+    sc_ocp_obj = OCP(
+        kind=constants.STORAGECLASS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.CEPH_NVMEOF_SC,
+    )
+    return OCS(**sc_ocp_obj.get())
+
+
 @green_squad
 @tier1
 @skipif_no_nvmeof
@@ -93,56 +215,6 @@ class TestNvmeofPvc(ManageTest):
     Tests for basic PVC lifecycle and data integrity using the NVMe-oF
     (NVMe over Fabrics) StorageClass.
     """
-
-    @pytest.fixture(autouse=True)
-    def nvmeof_prerequisites(self):
-        """
-        Verify NVMe-oF prerequisites before running the test:
-            - NVMe-oF Gateway pods are deployed and healthy (Running).
-            - NVMe-oF StorageClass exists.
-
-        """
-        namespace = config.ENV_DATA["cluster_namespace"]
-
-        # NVMe-oF StorageClass must exist
-        sc_ocp_obj = OCP(kind=constants.STORAGECLASS, namespace=namespace)
-        assert sc_ocp_obj.is_exist(resource_name=constants.CEPH_NVMEOF_SC), (
-            f"NVMe-oF StorageClass {constants.CEPH_NVMEOF_SC} does not exist. "
-            "Ensure the StorageCluster was deployed with nvmeof enabled."
-        )
-        logger.assertion("NVMe-oF StorageClass %s exists", constants.CEPH_NVMEOF_SC)
-
-        # NVMe-oF Gateway pods must be deployed and healthy
-        gateway_pods = pod.get_pods_having_label(
-            label=constants.NVMEOF_APP_LABEL, namespace=namespace
-        )
-        assert gateway_pods, (
-            "No NVMe-oF Gateway pods found with label "
-            f"{constants.NVMEOF_APP_LABEL} in namespace {namespace}"
-        )
-        gateway_pod_names = [pod_data["metadata"]["name"] for pod_data in gateway_pods]
-        logger.info("Found NVMe-oF Gateway pods: %s", gateway_pod_names)
-        assert pod.wait_for_pods_to_be_running(
-            namespace=namespace, pod_names=gateway_pod_names, timeout=300
-        ), "NVMe-oF Gateway pods are not in Running state"
-        logger.assertion("All NVMe-oF Gateway pods are healthy (Running)")
-
-    @pytest.fixture()
-    def nvmeof_storageclass(self):
-        """
-        Return the existing NVMe-oF StorageClass as an OCS object so that it can
-        be consumed by the pvc_factory fixture.
-
-        Returns:
-            OCS: OCS instance of the NVMe-oF StorageClass
-
-        """
-        sc_ocp_obj = OCP(
-            kind=constants.STORAGECLASS,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=constants.CEPH_NVMEOF_SC,
-        )
-        return OCS(**sc_ocp_obj.get())
 
     @polarion_id("OCS-8237")
     def test_nvmeof_pvc_data_integrity_and_reclaim(
@@ -435,3 +507,256 @@ class TestNvmeofPvc(ManageTest):
             reclaim_policy,
         )
         verify_pv_reclaim(pv_obj, reclaim_policy)
+
+
+@green_squad
+@tier4a
+@ignore_leftovers
+@skipif_no_nvmeof
+class TestNvmeofGatewayScaleDown(ManageTest):
+    """
+    Tests for the behaviour of NVMe-oF consumers while the NVMe-oF Gateway is
+    scaled down, and for their recovery once it is scaled back up.
+    """
+
+    @pytest.fixture()
+    def nvmeof_gateway_instances(self, request):
+        """
+        Return the configured number of NVMe-oF gateway instances and restore
+        it after the test, so that a failure in the middle of the test does not
+        leave the cluster without gateways.
+
+        Returns:
+            int: The number of gateway instances configured before the test
+
+        """
+        original_instances = storage_cluster.get_nvmeof_gateway_instances()
+
+        def finalizer():
+            if storage_cluster.get_nvmeof_gateway_instances() != original_instances:
+                logger.info(
+                    "Restoring the NVMe-oF gateway to %s instances",
+                    original_instances,
+                )
+                storage_cluster.scale_nvmeof_gateway(original_instances)
+
+        request.addfinalizer(finalizer)
+        return original_instances
+
+    def test_nvmeof_gateway_scale_to_zero(
+        self,
+        nvmeof_gateway_instances,
+        nvmeof_storageclass,
+        project_factory,
+        pvc_factory,
+        pod_factory,
+        teardown_factory,
+    ):
+        """
+        Verify how NVMe-oF consumers behave while the gateway is scaled to 0
+        and that they recover once it is scaled back up.
+
+        Steps:
+            1. Verify the gateway is deployed with at least 2 instances and
+               start a pod with continuous fio on an NVMe-oF PVC.
+            2. Scale the gateway to 0 and wait for all gateway pods to
+               terminate.
+            3. Observe the IO behaviour of the running pod, its events and the
+               state of fio.
+            4. Create a new PVC on the NVMe-oF StorageClass and verify it stays
+               Pending while the gateways are down.
+            5. Scale the gateway back to its original number of instances and
+               wait for the gateway pods to be Running.
+            6. Verify the pod serves IO again, restarting it if needed, write
+               new data and read back the old and the new data.
+            7. Verify the PVC from step 4 transitions to Bound.
+
+        """
+        # Step 1: Gateway with 2 instances and a pod running continuous IO
+        logger.test_step(
+            "Verify the NVMe-oF gateway is deployed with at least 2 instances "
+            "and start continuous IO on an NVMe-oF PVC"
+        )
+        assert nvmeof_gateway_instances >= 2, (
+            "The test requires an NVMe-oF gateway with at least 2 instances, "
+            f"found {nvmeof_gateway_instances}"
+        )
+        logger.info(
+            "NVMe-oF gateway is configured with %s instances",
+            nvmeof_gateway_instances,
+        )
+
+        project_obj = project_factory()
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            project=project_obj,
+            storageclass=nvmeof_storageclass,
+            size=5,
+            access_mode=constants.ACCESS_MODE_RWO,
+            status=constants.STATUS_BOUND,
+        )
+        pod_obj = pod_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            pvc=pvc_obj,
+            status=constants.STATUS_RUNNING,
+        )
+
+        # Data written before the outage, verified again after the recovery
+        pre_scale_file = "pre_scale_data"
+        pre_scale_path = pod.get_file_path(pod_obj, pre_scale_file)
+        pod_obj.exec_sh_cmd_on_pod(
+            command=(
+                f"dd if=/dev/urandom of={pre_scale_path} bs=1M "
+                f"count={SCALE_DATA_SIZE_MIB} oflag=direct && sync"
+            )
+        )
+        pre_scale_md5sum = pod.cal_md5sum(pod_obj, pre_scale_file)
+
+        # Continuous IO spanning the outage. fio runs in a background thread,
+        # its results are collected after the gateways are back.
+        pod_obj.run_io(
+            storage_type="fs",
+            size="1G",
+            io_direction="rw",
+            runtime=SCALE_FIO_RUNTIME,
+            fio_filename="fio_continuous",
+        )
+        logger.assertion(
+            "Pod %s runs continuous IO on PVC %s", pod_obj.name, pvc_obj.name
+        )
+
+        # Step 2: Scale the gateway to 0
+        logger.test_step("Scale the NVMe-oF gateway to 0 instances")
+        storage_cluster.scale_nvmeof_gateway(0)
+        assert not pod.get_pods_having_label(
+            label=constants.NVMEOF_APP_LABEL,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        ), "NVMe-oF gateway pods are still present after scaling to 0"
+        logger.assertion("All NVMe-oF gateway pods are terminated")
+
+        # Step 3: Observe the IO behaviour of the running pod
+        logger.test_step(
+            "Observe the IO behaviour of pod %s while the gateways are down",
+            pod_obj.name,
+        )
+        pod_obj.reload()
+        logger.info(
+            "Pod %s is in %s state while the gateways are scaled to 0",
+            pod_obj.name,
+            pod_obj.ocp.get_resource_status(pod_obj.name),
+        )
+        logger.info(
+            "fio on pod %s finished: %s", pod_obj.name, pod_obj.fio_thread.done()
+        )
+        log_pod_events(pod_obj)
+        # Losing the gateways must not take the consumer pod away, its IO is
+        # expected to either fail or block, both of which are recorded above.
+        assert pod_obj.ocp.is_exist(
+            resource_name=pod_obj.name
+        ), f"Pod {pod_obj.name} disappeared while the gateways were scaled to 0"
+        logger.assertion(
+            "Pod %s is still present while the gateways are down", pod_obj.name
+        )
+
+        # Step 4: A new PVC must not get provisioned while the gateways are down
+        logger.test_step(
+            "Create a PVC on StorageClass %s while the gateways are scaled to 0",
+            constants.CEPH_NVMEOF_SC,
+        )
+        pending_pvc_obj = helpers.create_pvc(
+            sc_name=constants.CEPH_NVMEOF_SC,
+            namespace=project_obj.namespace,
+            size="1Gi",
+            do_reload=False,
+            access_mode=constants.ACCESS_MODE_RWO,
+        )
+        teardown_factory(pending_pvc_obj)
+        sleep(PENDING_PVC_OBSERVATION_TIME)
+        pending_pvc_obj.reload()
+        assert pending_pvc_obj.status == constants.STATUS_PENDING, (
+            f"PVC {pending_pvc_obj.name} is in {pending_pvc_obj.status} state "
+            f"after {PENDING_PVC_OBSERVATION_TIME}s, it is expected to stay "
+            "Pending while the NVMe-oF gateways are scaled to 0"
+        )
+        logger.assertion(
+            "PVC %s stays Pending while the gateways are down",
+            pending_pvc_obj.name,
+        )
+
+        # Step 5: Scale the gateway back up
+        logger.test_step(
+            "Scale the NVMe-oF gateway back to %s instances",
+            nvmeof_gateway_instances,
+        )
+        storage_cluster.scale_nvmeof_gateway(nvmeof_gateway_instances)
+        logger.assertion(
+            "NVMe-oF gateway pods are Running again (%s instances)",
+            nvmeof_gateway_instances,
+        )
+
+        # Step 6: Verify the pod serves IO again and the data is intact
+        logger.test_step(
+            "Verify pod %s serves IO again and verify the data", pod_obj.name
+        )
+        try:
+            fio_result = pod_obj.get_fio_results(timeout=SCALE_FIO_RUNTIME)
+            logger.info(
+                "fio on pod %s completed with error count %s",
+                pod_obj.name,
+                fio_result.get("jobs")[0].get("error"),
+            )
+        except Exception as ex:
+            # fio is expected to be disrupted by the outage, its failure is
+            # recorded but the recovery is verified by the IO probe below.
+            logger.warning(
+                "fio on pod %s did not complete cleanly: %s", pod_obj.name, ex
+            )
+
+        io_pod_obj = pod_obj
+        if not is_pod_io_responsive(pod_obj):
+            logger.info(
+                "IO on pod %s did not recover, restarting the pod", pod_obj.name
+            )
+            pod_obj.delete()
+            pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
+            io_pod_obj = pod_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                pvc=pvc_obj,
+                status=constants.STATUS_RUNNING,
+            )
+            assert is_pod_io_responsive(io_pod_obj), (
+                f"Pod {io_pod_obj.name} does not serve IO on PVC "
+                f"{pvc_obj.name} after the gateways were scaled back up"
+            )
+        logger.assertion("IO is served again by pod %s", io_pod_obj.name)
+
+        # Write new data, then read back the old and the new data
+        post_scale_file = "post_scale_data"
+        post_scale_path = pod.get_file_path(io_pod_obj, post_scale_file)
+        io_pod_obj.exec_sh_cmd_on_pod(
+            command=(
+                f"dd if=/dev/urandom of={post_scale_path} bs=1M "
+                f"count={SCALE_DATA_SIZE_MIB} oflag=direct && sync"
+            )
+        )
+        post_scale_md5sum = pod.cal_md5sum(io_pod_obj, post_scale_file)
+        assert pod.verify_data_integrity(
+            io_pod_obj, pre_scale_file, pre_scale_md5sum
+        ), f"Data written before the outage is corrupted on PVC {pvc_obj.name}"
+        assert pod.verify_data_integrity(
+            io_pod_obj, post_scale_file, post_scale_md5sum
+        ), f"Data written after the recovery is corrupted on PVC {pvc_obj.name}"
+        logger.assertion(
+            "Data written before and after the outage is intact on PVC %s",
+            pvc_obj.name,
+        )
+
+        # Step 7: The PVC created during the outage must get provisioned
+        logger.test_step("Verify PVC %s transitions to Bound", pending_pvc_obj.name)
+        helpers.wait_for_resource_state(
+            pending_pvc_obj, constants.STATUS_BOUND, timeout=300
+        )
+        logger.assertion(
+            "PVC %s is Bound after the gateways were scaled back up",
+            pending_pvc_obj.name,
+        )
