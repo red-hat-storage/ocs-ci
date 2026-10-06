@@ -1140,17 +1140,8 @@ class BAREMETALAI(BAREMETALBASE):
 
             # download discovery ipxe config
             ipxe_config_file = self.ai_cluster.download_ipxe_config(self.cluster_path)
-            # parse ipxe_config_file for initrd, kernel and rootfs urls
             with open(ipxe_config_file) as ipxe_config_content:
-                content = ipxe_config_content.read()
-            initrd_url = re.search(r"\ninitrd --name initrd (.*)\n", content).group(1)
-            kernel_line = re.search(r"\nkernel (.*)\n", content).group(1)
-            kernel_url = kernel_line.split()[0]
-            # Extract all kernel args (everything after kernel URL)
-            ai_kernel_args = " ".join(kernel_line.split()[1:])
-            # Extract rootfs URL from kernel args
-            rootfs_match = re.search(r"coreos\.live\.rootfs_url=(\S+)", ai_kernel_args)
-            rootfs_url = rootfs_match.group(1) if rootfs_match else None
+                ipxe_content = ipxe_config_content.read()
 
             # IBM Cloud VPC Bare Metal: Use direct iPXE boot with AI script
             if is_vpc_infra():
@@ -1163,8 +1154,8 @@ class BAREMETALAI(BAREMETALBASE):
                     region=config.ENV_DATA.get("region", "us-south")
                 )
 
-                # Generate inline iPXE script by prepending DHCP retry loop to AI script
-                ipxe_script = vpc_bm_manager.generate_rhcos_ipxe_script(content)
+                # Generate inline iPXE script by appending DHCP retry loop to AI script
+                ipxe_script = vpc_bm_manager.generate_rhcos_ipxe_script(ipxe_content)
                 logger.info(
                     f"Generated iPXE script for VPC BM ({len(ipxe_script)} bytes)"
                 )
@@ -1311,6 +1302,15 @@ class BAREMETALAI(BAREMETALBASE):
                 # VPC BM deployment complete - return early to skip traditional baremetal flow
                 logger.info("VPC BM deployment completed successfully")
                 return
+            else:
+                # Traditional baremetal: parse iPXE script for initrd, kernel and rootfs urls
+                initrd_url = re.search(
+                    r"\ninitrd --name initrd (.*)\n", ipxe_content
+                ).group(1)
+                kernel_url, rootfs_url = re.search(
+                    r"\nkernel ([^ ]*) initrd=initrd coreos.live.rootfs_url=([^ ]*)",
+                    ipxe_content,
+                ).groups()
 
             # Traditional baremetal: download initrd, kernel and rootfs to httpd server
             dest_dir = f"{self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
