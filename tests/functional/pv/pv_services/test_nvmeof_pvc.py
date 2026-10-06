@@ -155,6 +155,25 @@ def is_pod_io_responsive(pod_obj, timeout=120):
     return True
 
 
+def verify_nvmeof_consumer_healthy(pod_obj, file_name, md5sum):
+    """
+    Verify that a pod consuming an NVMe-oF volume still serves IO and that the
+    data written to the volume earlier is intact.
+
+    Args:
+        pod_obj (Pod): The pod consuming the NVMe-oF volume
+        file_name (str): The name of the file to verify
+        md5sum (str): The md5sum the file is expected to have
+
+    """
+    assert is_pod_io_responsive(
+        pod_obj
+    ), f"Pod {pod_obj.name} does not serve IO on its NVMe-oF volume"
+    assert pod.verify_data_integrity(
+        pod_obj, file_name, md5sum
+    ), f"Data of file {file_name} is corrupted on pod {pod_obj.name}"
+
+
 @pytest.fixture(autouse=True)
 def nvmeof_prerequisites():
     """
@@ -513,10 +532,11 @@ class TestNvmeofPvc(ManageTest):
 @tier4a
 @ignore_leftovers
 @skipif_no_nvmeof
-class TestNvmeofGatewayScaleDown(ManageTest):
+class TestNvmeofGatewayScaling(ManageTest):
     """
-    Tests for the behaviour of NVMe-oF consumers while the NVMe-oF Gateway is
-    scaled down, and for their recovery once it is scaled back up.
+    Tests for changing the replica count of the NVMe-oF Gateway, covering the
+    behaviour of NVMe-oF consumers while the gateway is scaled down and their
+    recovery once it is scaled back up.
     """
 
     @pytest.fixture()
@@ -760,3 +780,131 @@ class TestNvmeofGatewayScaleDown(ManageTest):
             "PVC %s is Bound after the gateways were scaled back up",
             pending_pvc_obj.name,
         )
+
+    def test_nvmeof_gateway_replica_scaling(
+        self,
+        nvmeof_gateway_instances,
+        nvmeof_storageclass,
+        project_factory,
+        pvc_factory,
+        pod_factory,
+    ):
+        """
+        Verify that the NVMe-oF gateway can be scaled up and down and that the
+        consumers keep working at every replica count.
+
+        Steps:
+            1. Verify the gateway is deployed with at least 2 instances and
+               provision a PVC with a pod consuming it.
+            2. Scale the gateway up by one instance.
+            3. Scale the gateway back down to its original number of instances.
+            4. Scale the gateway down to a single instance.
+            5. Scale the gateway back to its original number of instances.
+
+        After every scaling operation the number of gateway pods, the IO of the
+        existing consumer, the integrity of its data and the provisioning of a
+        new PVC are verified.
+
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        # Step 1: Gateway with the default number of instances and a consumer
+        logger.test_step(
+            "Verify the NVMe-oF gateway is deployed with at least 2 instances "
+            "and provision a PVC with a pod consuming it"
+        )
+        assert nvmeof_gateway_instances >= 2, (
+            "The test requires an NVMe-oF gateway with at least 2 instances, "
+            f"found {nvmeof_gateway_instances}"
+        )
+        logger.info(
+            "NVMe-oF gateway is configured with %s instances",
+            nvmeof_gateway_instances,
+        )
+
+        project_obj = project_factory()
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            project=project_obj,
+            storageclass=nvmeof_storageclass,
+            size=5,
+            access_mode=constants.ACCESS_MODE_RWO,
+            status=constants.STATUS_BOUND,
+        )
+        pod_obj = pod_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            pvc=pvc_obj,
+            status=constants.STATUS_RUNNING,
+        )
+
+        data_file = "scaling_data"
+        data_path = pod.get_file_path(pod_obj, data_file)
+        pod_obj.exec_sh_cmd_on_pod(
+            command=(
+                f"dd if=/dev/urandom of={data_path} bs=1M "
+                f"count={SCALE_DATA_SIZE_MIB} oflag=direct && sync"
+            )
+        )
+        data_md5sum = pod.cal_md5sum(pod_obj, data_file)
+        logger.assertion(
+            "PVC %s is Bound and consumed by pod %s", pvc_obj.name, pod_obj.name
+        )
+
+        # Steps 2 to 5: scale up, back down, to the minimum and back to the
+        # original number of instances. The last step also leaves the cluster
+        # in its original state.
+        scaling_steps = [
+            ("up", nvmeof_gateway_instances + 1),
+            ("down", nvmeof_gateway_instances),
+            ("down to the minimum", 1),
+            ("back to the original", nvmeof_gateway_instances),
+        ]
+        for description, target_instances in scaling_steps:
+            logger.test_step(
+                "Scale the NVMe-oF gateway %s, to %s instances",
+                description,
+                target_instances,
+            )
+            storage_cluster.scale_nvmeof_gateway(target_instances)
+
+            configured_instances = storage_cluster.get_nvmeof_gateway_instances()
+            assert configured_instances == target_instances, (
+                f"StorageCluster requests {configured_instances} NVMe-oF "
+                f"gateway instances instead of {target_instances}"
+            )
+            gateway_pods = pod.get_pods_having_label(
+                label=constants.NVMEOF_APP_LABEL,
+                namespace=namespace,
+                statuses=[constants.STATUS_RUNNING],
+            )
+            assert len(gateway_pods) == target_instances, (
+                f"Found {len(gateway_pods)} running NVMe-oF gateway pods "
+                f"instead of {target_instances}"
+            )
+            logger.assertion(
+                "NVMe-oF gateway is running with %s instances", target_instances
+            )
+
+            # The existing consumer must keep serving IO across the change
+            verify_nvmeof_consumer_healthy(pod_obj, data_file, data_md5sum)
+            logger.assertion(
+                "Pod %s serves IO and its data is intact with %s gateway "
+                "instances",
+                pod_obj.name,
+                target_instances,
+            )
+
+            # New volumes must still be provisioned at this replica count
+            new_pvc_obj = pvc_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                project=project_obj,
+                storageclass=nvmeof_storageclass,
+                size=1,
+                access_mode=constants.ACCESS_MODE_RWO,
+                status=constants.STATUS_BOUND,
+            )
+            logger.assertion(
+                "PVC %s is provisioned with %s gateway instances",
+                new_pvc_obj.name,
+                target_instances,
+            )
