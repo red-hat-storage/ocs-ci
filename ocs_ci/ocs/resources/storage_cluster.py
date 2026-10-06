@@ -2444,14 +2444,23 @@ def get_nvmeof_gateway_instances(namespace=None):
         namespace (str): Namespace of the StorageCluster
 
     Returns:
-        int: Value of spec.nvmeof.gatewayInstances on the StorageCluster, 0 if
-            NVMe-oF is not configured
+        int: Value of spec.nvmeof.gatewayInstances on the StorageCluster. If
+            NVMe-oF is enabled without an explicit gatewayInstances, the
+            operator default is returned. 0 if NVMe-oF is not configured or is
+            disabled.
 
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     sc_obj = get_storage_cluster(namespace=namespace)
     storage_cluster = sc_obj.get()["items"][0]
-    return storage_cluster["spec"].get("nvmeof", {}).get("gatewayInstances", 0)
+    nvmeof_spec = storage_cluster["spec"].get("nvmeof", {})
+    if not nvmeof_spec.get("enable"):
+        return 0
+    # An enabled gateway without an explicit instance count runs the operator
+    # default, reporting 0 for it would mean "no gateway" to the callers.
+    return nvmeof_spec.get(
+        "gatewayInstances", constants.NVMEOF_DEFAULT_GATEWAY_INSTANCES
+    )
 
 
 def scale_nvmeof_gateway(instances, namespace=None, wait=True, timeout=600):

@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 NVMEOF_RAW_BLOCK_DEVICE = "/dev/xvda"
 # Amount of raw data written to and read back from the block device
 RAW_BLOCK_IO_SIZE_MIB = 100
+# In-pod path the raw data is generated into before writing it to the device
+RAW_BLOCK_SOURCE_PATH = "/tmp/source_data"
 # In-pod path the raw data is read back to
 RAW_BLOCK_READBACK_PATH = "/tmp/readback"
 
@@ -46,6 +48,9 @@ MULTI_ATTACH_FAILURE_STRS = (
     "Multi-Attach error for volume",
     "Waiting for detach for volume",
 )
+# Time the second pod of the RWO test is observed to confirm it does not start
+# while the first pod still holds the volume
+RWO_ENFORCEMENT_OBSERVATION_TIME = 60
 
 # Resource requirements set on the NVMe-oF gateway to make the ocs-operator
 # roll out new gateway pods
@@ -536,9 +541,20 @@ class TestNvmeofPvc(ManageTest):
             RAW_BLOCK_IO_SIZE_MIB,
             device_path,
         )
+        # The random data is generated into a file first so that the device
+        # and the readback can both be compared against the data that was
+        # actually written. Comparing them with each other would pass even if
+        # the device returned wrong data consistently.
         pod_obj.exec_sh_cmd_on_pod(
             command=(
-                f"dd if=/dev/urandom of={device_path} bs=1M "
+                f"dd if=/dev/urandom of={RAW_BLOCK_SOURCE_PATH} bs=1M "
+                f"count={RAW_BLOCK_IO_SIZE_MIB} && sync"
+            )
+        )
+        source_md5sum = pod.cal_md5sum(pod_obj, RAW_BLOCK_SOURCE_PATH, raw_path=True)
+        pod_obj.exec_sh_cmd_on_pod(
+            command=(
+                f"dd if={RAW_BLOCK_SOURCE_PATH} of={device_path} bs=1M "
                 f"count={RAW_BLOCK_IO_SIZE_MIB} oflag=direct"
             )
         )
@@ -548,19 +564,24 @@ class TestNvmeofPvc(ManageTest):
                 f"count={RAW_BLOCK_IO_SIZE_MIB} iflag=direct"
             )
         )
-        device_md5sum = md5sum_of_device_head(
-            pod_obj, device_path, RAW_BLOCK_IO_SIZE_MIB
-        )
         readback_md5sum = pod.cal_md5sum(
             pod_obj, RAW_BLOCK_READBACK_PATH, raw_path=True
         )
-        assert device_md5sum == readback_md5sum, (
+        assert readback_md5sum == source_md5sum, (
             f"Data read back from {device_path} on pod {pod_obj.name} does not "
-            f"match the device content. Device md5sum: {device_md5sum}, "
+            f"match the data written to it. Written md5sum: {source_md5sum}, "
             f"readback md5sum: {readback_md5sum}"
         )
+        device_md5sum = md5sum_of_device_head(
+            pod_obj, device_path, RAW_BLOCK_IO_SIZE_MIB
+        )
+        assert device_md5sum == source_md5sum, (
+            f"The first {RAW_BLOCK_IO_SIZE_MIB} MiB of {device_path} on pod "
+            f"{pod_obj.name} do not match the data written to it. Written "
+            f"md5sum: {source_md5sum}, device md5sum: {device_md5sum}"
+        )
         logger.assertion(
-            "Raw data read back from %s matches the device content", device_path
+            "Raw data read back from %s matches the data written to it", device_path
         )
 
         # Step 5: Delete the pod and verify the data persists on a new pod
@@ -594,9 +615,9 @@ class TestNvmeofPvc(ManageTest):
         persisted_md5sum = pod.cal_md5sum(
             new_pod_obj, RAW_BLOCK_READBACK_PATH, raw_path=True
         )
-        assert persisted_md5sum == device_md5sum, (
+        assert persisted_md5sum == source_md5sum, (
             f"Data on {device_path} did not persist across pod recreation. "
-            f"Expected md5sum: {device_md5sum}, actual: {persisted_md5sum}"
+            f"Expected md5sum: {source_md5sum}, actual: {persisted_md5sum}"
         )
         logger.assertion(
             "Raw data on PVC %s persisted after pod recreation", pvc_obj.name
@@ -712,9 +733,30 @@ class TestNvmeofPvc(ManageTest):
         helpers.verify_expected_failure_event(
             ocs_obj=pod_b_obj, failure_strs=MULTI_ATTACH_FAILURE_STRS
         )
+
+        # The failure event alone only proves that the attach was rejected at
+        # some point. Observe pod B for a bounded period, with pod A still
+        # running and holding the volume, to assert that it really does not
+        # start.
+        sleep(RWO_ENFORCEMENT_OBSERVATION_TIME)
+        pod_a_status = pod_a_obj.ocp.get_resource_status(pod_a_obj.name)
+        assert pod_a_status == constants.STATUS_RUNNING, (
+            f"Pod {pod_a_obj.name} is in {pod_a_status} state, it has to stay "
+            f"Running and hold PVC {pvc_obj.name} for the enforcement of the "
+            "RWO access mode to be verified"
+        )
+        pod_b_status = pod_b_obj.ocp.get_resource_status(pod_b_obj.name)
+        assert pod_b_status != constants.STATUS_RUNNING, (
+            f"Pod {pod_b_obj.name} reached the Running state on node "
+            f"{node_pod_b} after {RWO_ENFORCEMENT_OBSERVATION_TIME}s while pod "
+            f"{pod_a_obj.name} still holds PVC {pvc_obj.name} on node "
+            f"{node_pod_a}. The RWO access mode is not enforced across nodes"
+        )
         logger.assertion(
-            "Pod %s cannot mount PVC %s while it is attached to pod %s",
+            "Pod %s stays in %s state and cannot mount PVC %s while it is "
+            "attached to pod %s",
             pod_b_obj.name,
+            pod_b_status,
             pvc_obj.name,
             pod_a_obj.name,
         )
@@ -755,11 +797,19 @@ class TestNvmeofGatewayScaling(ManageTest):
     """
 
     @pytest.fixture()
-    def nvmeof_gateway_instances(self, request):
+    def nvmeof_gateway_instances(
+        self, request, project_factory, pvc_factory, pod_factory, teardown_factory
+    ):
         """
         Return the configured number of NVMe-oF gateway instances and restore
         it after the test, so that a failure in the middle of the test does not
         leave the cluster without gateways.
+
+        The resource factories are requested, although they are not used here,
+        so that they are set up before this fixture and therefore finalized
+        after it. The gateways have to be restored before the pods and the PVCs
+        are deleted, their volumes cannot be detached while the gateways are
+        scaled down.
 
         Returns:
             int: The number of gateway instances configured before the test
