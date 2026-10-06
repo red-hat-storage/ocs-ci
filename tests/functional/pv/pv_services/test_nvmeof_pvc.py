@@ -18,7 +18,7 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pod, storage_cluster
+from ocs_ci.ocs.resources import events, pod, storage_cluster
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -730,7 +730,7 @@ class TestNvmeofPvc(ManageTest):
             state=constants.STATUS_CONTAINER_CREATING,
             timeout=120,
         )
-        helpers.verify_expected_failure_event(
+        events.verify_expected_failure_event(
             ocs_obj=pod_b_obj, failure_strs=MULTI_ATTACH_FAILURE_STRS
         )
 

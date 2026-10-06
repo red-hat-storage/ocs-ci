@@ -13,7 +13,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework.pytest_customization.marks import skipif_cephfs_disabled
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources import events, pod
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import version
 
@@ -181,7 +181,7 @@ class TestDynamicPvc(ManageTest):
                 state=constants.STATUS_CONTAINER_CREATING,
                 timeout=timeout,
             )
-            helpers.verify_expected_failure_event(
+            events.verify_expected_failure_event(
                 ocs_obj=pod_obj2, failure_strs=expected_failure_strs
             )
 
