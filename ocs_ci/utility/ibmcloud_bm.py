@@ -355,9 +355,9 @@ class IBMCloudVPCBM(IBMCloudBM):
         Create DNS records in IBM Cloud Internet Services (CIS) for API, API-INT, and Ingress VIPs.
 
         Creates three DNS records required for OpenShift Assisted Installer:
-        - api.<cluster>.<domain> -> API VIP (public API VIP for external client access)
-        - api-int.<cluster>.<domain> -> API-INT VIP (internal API VIP for cluster nodes)
-        - *.apps.<cluster>.<domain> -> Ingress VIP
+            ``api.<cluster>.<domain>`` -> API VIP (public API VIP for external client access)
+            ``api-int.<cluster>.<domain>`` -> API-INT VIP (internal API VIP for cluster nodes)
+            ``*.apps.<cluster>.<domain>`` -> Ingress VIP
 
         Args:
             cluster_name (str): OpenShift cluster name
@@ -417,9 +417,9 @@ class IBMCloudVPCBM(IBMCloudBM):
         Delete DNS records in IBM Cloud Internet Services (CIS) for a cluster.
 
         Deletes all DNS records matching the cluster name pattern:
-        - api.<cluster>.<domain>
-        - api-int.<cluster>.<domain>
-        - *.apps.<cluster>.<domain>
+            ``api.<cluster>.<domain>``
+            ``api-int.<cluster>.<domain>``
+            ``*.apps.<cluster>.<domain>``
 
         Args:
             cluster_name (str): OpenShift cluster name
