@@ -133,6 +133,36 @@ def apply_resource(**kwargs):
     return ocs_obj
 
 
+@retry(UnexpectedBehaviour, tries=10, delay=5, backoff=1)
+def verify_expected_failure_event(ocs_obj, failure_strs):
+    """
+    Checks for the expected failure event message in oc describe command
+
+    Args:
+        ocs_obj (OCS): The resource to check the events of
+        failure_strs (list): Failure messages, any one of which is expected to
+            be present in the events of the resource
+
+    Returns:
+        bool: True if one of the failure messages is present
+
+    Raises:
+        UnexpectedBehaviour: If none of the failure messages is present
+
+    """
+    logger.info("Check expected failure event message in oc describe command")
+    describe_output = ocs_obj.describe()
+    for failure_str in failure_strs:
+        if failure_str in describe_output:
+            logger.info(
+                f"Failure string {failure_str} is present in oc describe command"
+            )
+            return True
+    raise UnexpectedBehaviour(
+        f"None of the failure strings {failure_strs} were found in oc describe command"
+    )
+
+
 def wait_for_resource_state(resource, state, timeout=60):
     """
     Wait for a resource to get to a given status

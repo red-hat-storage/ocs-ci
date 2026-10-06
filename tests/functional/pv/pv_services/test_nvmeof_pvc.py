@@ -15,7 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod, storage_cluster
@@ -37,6 +37,14 @@ SCALE_FIO_RUNTIME = 600
 # Time the new PVC is observed to confirm it is not provisioned while the
 # gateways are scaled to 0
 PENDING_PVC_OBSERVATION_TIME = 60
+
+# Event messages reported when a RWO volume is already attached to a pod on
+# another node. kubernetes/kubernetes#138837 updated the FailedAttachVolume
+# event message, hence both the old and the new wording are accepted.
+MULTI_ATTACH_FAILURE_STRS = (
+    "Multi-Attach error for volume",
+    "Waiting for detach for volume",
+)
 
 
 def verify_pv_reclaim(pv_obj, reclaim_policy):
@@ -527,6 +535,130 @@ class TestNvmeofPvc(ManageTest):
         )
         verify_pv_reclaim(pv_obj, reclaim_policy)
 
+    def test_nvmeof_rwo_access_mode_enforcement(
+        self, nvmeof_storageclass, pvc_factory, pod_factory
+    ):
+        """
+        Verify that a RWO PVC on the NVMe-oF StorageClass is attached to a
+        single pod at a time.
+
+        Steps:
+            1. Prerequisites (NVMe-oF Gateway deployed, StorageClass exists)
+               are verified by the nvmeof_prerequisites fixture.
+            2. Create a RWO PVC and a pod-A mounting it on the first worker
+               node, and verify pod-A is Running.
+            3. Create a pod-B mounting the same PVC on a second worker node
+               and verify it cannot start.
+            4. Delete pod-A and verify pod-B starts and mounts the PVC.
+
+        """
+        worker_nodes = node.get_worker_nodes()
+        if len(worker_nodes) < 2:
+            pytest.skip(
+                "Enforcement of the RWO access mode can only be verified with "
+                f"pods on two different nodes, the cluster has "
+                f"{len(worker_nodes)} worker node(s)"
+            )
+
+        # Step 2: RWO PVC mounted by pod-A
+        logger.test_step(
+            "Create a RWO PVC using StorageClass %s and a pod mounting it on "
+            "node %s",
+            constants.CEPH_NVMEOF_SC,
+            worker_nodes[0],
+        )
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            storageclass=nvmeof_storageclass,
+            size=5,
+            access_mode=constants.ACCESS_MODE_RWO,
+            status=constants.STATUS_BOUND,
+        )
+        pod_a_obj = pod_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            pvc=pvc_obj,
+            status=constants.STATUS_RUNNING,
+            node_name=worker_nodes[0],
+        )
+        logger.assertion(
+            "Pod %s is Running and mounts PVC %s", pod_a_obj.name, pvc_obj.name
+        )
+
+        # Data written by pod-A, used to verify the mount of pod-B later on
+        file_name = pod_a_obj.name
+        pod_a_obj.run_io(
+            storage_type="fs",
+            size="1G",
+            io_direction="write",
+            fio_filename=file_name,
+            end_fsync=1,
+        )
+        fio_result = pod_a_obj.get_fio_results()
+        err_count = fio_result.get("jobs")[0].get("error")
+        assert (
+            err_count == 0
+        ), f"IO error on pod {pod_a_obj.name}. FIO result: {fio_result}"
+        md5sum_pod_a = pod.cal_md5sum(pod_a_obj, file_name)
+
+        # Step 3: pod-B on another node must not get the volume attached
+        logger.test_step(
+            "Create a second pod mounting PVC %s on node %s and verify it "
+            "cannot start",
+            pvc_obj.name,
+            worker_nodes[1],
+        )
+        pod_b_obj = pod_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            pvc=pvc_obj,
+            status=None,
+            node_name=worker_nodes[1],
+        )
+        node_pod_a = pod_a_obj.get()["spec"]["nodeName"]
+        node_pod_b = pod_b_obj.get()["spec"]["nodeName"]
+        assert node_pod_a != node_pod_b, (
+            f"Pods {pod_a_obj.name} and {pod_b_obj.name} are both scheduled on "
+            f"node {node_pod_a}, the RWO access mode is only enforced across "
+            "nodes"
+        )
+
+        helpers.wait_for_resource_state(
+            resource=pod_b_obj,
+            state=constants.STATUS_CONTAINER_CREATING,
+            timeout=120,
+        )
+        helpers.verify_expected_failure_event(
+            ocs_obj=pod_b_obj, failure_strs=MULTI_ATTACH_FAILURE_STRS
+        )
+        logger.assertion(
+            "Pod %s cannot mount PVC %s while it is attached to pod %s",
+            pod_b_obj.name,
+            pvc_obj.name,
+            pod_a_obj.name,
+        )
+
+        # Step 4: pod-B takes the volume over once pod-A is gone
+        logger.test_step(
+            "Delete pod %s and verify pod %s mounts PVC %s",
+            pod_a_obj.name,
+            pod_b_obj.name,
+            pvc_obj.name,
+        )
+        pod_a_obj.delete()
+        pod_a_obj.ocp.wait_for_delete(resource_name=pod_a_obj.name)
+
+        helpers.wait_for_resource_state(
+            resource=pod_b_obj, state=constants.STATUS_RUNNING, timeout=300
+        )
+        assert pod.verify_data_integrity(pod_b_obj, file_name, md5sum_pod_a), (
+            f"Data written by pod {pod_a_obj.name} is not readable by pod "
+            f"{pod_b_obj.name}"
+        )
+        logger.assertion(
+            "Pod %s is Running and reads the data of PVC %s",
+            pod_b_obj.name,
+            pvc_obj.name,
+        )
+
 
 @green_squad
 @tier4a
@@ -888,8 +1020,7 @@ class TestNvmeofGatewayScaling(ManageTest):
             # The existing consumer must keep serving IO across the change
             verify_nvmeof_consumer_healthy(pod_obj, data_file, data_md5sum)
             logger.assertion(
-                "Pod %s serves IO and its data is intact with %s gateway "
-                "instances",
+                "Pod %s serves IO and its data is intact with %s gateway " "instances",
                 pod_obj.name,
                 target_instances,
             )

@@ -13,9 +13,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework.pytest_customization.marks import skipif_cephfs_disabled
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources import pod
-from ocs_ci.utility.retry import retry
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import version
 
@@ -65,24 +63,6 @@ class TestDynamicPvc(ManageTest):
         worker_nodes_list = node.get_worker_nodes()
 
         return sc_obj, worker_nodes_list
-
-    @retry(UnexpectedBehaviour, tries=10, delay=5, backoff=1)
-    def verify_expected_failure_event(self, ocs_obj, failure_strs):
-        """
-        Checks for the expected failure event message in oc describe command
-
-        """
-        logger.info("Check expected failure event message in oc describe command")
-        describe_output = ocs_obj.describe()
-        for failure_str in failure_strs:
-            if failure_str in describe_output:
-                logger.info(
-                    f"Failure string {failure_str} is present in oc describe command"
-                )
-                return True
-        raise UnexpectedBehaviour(
-            f"None of the failure strings {failure_strs} were found in oc describe command"
-        )
 
     @tier1
     @pytest.mark.parametrize(
@@ -201,7 +181,7 @@ class TestDynamicPvc(ManageTest):
                 state=constants.STATUS_CONTAINER_CREATING,
                 timeout=timeout,
             )
-            self.verify_expected_failure_event(
+            helpers.verify_expected_failure_event(
                 ocs_obj=pod_obj2, failure_strs=expected_failure_strs
             )
 
