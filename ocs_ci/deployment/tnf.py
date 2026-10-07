@@ -15,6 +15,7 @@ OCP provisioning and deploy ODF only.
 import json
 import logging
 import os
+import time
 
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.ocs import constants
@@ -364,6 +365,15 @@ class TNF(TNFBASE):
         tnf_instance = self
 
         def setup_with_drbd(storage_setup_self):
+            logger.info("TNF: Waiting for ODF operator pods to stabilize...")
+            odf_pods = get_pods_having_label(
+                label="app.kubernetes.io/part-of=odf-operator",
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            )
+            for pod in odf_pods:
+                pod_name = pod.get("metadata", {}).get("name", "")
+                logger.info(f"ODF operator pod ready: {pod_name}")
+            time.sleep(300)
             logger.info("TNF: Configuring DRBD before StorageCluster creation...")
             tnf_instance._configure_drbd()
             original_setup(storage_setup_self)
