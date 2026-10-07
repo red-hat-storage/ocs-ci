@@ -1,8 +1,0 @@
-#!ipxe
-
-:retry_dhcp
-dhcp || goto retry_dhcp
-
-initrd --name initrd {{ initrd_url }}
-kernel {{ kernel_url }} {{ kernel_args }}
-boot

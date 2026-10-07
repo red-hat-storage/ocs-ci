@@ -844,13 +844,7 @@ class IBMCloudVPCBM(IBMCloudBM):
             f"Timeout waiting for server to reach {expected_status} (stuck in: {final_status})"
         )
 
-    def generate_rhcos_ipxe_script(
-        self,
-        ai_ipxe_content=None,
-        kernel_url=None,
-        initrd_url=None,
-        ai_kernel_args=None,
-    ):
+    def generate_rhcos_ipxe_script(self, ai_ipxe_content=None):
         """
         Generate inline iPXE script for Assisted Installer discovery boot
 
@@ -860,25 +854,10 @@ class IBMCloudVPCBM(IBMCloudBM):
 
         Args:
             ai_ipxe_content (str): Full iPXE script content downloaded from AI service
-            kernel_url (str, optional): Full URL to kernel (legacy fallback)
-            initrd_url (str, optional): Full URL to initrd (legacy fallback)
-            ai_kernel_args (str, optional): Kernel arguments (legacy fallback)
 
         Returns:
             str: iPXE script content with DHCP retry header (suitable for user_data)
         """
-        # Legacy fallback if URLs/args passed individually
-        if kernel_url is not None or initrd_url is not None:
-            from ocs_ci.utility import templating
-
-            template_data = {
-                "kernel_url": ai_ipxe_content,
-                "initrd_url": kernel_url,
-                "kernel_args": initrd_url,
-            }
-            _templating = templating.Templating()
-            return _templating.render_template("ipxe/rhcos-boot.ipxe.j2", template_data)
-
         content = (ai_ipxe_content or "").strip()
         if content.startswith("#!ipxe"):
             content = content[len("#!ipxe") :].strip()
