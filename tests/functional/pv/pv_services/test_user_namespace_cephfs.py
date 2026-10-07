@@ -2,8 +2,8 @@
 Tests for user namespace support with CephFS shared storage.
 """
 
-import time
 import logging
+import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_ocs_version,
@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2, polarion_id
 from ocs_ci.ocs import constants, node, ocp
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers.helpers import (
     create_userns_project,
     create_userns_pod,
@@ -408,9 +409,17 @@ class TestUserNamespaceCephFS(ManageTest):
 
         logger.test_step("Step 2: Verify namespace has default high UID range")
         ns_ocp = ocp.OCP(kind="namespace", resource_name=ns_name)
-        ns_data = ns_ocp.get()
-        annotations = ns_data.get("metadata", {}).get("annotations", {})
-        uid_range = annotations.get(constants.SA_SCC_UID_RANGE)
+
+        # Wait for OpenShift to asynchronously allocate UID range annotation
+        logger.info("Waiting for namespace UID range allocation (async controller)")
+        uid_range = None
+        for sample in TimeoutSampler(timeout=60, sleep=5, func=lambda: ns_ocp.get()):
+            annotations = sample.get("metadata", {}).get("annotations", {})
+            uid_range = annotations.get(constants.SA_SCC_UID_RANGE)
+            if uid_range:
+                logger.info(f"UID range allocated: {uid_range}")
+                break
+            logger.info("UID range annotation not yet allocated, retrying...")
 
         if uid_range:
             uid_range_start = int(uid_range.split("/")[0])
@@ -424,7 +433,7 @@ class TestUserNamespaceCephFS(ManageTest):
         else:
             uid_range_start = 1000000000
             logger.info(
-                "No explicit UID range annotation found, "
+                "No explicit UID range annotation found after 60s wait, "
                 f"using default value {uid_range_start} for testing"
             )
 
@@ -495,6 +504,11 @@ class TestUserNamespaceCephFS(ManageTest):
                 f"Pod phase: {pod_phase}, "
                 f"Container statuses: {len(container_statuses)}"
             )
+
+            # Break immediately if pod reaches Running (test should fail)
+            if pod_phase == constants.STATUS_RUNNING:
+                logger.info("Pod reached Running state (unexpected)")
+                break
 
             if container_statuses:
                 waiting_state = container_statuses[0].get("state", {}).get("waiting")
@@ -601,7 +615,7 @@ class TestUserNamespaceCephFS(ManageTest):
             6. Write file and verify group ownership is 10000.
             7. Verify UID remapping active on host.
             8. Delete pod.
-            9. Try to create pod with fsGroup=10500 (outside range).
+            9. Try to create pod with fsGroup=11000 (outside range).
             10. Verify pod creation rejected by SCC with expected error.
         """
         logger.test_step(
@@ -683,12 +697,16 @@ class TestUserNamespaceCephFS(ManageTest):
             f"uid={CONTAINER_UID}" in id_output
         ), f"Expected uid={CONTAINER_UID} in id output, got: {id_output}"
 
+        # Verify group specifically in groups field to avoid false matches
+        id_groups = pod_obj.exec_sh_cmd_on_pod("id -G")
+        logger.info(f"Container groups (id -G): {id_groups}")
+        groups_list = id_groups.strip().split()
         logger.assertion(
-            f"Container groups: expected {SUPPLEMENTAL_GROUPS_BASE} in output"
+            f"Container groups: expected {SUPPLEMENTAL_GROUPS_BASE} in groups list"
         )
         assert (
-            f"{SUPPLEMENTAL_GROUPS_BASE}" in id_output
-        ), f"Expected group {SUPPLEMENTAL_GROUPS_BASE} in id output, got: {id_output}"
+            str(SUPPLEMENTAL_GROUPS_BASE) in groups_list
+        ), f"Expected group {SUPPLEMENTAL_GROUPS_BASE} in groups, got: {groups_list}"
         logger.info(f"Confirmed groups include {SUPPLEMENTAL_GROUPS_BASE}")
 
         logger.test_step("Step 6: Write file and verify group ownership is 10000")
@@ -742,15 +760,17 @@ class TestUserNamespaceCephFS(ManageTest):
         pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
         logger.info(f"Pod {pod_obj.name} deleted")
 
-        logger.test_step("Step 9: Try to create pod with fsGroup=10500 (outside range)")
+        logger.test_step("Step 9: Try to create pod with fsGroup=11000 (outside range)")
+        logger.test_step("Step 10: Verify pod creation rejected with expected error")
         invalid_fsgroup = 11000
         logger.info(
             f"Attempting to create pod with fsGroup={invalid_fsgroup} "
             f"(outside range {USERNS_UID_RANGE})"
         )
 
-        try:
-            invalid_pod = create_pod(
+        # SCC admission should reject this pod creation with CommandFailed
+        with pytest.raises(CommandFailed) as exc_info:
+            create_pod(
                 interface_type=constants.CEPHFILESYSTEM,
                 pvc_name=pvc_obj.name,
                 namespace=ns_name,
@@ -771,83 +791,20 @@ class TestUserNamespaceCephFS(ManageTest):
                 host_users=False,
                 volumemounts=[{"mountPath": "/mnt/test", "name": "mypvc"}],
             )
-            teardown_factory(invalid_pod)
-            logger.info("Pod creation API call succeeded, checking pod status...")
-            time.sleep(5)
-            describe_output = invalid_pod.describe()
-            logger.info(f"Pod describe output: {describe_output}")
 
-            pod_status = invalid_pod.get().get("status", {})
-            pod_phase = pod_status.get("phase")
-            logger.info(f"Pod phase after creation: {pod_phase}")
+        error_msg = str(exc_info.value).lower()
+        logger.info(f"Pod creation rejected with error: {error_msg}")
 
-            if (
-                "fsGroup" in describe_output
-                and "not an allowed group" in describe_output
-            ):
-                logger.info("Pod was created but SCC validation error found in events")
-                logger.test_step(
-                    "Step 10: Verify pod creation rejected with expected error"
-                )
-                expected_error = "is not an allowed group"
-                logger.assertion(
-                    f"SCC error: expected '{expected_error}' in pod events"
-                )
-                assert expected_error in describe_output, (
-                    f"Expected SCC error '{expected_error}' not found. "
-                    f"Events: {describe_output}"
-                )
-                logger.info("Found expected SCC validation error for fsGroup")
-
-                invalid_pod.delete()
-                invalid_pod.ocp.wait_for_delete(resource_name=invalid_pod.name)
-            else:
-                logger.warning(
-                    f"Pod with invalid fsGroup={invalid_fsgroup} was created "
-                    f"and reached phase {pod_phase}. This may indicate SCC "
-                    f"validation is not enforcing supplemental-groups range."
-                )
-                logger.info(
-                    "NOTE: SCC validation behavior may vary by cluster configuration"
-                )
-                invalid_pod.delete()
-                invalid_pod.ocp.wait_for_delete(resource_name=invalid_pod.name)
-
-        except Exception as e:
-            error_msg = str(e)
-            logger.info(f"Pod creation failed with error: {error_msg}")
-
-            logger.test_step(
-                "Step 10: Verify pod creation rejected with expected error"
-            )
-
-            expected_errors = [
-                "is not an allowed group",
-                "fsGroup: Invalid value",
-                "forbidden",
-            ]
-
-            error_found = False
-            for expected_error in expected_errors:
-                if expected_error in error_msg.lower():
-                    logger.assertion(
-                        f"SCC error: expected '{expected_error}' in exception"
-                    )
-                    logger.info(
-                        f"Pod creation correctly rejected by SCC with error: "
-                        f"{expected_error}"
-                    )
-                    error_found = True
-                    break
-
-            if not error_found:
-                logger.info(
-                    f"Pod creation failed but with unexpected error: {error_msg}"
-                )
-                logger.info(
-                    "This may still be correct SCC enforcement, "
-                    "error message format varies"
-                )
+        logger.assertion(
+            "SCC error: expected 'not an allowed group' (case-insensitive) in exception"
+        )
+        assert (
+            "not an allowed group" in error_msg
+        ), f"Expected SCC error 'not an allowed group' not found in: {error_msg}"
+        logger.info(
+            f"Pod creation correctly rejected by SCC: fsGroup={invalid_fsgroup} "
+            f"outside range {USERNS_UID_RANGE}"
+        )
 
         logger.info(
             "User namespace fsGroup validation test passed. "
