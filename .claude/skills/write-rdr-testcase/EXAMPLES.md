@@ -1,24 +1,22 @@
 # RDR Test Writer — Example Prompts
 
-Copy any of these into the **RDR Test Writer** mode (Bob or Claude Code) to generate a complete,
-validated test file. The more detail you provide up front, the fewer clarifying questions the
-agent asks before writing.
+Copy any of these into a Bob session with the **write-rdr-testcase** skill active.
+The workflow runs two phases automatically: GATHER → WRITE.
 
 ---
 
-## How to use this agent
+## How the two-phase workflow runs
 
-**In Bob:** Switch to **RDR Test Writer** from the mode picker, then paste a prompt below.
-**In Claude Code:** Start a new task and paste the prompt as the first message. Both environments
-run the same 4-phase workflow: GATHER → PLAN → WRITE → VALIDATE.
+1. **GATHER phase** (`rdr-gatherer` skill) — asks only the questions not answered by your prompt, batches them in one call. Outputs a structured SPEC.
+2. **WRITE phase** (`rdr-writer` skill) — reads only the addendum files needed, writes the complete file, runs `py_compile`, reports the checklist.
 
-Reply `"go"` after the agent shows its PLAN summary to trigger immediate file generation.
+Reply `"go"` after seeing the SPEC if you want to skip review and write immediately.
 
 ---
 
 ## Prompt templates
 
-### 1 — Minimal (fastest start — agent asks all 9 questions)
+### 1 — Minimal (gatherer asks all questions)
 
 ```
 Write an RDR test for failover after draining a node on the secondary cluster.
@@ -26,7 +24,7 @@ Write an RDR test for failover after draining a node on the secondary cluster.
 
 ---
 
-### 2 — Standard (most common — agent asks only for missing details)
+### 2 — Standard (gatherer asks only for missing details)
 
 ```
 Write a tier1 RDR test for appset + subscription failover/relocate.
@@ -37,7 +35,7 @@ File: test_failover_and_relocate_node_drain.py
 
 ---
 
-### 3 — Detailed (fastest path — agent skips most questions, plans immediately)
+### 3 — Detailed (gatherer skips most questions, writes immediately)
 
 ```
 Scenario: standard appset + subscription failover/relocate.
@@ -45,11 +43,9 @@ Workload: dr_workload(num_of_subscription=1, num_of_appset=1).
 Parametrize axes:
   - primary_cluster_down: True / False
   - pvc_interface: CEPHBLOCKPOOL / CEPHFILESYSTEM
-CephFS requires ReplicationDestination lifecycle checks (Step 5 of SKILL.md).
+CephFS requires ReplicationDestination lifecycle checks.
 RBD requires wait_for_mirroring_status_ok.
-UI/CLI: CLI only.
-OCS version gate: >= 4.18 for CephFS params.
-Tier: tier1. Squad: turquoise_squad.
+CLI only. OCS >= 4.18. Tier1. Squad: turquoise_squad.
 Polarion IDs: OCS-5100 (up/rbd), OCS-5101 (down/rbd), OCS-5102 (up/cephfs), OCS-5103 (down/cephfs).
 File: test_failover_and_relocate_rbd_cephfs.py
 ```
@@ -74,7 +70,7 @@ File: test_cnv_vm_data_integrity.py
 ```
 Discovered-apps test: failover + relocate.
 Both lastGroupSyncTime AND lastKubeObjectProtectionTime must be verified before failover
-and before relocate (not only after).
+and before relocate.
 One kubeobject workload, one recipe workload. RBD only. Primary up only.
 Tier1. OCS >= 4.15. Polarion OCS-4900.
 File: test_discovered_apps_sync_gate.py
@@ -136,12 +132,38 @@ File: test_scale_down_fault_failover.py
 ```
 Standard appset + subscription failover/relocate with via_ui parametrized (True/False).
 RBD only. Primary up only.
-UI path: dr_submariner_validation_from_ui before failover, failover_relocate_ui for action,
-check_cluster_status_on_acm_console after. CLI path: standard dr_helpers.failover.
-Verification steps are identical for both paths.
+UI path: dr_submariner_validation_from_ui before failover, failover_relocate_ui for action.
+CLI path: standard dr_helpers.failover. Verification steps are identical for both paths.
 Tier1. OCS >= 4.14. Polarion OCS-4200 (cli), OCS-4201 (ui).
 File: test_failover_relocate_ui_cli.py
 ```
+
+> **What to expect for UI tests (Phase 1b):**
+> Because this prompt includes `via_ui`, the gatherer will run a sequential evidence loop
+> before emitting the SPEC. It will ask you to capture a screenshot + DOM dump from each
+> ACM page (Applications list, Failover dialog, etc.) one at a time — you need a live cluster
+> with a running test to do this. For each page it gives you the exact lines to insert into
+> an existing test, then asks you to attach the `.png` and `.html` output files.
+> Reply `"skip page_N"` for any page you cannot capture — placeholder locators will be used.
+
+---
+
+### 11 — UI-only failover (full Phase 1b walkthrough, no CLI path)
+
+```
+Write a UI-only RDR failover+relocate test. No CLI path parametrize.
+AppSet workload, RBD. Primary up.
+All actions via ACM UI: submariner validation, failover, relocate.
+I have a live cluster — I can provide screenshots and DOM dumps for each page.
+Tier1. OCS >= 4.14. No Polarion IDs.
+File: test_failover_relocate_acm_ui_only.py
+```
+
+> **This prompt explicitly signals you have a live cluster.** The gatherer will walk you through
+> pages 1→7 in sequence — one ask per page, confirm locators before moving on.
+> Each round takes ~2 minutes (insert debug lines, run test stub, attach files, Ctrl+C).
+> Total: ~15 minutes for all 7 pages. The writer then produces a test with real, verified
+> locators in `views.py` — no guessed selectors.
 
 ---
 
@@ -149,19 +171,9 @@ File: test_failover_relocate_ui_cli.py
 
 | Tip | Effect |
 |---|---|
-| Include the file name | Skips 1 question |
-| Include Polarion IDs (or `OCS-XXXX`) | Skips 1 question |
-| Specify tier + OCS version | Skips 2 questions |
-| Name the workload type explicitly | Skips 1 question and removes all workload-type disambiguation |
-| After the PLAN, reply `go` | Agent writes the file immediately — no second confirmation |
-
----
-
-## What the agent will NOT do
-
-- Add imports that are not used in the generated test
-- Define fixtures in the test file (all fixtures live in `conftest.py`)
-- Skip `verify_last_group_sync_time` before failover or before relocate
-- Omit `polarion_id` from any `pytest.param`
-- Use `@rdr` on a hub-recovery class (those use `@dr_hub_recovery` instead)
-- Report done before `python -m py_compile` exits 0
+| Include the file name | Gatherer skips 1 question |
+| Include Polarion IDs (or `OCS-XXXX`) | Gatherer skips 1 question |
+| Specify tier + OCS version | Gatherer skips 2 questions |
+| Name the workload type explicitly | Gatherer skips 1 question and removes all workload-type disambiguation |
+| After seeing the SPEC, reply `go` | Writer starts immediately — no second confirmation |
+| Give a detailed prompt (template 3+) | Gatherer may skip all questions and go straight to SPEC |
