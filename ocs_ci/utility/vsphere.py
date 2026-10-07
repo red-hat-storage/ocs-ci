@@ -2083,7 +2083,7 @@ class VSPHERE(object):
                 return False
 
             logger.info(f"Deleting tag: {category_name}/{tag_name}")
-            delete_cmd = f"govc tags.rm -c '{category_name}' '{tag_name}'"
+            delete_cmd = f"govc tags.rm -f -c '{category_name}' '{tag_name}'"
             exec_cmd(delete_cmd, env=govc_env)
             logger.info(f"Successfully deleted tag: {category_name}/{tag_name}")
             return True
@@ -2125,7 +2125,7 @@ class VSPHERE(object):
                 return False
 
             logger.info(f"Deleting tag category: {category_name}")
-            delete_cmd = f"govc tags.category.rm '{category_name}'"
+            delete_cmd = f"govc tags.category.rm -f '{category_name}'"
             exec_cmd(delete_cmd, env=govc_env)
             logger.info(f"Successfully deleted tag category: {category_name}")
             return True
