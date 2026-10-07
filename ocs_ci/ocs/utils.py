@@ -56,6 +56,7 @@ from ocs_ci.utility.version import (
     get_submariner_operator_version,
     get_volsync_operator_version,
 )
+from ocs_ci.helpers.odf_cli import ODFCLIRetriever
 
 
 log = logging.getLogger(__name__)
@@ -1295,7 +1296,7 @@ def _collect_ocs_logs(
                 )
                 >= version.VERSION_5_0
             ):
-                from ocs_ci.helpers.odf_cli import ODFCLIRetriever
+                # Avoid circular import: ocs.utils -> utility.utils -> ocs.utils
                 from ocs_ci.utility.utils import exec_cmd as _exec_cmd
 
                 retriever = ODFCLIRetriever()
