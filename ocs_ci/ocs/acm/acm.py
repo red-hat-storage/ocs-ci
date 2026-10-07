@@ -975,6 +975,32 @@ def get_clusters_env():
     return clusters_env
 
 
+def is_cluster_already_imported(cluster_name):
+    """
+    Check whether a ManagedCluster is already imported and available in ACM.
+
+    Args:
+        cluster_name (str): Name of the managed cluster to check.
+
+    Returns:
+        bool: True if the ManagedCluster resource exists and its AVAILABLE
+              condition is True, False otherwise.
+    """
+    ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
+    try:
+        resource = ocp_obj.get(resource_name=cluster_name)
+    except CommandFailed as ex:
+        if "NotFound" in str(ex):
+            return False
+        raise
+    if not resource:
+        return False
+    for condition in resource.get("status", {}).get("conditions", []):
+        if condition.get("type") == "ManagedClusterConditionAvailable":
+            return condition.get("status") == "True"
+    return False
+
+
 def import_clusters_via_cli(clusters):
     """
     Import clusters via cli
@@ -986,10 +1012,21 @@ def import_clusters_via_cli(clusters):
         ResourceNotFoundError: If the managed cluster is MCE cluster and applicable KlusterletConfig is not found
     """
     for cluster in clusters:
+        if is_cluster_already_imported(cluster[0]):
+            log.info(
+                f"ManagedCluster '{cluster[0]}' is already imported and available, skipping import"
+            )
+            continue
         log.info("Importing clusters via CLI method")
         log.info(f"**** clustername={cluster[0]}")
         log.info(f"**** kubeconfig={cluster[1]}")
-        create_project(cluster[0])
+        project_ocp = OCP(kind="Project")
+        if project_ocp.check_resource_existence(
+            timeout=10, should_exist=True, resource_name=cluster[0]
+        ):
+            log.info(f"Project '{cluster[0]}' already exists, skipping creation")
+        else:
+            create_project(cluster[0])
 
         log.info("Create and apply managed-cluster.yaml")
         managed_cluster = templating.load_yaml(
@@ -1116,10 +1153,16 @@ def import_clusters_with_acm():
     if config.DEPLOYMENT.get("ui_acm_import"):
         login_to_acm()
         acm_nav = AcmAddClusters()
-        acm_nav.import_cluster(
-            cluster_name=cluster_name_a,
-            kubeconfig_location=kubeconfig_a,
-        )
+        for cluster_name, kubeconfig in clusters:
+            if is_cluster_already_imported(cluster_name):
+                log.info(
+                    f"ManagedCluster '{cluster_name}' is already imported and available, skipping UI import"
+                )
+            else:
+                acm_nav.import_cluster(
+                    cluster_name=cluster_name,
+                    kubeconfig_location=kubeconfig,
+                )
     else:
         import_clusters_via_cli(clusters)
 
