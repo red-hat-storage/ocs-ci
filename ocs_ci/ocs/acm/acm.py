@@ -1220,6 +1220,28 @@ def import_clusters_via_cli(clusters):
         Exception: If cluster import fails after all retries
 
     """
+    # Check for KlusterletConfig once if MCE import is configured
+    # This check happens before any retry logic to avoid retrying configuration errors
+    klusterletconfig_name = None
+    if config.ENV_DATA.get("configure_acm_to_import_mce"):
+        klusterletconfig_obj = OCP(kind=constants.KLUSTERLET_CONFIG)
+        klusterletconfigs = klusterletconfig_obj.get().get("items", [])
+        for klusterletconfig in klusterletconfigs:
+            if (
+                klusterletconfig.get("spec", {})
+                .get("installMode", {})
+                .get("noOperator", {})
+                .get("postfix")
+                == "mce-import"
+            ):
+                klusterletconfig_name = klusterletconfig.get("metadata").get("name")
+                break
+        if not klusterletconfig_name:
+            raise ResourceNotFoundError(
+                "No KlusterletConfig found to import MCE clusters"
+            )
+        log.info(f"Using KlusterletConfig '{klusterletconfig_name}' for MCE import")
+
     for cluster in clusters:
         cluster_name, kubeconfig = cluster[0], cluster[1]
 
