@@ -22,7 +22,11 @@ from ocs_ci.ocs.cluster import (
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_noobaa_core_pod, get_pod_obj
+from ocs_ci.ocs.resources.pod import (
+    get_noobaa_core_pod,
+    get_pod_obj,
+    wait_for_noobaa_pods_running,
+)
 from ocs_ci.ocs.resources.pvc import get_pvc_objs, get_pvc_size
 from ocs_ci.utility.prometheus import PrometheusAPI, check_alert_list
 from ocs_ci.utility.utils import (
@@ -37,13 +41,6 @@ DB_CAPACITY_WARNING_THRESHOLD = 80
 DB_CAPACITY_CRITICAL_THRESHOLD = 90
 DB_FILL_TARGET_PCT = 84
 EXPANSION_FACTOR = 1.08
-NOOBAA_PODS_RUNNING_TIMEOUT_AFTER_DB_FILL = 1800
-ALERT_FIRING_TIMEOUT = 900
-ALERT_SAMPLING_INTERVAL = 15
-DB_FILL_CLEANUP_TIMEOUT = 3600
-CORE_READY_TIMEOUT = 900
-CORE_READY_SAMPLING_INTERVAL = 15
-MAX_STALL_BATCHES = 5
 MAX_FILL_BATCHES = 500
 MAX_DB_DISK_PCT = 98
 MAX_OSD_USED_PCT = 80
@@ -66,32 +63,6 @@ CRITICAL_ALERT_DESCRIPTION = (
 
 def db_instance_pods():
     return (get_primary_nb_db_pod(), get_secondary_nb_db_pod())
-
-
-def core_pod_is_ready():
-    """
-    Report whether the noobaa-core pod md_blow execs into is ready.
-
-    Returns:
-        bool: True if every container of the pod is ready
-
-    """
-    try:
-        statuses = (
-            get_noobaa_core_pod().get().get("status", {}).get("containerStatuses") or []
-        )
-    except Exception as exc:
-        logger.warning(f"Could not read the noobaa-core pod status: {exc}")
-        return False
-    return bool(statuses) and all(status.get("ready") for status in statuses)
-
-
-def wait_for_core_pod_ready(timeout=CORE_READY_TIMEOUT):
-    for is_ready in TimeoutSampler(
-        timeout, CORE_READY_SAMPLING_INTERVAL, core_pod_is_ready
-    ):
-        if is_ready:
-            return
 
 
 def get_db_usage(db_pod_name):
@@ -243,15 +214,8 @@ def fill_noobaa_db(blow_io, bucket_name, db_pod_name, threshold_pct):
             f"({new_used_bytes}/{total_bytes} bytes)"
         )
         if new_used_bytes == used_bytes:
-            if not core_pod_is_ready():
-                logger.warning(
-                    f"Batch {batch_num} wrote nothing while the noobaa-core "
-                    "pod was not ready, waiting for it before the next batch"
-                )
-                wait_for_core_pod_ready()
-                continue
             stall_batches += 1
-            if stall_batches >= MAX_STALL_BATCHES:
+            if stall_batches >= 5:
                 try:
                     restarts = blow_io.noobaa_core_pod.restart_count
                 except Exception:
@@ -263,6 +227,11 @@ def fill_noobaa_db(blow_io, bucket_name, db_pod_name, threshold_pct):
                     f"{blow_io.noobaa_core_pod.name} restart count is "
                     f"{restarts}, check its log for md_blow RPC errors"
                 )
+            logger.warning(
+                f"Batch {batch_num} wrote nothing, waiting for the NooBaa pods "
+                "to be Running before the next batch"
+            )
+            wait_for_noobaa_pods_running(timeout=600)
         else:
             stall_batches = 0
         used_bytes = new_used_bytes
@@ -299,7 +268,7 @@ def fill_noobaa_db(blow_io, bucket_name, db_pod_name, threshold_pct):
 
 
 def verify_db_capacity_alerts(
-    api, expanded_pod_name, default_pod_name, phase, timeout=ALERT_FIRING_TIMEOUT
+    api, expanded_pod_name, default_pod_name, phase, timeout=900
 ):
     """
     Verify the capacity alerts of both NooBaa DB instances.
@@ -350,7 +319,7 @@ def verify_db_capacity_alerts(
         logger.info(f"Waiting for the {alert_name} alert to fire for pod {pod_name}")
         for response in TimeoutSampler(
             timeout,
-            ALERT_SAMPLING_INTERVAL,
+            15,
             api.get,
             "alerts",
             payload={"silenced": False, "inhibited": False},
@@ -512,7 +481,7 @@ class TestMCGRecovery(E2ETest):
                     podobj=awscli_pod_session,
                     target=fill_bucket,
                     mcg_obj=mcg_obj_session,
-                    timeout=DB_FILL_CLEANUP_TIMEOUT,
+                    timeout=3600,
                 )
                 logger.info("md_blow objects removed from the NooBaa DB")
             except Exception as exc:
@@ -520,7 +489,6 @@ class TestMCGRecovery(E2ETest):
 
         request.addfinalizer(cleanup_db_fill)
 
-        wait_for_core_pod_ready()
         fill_noobaa_db(
             blow_io=md_blow_factory,
             bucket_name=fill_bucket,
@@ -551,9 +519,7 @@ class TestMCGRecovery(E2ETest):
         )
 
         logger.test_step("Perform NooBaa DB backup and recovery")
-        noobaa_db_backup_and_recovery_locally(
-            noobaa_pods_running_timeout=NOOBAA_PODS_RUNNING_TIMEOUT_AFTER_DB_FILL
-        )
+        noobaa_db_backup_and_recovery_locally(noobaa_pods_running_timeout=1800)
 
         logger.test_step("Verify the object count is preserved after the recovery")
         obj_count_post_recovery = len(
