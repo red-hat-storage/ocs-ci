@@ -412,23 +412,13 @@ class TestUserNamespaceCephFS(ManageTest):
         # Wait for OpenShift to asynchronously allocate UID range annotation
         logger.info("Waiting for namespace UID range allocation (async controller)")
         uid_range = None
-        try:
-            for sample in TimeoutSampler(
-                timeout=60, sleep=5, func=lambda: ns_ocp.get()
-            ):
-                annotations = sample.get("metadata", {}).get("annotations", {})
-                uid_range = annotations.get(constants.SA_SCC_UID_RANGE)
-                if uid_range:
-                    logger.info(f"UID range allocated: {uid_range}")
-                    break
-                logger.info("UID range annotation not yet allocated, retrying...")
-        except Exception as e:
-            # If timeout occurs, annotation was not allocated - this is a test precondition failure
-            logger.error(
-                f"UID range annotation not allocated after 60s: {e}. "
-                "This indicates a problem with the OpenShift SCC controller."
-            )
-            raise
+        for sample in TimeoutSampler(timeout=60, sleep=5, func=lambda: ns_ocp.get()):
+            annotations = sample.get("metadata", {}).get("annotations", {})
+            uid_range = annotations.get(constants.SA_SCC_UID_RANGE)
+            if uid_range:
+                logger.info(f"UID range allocated: {uid_range}")
+                break
+            logger.info("UID range annotation not yet allocated, retrying...")
 
         # Assert that annotation was actually allocated
         logger.assertion(f"UID range annotation allocated: {uid_range}")
