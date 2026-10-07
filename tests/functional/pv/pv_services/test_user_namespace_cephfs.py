@@ -3,7 +3,6 @@ Tests for user namespace support with CephFS shared storage.
 """
 
 import logging
-import time
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_ocs_version,
@@ -413,29 +412,39 @@ class TestUserNamespaceCephFS(ManageTest):
         # Wait for OpenShift to asynchronously allocate UID range annotation
         logger.info("Waiting for namespace UID range allocation (async controller)")
         uid_range = None
-        for sample in TimeoutSampler(timeout=60, sleep=5, func=lambda: ns_ocp.get()):
-            annotations = sample.get("metadata", {}).get("annotations", {})
-            uid_range = annotations.get(constants.SA_SCC_UID_RANGE)
-            if uid_range:
-                logger.info(f"UID range allocated: {uid_range}")
-                break
-            logger.info("UID range annotation not yet allocated, retrying...")
+        try:
+            for sample in TimeoutSampler(
+                timeout=60, sleep=5, func=lambda: ns_ocp.get()
+            ):
+                annotations = sample.get("metadata", {}).get("annotations", {})
+                uid_range = annotations.get(constants.SA_SCC_UID_RANGE)
+                if uid_range:
+                    logger.info(f"UID range allocated: {uid_range}")
+                    break
+                logger.info("UID range annotation not yet allocated, retrying...")
+        except Exception as e:
+            # If timeout occurs, annotation was not allocated - this is a test precondition failure
+            logger.error(
+                f"UID range annotation not allocated after 60s: {e}. "
+                "This indicates a problem with the OpenShift SCC controller."
+            )
+            raise
 
-        if uid_range:
-            uid_range_start = int(uid_range.split("/")[0])
-            logger.info(f"Namespace UID range annotation: {uid_range}")
-            logger.assertion(
-                f"UID range start: expected >= 1000000000, actual={uid_range_start}"
-            )
-            assert (
-                uid_range_start >= 1000000000
-            ), f"Expected default high UID range (>= 1000000000), got {uid_range}"
-        else:
-            uid_range_start = 1000000000
-            logger.info(
-                "No explicit UID range annotation found after 60s wait, "
-                f"using default value {uid_range_start} for testing"
-            )
+        # Assert that annotation was actually allocated
+        logger.assertion(f"UID range annotation allocated: {uid_range}")
+        assert uid_range, (
+            "Namespace UID range annotation was not allocated by OpenShift. "
+            "This is a precondition failure."
+        )
+
+        uid_range_start = int(uid_range.split("/")[0])
+        logger.info(f"Namespace UID range annotation: {uid_range}")
+        logger.assertion(
+            f"UID range start: expected >= 1000000000, actual={uid_range_start}"
+        )
+        assert (
+            uid_range_start >= 1000000000
+        ), f"Expected default high UID range (>= 1000000000), got {uid_range}"
 
         logger.test_step("Step 3: Create CephFS RWX PVC (1Gi)")
         pvc_obj = pvc_factory(
@@ -821,82 +830,74 @@ class TestUserNamespaceCephFS(ManageTest):
             )
 
         if not scc_rejected_at_admission:
-            # Pod was created - check if SCC enforcement prevents it from running
+            # Pod was created - poll for decisive state (not Pending)
             teardown_factory(invalid_pod)
-            logger.info("Checking if pod reaches Running state with invalid fsGroup...")
+            logger.info("Polling for pod to reach a decisive state...")
 
-            # Wait for pod to stabilize
-            time.sleep(10)
-            pod_phase = invalid_pod.get().get("status", {}).get("phase")
-            logger.info(f"Pod phase after 10s: {pod_phase}")
+            # Poll until pod exits Pending state (max 60s)
+            for sample in TimeoutSampler(
+                timeout=60,
+                sleep=5,
+                func=lambda: invalid_pod.get().get("status", {}).get("phase"),
+            ):
+                pod_phase = sample
+                logger.info(f"Pod phase: {pod_phase}")
+                if pod_phase != constants.STATUS_PENDING:
+                    logger.info(f"Pod reached decisive state: {pod_phase}")
+                    break
 
-            if pod_phase != constants.STATUS_RUNNING:
-                # SCC enforcement at runtime - pod failed to start
-                logger.info(
-                    f"SCC runtime enforcement: pod with fsGroup={invalid_fsgroup} "
-                    f"did not reach Running state (phase: {pod_phase})"
-                )
+            # Get pod events for error checking
+            describe_output = invalid_pod.describe()
 
-                # Check pod events for validation error
-                describe_output = invalid_pod.describe()
-                has_fsgroup_error = "fsGroup" in describe_output.lower() and (
-                    "not an allowed group" in describe_output.lower()
-                    or "invalid value" in describe_output.lower()
-                    or "forbidden" in describe_output.lower()
-                )
+            # Check if fsGroup error is present in events (case-sensitive check on original output)
+            fsgroup_error_patterns = [
+                "is not an allowed group",
+                "Invalid value",
+                "forbidden",
+            ]
+            fsgroup_error_found = (
+                any(pattern in describe_output for pattern in fsgroup_error_patterns)
+                and "fsGroup" in describe_output
+            )
 
-                if has_fsgroup_error:
-                    logger.info(
-                        f"SCC validation error found in pod events for "
-                        f"fsGroup={invalid_fsgroup}"
-                    )
-                else:
-                    logger.info(
-                        f"Pod failed to start (phase: {pod_phase}), "
-                        f"indicating SCC enforcement"
-                    )
-            else:
-                # Pod reached Running - SCC validation not enforced for fsGroup
-                logger.info(
-                    f"Pod with fsGroup={invalid_fsgroup} reached Running state. "
+            if pod_phase == constants.STATUS_RUNNING:
+                # Pod reached Running - SCC not enforcing fsGroup validation
+                logger.warning(
+                    f"Pod with invalid fsGroup={invalid_fsgroup} reached Running state. "
                     f"SCC is not enforcing supplemental-groups range validation "
-                    f"on this cluster (this behavior varies by cluster configuration)."
+                    f"on this cluster."
                 )
 
-                # Verify what fsGroup is actually being used
+                # Log what fsGroup was actually used
                 pod_spec = invalid_pod.get()["spec"]
                 actual_fsgroup = pod_spec.get("securityContext", {}).get("fsGroup")
                 logger.info(
-                    f"Pod spec fsGroup: {actual_fsgroup} "
-                    f"(requested: {invalid_fsgroup})"
+                    f"Pod spec fsGroup: {actual_fsgroup} (requested: {invalid_fsgroup})"
                 )
-
-                # Check actual file ownership to see if fsGroup was applied
-                try:
-                    invalid_pod_obj = invalid_pod
-                    wait_for_resource_state(
-                        resource=invalid_pod_obj,
-                        state=constants.STATUS_RUNNING,
-                        timeout=60,
-                    )
-                    invalid_pod.exec_sh_cmd_on_pod(
-                        "echo test > /mnt/test/fsgroup_test && sync"
-                    )
-                    ls_output = invalid_pod.exec_sh_cmd_on_pod(
-                        "ls -ln /mnt/test/fsgroup_test"
-                    )
-                    logger.info(f"File ownership with invalid fsGroup: {ls_output}")
-                except Exception as e:
-                    logger.info(
-                        f"Could not verify file ownership: {e}. "
-                        f"Pod may be running but not fully functional."
-                    )
 
                 logger.info(
                     "Note: SCC fsGroup validation behavior is cluster-specific. "
-                    "Some clusters enforce it strictly, others allow it. "
-                    "The positive test case (fsGroup=10000 within range) passed, "
+                    "The positive test (fsGroup=10000 within range) passed, "
                     "confirming user namespace functionality works correctly."
+                )
+            else:
+                # Pod did not reach Running - verify it was rejected for fsGroup
+                logger.info(
+                    f"SCC runtime enforcement: pod did not reach Running (phase: {pod_phase})"
+                )
+
+                # Assert that fsGroup error is present in events
+                logger.assertion(
+                    f"fsGroup validation error in events: expected=True, actual={fsgroup_error_found}"
+                )
+                assert fsgroup_error_found, (
+                    f"Pod failed to start but fsGroup validation error not found in events. "
+                    f"Phase: {pod_phase}. Events: {describe_output}"
+                )
+
+                logger.info(
+                    f"SCC correctly rejected pod with fsGroup={invalid_fsgroup} "
+                    f"outside range {USERNS_UID_RANGE}"
                 )
 
         # Determine enforcement status for final summary
