@@ -1051,22 +1051,21 @@ def _cleanup_failed_cluster_import(cluster_name):
         ) from ex
 
 
-def _import_single_cluster_cli(cluster_name, kubeconfig):
+def _import_single_cluster_cli(cluster_name, kubeconfig, klusterletconfig_name=None):
     """
     Import a single cluster via CLI.
 
     Args:
         cluster_name (str): Name of the cluster to import
         kubeconfig (str): Kubeconfig content for the cluster
+        klusterletconfig_name (str): Optional KlusterletConfig name for MCE import
 
     Raises:
-        ResourceNotFoundError: If KlusterletConfig is not found for MCE import
         Exception: For any import failures
 
     """
     log.info("Importing clusters via CLI method")
     log.info(f"**** clustername={cluster_name}")
-    log.info(f"**** kubeconfig={kubeconfig}")
 
     # Check if project already exists before creating
     project_ocp = OCP(kind="Project")
@@ -1083,32 +1082,11 @@ def _import_single_cluster_cli(cluster_name, kubeconfig):
     )
     managed_cluster["metadata"]["name"] = cluster_name
 
-    # TODO: This check is based on current requirements of RDR in provider mode.
-    # Change the condition and add additional check to verify whether Multicluster
-    # Engine is installed in the managedcluster
-    if config.ENV_DATA.get("configure_acm_to_import_mce"):
-        # Find the klusterletconfig to import MCE cluster
-        klusterletconfig_obj = OCP(kind=constants.KLUSTERLET_CONFIG)
-        klusterletconfigs = klusterletconfig_obj.get().get("items", [])
-        klusterletconfig_name = ""
-        for klusterletconfig in klusterletconfigs:
-            if (
-                klusterletconfig.get("spec", {})
-                .get("installMode", {})
-                .get("noOperator", {})
-                .get("postfix")
-                == "mce-import"
-            ):
-                klusterletconfig_name = klusterletconfig.get("metadata").get("name")
-                break
-        if klusterletconfig_name:
-            managed_cluster["metadata"]["annotations"] = {
-                "agent.open-cluster-management.io/klusterlet-config": klusterletconfig_name
-            }
-        else:
-            raise ResourceNotFoundError(
-                "No KlusterletConfig found to import MCE clusters"
-            )
+    # Apply KlusterletConfig if provided (for MCE import)
+    if klusterletconfig_name:
+        managed_cluster["metadata"]["annotations"] = {
+            "agent.open-cluster-management.io/klusterlet-config": klusterletconfig_name
+        }
         # Add 'leaseDurationSeconds' obtained from ACM documentation
         managed_cluster["spec"]["leaseDurationSeconds"] = 60
 
@@ -1192,53 +1170,36 @@ def _import_single_cluster_cli(cluster_name, kubeconfig):
     log.info(f"Cluster '{cluster_name}' imported successfully")
 
 
-def _import_single_cluster_cli_with_retry(cluster_name, kubeconfig):
+@retry(Exception, tries=3, delay=30, backoff=1)
+def _import_single_cluster_with_cleanup(
+    cluster_name, kubeconfig, klusterletconfig_name=None
+):
     """
-    Wrapper around _import_single_cluster_cli that handles ResourceNotFoundError
-    separately (no retry) while retrying other exceptions.
+    Import a single cluster with cleanup after failures.
+
+    The @retry decorator handles retries. Cleanup happens in the exception path,
+    so it only runs AFTER a failed import attempt, not before the first attempt.
 
     Args:
         cluster_name (str): Name of the cluster to import
         kubeconfig (str): Kubeconfig content for the cluster
+        klusterletconfig_name (str): Optional KlusterletConfig name for MCE import
 
     Raises:
-        ResourceNotFoundError: If KlusterletConfig is not found (no retry)
-        Exception: For any other import failures after retries
+        Exception: After all retry attempts are exhausted
 
     """
     try:
-        _import_single_cluster_cli(cluster_name, kubeconfig)
-    except ResourceNotFoundError:
-        # ResourceNotFoundError is a configuration issue - cleanup and re-raise without retry
-        log.error(
-            f"Configuration error for cluster '{cluster_name}': "
-            f"missing KlusterletConfig for MCE import. "
-            f"Cleaning up and failing without retry."
+        _import_single_cluster_cli(cluster_name, kubeconfig, klusterletconfig_name)
+    except Exception as ex:
+        # Cleanup only runs in the exception path (after import failure)
+        log.warning(
+            f"Import failed for cluster '{cluster_name}': {ex}. "
+            f"Cleaning up before retry..."
         )
         _cleanup_failed_cluster_import(cluster_name)
+        # Re-raise for @retry decorator to catch and retry
         raise
-
-
-def _get_import_with_retry_for_cluster(cluster_name):
-    """
-    Create a retry-decorated import function with cleanup for a specific cluster.
-
-    Args:
-        cluster_name (str): Name of the cluster for which to create the retry wrapper
-
-    Returns:
-        function: Decorated import function with retry and cleanup logic
-
-    """
-
-    def cleanup_func():
-        _cleanup_failed_cluster_import(cluster_name)
-
-    # Retry on general exceptions (transient failures)
-    # The wrapper _import_single_cluster_cli_with_retry handles ResourceNotFoundError separately
-    return retry(Exception, tries=3, delay=30, backoff=1, func=cleanup_func)(
-        _import_single_cluster_cli_with_retry
-    )
 
 
 def import_clusters_via_cli(clusters):
@@ -1257,6 +1218,28 @@ def import_clusters_via_cli(clusters):
         Exception: If cluster import fails after all retries
 
     """
+    # Check for KlusterletConfig once if MCE import is configured
+    # This check happens before any retry logic to avoid retrying configuration errors
+    klusterletconfig_name = None
+    if config.ENV_DATA.get("configure_acm_to_import_mce"):
+        klusterletconfig_obj = OCP(kind=constants.KLUSTERLET_CONFIG)
+        klusterletconfigs = klusterletconfig_obj.get().get("items", [])
+        for klusterletconfig in klusterletconfigs:
+            if (
+                klusterletconfig.get("spec", {})
+                .get("installMode", {})
+                .get("noOperator", {})
+                .get("postfix")
+                == "mce-import"
+            ):
+                klusterletconfig_name = klusterletconfig.get("metadata").get("name")
+                break
+        if not klusterletconfig_name:
+            raise ResourceNotFoundError(
+                "No KlusterletConfig found to import MCE clusters"
+            )
+        log.info(f"Using KlusterletConfig '{klusterletconfig_name}' for MCE import")
+
     for cluster in clusters:
         cluster_name, kubeconfig = cluster[0], cluster[1]
 
@@ -1269,9 +1252,10 @@ def import_clusters_via_cli(clusters):
 
         log.info(f"Attempting to import cluster '{cluster_name}'")
 
-        # Get retry-decorated function for this specific cluster
-        import_with_retry = _get_import_with_retry_for_cluster(cluster_name)
-        import_with_retry(cluster_name, kubeconfig)
+        # Import with retry and cleanup after failures
+        _import_single_cluster_with_cleanup(
+            cluster_name, kubeconfig, klusterletconfig_name
+        )
 
 
 def import_clusters_with_acm():
