@@ -39,6 +39,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     mcg,
+    runs_on_provider,
     red_squad,
     tier2,
     tier3,
@@ -1010,6 +1011,7 @@ def connection_update_cli():
 
 
 @mcg
+@runs_on_provider
 @red_squad
 class TestBackingStoreEndpointUpdate(MCGTest):
     """
@@ -1749,6 +1751,7 @@ class TestBackingStoreEndpointUpdate(MCGTest):
 
 
 @mcg
+@runs_on_provider
 @red_squad
 class TestConnectionUpdateNegative(MCGTest):
     """
@@ -2193,6 +2196,7 @@ class TestConnectionUpdateNegative(MCGTest):
 
 
 @mcg
+@runs_on_provider
 @red_squad
 class TestNamespaceStoreEndpointUpdate(MCGTest):
     """
@@ -2421,6 +2425,7 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
 
 
 @mcg
+@runs_on_provider
 @red_squad
 class TestConnectionUpdateCliParity(MCGTest):
     """
