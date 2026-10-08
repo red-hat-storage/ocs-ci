@@ -1141,11 +1141,14 @@ class VSPHEREUPI(VSPHEREBASE):
                 time.sleep(600)
                 logger.info("waiting for bootstrap to complete")
                 try:
+                    bootstrap_timeout = config.DEPLOYMENT.get(
+                        "bootstrap_complete_timeout", 5400
+                    )
                     run_cmd(
                         f"{self.installer} wait-for bootstrap-complete "
                         f"--dir {self.cluster_path} "
                         f"--log-level {log_cli_level}",
-                        timeout=3600,
+                        timeout=bootstrap_timeout,
                     )
                 except (CommandFailed, TimeoutExpired) as e:
                     err = str(e)
