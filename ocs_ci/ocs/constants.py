@@ -2154,7 +2154,7 @@ HCI_PROVIDER_CLIENT_PLATFORMS = [
     IBM_HCI_PLATFORM,
 ]
 
-IBM_REGIONS = ["us-east", "us-south", "us"]
+IBM_REGIONS = ["us-east", "us-south", "ca-tor", "us"]
 IBM_CLOUD_SUBNETS = {
     # Washington D.C.
     "us-east": {
@@ -2162,11 +2162,17 @@ IBM_CLOUD_SUBNETS = {
         "us-east-2": "10.241.64.0/18",
         "us-east-3": "10.241.128.0/18",
     },
-    # Dalas
+    # Dallas
     "us-south": {
         "us-south-1": "10.240.0.0/18",
         "us-south-2": "10.240.64.0/18",
         "us-south-3": "10.240.128.0/18",
+    },
+    # Toronto
+    "ca-tor": {
+        "ca-tor-1": "10.242.0.0/18",
+        "ca-tor-2": "10.242.64.0/18",
+        "ca-tor-3": "10.242.128.0/18",
     },
 }
 
