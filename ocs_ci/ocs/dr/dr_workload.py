@@ -672,20 +672,21 @@ class BusyBox(DRWorkload):
             self.workload_namespace
         )
 
-        # Skipping drpc.yaml deletion since DRPC is automatically removed.
-        kustomization_yaml_file = os.path.join(
-            self.workload_subscription_dir, self.workload_name, "kustomization.yaml"
-        )
-        if not self.is_placement:
-            kustomization_yaml_data = templating.load_yaml(kustomization_yaml_file)
-            kustomization_yaml_data["resources"].remove("drpc.yaml")
-            templating.dump_data_to_temp_yaml(
-                kustomization_yaml_data, kustomization_yaml_file
+        if not config.ENV_DATA.get("deploy_via_cli"):
+            # Skipping drpc.yaml deletion since DRPC is automatically removed.
+            kustomization_yaml_file = os.path.join(
+                self.workload_subscription_dir, self.workload_name, "kustomization.yaml"
             )
+            if not self.is_placement:
+                kustomization_yaml_data = templating.load_yaml(kustomization_yaml_file)
+                kustomization_yaml_data["resources"].remove("drpc.yaml")
+                templating.dump_data_to_temp_yaml(
+                    kustomization_yaml_data, kustomization_yaml_file
+                )
 
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
-            if self.is_placement:
+            if not config.ENV_DATA.get("deploy_via_cli") and self.is_placement:
                 clusterset_name = (
                     config.ENV_DATA.get("cluster_set")
                     or get_cluster_set_name(switch_ctx)[0]
