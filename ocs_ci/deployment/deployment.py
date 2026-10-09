@@ -731,7 +731,20 @@ class Deployment(object):
                         namespace=constants.OADP_NAMESPACE,
                     ):
                         logger.info(
-                            f"Found {constants.OADP_OPERATOR_NAME} skipping creation"
+                            f"Found {constants.OADP_OPERATOR_NAME} CSV, skipping creation"
+                        )
+                        continue
+                    if ocp.OCP(
+                        kind=constants.SUBSCRIPTION_WITH_ACM,
+                        resource_name=constants.OADP_OPERATOR_NAME,
+                        namespace=constants.OADP_NAMESPACE,
+                    ).check_resource_existence(
+                        timeout=10,
+                        should_exist=True,
+                        resource_name=constants.OADP_OPERATOR_NAME,
+                    ):
+                        logger.info(
+                            f"Found {constants.OADP_OPERATOR_NAME} subscription, skipping creation"
                         )
                         continue
                     if config.DEPLOYMENT.get("disconnected"):
