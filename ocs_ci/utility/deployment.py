@@ -217,7 +217,16 @@ def get_and_apply_idms_from_catalog(image, apply=True, insecure=False):
     )
     if insecure:
         cmd = f"{cmd} --insecure"
-    exec_cmd(cmd)
+    retry(
+        CommandFailed,
+        tries=10,
+        delay=60,
+        backoff=1,
+        text_in_exception=(
+            "unexpected EOF",
+            "unable to extract layer",
+        ),
+    )(exec_cmd)(cmd)
     if not os.path.exists(idms_file_dest_location):
         return ""
 
