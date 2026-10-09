@@ -4,7 +4,7 @@ from itertools import cycle
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import yellow_squad
+from ocs_ci.framework.pytest_customization.marks import yellow_squad, zstream_4_18_1
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4c,
@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 @provider_client_ms_platform_required
 @ignore_leftover_label(constants.TOOL_APP_LABEL)
 @pytest.mark.polarion_id("OCS-3924")
+@zstream_4_18_1
 class TestPodDisruptions(ManageTest):
     """
     Tests to verify pod disruption
