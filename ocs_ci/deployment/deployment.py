@@ -6,6 +6,7 @@ platforms like AWS, VMWare, Baremetal etc.
 import json
 import logging
 import os
+import shutil
 from subprocess import PIPE, Popen
 import tempfile
 import fauxfactory
@@ -189,6 +190,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     get_latest_ds_olm_tag,
     is_cluster_running,
+    ocsci_log_path,
     run_cmd,
     run_cmd_multicluster,
     set_selinux_permissions,
@@ -4099,7 +4101,7 @@ class MultiClusterDROperatorsDeploy(object):
                     location=ramenctl_clone_dir,
                     branch=ramenctl_branch,
                 )
-            except Exception as e:
+            except Exception:
                 logger.exception("[ramenctl-e2e] Failed to clone ramenctl repo")
                 logger.warning("[ramenctl-e2e] Skipping ramenctl e2e tests")
                 return
@@ -4110,14 +4112,18 @@ class MultiClusterDROperatorsDeploy(object):
 
             config_file = self._generate_ramenctl_config(ramenctl_clone_dir)
             if not config_file:
-                logger.warning("[ramenctl-e2e] Skipping e2e tests due to config generation failure")
+                logger.warning(
+                    "[ramenctl-e2e] Skipping e2e tests due to config generation failure"
+                )
                 return
 
             self._execute_ramenctl_e2e(ramenctl_clone_dir, config_file)
 
             logger.info("[ramenctl-e2e] Completed ramenctl e2e test execution")
         finally:
-            logger.info(f"[ramenctl-e2e] Cleaning up temporary directory: {ramenctl_clone_dir}")
+            logger.info(
+                f"[ramenctl-e2e] Cleaning up temporary directory: {ramenctl_clone_dir}"
+            )
             shutil.rmtree(ramenctl_clone_dir, ignore_errors=True)
 
     def _install_ramenctl(self, ramenctl_dir):
@@ -4141,9 +4147,7 @@ class MultiClusterDROperatorsDeploy(object):
             logger.info("[ramenctl-e2e] ramenctl binary built successfully")
             logger.info(f"[ramenctl-e2e] Build output:\n{output}")
         except CommandFailed as e:
-            logger.error(
-                f"[ramenctl-e2e] Failed to build ramenctl binary: {e}"
-            )
+            logger.error(f"[ramenctl-e2e] Failed to build ramenctl binary: {e}")
             return False
 
         binary_path = f"{ramenctl_dir}/ramenctl"
@@ -4157,10 +4161,8 @@ class MultiClusterDROperatorsDeploy(object):
         verify_cmd = f"cd {ramenctl_dir} && ./ramenctl help"
         logger.info(f"[ramenctl-e2e] Verifying binary with command: {verify_cmd}")
         try:
-            help_output = run_cmd(verify_cmd, shell=True)
-            logger.info(
-                f"[ramenctl-e2e] ramenctl binary ready at {binary_path}"
-            )
+            run_cmd(verify_cmd, shell=True)
+            logger.info(f"[ramenctl-e2e] ramenctl binary ready at {binary_path}")
         except CommandFailed as e:
             logger.warning(
                 f"[ramenctl-e2e] Failed to verify binary, but it exists: {e}"
@@ -4198,7 +4200,7 @@ class MultiClusterDROperatorsDeploy(object):
         logger.info("[ramenctl-e2e] Building config content with cluster details")
         try:
             ramenctl_config = self._build_ramenctl_config_content(ramenctl_dir)
-        except Exception as e:
+        except Exception:
             logger.exception("[ramenctl-e2e] Failed to build ramenctl config")
             return None
 
@@ -4207,9 +4209,7 @@ class MultiClusterDROperatorsDeploy(object):
                 yaml.dump(ramenctl_config, f, default_flow_style=False)
             logger.info(f"[ramenctl-e2e] Updated config at {config_file}")
             config_content = yaml.dump(ramenctl_config, default_flow_style=False)
-            logger.info(
-                f"[ramenctl-e2e] Config content:\n{config_content}"
-            )
+            logger.info(f"[ramenctl-e2e] Config content:\n{config_content}")
         except IOError as e:
             logger.error(f"[ramenctl-e2e] Failed to write config file: {e}")
             return None
@@ -4247,9 +4247,13 @@ class MultiClusterDROperatorsDeploy(object):
                 hub_dest = os.path.join(ramenctl_dir, "hub.yaml")
                 shutil.copy(hub_kubeconfig, hub_dest)
                 clusters_config["hub"] = {"kubeconfig": "hub.yaml"}
-                logger.info(f"[ramenctl-e2e] Copied hub kubeconfig from {hub_kubeconfig} to {hub_dest}")
+                logger.info(
+                    f"[ramenctl-e2e] Copied hub kubeconfig from {hub_kubeconfig} to {hub_dest}"
+                )
             else:
-                logger.warning(f"[ramenctl-e2e] Hub kubeconfig not found at {hub_kubeconfig}")
+                logger.warning(
+                    f"[ramenctl-e2e] Hub kubeconfig not found at {hub_kubeconfig}"
+                )
 
             clusters_config["passive-hub"] = {"kubeconfig": ""}
 
@@ -4267,10 +4271,23 @@ class MultiClusterDROperatorsDeploy(object):
             if not managed_clusters:
                 logger.warning("[ramenctl-e2e] No DR-policy managed clusters found")
 
+            # Order managed clusters primary-then-secondary (matching the DR
+            # policy's drClusters order) so the primary is assigned c1 downstream
+            # rather than relying on config.clusters order.
+            primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
+            managed_clusters = sorted(
+                managed_clusters,
+                key=lambda cluster: cluster.ENV_DATA.get("cluster_name")
+                != primary_cluster_name,
+            )
+
             for idx, cluster in enumerate(managed_clusters, start=1):
                 cluster_name = cluster.ENV_DATA.get("cluster_name", f"cluster-{idx}")
                 cluster_kubeconfig = cluster.RUN.get("kubeconfig")
-                logger.info(f"[ramenctl-e2e] Processing cluster c{idx} ({cluster_name}), kubeconfig: {cluster_kubeconfig}")
+                logger.info(
+                    f"[ramenctl-e2e] Processing cluster c{idx} ({cluster_name}), "
+                    f"kubeconfig: {cluster_kubeconfig}"
+                )
                 if cluster_kubeconfig and os.path.exists(cluster_kubeconfig):
                     cluster_dest = os.path.join(ramenctl_dir, f"c{idx}.yaml")
                     shutil.copy(cluster_kubeconfig, cluster_dest)
@@ -4413,20 +4430,22 @@ class MultiClusterDROperatorsDeploy(object):
         """
         logger.info("[ramenctl-e2e] Executing ramenctl test run")
 
-        # Output directory for test results (relative to ramenctl_dir)
-        output_dirname = "e2e-results"
-        output_path = f"{ramenctl_dir}/{output_dirname}"
+        # Store test results at a persistent path outside ramenctl_dir so they
+        # survive cleanup of the cloned repository directory.
+        output_path = os.path.join(ocsci_log_path(), "ramenctl-e2e-results")
 
-        e2e_cmd = " ".join([
-            "cd",
-            ramenctl_dir,
-            "&&",
-            "./ramenctl",
-            "test",
-            "run",
-            "-o",
-            output_dirname,
-        ])
+        e2e_cmd = " ".join(
+            [
+                "cd",
+                ramenctl_dir,
+                "&&",
+                "./ramenctl",
+                "test",
+                "run",
+                "-o",
+                output_path,
+            ]
+        )
 
         logger.info(f"[ramenctl-e2e] Running command: {e2e_cmd}")
         logger.info(f"[ramenctl-e2e] Test results will be saved to: {output_path}")
