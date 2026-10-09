@@ -441,22 +441,6 @@ class Deployment(object):
                 gitops_subscription_manifest.name,
             )
             run_cmd(f"oc apply -f {gitops_subscription_manifest.name}")
-        elif ocp_version >= version.VERSION_5_0:
-            # Use the temporary GitOps workaround CatalogSource
-            gitops_subscription_yaml_data = templating.load_yaml(
-                constants.GITOPS_SUBSCRIPTION_YAML
-            )
-            gitops_subscription_yaml_data["spec"][
-                "source"
-            ] = constants.TEMP_GITOPS_WA_CATSRC_NAME
-            gitops_subscription_manifest = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="gitops_subscription_manifest", delete=False
-            )
-            templating.dump_data_to_temp_yaml(
-                gitops_subscription_yaml_data,
-                gitops_subscription_manifest.name,
-            )
-            exec_cmd(f"oc apply -f {gitops_subscription_manifest.name}")
         else:
             run_cmd(f"oc apply -f {constants.GITOPS_SUBSCRIPTION_YAML}")
 
