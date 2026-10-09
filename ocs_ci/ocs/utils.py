@@ -805,7 +805,7 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
         log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
         return
 
-    if ocsci_config.DEPLOYMENT.get("fusion_access_deployment"):
+    if ocsci_config.DEPLOYMENT.get("fusion_access"):
         log.info(
             "Skipping Ceph toolbox setup — Fusion Access cluster has no CephCluster"
         )
