@@ -723,6 +723,12 @@ OSD_CEPHX_GET_OR_CREATE_LOG = "auth get-or-create"
 OSD_ENCRYPTED_LABEL = "encrypted"
 OSD_LOCKBOX_AUTH_PREFIX = "client.osd-lockbox."
 OSD_ACTIVATE_INIT_CONTAINER = "activate"
+OSD_ENCRYPTION_OPEN_INIT_CONTAINER = "encryption-open"
+# encryption-open prints one of these when the LUKS device is usable.
+OSD_ENCRYPTION_DEVICE_OPENED_LOGS = (
+    "already opened",
+    "Opening encrypted device",
+)
 OSD_LOCKBOX_INIT_SUCCESS_LOG = "got latest cephx lockbox key for OSD successfully"
 # Same get-or-create token as OSD cephx init; alias kept for lockbox call sites.
 OSD_LOCKBOX_GET_OR_CREATE_LOG = OSD_CEPHX_GET_OR_CREATE_LOG
@@ -1696,6 +1702,12 @@ DEFAULT_DESIRED_CEPHX_KEY_GEN = 2
 CEPHX_KEY_GENERATION_DECREASE_ERROR = "keyGeneration cannot be decreased"
 CEPHX_KEY_GENERATION_REMOVE_ERROR = "keyGeneration cannot be removed once set"
 CEPHX_KEY_GENERATION_TYPE_ERROR = "must be of type integer"
+# Boolean ``true`` on an int64 CRD field is rejected as ``must be of type int64``
+# with an empty value, not ``must be of type integer: "boolean"``.
+CEPHX_KEY_GENERATION_TYPE_ERRORS = (
+    CEPHX_KEY_GENERATION_TYPE_ERROR,
+    "must be of type int64",
+)
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
