@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     brown_squad,
+    zstream_4_18_1,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 @skipif_external_mode
 @ignore_leftovers
 @tier4c
+@zstream_4_18_1
 class TestAddCapacityWithResourceDelete:
     """
     Test add capacity when one of the resources gets deleted
