@@ -33,7 +33,7 @@ class TestStorageClusterDeletionGuardMultiSC(ManageTest):
 
     @tier4
     @skipif_ocs_version("<4.23")
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-8321")
     @pytest.mark.order("last")
     def test_storagecluster_deletion_guard_multi_sc(self, request):
         """
