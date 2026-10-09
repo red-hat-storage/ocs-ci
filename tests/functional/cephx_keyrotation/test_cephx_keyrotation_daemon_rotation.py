@@ -419,6 +419,7 @@ class TestCephXKeyRotationIdempotency:
         target_generation = rotator.rotate_daemon_keys()
         log.info(f"Triggered daemon CephX rotation to generation {target_generation}")
         rotator.wait_for_rook_daemon_rotation(target_generation, timeout=1500)
+        rotator.wait_for_cluster_fully_recovered(timeout=1500)
 
         baseline_generations = rotator.record_all_cephx_status_generations()
         rotator.log_generation_status("Post-rotation baseline")
@@ -557,6 +558,7 @@ class TestCephXKeyRotationIOContinuity:
         )
         log.info("Post-rotation PVC provisioning and I/O verified successfully")
 
+        rotator.wait_for_cluster_fully_recovered(timeout=1500)
         ceph_health_check(namespace=namespace)
         log.info(
             "Cluster health and I/O continuity verified during daemon CephX key rotation"
