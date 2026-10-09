@@ -89,9 +89,6 @@ BURSTABLE_BLOCK_CONTAINERS = [
     }
 ]
 
-# RBD CSI provisioner that backs every VolumeAttributesClass in this module.
-RBD_CSI_DRIVER = "openshift-storage.rbd.csi.ceph.com"
-
 # Shared VolumeAttributesClass tiers. Consumed by both the @tier1 QoS matrix
 # (TestVolumeAttributesClassQoS.setup_qos_classes) and the standalone upgrade
 # class so the tier names/limits are defined exactly once.
@@ -126,7 +123,7 @@ def build_vac_manifest(name, limits):
         "apiVersion": "storage.k8s.io/v1",
         "kind": "VolumeAttributesClass",
         "metadata": {"name": name},
-        "driverName": RBD_CSI_DRIVER,
+        "driverName": constants.RBD_PROVISIONER,
         "parameters": {
             "maxReadBps": limits["rbps"],
             "maxWriteBps": limits["wbps"],
@@ -779,8 +776,11 @@ class TestVolumeAttributesClassQoS(ManageTest):
         helpers.wait_for_resource_state(
             source_pod, constants.STATUS_RUNNING, timeout=420
         )
+        # sync so the write is flushed from the pod's page cache to the RBD
+        # device before snapshotting; otherwise the snapshot captures the file's
+        # metadata but not its (still-dirty) data blocks.
         source_pod.exec_cmd_on_pod(
-            "sh -c 'echo snapshot-test > /mnt/storage/data.txt'",
+            "sh -c 'echo snapshot-test > /mnt/storage/data.txt && sync'",
             out_yaml_format=False,
         )
 
@@ -914,8 +914,11 @@ class TestQoSPreExistingPVCAfterUpgrade(ManageTest):
         )
         pod_obj.create()
         helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=420)
+        # sync so the marker is flushed to the RBD device before the upgrade; a
+        # node drain/reboot during the upgrade would otherwise drop the still
+        # dirty page-cache write even though the PVC itself survives.
         pod_obj.exec_cmd_on_pod(
-            f"sh -c 'echo {QOS_UPGRADE_DATA_MARKER} > {QOS_UPGRADE_DATA_FILE}'",
+            f"sh -c 'echo {QOS_UPGRADE_DATA_MARKER} > {QOS_UPGRADE_DATA_FILE} && sync'",
             out_yaml_format=False,
         )
         logger.info(
