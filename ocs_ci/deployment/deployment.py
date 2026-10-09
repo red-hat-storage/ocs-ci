@@ -4460,6 +4460,54 @@ class MultiClusterDROperatorsDeploy(object):
         except CommandFailed as e:
             logger.error(f"[ramenctl-e2e] E2E tests failed: {e}")
             logger.error(f"[ramenctl-e2e] Check detailed results at: {output_path}")
+        finally:
+            # Always attempt to tear down the test artifacts deployed on the
+            # clusters by the test run, while config.yaml still exists in
+            # ramenctl_dir. Best-effort: failures must not block workspace
+            # deletion in the caller.
+            self._clean_ramenctl_e2e(ramenctl_dir)
+
+    def _clean_ramenctl_e2e(self, ramenctl_dir):
+        """
+        Best-effort cleanup of test artifacts deployed by the ramenctl test run.
+
+        Runs ``ramenctl test clean`` with a dedicated output directory so the
+        test run's diagnostic results are preserved, and swallows any error so
+        the caller can proceed with workspace deletion.
+
+        Args:
+            ramenctl_dir (str): Path to ramenctl repository
+
+        """
+        logger.info("[ramenctl-e2e] Cleaning up ramenctl test artifacts")
+
+        # Keep cleanup diagnostics separate from the test run results so this
+        # step does not overwrite or remove them.
+        clean_output_path = os.path.join(ocsci_log_path(), "ramenctl-e2e-clean-results")
+
+        clean_cmd = " ".join(
+            [
+                "cd",
+                ramenctl_dir,
+                "&&",
+                "./ramenctl",
+                "test",
+                "clean",
+                "-o",
+                clean_output_path,
+            ]
+        )
+
+        logger.info(f"[ramenctl-e2e] Running cleanup command: {clean_cmd}")
+        try:
+            output = run_cmd(clean_cmd, timeout=3600, shell=True)
+            logger.info("[ramenctl-e2e] Test artifacts cleaned successfully")
+            logger.info(f"[ramenctl-e2e] Cleanup output:\n{output}")
+        except Exception as e:
+            logger.warning(
+                "[ramenctl-e2e] Test cleanup failed, continuing with workspace "
+                f"deletion: {e}"
+            )
 
     def deploy_dr_policy(self):
         # Create DR policy on ACM hub cluster
