@@ -4086,7 +4086,9 @@ def clone_repo(
     if ("installer" in location) and installer_path_exist:
         if "coreos" not in location:
             installer_dir = os.path.join(constants.EXTERNAL_DIR, "installer")
-            remote_output = exec_cmd(f"git -C {installer_dir} remote -v")
+            remote_output = exec_cmd(
+                f"git -C {installer_dir} remote -v"
+            ).stdout.decode()
             if (("srozen" in remote_output) and ("openshift" in url)) or (
                 ("openshift" in remote_output) and ("srozen" in url)
             ):
