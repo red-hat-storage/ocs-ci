@@ -51,6 +51,7 @@ from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
 from ocs_ci.helpers.odf_cli import NoobaaCliRunner, NoobaaCLIRetriever
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
+    assert_store_phase_and_mode,
     list_objects_from_bucket,
     write_random_test_objects_to_bucket,
 )
@@ -116,6 +117,10 @@ _S3_HTTP_PORT = 80
 
 # Pre-validation wants "a valid location used by noobaa"; one object satisfies it.
 NOOBAA_LOCATION_MARKER_KEY = "noobaa_blocks/ocs-ci-endpoint-update-marker"
+
+# A BucketClass is normally Ready in seconds; this only has to outlast a
+# reconcile that is still catching up with a just-created store.
+BUCKETCLASS_READY_TIMEOUT = 180
 
 # Stores the bulk test puts on the shared endpoint; each needs its own bucket.
 BULK_STORE_COUNT = 2
@@ -334,24 +339,35 @@ def get_store_endpoint(kind, name, namespace):
     return obj["spec"]["s3Compatible"]["endpoint"]
 
 
-def get_pool_endpoint(mcg_obj, store_name):
+def get_pool_endpoint(mcg_obj, store_name, kind=None):
     """
-    Return the endpoint NooBaa core actually serves a store's pool from.
+    Return the endpoint NooBaa core actually serves a store from.
 
     This is the core's own view, read over the management RPC, and it is what
     the data path actually uses - which is not the same thing as what the CR
     spec says, so the two are worth asserting separately.
 
+    Core keeps the kinds in different collections and at different depths:
+    cloud_info.endpoint for a pool, top-level endpoint for a namespace
+    resource.
+
     Args:
         mcg_obj (MCG): The MCG fixture object.
-        store_name (str): Name of the BackingStore / its pool.
+        store_name (str): Name of the store.
+        kind (str): Store kind. Defaults to BackingStore.
 
     Returns:
-        str: The endpoint, or None if the pool has none / does not exist.
+        str: The endpoint, or None if the store has none / does not exist.
     """
-    for pool in mcg_obj.read_system().get("pools", []):
-        if pool.get("name") == store_name:
-            return pool.get("cloud_info", {}).get("endpoint")
+    is_nss = str(kind).lower() == constants.NAMESPACESTORE.lower()
+    collection = "namespace_resources" if is_nss else "pools"
+    for item in mcg_obj.read_system().get(collection, []):
+        if item.get("name") == store_name:
+            return (
+                item.get("endpoint")
+                if is_nss
+                else item.get("cloud_info", {}).get("endpoint")
+            )
     return None
 
 
@@ -506,6 +522,108 @@ def operator_logged_pause_skip(operator_pod, namespace, store_name, since):
             operator_pod, pattern, namespace=namespace, since=since
         )
     )
+
+
+def assert_rejected_update_is_a_noop(
+    mcg_obj, result, kind, store_name, old, generation
+):
+    """
+    Assert a pre-validation failure left the store untouched, for either kind:
+    aborted, still on OLD, generation unchanged (so the spec was never written,
+    not written-then-rolled-back), unpaused, and core still serving OLD.
+
+    Args:
+        mcg_obj (MCG): The MCG fixture object.
+        result (dict): Parsed output of the rejected ``connection update``.
+        kind (str): Store kind - BackingStore or NamespaceStore.
+        store_name (str): Name of the store.
+        old (str): The endpoint the store must still be on.
+        generation (int): ``metadata.generation`` read before the update.
+    """
+    ns = config.ENV_DATA["cluster_namespace"]
+    assert result["aborted"], (
+        "Expected the batch to abort ('No changes have been made') against an "
+        f"unreachable endpoint:\n{result['raw']}"
+    )
+    assert result["prevalidation_failed"], result["raw"]
+    assert not result["stores_updated"], result["raw"]
+    assert get_store_endpoint(kind, store_name, ns) == old
+    after = OCP(kind=kind, namespace=ns, resource_name=store_name).get()
+    assert after["metadata"]["generation"] == generation, (
+        f"{kind}/{store_name} spec was written during a run that aborted in "
+        "pre-validation: generation moved from "
+        f"{generation} to {after['metadata']['generation']}"
+    )
+    assert not get_store_pause_annotation(
+        kind, store_name, ns
+    ), f"{kind}/{store_name} was left paused by an aborted batch"
+    assert get_pool_endpoint(mcg_obj, store_name, kind) == old, (
+        f"NooBaa core moved {kind}/{store_name} off {old} even though the "
+        f"batch aborted:\n{result['raw']}"
+    )
+
+
+def run_rejected_update_case(
+    kind, mcg_obj, conf, store_factory, bucketclass, bucket_factory, io_pod, dirs
+):
+    """
+    Shared body of the rejected-update cases: create the store on OLD behind
+    an OBC, write through it, attempt the update to an unreachable endpoint,
+    then assert nothing moved and I/O is unaffected.
+
+    Args:
+        kind (str): Store kind - BackingStore or NamespaceStore.
+        mcg_obj (MCG): The MCG fixture object.
+        conf (dict): The ``endpoint_conf`` fixture.
+        store_factory (function): The ``store_factory`` fixture.
+        bucketclass (function): The ``bucketclass_over_store`` fixture.
+        bucket_factory (function): The ``bucket_factory`` fixture.
+        io_pod (Pod): The ``awscli_pod_session`` fixture.
+        dirs (object): The ``test_directory_setup`` fixture.
+    """
+    ns = config.ENV_DATA["cluster_namespace"]
+    old = conf["old"]
+    store = make_store(store_factory, conf, old, kind=kind)
+    bucket = bucket_factory(interface="OC", bucketclass=bucketclass(store))[0]
+    pre_objects = write_random_test_objects_to_bucket(
+        io_pod,
+        bucket.name,
+        _write_dir(dirs.origin_dir, "pre"),
+        amount=2,
+        pattern="pre-reject-",
+        mcg_obj=mcg_obj,
+    )
+
+    # Settle first: the OBC and the write drive status writes of their own.
+    wait_for_stores_quiesced([(kind, store.name)], ns)
+    generation = OCP(kind=kind, namespace=ns, resource_name=store.name).get()[
+        "metadata"
+    ]["generation"]
+
+    result = run_connection_update(mcg_obj, old, UNREACHABLE_ENDPOINT)
+    assert_rejected_update_is_a_noop(mcg_obj, result, kind, store.name, old, generation)
+    assert_store_phase_and_mode(
+        store.name, kind, constants.STATUS_READY, constants.BS_OPTIMAL, mcg_obj
+    )
+
+    # Prefix-scoped: a "PRE noobaa_blocks/" row makes list_objects_from_bucket
+    # return an empty list for the whole bucket.
+    listed = set(
+        list_objects_from_bucket(
+            io_pod, bucket.name, prefix="pre-reject-", s3_obj=mcg_obj
+        )
+    )
+    missing = set(pre_objects) - listed
+    assert (
+        not missing
+    ), f"Objects written before the rejected update are no longer readable: {sorted(missing)}"
+    assert _try_write(
+        io_pod,
+        bucket.name,
+        _write_dir(dirs.origin_dir, "post"),
+        "post-reject-",
+        mcg_obj,
+    ), "A write failed after an endpoint update that changed nothing"
 
 
 def _create_alt_service(base_svc, name, namespace):
@@ -854,13 +972,16 @@ def make_store(store_factory, conf, endpoint, bucket=None, kind=None, **kwargs):
 @pytest.fixture
 def bucketclass_over_store(request, mcg_obj):
     """
-    Factory that wraps a BackingStore in a single-tier BucketClass, so a bucket
-    created on it drives its I/O through that one store.
+    Factory that wraps a single store in a BucketClass, so a bucket created on
+    it drives its I/O through that one store.
+
+    A BackingStore gets a single-tier Spread placement policy, a
+    NamespaceStore a Single namespace policy; the kind is read off the store.
 
     Usage::
 
         bucket = bucket_factory(
-            interface="OC", bucketclass=bucketclass_over_store(bs)
+            interface="OC", bucketclass=bucketclass_over_store(store)
         )[0]
     """
     created = []
@@ -879,9 +1000,36 @@ def bucketclass_over_store(request, mcg_obj):
 
     def _factory(store):
         name = create_unique_resource_name("eps-bc", "bucketclass")
-        mcg_obj.oc_create_bucketclass(name, [store], "Spread", None, None)
-        bucketclass = BucketClass(name, [store], None, "Spread", None, None)
+        # Case-insensitive: the CR says "NamespaceStore", the constant
+        # "Namespacestore", and an exact compare silently builds a placement
+        # policy the operator rejects with MissingBackingStore.
+        if store.kind.lower() == constants.NAMESPACESTORE.lower():
+            namespace_policy = {
+                "type": constants.NAMESPACE_POLICY_TYPE_SINGLE,
+                "write_resource": store.name,
+            }
+            mcg_obj.oc_create_bucketclass(name, None, None, namespace_policy, None)
+            bucketclass = BucketClass(name, None, [store], None, None, namespace_policy)
+        else:
+            mcg_obj.oc_create_bucketclass(name, [store], "Spread", None, None)
+            bucketclass = BucketClass(name, [store], None, "Spread", None, None)
         created.append(bucketclass)
+        # The OBC only reports "BucketClassNotReady", so wait here. status.phase
+        # is read directly: wait_for_resource sees a Bucketclass PHASE column as
+        # unpopulated even once it says Ready.
+        bc_ocp = OCP(
+            kind=constants.BUCKETCLASS,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=name,
+        )
+        for ready in TimeoutSampler(
+            BUCKETCLASS_READY_TIMEOUT,
+            5,
+            lambda: bc_ocp.get().get("status", {}).get("phase")
+            == constants.STATUS_READY,
+        ):
+            if ready:
+                break
         return bucketclass
 
     return _factory
@@ -1749,6 +1897,41 @@ class TestBackingStoreEndpointUpdate(MCGTest):
             condition=constants.STATUS_READY, column="PHASE", timeout=180
         )
 
+    @tier2
+    @polarion_id("OCS-8322")
+    def test_unreachable_endpoint_rejected_single_bs(
+        self,
+        mcg_obj,
+        endpoint_conf,
+        store_factory,
+        bucketclass_over_store,
+        bucket_factory,
+        awscli_pod_session,
+        test_directory_setup,
+    ):
+        """
+        A rejected endpoint update is a no-op for a BackingStore serving a
+        bucket: nothing is patched, core is not moved and I/O never notices.
+
+        Unlike the ``unreachable`` variant of
+        ``test_prevalidation_failure_aborts_batch``, which grades the abort on
+        a bare store, this puts live data behind an OBC and adds the
+        generation check, which an abort-then-rollback would not satisfy.
+
+        Teardown: every resource belongs to a factory fixture, and a passing
+        run makes no change to revert.
+        """
+        run_rejected_update_case(
+            constants.BACKINGSTORE,
+            mcg_obj,
+            endpoint_conf,
+            store_factory,
+            bucketclass_over_store,
+            bucket_factory,
+            awscli_pod_session,
+            test_directory_setup,
+        )
+
 
 @mcg
 @runs_on_provider
@@ -2422,6 +2605,40 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
                 f"{name} was left on the new endpoint after a denied batch, so "
                 f"the rollback was not all-or-nothing:\n{result['raw']}"
             )
+
+    @tier2
+    @polarion_id("OCS-8323")
+    def test_unreachable_endpoint_rejected_single_nss(
+        self,
+        mcg_obj,
+        endpoint_conf,
+        store_factory,
+        bucketclass_over_store,
+        bucket_factory,
+        awscli_pod_session,
+        test_directory_setup,
+    ):
+        """
+        The NamespaceStore counterpart of
+        ``test_unreachable_endpoint_rejected_single_bs``.
+
+        Covered separately because NamespaceStore pre-validation is a
+        different check - its check_external_connection carries an EMPTY
+        Bucket field, so it tests connectivity and credentials only. Every
+        other pre-validation failure in this module drives a BackingStore.
+
+        Teardown: as the BackingStore case.
+        """
+        run_rejected_update_case(
+            constants.NAMESPACESTORE,
+            mcg_obj,
+            endpoint_conf,
+            store_factory,
+            bucketclass_over_store,
+            bucket_factory,
+            awscli_pod_session,
+            test_directory_setup,
+        )
 
 
 @mcg
