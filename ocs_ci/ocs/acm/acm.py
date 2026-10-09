@@ -1134,12 +1134,62 @@ def import_clusters_with_acm():
     """
     # TODO: Import action should be dynamic per cluster count (Use config.nclusters loop)
     clusters_env = get_clusters_env()
-    primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
-    secondary_index = [
-        s.MULTICLUSTER["multicluster_index"]
-        for s in get_non_acm_cluster_config()
-        if s.MULTICLUSTER["multicluster_index"] != primary_index
-    ][0]
+    primary_cluster_config = get_primary_cluster_config()
+    primary_index = primary_cluster_config.MULTICLUSTER["multicluster_index"]
+
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        # dr_cluster_relations is a list containing cluster pairs list with the index 0 pair as current pair under test
+        dr_cluster_names = dr_cluster_relations[0]
+        primary_name = config.get_cluster_name_by_index(primary_index)
+        secondary_index = config.get_cluster_index_by_name(
+            [
+                cluster_name
+                for cluster_name in dr_cluster_names
+                if cluster_name != primary_name
+            ][0]
+        )
+    else:
+        secondary_index = [
+            s.MULTICLUSTER["multicluster_index"]
+            for s in get_non_acm_cluster_config()
+            if s.MULTICLUSTER["multicluster_index"] != primary_index
+        ][0]
+
+    primary_is_hosted = is_hosted_cluster(
+        primary_cluster_config.ENV_DATA["cluster_name"]
+    )
+    secondary_is_hosted = is_hosted_cluster(
+        config.get_cluster_name_by_index(secondary_index)
+    )
+    secondary_cluster_config = config.clusters[secondary_index]
+
+    # Do not import hosted cluster directly, instead import the host which is the provider cluster.
+    # At this stage the ACM is supposed to be configured to import MCE cluster.
+    # This works if base cluster pair is not already an RDR pair and not imported.
+    # Also works for MDR pair as clients on same provider cluster
+    provider_index_of_primary = None
+    provider_index_of_secondary = None
+    if primary_cluster_config.ENV_DATA.get("cluster_type") in [
+        constants.EXT_CLIENT,
+        constants.HCI_CLIENT,
+    ]:
+        with config.RunWithConfigContext(primary_index):
+            provider_index_of_primary = config.get_provider_index()
+            if primary_is_hosted:
+                primary_index = provider_index_of_primary
+                provider_index_of_primary = None
+
+    if secondary_cluster_config.ENV_DATA.get("cluster_type") in [
+        constants.EXT_CLIENT,
+        constants.HCI_CLIENT,
+    ]:
+        with config.RunWithConfigContext(secondary_index):
+            provider_index_of_secondary = config.get_provider_index()
+            if secondary_is_hosted:
+                secondary_index = provider_index_of_secondary
+                provider_index_of_secondary = None
+
     log.info(clusters_env)
     kubeconfig_a = copy_kubeconfig(
         file=clusters_env.get(f"kubeconfig_location_c{primary_index}"), return_str=True
@@ -1151,6 +1201,17 @@ def import_clusters_with_acm():
     cluster_name_a = clusters_env.get(f"cluster_name_{primary_index}")
     cluster_name_b = clusters_env.get(f"cluster_name_{secondary_index}")
     clusters = ((cluster_name_a, kubeconfig_a), (cluster_name_b, kubeconfig_b))
+
+    # Use set because both indices can be same or different
+    for provider_index in {provider_index_of_primary, provider_index_of_secondary}:
+        if provider_index is not None:
+            kubeconfig_of_cluster = copy_kubeconfig(
+                file=clusters_env.get(f"kubeconfig_location_c{provider_index}"),
+                return_str=True,
+            )
+            cluster_name = clusters_env.get(f"cluster_name_{provider_index}")
+            clusters = clusters + ((cluster_name, kubeconfig_of_cluster),)
+
     verify_running_acm()
     if config.DEPLOYMENT.get("ui_acm_import"):
         login_to_acm()

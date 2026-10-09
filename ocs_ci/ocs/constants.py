@@ -450,7 +450,9 @@ MS_PROVIDER_TYPE = "provider"
 NON_MS_CLUSTER_TYPE = "non_ms"
 
 # HCI cluster types
+# Generally HCI_CLIENT is used for hosted cluster as client cluster and EXT_CLIENT for non hosted client cluster
 HCI_CLIENT = "hci_client"
+EXT_CLIENT = "ext_client"
 HCI_PROVIDER = "provider"
 # hosted cluster types
 HOSTED_CLUSTER_KUBEVIRT = "kubevirt"
