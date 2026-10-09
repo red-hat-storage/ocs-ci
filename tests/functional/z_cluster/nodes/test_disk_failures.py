@@ -4,7 +4,7 @@ import pytest
 
 from ocs_ci.ocs import node, constants
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     tier4a,
     ignore_leftovers,
@@ -42,6 +42,8 @@ logger = logging.getLogger(__name__)
 @brown_squad
 @tier4a
 @ignore_leftovers
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestDiskFailures(ManageTest):
     """
     Test class for detach and attach worker volume
