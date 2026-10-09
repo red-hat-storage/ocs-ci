@@ -8,6 +8,7 @@ import tempfile
 
 from ocs_ci.framework import config as ocsci_config, config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_indexes,
@@ -326,11 +327,18 @@ def create_mce_catsrc():
     # if idms were not created during acm deployment, create it now
     log.info("Creating ImageDigestMirrorSet for ACM Deployment if not present")
     try:
-        # attempt to apply the IDMS from the template. `oc apply` is idempotent so
-        # if the resource already exists it will be updated/unchanged instead of erroring.
-        run_cmd(f"oc apply -f {constants.ACM_BREW_IDMS_YAML}")
-        wait_for_machineconfigpool_status(node_type="all")
-        log.info("ACM Brew ImageDigestMirrorSet applied (or already present)")
+        idms_obj = OCP(kind=constants.IMAGEDIGESTMIRRORSET, resource_name="acm-idms")
+        if idms_obj.check_resource_existence(
+            timeout=10, should_exist=True, resource_name="acm-idms"
+        ):
+            log.info(
+                "ImageDigestMirrorSet 'acm-idms' already present, verifying MCP readiness"
+            )
+            wait_for_machineconfigpool_status(node_type="all")
+        else:
+            run_cmd(f"oc apply -f {constants.ACM_BREW_IDMS_YAML}")  # IgnoreDeprecation
+            wait_for_machineconfigpool_status(node_type="all")
+            log.info("ACM Brew ImageDigestMirrorSet applied successfully")
     except Exception as ex:
         # If application failed for any reason, log and continue to create catalogsource
         log.warning(f"Failed to apply ACM Brew ImageDigestMirrorSet: {ex}")

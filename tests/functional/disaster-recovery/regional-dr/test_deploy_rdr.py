@@ -263,6 +263,7 @@ def test_deploy_rdr():
 
         # Import the ACM import function
         from ocs_ci.ocs.acm.acm import import_clusters_with_acm
+        from ocs_ci.ocs.ocp import OCP
         from ocs_ci.utility import version as version_util
         from ocs_ci.utility.utils import run_cmd, wait_for_machineconfigpool_status
 
@@ -275,17 +276,34 @@ def test_deploy_rdr():
             )
 
             def apply_idms(cluster):
+                """Apply acm-idms to the cluster if not already present.
+
+                Returns:
+                    str: 'applied' if newly created, 'existing' if already present.
+                """
                 cluster_index = cluster.MULTICLUSTER.get("multicluster_index")
                 cluster_name = cluster.ENV_DATA.get(
                     "cluster_name", f"cluster-{cluster_index}"
                 )
-                log.info(
-                    f"Applying IDMS on cluster: {cluster_name} (index: {cluster_index})"
-                )
                 config.switch_ctx(cluster_index)
                 try:
+                    idms_obj = OCP(
+                        kind=constants.IMAGEDIGESTMIRRORSET, resource_name="acm-idms"
+                    )
+                    if idms_obj.check_resource_existence(
+                        timeout=10, should_exist=True, resource_name="acm-idms"
+                    ):
+                        log.info(
+                            f"[{cluster_name}] ImageDigestMirrorSet 'acm-idms' already present,"
+                            " will verify MCP readiness"
+                        )
+                        return "existing"
+                    log.info(
+                        f"Applying IDMS on cluster: {cluster_name} (index: {cluster_index})"
+                    )
                     run_cmd(f"oc apply -f {constants.ACM_BREW_IDMS_YAML}")
                     log.info(f"✓ IDMS applied successfully on {cluster_name}")
+                    return "applied"
                 except Exception as e:
                     log.error(f"✗ Error applying IDMS on {cluster_name}: {e}")
                     raise
@@ -312,20 +330,36 @@ def test_deploy_rdr():
                 finally:
                     config.switch_ctx(original_ctx_index)
 
+            acm_hub_unreleased = config.clusters[acm_cluster_index].ENV_DATA.get(
+                "acm_hub_unreleased"
+            )
+            clusters_need_mcp_wait = []
             # Apply IDMS to all clusters
             log.info("-" * 80)
             log.info("Applying IDMS to all clusters...")
             for cluster in config.clusters:
-                try:
-                    apply_idms(cluster)
-                except Exception as e:
-                    log.error(f"Failed to apply IDMS: {e}")
-                    raise
+                if (
+                    cluster.DEPLOYMENT.get("disconnected", False)
+                    or not acm_hub_unreleased
+                ):
+                    log.info(
+                        f"Skipping IDMS for cluster index {cluster.MULTICLUSTER['multicluster_index']}"
+                    )
+                else:
+                    try:
+                        result = apply_idms(cluster)
+                        if result in ("applied", "existing"):
+                            clusters_need_mcp_wait.append(cluster)
+                    except Exception as e:
+                        log.error(f"Failed to apply IDMS: {e}")
+                        raise
 
-            # Wait for MCP update on all clusters
+            # Verify MCP readiness on all clusters where IDMS is present
             log.info("-" * 80)
-            log.info("Waiting for MachineConfigPool updates on all clusters...")
-            for cluster in config.clusters:
+            log.info(
+                "Waiting for MachineConfigPool updates on clusters where IDMS is present..."
+            )
+            for cluster in clusters_need_mcp_wait:
                 try:
                     wait_for_mcp(cluster)
                 except Exception as e:
