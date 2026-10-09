@@ -976,22 +976,40 @@ class TestQoSPreExistingPVCAfterUpgrade(ManageTest):
 
         logger.test_step(f"[{test_id}] Verify data written before upgrade persisted")
         # The pre-upgrade pod is a bare pod with no controller, so an upgrade
-        # node drain can evict it without rescheduling. Reuse the live pod if it
-        # survived; otherwise recreate one against the still-bound PVC. The marker
-        # lives on the PVC, so either path preserves the persistence check.
+        # node drain can evict it without rescheduling. Reuse the live pod only
+        # if it survived and is healthy; a drained/rebooted node can also leave
+        # the pod object behind in a non-Running phase (Failed/Unknown), in which
+        # case reusing it would just burn the timeout below. Otherwise recreate
+        # one against the still-bound PVC. The marker lives on the PVC, so every
+        # path preserves the persistence check.
+        existing_pod = None
         try:
-            existing_pod = get_pod_obj(QOS_UPGRADE_POD_NAME, namespace=ns)
+            candidate = get_pod_obj(QOS_UPGRADE_POD_NAME, namespace=ns)
+            phase = candidate.ocp.get_resource_status(candidate.name)
+            if phase == constants.STATUS_RUNNING:
+                existing_pod = candidate
+            else:
+                logger.info(
+                    f"[{test_id}] Pre-upgrade pod {QOS_UPGRADE_POD_NAME} is in "
+                    f"phase '{phase}' after upgrade; deleting and recreating on "
+                    "the existing PVC"
+                )
+                candidate.delete()
+                candidate.ocp.wait_for_delete(resource_name=candidate.name)
         except CommandFailed:
             logger.info(
                 f"[{test_id}] Pre-upgrade pod {QOS_UPGRADE_POD_NAME} not found "
                 "after upgrade (likely drained); recreating on the existing PVC"
             )
+
+        if existing_pod is None:
             existing_pod = Pod(
                 **build_guaranteed_fs_pod_dict(
                     QOS_UPGRADE_POD_NAME, ns, QOS_UPGRADE_PVC_NAME
                 )
             )
             existing_pod.create()
+
         helpers.wait_for_resource_state(
             existing_pod, constants.STATUS_RUNNING, timeout=420
         )
