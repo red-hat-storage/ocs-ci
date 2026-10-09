@@ -55,7 +55,7 @@ class TestStorageClusterDeletionGuardMultiSC(ManageTest):
             8. Verify the external RHCS Ceph cluster is healthy.
         """
         internal_ns = config.ENV_DATA["cluster_namespace"]
-        internal_sc_name = constants.DEFAULT_CLUSTERNAME
+        internal_sc_name = config.ENV_DATA["storage_cluster_name"]
         external_ns = config.ENV_DATA["external_storage_cluster_namespace"]
         external_sc_name = config.ENV_DATA["external_storage_cluster_name"]
 
