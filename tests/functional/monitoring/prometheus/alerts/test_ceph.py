@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     runs_on_provider,
     blue_squad,
     provider_mode,
+    skipif_compact_mode,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import (
@@ -211,6 +212,7 @@ class TestCephOSDSlowOps(object):
     @tier3
     @pytest.mark.polarion_id("OCS-5158")
     @blue_squad
+    @skipif_compact_mode
     def test_ceph_osd_slow_ops_alert(self, setup, threading_lock):
         """
         Test to verify bz #1966139, more info about Prometheus alert - #1885441
