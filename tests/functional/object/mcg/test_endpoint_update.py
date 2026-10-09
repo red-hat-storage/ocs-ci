@@ -524,63 +524,10 @@ def operator_logged_pause_skip(operator_pod, namespace, store_name, since):
     )
 
 
-def assert_rejected_update_is_a_noop(
-    mcg_obj, result, kind, store_name, old, generation
-):
-    """
-    Assert a pre-validation failure left the store untouched, for either kind:
-    aborted, still on OLD, generation unchanged (so the spec was never written,
-    not written-then-rolled-back), unpaused, and core still serving OLD.
-
-    Args:
-        mcg_obj (MCG): The MCG fixture object.
-        result (dict): Parsed output of the rejected ``connection update``.
-        kind (str): Store kind - BackingStore or NamespaceStore.
-        store_name (str): Name of the store.
-        old (str): The endpoint the store must still be on.
-        generation (int): ``metadata.generation`` read before the update.
-    """
-    ns = config.ENV_DATA["cluster_namespace"]
-    assert result["aborted"], (
-        "Expected the batch to abort ('No changes have been made') against an "
-        f"unreachable endpoint:\n{result['raw']}"
-    )
-    assert result["prevalidation_failed"], result["raw"]
-    assert not result["stores_updated"], result["raw"]
-    assert get_store_endpoint(kind, store_name, ns) == old
-    after = OCP(kind=kind, namespace=ns, resource_name=store_name).get()
-    assert after["metadata"]["generation"] == generation, (
-        f"{kind}/{store_name} spec was written during a run that aborted in "
-        "pre-validation: generation moved from "
-        f"{generation} to {after['metadata']['generation']}"
-    )
-    assert not get_store_pause_annotation(
-        kind, store_name, ns
-    ), f"{kind}/{store_name} was left paused by an aborted batch"
-    assert get_pool_endpoint(mcg_obj, store_name, kind) == old, (
-        f"NooBaa core moved {kind}/{store_name} off {old} even though the "
-        f"batch aborted:\n{result['raw']}"
-    )
-
-
 def run_rejected_update_case(
     kind, mcg_obj, conf, store_factory, bucketclass, bucket_factory, io_pod, dirs
 ):
-    """
-    Shared body of the rejected-update cases: create the store on OLD behind
-    an OBC, write through it, attempt the update to an unreachable endpoint,
-    then assert nothing moved and I/O is unaffected.
-
-    Args:
-        kind (str): Store kind - BackingStore or NamespaceStore.
-        mcg_obj (MCG): The MCG fixture object.
-        conf (dict): The ``endpoint_conf`` fixture.
-        store_factory (function): The ``store_factory`` fixture.
-        bucketclass (function): The ``bucketclass_over_store`` fixture.
-        bucket_factory (function): The ``bucket_factory`` fixture.
-        io_pod (Pod): The ``awscli_pod_session`` fixture.
-        dirs (object): The ``test_directory_setup`` fixture.
-    """
+    """Test that a rejected endpoint update is a no-op: store untouched, I/O unaffected."""
     ns = config.ENV_DATA["cluster_namespace"]
     old = conf["old"]
     store = make_store(store_factory, conf, old, kind=kind)
@@ -593,37 +540,46 @@ def run_rejected_update_case(
         pattern="pre-reject-",
         mcg_obj=mcg_obj,
     )
-
-    # Settle first: the OBC and the write drive status writes of their own.
     wait_for_stores_quiesced([(kind, store.name)], ns)
     generation = OCP(kind=kind, namespace=ns, resource_name=store.name).get()[
         "metadata"
     ]["generation"]
-
     result = run_connection_update(mcg_obj, old, UNREACHABLE_ENDPOINT)
-    assert_rejected_update_is_a_noop(mcg_obj, result, kind, store.name, old, generation)
+    # Verify batch aborted in pre-validation without moving the store
+    assert result[
+        "aborted"
+    ], f"Batch should abort against unreachable endpoint:\n{result['raw']}"
+    assert result["prevalidation_failed"], result["raw"]
+    assert not result["stores_updated"], result["raw"]
+    assert get_store_endpoint(kind, store.name, ns) == old
+    after = OCP(kind=kind, namespace=ns, resource_name=store.name).get()
+    assert (
+        after["metadata"]["generation"] == generation
+    ), f"{kind}/{store.name} generation changed: {generation} → {after['metadata']['generation']}"
+    assert not get_store_pause_annotation(
+        kind, store.name, ns
+    ), f"{kind}/{store.name} left paused by aborted batch"
+    assert (
+        get_pool_endpoint(mcg_obj, store.name, kind) == old
+    ), f"Core moved {kind}/{store.name} off {old} despite batch abort:\n{result['raw']}"
     assert_store_phase_and_mode(
         store.name, kind, constants.STATUS_READY, constants.BS_OPTIMAL, mcg_obj
     )
-
-    # Prefix-scoped: a "PRE noobaa_blocks/" row makes list_objects_from_bucket
-    # return an empty list for the whole bucket.
+    # Verify I/O is unaffected
     listed = set(
         list_objects_from_bucket(
             io_pod, bucket.name, prefix="pre-reject-", s3_obj=mcg_obj
         )
     )
     missing = set(pre_objects) - listed
-    assert (
-        not missing
-    ), f"Objects written before the rejected update are no longer readable: {sorted(missing)}"
+    assert not missing, f"Objects unreadable after aborted update: {sorted(missing)}"
     assert _try_write(
         io_pod,
         bucket.name,
         _write_dir(dirs.origin_dir, "post"),
         "post-reject-",
         mcg_obj,
-    ), "A write failed after an endpoint update that changed nothing"
+    ), "Write failed after rejected update"
 
 
 def _create_alt_service(base_svc, name, namespace):
@@ -1181,13 +1137,9 @@ class TestBackingStoreEndpointUpdate(MCGTest):
 
         Flow:
             1. Create a BackingStore on the OLD endpoint.
-            2. Settle the store and run the connection update OLD -> NEW.
-               Assert the CLI did not abort on a resource-version conflict
-               (DFBUGS-10937), that exactly one store was updated, its spec
-               endpoint now points at NEW, and the transient pause-reconcile
-               annotation was cleaned up.
-            3. Run the reverse update NEW -> OLD and assert the store is switched
-               back to its original endpoint.
+            2. Settle, then switch OLD → NEW. Verify endpoint moved, update
+               matched, pause-annotation cleaned up.
+            3. Switch back NEW → OLD and verify endpoint restored.
 
         Teardown: ``store_factory`` deletes the store. The revert in step 3 is
         part of the assertion, not cleanup - the store is removed either way.
@@ -1247,10 +1199,9 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         keeps the assertion honest instead of letting identical stores make it
         look true by accident.
 
-        The update goes through :func:`run_update_on_settled_stores`. Reaching
-        Ready does not mean the operator has finished writing to the stores, so
-        firing blind would grade the CLI's conflict retry rather than
-        de-duplication. That behaviour has a test of its own -
+        The update goes through :func:`run_update_on_settled_stores`. Store
+        settling avoids grading the CLI's conflict retry instead of
+        de-duplication; that behaviour has its own test -
         :meth:`TestConnectionUpdateNegative.test_switch_survives_concurrent_store_writes`.
 
         Teardown: ``store_factory`` deletes every store it created, clearing the
@@ -1298,36 +1249,7 @@ class TestBackingStoreEndpointUpdate(MCGTest):
     def test_no_match_endpoint_variants(
         self, mcg_obj, endpoint_conf, store_factory, variant
     ):
-        """
-        An old-endpoint string that matches no store must be rejected without
-        touching anything (matching is on the exact endpoint string).
-
-        Variants:
-            * wrong_endpoint      - an endpoint value that no store uses.
-            * trailing_slash      - the correct endpoint with its trailing "/"
-                                    toggled, which is not an exact match.
-            * dns_form            - the SAME backend the store really sits on,
-                                    spelled as its DNS name instead of its IP.
-                                    It resolves to the very same service, which
-                                    is the point: matching is a string
-                                    comparison, not an address comparison, so an
-                                    equivalent spelling still matches nothing.
-                                    The value is only ever a match key here - the
-                                    command aborts before pre-validation - so the
-                                    fact that a DNS endpoint would fail
-                                    pre-validation is beside the point.
-            * rerun_after_success - re-running OLD -> NEW after a successful
-                                    switch, when no store sits on OLD any more.
-
-        In every variant the command reports no matching stores, updates nothing,
-        and leaves the store's endpoint unchanged.
-
-        The ``dns_form`` case skips unless the endpoint pair supplies ``old_dns``.
-        A derived pair always does; an explicit lab override need not.
-
-        Teardown: ``store_factory`` deletes the store. The rerun variant leaves it
-        on NEW, which is immaterial - it is deleted either way.
-        """
+        """Endpoint variants that don\'t match any store."""
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         old_dns = endpoint_conf.get("old_dns")
@@ -1384,45 +1306,7 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         awscli_pod_session,
         test_directory_setup,
     ):
-        """
-        Only stores on the OLD endpoint are matched; a store already on the NEW
-        endpoint is left untouched - and afterwards the two stores, now sharing
-        one endpoint, still serve their own data independently.
-
-        Two connections on one endpoint is not a conflict: NooBaa core treats
-        each connection as a separate entity, and the command deliberately does
-        not check for one. Asserting that the store which was already on NEW is
-        not re-updated only covers the command's bookkeeping, so the data path is
-        exercised too - otherwise nothing here would notice the two connections
-        colliding once they landed on the same endpoint.
-
-        Flow:
-            1. Create one BackingStore on OLD and one already on NEW, each with
-               its own target bucket, and put an OBC in front of each.
-            2. Write distinct objects through both, so each bucket holds data
-               that is identifiable as its own. Every write gets its own source
-               directory (:func:`_write_dir`) - the cross-talk check in step 6
-               is only meaningful if no write can carry another one's objects
-               along with it.
-            3. Let both stores quiesce - creating them and putting an OBC in
-               front keeps the operator writing to them, which would make this
-               a test of the CLI's conflict retry instead of its matching.
-            4. Run the connection update OLD -> NEW.
-            5. Assert exactly one store (the one on OLD) was updated, both now
-               sit on NEW, neither is left paused, and both are OPTIMAL.
-            6. Write again through both - the moved store retried over the
-               endpoint-config propagation window, as elsewhere in this module -
-               then list both buckets and assert two things: every object is
-               still readable through the store that wrote it, and neither
-               store's objects appear in the other's bucket. Both checks cover
-               the post-switch writes as well as the pre-switch ones; the
-               post-switch pair is the only data written while the two
-               connections shared an endpoint.
-
-        Teardown: ``store_factory`` deletes both stores, ``bucketclass_over_store``
-        the BucketClasses, and ``bucket_factory`` / ``test_directory_setup`` the
-        OBCs and scratch directory.
-        """
+        """Only OLD endpoint stores are matched; both reach NEW."""
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         buckets = endpoint_conf["target_buckets"]
@@ -1554,8 +1438,8 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         is refused before anything is touched - the store keeps its endpoint
         and is left with no pause-reconcile annotation.
 
-        Before the DFBUGS-10743 fix the CLI walked the whole pause / patch /
-        unpause sequence, so a same-endpoint run could strand a store.
+        Regression test for DFBUGS-10743: the CLI used to walk the whole
+        pause / patch / unpause sequence, stranding a store on same-endpoint.
 
         Teardown: ``store_factory`` deletes the store.
         """
@@ -1581,48 +1465,7 @@ class TestBackingStoreEndpointUpdate(MCGTest):
     def test_pause_annotation_honored_and_cleaned_up(
         self, mcg_obj, endpoint_conf, store_factory
     ):
-        """
-        The noobaa.io/pause-reconcile annotation suspends reconciliation while it
-        is set, can be removed by hand, and is not left behind by a successful
-        update.
-
-        The annotation is what makes the endpoint switch safe: the CLI sets it on
-        every matched store so the operator cannot reconcile a store out from
-        under a half-applied change. A pause that is not honored would let the
-        operator race the update; a pause that is not cleaned up would leave the
-        store permanently unmanaged, which is the failure mode DFBUGS-10743
-        produced on NamespaceStores.
-
-        SCOPE: this is the BackingStore annotation lifecycle only - a manual
-        pause/resume plus cleanup on a SUCCESSFUL update. Cleanup on a FAILED
-        update is covered by
-        :meth:`TestNamespaceStoreEndpointUpdate.test_rollback_clears_pause_on_denied_patch`.
-
-        Flow:
-            1. Create a BackingStore and let it settle.
-            2. Set the annotation by hand and confirm the operator starts
-               skipping the store, while the store itself stays Ready rather
-               than degrading.
-            3. Remove the annotation by hand and confirm the skipping stops.
-            4. Run a successful update and confirm no annotation is left behind.
-
-        NOTE on what is asserted in steps 2 and 3. The only externally visible
-        signal that the operator is honoring the pause is its own log line - it
-        skips BEFORE writing anything, so there is no status or spec change to
-        observe, and a controller that finds nothing to do is indistinguishable
-        from one that is paused. The match is therefore kept deliberately loose
-        (the store name and the word "paused"), and step 3 asserts the skipping
-        STOPS rather than trying to recognise a normal reconcile. On resume the
-        operator does run a full reconcile (phase cycles Verifying -> Connecting
-        -> Creating -> Ready), but those phases are transient and the end state
-        is Ready either way, so catching them would be a race. Step 4 is what
-        independently proves the operator is working again, since a successful
-        update needs it.
-
-        Teardown: ``store_factory`` deletes the store, and it clears the
-        pause-reconcile annotation first - so a failure between steps 2 and 3
-        cannot leave a paused store behind.
-        """
+        """Pause annotation is honored and cleaned up on success."""
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         bs = make_store(store_factory, endpoint_conf, old)
@@ -1697,34 +1540,7 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         awscli_pod_session,
         test_directory_setup,
     ):
-        """
-        Fire the endpoint switch while I/O is running through the store.
-
-        Flow:
-            1. Create a BackingStore on OLD, put an OBC in front of it through a
-               single-tier BucketClass, and prove the data path works.
-            2. Let the store settle before the writer starts, so setup noise is
-               not what this test grades. The update itself cannot settle.
-            3. Start a continuous write loop and trigger the connection update
-               OLD -> NEW while it runs.
-            4. Assert the store ends up Ready/OPTIMAL on NEW with no lingering
-               pause, and that I/O issued after the endpoint-config propagation
-               window succeeds and the pre-switch objects are still readable.
-
-        NOTE: continuity is asserted only on post-switch I/O because of the
-        endpoint-config propagation window; writes issued mid-switch are allowed
-        to fail. A same-backend endpoint pair avoids the two-backend stranding
-        artifact, so the pre-switch objects must remain visible throughout.
-
-        Teardown: the writer thread is stopped and joined in a ``finally``, so it
-        does not outlive the test even if the update raises. A write already in
-        flight cannot be cancelled - it is an exec into the awscli pod - so if
-        the join times out the overlap is logged as a warning rather than
-        silently ignored. The store, BucketClass, OBC and scratch directory
-        belong to ``store_factory``, ``bucketclass_over_store``,
-        ``bucket_factory`` and ``test_directory_setup`` respectively, each of
-        which cleans up its own.
-        """
+        """Switch succeeds under active I/O; data unaffected."""
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         bs = make_store(store_factory, endpoint_conf, old)
@@ -1832,20 +1648,16 @@ class TestBackingStoreEndpointUpdate(MCGTest):
     @polarion_id("OCS-8288")
     def test_default_backingstore_endpoint_update(self, mcg_obj):
         """
-        The default backingstore participates in endpoint update like any other
-        store, and a batch that cannot be completed leaves it exactly as it
-        was. Run against an unreachable endpoint, so pre-validation aborts
-        before any store is patched and live data is never moved.
+        The default store participates like any other. Run against an
+        unreachable endpoint to prove a rejected batch leaves it unchanged.
 
         Flow:
-            1. Read the default backingstore's type and endpoint; skip (N/A) if
-               it has no endpoint (e.g. a PV-Pool default store).
-            2. Run the connection update from that endpoint to an unreachable
-               one.
-            3. Assert the default store was matched, the batch aborted in
-               pre-validation, and the store is unchanged, unpaused and Ready.
+            1. Read the default store's type/endpoint; skip if N/A (PV-Pool).
+            2. Run update to an unreachable endpoint.
+            3. Assert the store was matched, batch aborted in pre-validation,
+               store is unchanged/unpaused/Ready.
 
-        Teardown: none needed. The run aborts before it writes anything.
+        Teardown: none needed - the run aborts before writing anything.
         """
         ns = config.ENV_DATA["cluster_namespace"]
         default = OCP(
@@ -1972,37 +1784,7 @@ class TestConnectionUpdateNegative(MCGTest):
     def test_prevalidation_failure_aborts_batch(
         self, mcg_obj, endpoint_conf, store_factory, bad_creds_secret, failure
     ):
-        """
-        Any pre-validation failure aborts the WHOLE batch before any spec change
-        - nothing is patched and no pause-reconcile annotation is left behind
-        (all-or-nothing).
-
-        Failure variants:
-            * unreachable           - the NEW endpoint does not resolve/connect.
-            * missing_target_bucket - the store's target bucket does not exist
-                                      on the NEW endpoint at all.
-            * not_noobaa_location   - the store's target bucket DOES exist on
-                                      the NEW endpoint but holds no
-                                      ``noobaa_blocks/`` prefix, so it is not a
-                                      valid NooBaa location.
-            * wrong_creds           - the store's secret has invalid credentials.
-            * one_bad_in_batch      - two stores are matched and one of them
-                                      fails pre-validation.
-
-        Each variant asserts the command aborts, that the reported failure is the
-        expected one, and that every matched store stays on OLD with no pause
-        annotation.
-
-        Store, bucket and status are read off that store's own report line, so
-        a failure in a batch cannot be graded against another store's. The
-        error text is asserted only where the wording is NooBaa's own: core
-        relays the backend's verbatim and it differs by backend (DFBUGS-10938).
-
-        Teardown: every store comes from ``store_factory`` and the bad-creds
-        secret from ``bad_creds_secret``, both of which clean up after
-        themselves. The variants that retarget a store only patch its spec, so
-        they leave nothing extra behind.
-        """
+        """Pre-validation failures abort batch; all stores stay OLD."""
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
 
@@ -2136,30 +1918,7 @@ class TestConnectionUpdateNegative(MCGTest):
         ],
     )
     def test_cli_input_validation(self, mcg_obj, endpoint_conf, store_factory, case):
-        """
-        CLI argument handling for the connection update command.
-
-        Cases:
-            * missing_flag       - omitting --new-endpoint produces a usage error
-                                   and changes nothing.
-            * whitespace_trimmed - flags padded with surrounding spaces are
-                                   trimmed and still match the store, so the
-                                   switch succeeds.
-            * malformed_url      - a bare / malformed URL is rejected with a clean
-                                   abort and changes nothing.
-            * long_url           - an absurdly long but syntactically plausible
-                                   host is rejected the same way: a clean abort,
-                                   no crash, no partial state.
-
-        The two rejection cases assert the abort and the untouched store rather
-        than a status code. Core reports both as UNKNOWN_FAILURE today and the
-        real reason is only in the message text - that coarseness is
-        DFBUGS-10938, and pinning a code here would just re-assert the bug.
-
-        Teardown: ``store_factory`` deletes the store. The whitespace variant is
-        the one case that really does move it to NEW; that is the point of the
-        case and makes no difference to cleanup.
-        """
+        """CLI input validation: missing flag, whitespace trim, malformed URLs."""
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         bs = make_store(store_factory, endpoint_conf, old)
@@ -2168,14 +1927,11 @@ class TestConnectionUpdateNegative(MCGTest):
             result = noobaa_cli().run_noobaa(
                 f"connection update --old-endpoint {old}", ignore_error=True
             )
-            # Raw CompletedProcess, not the parsed dict, so .returncode is real.
-            assert result.returncode != 0, (
-                "Omitting --new-endpoint was accepted instead of producing a "
-                f"usage error:\n{result.stdout}\n{result.stderr}"
-            )
+            assert (
+                result.returncode != 0
+            ), f"Missing --new-endpoint should fail:\n{result.stderr}"
             assert get_store_endpoint(constants.BACKINGSTORE, bs.name, ns) == old
         elif case == "whitespace_trimmed":
-            # Matching on a padded --old-endpoint is what proves the CLI trimmed.
             result = run_update_on_settled_stores(
                 mcg_obj,
                 f'"  {old}  "',
@@ -2183,27 +1939,21 @@ class TestConnectionUpdateNegative(MCGTest):
                 [(constants.BACKINGSTORE, bs.name)],
                 ns,
             )
-            assert not result["no_match"], (
-                "Padded --old-endpoint matched no stores, so the surrounding "
-                f"whitespace was not trimmed:\n{result['raw']}"
-            )
-            assert result["matched"] == 1, (
-                f"Expected the padded endpoint to match 1 store, got "
-                f"{result['matched']}:\n{result['raw']}"
-            )
-            assert result["prevalidation_passed"], (
-                "Padded --new-endpoint failed pre-validation, so the "
-                f"surrounding whitespace was not trimmed:\n{result['raw']}"
-            )
-            assert not result["conflict"], (
-                "The CLI gave up on a resource-version conflict instead of "
-                f"retrying it - DFBUGS-10937:\n{result['raw']}"
-            )
-            # The padding must not survive into the spec either.
-            assert get_store_endpoint(constants.BACKINGSTORE, bs.name, ns) == new, (
-                "The store did not land on the unpadded new endpoint:\n"
-                f"{result['raw']}"
-            )
+            assert not result[
+                "no_match"
+            ], f"Padded endpoint should trim:\n{result['raw']}"
+            assert (
+                result["matched"] == 1
+            ), f"Expected 1 match, got {result['matched']}:\n{result['raw']}"
+            assert result[
+                "prevalidation_passed"
+            ], f"Padding should be trimmed:\n{result['raw']}"
+            assert not result[
+                "conflict"
+            ], f"CLI should retry conflict (DFBUGS-10937):\n{result['raw']}"
+            assert (
+                get_store_endpoint(constants.BACKINGSTORE, bs.name, ns) == new
+            ), f"Store should land on unpadded endpoint:\n{result['raw']}"
         else:  # malformed_url / long_url
             bad_new = (
                 "http://"
@@ -2225,23 +1975,7 @@ class TestConnectionUpdateNegative(MCGTest):
     def test_direct_cr_edit_is_rejected_by_webhook(
         self, mcg_obj, endpoint_conf, store_factory
     ):
-        """
-        A DIRECT ``oc patch`` of the endpoint (bypassing the CLI) is denied by
-        the NooBaa admission webhook, so the CLI is the only way to move a store
-        between endpoints.
-
-        This closes the hole behind DFBUGS-10346, where the direct edit was
-        allowed through: it changed the CR spec while NooBaa core carried on
-        serving the old endpoint, leaving the store's declared and effective
-        endpoints silently out of step. Rejecting the edit outright means that
-        divergence can no longer be created.
-
-        The store is checked afterwards to confirm the denial left nothing
-        behind - the spec still holds OLD and core still serves OLD.
-
-        Teardown: ``store_factory`` deletes the store. The rejected patch never
-        landed, so there is nothing else to undo.
-        """
+        """Direct CR endpoint edit is rejected by webhook."""
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         bs = make_store(store_factory, endpoint_conf, old)
@@ -2268,38 +2002,7 @@ class TestConnectionUpdateNegative(MCGTest):
     def test_switch_survives_concurrent_store_writes(
         self, mcg_obj, endpoint_conf, store_factory, request
     ):
-        """
-        The update must survive somebody else writing to the matched stores while
-        it runs.
-
-        The CLI lists the stores once at the start and then writes back the
-        copies it is holding. Anything that touches a store in between - the
-        operator updating status or conditions, a user adding a label - bumps its
-        ``metadata.resourceVersion`` and makes those writes stale. A stale write
-        is a routine, retryable Kubernetes condition, so the command is expected
-        to re-read and carry on rather than give up.
-
-        Flow:
-            1. Create several BackingStores on the OLD endpoint.
-            2. Start a background thread that keeps re-annotating them, so every
-               write the CLI attempts races a foreign update. The stores are
-               deliberately NOT left to settle first - unlike
-               :meth:`TestBackingStoreEndpointUpdate.test_bulk_switch_and_connection_dedup`,
-               contention is the point here.
-            3. Run one connection update OLD -> NEW.
-            4. Stop the churn and assert the command neither reported a conflict
-               nor aborted, that every store reached NEW, and that none was left
-               paused.
-
-        Regression test for DFBUGS-10937, where a conflict during ``rollback``
-        could leave part of the batch on OLD and part on NEW - hence the
-        per-store endpoint check below rather than a count alone.
-
-        Teardown: the churn thread is stopped and joined, and the annotations it
-        wrote are removed, through finalizers registered before the thread
-        starts, so they run even if an assertion fails. The stores themselves
-        belong to ``store_factory``.
-        """
+        """Switch succeeds under concurrent writes; all reach NEW."""
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         stores = [
@@ -2403,26 +2106,7 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
     @tier2
     @polarion_id("OCS-8276")
     def test_switch_and_revert_single_nss(self, mcg_obj, endpoint_conf, store_factory):
-        """
-        Switch a single s3-compatible NamespaceStore's endpoint from OLD to NEW,
-        then revert it back.
-
-        Mirrors :meth:`TestBackingStoreEndpointUpdate.
-        test_switch_and_revert_single_bs` for the NamespaceStore kind.
-
-        Flow:
-            1. Create a NamespaceStore on the OLD endpoint and wait for Ready.
-            2. Settle the store and run the connection update OLD -> NEW.
-               Assert one store was updated, its endpoint points at NEW, and
-               the pause-reconcile annotation was cleaned up.
-            3. Run the reverse update NEW -> OLD and assert the store is switched
-               back to its original endpoint.
-
-        Teardown: ``store_factory`` deletes the store, clearing the
-        pause-reconcile annotation first - which matters here, because a
-        NamespaceStore left paused (the DFBUGS-10743 failure mode) will not
-        delete cleanly otherwise.
-        """
+        """Switch NamespaceStore OLD→NEW→OLD; verify endpoints."""
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         nss = make_store(
@@ -2461,25 +2145,7 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
     @tier2
     @polarion_id("OCS-8277")
     def test_mixed_batch_switch_bs_and_nss(self, mcg_obj, endpoint_conf, store_factory):
-        """
-        A mixed batch - a BackingStore and a NamespaceStore sharing one endpoint
-        - switches together in a single command.
-
-        Flow:
-            1. Create both stores on the OLD endpoint, each with its own target
-               bucket.
-            2. Run one connection update OLD -> NEW; both stores must move and
-               neither may be left paused.
-            3. All-or-nothing check: make the BackingStore fail pre-validation
-               and run the reverse update. The batch must abort BEFORE any spec
-               is patched, so both stores stay on NEW and the NamespaceStore is
-               not left paused.
-
-        Teardown: ``store_factory`` deletes both stores, clearing the
-        pause-reconcile annotation first so that a store left paused still
-        deletes cleanly. Step 3 only retargets the BackingStore's bucket, which
-        goes away with the store.
-        """
+        """Batch switch BackingStore + NamespaceStore; verify both reach NEW."""
         ns = config.ENV_DATA["cluster_namespace"]
         old, new = endpoint_conf["old"], endpoint_conf["new"]
         buckets = endpoint_conf["target_buckets"]
@@ -2535,16 +2201,7 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
     def test_rollback_clears_pause_on_denied_patch(
         self, mcg_obj, endpoint_conf, store_factory
     ):
-        """
-        When one store's spec patch is denied part-way through a batch, the
-        rollback must put every store back on OLD and leave none paused.
-
-        Regression test for DFBUGS-10743. Of two NamespaceStores on an https
-        OLD endpoint, the v4 one is denied by the signature-version webhook
-        when moved to a plain-http NEW while the v2 one patches cleanly.
-
-        Teardown: ``store_factory`` clears a leftover pause annotation first.
-        """
+        """Mid-batch denial triggers clean rollback; no stores left paused."""
         ns = config.ENV_DATA["cluster_namespace"]
         new = endpoint_conf["new"]
         if not new.startswith("http://"):
@@ -2582,29 +2239,22 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
         # Not settled: these stores never will be, since OLD does not resolve.
         result = run_connection_update(mcg_obj, old, new)
 
-        assert result["prevalidation_passed"], (
-            "The batch never got past pre-validation, so no store was ever "
-            f"paused and there is no rollback to grade:\n{result['raw']}"
-        )
-        assert result["webhook_denied"], (
-            "The webhook accepted the v4 NamespaceStore on a non-secure "
-            f"endpoint, so no patch was denied mid-batch:\n{result['raw']}"
-        )
-        # Both must be in the batch, or the checks below pass on a store the
-        # rollback never touched.
-        assert result["matched"] == len(stores), (
-            f"Expected the batch to match both NamespaceStores, got "
-            f"{result['matched']}:\n{result['raw']}"
-        )
+        assert result[
+            "prevalidation_passed"
+        ], f"No pre-validation failure means no paused stores, no rollback to test:\n{result['raw']}"
+        assert result[
+            "webhook_denied"
+        ], f"Webhook should deny v4 on insecure endpoint:\n{result['raw']}"
+        assert result["matched"] == len(
+            stores
+        ), f"Expected {len(stores)} stores matched, got {result['matched']}:\n{result['raw']}"
         for kind, name in stores:
-            assert not get_store_pause_annotation(kind, name, ns), (
-                f"{name} was left paused after the rollback, so it is "
-                f"permanently unmanaged - DFBUGS-10743:\n{result['raw']}"
-            )
-            assert get_store_endpoint(kind, name, ns) == old, (
-                f"{name} was left on the new endpoint after a denied batch, so "
-                f"the rollback was not all-or-nothing:\n{result['raw']}"
-            )
+            assert not get_store_pause_annotation(
+                kind, name, ns
+            ), f"{name} left paused post-rollback (DFBUGS-10743):\n{result['raw']}"
+            assert (
+                get_store_endpoint(kind, name, ns) == old
+            ), f"{name} not on OLD after denied batch:\n{result['raw']}"
 
     @tier2
     @polarion_id("OCS-8323")
@@ -2618,17 +2268,7 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
         awscli_pod_session,
         test_directory_setup,
     ):
-        """
-        The NamespaceStore counterpart of
-        ``test_unreachable_endpoint_rejected_single_bs``.
-
-        Covered separately because NamespaceStore pre-validation is a
-        different check - its check_external_connection carries an EMPTY
-        Bucket field, so it tests connectivity and credentials only. Every
-        other pre-validation failure in this module drives a BackingStore.
-
-        Teardown: as the BackingStore case.
-        """
+        """Rejected endpoint is no-op for NamespaceStore serving bucket."""
         run_rejected_update_case(
             constants.NAMESPACESTORE,
             mcg_obj,
@@ -2654,16 +2294,7 @@ class TestConnectionUpdateCliParity(MCGTest):
     @polarion_id("OCS-8299")
     @STALE_CLI_PIN
     def test_odf_wrapper_carries_connection_update_fixes(self, mcg_obj):
-        """
-        Assert the odf CLI passes ``connection update`` through to the same
-        noobaa-operator code the cluster runs.
-
-        Drives the wrapper with the ``connection_update_cli`` probe. The
-        refusal it expects arrived with the retry and rollback work, so a
-        wrapper answering otherwise predates those fixes too.
-
-        Teardown: none - the refusal happens during argument parsing.
-        """
+        """Wrapper CLI carries connection-update fixes or test skips."""
         result = run_connection_update(
             mcg_obj, PROBE_ENDPOINT, PROBE_ENDPOINT, via_odf_cli=True
         )
