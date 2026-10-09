@@ -1,7 +1,7 @@
 ---
 name: rdr-gatherer
-version: 1.2.0
-description: Phase 1 of the RDR test writer workflow. Gathers all requirements for a new RDR test case by asking the user targeted questions, then outputs a machine-readable SPEC block for the rdr-writer skill. When via_ui is True or parametrized, runs a UI evidence sub-phase to extract real locators from user-provided screenshots and DOM dumps before emitting the SPEC.
+version: 1.3.0
+description: Phase 1 of the RDR test writer workflow. Gathers all requirements for a new RDR test case by asking the user targeted questions, then outputs a machine-readable SPEC block for the rdr-writer skill. When via_ui is True or parametrized, checks if existing UI helpers suffice or runs a UI evidence sub-phase to extract real locators from user-provided screenshots and DOM dumps before emitting the SPEC.
 ---
 
 # RDR Gatherer — Requirements Phase
@@ -86,6 +86,21 @@ I need a few details before I can plan this test. Please answer as many as you c
 
 **Run this sub-phase AFTER the main requirements are gathered, BEFORE emitting the SPEC.**
 Skip entirely when `via_ui: False`.
+
+### Step 0 — UI Locator Strategy Check (MANDATORY)
+
+Before proceeding or assuming existing locators, **always ask the user**:
+
+> "This test involves ACM UI automation (`via_ui`).
+> Are you using existing UI helpers/locators in `views.py` (e.g., standard `failover_relocate_ui`),
+> or are changes/additions required for UI locators via screenshots and DOM dumps?"
+
+- If the user responds that **existing UI helpers/locators in `views.py` are sufficient**:
+  Set `ui_locators: none`, add `"Standard ACM UI helpers and existing locators in views.py are used"` to `notes`, and proceed directly to emitting the SPEC block.
+- If the user responds that **changes or new locators are required**:
+  Proceed with the UI evidence capture steps below.
+
+---
 
 ### Overview
 

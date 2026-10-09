@@ -42,7 +42,8 @@ Call `spawn_subagent` with `fork_context=true` (user's original request is in co
 Activate the skill named "rdr-gatherer" from .claude/skills/rdr-gatherer/SKILL.md, then
 gather all required information to write an RDR test case. Ask all missing questions
 (batch them in a single ask_followup_question call where possible). If via_ui is True or
-parametrized, run Phase 1b to collect UI screenshots and DOM dumps and extract locators.
+parametrized, run Phase 1b to check whether existing UI helpers/locators in views.py suffice
+or if screenshots and DOM dumps are needed to extract new/updated locators.
 Once all 10 requirements and any UI locators are resolved, output a SPEC block in exactly
 this format and nothing else:
 
