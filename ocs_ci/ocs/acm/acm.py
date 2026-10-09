@@ -35,6 +35,7 @@ from ocs_ci.ocs.utils import (
     get_recovery_cluster_config,
     get_non_acm_and_non_recovery_cluster_config,
 )
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_ocp_version,
@@ -673,6 +674,7 @@ def login_to_acm():
     return driver
 
 
+@retry(AssertionError, 2, 10, 1)
 def verify_running_acm():
     """
     Detect ACM and its version on Cluster
