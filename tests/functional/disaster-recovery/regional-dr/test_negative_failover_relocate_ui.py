@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     rdr,
     rdr_ui,
     turquoise_squad,
+    zstream_4_18_1,
 )
 from ocs_ci.framework.testlib import tier3, skipif_ocs_version
 from ocs_ci.helpers import dr_helpers
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 @turquoise_squad
 @skipif_ocs_version("<4.13")
 @rdr_ui
+@zstream_4_18_1
 class TestNegativeFailoverRelocate:
     """
     Test Failover/Relocate action to same cluster where workloads are already  running
