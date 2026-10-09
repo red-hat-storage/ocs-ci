@@ -441,22 +441,6 @@ class Deployment(object):
                 gitops_subscription_manifest.name,
             )
             run_cmd(f"oc apply -f {gitops_subscription_manifest.name}")
-        elif ocp_version >= version.VERSION_5_0:
-            # Use the temporary GitOps workaround CatalogSource
-            gitops_subscription_yaml_data = templating.load_yaml(
-                constants.GITOPS_SUBSCRIPTION_YAML
-            )
-            gitops_subscription_yaml_data["spec"][
-                "source"
-            ] = constants.TEMP_GITOPS_WA_CATSRC_NAME
-            gitops_subscription_manifest = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="gitops_subscription_manifest", delete=False
-            )
-            templating.dump_data_to_temp_yaml(
-                gitops_subscription_yaml_data,
-                gitops_subscription_manifest.name,
-            )
-            exec_cmd(f"oc apply -f {gitops_subscription_manifest.name}")
         else:
             run_cmd(f"oc apply -f {constants.GITOPS_SUBSCRIPTION_YAML}")
 
@@ -494,10 +478,6 @@ class Deployment(object):
         """
         # Multicluster operations
         if config.multicluster:
-            # Temporary workaround: create the GitOps CatalogSource on all
-            # clusters before deploying the GitOps operator and OADP.
-            if version.get_semantic_ocp_version_from_config() >= version.VERSION_5_0:
-                run_cmd_multicluster(f"oc apply -f {constants.TEMP_GITOPS_WA_YAML}")
 
             # Gitops operator is needed on all clusters for appset type workload deployment using pull model
             for cluster_index in range(config.nclusters):

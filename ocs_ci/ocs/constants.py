@@ -3708,13 +3708,6 @@ SUBMARINER_BROKER_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "submariner_broker.yaml"
 )
 CLUSTERSET_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "clusterset.yaml")
-# GitOps
-# Temporary workaround CatalogSource applied before GitOps/OADP deployment on
-# OCP >= 5.0
-TEMP_GITOPS_WA_YAML = os.path.join(
-    TEMPLATE_DIR, "gitops-deployment", "temp-gitops-wa.yaml"
-)
-TEMP_GITOPS_WA_CATSRC_NAME = "temp-gitops-wa"
 GITOPS_NAMESPACE = "openshift-gitops"
 GITOPS_OPERATOR_NAME = "openshift-gitops-operator"
 GITOPS_CLUSTER_NAME = "gitops-cluster"
