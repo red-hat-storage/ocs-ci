@@ -76,6 +76,7 @@ VERSION_4_21 = get_semantic_version("4.21", True)
 VERSION_4_22 = get_semantic_version("4.22", True)
 VERSION_4_23 = get_semantic_version("4.23", True)
 VERSION_5_0 = get_semantic_version("5.0", True)
+VERSION_5_1 = get_semantic_version("5.1", True)
 
 # Fusion version constants
 VERSION_2_11 = get_semantic_version("2.11", True)
