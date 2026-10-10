@@ -12472,10 +12472,10 @@ def fill_job_factory(request):
     def factory(
         name=None,
         block_size="1M",
-        cpu_request="100m",
-        mem_request="128Mi",
-        cpu_limit="500m",
-        mem_limit="256Mi",
+        cpu_request=None,
+        mem_request=None,
+        cpu_limit=None,
+        mem_limit=None,
         fill_mode="zero",
         base_yaml_path=constants.FILL_POOL_JOB_YAML,
         pvc_name=None,
@@ -12487,12 +12487,17 @@ def fill_job_factory(request):
 
         Args:
             name (str): Name of the Pod to create.
-            block_size (str): Block size for the dd command.
-            cpu_request (str): CPU request for the Pod.
-            mem_request (str): Memory request for the Pod.
-            cpu_limit (str): CPU limit for the Pod.
-            mem_limit (str): Memory limit for the Pod.
-            fill_mode (str): Mode of filling data, either 'zero' or 'random'.
+            block_size (str): Block size for the fill command.
+            cpu_request (str): CPU request for the Pod. Defaults by fill_mode
+                (500m incompressible, 100m otherwise).
+            mem_request (str): Memory request for the Pod. Defaults by
+                fill_mode (512Mi incompressible, 128Mi otherwise).
+            cpu_limit (str): CPU limit for the Pod. Defaults by fill_mode
+                (2 incompressible, 500m otherwise).
+            mem_limit (str): Memory limit for the Pod. Defaults by fill_mode
+                (2Gi incompressible, 256Mi otherwise).
+            fill_mode (str): Data generator: 'zero', 'random', or 'incompressible'.
+                Use 'incompressible' to increase Ceph used-raw capacity on RBD.
             base_yaml_path (str): Path to the base Job YAML manifest.
             pvc_name (str): Name of the PVC to create and attach to the Pod.
             sc_name (str): StorageClass name for the PVC.
