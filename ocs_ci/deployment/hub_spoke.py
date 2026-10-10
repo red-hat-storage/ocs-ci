@@ -469,6 +469,55 @@ def get_provider_address():
     return storage_provider_endpoint
 
 
+def _extract_version_from_channel_string(version_string, cluster_name):
+    """
+    Extract a numeric version from a channel-prefixed version string.
+
+    Strips known channel prefixes ("latest", "stable") and returns the
+    remaining numeric version. Falls back to the cluster's odf_version
+    config when the channel string has no numeric component.
+
+    Args:
+        version_string (str): Version string, possibly prefixed with channel
+            tags like "stable-4.23", "latest-stable-4.23", or bare "4.23.0-41".
+        cluster_name (str): Cluster name for fallback lookup.
+
+    Returns:
+        str: A version string suitable for semantic version parsing.
+
+    Raises:
+        ValueError: If no numeric version can be determined.
+
+    """
+    if any(tag in version_string for tag in ["latest", "stable"]):
+        parts = [
+            p for p in version_string.split("-") if p not in ("latest", "stable", "")
+        ]
+        if parts:
+            version_string = "-".join(parts)
+        else:
+            fallback = (
+                config.ENV_DATA.get("clusters", {})
+                .get(cluster_name, {})
+                .get("odf_version")
+            )
+            if fallback:
+                logger.warning(
+                    "hosted_odf_version '%s' has no numeric version, "
+                    "falling back to odf_version '%s'",
+                    version_string,
+                    fallback,
+                )
+                version_string = fallback
+            else:
+                raise ValueError(
+                    f"hosted_odf_version '{version_string}' for cluster "
+                    f"'{cluster_name}' contains no numeric version and no "
+                    f"odf_version fallback is available"
+                )
+    return version_string
+
+
 def config_has_hosted_odf_image(cluster_name):
     """
     Check if the config has hosted ODF image set for the cluster
@@ -561,6 +610,12 @@ def get_fdf_catalog_image():
     pullable from spoke clusters.
     Result is cached to avoid redundant API calls across HostedFDF instances.
 
+    For a standard FDF / Fusion deployment the CatalogSource is named
+    ``isf-data-foundation-catalog`` (``defaults.FUSION_CATALOG_NAME``).
+    For a standalone FDF deployment (``fdf_standalone_deployment: true``)
+    the CatalogSource is named ``ibm-operators``
+    (``constants.FDF_STANDALONE_CATALOG_SOURCE_NAME``).
+
     Returns:
         str: The pullable image reference for the FDF CatalogSource
 
@@ -572,22 +627,28 @@ def get_fdf_catalog_image():
     if _fdf_catalog_image_cache:
         return _fdf_catalog_image_cache
 
+    from ocs_ci.deployment.fdf_standalone import is_fdf_standalone_deployment
+
+    catalog_name = (
+        constants.FDF_STANDALONE_CATALOG_SOURCE_NAME
+        if is_fdf_standalone_deployment()
+        else defaults.FUSION_CATALOG_NAME
+    )
+
     ocp_obj = OCP(
         kind=constants.CATSRC,
         namespace=constants.MARKETPLACE_NAMESPACE,
     )
     try:
-        catsrc = ocp_obj.get(resource_name=defaults.FUSION_CATALOG_NAME)
+        catsrc = ocp_obj.get(resource_name=catalog_name)
     except CommandFailed as e:
         raise ValueError(
-            f"FDF CatalogSource '{defaults.FUSION_CATALOG_NAME}' not found "
+            f"FDF CatalogSource '{catalog_name}' not found "
             f"on management cluster: {e}"
         )
     image = catsrc.get("spec", {}).get("image", "")
     if not image:
-        raise ValueError(
-            f"FDF CatalogSource '{defaults.FUSION_CATALOG_NAME}' has no image in spec"
-        )
+        raise ValueError(f"FDF CatalogSource '{catalog_name}' has no image in spec")
 
     image = _resolve_image_through_itms(image)
 
@@ -7614,8 +7675,9 @@ class SpokeODF(SpokeOCP, ABC):
         hosted_odf_version = (
             config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
         )
-        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
-            hosted_odf_version = hosted_odf_version.split("-")[-1]
+        hosted_odf_version = _extract_version_from_channel_string(
+            hosted_odf_version, self.name
+        )
 
         version_semantic = version.get_semantic_version(hosted_odf_version)
 
@@ -7914,12 +7976,20 @@ class HostedFDF(HypershiftHostedOCP, SpokeODF):
     FDF CatalogSource image from the management cluster.
     """
 
-    FDF_CATALOGSOURCE_NAME = defaults.FUSION_CATALOG_NAME
-
     def __init__(self, name: str):
         HypershiftHostedOCP.__init__(self, name)
         SpokeODF.__init__(self, name)
         self.catsrc_image = get_fdf_catalog_image()
+        # Resolve the catalog name at runtime: standalone FDF uses "ibm-operators",
+        # standard FDF / Fusion uses "isf-data-foundation-catalog".  This drives
+        # create_catalog_source, catalog_source_exists, and create_subscription.
+        from ocs_ci.deployment.fdf_standalone import is_fdf_standalone_deployment
+
+        self.FDF_CATALOGSOURCE_NAME = (
+            constants.FDF_STANDALONE_CATALOG_SOURCE_NAME
+            if is_fdf_standalone_deployment()
+            else defaults.FUSION_CATALOG_NAME
+        )
 
     @kubeconfig_exists_decorator
     def create_catalog_source(self, reapply=False, odf_version_tag=None):
@@ -7998,6 +8068,13 @@ class HostedFDF(HypershiftHostedOCP, SpokeODF):
     def create_subscription(self):
         """
         Create subscription for FDF Client operator, sourcing from the FDF CatalogSource.
+
+        The OLM channel is resolved in order of preference:
+        1. ``hosted_odf_version`` from ``ENV_DATA.clusters.<name>`` — used by
+           the standard Fusion/FDF path where the version is explicit in config.
+        2. The tag component of ``self.catsrc_image`` — used by the FDF standalone
+           path where ``hosted_odf_version`` is not set and the version is encoded
+           in the catalog image tag (e.g. ``4.23.0-41`` → channel ``stable-4.23``).
         """
         if self.subscription_exists():
             logger.info("FDF Client Subscription already exists")
@@ -8010,8 +8087,23 @@ class HostedFDF(HypershiftHostedOCP, SpokeODF):
         hosted_odf_version = (
             config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
         )
-        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
-            hosted_odf_version = hosted_odf_version.split("-")[-1]
+
+        if not hosted_odf_version:
+            tag = self.catsrc_image.split(":")[-1] if ":" in self.catsrc_image else ""
+            if not tag:
+                raise ValueError(
+                    f"Cannot determine ODF channel: 'hosted_odf_version' is not set "
+                    f"and the catalog image '{self.catsrc_image}' has no tag."
+                )
+            logger.info(
+                f"'hosted_odf_version' not set for cluster '{self.name}'; "
+                f"deriving channel from catalog image tag '{tag}'"
+            )
+            hosted_odf_version = tag
+
+        hosted_odf_version = _extract_version_from_channel_string(
+            hosted_odf_version, self.name
+        )
 
         version_semantic = version.get_semantic_version(hosted_odf_version)
         hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
