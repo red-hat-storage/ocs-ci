@@ -617,6 +617,11 @@ external_mode_required = pytest.mark.skipif(
     reason="Test will run on External Mode cluster only",
 )
 
+multi_storagecluster_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("multi_storagecluster") is not True,
+    reason="Test requires a multi-storagecluster deployment",
+)
+
 fusion_access_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("fusion_access") is not True,
     reason="Test will run on Fusion Access cluster only",
