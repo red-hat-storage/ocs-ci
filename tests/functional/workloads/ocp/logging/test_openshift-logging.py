@@ -9,6 +9,7 @@ import time
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import LokiEmptyResultError
 from ocs_ci.ocs.resources.pod import delete_deployment_pods
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3, magenta_squad
@@ -122,7 +123,7 @@ class Testopenshiftloggingonocs(E2ETest):
         logger.info(f"Retrieved Loki route: {lokistack_route}")
         return lokistack_route, token.stdout.decode("utf-8")
 
-    @retry(ModuleNotFoundError, tries=5, delay=200, backoff=1)
+    @retry(LokiEmptyResultError, tries=5, delay=200, backoff=1)
     def validate_project_exists_in_logs(self, project):
         """
         This function checks whether the new project exists in the
@@ -132,7 +133,8 @@ class Testopenshiftloggingonocs(E2ETest):
             project (str): The project
 
         Raises:
-            AssertionError: If curl command fails or logs are not accessible
+            LokiEmptyResultError: If Loki returns no results (transient, retried)
+            AssertionError: If curl command fails, returns an error, or log_type is wrong
 
         """
         logger.info(f"Validating project exists in Loki logs: {project}")
@@ -151,7 +153,9 @@ class Testopenshiftloggingonocs(E2ETest):
 
         try:
             curl_output_str = exec_cmd(curl_command).stdout.decode("utf-8")
-            logger.debug(f"Curl command output: {curl_output_str[:200]}...")
+            logger.info(
+                f"Loki query raw response (first 500 chars): {curl_output_str[:500]}"
+            )
         except Exception as e:
             logger.exception(f"Failed to fetch logs from Loki for project: {project}")
             raise AssertionError(f"Curl command failed to fetch logs: {e}")
@@ -171,8 +175,18 @@ class Testopenshiftloggingonocs(E2ETest):
                 f"Full response: {curl_output_str}"
             )
 
-        log_type = curl_output["data"]["result"][0]["stream"]["openshift_log_type"]
-        logger.assertion(
+        # Check if any results were returned — transient, safe to retry
+        result = curl_output.get("data", {}).get("result")
+        if not result:
+            raise LokiEmptyResultError(
+                f"No logs found for namespace {project} in LokiStack. "
+                f"Query may need more time for log collection/indexing. "
+                f"Full response: {curl_output_str}"
+            )
+
+        logger.info(f"Loki returned {len(result)} stream(s) for namespace: {project}")
+        log_type = result[0]["stream"]["openshift_log_type"]
+        logger.info(
             f"Log type validation: project={project}, expected='application', actual='{log_type}'"
         )
         assert log_type == "application", "not able to access project in logs"

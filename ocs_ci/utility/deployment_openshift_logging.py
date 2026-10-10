@@ -6,9 +6,15 @@ lokistack stack
 import logging
 import base64
 
+import pytest
+
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility import templating
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ConfigMapDataNotAvailable,
+    ResourceNotFoundError,
+)
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.utility.utils import (
@@ -360,7 +366,6 @@ def setup_sa_permissions():
     exec_cmd(cmd)
 
 
-@retry(CommandFailed, tries=5, delay=60, backoff=2)
 def create_clusterlogforwarder(yaml_file, skip_resource_exists=False):
     """
     Create a ClusterLogForwarder CR to collect logs from nodes and
@@ -379,9 +384,11 @@ def create_clusterlogforwarder(yaml_file, skip_resource_exists=False):
     try:
         clf_obj.create(yaml_file=yaml_file)
     except CommandFailed as e:
-        if "AlreadyExists" in str(e) and skip_resource_exists:
-            logger.warning("clusterlogforwader already exists")
-            return True
+        if "AlreadyExists" in str(e):
+            logger.warning(
+                "clusterlogforwarder already exists, skipping creation "
+                "and continuing with pod/PVC verification"
+            )
         else:
             raise
 
@@ -404,7 +411,7 @@ def create_clusterlogforwarder(yaml_file, skip_resource_exists=False):
     )
     pvc_status = pvc_obj.wait_for_resource(
         condition=constants.STATUS_BOUND,
-        resource_count=nodes_in_cluster,
+        selector="app.kubernetes.io/instance=logging-loki",
         timeout=150,
         sleep=5,
     )
@@ -549,6 +556,19 @@ def install_logging(skip_resource_exists=False):
 
     logger.info("Configuring Openshift-logging")
 
+    # Check if cluster-logging operator is available in the catalog
+    try:
+        package_manifest = PackageManifest(
+            resource_name="cluster-logging",
+            selector="catalog=redhat-operators",
+        )
+        package_manifest.get()  # Verify it exists
+    except ResourceNotFoundError:
+        pytest.skip(
+            "cluster-logging operator not available in catalog. "
+            "Skipping openshift-logging tests."
+        )
+
     # Gets OCP version to align logging version to OCP version
     package_manifest = PackageManifest(
         resource_name=constants.CLUSTERLOGGING_SUBSCRIPTION,
@@ -605,23 +625,37 @@ def install_logging(skip_resource_exists=False):
 
     ocp_logging_obj.get_obc()
 
-    # Creating secret
-    sample = TimeoutSampler(
-        timeout=500,
-        sleep=20,
-        func=run_cmd_verify_cli_output,
-        cmd=(
-            f"oc -n {constants.OPENSHIFT_LOGGING_NAMESPACE} get configmap"
-            f" {constants.OBJECT_BUCKET_CLAIM} -o jsonpath='{{.data.BUCKET_PORT}}'"
-        ),
-    )
-    if not sample.wait_for_func_status(result=True):
-        raise Exception("Failed to get configmap")
-
+    # Wait for ConfigMap to be created by OBC provisioner and for
+    # BUCKET_NAME / BUCKET_HOST to be populated by the provisioner.
     configmap_obj = ocp.OCP(
         kind=constants.CONFIGMAP, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
-    cm_dict = configmap_obj.get(resource_name=constants.OBJECT_BUCKET_CLAIM)
+    if not configmap_obj.check_resource_existence(
+        resource_name=constants.OBJECT_BUCKET_CLAIM,
+        should_exist=True,
+        timeout=180,
+    ):
+        raise ConfigMapDataNotAvailable(
+            f"ConfigMap {constants.OBJECT_BUCKET_CLAIM} was not created in "
+            f"{constants.OPENSHIFT_LOGGING_NAMESPACE} within the timeout"
+        )
+
+    cm_dict = None
+    for cm in TimeoutSampler(
+        timeout=180,
+        sleep=10,
+        func=configmap_obj.get,
+        resource_name=constants.OBJECT_BUCKET_CLAIM,
+    ):
+        data = (cm or {}).get("data", {})
+        if data.get("BUCKET_NAME") and data.get("BUCKET_HOST"):
+            cm_dict = cm
+            break
+    if cm_dict is None:
+        raise ConfigMapDataNotAvailable(
+            f"ConfigMap {constants.OBJECT_BUCKET_CLAIM} exists but "
+            "BUCKET_NAME and BUCKET_HOST were not populated within the timeout"
+        )
 
     access_key_cmd = (
         f"oc get -n {constants.OPENSHIFT_LOGGING_NAMESPACE}"
