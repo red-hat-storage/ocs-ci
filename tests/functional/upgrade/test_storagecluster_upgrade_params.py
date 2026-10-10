@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_external_mode,
     brown_squad,
+    ignore_leftovers,
 )
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 @tier2
 @brown_squad
 @skipif_external_mode
+@ignore_leftovers
 @pytest.mark.polarion_id("OCS-6225")
 class TestStorageclusterUpgradeParams(ManageTest):
     """
