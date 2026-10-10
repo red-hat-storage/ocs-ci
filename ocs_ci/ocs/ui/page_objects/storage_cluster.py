@@ -206,35 +206,14 @@ class StorageClusterPage(
         return compression_status_blockpools_tab, compression_status_blockpools_details
 
     def click_configure_performance_button(self):
-        """
-        Click on the 'Configure Performance' button and navigate to Configure Performance page.
-
-        Returns:
-            ConfigurePerformancePage: Page object for Configure Performance page
-        """
-        logger.info("Clicking 'Configure Performance' button")
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-
-        # Try to find and click the Configure Performance button
-        try:
-            configure_perf_btn = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable(
-                    (By.XPATH, "//button[contains(text(), 'Configure Performance')]")
-                )
-            )
-            configure_perf_btn.click()
-            logger.info("✓ Clicked Configure Performance button")
-        except Exception as e:
-            logger.error(f"Failed to click Configure Performance button: {e}")
-            raise
-
-        # Wait for page to load
-        self.page_has_loaded(retries=10, sleep_time=2)
-
+        """Click Configure Performance button."""
+        from ocs_ci.ocs.ui.views import locators
         from ocs_ci.ocs.ui.page_objects.configure_performance import (
             ConfigurePerformancePage,
         )
 
+        logger.info("Clicking 'Configure Performance' button")
+        button_loc = locators["storage_cluster"]["configure_performance_button"]
+        self.do_click(button_loc)
+        self.page_has_loaded(retries=10, sleep_time=2)
         return ConfigurePerformancePage()

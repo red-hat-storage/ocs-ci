@@ -1,4 +1,5 @@
 import logging
+from contextlib import contextmanager
 
 from selenium.webdriver.common.by import By
 from ocs_ci.ocs.ui.views import locators, locators_for_current_ocp_version
@@ -244,3 +245,23 @@ def extract_encryption_status(root_element, svg_path):
                 return False
     except Exception as e:
         raise ResourceNotFoundError(f"Given SVG element is not Found: {e}")
+
+
+@contextmanager
+def test_step(message):
+    """
+    Context manager for logging test steps.
+
+    Usage:
+        with test_step("Create PVC"):
+            # create PVC code
+    """
+    logger.test_step(message)
+    try:
+        yield
+    except Exception as e:
+        logger.test_step(f"{message} - FAILED: {e}")
+        raise
+
+
+test_step.__test__ = False
