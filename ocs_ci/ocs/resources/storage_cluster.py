@@ -51,6 +51,9 @@ from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
     get_osd_pod_id,
     get_deviceclass_osd_pods,
+    wait_for_pods_deletion,
+    wait_for_pods_by_label_count,
+    wait_for_pods_to_be_running,
 )
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
@@ -2388,6 +2391,136 @@ def get_storage_cluster(namespace=None):
             namespace = config.ENV_DATA["cluster_namespace"]
         sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
     return sc_obj
+
+
+def get_nvmeof_gateway_resources(namespace=None):
+    """
+    Get the resource requirements configured for the NVMe-oF gateway.
+
+    Args:
+        namespace (str): Namespace of the StorageCluster
+
+    Returns:
+        dict: Value of spec.resources.nvmeof on the StorageCluster, None if no
+            resource requirements are configured for the gateway
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    storage_cluster = sc_obj.get()["items"][0]
+    return storage_cluster["spec"].get("resources", {}).get("nvmeof")
+
+
+def set_nvmeof_gateway_resources(resources, namespace=None):
+    """
+    Set the resource requirements of the NVMe-oF gateway, which makes the
+    ocs-operator roll out new gateway pods.
+
+    Args:
+        resources (dict): The resource requirements to set, for example
+            {"requests": {"cpu": "1", "memory": "4Gi"}}. None removes the
+            nvmeof entry, which is how a merge patch expresses a deletion.
+        namespace (str): Namespace of the StorageCluster
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    sc_name = sc_obj.get()["items"][0]["metadata"]["name"]
+    log.info(
+        f"Setting the NVMe-oF gateway resources of StorageCluster {sc_name} "
+        f"to {resources}"
+    )
+    patch_body = json.dumps({"spec": {"resources": {"nvmeof": resources}}})
+    assert sc_obj.patch(
+        resource_name=sc_name, params=patch_body, format_type="merge"
+    ), f"Failed to set the NVMe-oF gateway resources to {resources}"
+
+
+def get_nvmeof_gateway_instances(namespace=None):
+    """
+    Get the configured number of NVMe-oF gateway instances.
+
+    Args:
+        namespace (str): Namespace of the StorageCluster
+
+    Returns:
+        int: Value of spec.nvmeof.gatewayInstances on the StorageCluster. If
+            NVMe-oF is enabled without an explicit gatewayInstances, the
+            operator default is returned. 0 if NVMe-oF is not configured or is
+            disabled.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    storage_cluster = sc_obj.get()["items"][0]
+    nvmeof_spec = storage_cluster["spec"].get("nvmeof", {})
+    if not nvmeof_spec.get("enable"):
+        return 0
+    # An enabled gateway without an explicit instance count runs the operator
+    # default, reporting 0 for it would mean "no gateway" to the callers.
+    return nvmeof_spec.get(
+        "gatewayInstances", constants.NVMEOF_DEFAULT_GATEWAY_INSTANCES
+    )
+
+
+def scale_nvmeof_gateway(instances, namespace=None, wait=True, timeout=600):
+    """
+    Scale the NVMe-oF gateway to the given number of instances.
+
+    The CephNVMeOFGateway CR is reconciled by the ocs-operator from
+    spec.nvmeof.gatewayInstances on the StorageCluster, so the StorageCluster
+    is patched instead of the gateway CR itself, which would be reverted.
+
+    Args:
+        instances (int): The number of gateway instances to scale to
+        namespace (str): Namespace of the StorageCluster
+        wait (bool): True to wait for the gateway pods to match the requested
+            number of instances, False otherwise
+        timeout (int): Time in seconds to wait for the gateway pods
+
+    Raises:
+        TimeoutExpiredError: If the gateway pods did not reach the requested
+            number of instances within the timeout
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    sc_name = sc_obj.get()["items"][0]["metadata"]["name"]
+    log.info(
+        f"Scaling NVMe-oF gateway of StorageCluster {sc_name} to "
+        f"{instances} instances"
+    )
+    patch_body = json.dumps({"spec": {"nvmeof": {"gatewayInstances": instances}}})
+    assert sc_obj.patch(
+        resource_name=sc_name, params=patch_body, format_type="merge"
+    ), f"Failed to scale the NVMe-oF gateway to {instances} instances"
+
+    if not wait:
+        return
+
+    if instances == 0:
+        wait_for_pods_deletion(
+            label=constants.NVMEOF_APP_LABEL, timeout=timeout, namespace=namespace
+        )
+        log.info("All NVMe-oF gateway pods are terminated")
+        return
+
+    assert wait_for_pods_by_label_count(
+        label=constants.NVMEOF_APP_LABEL,
+        expected_count=instances,
+        namespace=namespace,
+        timeout=timeout,
+    ), f"Number of NVMe-oF gateway pods did not reach {instances}"
+    gateway_pod_names = [
+        gateway_pod["metadata"]["name"]
+        for gateway_pod in get_pods_having_label(
+            label=constants.NVMEOF_APP_LABEL, namespace=namespace
+        )
+    ]
+    assert wait_for_pods_to_be_running(
+        namespace=namespace, pod_names=gateway_pod_names, timeout=timeout
+    ), f"NVMe-oF gateway pods {gateway_pod_names} are not in Running state"
+    log.info(f"NVMe-oF gateway pods {gateway_pod_names} are Running")
 
 
 def get_osd_count():

@@ -805,6 +805,9 @@ OSD_APP_LABEL = "app=rook-ceph-osd"
 OSD_PREPARE_APP_LABEL = "app=rook-ceph-osd-prepare"
 RGW_APP_LABEL = "app=rook-ceph-rgw"
 NVMEOF_APP_LABEL = "app=rook-ceph-nvmeof"
+# Number of gateway instances the operator deploys when NVMe-oF is enabled on
+# the StorageCluster without an explicit spec.nvmeof.gatewayInstances
+NVMEOF_DEFAULT_GATEWAY_INSTANCES = 2
 # Map performance profile component name to pod label selector for Ceph daemons
 CEPH_DAEMON_LABEL_BY_COMPONENT = {
     "mgr": MGR_APP_LABEL,
