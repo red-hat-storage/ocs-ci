@@ -276,13 +276,16 @@ def _validate_catalog_image():
     return catalog_image
 
 
-def _ensure_cnsa_namespace_and_operator_group():
+def _ensure_cnsa_namespace():
     """
-    Ensure the ``ibm-spectrum-scale`` namespace and its OperatorGroup exist.
+    Ensure the ``ibm-spectrum-scale`` namespace exists.
 
-    OLM requires both to be present before a Subscription can be applied to
-    that namespace.  This function is idempotent — it skips creation when
-    the resources already exist.
+    OLM requires the namespace to be present before a Subscription can be
+    applied to it.  The OperatorGroup is intentionally *not* created here
+    because the ODF operator creates its own
+    (``ibm-spectrum-scale-operator-group``) once it detects the namespace.
+    Creating a second OperatorGroup would cause OLM to fail the CSV with
+    ``TooManyOperatorGroups``.
     """
     namespace = constants.IBM_STORAGE_SCALE_NAMESPACE
     kubeconfig = config.RUN["kubeconfig"]
@@ -307,32 +310,6 @@ def _ensure_cnsa_namespace_and_operator_group():
     else:
         logger.info("Namespace '%s' already exists, skipping", namespace)
 
-    og_name = f"{namespace}-og"
-    og_ocp = OCP(kind=constants.OPERATOR_GROUP, namespace=namespace)
-    if not og_ocp.is_exist(resource_name=og_name):
-        logger.info("Creating OperatorGroup '%s' in namespace '%s'", og_name, namespace)
-        og_data = {
-            "apiVersion": "operators.coreos.com/v1",
-            "kind": "OperatorGroup",
-            "metadata": {"name": og_name, "namespace": namespace},
-            "spec": {"targetNamespaces": [namespace]},
-        }
-        with tempfile.NamedTemporaryFile(
-            mode="w+", suffix=".yaml", prefix="cnsa_og_", delete=False
-        ) as og_file:
-            templating.dump_data_to_temp_yaml(og_data, og_file.name)
-            exec_cmd(
-                f"oc --kubeconfig {kubeconfig} apply -f {og_file.name}",
-                timeout=60,
-            )
-        logger.info("OperatorGroup '%s' created", og_name)
-    else:
-        logger.info(
-            "OperatorGroup '%s' already exists in namespace '%s', skipping",
-            og_name,
-            namespace,
-        )
-
 
 def create_cnsa_operator_subscription():
     """
@@ -347,16 +324,17 @@ def create_cnsa_operator_subscription():
     the ``cnsa-dependencies`` Subscription stays in ``ResolutionFailed``
     indefinitely and no CNSA pods ever start.
 
-    This function creates the ``ibm-spectrum-scale`` namespace and its
-    OperatorGroup if they do not yet exist, then applies the Subscription.
-    It is idempotent: calling it on a cluster that already has all three
+    This function creates the ``ibm-spectrum-scale`` namespace if it does
+    not yet exist, then applies the Subscription.  The OperatorGroup is
+    managed by the ODF operator and must not be created here.
+    It is idempotent: calling it on a cluster that already has the
     resources is a no-op.
     """
     namespace = constants.IBM_STORAGE_SCALE_NAMESPACE
     package = constants.IBM_STORAGE_SCALE_OPERATOR_PACKAGE
     channel = constants.IBM_STORAGE_SCALE_OPERATOR_CHANNEL
 
-    _ensure_cnsa_namespace_and_operator_group()
+    _ensure_cnsa_namespace()
 
     sub_ocp = OCP(kind=constants.SUBSCRIPTION_COREOS, namespace=namespace)
     if sub_ocp.is_exist(resource_name=package):
