@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import time
 from datetime import datetime
@@ -1122,6 +1123,84 @@ class HyperShiftBase:
             if sample == "Completed":
                 return True
 
+    @staticmethod
+    def _is_nonempty_kubeconfig(kubeconfig_path):
+        """
+        Return True if kubeconfig_path exists and has content.
+        """
+        return os.path.isfile(kubeconfig_path) and os.stat(kubeconfig_path).st_size > 0
+
+    def _download_hosted_kubeconfig_via_hcp(self, name, kubeconfig_path):
+        """
+        Download hosted cluster kubeconfig using the hcp binary.
+
+        Runs hcp without shell=True so path/name are not interpolated into a
+        shell command. Writes stdout directly to kubeconfig_path so the
+        kubeconfig (credentials) is never logged via exec_cmd DEBUG stdout.
+
+        Args:
+            name (str): Hosted cluster name
+            kubeconfig_path (str): Destination kubeconfig path
+
+        Returns:
+            bool: True if a non-empty kubeconfig was written
+        """
+        try:
+            env = os.environ.copy()
+            provider_kubeconfig = config.RUN.get("kubeconfig")
+            if provider_kubeconfig:
+                env["KUBECONFIG"] = provider_kubeconfig
+            with open(kubeconfig_path, "w") as out_f:
+                completed = subprocess.run(
+                    [
+                        self.hcp_binary_path,
+                        "create",
+                        "kubeconfig",
+                        "--name",
+                        name,
+                    ],
+                    stdout=out_f,
+                    stderr=subprocess.PIPE,
+                    timeout=600,
+                    env=env,
+                    check=False,
+                )
+            if completed.returncode != 0:
+                stderr = (
+                    completed.stderr.decode(errors="replace")
+                    if completed.stderr
+                    else ""
+                )
+                logger.warning(
+                    "hcp kubeconfig download for '%s' failed (rc=%s): %s",
+                    name,
+                    completed.returncode,
+                    stderr,
+                )
+                if os.path.isfile(kubeconfig_path):
+                    os.remove(kubeconfig_path)
+                return False
+        except Exception as e:
+            logger.warning(
+                "hcp kubeconfig download for '%s' failed: %s",
+                name,
+                e,
+            )
+            if os.path.isfile(kubeconfig_path):
+                os.remove(kubeconfig_path)
+            return False
+
+        if self._is_nonempty_kubeconfig(kubeconfig_path):
+            return True
+
+        logger.warning(
+            "hcp kubeconfig download for '%s' produced an empty file",
+            name,
+        )
+        if os.path.isfile(kubeconfig_path):
+            os.remove(kubeconfig_path)
+        return False
+
     def download_hosted_cluster_kubeconfig(
         self, name: str, cluster_path: str, from_hcp: bool = True
     ):
@@ -1131,11 +1210,15 @@ class HyperShiftBase:
         Args:
             name (str): name of the cluster
             cluster_path (str): path to create auth_path folder and download kubeconfig there
-            from_hcp (bool): if True, use hcp binary to download kubeconfig, otherwise use ocp secret
+            from_hcp (bool): If True, try hcp first; fall back to extracting the
+                admin-kubeconfig secret if hcp fails or writes an empty file.
+                If False, extract the secret only.
 
         Returns:
-            str: path to the downloaded kubeconfig, None if failed
+            str: path to the downloaded kubeconfig
 
+        Raises:
+            CommandFailed: If kubeconfig could not be downloaded
         """
         path_abs = os.path.expanduser(cluster_path)
         auth_path = os.path.join(path_abs, "auth")
@@ -1148,38 +1231,52 @@ class HyperShiftBase:
             )
             os.remove(kubeconfig_path)
 
-        # touch the file
-        time.sleep(0.5)
-        open(kubeconfig_path, "a").close()
-
         logger.info(
             f"Downloading kubeconfig for HyperShift hosted cluster {name} to {kubeconfig_path}"
         )
 
-        try:
-            with config.RunWithProviderConfigContextIfAvailable():
-                if from_hcp:
-                    exec_cmd(
-                        f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path}",
-                        shell=True,
-                    )
-                else:
-                    # kubeconfig will be stored with name 'kubeconfig'
-                    OCP().exec_oc_cmd(
-                        f"extract secret/admin-kubeconfig -n clusters-{name} "
-                        f"--to {os.path.dirname(kubeconfig_path)} --confirm"
-                    )
-        except Exception as e:
-            logger.error(
-                f"Failed to download kubeconfig for HyperShift hosted cluster {name}\n{e}"
-            )
-            return
+        with config.RunWithProviderConfigContextIfAvailable():
+            if from_hcp:
+                if self._download_hosted_kubeconfig_via_hcp(name, kubeconfig_path):
+                    return kubeconfig_path
+                logger.warning(
+                    "hcp kubeconfig download for '%s' failed or was empty; "
+                    "falling back to admin-kubeconfig secret",
+                    name,
+                )
 
-        if not os.stat(kubeconfig_path).st_size > 0:
+            try:
+                # kubeconfig will be stored with name 'kubeconfig'
+                OCP().exec_oc_cmd(
+                    f"extract secret/admin-kubeconfig -n clusters-{name} "
+                    f"--to {auth_path} --confirm"
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to extract admin-kubeconfig for HyperShift "
+                    "hosted cluster %s\n%s",
+                    name,
+                    e,
+                )
+                if os.path.isfile(kubeconfig_path) and (
+                    os.stat(kubeconfig_path).st_size == 0
+                ):
+                    os.remove(kubeconfig_path)
+                raise CommandFailed(
+                    f"Failed to download kubeconfig for HyperShift hosted "
+                    f"cluster {name}"
+                ) from e
+
+        if not self._is_nonempty_kubeconfig(kubeconfig_path):
             logger.error(
                 f"Failed to download kubeconfig for HyperShift hosted cluster {name}"
             )
-            return
+            if os.path.isfile(kubeconfig_path):
+                os.remove(kubeconfig_path)
+            raise CommandFailed(
+                f"Failed to download kubeconfig for HyperShift hosted "
+                f"cluster {name}"
+            )
         return kubeconfig_path
 
     @staticmethod
@@ -1599,6 +1696,9 @@ def create_kubeconfig_file_hosted_cluster():
 
     This function is wrapped with retry decorator to handle CommandFailed errors.
     It will retry up to 5 times with 30 sec  delay between attempts.
+
+    Raises:
+        CommandFailed: if the kubeconfig file could not be downloaded
     """
     cluster_path = config.ENV_DATA["cluster_path"]
     cluster_name = config.ENV_DATA["cluster_name"]
