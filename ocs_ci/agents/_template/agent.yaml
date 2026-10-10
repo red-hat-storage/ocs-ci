@@ -1,0 +1,8 @@
+name: agent_name
+description: What this agent does for ODF
+mcp_servers:
+  - jira
+tools:
+  allow:
+    - jira_get_issue
+prompt: prompt.md
