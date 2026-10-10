@@ -55,7 +55,10 @@ from ocs_ci.utility.csr import (
     get_nodes_csr,
     wait_for_all_nodes_csr_and_approve,
 )
-from ocs_ci.deployment.helpers.hypershift_base import get_hosted_cluster_namespace
+from ocs_ci.deployment.helpers.hypershift_base import (
+    get_hosted_cluster_namespace,
+    get_hcp_agent_namespace,
+)
 from ocs_ci.utility.utils import (
     get_cluster_name,
     get_infra_id,
@@ -4305,7 +4308,15 @@ class IBMHCIAgentNode(object):
         try:
             config.switch_ctx(self.provider_index)
 
-            agent_ns = self.hosted_cluster_name
+            # Get the agent namespace from the HostedCluster spec
+            agent_ns = get_hcp_agent_namespace(self.hosted_cluster_name)
+            if not agent_ns:
+                logger.warning(
+                    f"No agent namespace found for hosted cluster {self.hosted_cluster_name}. "
+                    "Cannot build agent node map."
+                )
+                return agent_map
+
             agent_ocp = ocp.OCP(kind="Agent", namespace=agent_ns)
             agents = agent_ocp.get()
 
