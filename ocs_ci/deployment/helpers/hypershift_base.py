@@ -785,6 +785,7 @@ class HyperShiftBase:
         data_replication_separation=False,
         auto_repair=True,
         hcp_image=None,
+        node_upgrade_type=defaults.HYPERSHIFT_NODE_UPGRADE_TYPE_DEFAULT,
     ):
         """
         Create HyperShift hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -808,6 +809,9 @@ class HyperShiftBase:
                 then add additional network
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
             hcp_image (str): OCP image url for HCP cluster
+            node_upgrade_type (str): NodePool upgrade strategy for how nodes should behave when upgraded.
+                Supported options: constants.NODE_UPGRADE_TYPE_REPLACE, constants.NODE_UPGRADE_TYPE_INPLACE.
+                Default: constants.NODE_UPGRADE_TYPE_INPLACE
 
         Returns:
             str: Name of the hosted cluster
@@ -899,6 +903,14 @@ class HyperShiftBase:
 
         if disable_default_sources:
             create_hcp_cluster_cmd += " --olm-disable-default-sources"
+
+        if node_upgrade_type and node_upgrade_type in constants.NODE_UPGRADE_TYPES:
+            create_hcp_cluster_cmd += f" --node-upgrade-type {node_upgrade_type}"
+        else:
+            logger.error(
+                f"Node upgrade type '{node_upgrade_type}' is not valid. "
+                f"Valid values are: {constants.NODE_UPGRADE_TYPES}"
+            )
 
         logger.info("Creating HyperShift hosted cluster")
         try:
