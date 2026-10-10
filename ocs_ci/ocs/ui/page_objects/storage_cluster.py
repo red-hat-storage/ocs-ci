@@ -204,3 +204,16 @@ class StorageClusterPage(
             self.validation_loc["storagecluster-blockpool-details-compress-status"]
         )
         return compression_status_blockpools_tab, compression_status_blockpools_details
+
+    def click_configure_performance_button(self):
+        """Click Configure Performance button."""
+        from ocs_ci.ocs.ui.views import locators
+        from ocs_ci.ocs.ui.page_objects.configure_performance import (
+            ConfigurePerformancePage,
+        )
+
+        logger.info("Clicking 'Configure Performance' button")
+        button_loc = locators["storage_cluster"]["configure_performance_button"]
+        self.do_click(button_loc)
+        self.page_has_loaded(retries=10, sleep_time=2)
+        return ConfigurePerformancePage()

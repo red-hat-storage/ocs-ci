@@ -4310,6 +4310,61 @@ external_systems = {
         By.XPATH,
     ),
 }
+
+configure_performance = {
+    "core_storage_section": (
+        "//*[normalize-space()='Core Storage']/ancestor::*[contains(@class, 'panel')]",
+        By.XPATH,
+    ),
+    "mcg_section": (
+        "//*[normalize-space()='Multicloud']/ancestor::*[contains(@class, 'panel')]",
+        By.XPATH,
+    ),
+    "mcg_profile_selector": (
+        "//select[@aria-label='MCG Performance Profile']",
+        By.XPATH,
+    ),
+    "mcg_profile_option": (
+        "//select[@aria-label='MCG Performance Profile']/option[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    "core_storage_selector": (
+        "//select[@aria-label='Resource Profile']",
+        By.XPATH,
+    ),
+    "core_storage_profile_option": (
+        "//select[@aria-label='Resource Profile']/option[normalize-space()='{}']",
+        By.XPATH,
+    ),
+    "save_button": (
+        "//button[normalize-space()='Save']",
+        By.XPATH,
+    ),
+    "cancel_button": (
+        "//button[normalize-space()='Cancel']",
+        By.XPATH,
+    ),
+    "node_item": (
+        ".//div[contains(@class, 'node')]",
+        By.XPATH,
+    ),
+    "node_name": (
+        ".//*[contains(@class, 'node-name')]",
+        By.XPATH,
+    ),
+    "node_selection_option": (
+        ".//input[@type='checkbox' or @type='radio'] | .//button[normalize-space()='Select']",
+        By.XPATH,
+    ),
+}
+
+storage_cluster_locators = {
+    "configure_performance_button": (
+        "//button[normalize-space()='Configure Performance']",
+        By.XPATH,
+    ),
+}
+
 locators = {
     "5.0": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -4391,6 +4446,8 @@ locators = {
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
         "virtualmachine": virtualmachine,
+        "configure_performance": configure_performance,
+        "storage_cluster": storage_cluster_locators,
     },
     "4.22": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -4471,6 +4528,8 @@ locators = {
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
         "virtualmachine": virtualmachine,
+        "configure_performance": configure_performance,
+        "storage_cluster": storage_cluster_locators,
     },
     "4.21": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
