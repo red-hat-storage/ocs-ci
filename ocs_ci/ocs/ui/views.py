@@ -1137,6 +1137,34 @@ SCALE_DASHBOARD_LOCATORS = {
     ),
 }
 
+fusion_access_storage_cluster = {
+    "fusion_access_for_san_nav": (
+        "//a[normalize-space()='Fusion Access for SAN']",
+        By.XPATH,
+    ),
+    "create_storage_cluster_btn": (
+        "//button[normalize-space()='Create storage cluster']",
+        By.XPATH,
+    ),
+    "node_row_checkboxes": (
+        "//tbody//tr//input[@type='checkbox' and contains(@id,'node-')]",
+        By.XPATH,
+    ),
+    "nodes_selected_summary": (
+        "//*[contains(text(), 'nodes were selected')]",
+        By.XPATH,
+    ),
+    "nodes_selected_with_disks": (
+        "//*[contains(text(), 'nodes were selected') "
+        "and not(contains(text(), 'sharing 0 disks'))]",
+        By.XPATH,
+    ),
+    "submit_create_storage_cluster_btn": (
+        "//button[normalize-space()='Create storage cluster']",
+        By.XPATH,
+    ),
+}
+
 acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
@@ -4391,6 +4419,7 @@ locators = {
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
         "virtualmachine": virtualmachine,
+        "fusion_access_storage_cluster": fusion_access_storage_cluster,
     },
     "4.22": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
