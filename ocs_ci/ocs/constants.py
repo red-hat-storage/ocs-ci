@@ -2738,6 +2738,9 @@ MCG_CLI_DEV_IMAGE = "quay.io/rhceph-dev/mcg-cli"
 MCG_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/mcg-cli-rhel9"
 ODF_CLI_DEV_IMAGE = "quay.io/rhceph-dev/odf4-odf-cli-rhel9"
 ODF_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/odf-cli-rhel9"
+# The ODF CLI image also ships the standalone noobaa CLI, as one tarball per
+# platform under this directory.
+CLI_IMAGE_RELEASES_DIR = "/releases"
 ACM_CATSRC_IMAGE = "quay.io:443/acm-d/acm-dev-catalog"
 MCE_CATSRC_IMAGE = "quay.io:443/acm-d/mce-dev-catalog"
 
