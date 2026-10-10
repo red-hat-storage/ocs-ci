@@ -176,16 +176,19 @@ class TestStorageAutoscalerBase(ManageTest):
 
     def fill_up_cluster(self, target_percentage, is_completed=True):
         """
-        Fill up the cluster to a target percentage of total storage capacity using FIO-based load.
+        Fill up the cluster to a target percentage of total storage
+        capacity using dd-based FillPoolJob objects.
 
-        This method invokes the benchmark operator to prefill the cluster up to a specified
-        usage level. If `fast_fill_up` is enabled, more aggressive FIO settings are applied
-        to increase fill speed, and the `target_percentage` is reduced slightly to compensate
-        for potential overshoot.
+        Storage is split between zero-fill (75%) and random-fill
+        (25%) modes. On vSphere, a larger block size with
+        oflag=direct is used to maintain throughput and avoid
+        page-cache writeback stalls.
 
         Args:
-            target_percentage (int): Desired percentage of used cluster storage to reach.
-            is_completed (bool): Whether to wait until the benchmark workload completes.
+            target_percentage (int): Desired percentage of used
+                cluster storage to reach.
+            is_completed (bool): Whether to wait until the fill
+                jobs complete.
 
         """
         storage_to_fill = get_file_size(
@@ -201,14 +204,22 @@ class TestStorageAutoscalerBase(ManageTest):
             f"Storage to fill in zero mode: {storage_to_fill_zero_mode}Gi, "
             f"Storage to fill in random mode: {storage_to_fill_random_mode}Gi"
         )
+        # On vSphere, per-volume storage throughput is typically lower, and
+        # page-cache writeback stalls can throttle dd write speed enough to
+        # miss the fill target within the timeout. Use a larger block size
+        # with oflag=direct there to keep fill throughput consistent.
+        is_vsphere = config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+        fill_kwargs = {"block_size": "8M", "direct_io": True} if is_vsphere else {}
         fill_job_obj = self.fill_job_factory(
             fill_mode="zero",
             storage=f"{storage_to_fill_zero_mode}Gi",
+            **fill_kwargs,
         )
         self.fill_job_objs.append(fill_job_obj)
         fill_job_obj = self.fill_job_factory(
             fill_mode="random",
             storage=f"{storage_to_fill_random_mode}Gi",
+            **fill_kwargs,
         )
         self.fill_job_objs.append(fill_job_obj)
 
