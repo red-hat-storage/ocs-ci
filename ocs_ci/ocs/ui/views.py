@@ -4344,6 +4344,18 @@ configure_performance = {
         "//button[normalize-space()='Cancel']",
         By.XPATH,
     ),
+    "node_item": (
+        ".//div[contains(@class, 'node')]",
+        By.XPATH,
+    ),
+    "node_name": (
+        ".//*[contains(@class, 'node-name')]",
+        By.XPATH,
+    ),
+    "node_selection_option": (
+        ".//input[@type='checkbox' or @type='radio'] | .//button[normalize-space()='Select']",
+        By.XPATH,
+    ),
 }
 
 storage_cluster_locators = {
