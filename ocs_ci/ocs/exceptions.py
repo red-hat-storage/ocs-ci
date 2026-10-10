@@ -228,6 +228,10 @@ class NoInstallPlanForApproveFoundException(Exception):
     pass
 
 
+class InstallPlanRecoveryFailedException(Exception):
+    pass
+
+
 class NoobaaConditionException(Exception):
     pass
 
