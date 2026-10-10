@@ -1858,6 +1858,7 @@ ALERT_ODF_MIRROR_DAEMON_STATUS = "OdfMirrorDaemonStatus"
 ALERT_ODF_MIRRORING_IMAGE_HEALTH = "OdfPoolMirroringImageHealth"
 ALERT_CEPH_OSD_FLAPPING = "CephOSDFlapping"
 ALERT_CEPH_OSD_NEAR_FULL = "CephOSDNearFull"
+ALERT_CEPH_OSD_DOWN = "CephOSDDown"
 ALERT_PERSISTENT_VOLUME_USAGE_NEAR_FULL = "PersistentVolumeUsageNearFull"
 ALERT_ODF_PERSISTENT_VOLUME_MIRROR_STATUS = "ODFPersistentVolumeMirrorStatus"
 ALERT_OBC_QUOTA_BYTES_ALERT = "ObcQuotaBytesAlert"
@@ -1894,6 +1895,101 @@ CEPHX_KEY_GENERATION_TYPE_ERRORS = (
     CEPHX_KEY_GENERATION_TYPE_ERROR,
     "must be of type int64",
 )
+
+# OCP platform alert labels
+ALERT_WATCHDOG = "Watchdog"
+ALERT_ALERTMANAGER_RECEIVERS_NOT_CONFIGURED = "AlertmanagerReceiversNotConfigured"
+ALERT_INSIGHTS_RECOMMENDATION_ACTIVE = "InsightsRecommendationActive"
+ALERT_UPDATE_AVAILABLE = "UpdateAvailable"
+ALERT_CLUSTER_NOT_UPGRADEABLE = "ClusterNotUpgradeable"
+ALERT_CLUSTER_OPERATOR_DOWN = "ClusterOperatorDown"
+ALERT_CLUSTER_OPERATOR_DEGRADED = "ClusterOperatorDegraded"
+ALERT_KUBE_DAEMONSET_ROLLOUT_STUCK = "KubeDaemonSetRolloutStuck"
+ALERT_KUBE_DEPLOYMENT_REPLICAS_MISMATCH = "KubeDeploymentReplicasMismatch"
+ALERT_KUBE_STATEFULSET_REPLICAS_MISMATCH = "KubeStatefulSetReplicasMismatch"
+ALERT_KUBE_POD_NOT_READY = "KubePodNotReady"
+ALERT_KUBE_CONTAINER_WAITING = "KubeContainerWaiting"
+ALERT_TARGET_DOWN = "TargetDown"
+ALERT_POD_DISRUPTION_BUDGET_AT_LIMIT = "PodDisruptionBudgetAtLimit"
+ALERT_POD_DISRUPTION_BUDGET_LIMIT = "PodDisruptionBudgetLimit"
+ALERT_KUBE_NODE_NOT_READY = "KubeNodeNotReady"
+ALERT_KUBE_NODE_UNREACHABLE = "KubeNodeUnreachable"
+ALERT_KUBE_API_ERROR_BUDGET_BURN = "KubeAPIErrorBudgetBurn"
+ALERT_ETCD_HIGH_NUMBER_OF_LEADER_CHANGES = "etcdHighNumberOfLeaderChanges"
+ALERT_ETCD_GRPC_REQUESTS_SLOW = "etcdGRPCRequestsSlow"
+ALERT_ETCD_GRPC_READ_REQUESTS_SLOW = "etcdGRPCReadRequestsSlow"
+ALERT_ETCD_GRPC_WRITE_REQUESTS_SLOW = "etcdGRPCWriteRequestsSlow"
+ALERT_ETCD_MEMBER_COMMUNICATION_SLOW = "etcdMemberCommunicationSlow"
+ALERT_CSV_ABNORMAL_FAILED_OVER_2_MIN = "CsvAbnormalFailedOver2Min"
+
+# Alerts that are known to be fired during OCP or ODF upgrade because pods,
+# nodes and operators are restarted in a rolling manner. Alerts collected
+# during an upgrade that are not listed here are reported as unexpected by
+# post upgrade alert check. The list can be extended for a particular run by
+# UPGRADE/expected_alerts config option.
+EXPECTED_UPGRADE_ALERTS = [
+    # dead man's switch alert that is firing all the time by design
+    ALERT_WATCHDOG,
+    # informational alerts not related to the health of the cluster
+    ALERT_ALERTMANAGER_RECEIVERS_NOT_CONFIGURED,
+    ALERT_INSIGHTS_RECOMMENDATION_ACTIVE,
+    ALERT_UPDATE_AVAILABLE,
+    ALERT_CLUSTER_NOT_UPGRADEABLE,
+    # workloads and operators are restarted during upgrade
+    ALERT_CLUSTER_OPERATOR_DOWN,
+    ALERT_CLUSTER_OPERATOR_DEGRADED,
+    ALERT_KUBE_DAEMONSET_ROLLOUT_STUCK,
+    ALERT_KUBE_DEPLOYMENT_REPLICAS_MISMATCH,
+    ALERT_KUBE_STATEFULSET_REPLICAS_MISMATCH,
+    ALERT_KUBE_POD_NOT_READY,
+    ALERT_KUBE_CONTAINER_WAITING,
+    ALERT_TARGET_DOWN,
+    ALERT_POD_DISRUPTION_BUDGET_AT_LIMIT,
+    ALERT_POD_DISRUPTION_BUDGET_LIMIT,
+    # nodes are drained and rebooted during OCP upgrade
+    ALERT_KUBE_NODE_NOT_READY,
+    ALERT_KUBE_NODE_UNREACHABLE,
+    ALERT_NODEDOWN,
+    # control plane components are restarted during OCP upgrade
+    ALERT_KUBE_API_ERROR_BUDGET_BURN,
+    ALERT_ETCD_HIGH_NUMBER_OF_LEADER_CHANGES,
+    # etcd members are restarted one by one and the remaining members serve
+    # the whole load, which increases the request latency and the round trip
+    # time between the members
+    ALERT_ETCD_GRPC_REQUESTS_SLOW,
+    ALERT_ETCD_GRPC_READ_REQUESTS_SLOW,
+    ALERT_ETCD_GRPC_WRITE_REQUESTS_SLOW,
+    ALERT_ETCD_MEMBER_COMMUNICATION_SLOW,
+    # CSVs go through Failed/Replacing phases while operators are upgraded
+    ALERT_CSV_ABNORMAL_FAILED_OVER_2_MIN,
+    # Ceph daemons are restarted one by one and run mixed versions until the
+    # ODF upgrade is finished
+    ALERT_CLUSTERWARNINGSTATE,
+    ALERT_CEPH_OSD_VERSION_MISMATCH,
+    ALERT_CEPH_MON_VERSION_MISMATCH,
+    ALERT_CEPH_MON_HIGH_NUMBER_OF_LEADER_CHANGES,
+    ALERT_MGRISABSENT,
+    ALERT_MGRISMISSINGREPLICAS,
+    ALERT_CEPH_MDS_MISSING_REPLICAS,
+    ALERT_ODF_CORE_POD_RESTART,
+    # the provider server and the client operator are restarted during the
+    # upgrade, so the client heartbeat is missed for a while
+    ALERT_STORAGECLIENTHEARTBEATMISSED,
+]
+
+# Alerts that are tolerated only when they are not firing anymore at the time
+# of the post upgrade alert check. They are fired during an upgrade for a
+# legitimate reason, but the condition that fired them has to be resolved by
+# the end of the upgrade. When such an alert is still firing, it is reported
+# as unexpected even though it is listed here.
+EXPECTED_UPGRADE_ALERTS_IF_RECOVERED = [
+    # OSDs running on a drained or rebooted node are down for a while, but all
+    # of them have to be up again once the upgrade is finished. A single OSD
+    # that stays down keeps the cluster in HEALTH_WARN, which is not detected
+    # by the Ceph health monitor running during the upgrade because the
+    # monitor only reacts to HEALTH_ERR.
+    ALERT_CEPH_OSD_DOWN,
+]
 
 # DR Pending Cleanup Alert (OCS 4.22+)
 ALERT_APPLICATION_CLEANUP_PENDING = "ApplicationCleanupPending"
