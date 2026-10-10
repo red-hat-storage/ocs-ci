@@ -37,6 +37,7 @@ OCS 4.20 Notes:
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.utility import version
 
 GATHER_COMMANDS_LOG = "gather-debug.log"
 GATHER_COMMANDS_CEPH = [
@@ -911,7 +912,7 @@ if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
     )
 
 GATHER_COMMANDS_VERSION = {
-    4.5: {
+    version.VERSION_4_5: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_5,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_5,
         "OTHERS": GATHER_COMMANDS_OTHERS + GATHER_COMMANDS_OTHERS_4_5,
@@ -920,7 +921,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.6: {
+    version.VERSION_4_6: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_6,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_6,
         "OTHERS": GATHER_COMMANDS_OTHERS + GATHER_COMMANDS_OTHERS_4_6,
@@ -929,7 +930,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.7: {
+    version.VERSION_4_7: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
         "OTHERS": GATHER_COMMANDS_OTHERS + GATHER_COMMANDS_OTHERS_4_7,
@@ -938,7 +939,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.8: {
+    version.VERSION_4_8: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
         "OTHERS": GATHER_COMMANDS_OTHERS + GATHER_COMMANDS_OTHERS_4_7,
@@ -947,7 +948,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.9: {
+    version.VERSION_4_9: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
         "OTHERS": GATHER_COMMANDS_OTHERS + GATHER_COMMANDS_OTHERS_4_7,
@@ -956,7 +957,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.10: {
+    version.VERSION_4_10: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
         "OTHERS": GATHER_COMMANDS_OTHERS
@@ -975,7 +976,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.11: {
+    version.VERSION_4_11: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
         "OTHERS": list(
@@ -999,7 +1000,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.12: {
+    version.VERSION_4_12: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
         "OTHERS": list(
@@ -1023,7 +1024,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.13: {
+    version.VERSION_4_13: {
         "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
         "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
         "OTHERS": list(
@@ -1050,7 +1051,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.14: {
+    version.VERSION_4_14: {
         "CEPH": GATHER_COMMANDS_CEPH
         + GATHER_COMMANDS_CEPH_4_7
         + GATHER_COMMANDS_CEPH_4_14,
@@ -1082,7 +1083,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.15: {
+    version.VERSION_4_15: {
         "CEPH": GATHER_COMMANDS_CEPH
         + GATHER_COMMANDS_CEPH_4_7
         + GATHER_COMMANDS_CEPH_4_14,
@@ -1114,7 +1115,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.16: {
+    version.VERSION_4_16: {
         "CEPH": GATHER_COMMANDS_CEPH
         + GATHER_COMMANDS_CEPH_4_7
         + GATHER_COMMANDS_CEPH_4_14
@@ -1148,7 +1149,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.17: {
+    version.VERSION_4_17: {
         "CEPH": GATHER_COMMANDS_CEPH
         + GATHER_COMMANDS_CEPH_4_7
         + GATHER_COMMANDS_CEPH_4_14
@@ -1182,7 +1183,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.18: {
+    version.VERSION_4_18: {
         "CEPH": GATHER_COMMANDS_CEPH
         + GATHER_COMMANDS_CEPH_4_7
         + GATHER_COMMANDS_CEPH_4_14
@@ -1216,7 +1217,7 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.19: {
+    version.VERSION_4_19: {
         "CEPH": GATHER_COMMANDS_CEPH
         + GATHER_COMMANDS_CEPH_4_7
         + GATHER_COMMANDS_CEPH_4_14
@@ -1250,7 +1251,49 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
-    4.20: {
+    version.VERSION_4_20: {
+        "CEPH": GATHER_COMMANDS_CEPH
+        + GATHER_COMMANDS_CEPH_4_7
+        + GATHER_COMMANDS_CEPH_4_14
+        + GATHER_COMMANDS_CEPH_4_16
+        + GATHER_COMMANDS_CEPH_4_20,
+        "JSON": list(
+            set(
+                GATHER_COMMANDS_JSON
+                + GATHER_COMMANDS_JSON_4_7
+                + GATHER_COMMANDS_JSON_4_14
+                + GATHER_COMMANDS_JSON_4_16
+                + GATHER_COMMANDS_JSON_4_20
+            )
+            - set(GATHER_COMMANDS_JSON_4_20_EXCLUDE)
+        ),
+        "OTHERS": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(
+                GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_14
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_20
+            )
+        ),
+        "OTHERS_MANAGED_SERVICES": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE)
+        ),
+        "OTHERS_EXTERNAL": list(
+            set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
+            - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
+        ),
+    },
+    version.VERSION_5_0: {
         "CEPH": GATHER_COMMANDS_CEPH
         + GATHER_COMMANDS_CEPH_4_7
         + GATHER_COMMANDS_CEPH_4_14
