@@ -2274,11 +2274,24 @@ def get_managed_cluster_node_ips():
     """
     restore_index = config.cur_index
     primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
-    secondary_index = [
-        s.MULTICLUSTER["multicluster_index"]
-        for s in get_non_acm_cluster_config()
-        if s.MULTICLUSTER["multicluster_index"] != primary_index
-    ][0]
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        # dr_cluster_relations is a list containing cluster pairs list with the index 0 pair as current pair under test
+        dr_cluster_names = dr_cluster_relations[0]
+        primary_name = config.get_cluster_name_by_index(primary_index)
+        secondary_index = config.get_cluster_index_by_name(
+            [
+                cluster_name
+                for cluster_name in dr_cluster_names
+                if cluster_name != primary_name
+            ][0]
+        )
+    else:
+        secondary_index = [
+            s.MULTICLUSTER["multicluster_index"]
+            for s in get_non_acm_cluster_config()
+            if s.MULTICLUSTER["multicluster_index"] != primary_index
+        ][0]
     cluster_name_primary = config.clusters[primary_index].ENV_DATA["cluster_name"]
     cluster_name_secondary = config.clusters[secondary_index].ENV_DATA["cluster_name"]
     cluster_data = [
@@ -2575,8 +2588,7 @@ def verify_drpolicy_cli(switch_ctx=None):
 
     restore_index = config.cur_index
     config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
-    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
-    drpolicy_items = drpolicy_obj.get().get("items") or []
+    drpolicy_items = get_all_drpolicy()
     if not drpolicy_items:
         config.switch_ctx(restore_index)
         raise UnexpectedBehaviour("No DRPolicy resources found on hub")
