@@ -1,0 +1,18 @@
+# FDF Standalone MCG-Only Deployment Configuration (RHSTOR-8290 / TC-17)
+#
+# Overlay for deploying FDF standalone in MCG-only (lightweight) mode and
+# running existing NooBaa/MCG tests. Only NooBaa pods deploy — no
+# MON/OSD/MDS/RGW components.
+#
+# Usage:
+#   run-ci ... --ocsci-conf conf/ocsci/fdf_standalone_deployment.yaml \
+#              --ocsci-conf conf/ocsci/fdf_standalone_mcg_only.yaml \
+#              tests/functional/object/mcg/
+#
+# Requires cloud storage credentials for BackingStore (AWS S3 or equivalent).
+---
+DEPLOYMENT:
+  fdf_standalone_deployment: true
+  mcg_only_deployment: true
+ENV_DATA:
+  mcg_only_deployment: true
