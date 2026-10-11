@@ -563,7 +563,7 @@ class StorageClusterSetup(object):
                 <= version.VERSION_4_17
             )
             and config.multicluster
-            and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
+            and (config.MULTICLUSTER.get("multicluster_mode") in constants.RDR_MODES)
             and config.ENV_DATA.get("rdr_osd_deployment_mode")
             == constants.RDR_OSD_MODE_GREENFIELD
         ):

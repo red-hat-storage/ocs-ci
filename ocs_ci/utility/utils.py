@@ -3760,7 +3760,7 @@ def ceph_health_recover(
                 {
                     "issue": "DFBUGS-2456",
                     "func": lambda: config.MULTICLUSTER.get("multicluster_mode")
-                    == "regional-dr",
+                    in constants.RDR_MODES,
                 },
             ],
         },
