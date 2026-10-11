@@ -1706,7 +1706,12 @@ RAMEN_UPSTREAM_IMAGE = "quay.io/ramendr/ramen-operator:canary"
 ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER = "odfmo-controller-manager"
 DR_RESTORE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "restore.yaml")
 RDR_MODE = "regional-dr"
+RDR_PROVIDER_MODE = "rdr-provider"
 MDR_MODE = "metro-dr"
+# Modes which follow the Regional-DR deployment flow. 'rdr-provider' reuses the
+# RDR deployment path as-is, it only differs in the upgrade parametrization.
+RDR_MODES = (RDR_MODE, RDR_PROVIDER_MODE)
+DR_MODES = RDR_MODES + (MDR_MODE,)
 MDR_DR_POLICY = "odr-policy-mdr"
 RDR_DR_POLICY_IBM_CLOUD_MANAGED = "odr-policy-10m"
 RESTIC_OR_NODE_AGENT_POD_COUNT = 3

@@ -49,7 +49,7 @@ class OCPDeployWithACM(Deployment):
                 "has been specified"
             )
             return
-        if self.multicluster_mode == constants.RDR_MODE:
+        if self.multicluster_mode in constants.RDR_MODES:
             self.do_rdr_acm_ocp_deploy()
             self.post_deploy_ops()
 

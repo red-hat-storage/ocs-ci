@@ -591,7 +591,7 @@ class Deployment(object):
                     # we need to add a flag to storagecluster
                     if config.MULTICLUSTER[
                         "multicluster_mode"
-                    ] == "regional-dr" and get_primary_cluster_config().ENV_DATA.get(
+                    ] in constants.RDR_MODES and get_primary_cluster_config().ENV_DATA.get(
                         "enable_globalnet", True
                     ):
                         for cluster in get_non_acm_cluster_config():
@@ -2639,7 +2639,7 @@ class Deployment(object):
                 <= version.VERSION_4_17
             )
             and config.multicluster
-            and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
+            and (config.MULTICLUSTER.get("multicluster_mode") in constants.RDR_MODES)
             and config.ENV_DATA.get("rdr_osd_deployment_mode")
             == constants.RDR_OSD_MODE_GREENFIELD
         ):
@@ -4007,7 +4007,7 @@ class MultiClusterDROperatorsDeploy(object):
         )
         mirror_peer._has_phase = True
         mirror_peer.get()
-        if config.MULTICLUSTER["multicluster_mode"] == "regional-dr":
+        if config.MULTICLUSTER["multicluster_mode"] in constants.RDR_MODES:
             if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22:
                 expected_phase = "Ready"
             else:
@@ -5456,6 +5456,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
 MULTICLUSTER_DR_MAP = {
     "regional-dr": RDRMultiClusterDROperatorsDeploy,
+    "rdr-provider": RDRMultiClusterDROperatorsDeploy,
     "metro-dr": MDRMultiClusterDROperatorsDeploy,
 }
 
