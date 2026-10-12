@@ -1,0 +1,16 @@
+---
+# Metro DR on top of IBM Fusion Access for SAN.
+#
+# Same DR layer as a regular metro-dr deployment (Multicluster Orchestrator, Ramen,
+# DRPolicy, S3 metadata store), with the Ceph specific steps skipped:
+#   - no MirrorPeer, volume replication happens at the SAN layer
+#   - no DRCluster fencing, there is no Ceph cluster to fence
+#
+# Layer this on top of conf/ocsci/multicluster_mode_mdr.yaml, or use it on its own
+# since it carries the same MULTICLUSTER settings.
+MULTICLUSTER:
+  multicluster_mode: "metro-dr"
+DEPLOYMENT:
+  fusion_access: true
+ENV_DATA:
+  dr_metadata_store: "awss3"
