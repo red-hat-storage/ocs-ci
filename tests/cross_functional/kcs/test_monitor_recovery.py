@@ -40,6 +40,7 @@ from ocs_ci.ocs.resources.pod import (
     cal_md5sum,
     get_pods_having_label,
 )
+from ocs_ci.ocs.resources.events import filter_events_by_age
 from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
 from ocs_ci.helpers.helpers import wait_for_resource_state, get_secret_names
 from ocs_ci.utility.retry import retry
@@ -1290,8 +1291,10 @@ def _wait_for_replacement_pod(pod_obj, timeout, namespace, max_attempts=3):
 def _classify_pod_errors(pod_obj):
     """
     Run ``oc describe pod`` and classify which error types are present in the
-    Events section.  Returns a 4-tuple:
-    ``(has_multi_attach, has_sandbox, has_rwop, events_text)``.
+    Events section. Only considers recent events (last 3 minutes) to avoid
+    detecting stale errors that have already been resolved.
+
+    Returns a 4-tuple: ``(has_multi_attach, has_sandbox, has_rwop, events_text)``.
 
     """
     logger.debug(f"Classifying pod errors for: {pod_obj.name}")
@@ -1303,14 +1306,20 @@ def _classify_pod_errors(pod_obj):
         logger.exception(f"Failed to describe pod {pod_obj.name}")
         return False, False, False, ""
 
-    has_multi_attach = any(p in describe_out for p in MULTI_ATTACH_PATTERNS)
-    has_sandbox = any(p in describe_out for p in SANDBOX_ERROR_PATTERNS)
-    has_rwop = any(p in describe_out for p in RWOP_ERROR_PATTERNS)
-
+    # Extract events section
     events_idx = describe_out.find("\nEvents:")
     events_text = (
         describe_out[events_idx:].strip() if events_idx != -1 else describe_out[-2000:]
     )
+
+    # Filter to only recent events (last 3 minutes) to avoid stale error detection
+    recent_events = filter_events_by_age(events_text, max_age_seconds=180)
+
+    # Check for error patterns only in recent events
+    has_multi_attach = any(p in recent_events for p in MULTI_ATTACH_PATTERNS)
+    has_sandbox = any(p in recent_events for p in SANDBOX_ERROR_PATTERNS)
+    has_rwop = any(p in recent_events for p in RWOP_ERROR_PATTERNS)
+
     return has_multi_attach, has_sandbox, has_rwop, events_text
 
 
@@ -1377,14 +1386,22 @@ def check_and_recover_sandbox_errors(
         )
 
         if has_multi_attach:
+            if _attempt >= max_recovery_attempts:
+                logger.error(
+                    f"Pod {pod_name} still has Multi-Attach error after "
+                    f"{max_recovery_attempts} recovery attempts, giving up"
+                )
+                return False
             logger.warning(
                 f"Pod {pod_name} has Multi-Attach error — resolving via "
-                "VolumeAttachment cleanup (no node restart)"
+                f"VolumeAttachment cleanup (attempt {_attempt + 1}/{max_recovery_attempts})"
             )
             logger.warning(f"Pod {pod_name} events:\n{events_text}")
             handle_multi_attach_error(pod_obj, timeout=30)
+            logger.debug("Waiting 10s for VolumeAttachment cleanup to propagate...")
+            time.sleep(10)
             return check_and_recover_sandbox_errors(
-                pod_obj, 600, max_recovery_attempts, _attempt, _session_start
+                pod_obj, 600, max_recovery_attempts, _attempt + 1, _session_start
             )
 
         if has_sandbox or has_rwop:
@@ -1483,17 +1500,28 @@ def check_and_recover_sandbox_errors(
                     has_ma, has_sb, has_rw, events_text = _classify_pod_errors(pod_obj)
 
                     if has_ma:
+                        if _attempt >= max_recovery_attempts:
+                            logger.error(
+                                f"Pod {pod_name} still has Multi-Attach error after "
+                                f"{max_recovery_attempts} recovery attempts, giving up"
+                            )
+                            return False
                         logger.warning(
                             f"Multi-Attach error detected during monitoring for pod "
-                            f"{pod_name} — resolving via VolumeAttachment cleanup"
+                            f"{pod_name} — resolving via VolumeAttachment cleanup "
+                            f"(attempt {_attempt + 1}/{max_recovery_attempts})"
                         )
                         logger.warning(f"Pod {pod_name} events:\n{events_text}")
                         handle_multi_attach_error(pod_obj, timeout=30)
+                        logger.debug(
+                            "Waiting 10s for VolumeAttachment cleanup to propagate..."
+                        )
+                        time.sleep(10)
                         return check_and_recover_sandbox_errors(
                             pod_obj,
                             600,
                             max_recovery_attempts,
-                            _attempt,
+                            _attempt + 1,
                             _session_start,
                         )
 
@@ -1685,12 +1713,36 @@ def handle_multi_attach_error(pod_obj, timeout=300):
             f"describe pod {pod_obj.name}", out_yaml_format=False
         )
 
-        if "Multi-Attach error" in pod_describe:
+        # Extract and filter events section to only recent events (< 3 minutes)
+        events_idx = pod_describe.find("\nEvents:")
+        events_text = (
+            pod_describe[events_idx:].strip()
+            if events_idx != -1
+            else pod_describe[-2000:]
+        )
+        recent_events = filter_events_by_age(events_text, max_age_seconds=180)
+
+        has_multi_attach = any(p in recent_events for p in MULTI_ATTACH_PATTERNS)
+
+        if has_multi_attach:
+            pv_name = None
+
+            # Pattern 1: "Multi-Attach error for volume "pvc-...""
             pv_match = re.search(
-                r'Multi-Attach error for volume "([^"]+)"', pod_describe
+                r'Multi-Attach error for volume "([^"]+)"', recent_events
             )
             if pv_match:
                 pv_name = pv_match.group(1)
+            else:
+                # Pattern 2: "for volume "pvc-..." Volume is already exclusively attached"
+                pv_match = re.search(
+                    r'for volume "([^"]+)" Volume is already exclusively attached',
+                    recent_events,
+                )
+                if pv_match:
+                    pv_name = pv_match.group(1)
+
+            if pv_name:
                 logger.info(f"Pod {pod_obj.name}: Multi-Attach error on PV {pv_name}")
                 deleted = _delete_volume_attachments_for_pv(pv_name)
                 if deleted:
@@ -1703,12 +1755,12 @@ def handle_multi_attach_error(pod_obj, timeout=300):
                     )
             else:
                 logger.warning(
-                    f"Pod {pod_obj.name}: Multi-Attach error in describe but "
+                    f"Pod {pod_obj.name}: Multi-Attach error in recent events but "
                     "could not extract PV name"
                 )
         else:
             logger.debug(
-                f"Pod {pod_obj.name}: no Multi-Attach error in describe output"
+                f"Pod {pod_obj.name}: no Multi-Attach error in recent events (< 3min)"
             )
     except Exception:
         logger.exception(f"Error resolving Multi-Attach error for pod {pod_obj.name}")
