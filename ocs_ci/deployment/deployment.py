@@ -973,6 +973,10 @@ class Deployment(object):
         """
         Enable IBM Fusion Access for SAN operator deployment after OCP is deployed.
         Triggered when ``config.DEPLOYMENT["fusion_access_deployment"]`` is True.
+
+        When ``config.DEPLOYMENT["fusion_access_storage"]`` is also True, the SAN
+        storage itself is provisioned after the operator is up, by creating a LUN
+        group through the console.
         """
         if (
             config.DEPLOYMENT.get("fusion_access_deployment")
@@ -981,6 +985,13 @@ class Deployment(object):
             from ocs_ci.deployment.fusion_access import FusionAccessOperator
 
             FusionAccessOperator().deploy()
+
+            if config.DEPLOYMENT.get("fusion_access_storage"):
+                from ocs_ci.deployment.fusion_access_storage import (
+                    FusionAccessStorage,
+                )
+
+                FusionAccessStorage().deploy()
 
     def do_deploy_fusion_access_storage_cluster(self):
         """
@@ -5596,6 +5607,9 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         super().__init__()
 
     def deploy(self):
+        # Fusion Access replicates at the SAN layer rather than through Ceph, so the
+        # Ceph-specific parts of the MDR flow do not apply to it.
+        fusion_access = config.DEPLOYMENT.get("fusion_access")
         # We need multicluster orchestrator on both the active/passive ACM clusters
         acm_indexes = get_all_acm_indexes()
         for i in acm_indexes:
@@ -5611,14 +5625,26 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             enable_mco_console_plugin()
         # Configure mirror peer
         config.switch_acm_ctx()
-        self.configure_mirror_peer()
+        if fusion_access:
+            logger.info(
+                "Fusion Access deployment, skipping MirrorPeer: mirroring is "
+                "handled by the SAN, not by Ceph RBD"
+            )
+        else:
+            self.configure_mirror_peer()
         self.apply_custom_ramen_image()
         # Deploy dr policy
         self.deploy_dr_policy()
         if not config.is_provider_exist():
             update_volsync_channel()
         # Configure DRClusters for fencing automation
-        configure_drcluster_for_fencing()
+        if fusion_access:
+            logger.info(
+                "Fusion Access deployment, skipping DRCluster fencing configuration: "
+                "there is no Ceph cluster to fence"
+            )
+        else:
+            configure_drcluster_for_fencing()
 
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
