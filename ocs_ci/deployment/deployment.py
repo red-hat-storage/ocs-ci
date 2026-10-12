@@ -976,7 +976,8 @@ class Deployment(object):
 
         When ``config.DEPLOYMENT["fusion_access_storage"]`` is also True, the SAN
         storage itself is provisioned after the operator is up, by creating a LUN
-        group through the console.
+        group through the console. The storage step needs the operator in place
+        first, since it drives the console plugin the operator installs.
         """
         if (
             config.DEPLOYMENT.get("fusion_access_deployment")
@@ -1169,12 +1170,17 @@ class Deployment(object):
         self.do_gitops_deploy()
         self.do_deploy_oadp()
         self.do_deploy_ocs()
+        # Fusion Access has to come before the DR operators. On a Fusion Access
+        # deployment it is what provides the storage, so deploying DR first would
+        # leave deploy_dr_policy() waiting on a DRPolicy that has no storage behind
+        # it. The step is self gated on DEPLOYMENT["fusion_access_deployment"], so
+        # for every other deployment this ordering makes no difference.
+        self.do_deploy_fusion_access()
         self.do_deploy_rdr()
         self.do_deploy_mce()
         self.do_deploy_cnv()
         self.do_deploy_hyperconverged()
         self.do_deploy_metallb()
-        self.do_deploy_fusion_access()
         self.do_deploy_fusion_access_storage_cluster()
         self.do_deploy_hosted_spoke_clusters()
         self.do_deploy_external_spoke_clusters()
