@@ -72,7 +72,7 @@ from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(__name__)
 
-ZONE_B = "data-2"
+ZONE_B = constants.DATA_ZONE_LABELS[1]
 CEPH_CHECK_TIMEOUT = 120
 
 
