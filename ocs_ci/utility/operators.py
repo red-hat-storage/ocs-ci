@@ -630,6 +630,59 @@ class LocalStorageOperator(Operator):
         ), "Local storage operator did not reach running phase"
 
 
+class KernelModuleManagementOperator(Operator):
+    """
+    Kernel Module Management operator.
+
+    IBM Storage Scale ships its gpfs kernel module as an out of tree kmod and
+    relies on KMM to build and load it on every node, so it has to be in place
+    before the Scale cluster is created.
+    """
+
+    def __init__(self, create_catalog: bool = False):
+        self.name = constants.KMM_OPERATOR_NAME
+        self.namespace = constants.KMM_NAMESPACE
+        self.disconnected_required_packages = [constants.KMM_OPERATOR_NAME]
+        super().__init__(create_catalog)
+
+    def get_channel(self):
+        """
+        Return the subscription channel for KMM.
+
+        The base class derives the channel from the OCP version, which does not
+        hold for KMM, it only publishes a ``stable`` channel.
+        """
+        return config.DEPLOYMENT.get("kmm_channel", constants.STABLE)
+
+    def _customize_operatorgroup(self, operatorgroup_data: dict):
+        """
+        Hook for KMM to customize OperatorGroup YAML
+
+        Args:
+            operatorgroup_data (dict): the OperatorGroup YAML data
+        """
+        operatorgroup_data["metadata"].pop("annotations", None)
+
+    def _deployment_verification(self):
+        """
+        Verify the deployment of the KMM operator
+        """
+        for csvs in TimeoutSampler(
+            timeout=900,
+            sleep=15,
+            func=get_csvs_start_with_prefix,
+            csv_prefix=self.name,
+            namespace=self.namespace,
+        ):
+            if csvs:
+                break
+        csv_name = csvs[0]["metadata"]["name"]
+        CSV(resource_name=csv_name, namespace=self.namespace).wait_for_phase(
+            "Succeeded", timeout=600
+        )
+        logger.info(f"KMM operator CSV '{csv_name}' reached Succeeded phase")
+
+
 class MetalLBOperator(Operator):
     def __init__(self, create_catalog: bool = False):
         self.name = constants.METALLB_OPERATOR_NAME
