@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     yellow_squad,
+    fa_functional,
     fusion_access_required,
     ignore_leftovers,
 )
@@ -148,6 +149,7 @@ class TestFDFSANConnection(ManageTest):
         self.setup_ui_class_factory = setup_ui_class_factory
 
     @pytest.mark.polarion_id("OCS-5500")
+    @fa_functional
     def test_connect_san_storage_and_create_filesystem(
         self,
     ):
