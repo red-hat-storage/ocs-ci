@@ -239,22 +239,32 @@ def configure_drbd(node_0_info, node_1_info, monitor_disk_node_0, monitor_disk_n
         disk_flag = f"-d0 {monitor_disk_node_0} -d1 {monitor_disk_node_1}"
 
     logger.info(f"Running DRBD setup script with: {disk_flag}")
-    result = exec_cmd(
-        f"bash {script_path} {disk_flag}",
-        shell=True,
-        timeout=3600,
-        ignore_error=True,
-    )
-    stdout = result.stdout.decode().strip()
-    stderr = result.stderr.decode().strip()
-    if stdout:
-        logger.info(f"DRBD setup script output:\n{stdout}")
-    if result.returncode:
-        error_detail = stderr or stdout or "no output captured"
-        raise CommandFailed(
-            f"DRBD setup script failed (exit code {result.returncode}). "
-            f"Output: {error_detail}"
+    for attempt in range(1, 3):
+        result = exec_cmd(
+            f"bash {script_path} {disk_flag}",
+            shell=True,
+            timeout=3600,
+            ignore_error=True,
         )
+        stdout = result.stdout.decode().strip()
+        stderr = result.stderr.decode().strip()
+        if stdout:
+            logger.info(f"DRBD setup stdout:\n{stdout}")
+        if stderr:
+            logger.info(f"DRBD setup stderr:\n{stderr}")
+        if result.returncode == 0:
+            break
+        if attempt == 1:
+            logger.warning(
+                f"DRBD setup script failed (exit code {result.returncode}), "
+                "retrying..."
+            )
+        else:
+            raise CommandFailed(
+                f"DRBD setup script failed after retry "
+                f"(exit code {result.returncode}). "
+                f"Check DRBD setup stdout/stderr logged above."
+            )
 
     logger.info("DRBD configuration completed successfully")
     return True

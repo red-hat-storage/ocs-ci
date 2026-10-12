@@ -649,8 +649,7 @@ class TNFHypervisor:
         logger.info("Cleaning dnf cache and installing required packages...")
         self._ssh_cmd("dnf clean all", timeout=120)
         pkg_list = " ".join(TNF_HYPERVISOR_PACKAGES)
-        self._ssh_cmd(f"dnf install -y {pkg_list}", timeout=600)
-        self._ssh_cmd("systemctl enable --now libvirtd")
+        self._ssh_cmd(f"dnf install -y {pkg_list}", timeout=1800)
 
     def _configure_libvirt(self):
         logger.info("Configuring libvirt...")
