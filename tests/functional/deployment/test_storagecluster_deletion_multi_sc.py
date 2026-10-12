@@ -4,6 +4,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
+    ignore_leftovers,
     multi_storagecluster_required,
 )
 from ocs_ci.framework.testlib import (
@@ -33,6 +34,7 @@ class TestStorageClusterDeletionGuardMultiSC(ManageTest):
 
     @tier4
     @skipif_ocs_version("<4.23")
+    @ignore_leftovers
     @pytest.mark.polarion_id("OCS-8321")
     @pytest.mark.order("last")
     def test_storagecluster_deletion_guard_multi_sc(self, request):
