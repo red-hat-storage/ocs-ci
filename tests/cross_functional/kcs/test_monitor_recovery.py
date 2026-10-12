@@ -1429,12 +1429,18 @@ def check_and_recover_sandbox_errors(
             )
             logger.warning(f"Pod {pod_name} events:\n{events_text}")
             handle_multi_attach_error(pod_obj, timeout=30)
-            _wait_for_recovery_progress(
+            progress_seen = _wait_for_recovery_progress(
                 pod_obj, timeout=MULTI_ATTACH_RECOVERY_POLL_TIMEOUT
             )
-            return check_and_recover_sandbox_errors(
-                pod_obj, 600, max_recovery_attempts, _attempt + 1, _session_start
-            )
+            if progress_seen:
+                return check_and_recover_sandbox_errors(
+                    pod_obj, 600, max_recovery_attempts, _attempt + 1, _session_start
+                )
+            else:
+                logger.warning(
+                    f"Pod {pod_name}: No recovery progress observed after "
+                    f"{MULTI_ATTACH_RECOVERY_POLL_TIMEOUT}s, continuing to monitor..."
+                )
 
         if has_sandbox or has_rwop:
             error_type = (
@@ -1545,16 +1551,23 @@ def check_and_recover_sandbox_errors(
                         )
                         logger.warning(f"Pod {pod_name} events:\n{events_text}")
                         handle_multi_attach_error(pod_obj, timeout=30)
-                        _wait_for_recovery_progress(
+                        progress_seen = _wait_for_recovery_progress(
                             pod_obj, timeout=MULTI_ATTACH_RECOVERY_POLL_TIMEOUT
                         )
-                        return check_and_recover_sandbox_errors(
-                            pod_obj,
-                            600,
-                            max_recovery_attempts,
-                            _attempt + 1,
-                            _session_start,
-                        )
+                        if progress_seen:
+                            return check_and_recover_sandbox_errors(
+                                pod_obj,
+                                600,
+                                max_recovery_attempts,
+                                _attempt + 1,
+                                _session_start,
+                            )
+                        else:
+                            logger.warning(
+                                f"Pod {pod_name}: No recovery progress after "
+                                f"{MULTI_ATTACH_RECOVERY_POLL_TIMEOUT}s, continuing to monitor..."
+                            )
+                            last_check = elapsed
 
                     if has_sb or has_rw:
                         if _attempt >= max_recovery_attempts:

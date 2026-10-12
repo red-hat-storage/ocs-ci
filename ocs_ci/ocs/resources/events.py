@@ -58,7 +58,8 @@ def parse_event_age_seconds(age_str):
     Parse Kubernetes event age string (e.g., "12s", "5m", "2h") into seconds.
 
     Args:
-        age_str (str): Age string from event (e.g., "12s", "5m30s", "2h", "3d")
+        age_str (str): Age string from event (e.g., "12s", "5m30s", "2h", "3d",
+                      or "2s (x3 over 1h)" for repeated events)
 
     Returns:
         int: Age in seconds, or None if unable to parse
@@ -66,6 +67,8 @@ def parse_event_age_seconds(age_str):
     """
     if not age_str:
         return None
+
+    age_str = age_str.split("(")[0].strip()
 
     total_seconds = 0
     found_match = False
