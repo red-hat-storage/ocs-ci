@@ -227,10 +227,13 @@ class IBMCloudIPI(CloudDeploymentBase):
                 f"Prefix used for destroy resources from odf-qe-vpc VPC: {prefix}"
             )
             super(IBMCloudIPI, self).destroy_cluster(log_level)
-            self.destroy_cluster_from_existing_vpc(prefix)
-            logger.info("IBM Cloud cluster destroyed successfully")
-            ibmcloud.delete_dns_records(self.cluster_name)
-            logger.info("DNS records deleted successfully")
+            try:
+                self.destroy_cluster_from_existing_vpc(prefix)
+                logger.info("IBM Cloud cluster destroyed successfully")
+                ibmcloud.delete_dns_records(self.cluster_name)
+                logger.info("DNS records deleted successfully")
+            finally:
+                self.cleanup_service_ids_and_policies()
         else:
             resource_group = self.get_resource_group()
             if resource_group:
@@ -271,8 +274,25 @@ class IBMCloudIPI(CloudDeploymentBase):
             except Exception as ex:
                 logger.error(f"During IBM Cloud cleanup some exception occurred {ex}")
                 raise
+            finally:
+                self.cleanup_service_ids_and_policies()
+
+    def cleanup_service_ids_and_policies(self):
+        """
+        Clean up leftover IAM Service IDs and Account Policies for the cluster.
+
+        Always called after openshift-install destroy, even if later IBM-specific
+        cleanup fails, so one doesn't mask the other. Failures here are logged, not
+        raised - a leftover service ID shouldn't fail the teardown job.
+        """
         logger.info("Force cleaning up Service IDs and Account Policies leftovers")
-        ibmcloud.cleanup_policies_and_service_ids(self.cluster_name)
+        try:
+            ibmcloud.cleanup_policies_and_service_ids(self.cluster_name)
+        except Exception as ex:
+            logger.error(
+                "Failed to clean up leftover Service IDs/Account Policies for "
+                f"cluster {self.cluster_name}: {ex}"
+            )
 
     def delete_bucket(self):
         """
