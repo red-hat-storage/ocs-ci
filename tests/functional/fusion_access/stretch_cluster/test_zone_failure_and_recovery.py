@@ -14,6 +14,7 @@ from ocs_ci.helpers.fusion_access_helper import (
     discover_iscsi_luns,
     get_data_zones,
     get_workload_pod,
+    wait_for_workload_pods,
     verify_baseline_file,
     verify_route_accessible,
     verify_workload_moved_out_of_zone,
@@ -140,6 +141,18 @@ class TestFusionAccessZoneFailureAndRecovery:
         # sessions, so the shared SAN LUNs have to be rediscovered before the
         # Storage Scale cluster can bring the NSDs of those nodes back up
         discover_iscsi_luns()
+
+        # A node reports Ready well before the Storage Scale filesystem is
+        # remounted on it and before the logwriter replicas it used to run are
+        # recreated, so wait for the StatefulSet to be whole again rather than
+        # assuming the zone is usable as soon as the nodes are Ready
+        wait_for_workload_pods(
+            labels=[constants.LOGWRITER_RBD_LABEL],
+            namespace=namespace,
+            expected_count=sc_obj.workload_map[constants.LOGWRITER_RBD_LABEL][2],
+            timeout=900,
+        )
+        log.info("The logwriter workload is back to its full set of replicas")
 
         end_time = datetime.now(timezone.utc)
         log.info(f"Zone {zone} failure started at {start_time} and ended at {end_time}")
