@@ -71,6 +71,7 @@ MULTI_ATTACH_PATTERNS = [
 
 _node_restart_tracker = {}
 NODE_RESTART_COOLDOWN = 300
+MULTI_ATTACH_RECOVERY_POLL_TIMEOUT = 60
 
 
 @magenta_squad
@@ -1288,6 +1289,62 @@ def _wait_for_replacement_pod(pod_obj, timeout, namespace, max_attempts=3):
     return False, deleted_name
 
 
+def _wait_for_recovery_progress(pod_obj, timeout=60):
+    """
+    Wait for observable recovery progress after Multi-Attach cleanup.
+
+    Args:
+        pod_obj: Pod object to check
+        timeout (int): Maximum time to wait for progress (default: 60s)
+
+    Returns:
+        bool: True if pod shows progress (Running or events age out), False if stuck
+    """
+    logger.debug(
+        f"Polling pod {pod_obj.name} for recovery progress (timeout: {timeout}s)..."
+    )
+    start_time = time.time()
+    last_event_check = 0
+    check_interval = 10
+
+    while time.time() - start_time < timeout:
+        try:
+            pod_data = pod_obj.get()
+            phase = pod_data.get("status", {}).get("phase")
+
+            if phase == constants.STATUS_RUNNING:
+                logger.info(
+                    f"Pod {pod_obj.name} reached Running state during recovery poll"
+                )
+                return True
+
+            # Check if Multi-Attach events are still recent
+            elapsed = time.time() - start_time
+            if elapsed - last_event_check >= check_interval:
+                has_ma, _, _, _ = _classify_pod_errors(pod_obj)
+                if not has_ma:
+                    logger.info(
+                        f"Pod {pod_obj.name}: Multi-Attach error no longer detected "
+                        f"in recent events after {int(elapsed)}s"
+                    )
+                    return True
+                logger.debug(
+                    f"Pod {pod_obj.name} still has recent Multi-Attach events "
+                    f"after {int(elapsed)}s, continuing to poll..."
+                )
+                last_event_check = elapsed
+
+            time.sleep(5)
+        except Exception as e:
+            logger.debug(f"Error polling pod {pod_obj.name}: {e}")
+            time.sleep(5)
+
+    logger.warning(
+        f"Pod {pod_obj.name} did not show recovery progress within {timeout}s"
+    )
+    return False
+
+
 def _classify_pod_errors(pod_obj):
     """
     Run ``oc describe pod`` and classify which error types are present in the
@@ -1398,8 +1455,9 @@ def check_and_recover_sandbox_errors(
             )
             logger.warning(f"Pod {pod_name} events:\n{events_text}")
             handle_multi_attach_error(pod_obj, timeout=30)
-            logger.debug("Waiting 10s for VolumeAttachment cleanup to propagate...")
-            time.sleep(10)
+            _wait_for_recovery_progress(
+                pod_obj, timeout=MULTI_ATTACH_RECOVERY_POLL_TIMEOUT
+            )
             return check_and_recover_sandbox_errors(
                 pod_obj, 600, max_recovery_attempts, _attempt + 1, _session_start
             )
@@ -1513,10 +1571,9 @@ def check_and_recover_sandbox_errors(
                         )
                         logger.warning(f"Pod {pod_name} events:\n{events_text}")
                         handle_multi_attach_error(pod_obj, timeout=30)
-                        logger.debug(
-                            "Waiting 10s for VolumeAttachment cleanup to propagate..."
+                        _wait_for_recovery_progress(
+                            pod_obj, timeout=MULTI_ATTACH_RECOVERY_POLL_TIMEOUT
                         )
-                        time.sleep(10)
                         return check_and_recover_sandbox_errors(
                             pod_obj,
                             600,

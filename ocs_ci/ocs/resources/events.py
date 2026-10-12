@@ -57,6 +57,7 @@ def parse_event_age_seconds(age_str):
         return None
 
     total_seconds = 0
+    found_match = False
     patterns = [
         (r"(\d+)d", 86400),  # days
         (r"(\d+)h", 3600),  # hours
@@ -68,8 +69,9 @@ def parse_event_age_seconds(age_str):
         match = re.search(pattern, age_str)
         if match:
             total_seconds += int(match.group(1)) * multiplier
+            found_match = True
 
-    return total_seconds if total_seconds > 0 else None
+    return total_seconds if found_match else None
 
 
 def filter_events_by_age(events_text, max_age_seconds=180):
