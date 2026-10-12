@@ -69,21 +69,25 @@ class FusionAccessStorage(object):
 
     All configuration is read from the OCS-CI config at runtime.
 
-    ENV_DATA:
-        san_iscsi_ip (str): iSCSI target portal IP.
-        san_iscsi_iqn (str): iSCSI target IQN.
-        san_image_registry_url (str): Registry for the GPFS kmod image.
-            Defaults to ``"quay.io"``.
-        san_image_repository_name (str): Repository for the GPFS kmod image.
-        san_quay_server (str): Quay server for the pull secret.
-        san_quay_username (str): Quay username.
-        san_quay_password (str): Quay password.
-        san_quay_email (str): Quay email.
-        san_lun_group_name (str): LUN group to create. Defaults to ``"lungroup1"``.
-        san_num_luns (int): Number of LUNs to put in the group. Defaults to 1.
+    ENV_DATA keys:
 
-    AUTH:
-        ibm_entitlement_key (str): IBM entitlement key for ``cp.icr.io``.
+    * ``san_iscsi_ip`` (str): iSCSI target portal IP.
+    * ``san_iscsi_iqn`` (str): iSCSI target IQN.
+    * ``san_image_registry_url`` (str): Registry for the GPFS kmod image.
+      Defaults to ``"quay.io"``.
+    * ``san_image_repository_name`` (str): Repository for the GPFS kmod image.
+    * ``san_quay_server`` (str): Quay server for the pull secret.
+    * ``san_quay_username`` (str): Quay username.
+    * ``san_quay_password`` (str): Quay password.
+    * ``san_quay_email`` (str): Quay email.
+    * ``san_lun_group_name`` (str): LUN group to create. Defaults to
+      ``"lungroup1"``.
+    * ``san_num_luns`` (int): Number of LUNs to put in the group. Defaults to 1.
+
+    AUTH keys:
+
+    * ``ibm_entitlement_key`` (str): IBM entitlement key for ``cp.icr.io``.
+
     """
 
     def __init__(self):
@@ -579,9 +583,10 @@ def add_entitlement_to_pull_secret():
     No-op when ``config.AUTH["ibm_entitlement_key"]`` is not set.
 
     Config keys:
-        AUTH.ibm_entitlement_key (str): the IBM entitlement key.
-        ENV_DATA.ibm_registries (list): registries to add. Defaults to
-            ``["preprod.icr.io"]``.
+
+    * ``AUTH.ibm_entitlement_key`` (str): the IBM entitlement key.
+    * ``ENV_DATA.ibm_registries`` (list): registries to add. Defaults to
+      ``["preprod.icr.io"]``.
 
     """
     ent_key = config.AUTH.get("ibm_entitlement_key")
