@@ -30,8 +30,11 @@ Deployment flow:
 """
 
 import base64
+import json
 import logging
+import os
 import re
+import tempfile
 
 from time import sleep
 
@@ -44,7 +47,11 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
 )
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    exec_cmd,
+    wait_for_machineconfigpool_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -557,3 +564,71 @@ class FusionAccessStorage(object):
         """
         data = resource.get(dont_raise=True) or {}
         return data.get("status", {}).get("clusterID")
+
+
+def add_entitlement_to_pull_secret():
+    """
+    Add the IBM registry credentials to the cluster wide pull secret.
+
+    IBM Storage Scale pulls its pre release images from ``preprod.icr.io``,
+    which is not part of the stock pull secret. Without the entry the Scale
+    daemon pods sit in ImagePullBackOff.
+
+    The credentials are the IBM entitlement key, the same one the
+    ``ibm-entitlement-key`` secret carries, under the fixed ``cp`` username.
+    No-op when ``config.AUTH["ibm_entitlement_key"]`` is not set.
+
+    Config keys:
+        AUTH.ibm_entitlement_key (str): the IBM entitlement key.
+        ENV_DATA.ibm_registries (list): registries to add. Defaults to
+            ``["preprod.icr.io"]``.
+
+    """
+    ent_key = config.AUTH.get("ibm_entitlement_key")
+    if not ent_key:
+        logger.info(
+            "ibm_entitlement_key is not set, leaving the cluster pull secret alone"
+        )
+        return
+
+    registries = config.ENV_DATA.get("ibm_registries", [constants.IBM_PREPROD_REGISTRY])
+    auth = base64.b64encode(f"cp:{ent_key}".encode()).decode()
+
+    ocp_obj = ocp.OCP(
+        kind=constants.SECRET, namespace=constants.OPENSHIFT_CONFIG_NAMESPACE
+    )
+    pull_secret = ocp_obj.get(resource_name="pull-secret")
+    secret_data = json.loads(
+        base64.b64decode(pull_secret["data"][".dockerconfigjson"]).decode()
+    )
+    auths = secret_data.setdefault("auths", {})
+
+    missing = [r for r in registries if auths.get(r, {}).get("auth") != auth]
+    if not missing:
+        logger.info(
+            f"Pull secret already carries credentials for {registries}, nothing to do"
+        )
+        return
+
+    for registry in missing:
+        logger.info(f"Adding '{registry}' credentials to the cluster pull secret")
+        auths[registry] = {"auth": auth}  # pragma: allowlist secret
+
+    # NamedTemporaryFile rather than a plain path, the file holds every
+    # registry credential the cluster has.
+    with tempfile.NamedTemporaryFile(
+        mode="w+", prefix="pull-secret", suffix=".json"
+    ) as secret_file:
+        json.dump(secret_data, secret_file)
+        secret_file.flush()
+        os.chmod(secret_file.name, 0o600)
+        exec_cmd(
+            f"oc set data secret/pull-secret "
+            f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
+            f"--from-file=.dockerconfigjson={secret_file.name}"
+        )
+
+    # Updating the pull secret restarts the kubelet on every node, so the
+    # rollout has to finish before anything tries to pull from the new registry.
+    logger.info("Waiting for the node rollout triggered by the pull secret update")
+    wait_for_machineconfigpool_status(node_type="all")
