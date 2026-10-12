@@ -3,10 +3,11 @@ import threading
 from time import sleep
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_noobaa_core_pod, get_noobaa_db_pod
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.resources.pod import Pod, get_noobaa_db_pod, get_pods_having_label
 from ocs_ci.ocs.resources.mcg import MCG
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd
-from ocs_ci.helpers import helpers
 from ocs_ci.framework import config
 
 
@@ -14,6 +15,36 @@ logger = logging.getLogger(__name__)
 
 STALL_CHECK_ITERATIONS = 100
 STALL_CHECK_SLEEP_SECONDS = 5
+
+
+@retry(UnexpectedBehaviour, tries=30, delay=10, backoff=1)
+def get_active_core_pod():
+    """
+    Return the noobaa-core pod that serves RPC.
+
+    Returns:
+        Pod: noobaa-core pod holding the leader lease
+
+    Raises:
+        UnexpectedBehaviour: If no noobaa-core pod is serving
+
+    """
+    core_pods = get_pods_having_label(
+        label=constants.NOOBAA_CORE_POD_LABEL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    for pod_dict in core_pods:
+        container_statuses = pod_dict.get("status", {}).get("containerStatuses", [])
+        if any(
+            status["name"] == "core" and status["ready"]
+            for status in container_statuses
+        ):
+            return Pod(**pod_dict)
+    raise UnexpectedBehaviour(
+        "No noobaa-core pod has a ready core container, so none of them is "
+        "serving RPC and md_blow would fail every object with ECONNREFUSED. "
+        f"Core pods: {[pod['metadata']['name'] for pod in core_pods]}"
+    )
 
 
 class MdBlow(object):
@@ -34,7 +65,7 @@ class MdBlow(object):
         self.creds = mcg_obj.get_noobaa_admin_credentials_from_secret()
         self.email = self.creds["email"]
         self.password = self.creds["password"]
-        self.noobaa_core_pod = get_noobaa_core_pod()
+        self.noobaa_core_pod = get_active_core_pod()
         self.noobaa_db_pod = get_noobaa_db_pod()
 
     def increase_core_pod_cpu_memory(self):
@@ -50,11 +81,8 @@ class MdBlow(object):
             f"-n {namespace}  --type merge --patch '{ptch}'"
         )
         exec_cmd(ptch_cmd)
-        logger.info("Wait for noobaa-core pod move to Running state")
-        self.noobaa_core_pod = get_noobaa_core_pod()
-        helpers.wait_for_resource_state(
-            self.noobaa_core_pod, state=constants.STATUS_RUNNING, timeout=300
-        )
+        logger.info("Wait for a noobaa-core pod to serve RPC again")
+        self.noobaa_core_pod = get_active_core_pod()
 
     def reduce_core_pod_cpu_memory(self):
         """
@@ -68,11 +96,28 @@ class MdBlow(object):
             f"-n {namespace} --patch '{params}' --type=json"
         )
         exec_cmd(ptch_cmd)
-        logger.info("Wait for noobaa-core pod move to Running state")
-        self.noobaa_core_pod = get_noobaa_core_pod()
-        helpers.wait_for_resource_state(
-            self.noobaa_core_pod, state=constants.STATUS_RUNNING, timeout=300
+        logger.info("Wait for a noobaa-core pod to serve RPC again")
+        self.noobaa_core_pod = get_active_core_pod()
+
+    def run_md_blow(self, base_cmd, cmd, exec_timeout):
+        """
+        Run one md_blow invocation in the active noobaa-core pod.
+
+        Args:
+            base_cmd (str): md_blow command with the system and bucket options
+            cmd (str): md_blow command with the object count options
+            exec_timeout (int): Timeout in seconds of the md_blow 'oc exec'
+
+        """
+        self.noobaa_core_pod = get_active_core_pod()
+        self.noobaa_core_pod.exec_cmd_on_pod(
+            base_cmd + cmd,
+            container_name="core",
+            out_yaml_format=False,
+            timeout=exec_timeout,
+            secrets=[self.password],
         )
+        logger.info(f"md_blow completed on {self.noobaa_core_pod.name}")
 
     def monitor_db_usage(self, threshold_pct):
         """
@@ -155,13 +200,7 @@ class MdBlow(object):
                 f"--chunks={chunks} "
                 f"--chunk_size={chunk_size}"
             )
-            self.noobaa_core_pod.exec_cmd_on_pod(
-                base_cmd + cmd,
-                container_name="core",
-                ignore_error=True,
-                timeout=exec_timeout,
-            )
-            logger.info("Workload executed successfully")
+            self.run_md_blow(base_cmd, cmd, exec_timeout)
         else:
             assert threshold_pct <= 100, f"Invalid value. Given {threshold_pct}"
             current_db_percentage = self.noobaa_db_pod.exec_cmd_on_pod(
@@ -195,12 +234,7 @@ class MdBlow(object):
                 )
                 logger.info("Initiating IO dump directly into DB")
                 while not self.stop_dumping.is_set():
-                    self.noobaa_core_pod.exec_cmd_on_pod(
-                        base_cmd + cmd,
-                        container_name="core",
-                        ignore_error=True,
-                        timeout=exec_timeout,
-                    )
+                    self.run_md_blow(base_cmd, cmd, exec_timeout)
                     sleep(5)
                 t1.join()
                 logger.info(f"Stopping the IO... DB is filled with {threshold_pct}")

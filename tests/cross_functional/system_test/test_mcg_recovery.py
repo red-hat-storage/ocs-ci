@@ -23,7 +23,6 @@ from ocs_ci.ocs.cluster import (
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
-    get_noobaa_core_pod,
     get_pod_obj,
     wait_for_noobaa_pods_running,
 )
@@ -39,10 +38,10 @@ logger = logging.getLogger(__name__)
 
 DB_CAPACITY_WARNING_THRESHOLD = 80
 DB_CAPACITY_CRITICAL_THRESHOLD = 90
-DB_FILL_TARGET_PCT = 84
-EXPANSION_FACTOR = 1.08
+DB_FILL_TARGET_PCT = 81
+EXPANSION_FACTOR = DB_CAPACITY_CRITICAL_THRESHOLD / DB_FILL_TARGET_PCT
 MAX_FILL_BATCHES = 500
-MAX_DB_DISK_PCT = 98
+MAX_DB_DISK_PCT = 95
 MAX_OSD_USED_PCT = 80
 WARNING_ALERT_MSG = (
     "The NooBaa database on pod {pod} is consuming 80% of its PVC capacity. "
@@ -95,6 +94,29 @@ def get_db_usage(db_pod_name):
         ) from exc
     usage_pct = (used_bytes * 100) // total_bytes if total_bytes else 0
     return used_bytes, total_bytes, usage_pct
+
+
+def drain_wal(db_pod_name):
+    """
+    Force a checkpoint so that PostgreSQL can retire its WAL segments.
+
+    wal_keep_size is a retention floor rather than a cap, and md_blow writes
+    faster than the automatic checkpoints retire WAL, so pg_wal grows well
+    past it. The alert query clamps the WAL term at wal_keep_size, so the
+    measured usage then drifts below the real disk usage and the instance on
+    the PVC that keeps its default size runs out of space while the fill
+    still reads as on target.
+
+    Args:
+        db_pod_name (str): NooBaa DB instance to checkpoint
+
+    """
+    db_pod = get_pod_obj(db_pod_name, namespace=config.ENV_DATA["cluster_namespace"])
+    db_pod.exec_cmd_on_pod(
+        'psql -U postgres -c "CHECKPOINT"',
+        container_name="postgres",
+        shell=True,
+    )
 
 
 def most_full_osd():
@@ -205,9 +227,11 @@ def fill_noobaa_db(blow_io, bucket_name, db_pod_name, threshold_pct):
                 f"{MAX_FILL_BATCHES} batches, stopped at {current_pct}%"
             )
         logger.info(f"Running md_blow batch {batch_num}")
-        blow_io.noobaa_core_pod = get_noobaa_core_pod()
         blow_io.upload_obj_using_md_blow(bucket_name)
 
+        # Keeps pg_wal near wal_keep_size, so that the measured usage stays in
+        # step with the real disk usage of both instances
+        drain_wal(db_pod_name)
         new_used_bytes, total_bytes, current_pct = get_db_usage(db_pod_name)
         logger.info(
             f"DB usage after batch {batch_num}: {current_pct}% "
@@ -386,8 +410,7 @@ class TestMCGRecovery(E2ETest):
         Steps:
         1. Run MCG background features and IOs
         2. Expand the PVC of the CNPG primary DB instance, so that one fill
-           reads as between 80% and 90% of the expanded PVC and as over 90%
-           of the replica PVC, which keeps its default size
+           reads more than 80% of the expanded PVC and over 90% of the replica PVC
         3. Fill the primary DB instance to DB_FILL_TARGET_PCT of its PVC using
            md_blow, measured the way the alert rules measure it
         4. Verify the capacity alerts before backup and recovery:
