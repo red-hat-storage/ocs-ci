@@ -200,42 +200,42 @@ class TNF(TNFBASE):
             hypervisor = self._get_hypervisor()
 
             try:
-                logger.info("Step 1: Launching EC2 bare-metal instance...")
+                logger.test_step("Launching EC2 bare-metal instance")
                 hypervisor.launch_instance()
                 hypervisor.save_instance_info(self.cluster_path)
 
-                logger.info("Step 2: Waiting for SSH access...")
+                logger.test_step("Waiting for SSH access")
                 hypervisor.wait_for_ssh_ready()
 
-                logger.info("Step 3: Configuring host as KVM hypervisor...")
+                logger.test_step("Configuring host as KVM hypervisor")
                 hypervisor.configure_host()
 
-                logger.info("Step 4: Cloning dev-scripts...")
+                logger.test_step("Cloning dev-scripts")
                 hypervisor.clone_dev_scripts()
 
-                logger.info("Step 5: Generating dev-scripts config...")
+                logger.test_step("Generating dev-scripts config")
                 pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
                 with open(pull_secret_path, "r") as f:
                     pull_secret = json.dumps(json.loads(f.read()))
                 hypervisor.generate_dev_scripts_config(pull_secret)
 
-                logger.info("Step 6: Running dev-scripts (45-90 minutes)...")
+                logger.test_step("Running dev-scripts (45-90 minutes)")
                 hypervisor.run_dev_scripts()
 
-                logger.info("Step 6b: Resizing OSD disks on VMs...")
+                logger.test_step("Resizing OSD disks on VMs")
                 hypervisor.resize_vm_disks()
 
-                logger.info("Step 7: Setting up port forwarding...")
+                logger.test_step("Setting up port forwarding")
                 hypervisor.setup_port_forwarding()
 
-                logger.info("Step 8: Configuring DNS records...")
+                logger.test_step("Configuring DNS records")
                 _configure_dns(hypervisor.public_ip)
 
-                logger.info("Step 9: Retrieving kubeconfig...")
+                logger.test_step("Retrieving kubeconfig")
                 auth_dir = os.path.join(self.cluster_path, "auth")
                 hypervisor.retrieve_kubeconfig(auth_dir)
 
-                logger.info("Step 10: Testing cluster connectivity...")
+                logger.test_step("Testing cluster connectivity")
                 self.test_cluster()
 
                 cluster_name = config.ENV_DATA["cluster_name"]
