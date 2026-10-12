@@ -4857,10 +4857,11 @@ class MultiClusterDROperatorsDeploy(object):
         cluster instead and register the profiles and their secrets by hand.
 
         Config keys (ENV_DATA):
-            dr_s3_region (str): region for the metadata buckets.
-                Defaults to ``us-east-1``.
-            dr_s3_bucket_prefix (str): bucket name prefix.
-                Defaults to ``dnd``.
+
+        * ``dr_s3_region`` (str): region for the metadata buckets. Defaults to
+          ``us-east-1``.
+        * ``dr_s3_bucket_prefix`` (str): bucket name prefix. Defaults to
+          ``dnd``.
 
         """
         region = config.ENV_DATA.get("dr_s3_region", "us-east-1")
