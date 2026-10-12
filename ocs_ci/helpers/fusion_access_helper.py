@@ -1,0 +1,337 @@
+"""
+Helper functions specific to Fusion Access (IBM Storage Scale / CNSA) stretch
+clusters.
+
+Everything that is common with the ODF arbiter stretch cluster, such as the
+zone aware logwriter workload, finding the nodes of a zone or looking for a
+write pause, is reused from
+:py:mod:`ocs_ci.ocs.resources.stretchcluster` and
+:py:mod:`ocs_ci.helpers.stretchcluster_helper`. Only the bits that have no
+counterpart there live in this module.
+
+"""
+
+import logging
+import re
+from time import sleep
+
+import requests
+
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.node import get_node_objs
+from ocs_ci.ocs.resources.pod import (
+    Pod,
+    get_pod_node,
+    get_pods_having_label,
+    wait_for_pods_to_be_running,
+)
+from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
+from ocs_ci.helpers import helpers
+
+logger = logging.getLogger(__name__)
+
+
+def get_fusion_access_storageclass():
+    """
+    Get the storage class backed by the IBM Storage Scale filesystem
+
+    Returns:
+        str: Name of the storage class
+
+    """
+    return config.ENV_DATA.get("fusion_access_storageclass", constants.FUSION_ACCESS_SC)
+
+
+def get_zone_of_node(node_name):
+    """
+    Get the zone a node belongs to
+
+    Args:
+        node_name (str): Name of the node
+
+    Returns:
+        str: Zone label value of the node, None if the node is not labeled
+
+    """
+    node_obj = get_node_objs([node_name])[0]
+    return node_obj.get()["metadata"]["labels"].get(constants.ZONE_LABEL)
+
+
+def get_data_zones():
+    """
+    Get the data zones of the stretch cluster.
+
+    A Fusion Access stretch cluster does not use the 'data-1'/'data-2' zone
+    names of the ODF arbiter cluster, so the data zones are discovered from the
+    node labels instead of being hardcoded. The arbiter zone is excluded.
+
+    Returns:
+        list: Sorted list of data zone label values
+
+    Raises:
+        UnexpectedBehaviour: If the cluster does not have exactly two data zones
+
+    """
+    zones = set()
+    for node_info in (
+        OCP(kind=constants.NODE).get(selector=constants.ZONE_LABEL).get("items", [])
+    ):
+        zone = node_info["metadata"]["labels"].get(constants.ZONE_LABEL)
+        if zone and zone != constants.FUSION_ACCESS_ARBITER_ZONE_LABEL:
+            zones.add(zone)
+
+    data_zones = sorted(zones)
+    if len(data_zones) != 2:
+        raise UnexpectedBehaviour(
+            f"Expected exactly 2 data zones on a stretch cluster, found {data_zones}"
+        )
+    logger.info(f"Data zones of the stretch cluster: {data_zones}")
+    return data_zones
+
+
+def discover_iscsi_luns(wait_for_luns=120):
+    """
+    Rediscover the shared SAN LUNs and log back into the iSCSI target on every
+    worker node.
+
+    A node loses its iSCSI sessions when it is powered off and they are not
+    reliably re-established on their own once it boots back up. Without the
+    LUNs the node cannot bring its NSDs back and rejoin the IBM Storage Scale
+    cluster, so the discovery has to be run again after the nodes of a failed
+    zone are started.
+
+    Args:
+        wait_for_luns (int): Time in seconds to wait for the LUNs to become
+            visible once the discovery has completed
+
+    Raises:
+        ValueError: If 'san_iscsi_ip' or 'san_iscsi_iqn' of ENV_DATA is missing
+            or malformed
+
+    """
+    iscsi_ip = config.ENV_DATA.get("san_iscsi_ip")
+    iscsi_iqn = config.ENV_DATA.get("san_iscsi_iqn")
+
+    # Validate values before interpolating into a shell command.
+    # IP must be a dotted-decimal address; IQN must follow the iqn. format.
+    if not re.fullmatch(r"[\d]{1,3}(\.[\d]{1,3}){3}", iscsi_ip or ""):
+        raise ValueError(f"san_iscsi_ip '{iscsi_ip}' is not a valid IPv4 address")
+    if not re.fullmatch(r"iqn\.\d{4}-\d{2}\.[a-zA-Z0-9.\-:]+", iscsi_iqn or ""):
+        raise ValueError(f"san_iscsi_iqn '{iscsi_iqn}' is not a valid IQN")
+
+    logger.info("Starting LUN discovery on all worker nodes")
+    OCP().exec_oc_cmd(
+        f"get nodes -l node-role.kubernetes.io/worker --no-headers -o name "
+        f"| xargs -I {{}} -- oc debug {{}} -- bash -c "
+        f'\'chroot /host iscsiadm -m discovery -t st -p "{iscsi_ip}"; '
+        f'chroot /host iscsiadm --mode node --target "{iscsi_iqn}" '
+        f'--portal "{iscsi_ip}" -l\' 2> /dev/null',
+        shell=True,
+        out_yaml_format=False,
+        secrets=[iscsi_ip, iscsi_iqn],
+    )
+    logger.info("LUN discovery completed on all worker nodes")
+    logger.info(f"Waiting {wait_for_luns}s for the LUNs to become visible")
+    sleep(wait_for_luns)
+
+
+def create_workload_from_template(
+    template_path, namespace, sc_name=None, teardown_factory=None
+):
+    """
+    Create all the resources of a multi document workload template.
+
+    Used for the Fusion Access busybox and file-uploader workloads, which are
+    made up of a PVC, a Deployment and optionally a Service and a Route.
+
+    Args:
+        template_path (str): Path of the multi document workload template
+        namespace (str): Namespace to create the resources in
+        sc_name (str): Storage class to use for the PVC of the workload. The
+            storage class defined in the template is used when not provided
+        teardown_factory (function): Teardown factory to register the created
+            resources with
+
+    Returns:
+        list: OCS objects representing the created resources, in the order
+            they are defined in the template
+
+    """
+    created_resources = []
+    for resource_data in templating.load_yaml(template_path, multi_document=True):
+        resource_data["metadata"]["namespace"] = namespace
+        if sc_name and resource_data["kind"] == constants.PVC:
+            resource_data["spec"]["storageClassName"] = sc_name
+
+        resource_obj = helpers.create_resource(**resource_data)
+        if teardown_factory:
+            teardown_factory(resource_obj)
+        created_resources.append(resource_obj)
+        logger.info(
+            f"Created {resource_data['kind']} {resource_obj.name} in {namespace}"
+        )
+
+    return created_resources
+
+
+@retry(UnexpectedBehaviour, tries=10, delay=30)
+def get_workload_pod(label, namespace):
+    """
+    Get the single running pod of a Deployment based workload.
+
+    Args:
+        label (str): Label of the workload
+        namespace (str): Namespace of the workload
+
+    Returns:
+        Pod: Pod object of the running workload pod
+
+    Raises:
+        UnexpectedBehaviour: If there is no running pod for the workload
+
+    """
+    for pod_data in get_pods_having_label(label=label, namespace=namespace):
+        pod_obj = Pod(**pod_data)
+        # A pod on a node that is down stays in Running state with a deletion
+        # timestamp set, so the terminating pods have to be filtered out
+        if (
+            pod_obj.status() == constants.STATUS_RUNNING
+            and pod_obj.get()["metadata"].get("deletionTimestamp") is None
+        ):
+            return pod_obj
+
+    raise UnexpectedBehaviour(f"No running pod found for the workload {label}")
+
+
+def wait_for_workload_pods(labels, namespace, timeout=600):
+    """
+    Wait for the pods of the given workloads to be in Running state
+
+    Args:
+        labels (list): Labels of the workloads to wait for
+        namespace (str): Namespace of the workloads
+        timeout (int): Time in seconds to wait for the pods to be running
+
+    """
+    for label in labels:
+        pod_names = [
+            pod_data["metadata"]["name"]
+            for pod_data in get_pods_having_label(label=label, namespace=namespace)
+        ]
+        retry(CommandFailed, tries=6, delay=10)(wait_for_pods_to_be_running)(
+            namespace=namespace, pod_names=pod_names, timeout=timeout
+        )
+        logger.info(f"Workload pods {pod_names} are running")
+
+
+def create_baseline_file(pod_obj, mount_path):
+    """
+    Write a file with random content into the volume of a workload and
+    calculate its md5sum. The file is verified after the failure to make sure
+    the data written before the failure is intact.
+
+    Args:
+        pod_obj (Pod): Pod object of the workload
+        mount_path (str): Path the workload volume is mounted at
+
+    Returns:
+        str: md5sum of the file created
+
+    """
+    file_path = f"{mount_path}/{constants.FUSION_ACCESS_BASELINE_FILE}"
+    # 'sh' and not the default 'bash', the busybox based workload images do not
+    # ship bash
+    pod_obj.exec_sh_cmd_on_pod(
+        command=f"head -c 65536 /dev/urandom | od -An -x > {file_path} && sync",
+        sh="sh",
+    )
+    md5sum = pod_obj.exec_sh_cmd_on_pod(command=f"md5sum {file_path}", sh="sh").split()[
+        0
+    ]
+    logger.info(f"Baseline file created at {file_path} with md5sum {md5sum}")
+    return md5sum
+
+
+def verify_baseline_file(pod_obj, mount_path, md5sum_before):
+    """
+    Verify the baseline file written before the failure is intact
+
+    Args:
+        pod_obj (Pod): Pod object of the workload
+        mount_path (str): Path the workload volume is mounted at
+        md5sum_before (str): md5sum of the file before the failure
+
+    Raises:
+        AssertionError: If the md5sum of the file has changed
+
+    """
+    file_path = f"{mount_path}/{constants.FUSION_ACCESS_BASELINE_FILE}"
+    md5sum_after = pod_obj.exec_sh_cmd_on_pod(
+        command=f"md5sum {file_path}", sh="sh"
+    ).split()[0]
+    assert md5sum_before == md5sum_after, (
+        f"Data corruption detected in {pod_obj.name}! md5sum of {file_path} was "
+        f"{md5sum_before} before the failure and is {md5sum_after} now"
+    )
+    logger.info(f"Data integrity verified for {pod_obj.name}, md5sum {md5sum_after}")
+
+
+@retry((AssertionError, requests.RequestException), tries=10, delay=30)
+def verify_route_accessible(route_name, namespace):
+    """
+    Verify the route of a workload responds.
+
+    Note the file-uploader route uses edge TLS termination without an insecure
+    policy, so it has to be accessed over https. Plain http is answered with a
+    503 by the router by design.
+
+    Args:
+        route_name (str): Name of the route
+        namespace (str): Namespace of the route
+
+    Raises:
+        AssertionError: If the route does not respond with 200
+
+    """
+    route_obj = OCP(kind=constants.ROUTE, namespace=namespace, resource_name=route_name)
+    host = route_obj.get()["spec"]["host"]
+    response = requests.get(f"https://{host}", verify=False, timeout=60)
+    assert (
+        response.status_code == 200
+    ), f"Route https://{host} responded with {response.status_code}, expected 200"
+    logger.info(f"Route https://{host} is accessible")
+
+
+def verify_workload_moved_out_of_zone(label, namespace, zone):
+    """
+    Verify the pod of a workload has moved out of the given zone and is running
+    in the surviving zone
+
+    Args:
+        label (str): Label of the workload
+        namespace (str): Namespace of the workload
+        zone (str): Zone the workload is expected to have moved out of
+
+    Returns:
+        Pod: Pod object of the workload running in the surviving zone
+
+    Raises:
+        AssertionError: If the workload pod is still running in the failed zone
+
+    """
+    pod_obj = get_workload_pod(label=label, namespace=namespace)
+    node_name = get_pod_node(pod_obj).name
+    node_zone = get_zone_of_node(node_name)
+    assert node_zone != zone, (
+        f"Workload {label} pod {pod_obj.name} is still running on {node_name} "
+        f"which is in the failed zone {zone}"
+    )
+    logger.info(
+        f"Workload {label} moved to pod {pod_obj.name} on node {node_name} "
+        f"in zone {node_zone}"
+    )
+    return pod_obj
