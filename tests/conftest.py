@@ -8322,6 +8322,7 @@ def cnv_dr_workload(request):
         num_of_vm_appset_push=0,
         num_of_vm_appset_pull=0,
         vm_type=constants.VM_VOLUME_PVC,
+        skip_mirroring_validation=False,
     ):
         """
         Args:
@@ -8329,6 +8330,8 @@ def cnv_dr_workload(request):
             num_of_vm_appset_push (int): Number of ApplicationSet Push type workload to be created
             num_of_vm_appset_pull (int): Number of ApplicationSet Pull type workload to be created
             vm_type (str): Vm type that needs to be created
+            skip_mirroring_validation (bool): If True, skip mirroring status validation after deployment.
+                Useful when deploying multiple workloads and validation will be done later.
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -8416,7 +8419,10 @@ def cnv_dr_workload(request):
                 total_pvc_count += workload_details["pvc_count"]
                 workload.deploy_workload()
 
-        if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+        if (
+            ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
+            and not skip_mirroring_validation
+        ):
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
 
         return instances

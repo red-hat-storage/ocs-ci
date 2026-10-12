@@ -138,6 +138,7 @@ class TestWorkloadDeployRDR:
                 num_of_vm_appset_push=1,
                 num_of_vm_appset_pull=1,
                 vm_type=constants.VM_VOLUME_PVC,
+                skip_mirroring_validation=True,
             )
         else:
             logger.warning(
