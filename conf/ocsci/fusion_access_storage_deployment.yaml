@@ -1,0 +1,29 @@
+---
+# Provision Fusion Access SAN storage after the operator is installed, by creating
+# a LUN group through the OpenShift console. The Fusion Access operator creates the
+# Cluster, Daemon, LocalDisk and Filesystem resources in response.
+#
+# Use together with conf/ocsci/fusion_access_deployment.yaml, which installs the
+# operator itself.
+#
+# The following keys have no sensible default and must be supplied by the cluster
+# config, so they are intentionally not set here:
+#
+#   AUTH:
+#     ibm_entitlement_key: <IBM entitlement key for cp.icr.io>
+#   ENV_DATA:
+#     san_iscsi_ip: <iSCSI target portal IP>
+#     san_iscsi_iqn: <iSCSI target IQN>
+#     san_image_repository_name: <repo for the GPFS kmod image, e.g. org/repo>
+#     san_quay_server: <e.g. quay.io/org>
+#     san_quay_username: <quay username>
+#     san_quay_password: <quay password>
+#     san_quay_email: <quay email>
+#
+# Optional, defaulted in ocs_ci/deployment/fusion_access_storage.py:
+#   ENV_DATA:
+#     san_image_registry_url  (default "quay.io")
+#     san_lun_group_name      (default "lungroup1")
+#     san_num_luns            (default 1)
+DEPLOYMENT:
+  fusion_access_storage: true

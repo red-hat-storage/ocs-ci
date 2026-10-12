@@ -3064,6 +3064,10 @@ IBM_STORAGE_SCALE_CLUSTER_NAME = "ibm-spectrum-scale"
 IBM_STORAGE_SCALE_CLUSTER_KIND = "Cluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_REMOTECLUSTER_KIND = "RemoteCluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_FILESYSTEM_KIND = "Filesystem.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_DAEMON_KIND = "Daemon.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_DAEMON_NAME = "ibm-spectrum-scale"
+IBM_STORAGE_SCALE_FSRD_KIND = "FilesystemRecoveryData.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_DR_PRIMARY_LABEL = "scale.spectrum.ibm.com/dr-primary"
 # Pinned commit URL for the IBM Storage Scale MCO (Machine Config Operator)
 # manifest. The URL is not stable and is expected to change over time.
 IBM_STORAGE_SCALE_MCO_URL = (
