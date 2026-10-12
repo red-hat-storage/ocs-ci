@@ -13,23 +13,28 @@ counterpart there live in this module.
 
 import logging
 import re
-from time import sleep
 
 import requests
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    TimeoutExpiredError,
+    UnexpectedBehaviour,
+)
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.node import get_node_objs
+from ocs_ci.ocs.node import get_node_objs, get_worker_nodes
 from ocs_ci.ocs.resources.pod import (
     Pod,
     get_pod_node,
     get_pods_having_label,
+    wait_for_pods_by_label_count,
     wait_for_pods_to_be_running,
 )
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
@@ -93,10 +98,53 @@ def get_data_zones():
     return data_zones
 
 
-def discover_iscsi_luns(wait_for_luns=120):
+def wait_for_luns_visible(node_name, timeout=600, sleep_time=20):
+    """
+    Wait for the shared SAN LUNs to show up as block devices on a node.
+
+    'lsblk -S' lists the SCSI devices along with the transport they are
+    reached over, so the LUNs are identified by their 'iscsi' transport. This
+    checks what actually matters, the disks being visible to the node, rather
+    than the iSCSI session being up, and it needs no target details.
+
+    Args:
+        node_name (str): Name of the node to check
+        timeout (int): Time in seconds to wait for the LUNs to show up
+        sleep_time (int): Time in seconds between two checks
+
+    Raises:
+        UnexpectedBehaviour: If no LUN is visible on the node within the
+            timeout
+
+    """
+    ocp_obj = OCP()
+    try:
+        for out in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep_time,
+            func=ocp_obj.exec_oc_cmd,
+            command=f"debug node/{node_name} -- chroot /host lsblk -S -o NAME,TRAN,SIZE",
+            out_yaml_format=False,
+            ignore_error=True,
+        ):
+            luns = [line for line in str(out).splitlines() if "iscsi" in line]
+            if luns:
+                logger.info(
+                    f"Node {node_name} sees {len(luns)} LUN(s):\n" + "\n".join(luns)
+                )
+                return
+            logger.warning(f"Node {node_name} sees no LUN yet, lsblk output:\n{out}")
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"Node {node_name} still sees no SAN LUN after {timeout} seconds, "
+            f"its NSDs will not come back"
+        )
+
+
+def discover_iscsi_luns(timeout=600):
     """
     Rediscover the shared SAN LUNs and log back into the iSCSI target on every
-    worker node.
+    worker node, then verify the LUNs are actually visible on each of them.
 
     A node loses its iSCSI sessions when it is powered off and they are not
     reliably re-established on their own once it boots back up. Without the
@@ -104,13 +152,17 @@ def discover_iscsi_luns(wait_for_luns=120):
     cluster, so the discovery has to be run again after the nodes of a failed
     zone are started.
 
+    The target address and IQN are read from ENV_DATA, they are environment
+    specific and are never hardcoded here.
+
     Args:
-        wait_for_luns (int): Time in seconds to wait for the LUNs to become
-            visible once the discovery has completed
+        timeout (int): Time in seconds to wait for the LUNs to become visible
+            on each worker node once the login has been issued
 
     Raises:
         ValueError: If 'san_iscsi_ip' or 'san_iscsi_iqn' of ENV_DATA is missing
             or malformed
+        UnexpectedBehaviour: If a worker node does not see the LUNs
 
     """
     iscsi_ip = config.ENV_DATA.get("san_iscsi_ip")
@@ -123,20 +175,30 @@ def discover_iscsi_luns(wait_for_luns=120):
     if not re.fullmatch(r"iqn\.\d{4}-\d{2}\.[a-zA-Z0-9.\-:]+", iscsi_iqn or ""):
         raise ValueError(f"san_iscsi_iqn '{iscsi_iqn}' is not a valid IQN")
 
-    logger.info("Starting LUN discovery on all worker nodes")
-    OCP().exec_oc_cmd(
-        f"get nodes -l node-role.kubernetes.io/worker --no-headers -o name "
-        f"| xargs -I {{}} -- oc debug {{}} -- bash -c "
-        f'\'chroot /host iscsiadm -m discovery -t st -p "{iscsi_ip}"; '
-        f'chroot /host iscsiadm --mode node --target "{iscsi_iqn}" '
-        f'--portal "{iscsi_ip}" -l\' 2> /dev/null',
-        shell=True,
-        out_yaml_format=False,
-        secrets=[iscsi_ip, iscsi_iqn],
-    )
-    logger.info("LUN discovery completed on all worker nodes")
-    logger.info(f"Waiting {wait_for_luns}s for the LUNs to become visible")
-    sleep(wait_for_luns)
+    worker_nodes = get_worker_nodes()
+    logger.info(f"Starting LUN discovery on the worker nodes {worker_nodes}")
+    ocp_obj = OCP()
+    for node_name in worker_nodes:
+        # stderr is deliberately not discarded so that a genuine discovery or
+        # login failure is visible in the logs. A non zero exit is not fatal
+        # here on purpose, 'iscsiadm -l' fails with 'already exists' on the
+        # nodes that never went down and therefore still hold a session. The
+        # LUNs are verified below instead of trusting the exit code
+        out = ocp_obj.exec_oc_cmd(
+            f"debug node/{node_name} -- chroot /host sh -c "
+            f'\'iscsiadm -m discovery -t st -p "{iscsi_ip}"; '
+            f'iscsiadm --mode node --target "{iscsi_iqn}" '
+            f'--portal "{iscsi_ip}" -l\'',
+            out_yaml_format=False,
+            ignore_error=True,
+            secrets=[iscsi_ip, iscsi_iqn],
+        )
+        logger.info(f"iSCSI discovery and login output of {node_name}:\n{out}")
+
+    logger.info("LUN discovery completed, verifying the LUNs are visible")
+    for node_name in worker_nodes:
+        wait_for_luns_visible(node_name, timeout=timeout)
+    logger.info("The SAN LUNs are visible on all the worker nodes")
 
 
 def create_workload_from_template(
@@ -207,17 +269,35 @@ def get_workload_pod(label, namespace):
     raise UnexpectedBehaviour(f"No running pod found for the workload {label}")
 
 
-def wait_for_workload_pods(labels, namespace, timeout=600):
+def wait_for_workload_pods(labels, namespace, expected_count=None, timeout=600):
     """
     Wait for the pods of the given workloads to be in Running state
 
     Args:
         labels (list): Labels of the workloads to wait for
         namespace (str): Namespace of the workloads
+        expected_count (int): Number of pods each workload is expected to have.
+            When given, the pods are waited for to be recreated first. Needed
+            after a node failure, where the replicas of the failed nodes are
+            gone and waiting only on the surviving pods would pass instantly
         timeout (int): Time in seconds to wait for the pods to be running
+
+    Raises:
+        UnexpectedBehaviour: If a workload does not reach 'expected_count' pods
 
     """
     for label in labels:
+        if expected_count is not None and not wait_for_pods_by_label_count(
+            label=label,
+            expected_count=expected_count,
+            namespace=namespace,
+            timeout=timeout,
+        ):
+            raise UnexpectedBehaviour(
+                f"Workload {label} did not reach {expected_count} pods within "
+                f"{timeout} seconds"
+            )
+
         pod_names = [
             pod_data["metadata"]["name"]
             for pod_data in get_pods_having_label(label=label, namespace=namespace)
