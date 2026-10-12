@@ -326,14 +326,37 @@ class Deployment(object):
         Deploy Submariner operator
 
         """
-        if config.ENV_DATA.get("skip_submariner_deployment", False):
-            return
+        try:
+            if config.ENV_DATA.get("skip_submariner_deployment", False):
+                return
 
-        # Multicluster operations
-        if config.multicluster:
-            # Configure submariner only on non-ACM clusters
-            submariner = Submariner()
-            submariner.deploy()
+            # Multicluster operations
+            if config.multicluster:
+                # Configure submariner only on non-ACM clusters
+                submariner = Submariner()
+                submariner.deploy()
+        except Exception as e:
+            logger.error(e)
+            if config.REPORTING["gather_on_deploy_failure"]:
+                # Let's do the collections separately to guard against one
+                # of them failing
+                try:
+                    collect_ocs_logs(
+                        "submariner_deployment",
+                        ocs=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCP logs: {e}")
+                try:
+                    collect_ocs_logs(
+                        "submariner_deployment",
+                        ocp=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCS logs: {e}")
+            raise
 
     def deploy_gitops_operator(self, switch_ctx=None):
         """
@@ -725,13 +748,36 @@ class Deployment(object):
         Call Regional DR deploy
 
         """
-        # Multicluster: Handle all ODF multicluster DR ops
-        if config.ENV_DATA.get("skip_dr_deployment", False):
-            return
-        if config.multicluster:
-            dr_conf = self.get_rdr_conf()
-            deploy_dr = get_multicluster_dr_deployment()(dr_conf)
-            deploy_dr.deploy()
+        try:
+            # Multicluster: Handle all ODF multicluster DR ops
+            if config.ENV_DATA.get("skip_dr_deployment", False):
+                return
+            if config.multicluster:
+                dr_conf = self.get_rdr_conf()
+                deploy_dr = get_multicluster_dr_deployment()(dr_conf)
+                deploy_dr.deploy()
+        except Exception as e:
+            logger.error(e)
+            if config.REPORTING["gather_on_deploy_failure"]:
+                # Let's do the collections separately to guard against one
+                # of them failing
+                try:
+                    collect_ocs_logs(
+                        "rdr_deployment",
+                        ocs=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCP logs: {e}")
+                try:
+                    collect_ocs_logs(
+                        "rdr_deployment",
+                        ocp=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCS logs: {e}")
+            raise
 
     def do_deploy_lvmo(self):
         """
