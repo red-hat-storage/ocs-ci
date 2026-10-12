@@ -7,7 +7,7 @@ import re
 
 from ocs_ci.ocs.ocp import OCP
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def count_pvc_volume_health_events(pvc_obj, reason, event_type, message_substr):
@@ -26,12 +26,17 @@ def count_pvc_volume_health_events(pvc_obj, reason, event_type, message_substr):
     Returns:
         int: Sum of ``count`` fields across all matching events (may be 0)
     """
+    logger.debug(
+        f"Querying volume health events: pvc={pvc_obj.name}, "
+        f"namespace={pvc_obj.namespace}, reason={reason}, type={event_type}"
+    )
     event_ocp = OCP(kind="Event", namespace=pvc_obj.namespace)
     events = event_ocp.get(
         field_selector=f"involvedObject.name={pvc_obj.name}",
     )["items"]
-    return sum(
-        e.get("count", 1)
+
+    matching_events = [
+        e
         for e in events
         if (
             e.get("reason") == reason
@@ -39,7 +44,13 @@ def count_pvc_volume_health_events(pvc_obj, reason, event_type, message_substr):
             and e.get("type") == event_type
             and e.get("source", {}).get("component") == "CSI-Addons"
         )
+    ]
+
+    count = sum(e.get("count", 1) for e in matching_events)
+    logger.debug(
+        f"Found {len(matching_events)} matching events with total count: {count}"
     )
+    return count
 
 
 def parse_event_age_seconds(age_str):
@@ -91,10 +102,13 @@ def filter_events_by_age(events_text, max_age_seconds=180):
 
     """
     if not events_text or "Events:" not in events_text:
+        logger.debug("No events section found in input text")
         return events_text
 
+    logger.debug(f"Filtering events by age: max_age={max_age_seconds}s")
     lines = events_text.split("\n")
     filtered_lines = []
+    filtered_count = 0
 
     for line in lines:
         if line.startswith("Events:") or line.startswith("Type") or not line.strip():
@@ -108,7 +122,10 @@ def filter_events_by_age(events_text, max_age_seconds=180):
 
             if age_seconds is not None and age_seconds <= max_age_seconds:
                 filtered_lines.append(line)
+            else:
+                filtered_count += 1
         else:
             filtered_lines.append(line)
 
+    logger.debug(f"Filtered out {filtered_count} events older than {max_age_seconds}s")
     return "\n".join(filtered_lines)
