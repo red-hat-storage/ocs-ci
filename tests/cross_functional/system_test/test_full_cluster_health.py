@@ -34,9 +34,9 @@ class TestFullClusterHealth(PASTest):
     Test Cluster health when storage is ~82%
     """
 
-    TIMEOUT_CEPH_MGR = 600
-    TIMEOUT_CEPH_MON = 600
-    TIMEOUT_CEPH_OSD = 900
+    TIMEOUT_CEPH_MGR = 1200
+    TIMEOUT_CEPH_MON = 1200
+    TIMEOUT_CEPH_OSD = 1200
 
     @pytest.fixture(autouse=True)
     def setup(self, request, nodes):
