@@ -306,33 +306,6 @@ def validate_snapshot_metadata_sidecar(pod):
 # ---- Lister entry range helpers -----------------------------------
 
 
-def get_lister_entries_block_ranges(entries):
-    """
-    Reduce lister entries to the block ranges they report.
-
-    The ranges are taken exactly as the tool printed them, so two
-    entry lists only compare equal if the tool split the changed
-    bytes into the same extents. Use
-    get_merged_lister_entries_byte_ranges instead when the
-    comparison should not depend on the extent boundaries.
-
-    Args:
-        entries (list): Parsed lister entries, each a dict with
-            ByteOffset and SizeBytes keys
-
-    Returns:
-        set: Set of (ByteOffset, SizeBytes) tuples
-
-    Example:
-        get_lister_entries_block_ranges([
-            {"ByteOffset": 0, "SizeBytes": 100},
-            {"ByteOffset": 100, "SizeBytes": 50},
-        ])
-        {(0, 100), (100, 50)}
-    """
-    return {(entry["ByteOffset"], entry["SizeBytes"]) for entry in entries}
-
-
 def get_merged_lister_entries_byte_ranges(entries):
     """
     Merge lister entries into non-overlapping byte ranges.
