@@ -69,6 +69,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     get_latest_ds_olm_tag,
     get_next_version_available_for_upgrade,
+    get_machineconfigpool_timeout,
     get_ocs_version_from_image,
     load_config_file,
     TimeoutSampler,
@@ -154,14 +155,10 @@ def prune_old_df_repo_idms(keep_latest: int = 1, force_delete_pods: bool = False
         log.info(f"Deleting old df-repo ImageDigestMirrorSet {name}")
         ocp_idms.delete(resource_name=name)
 
-    num_nodes = (
-        config.ENV_DATA["worker_replicas"]
-        + config.ENV_DATA["master_replicas"]
-        + config.ENV_DATA.get("infra_replicas", 0)
-    )
-    timeout = 2800 if num_nodes > 6 else 1900
     wait_for_machineconfigpool_status(
-        node_type="all", timeout=timeout, force_delete_pods=force_delete_pods
+        node_type="all",
+        timeout=get_machineconfigpool_timeout(),
+        force_delete_pods=force_delete_pods,
     )
 
     return to_delete

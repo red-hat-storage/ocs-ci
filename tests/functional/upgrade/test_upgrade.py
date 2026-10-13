@@ -22,6 +22,7 @@ from ocs_ci.framework.testlib import (
     fdf_upgrade,
 )
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm_upgrade import ACMUpgrade
 from ocs_ci.ocs.disruptive_operations import worker_node_shutdown, osd_node_reboot
 from ocs_ci.ocs.fdf_upgrade import FDFUpgrade
@@ -114,6 +115,17 @@ def test_upgrade(zone_rank, role_rank, config_index, upgrade_stats=None):
     Tests upgrade procedure of OCS cluster
 
     """
+    if config.MULTICLUSTER.get("multicluster_mode") == constants.RDR_PROVIDER_MODE:
+        # In rdr-provider the ODF upgrade is driven by
+        # test_provider_cluster_upgrade (run_provider_upgrade ->
+        # _run_odf_provider_upgrade) and the hosted clients follow their
+        # provider.  Guard here as well as in the parametrizer so an
+        # unparametrized collection of this test can never run ODF upgrade
+        # against an arbitrary cluster context.
+        pytest.skip(
+            "ODF upgrade is performed by test_provider_cluster_upgrade "
+            "in rdr-provider mode"
+        )
 
     run_ocs_upgrade(upgrade_stats=upgrade_stats)
     if config.multicluster and config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
