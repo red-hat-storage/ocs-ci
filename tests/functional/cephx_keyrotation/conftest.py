@@ -151,9 +151,9 @@ def cephx_keyrotation_setup():
       - enable daemon KeyGeneration policy on StorageCluster
       - wait for mon/mgr/osd/mds daemons and cluster Ready state
 
-    Enabling at DESIRED_CEPHX_KEY_GEN / DEFAULT_DAEMON_KEY_GENERATION only
-    updates StorageCluster; CephCluster does not Progress and status may stay
-    at keyGeneration 1. Do not wait for status to reach the desired baseline.
+    A greenfield enable at DESIRED_CEPHX_KEY_GEN only updates StorageCluster.
+    Re-enabling when spec keyGeneration is already set rotates; that path
+    waits until status.cephx catches up before tests snapshot pods.
     """
     rotator = CephXKeyRotation()
     rotator.ensure_daemon_key_rotation_enabled(
