@@ -13,11 +13,12 @@ import semantic_version
 import platform
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     DRPrimaryNotFoundException,
     SubctlDownloadFailed,
+    UnexpectedDeploymentConfiguration,
     UnsupportedPlatformError,
 )
 from ocs_ci.utility import templating
@@ -106,8 +107,135 @@ class Submariner(object):
     def deploy_upstream(self):
         self.submariner_configure_upstream()
 
+    def is_submariner_installed(self, target_clusters):
+        """
+        Check via CLI whether submariner is already installed on the target managed clusters.
+
+        Args:
+            target_clusters (list): List of cluster config objects for the target managed clusters.
+
+        Returns:
+            bool: True if submariner is installed and valid on all target clusters, False if installed on none.
+
+        Raises:
+            UnexpectedDeploymentConfiguration: If submariner state is mismatched across clusters,
+                if ManagedClusterSets do not match, or if a ManagedCluster resource is missing.
+        """
+        logger.info(
+            f"Checking via CLI if Submariner is already installed on target clusters: "
+            f"{[c.ENV_DATA['cluster_name'] for c in target_clusters]}"
+        )
+        installed_clusters = []
+        missing_clusters = []
+        cluster_set_map = {}
+
+        for cluster in target_clusters:
+            cluster_name = cluster.ENV_DATA["cluster_name"]
+            is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+            acm_cluster_name = (
+                f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cluster_name}"
+                if is_hosted
+                else cluster_name
+            )
+            mc_obj = ocp.OCP(
+                kind=constants.ACM_MANAGEDCLUSTER,
+                resource_name=acm_cluster_name,
+            )
+            mc_data = mc_obj.get(dont_raise=True)
+            if not mc_data:
+                raise UnexpectedDeploymentConfiguration(
+                    f"ManagedCluster resource '{acm_cluster_name}' not found on ACM hub"
+                )
+
+            labels = mc_data.get("metadata", {}).get("labels", {})
+            cluster_set = labels.get(constants.ACM_CLUSTERSET_LABEL)
+            cluster_set_map[acm_cluster_name] = cluster_set
+
+            # Check for submariner feature label on ManagedCluster
+            submariner_feature = labels.get(
+                "feature.open-cluster-management.io/addon-submariner"
+            )
+
+            # Check for ManagedClusterAddOn 'submariner' in the managed cluster namespace on ACM hub
+            addon_obj = ocp.OCP(
+                kind=constants.ACM_MANAGEDCLUSTER_ADDONS,
+                namespace=acm_cluster_name,
+                resource_name="submariner",
+            )
+            addon_data = addon_obj.get(dont_raise=True)
+
+            addon_available = any(
+                c.get("type") == "Available" and c.get("status") == "True"
+                for c in (
+                    addon_data.get("status", {}).get("conditions", [])
+                    if addon_data
+                    else []
+                )
+            )
+
+            if submariner_feature == "available" or addon_available:
+                logger.info(
+                    f"Submariner addon detected on ManagedCluster '{acm_cluster_name}' "
+                    f"(feature label: {submariner_feature}, clusterset: {cluster_set})"
+                )
+                installed_clusters.append(acm_cluster_name)
+            else:
+                logger.info(
+                    f"Submariner addon not detected on ManagedCluster '{acm_cluster_name}'"
+                )
+                missing_clusters.append(acm_cluster_name)
+
+        if installed_clusters and missing_clusters:
+            raise UnexpectedDeploymentConfiguration(
+                f"Submariner is only installed on {installed_clusters} but missing on {missing_clusters}. "
+                f"Submariner must be installed on all target managed clusters or none."
+            )
+
+        if len(installed_clusters) == len(target_clusters):
+            # Both (all) target managed clusters have submariner installed.
+            # Verify they are bound to the same ManagedClusterSet.
+            cluster_sets = set(cluster_set_map.values())
+            if None in cluster_sets or not cluster_sets:
+                raise UnexpectedDeploymentConfiguration(
+                    f"Target clusters have Submariner installed but missing "
+                    f"'{constants.ACM_CLUSTERSET_LABEL}' label: {cluster_set_map}"
+                )
+            if len(cluster_sets) > 1:
+                raise UnexpectedDeploymentConfiguration(
+                    f"Target clusters are not in the same ManagedClusterSet: {cluster_set_map}. "
+                    f"Both managed clusters must belong to the same ManagedClusterSet."
+                )
+            logger.info(
+                f"Submariner is already installed on all target clusters {installed_clusters} "
+                f"under ManagedClusterSet '{cluster_sets.pop()}'. Skipping deployment."
+            )
+            return True
+
+        logger.info(
+            "Submariner is not installed on any target clusters. Proceeding with deployment."
+        )
+        return False
+
     def deploy_downstream(self):
         config.switch_acm_ctx()
+
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            dr_cluster_names = dr_cluster_relations[0]
+            cluster_configs = [
+                cluster
+                for cluster in config.clusters
+                if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
+            ]
+        else:
+            cluster_configs = get_non_acm_cluster_config()
+
+        if self.is_submariner_installed(cluster_configs):
+            logger.info(
+                "Submariner is already installed and verified. Skipping downstream deployment."
+            )
+            return
+
         # Get the Selenium driver obj after logging in to ACM
         # Using import here, to avoid partly circular import
         from ocs_ci.ocs.acm.acm import AcmAddClusters, login_to_acm
@@ -116,19 +244,6 @@ class Submariner(object):
         acm_obj = AcmAddClusters()
         if self.submariner_release_type == "unreleased":
             old_ctx = config.cur_index
-            dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
-            # The dr_cluster_relations is expected to have only 1 pair for deployment, else,
-            # the first pair will be considered. This is mainly applicable for client cluster RDR pairs
-            # in multiclient configuration and provider cluster contexts will also be present.
-            if dr_cluster_relations:
-                dr_cluster_names = dr_cluster_relations[0]
-                cluster_configs = [
-                    cluster
-                    for cluster in config.clusters
-                    if cluster.ENV_DATA["cluster_name"] in dr_cluster_names
-                ]
-            else:
-                cluster_configs = get_non_acm_cluster_config()
             for cluster in cluster_configs:
                 # TODO: Skip if hosted cluster only
                 if cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT:
