@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 import time
 
@@ -70,39 +71,23 @@ class TestWorkloadDeployRDR:
             20. Verify all workloads are running on primary cluster.
         """
         # ── 1-4. Subscription and ApplicationSet workloads (RBD + CephFS) ───
-        logger.info("Deploying Subscription BusyBox workload (RBD)")
-        sub_rbd_workloads = dr_workload(
+        logger.info("Deploying Subscription + ApplicationSet BusyBox workloads (RBD)")
+        sub_appset_rbd = dr_workload(
             num_of_subscription=1,
-            num_of_appset=0,
-            pvc_interface=constants.CEPHBLOCKPOOL,
-            skip_mirroring_validation=True,
-        )
-
-        logger.info("Deploying Subscription BusyBox workload (CephFS)")
-        sub_cephfs_workloads = dr_workload(
-            num_of_subscription=1,
-            num_of_appset=0,
-            pvc_interface=constants.CEPHFILESYSTEM,
-            skip_mirroring_validation=True,
-        )
-
-        logger.info("Deploying ApplicationSet BusyBox workload (RBD)")
-        appset_rbd_workloads = dr_workload(
-            num_of_subscription=0,
             num_of_appset=1,
             pvc_interface=constants.CEPHBLOCKPOOL,
             skip_mirroring_validation=True,
         )
 
-        logger.info("Deploying ApplicationSet BusyBox workload (CephFS)")
-        appset_cephfs_workloads = dr_workload(
-            num_of_subscription=0,
+        logger.info("Deploying Subscription + ApplicationSet BusyBox workloads (CephFS)")
+        sub_appset_cephfs = dr_workload(
+            num_of_subscription=1,
             num_of_appset=1,
             pvc_interface=constants.CEPHFILESYSTEM,
             skip_mirroring_validation=True,
         )
 
-        gitops_appset_workloads = appset_rbd_workloads + appset_cephfs_workloads
+        all_sub_appset = sub_appset_rbd + sub_appset_cephfs
 
         # ── 5-8. Discovered Apps workloads ───────────────────────────────────
         logger.info("Deploying Discovered Apps BusyBox workload (RBD)")
@@ -156,10 +141,10 @@ class TestWorkloadDeployRDR:
 
         # ── 11. Identify primary cluster ──────────────────────────────────────
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
-            sub_rbd_workloads[0].workload_namespace
+            sub_appset_rbd[0].workload_namespace
         )
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            sub_rbd_workloads[0].workload_namespace
+            sub_appset_rbd[0].workload_namespace
         )
         config.switch_to_cluster_by_name(primary_cluster_name)
         logger.info(
@@ -167,93 +152,83 @@ class TestWorkloadDeployRDR:
             f"Secondary cluster: {secondary_cluster_name}"
         )
 
-        all_sub_appset = (
-            sub_rbd_workloads + sub_cephfs_workloads + gitops_appset_workloads
-        )
-
-        # ── 12. Verify all workloads on primary ──────────────────────────────
+        # ── 12. Verify all workloads on primary (in parallel) ────────────────
         errors = []
+        logger.info("Verifying all workloads on primary cluster in parallel")
 
-        logger.info("Verifying Subscription and ApplicationSet workloads on primary")
-        for wl in all_sub_appset:
-            try:
-                dr_helpers.wait_for_all_resources_creation(
-                    wl.workload_pvc_count,
-                    wl.workload_pod_count,
-                    wl.workload_namespace,
-                    skip_replication_resources=True,
-                )
-            except Exception as e:
-                logger.error(
-                    f"Initial primary verification failed for {wl.workload_namespace}: {e}"
-                )
-                errors.append(
-                    ("Initial Primary Verification", wl.workload_namespace, str(e))
-                )
-        logger.info("Completed subscription and appset workloads initial verification")
+        def _verify_sub_appset(wl):
+            dr_helpers.wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+                skip_replication_resources=True,
+            )
 
-        logger.info("Verifying Discovered Apps workloads on primary")
-        for wl in all_discovered_workloads:
-            try:
-                da_primary = dr_helpers.get_current_primary_cluster_name(
-                    wl.workload_namespace,
-                    discovered_apps=True,
-                    resource_name=wl.discovered_apps_placement_name,
-                )
-                config.switch_to_cluster_by_name(da_primary)
-                dr_helpers.wait_for_all_resources_creation(
-                    wl.workload_pvc_count,
-                    wl.workload_pod_count,
-                    wl.workload_namespace,
-                    discovered_apps=True,
-                    vrg_name=wl.discovered_apps_placement_name,
-                    skip_replication_resources=True,
-                )
-            except Exception as e:
-                logger.error(
-                    f"Initial primary verification failed for Discovered App {wl.workload_namespace}: {e}"
-                )
-                errors.append(
-                    (
-                        "Initial Primary Verification",
-                        f"DA:{wl.workload_namespace}",
-                        str(e),
-                    )
-                )
-        logger.info("Completed discovered apps workloads initial verification")
+        def _verify_discovered_app(wl):
+            dr_helpers.wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+                discovered_apps=True,
+                vrg_name=wl.discovered_apps_placement_name,
+                skip_replication_resources=True,
+            )
 
-        if cnv_workloads:
-            logger.info("Verifying CNV VM workloads on primary")
-            config.switch_to_cluster_by_name(primary_cluster_name)
+        def _verify_cnv(cnv_wl):
+            dr_helpers.wait_for_all_resources_creation(
+                cnv_wl.workload_pvc_count,
+                cnv_wl.workload_pod_count,
+                cnv_wl.workload_namespace,
+                skip_replication_resources=True,
+            )
+            dr_helpers.wait_for_cnv_workload(
+                vm_name=cnv_wl.vm_name,
+                namespace=cnv_wl.workload_namespace,
+                phase=constants.STATUS_RUNNING,
+            )
+
+        total_workloads = (
+            len(all_sub_appset) + len(all_discovered_workloads) + len(cnv_workloads)
+        )
+        with ThreadPoolExecutor(max_workers=max(total_workloads, 1)) as executor:
+            future_to_workload = {}
+            for wl in all_sub_appset:
+                f = executor.submit(_verify_sub_appset, wl)
+                future_to_workload[f] = (
+                    "Initial Primary Verification",
+                    wl.workload_namespace,
+                )
+
+            for wl in all_discovered_workloads:
+                f = executor.submit(_verify_discovered_app, wl)
+                future_to_workload[f] = (
+                    "Initial Primary Verification",
+                    f"DA:{wl.workload_namespace}",
+                )
+
             for cnv_wl in cnv_workloads:
+                f = executor.submit(_verify_cnv, cnv_wl)
+                future_to_workload[f] = (
+                    "Initial Primary Verification",
+                    f"CNV:{cnv_wl.workload_namespace}",
+                )
+
+            for future in as_completed(future_to_workload):
+                stage, wl_id = future_to_workload[future]
                 try:
-                    dr_helpers.wait_for_all_resources_creation(
-                        cnv_wl.workload_pvc_count,
-                        cnv_wl.workload_pod_count,
-                        cnv_wl.workload_namespace,
-                        skip_replication_resources=True,
-                    )
-                    dr_helpers.wait_for_cnv_workload(
-                        vm_name=cnv_wl.vm_name,
-                        namespace=cnv_wl.workload_namespace,
-                        phase=constants.STATUS_RUNNING,
-                    )
+                    future.result()
+                    logger.info(f"Initial primary verification passed for {wl_id}")
                 except Exception as e:
                     logger.error(
-                        f"Initial primary verification failed for CNV {cnv_wl.workload_namespace}: {e}"
+                        f"Initial primary verification failed for {wl_id}: {e}"
                     )
-                    errors.append(
-                        (
-                            "Initial Primary Verification",
-                            f"CNV:{cnv_wl.workload_namespace}",
-                            str(e),
-                        )
-                    )
-            logger.info("Completed CNV workloads initial verification")
+                    errors.append((stage, wl_id, str(e)))
+
+        logger.info("Completed initial verification for all workloads on primary")
 
         # ── 13. Wait for data sync to complete ───────────────────────────────
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            sub_rbd_workloads[0].workload_namespace
+            sub_appset_rbd[0].workload_namespace
         )
         wait_time = 2 * scheduling_interval
         logger.info(
