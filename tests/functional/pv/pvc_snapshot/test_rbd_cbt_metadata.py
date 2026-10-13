@@ -31,7 +31,6 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources.cbt_metadata import (
     VerifierTool,
-    get_lister_entries_block_ranges,
     get_merged_lister_entries_byte_ranges,
     get_total_covered_bytes,
     get_uncovered_byte_ranges,
@@ -738,8 +737,8 @@ class TestRbdCBTMetadata(ManageTest):
         4. Get the CSI snapshot handle of snap-1 from its
            VolumeSnapshotContent.
         5. Run the CBT lister in delta mode with the base snapshot
-           given by name and by CSI handle, and verify both return
-           the same block ranges.
+           given by name and by CSI handle, and verify both cover
+           the same bytes.
         6. Run the CBT verifier in delta mode with the base
            snapshot given by CSI handle and assert it exits with
            code 0.
@@ -784,7 +783,7 @@ class TestRbdCBTMetadata(ManageTest):
 
         log.test_step(
             "Run the CBT lister in delta mode with the base snapshot given by "
-            "name and by CSI handle, and verify both return the same block ranges"
+            "name and by CSI handle, and verify both cover the same bytes"
         )
         entries_by_name = self.cbt_runner.run_lister_delta(
             target_snap=snap_2.name,
@@ -802,12 +801,13 @@ class TestRbdCBTMetadata(ManageTest):
         )
         assert len(entries_by_name) > 0, "Delta lister by name returned no blocks"
 
-        ranges_by_name = get_lister_entries_block_ranges(entries_by_name)
-        ranges_by_handle = get_lister_entries_block_ranges(entries_by_handle)
-        assert ranges_by_name == ranges_by_handle, (
-            f"Delta by CSI handle returned different block ranges than delta "
-            f"by name. Only by name: {sorted(ranges_by_name - ranges_by_handle)}, "
-            f"only by handle: {sorted(ranges_by_handle - ranges_by_name)}"
+        coverage_by_name = get_merged_lister_entries_byte_ranges(entries_by_name)
+        coverage_by_handle = get_merged_lister_entries_byte_ranges(entries_by_handle)
+        only_by_name = get_uncovered_byte_ranges(coverage_by_name, coverage_by_handle)
+        only_by_handle = get_uncovered_byte_ranges(coverage_by_handle, coverage_by_name)
+        assert not only_by_name and not only_by_handle, (
+            f"Delta by CSI handle covers different bytes than delta by name. "
+            f"Covered only by name: {only_by_name}, only by handle: {only_by_handle}"
         )
 
         log.test_step(
