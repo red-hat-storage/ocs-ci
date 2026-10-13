@@ -444,21 +444,33 @@ def verify_workload_moved_out_of_zone(
         Pod: Pod object of the workload running in the surviving zone
 
     Raises:
-        UnexpectedBehaviour: If the workload has no running pod outside the
-            failed zone within the timeout
+        UnexpectedBehaviour: If the failed zone is not a data zone, or if the
+            workload has no running pod in the surviving data zone within the
+            timeout
 
     """
+    data_zones = get_data_zones()
+    if zone not in data_zones:
+        raise UnexpectedBehaviour(
+            f"Failed zone {zone} is not one of the data zones {data_zones}"
+        )
+    # Match the surviving data zone explicitly rather than accepting any zone
+    # that is not the failed one. The workloads have no scheduling constraint
+    # keeping them off the arbiter node or off a node with no zone label, and
+    # landing on either of those is not the failover this is verifying
+    surviving_zone = next(data_zone for data_zone in data_zones if data_zone != zone)
+    logger.info(f"Waiting for the workload {label} to run in zone {surviving_zone}")
 
     def _pod_in_surviving_zone():
         for pod_obj in get_running_workload_pods(label=label, namespace=namespace):
             node_name = get_pod_node(pod_obj).name
             node_zone = get_zone_of_node(node_name)
-            if node_zone != zone:
+            if node_zone == surviving_zone:
                 return pod_obj, node_name, node_zone
             logger.info(
-                f"Workload {label} pod {pod_obj.name} is still running on "
-                f"{node_name} in the failed zone {zone}, waiting for it to be "
-                f"evicted"
+                f"Workload {label} pod {pod_obj.name} is running on {node_name} "
+                f"in zone {node_zone}, waiting for it to come up in "
+                f"{surviving_zone}"
             )
         return None
 
@@ -475,6 +487,6 @@ def verify_workload_moved_out_of_zone(
                 return pod_obj
     except TimeoutExpiredError:
         raise UnexpectedBehaviour(
-            f"Workload {label} has no running pod outside the failed zone "
-            f"{zone} after {timeout} seconds"
+            f"Workload {label} has no running pod in the surviving zone "
+            f"{surviving_zone} after {timeout} seconds"
         )
