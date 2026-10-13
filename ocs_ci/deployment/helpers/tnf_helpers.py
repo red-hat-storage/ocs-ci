@@ -3,6 +3,7 @@ Helper functions for Two-Node Fencing (TNF) cluster deployment
 """
 
 import base64
+import json
 import logging
 import os
 import tempfile
@@ -10,8 +11,14 @@ import tempfile
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedDeploymentConfiguration
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.utility import templating
 from ocs_ci.utility.templating import Templating
-from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
+from ocs_ci.utility.utils import (
+    exec_cmd,
+    TimeoutSampler,
+    wait_for_machineconfigpool_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -212,12 +219,11 @@ def configure_drbd(node_0_info, node_1_info, monitor_disk_node_0, monitor_disk_n
     _validate_device_on_node(node_0_info["name"], monitor_disk_node_0)
     _validate_device_on_node(node_1_info["name"], monitor_disk_node_1)
 
-    # Fix virtual disk issues: rotational flag and missing /dev/disk/by-id symlinks
+    # Ensure /dev/disk/by-id symlinks exist for virtual disks
     for node_name, disk_path in [
         (node_0_info["name"], monitor_disk_node_0),
         (node_1_info["name"], monitor_disk_node_1),
     ]:
-        _fix_rotational_flag_if_virtual(node_name, disk_path)
         _ensure_disk_by_id_symlink(node_name, disk_path)
 
     # Fetch the drbd-setup script from the ODF operator ConfigMap
@@ -257,7 +263,13 @@ def configure_drbd(node_0_info, node_1_info, monitor_disk_node_0, monitor_disk_n
         if attempt == 1:
             logger.warning(
                 f"DRBD setup script failed (exit code {result.returncode}), "
-                "retrying..."
+                "running uninstall before retry..."
+            )
+            exec_cmd(
+                f"bash {script_path} uninstall {disk_flag}",
+                shell=True,
+                timeout=600,
+                ignore_error=True,
             )
         else:
             raise CommandFailed(
@@ -307,51 +319,33 @@ def _validate_device_on_node(node_name, device_path):
         raise
 
 
-def _fix_rotational_flag_if_virtual(node_name, device_path):
+def apply_ssd_workaround_machineconfig():
     """
-    Set rotational flag to 0 on disks that report ROTA=1 in VM environments.
+    Apply MachineConfig to mark all disks as SSD (non-rotational) on master nodes.
 
-    VM-backed disks (virtio, SCSI-emulated, xen) may falsely report as
-    rotational even when backed by SSD storage. The drbd-setup script
-    requires ROTA=0.
+    TNF clusters have only master nodes with virtual disks that falsely report
+    as rotational (ROTA=1). This creates a systemd oneshot service that sets
+    rotational=0 on every boot, persisting across reboots.
 
-    Args:
-        node_name (str): Node name
-        device_path (str): Device path (e.g. /dev/vda, /dev/sdb)
+    Uses the existing workaround-ssd MachineConfig template, modified for
+    the master role.
     """
-
     try:
-        resolved = exec_cmd(
-            f"oc debug -q node/{node_name} -- chroot /host "
-            f"readlink -f {device_path}",
-            shell=True,
-            timeout=60,
-        )
-        dev_name = os.path.basename(resolved.stdout.decode().strip())
-        rotational_path = f"/sys/block/{dev_name}/queue/rotational"
-        result = exec_cmd(
-            f"oc debug -q node/{node_name} -- chroot /host cat {rotational_path}",
-            shell=True,
-            timeout=60,
-        )
-        current = result.stdout.decode().strip()
-        if current == "0":
-            return
-
-        logger.info(
-            f"Setting {device_path} on {node_name} as non-rotational "
-            f"(ROTA=1, likely virtual disk backed by SSD)"
-        )
-        exec_cmd(
-            f"oc debug -q node/{node_name} -- chroot /host "
-            f"bash -c 'echo 0 > {rotational_path}'",
-            shell=True,
-            timeout=60,
-        )
-    except CommandFailed as e:
-        logger.warning(
-            f"Could not fix rotational flag for {device_path} on {node_name}: {e}"
-        )
+        logger.info("Applying SSD workaround MachineConfig for master nodes...")
+        mc_yaml_file = templating.load_yaml(constants.MC_WORKAROUND_SSD)
+        mc_yaml_file["metadata"]["name"] = "99-master-workaround-ssd"
+        mc_yaml_file["metadata"]["labels"][
+            "machineconfiguration.openshift.io/role"
+        ] = "master"
+        mc_yaml = OCS(**mc_yaml_file)
+        mc_yaml.create()
+        wait_for_machineconfigpool_status("all")
+        logger.info("SSD workaround MachineConfig applied to master nodes")
+    except CommandFailed as err:
+        if "AlreadyExists" in str(err):
+            logger.info("SSD workaround MachineConfig already applied")
+        else:
+            raise
 
 
 def _ensure_disk_by_id_symlink(node_name, device_path):
@@ -421,7 +415,6 @@ def resolve_disk_by_id_path(node_name, device_path):
     Returns:
         str: The /dev/disk/by-id/ path, or the original path if resolution fails
     """
-    _fix_rotational_flag_if_virtual(node_name, device_path)
     _ensure_disk_by_id_symlink(node_name, device_path)
 
     try:
@@ -658,25 +651,22 @@ def get_block_devices_on_node(node_name):
     try:
         cmd = (
             f"oc debug -q node/{node_name} -- chroot /host "
-            f"lsblk -ndo NAME,PATH,SIZE,ROTA,TYPE,FSTYPE"
+            f"lsblk -dno NAME,PATH,SIZE,ROTA,TYPE,FSTYPE --json"
         )
         result = exec_cmd(cmd, shell=True)
-        devices_output = result.stdout.decode().strip().split("\n")
-
+        lsblk_data = json.loads(result.stdout.decode().strip())
         devices = []
-        for line in devices_output:
-            parts = line.split()
-            if len(parts) >= 5:
-                devices.append(
-                    {
-                        "name": parts[0],
-                        "path": parts[1],
-                        "size": parts[2],
-                        "rota": parts[3],
-                        "type": parts[4],
-                        "fstype": parts[5] if len(parts) > 5 else "",
-                    }
-                )
+        for dev in lsblk_data.get("blockdevices", []):
+            devices.append(
+                {
+                    "name": dev.get("name", ""),
+                    "path": dev.get("path", ""),
+                    "size": dev.get("size", ""),
+                    "rota": str(dev.get("rota", "")),
+                    "type": dev.get("type", ""),
+                    "fstype": dev.get("fstype") or "",
+                }
+            )
 
         logger.info(f"Found {len(devices)} block devices on {node_name}")
         return devices
@@ -733,24 +723,32 @@ def discover_available_disks(node_info):
         # lsblk WITHOUT -d to include partitions for parent disk detection
         cmd = (
             f"oc debug -q node/{node_name} -- chroot /host "
-            f"lsblk -no NAME,PATH,SIZE,ROTA,TYPE,FSTYPE"
+            f"lsblk -no NAME,PATH,SIZE,ROTA,TYPE,FSTYPE --json"
         )
         lsblk_result = exec_cmd(cmd, shell=True)
-        lines = lsblk_result.stdout.decode().strip().split("\n")
+        lsblk_data = json.loads(lsblk_result.stdout.decode().strip())
 
         all_entries = []
-        for line in lines:
-            parts = line.split()
-            if len(parts) >= 5:
-                name = parts[0].lstrip("│├└─ ").lstrip("|-`- ")
+        for dev in lsblk_data.get("blockdevices", []):
+            all_entries.append(
+                {
+                    "name": dev.get("name", ""),
+                    "path": dev.get("path", ""),
+                    "size": dev.get("size", ""),
+                    "rota": str(dev.get("rota", "")),
+                    "type": dev.get("type", ""),
+                    "fstype": dev.get("fstype") or "",
+                }
+            )
+            for child in dev.get("children", []):
                 all_entries.append(
                     {
-                        "name": name,
-                        "path": parts[1],
-                        "size": parts[2],
-                        "rota": parts[3],
-                        "type": parts[4],
-                        "fstype": parts[5] if len(parts) > 5 else "",
+                        "name": child.get("name", ""),
+                        "path": child.get("path", ""),
+                        "size": child.get("size", ""),
+                        "rota": str(child.get("rota", "")),
+                        "type": child.get("type", ""),
+                        "fstype": child.get("fstype") or "",
                     }
                 )
 

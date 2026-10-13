@@ -21,6 +21,7 @@ from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.ocs import constants
 from ocs_ci.deployment.helpers.tnf_helpers import (
     _parse_size_gb,
+    apply_ssd_workaround_machineconfig,
     verify_tnf_cluster_topology,
     get_tnf_node_info,
     create_local_storage_class,
@@ -339,6 +340,9 @@ class TNF(TNFBASE):
 
         # Discover disks if not specified in config
         self._resolve_disk_config()
+
+        # Apply MachineConfig to mark virtual disks as SSD (persists across reboots)
+        apply_ssd_workaround_machineconfig()
 
         # Step 1: Create StorageClass and PVs BEFORE parent flow
         # This prevents LSO auto-discovery (parent skips LSO if SC exists)

@@ -153,7 +153,8 @@ class TNFHypervisor:
 
         logger.info("Creating VPC networking stack...")
 
-        vpc = self.ec2_client.create_vpc(CidrBlock="10.192.0.0/16")
+        vpc_cidr = self.config.get("vpc_cidr", constants.TNF_HYPERVISOR_VPC_CIDR)
+        vpc = self.ec2_client.create_vpc(CidrBlock=vpc_cidr)
         vpc_id = vpc["Vpc"]["VpcId"]
         self.ec2_client.create_tags(Resources=[vpc_id], Tags=tag_spec)
         self.ec2_client.modify_vpc_attribute(
@@ -169,9 +170,12 @@ class TNFHypervisor:
         self.ec2_client.attach_internet_gateway(InternetGatewayId=igw_id, VpcId=vpc_id)
         logger.info(f"Internet gateway created and attached: {igw_id}")
 
+        subnet_cidr = self.config.get(
+            "subnet_cidr", constants.TNF_HYPERVISOR_SUBNET_CIDR
+        )
         subnet = self.ec2_client.create_subnet(
             VpcId=vpc_id,
-            CidrBlock="10.192.10.0/24",
+            CidrBlock=subnet_cidr,
         )
         subnet_id = subnet["Subnet"]["SubnetId"]
         self.ec2_client.modify_subnet_attribute(

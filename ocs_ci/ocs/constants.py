@@ -746,6 +746,8 @@ TNF_DEV_SCRIPTS_BRANCH = "master"
 TNF_DEV_SCRIPTS_DIR = "/root/dev-scripts"
 TNF_DEV_SCRIPTS_OCP_DIR = "/root/dev-scripts/ocp"
 TNF_DEV_SCRIPTS_TIMEOUT = 7200
+TNF_HYPERVISOR_VPC_CIDR = "10.192.0.0/16"
+TNF_HYPERVISOR_SUBNET_CIDR = "10.192.10.0/24"
 TNF_HYPERVISOR_SG_NAME_PREFIX = "tnf-hypervisor-sg"
 TNF_HYPERVISOR_SG_PORTS = [
     {"port": 22, "protocol": "tcp", "description": "SSH"},
