@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     skipif_cephfs_disabled,
     skipif_managed_service,
+    skipif_rhel9_nodes,
 )
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2, polarion_id
 from ocs_ci.ocs import constants, node, ocp
@@ -36,6 +37,7 @@ USERNS_UID_RANGE = "10000/1000"
 @skipif_managed_service
 @skipif_rosa_hcp
 @skipif_mcg_only
+@skipif_rhel9_nodes
 class TestUserNamespaceCephFS(ManageTest):
     """
     Verify CephFS I/O under user namespaces (hostUsers=false)
