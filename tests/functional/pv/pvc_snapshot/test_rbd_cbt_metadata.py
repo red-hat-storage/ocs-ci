@@ -463,11 +463,11 @@ class TestRbdCBTMetadata(ManageTest):
         argvalues=[
             pytest.param(
                 constants.VOLUME_MODE_BLOCK,
-                marks=pytest.mark.polarion_id("OCS-XXXX"),
+                marks=pytest.mark.polarion_id("OCS-8327"),
             ),
             pytest.param(
                 constants.VOLUME_MODE_FILESYSTEM,
-                marks=pytest.mark.polarion_id("OCS-XXXX"),
+                marks=pytest.mark.polarion_id("OCS-8328"),
             ),
         ],
     )
@@ -604,11 +604,11 @@ class TestRbdCBTMetadata(ManageTest):
         argvalues=[
             pytest.param(
                 constants.VOLUME_MODE_BLOCK,
-                marks=pytest.mark.polarion_id("OCS-XXXX"),
+                marks=pytest.mark.polarion_id("OCS-8329"),
             ),
             pytest.param(
                 constants.VOLUME_MODE_FILESYSTEM,
-                marks=pytest.mark.polarion_id("OCS-XXXX"),
+                marks=pytest.mark.polarion_id("OCS-8330"),
             ),
         ],
     )
@@ -709,11 +709,11 @@ class TestRbdCBTMetadata(ManageTest):
         argvalues=[
             pytest.param(
                 constants.VOLUME_MODE_BLOCK,
-                marks=pytest.mark.polarion_id("OCS-XXXX"),
+                marks=pytest.mark.polarion_id("OCS-8333"),
             ),
             pytest.param(
                 constants.VOLUME_MODE_FILESYSTEM,
-                marks=pytest.mark.polarion_id("OCS-XXXX"),
+                marks=pytest.mark.polarion_id("OCS-8334"),
             ),
         ],
     )
