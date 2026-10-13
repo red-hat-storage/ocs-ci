@@ -1733,7 +1733,16 @@ class Deployment(object):
             templating.dump_data_to_temp_yaml(olm_ns_op_group_data, constants.OLM_YAML)
 
         try:
-            run_cmd(f"oc create -f {constants.OLM_YAML}")
+            retry(
+                CommandFailed,
+                tries=5,
+                delay=15,
+                backoff=1,
+                text_in_exception=(
+                    "resource quota evaluation timed out",
+                    "Internal error occurred",
+                ),
+            )(run_cmd)(f"oc create -f {constants.OLM_YAML}")
         except CommandFailed as ex:
             if "AlreadyExists" in str(ex):
                 logger.info("OLM resources already exist, calling apply to update!")
