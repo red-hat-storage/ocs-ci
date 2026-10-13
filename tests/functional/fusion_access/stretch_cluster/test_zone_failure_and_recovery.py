@@ -1,5 +1,4 @@
 import logging
-from collections import Counter
 from datetime import datetime, timezone
 
 import pytest
@@ -88,23 +87,30 @@ class TestFusionAccessZoneFailureAndRecovery:
         # Note the logfiles created so far, used for the data loss check
         sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
-        # Fetch the nodes of the zone that needs to be shutdown. The Deployment
-        # based workloads have no hard placement constraint, so the scheduler
-        # decides which data zone they start in. Failing a zone they do not run
-        # in would leave them untouched and the failover this test is about
-        # would never happen, so the zone is picked from where they actually
-        # landed instead of always taking the first data zone
+        # Fetch the nodes of the zone that needs to be shutdown. The zone is
+        # taken from where the Deployment based workloads actually landed, not
+        # fixed in advance: failing a zone they do not run in would leave them
+        # untouched and the failover checks below would pass without anything
+        # having moved. The file-uploader template keeps them together with a
+        # pod affinity, which is a preference and not a guarantee, so the
+        # co-location is asserted rather than assumed
         data_zones = get_data_zones()
-        pods_per_zone = Counter()
+        workload_zones = {}
         for label in WORKLOAD_MOUNT_PATHS:
             pod_obj = get_workload_pod(label=label, namespace=namespace)
-            pods_per_zone[get_zone_of_node(get_pod_node(pod_obj).name)] += 1
-        log.info(f"Workload pods per zone before the failure: {dict(pods_per_zone)}")
+            workload_zones[label] = get_zone_of_node(get_pod_node(pod_obj).name)
+        log.info(f"Workload placement before the failure: {workload_zones}")
 
-        zone = max(data_zones, key=lambda data_zone: pods_per_zone[data_zone])
-        assert pods_per_zone[zone], (
-            f"None of the workloads {list(WORKLOAD_MOUNT_PATHS)} is running in "
-            f"a data zone {data_zones}, their placement is {dict(pods_per_zone)}"
+        zone = workload_zones[constants.BUSYBOX_FUSION_LABEL]
+        assert zone in data_zones, (
+            f"The workloads started in zone {zone}, which is not one of the "
+            f"data zones {data_zones}"
+        )
+        assert set(workload_zones.values()) == {zone}, (
+            f"The Deployment based workloads did not all start in the same "
+            f"zone, their placement is {workload_zones}. Shutting down zone "
+            f"{zone} would leave the workloads of the other zone running and "
+            f"their failover would never be exercised"
         )
 
         nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
