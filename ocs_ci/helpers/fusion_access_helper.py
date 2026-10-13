@@ -247,6 +247,35 @@ def create_workload_from_template(
     return created_resources
 
 
+def get_running_workload_pods(label, namespace):
+    """
+    Get the pods of a workload that are running and not terminating.
+
+    A pod on a node that is down keeps its Running status until the node
+    controller evicts it, at which point it gets a deletion timestamp but stays
+    Running because the kubelet is unreachable and cannot confirm it is gone.
+    Both of those have to be filtered out when looking for a usable pod.
+
+    Args:
+        label (str): Label of the workload
+        namespace (str): Namespace of the workload
+
+    Returns:
+        list: Pod objects of the running pods of the workload
+
+    """
+    running_pods = []
+    for pod_data in get_pods_having_label(label=label, namespace=namespace):
+        pod_obj = Pod(**pod_data)
+        if (
+            pod_obj.status() == constants.STATUS_RUNNING
+            and pod_obj.get()["metadata"].get("deletionTimestamp") is None
+        ):
+            running_pods.append(pod_obj)
+
+    return running_pods
+
+
 @retry(UnexpectedBehaviour, tries=10, delay=30)
 def get_workload_pod(label, namespace):
     """
@@ -263,17 +292,11 @@ def get_workload_pod(label, namespace):
         UnexpectedBehaviour: If there is no running pod for the workload
 
     """
-    for pod_data in get_pods_having_label(label=label, namespace=namespace):
-        pod_obj = Pod(**pod_data)
-        # A pod on a node that is down stays in Running state with a deletion
-        # timestamp set, so the terminating pods have to be filtered out
-        if (
-            pod_obj.status() == constants.STATUS_RUNNING
-            and pod_obj.get()["metadata"].get("deletionTimestamp") is None
-        ):
-            return pod_obj
+    running_pods = get_running_workload_pods(label=label, namespace=namespace)
+    if not running_pods:
+        raise UnexpectedBehaviour(f"No running pod found for the workload {label}")
 
-    raise UnexpectedBehaviour(f"No running pod found for the workload {label}")
+    return running_pods[0]
 
 
 def wait_for_workload_pods(labels, namespace, expected_count=None, timeout=600):
@@ -393,32 +416,65 @@ def verify_route_accessible(route_name, namespace):
     logger.info(f"Route https://{host} is accessible")
 
 
-def verify_workload_moved_out_of_zone(label, namespace, zone):
+def verify_workload_moved_out_of_zone(
+    label, namespace, zone, timeout=900, sleep_time=30
+):
     """
-    Verify the pod of a workload has moved out of the given zone and is running
-    in the surviving zone
+    Wait for the pod of a workload to be rescheduled out of a failed zone and
+    verify it comes up in the surviving zone.
+
+    This polls rather than checking once. The pods of an unreachable node are
+    not evicted straight away, they keep their Running status and have no
+    deletion timestamp until the default 5 minute
+    'node.kubernetes.io/unreachable:NoExecute' toleration expires. Checking as
+    soon as the nodes report NotReady therefore finds the original pod, still
+    apparently healthy, on a node of the failed zone.
 
     Args:
         label (str): Label of the workload
         namespace (str): Namespace of the workload
-        zone (str): Zone the workload is expected to have moved out of
+        zone (str): Zone the workload is expected to move out of
+        timeout (int): Time in seconds to wait for the pod to be running in the
+            surviving zone. Has to comfortably exceed the 5 minute eviction
+            toleration plus the time it takes to schedule and start the
+            replacement pod
+        sleep_time (int): Time in seconds between two checks
 
     Returns:
         Pod: Pod object of the workload running in the surviving zone
 
     Raises:
-        AssertionError: If the workload pod is still running in the failed zone
+        UnexpectedBehaviour: If the workload has no running pod outside the
+            failed zone within the timeout
 
     """
-    pod_obj = get_workload_pod(label=label, namespace=namespace)
-    node_name = get_pod_node(pod_obj).name
-    node_zone = get_zone_of_node(node_name)
-    assert node_zone != zone, (
-        f"Workload {label} pod {pod_obj.name} is still running on {node_name} "
-        f"which is in the failed zone {zone}"
-    )
-    logger.info(
-        f"Workload {label} moved to pod {pod_obj.name} on node {node_name} "
-        f"in zone {node_zone}"
-    )
-    return pod_obj
+
+    def _pod_in_surviving_zone():
+        for pod_obj in get_running_workload_pods(label=label, namespace=namespace):
+            node_name = get_pod_node(pod_obj).name
+            node_zone = get_zone_of_node(node_name)
+            if node_zone != zone:
+                return pod_obj, node_name, node_zone
+            logger.info(
+                f"Workload {label} pod {pod_obj.name} is still running on "
+                f"{node_name} in the failed zone {zone}, waiting for it to be "
+                f"evicted"
+            )
+        return None
+
+    try:
+        for result in TimeoutSampler(
+            timeout=timeout, sleep=sleep_time, func=_pod_in_surviving_zone
+        ):
+            if result:
+                pod_obj, node_name, node_zone = result
+                logger.info(
+                    f"Workload {label} moved to pod {pod_obj.name} on node "
+                    f"{node_name} in zone {node_zone}"
+                )
+                return pod_obj
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"Workload {label} has no running pod outside the failed zone "
+            f"{zone} after {timeout} seconds"
+        )

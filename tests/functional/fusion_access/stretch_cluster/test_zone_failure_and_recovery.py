@@ -111,7 +111,10 @@ class TestFusionAccessZoneFailureAndRecovery:
         # Step 2: make sure the Deployment based workloads failover to the
         # surviving zone. The volumes are RWX so the replacement pod can attach
         # while the VolumeAttachment of the unreachable node is still around,
-        # which means no manual intervention is needed for the failover
+        # which means no manual intervention is needed for the failover. It is
+        # not immediate though, the original pods are only evicted once the 5
+        # minute 'node.kubernetes.io/unreachable' toleration expires, so this
+        # waits rather than asserting on the placement right away
         workload_pods = {}
         for label in WORKLOAD_MOUNT_PATHS:
             workload_pods[label] = verify_workload_moved_out_of_zone(
