@@ -1446,11 +1446,15 @@ def validate_pdb_creation():
         pdb_required.remove(constants.MDS_PDB)
         pdb_count -= 1
 
-    if len(item_list) != pdb_count:
-        raise PDBNotCreatedException(
-            f"Not All PDB's created. Expected {pdb_count} PDB's but found {len(item_list)}"
-        )
     pdb_list = [item["metadata"]["name"] for item in item_list]
+
+    if len(item_list) != pdb_count:
+        missing_pdb = [item for item in pdb_required if item not in pdb_list]
+        raise PDBNotCreatedException(
+            f"Not All PDB's created. Expected {pdb_count} PDB's but found {len(item_list)}.\n"
+            f"Expected: {pdb_required} but found {pdb_list} on the cluster.\n"
+            f"Missing PDB: {missing_pdb}"
+        )
 
     pdb_list.sort()
     pdb_required.sort()
