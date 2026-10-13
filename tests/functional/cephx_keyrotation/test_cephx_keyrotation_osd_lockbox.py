@@ -2,8 +2,8 @@
 OSD Lockbox CephX Key Rotation for Encrypted OSDs
 
 Verify that lockbox CephX keys (client.osd-lockbox.<UUID>) are rotated correctly
-for encrypted OSDs: encrypted labels, updated lockbox keys, activate init container
-key load, operator rotation logs, and cluster health after rotation.
+for encrypted OSDs: encrypted labels, updated lockbox keys, encrypted device
+open after restart, operator rotation logs, and cluster health after rotation.
 """
 
 import logging
@@ -41,7 +41,8 @@ class TestCephXKeyRotationOSDLockbox:
             2. Verify ``encrypted=true`` labels and record baseline lockbox keys.
             3. Trigger daemon key rotation.
             4. Wait for OSD pod restarts and verify lockbox keys changed.
-            5. Verify activate init container and operator lockbox rotation logs.
+            5. Verify the encrypted device opened (or the legacy activate lockbox
+               log) and operator lockbox rotation logs.
             6. Verify encrypted OSD pods remain Running/Ready and PGs are clean.
 
         Requires a cluster with encrypted OSDs (host-based and/or PVC-based).
