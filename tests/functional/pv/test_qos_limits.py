@@ -7,6 +7,8 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
+    ignore_leftovers,
+    polarion_id,
     post_upgrade,
     pre_upgrade,
     skipif_ocs_version,
@@ -345,7 +347,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
         "test_id, access_mode, volume_mode, is_gold_vac, pod_name, containers_spec, expected_qos_class, is_read_only",
         [
             # Guaranteed pod + fresh filesystem RWO baseline
-            (
+            pytest.param(
                 "guaranteed-fs-rwo",
                 constants.ACCESS_MODE_RWO,
                 constants.VOLUME_MODE_FILESYSTEM,
@@ -354,9 +356,10 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 GUARANTEED_FS_CONTAINERS,
                 "Guaranteed",
                 False,
+                marks=polarion_id("OCS-8338"),
             ),
             # Burstable pod + fresh filesystem RWOP validation
-            (
+            pytest.param(
                 "burstable-fs-rwop",
                 constants.ACCESS_MODE_RWOP,
                 constants.VOLUME_MODE_FILESYSTEM,
@@ -365,9 +368,10 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 BURSTABLE_FS_CONTAINERS,
                 "Burstable",
                 False,
+                marks=polarion_id("OCS-8339"),
             ),
             # BestEffort pod + fresh block RWX multi-container isolation
-            (
+            pytest.param(
                 "besteffort-block-rwx-multicontainer",
                 constants.ACCESS_MODE_RWX,
                 constants.VOLUME_MODE_BLOCK,
@@ -376,9 +380,10 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 BESTEFFORT_BLOCK_CONTAINERS,
                 "BestEffort",
                 False,
+                marks=polarion_id("OCS-8340"),
             ),
             # Guaranteed pod + fresh block RWO mapping
-            (
+            pytest.param(
                 "guaranteed-block-rwo",
                 constants.ACCESS_MODE_RWO,
                 constants.VOLUME_MODE_BLOCK,
@@ -387,9 +392,10 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 GUARANTEED_BLOCK_CONTAINERS,
                 "Guaranteed",
                 False,
+                marks=polarion_id("OCS-8341"),
             ),
             # Burstable pod + fresh block RWOP mapping
-            (
+            pytest.param(
                 "burstable-block-rwop",
                 constants.ACCESS_MODE_RWOP,
                 constants.VOLUME_MODE_BLOCK,
@@ -398,9 +404,10 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 BURSTABLE_BLOCK_CONTAINERS,
                 "Burstable",
                 False,
+                marks=polarion_id("OCS-8342"),
             ),
             # Read-only (ROX) block mode on the Gold tier
-            (
+            pytest.param(
                 "readonly-block-gold",
                 constants.ACCESS_MODE_RWO,
                 constants.VOLUME_MODE_BLOCK,
@@ -409,6 +416,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 GUARANTEED_BLOCK_CONTAINERS,
                 "Guaranteed",
                 True,  # Read-Only Spec Flag
+                marks=polarion_id("OCS-8343"),
             ),
         ],
         ids=[
@@ -573,6 +581,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
         """Thin wrapper around the module-level validate_filesystem_io."""
         validate_filesystem_io(pod_obj, test_id)
 
+    @polarion_id("OCS-8326")
     def test_qos_volume_cloning_vac_override(
         self, project_factory, test_resources_cleanup
     ):
@@ -661,8 +670,16 @@ class TestVolumeAttributesClassQoS(ManageTest):
     @pytest.mark.parametrize(
         "test_id, pod_name",
         [
-            ("live-mutation-to-unthrottled", "mutation-qos-pod"),
-            ("profile-removal-unset", "removal-qos-pod"),
+            pytest.param(
+                "live-mutation-to-unthrottled",
+                "mutation-qos-pod",
+                marks=polarion_id("OCS-8331"),
+            ),
+            pytest.param(
+                "profile-removal-unset",
+                "removal-qos-pod",
+                marks=polarion_id("OCS-8332"),
+            ),
         ],
         ids=[
             "live-mutation-to-unthrottled",
@@ -731,6 +748,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
         logger.test_step(f"[{test_id}] Validate active I/O after limits are cleared")
         self._validate_filesystem_io(new_pod_obj, test_id)
 
+    @polarion_id("OCS-8335")
     def test_qos_snapshot_restore_vac_pipeline(
         self,
         project_factory,
@@ -869,6 +887,8 @@ class TestQoSPreExistingPVCAfterUpgrade(ManageTest):
     """
 
     @pre_upgrade
+    @ignore_leftovers
+    @polarion_id("OCS-8336")
     def test_qos_provision_pvc_pre_upgrade(self):
         """Pre-upgrade phase: provision a plain PVC + app pod and seed data.
 
@@ -927,6 +947,8 @@ class TestQoSPreExistingPVCAfterUpgrade(ManageTest):
         )
 
     @post_upgrade
+    @skipif_ocs_version("<4.21")
+    @polarion_id("OCS-8337")
     def test_qos_pre_existing_pvc_post_upgrade(self, request):
         """Post-upgrade phase: bind the pre-existing PVC to Silver and verify.
 
