@@ -5765,6 +5765,29 @@ def get_system_architecture():
     return node.ocp.exec_oc_debug_cmd(node.data["metadata"]["name"], ["uname -m"])
 
 
+def get_machineconfigpool_timeout():
+    """
+    Compute the timeout to use when waiting for a MachineConfigPool rollout.
+
+    Applying or removing a MachineConfig (for example an ImageDigestMirrorSet)
+    rolls every node in the pool: each one is cordoned, drained and rebooted
+    serially.  The wall-clock cost therefore scales with the node count, and on
+    baremetal with ODF workloads a single node routinely takes well over ten
+    minutes to drain and rejoin.  Budget per node instead of using a flat
+    value, with a floor for very small clusters.
+
+    Returns:
+        int: timeout in seconds
+
+    """
+    num_nodes = (
+        config.ENV_DATA["worker_replicas"]
+        + config.ENV_DATA["master_replicas"]
+        + config.ENV_DATA.get("infra_replicas", 0)
+    )
+    return max(2800, 900 * num_nodes)
+
+
 def wait_for_machineconfigpool_status(
     node_type,
     timeout=1900,

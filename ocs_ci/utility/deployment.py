@@ -22,6 +22,7 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     create_directory_path,
     exec_cmd,
+    get_machineconfigpool_timeout,
     run_cmd,
     wait_for_machineconfigpool_status,
 )
@@ -251,13 +252,9 @@ def get_and_apply_idms_from_catalog(image, apply=True, insecure=False):
                 and config.ENV_DATA["deployment_type"] == "managed"
             )
             if not managed_ibmcloud:
-                num_nodes = (
-                    config.ENV_DATA["worker_replicas"]
-                    + config.ENV_DATA["master_replicas"]
-                    + config.ENV_DATA.get("infra_replicas", 0)
+                wait_for_machineconfigpool_status(
+                    node_type="all", timeout=get_machineconfigpool_timeout()
                 )
-                timeout = 2800 if num_nodes > 6 else 1900
-                wait_for_machineconfigpool_status(node_type="all", timeout=timeout)
 
     if (
         stage_testing

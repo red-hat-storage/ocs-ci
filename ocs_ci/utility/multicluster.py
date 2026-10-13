@@ -551,6 +551,12 @@ class RDRProviderClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
         For ``rdr-all-ocp``: hosted client clusters are excluded because their
         OCP upgrade is handled by ``test_upgrade_kubevirt_clusters`` (marked
         ``rdr-provider-all-clients``), not by ``test_upgrade_ocp``.
+
+        For ``rdr-all-odf``: no parameters are generated at all.  The ODF
+        upgrade on a provider is performed by ``test_provider_cluster_upgrade``
+        (``run_provider_upgrade`` -> ``_run_odf_provider_upgrade``), and the
+        hosted clients follow their provider, so ``test_upgrade`` has nothing
+        to do in this scenario.
         """
         pytest_params = []
         for role in roles:
@@ -558,7 +564,8 @@ class RDRProviderClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
                 pytest_params.extend(self.get_pytest_params_tuple(role))
             elif role.startswith("rdr-all"):
                 if "all-odf" in role:
-                    pytest_params.extend(self.get_all_odf_roles_to_param_tuple())
+                    # ODF upgrade is covered by test_provider_cluster_upgrade
+                    continue
                 elif "all-acm" in role:
                     pytest_params.extend(self.get_all_acm_roles_to_param_tuple())
                 elif "all-ocp" in role:
