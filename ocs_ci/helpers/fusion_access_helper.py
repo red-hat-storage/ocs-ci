@@ -32,6 +32,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_by_label_count,
     wait_for_pods_to_be_running,
 )
+from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
@@ -220,16 +221,22 @@ def create_workload_from_template(
 
     Returns:
         list: OCS objects representing the created resources, in the order
-            they are defined in the template
+            they are defined in the template. PVCs are returned as PVC objects
 
     """
     created_resources = []
     for resource_data in templating.load_yaml(template_path, multi_document=True):
         resource_data["metadata"]["namespace"] = namespace
-        if sc_name and resource_data["kind"] == constants.PVC:
+        is_pvc = resource_data["kind"] == constants.PVC
+        if sc_name and is_pvc:
             resource_data["spec"]["storageClassName"] = sc_name
 
         resource_obj = helpers.create_resource(**resource_data)
+        if is_pvc:
+            # 'create_resource' hands back a generic OCS object, but the
+            # teardown factory reads 'reclaim_policy' off every PVC it is
+            # given and that property only exists on the PVC class
+            resource_obj = PVC(**resource_data)
         if teardown_factory:
             teardown_factory(resource_obj)
         created_resources.append(resource_obj)
