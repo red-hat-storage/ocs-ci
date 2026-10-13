@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 from datetime import datetime, timezone
 
 import pytest
@@ -14,6 +15,7 @@ from ocs_ci.helpers.fusion_access_helper import (
     discover_iscsi_luns,
     get_data_zones,
     get_workload_pod,
+    get_zone_of_node,
     wait_for_workload_pods,
     verify_baseline_file,
     verify_route_accessible,
@@ -21,6 +23,7 @@ from ocs_ci.helpers.fusion_access_helper import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import wait_for_nodes_status
+from ocs_ci.ocs.resources.pod import get_pod_node
 
 log = logging.getLogger(__name__)
 
@@ -85,8 +88,25 @@ class TestFusionAccessZoneFailureAndRecovery:
         # Note the logfiles created so far, used for the data loss check
         sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
-        # Fetch the nodes of the zone that needs to be shutdown
-        zone = get_data_zones()[0]
+        # Fetch the nodes of the zone that needs to be shutdown. The Deployment
+        # based workloads have no hard placement constraint, so the scheduler
+        # decides which data zone they start in. Failing a zone they do not run
+        # in would leave them untouched and the failover this test is about
+        # would never happen, so the zone is picked from where they actually
+        # landed instead of always taking the first data zone
+        data_zones = get_data_zones()
+        pods_per_zone = Counter()
+        for label in WORKLOAD_MOUNT_PATHS:
+            pod_obj = get_workload_pod(label=label, namespace=namespace)
+            pods_per_zone[get_zone_of_node(get_pod_node(pod_obj).name)] += 1
+        log.info(f"Workload pods per zone before the failure: {dict(pods_per_zone)}")
+
+        zone = max(data_zones, key=lambda data_zone: pods_per_zone[data_zone])
+        assert pods_per_zone[zone], (
+            f"None of the workloads {list(WORKLOAD_MOUNT_PATHS)} is running in "
+            f"a data zone {data_zones}, their placement is {dict(pods_per_zone)}"
+        )
+
         nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
         assert (
             len(nodes_to_shutdown) != 0
