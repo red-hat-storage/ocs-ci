@@ -11,7 +11,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     brown_squad,
     skipif_ocs_version,
-    tier4,
+    tier4a,
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -32,7 +32,7 @@ class TestStorageClusterDeletionGuardMultiSC(ManageTest):
     It must run last in any test suite it is collected with.
     """
 
-    @tier4
+    @tier4a
     @skipif_ocs_version("<4.23")
     @ignore_leftovers
     @pytest.mark.polarion_id("OCS-8321")
