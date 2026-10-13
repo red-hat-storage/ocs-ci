@@ -324,18 +324,21 @@ def get_merged_lister_entries_byte_ranges(entries):
         list: Sorted (start, end) tuples, end exclusive
 
     Example:
-        # one 150 byte write reported as two touching extents
-        get_merged_lister_entries_byte_ranges([
-            {"ByteOffset": 0, "SizeBytes": 100},
-            {"ByteOffset": 100, "SizeBytes": 50},
-        ])
-        [(0, 150)]
-        # the same bytes reported as a single extent merge to the
-        # identical result
-        get_merged_lister_entries_byte_ranges([
-            {"ByteOffset": 0, "SizeBytes": 150},
-        ])
-        [(0, 150)]
+        One 150 byte write reported as two touching extents, and the
+        same bytes reported as a single extent, merge to the
+        identical result::
+
+            get_merged_lister_entries_byte_ranges(
+                [
+                    {"ByteOffset": 0, "SizeBytes": 100},
+                    {"ByteOffset": 100, "SizeBytes": 50},
+                ]
+            )
+            [(0, 150)]
+            get_merged_lister_entries_byte_ranges(
+                [{"ByteOffset": 0, "SizeBytes": 150}]
+            )
+            [(0, 150)]
     """
     intervals = sorted(
         (entry["ByteOffset"], entry["ByteOffset"] + entry["SizeBytes"])
