@@ -7645,14 +7645,18 @@ def create_kubeconfig(kubeconfig_path):
         log.info(f"Kubeconfig file was created: {kubeconfig_path}.")
 
         # Try to upgrade the token-based kubeconfig to a permanent
-        # (certificate-based) one that never expires. Capture the output in
-        # Python instead of shell-redirecting it (`> {kubeconfig_path}`)
-        # directly to kubeconfig_path: the shell truncates the redirection
-        # target before `oc` starts, and since KUBECONFIG also points at
-        # kubeconfig_path, `oc` would read an already-emptied file and
-        # silently fall back to the in-cluster service account instead of
-        # the intended cluster.
-        cmd = "oc config new-admin-kubeconfig"
+        # (certificate-based) one that never expires. The --kubeconfig flag
+        # is passed explicitly (instead of relying on exec_cmd's automatic
+        # injection based on the global config.RUN["kubeconfig"]) so that in
+        # a multicluster run this always targets the cluster this function
+        # was called for, not whichever cluster is currently the active
+        # context. Capture the output in Python instead of shell-redirecting
+        # it (`> {kubeconfig_path}`) directly to kubeconfig_path: the shell
+        # truncates the redirection target before `oc` starts, and since
+        # KUBECONFIG also points at kubeconfig_path, `oc` would read an
+        # already-emptied file and silently fall back to the in-cluster
+        # service account instead of the intended cluster.
+        cmd = f"oc --kubeconfig {kubeconfig_path} config new-admin-kubeconfig"
         result = exec_cmd(cmd, ignore_error=True)
         if result.returncode:
             log.warning(f"executed command: {cmd}")
