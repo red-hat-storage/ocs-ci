@@ -422,6 +422,4 @@ class TestWorkloadDeployRDR:
                     namespace=cnv_wl.workload_namespace,
                     phase=constants.STATUS_RUNNING,
                 )
-        logger.info(
-            "All workloads are running on primary cluster after relocate"
-        )
+        logger.info("All workloads are running on primary cluster after relocate")
