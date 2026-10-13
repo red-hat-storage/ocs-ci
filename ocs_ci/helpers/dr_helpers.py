@@ -4738,12 +4738,32 @@ def validate_cluster_odf_cli(retries=5, retry_interval=60):
         retry_interval (int): Seconds to wait between retries.
 
     Returns:
-        str: The stdout output from the validation command
+        str or None: The stdout output from the validation command,
+            or None if any cluster in the multicluster config is a hosted
+            cluster, or if ``skip_odf_cli_validation`` is set in ENV_DATA.
 
     Raises:
         CommandFailed: If the ODF CLI command fails
 
     """
+    if config.ENV_DATA.get("skip_odf_cli_validation", False):
+        logger.info(
+            "Skipping ODF CLI DR validate clusters: "
+            "'skip_odf_cli_validation' is set in ENV_DATA"
+        )
+        return None
+
+    for cluster in config.clusters:
+        if cluster.MULTICLUSTER.get("is_hosted", False):
+            cluster_name = cluster.MULTICLUSTER.get(
+                "name", cluster.ENV_DATA.get("cluster_name", "unknown")
+            )
+            logger.info(
+                f"Skipping ODF CLI DR validate clusters: "
+                f"cluster '{cluster_name}' is a hosted cluster"
+            )
+            return None
+
     output_dir = os.path.join(
         os.path.expanduser(config.RUN["log_dir"]),
         f"odf_dr_validate_clusters_{config.RUN['run_id']}",
