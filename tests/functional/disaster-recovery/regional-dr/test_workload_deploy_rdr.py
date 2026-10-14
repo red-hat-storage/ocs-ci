@@ -62,65 +62,115 @@ class TestWorkloadDeployRDR:
             11. Identify primary and secondary clusters.
             12. Verify initial deployment on primary cluster for all workloads.
             13. Wait for data sync to complete.
-            14. Failover all workloads to secondary cluster.
-            15. Verify all workloads are running on secondary cluster.
-            16. Verify all workloads are deleted from primary cluster.
+            14. Failover all workloads to secondary cluster in parallel.
+            15. Verify all workloads are running on secondary cluster in parallel.
+            16. Verify all workloads are deleted from primary cluster in parallel.
             17. Wait for sync to complete before relocate.
-            18. Relocate all workloads back to primary cluster.
-            19. Verify all workloads are deleted from secondary cluster.
-            20. Verify all workloads are running on primary cluster.
+            18. Relocate all workloads back to primary cluster in parallel.
+            19. Verify all workloads are deleted from secondary cluster in parallel.
+            20. Verify all workloads are running on primary cluster in parallel.
         """
-        # ── 1-4. Subscription and ApplicationSet workloads (RBD + CephFS) ───
-        logger.info("Deploying Subscription + ApplicationSet BusyBox workloads (RBD)")
-        sub_appset_rbd = dr_workload(
-            num_of_subscription=1,
-            num_of_appset=1,
-            pvc_interface=constants.CEPHBLOCKPOOL,
-            skip_mirroring_validation=True,
-        )
 
-        logger.info("Deploying Subscription + ApplicationSet BusyBox workloads (CephFS)")
-        sub_appset_cephfs = dr_workload(
-            num_of_subscription=1,
-            num_of_appset=1,
-            pvc_interface=constants.CEPHFILESYSTEM,
-            skip_mirroring_validation=True,
+        # ── Helper: run a list of callables in parallel, collect errors ─────────
+        def _run_parallel(tasks, stage, errors):
+            """
+            tasks: list of (callable, workload_id) tuples.
+            Runs each callable in its own thread, appending (stage, wl_id, str(e))
+            to errors on failure.  Returns the set of wl_ids that succeeded.
+            """
+            succeeded = set()
+            with ThreadPoolExecutor(max_workers=max(len(tasks), 1)) as pool:
+                future_map = {pool.submit(fn): wl_id for fn, wl_id in tasks}
+                for fut in as_completed(future_map):
+                    wl_id = future_map[fut]
+                    try:
+                        fut.result()
+                        logger.info(f"[{stage}] succeeded for {wl_id}")
+                        succeeded.add(wl_id)
+                    except Exception as exc:
+                        logger.error(f"[{stage}] failed for {wl_id}: {exc}")
+                        errors.append((stage, wl_id, str(exc)))
+            return succeeded
+
+        # ── 1-4. Deploy Subscription and ApplicationSet workloads in parallel ──
+        logger.info(
+            "Deploying Subscription + ApplicationSet BusyBox workloads in parallel (RBD + CephFS)"
         )
+        sub_appset_rbd = []
+        sub_appset_cephfs = []
+
+        def _deploy_sub_appset_rbd():
+            return dr_workload(
+                num_of_subscription=1,
+                num_of_appset=1,
+                pvc_interface=constants.CEPHBLOCKPOOL,
+                skip_mirroring_validation=True,
+            )
+
+        def _deploy_sub_appset_cephfs():
+            return dr_workload(
+                num_of_subscription=1,
+                num_of_appset=1,
+                pvc_interface=constants.CEPHFILESYSTEM,
+                skip_mirroring_validation=True,
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fut_rbd = pool.submit(_deploy_sub_appset_rbd)
+            fut_cephfs = pool.submit(_deploy_sub_appset_cephfs)
+            sub_appset_rbd = fut_rbd.result()
+            sub_appset_cephfs = fut_cephfs.result()
 
         all_sub_appset = sub_appset_rbd + sub_appset_cephfs
 
-        # ── 5-8. Discovered Apps workloads ───────────────────────────────────
-        logger.info("Deploying Discovered Apps BusyBox workload (RBD)")
-        da_busybox_rbd = discovered_apps_dr_workload(
-            pvc_interface=constants.CEPHBLOCKPOOL, kubeobject=1, recipe=0
-        )
+        # ── 5-8. Deploy Discovered Apps workloads in parallel ──────────────────
+        logger.info("Deploying all Discovered Apps workloads in parallel")
+        da_busybox_rbd = []
+        da_busybox_cephfs = []
+        da_mongodb_rbd = []
+        da_filebrowser_rbd = []
 
-        logger.info("Deploying Discovered Apps BusyBox workload (CephFS)")
-        da_busybox_cephfs = discovered_apps_dr_workload(
-            pvc_interface=constants.CEPHFILESYSTEM, kubeobject=1, recipe=0
-        )
+        def _deploy_da_bb_rbd():
+            return discovered_apps_dr_workload(
+                pvc_interface=constants.CEPHBLOCKPOOL, kubeobject=1, recipe=0
+            )
 
-        logger.info("Deploying Discovered Apps MongoDB workload (RBD)")
-        da_mongodb_rbd = discovered_apps_dr_workload(
-            pvc_interface=constants.CEPHBLOCKPOOL,
-            kubeobject=1,
-            recipe=0,
-            workloads="mongodb",
-        )
+        def _deploy_da_bb_cephfs():
+            return discovered_apps_dr_workload(
+                pvc_interface=constants.CEPHFILESYSTEM, kubeobject=1, recipe=0
+            )
 
-        logger.info("Deploying Discovered Apps FileBrowser workload (RBD)")
-        da_filebrowser_rbd = discovered_apps_dr_workload(
-            pvc_interface=constants.CEPHBLOCKPOOL,
-            kubeobject=1,
-            recipe=0,
-            workloads="filebrowser",
-        )
+        def _deploy_da_mongodb():
+            return discovered_apps_dr_workload(
+                pvc_interface=constants.CEPHBLOCKPOOL,
+                kubeobject=1,
+                recipe=0,
+                workloads="mongodb",
+            )
+
+        def _deploy_da_filebrowser():
+            return discovered_apps_dr_workload(
+                pvc_interface=constants.CEPHBLOCKPOOL,
+                kubeobject=1,
+                recipe=0,
+                workloads="filebrowser",
+            )
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            fut_bb_rbd = pool.submit(_deploy_da_bb_rbd)
+            fut_bb_cephfs = pool.submit(_deploy_da_bb_cephfs)
+            fut_mongodb = pool.submit(_deploy_da_mongodb)
+            fut_fb = pool.submit(_deploy_da_filebrowser)
+            da_busybox_rbd = fut_bb_rbd.result()
+            da_busybox_cephfs = fut_bb_cephfs.result()
+            da_mongodb_rbd = fut_mongodb.result()
+            da_filebrowser_rbd = fut_fb.result()
 
         all_discovered_workloads = (
             da_busybox_rbd + da_busybox_cephfs + da_mongodb_rbd + da_filebrowser_rbd
         )
 
-        # ── 9-10. CNV VM workloads (only when CNV operator is installed) ─────
+        # ── 9-10. CNV VM workloads (only when CNV operator is installed) ────────
         cnv_workloads = []
         cnv_installer = CNVInstaller()
         if cnv_installer.cnv_hyperconverged_installed():
@@ -187,43 +237,21 @@ class TestWorkloadDeployRDR:
                 phase=constants.STATUS_RUNNING,
             )
 
-        total_workloads = (
-            len(all_sub_appset) + len(all_discovered_workloads) + len(cnv_workloads)
-        )
-        with ThreadPoolExecutor(max_workers=max(total_workloads, 1)) as executor:
-            future_to_workload = {}
-            for wl in all_sub_appset:
-                f = executor.submit(_verify_sub_appset, wl)
-                future_to_workload[f] = (
-                    "Initial Primary Verification",
-                    wl.workload_namespace,
-                )
+        initial_tasks = []
+        for wl in all_sub_appset:
+            initial_tasks.append(
+                (lambda w=wl: _verify_sub_appset(w), wl.workload_namespace)
+            )
+        for wl in all_discovered_workloads:
+            initial_tasks.append(
+                (lambda w=wl: _verify_discovered_app(w), f"DA:{wl.workload_namespace}")
+            )
+        for cnv_wl in cnv_workloads:
+            initial_tasks.append(
+                (lambda w=cnv_wl: _verify_cnv(w), f"CNV:{cnv_wl.workload_namespace}")
+            )
 
-            for wl in all_discovered_workloads:
-                f = executor.submit(_verify_discovered_app, wl)
-                future_to_workload[f] = (
-                    "Initial Primary Verification",
-                    f"DA:{wl.workload_namespace}",
-                )
-
-            for cnv_wl in cnv_workloads:
-                f = executor.submit(_verify_cnv, cnv_wl)
-                future_to_workload[f] = (
-                    "Initial Primary Verification",
-                    f"CNV:{cnv_wl.workload_namespace}",
-                )
-
-            for future in as_completed(future_to_workload):
-                stage, wl_id = future_to_workload[future]
-                try:
-                    future.result()
-                    logger.info(f"Initial primary verification passed for {wl_id}")
-                except Exception as e:
-                    logger.error(
-                        f"Initial primary verification failed for {wl_id}: {e}"
-                    )
-                    errors.append((stage, wl_id, str(e)))
-
+        _run_parallel(initial_tasks, "Initial Primary Verification", errors)
         logger.info("Completed initial verification for all workloads on primary")
 
         # ── 13. Wait for data sync to complete ───────────────────────────────
@@ -236,190 +264,196 @@ class TestWorkloadDeployRDR:
         )
         time.sleep(wait_time * 60)
 
-        # ── 14. Failover all workloads to secondary cluster ──────────────────
-        failed_over_sub_appset = []
-        failed_over_discovered = []
-        failed_over_cnv = []
+        # ── 14. Failover all workloads to secondary cluster (in parallel) ────
+        logger.info("Failing over all workloads to secondary cluster in parallel")
 
-        logger.info("Failing over Subscription and ApplicationSet workloads")
+        def _failover_sub_appset(wl):
+            dr_helpers.failover(
+                failover_cluster=secondary_cluster_name,
+                namespace=wl.workload_namespace,
+                workload_type=wl.workload_type,
+                workload_placement_name=(
+                    wl.appset_placement_name
+                    if wl.workload_type == constants.APPLICATION_SET
+                    else None
+                ),
+            )
+
+        def _failover_discovered(wl):
+            dr_helpers.failover(
+                failover_cluster=secondary_cluster_name,
+                namespace=wl.workload_namespace,
+                discovered_apps=True,
+                workload_placement_name=wl.discovered_apps_placement_name,
+                old_primary=primary_cluster_name,
+            )
+            logger.info(
+                f"Cleaning up Discovered Apps workload {wl.workload_namespace} on {primary_cluster_name}"
+            )
+            dr_helpers.do_discovered_apps_cleanup(
+                drpc_name=wl.discovered_apps_placement_name,
+                old_primary=primary_cluster_name,
+                workload_namespace=wl.workload_namespace,
+                workload_dir=wl.workload_dir,
+                vrg_name=wl.discovered_apps_placement_name,
+            )
+
+        def _failover_cnv(cnv_wl):
+            dr_helpers.failover(
+                failover_cluster=secondary_cluster_name,
+                namespace=cnv_wl.workload_namespace,
+                workload_type=cnv_wl.workload_type,
+                workload_placement_name=(
+                    cnv_wl.cnv_workload_placement_name
+                    if cnv_wl.workload_type != constants.SUBSCRIPTION
+                    else None
+                ),
+            )
+
+        failover_tasks = []
         for wl in all_sub_appset:
-            try:
-                dr_helpers.failover(
-                    failover_cluster=secondary_cluster_name,
-                    namespace=wl.workload_namespace,
-                    workload_type=wl.workload_type,
-                    workload_placement_name=(
-                        wl.appset_placement_name
-                        if wl.workload_type == constants.APPLICATION_SET
-                        else None
-                    ),
-                )
-                failed_over_sub_appset.append(wl)
-            except Exception as e:
-                logger.error(f"Failover failed for {wl.workload_namespace}: {e}")
-                errors.append(("Failover", wl.workload_namespace, str(e)))
-
-        logger.info("Failing over Discovered Apps workloads")
+            failover_tasks.append(
+                (lambda w=wl: _failover_sub_appset(w), wl.workload_namespace)
+            )
         for wl in all_discovered_workloads:
-            try:
-                dr_helpers.failover(
-                    failover_cluster=secondary_cluster_name,
-                    namespace=wl.workload_namespace,
-                    discovered_apps=True,
-                    workload_placement_name=wl.discovered_apps_placement_name,
-                    old_primary=primary_cluster_name,
-                )
-                logger.info(
-                    f"Cleaning up Discovered Apps workload {wl.workload_namespace} on {primary_cluster_name}"
-                )
-                dr_helpers.do_discovered_apps_cleanup(
-                    drpc_name=wl.discovered_apps_placement_name,
-                    old_primary=primary_cluster_name,
-                    workload_namespace=wl.workload_namespace,
-                    workload_dir=wl.workload_dir,
-                    vrg_name=wl.discovered_apps_placement_name,
-                )
-                failed_over_discovered.append(wl)
-            except Exception as e:
-                logger.error(
-                    f"Failover/cleanup failed for Discovered App {wl.workload_namespace}: {e}"
-                )
-                errors.append(("Failover", f"DA:{wl.workload_namespace}", str(e)))
+            failover_tasks.append(
+                (lambda w=wl: _failover_discovered(w), f"DA:{wl.workload_namespace}")
+            )
+        for cnv_wl in cnv_workloads:
+            failover_tasks.append(
+                (lambda w=cnv_wl: _failover_cnv(w), f"CNV:{cnv_wl.workload_namespace}")
+            )
 
-        if cnv_workloads:
-            logger.info("Failing over CNV VM workloads")
-            for cnv_wl in cnv_workloads:
-                try:
-                    dr_helpers.failover(
-                        failover_cluster=secondary_cluster_name,
-                        namespace=cnv_wl.workload_namespace,
-                        workload_type=cnv_wl.workload_type,
-                        workload_placement_name=(
-                            cnv_wl.cnv_workload_placement_name
-                            if cnv_wl.workload_type != constants.SUBSCRIPTION
-                            else None
-                        ),
-                    )
-                    failed_over_cnv.append(cnv_wl)
-                except Exception as e:
-                    logger.error(
-                        f"Failover failed for CNV workload {cnv_wl.workload_namespace}: {e}"
-                    )
-                    errors.append(
-                        ("Failover", f"CNV:{cnv_wl.workload_namespace}", str(e))
-                    )
+        failed_over_ids = _run_parallel(failover_tasks, "Failover", errors)
 
-        # ── 15. Verify resources creation on secondary cluster ───────────────
-        verified_secondary_sub_appset = []
-        verified_secondary_discovered = []
-        verified_secondary_cnv = []
+        failed_over_sub_appset = [
+            wl for wl in all_sub_appset if wl.workload_namespace in failed_over_ids
+        ]
+        failed_over_discovered = [
+            wl
+            for wl in all_discovered_workloads
+            if f"DA:{wl.workload_namespace}" in failed_over_ids
+        ]
+        failed_over_cnv = [
+            wl
+            for wl in cnv_workloads
+            if f"CNV:{wl.workload_namespace}" in failed_over_ids
+        ]
 
+        # ── 15. Verify resources creation on secondary cluster (in parallel) ─
         config.switch_to_cluster_by_name(secondary_cluster_name)
-        logger.info("Verifying Subscription and ApplicationSet workloads on secondary")
+        logger.info("Verifying all workloads on secondary cluster in parallel")
+
+        def _verify_secondary_sub_appset(wl):
+            dr_helpers.wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+                performed_dr_action=True,
+            )
+
+        def _verify_secondary_discovered(wl):
+            dr_helpers.wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+                discovered_apps=True,
+                vrg_name=wl.discovered_apps_placement_name,
+                performed_dr_action=True,
+            )
+
+        def _verify_secondary_cnv(cnv_wl):
+            dr_helpers.wait_for_all_resources_creation(
+                cnv_wl.workload_pvc_count,
+                cnv_wl.workload_pod_count,
+                cnv_wl.workload_namespace,
+                performed_dr_action=True,
+            )
+            dr_helpers.wait_for_cnv_workload(
+                vm_name=cnv_wl.vm_name,
+                namespace=cnv_wl.workload_namespace,
+                phase=constants.STATUS_RUNNING,
+            )
+
+        secondary_verify_tasks = []
         for wl in failed_over_sub_appset:
-            try:
-                dr_helpers.wait_for_all_resources_creation(
-                    wl.workload_pvc_count,
-                    wl.workload_pod_count,
+            secondary_verify_tasks.append(
+                (
+                    lambda w=wl: _verify_secondary_sub_appset(w),
                     wl.workload_namespace,
-                    performed_dr_action=True,
                 )
-                verified_secondary_sub_appset.append(wl)
-            except Exception as e:
-                logger.error(
-                    f"Post-failover verification failed on secondary for {wl.workload_namespace}: {e}"
-                )
-                errors.append(
-                    ("Verify Failover Secondary", wl.workload_namespace, str(e))
-                )
-
-        logger.info("Verifying Discovered Apps workloads on secondary")
+            )
         for wl in failed_over_discovered:
-            try:
-                dr_helpers.wait_for_all_resources_creation(
-                    wl.workload_pvc_count,
-                    wl.workload_pod_count,
-                    wl.workload_namespace,
-                    discovered_apps=True,
-                    vrg_name=wl.discovered_apps_placement_name,
-                    performed_dr_action=True,
+            secondary_verify_tasks.append(
+                (
+                    lambda w=wl: _verify_secondary_discovered(w),
+                    f"DA:{wl.workload_namespace}",
                 )
-                verified_secondary_discovered.append(wl)
-            except Exception as e:
-                logger.error(
-                    f"Post-failover verification failed on secondary for Discovered App {wl.workload_namespace}: {e}"
-                )
-                errors.append(
-                    ("Verify Failover Secondary", f"DA:{wl.workload_namespace}", str(e))
-                )
-
-        if failed_over_cnv:
-            logger.info("Verifying CNV VM workloads on secondary")
-            for cnv_wl in failed_over_cnv:
-                try:
-                    dr_helpers.wait_for_all_resources_creation(
-                        cnv_wl.workload_pvc_count,
-                        cnv_wl.workload_pod_count,
-                        cnv_wl.workload_namespace,
-                        performed_dr_action=True,
-                    )
-                    dr_helpers.wait_for_cnv_workload(
-                        vm_name=cnv_wl.vm_name,
-                        namespace=cnv_wl.workload_namespace,
-                        phase=constants.STATUS_RUNNING,
-                    )
-                    verified_secondary_cnv.append(cnv_wl)
-                except Exception as e:
-                    logger.error(
-                        f"Post-failover verification failed on secondary for CNV {cnv_wl.workload_namespace}: {e}"
-                    )
-                    errors.append(
-                        (
-                            "Verify Failover Secondary",
-                            f"CNV:{cnv_wl.workload_namespace}",
-                            str(e),
-                        )
-                    )
-
-        # ── 16. Verify resources deletion from primary cluster ───────────────
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        logger.info("Verifying workload resources deletion from primary cluster")
-        for wl in failed_over_sub_appset:
-            try:
-                dr_helpers.wait_for_all_resources_deletion(wl.workload_namespace)
-            except Exception as e:
-                logger.error(
-                    f"Deletion verification on primary failed for {wl.workload_namespace}: {e}"
-                )
-                errors.append(
-                    ("Verify Primary Deletion", wl.workload_namespace, str(e))
-                )
-
-        for wl in failed_over_discovered:
-            try:
-                dr_helpers.wait_for_all_resources_deletion(wl.workload_namespace)
-            except Exception as e:
-                logger.error(
-                    f"Deletion verification on primary failed for Discovered App {wl.workload_namespace}: {e}"
-                )
-                errors.append(
-                    ("Verify Primary Deletion", f"DA:{wl.workload_namespace}", str(e))
-                )
-
+            )
         for cnv_wl in failed_over_cnv:
-            try:
-                dr_helpers.wait_for_all_resources_deletion(cnv_wl.workload_namespace)
-            except Exception as e:
-                logger.error(
-                    f"Deletion verification on primary failed for CNV {cnv_wl.workload_namespace}: {e}"
+            secondary_verify_tasks.append(
+                (
+                    lambda w=cnv_wl: _verify_secondary_cnv(w),
+                    f"CNV:{cnv_wl.workload_namespace}",
                 )
-                errors.append(
-                    (
-                        "Verify Primary Deletion",
-                        f"CNV:{cnv_wl.workload_namespace}",
-                        str(e),
-                    )
+            )
+
+        verified_secondary_ids = _run_parallel(
+            secondary_verify_tasks, "Verify Failover Secondary", errors
+        )
+
+        verified_secondary_sub_appset = [
+            wl
+            for wl in failed_over_sub_appset
+            if wl.workload_namespace in verified_secondary_ids
+        ]
+        verified_secondary_discovered = [
+            wl
+            for wl in failed_over_discovered
+            if f"DA:{wl.workload_namespace}" in verified_secondary_ids
+        ]
+        verified_secondary_cnv = [
+            wl
+            for wl in failed_over_cnv
+            if f"CNV:{wl.workload_namespace}" in verified_secondary_ids
+        ]
+
+        # ── 16. Verify resources deletion from primary cluster (in parallel) ─
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        logger.info(
+            "Verifying workload resources deletion from primary cluster in parallel"
+        )
+
+        deletion_tasks = []
+        for wl in failed_over_sub_appset:
+            deletion_tasks.append(
+                (
+                    lambda w=wl: dr_helpers.wait_for_all_resources_deletion(
+                        w.workload_namespace
+                    ),
+                    wl.workload_namespace,
                 )
+            )
+        for wl in failed_over_discovered:
+            deletion_tasks.append(
+                (
+                    lambda w=wl: dr_helpers.wait_for_all_resources_deletion(
+                        w.workload_namespace
+                    ),
+                    f"DA:{wl.workload_namespace}",
+                )
+            )
+        for cnv_wl in failed_over_cnv:
+            deletion_tasks.append(
+                (
+                    lambda w=cnv_wl: dr_helpers.wait_for_all_resources_deletion(
+                        w.workload_namespace
+                    ),
+                    f"CNV:{cnv_wl.workload_namespace}",
+                )
+            )
+
+        _run_parallel(deletion_tasks, "Verify Primary Deletion", errors)
 
         # ── 17. Wait for sync to complete before relocate ────────────────────
         if (
@@ -433,17 +467,52 @@ class TestWorkloadDeployRDR:
             time.sleep(wait_time * 60)
         else:
             logger.warning(
-                "No workloads successfully failed over and verified on secondary; skipping relocate sync wait"
+                "No workloads successfully failed over and verified on secondary; "
+                "skipping relocate sync wait"
             )
 
-        # ── 18. Relocate workloads back to primary cluster ───────────────────
-        relocated_sub_appset = []
-        relocated_discovered = []
-        relocated_cnv = []
+        # ── 18. Relocate workloads back to primary cluster (in parallel) ─────
+        logger.info("Relocating all workloads back to primary cluster in parallel")
 
-        logger.info(
-            "Relocating Subscription and ApplicationSet workloads back to primary"
-        )
+        def _relocate_sub_appset(wl):
+            dr_helpers.relocate(
+                preferred_cluster=primary_cluster_name,
+                namespace=wl.workload_namespace,
+                workload_type=wl.workload_type,
+                workload_placement_name=(
+                    wl.appset_placement_name
+                    if wl.workload_type == constants.APPLICATION_SET
+                    else None
+                ),
+            )
+
+        def _relocate_discovered(wl):
+            dr_helpers.relocate(
+                preferred_cluster=primary_cluster_name,
+                namespace=wl.workload_namespace,
+                workload_placement_name=wl.discovered_apps_placement_name,
+                discovered_apps=True,
+                old_primary=secondary_cluster_name,
+                workload_instance=wl,
+                vm_auto_cleanup=(
+                    version.get_semantic_ocs_version_from_config()
+                    >= version.VERSION_4_22
+                ),
+            )
+
+        def _relocate_cnv(cnv_wl):
+            dr_helpers.relocate(
+                preferred_cluster=primary_cluster_name,
+                namespace=cnv_wl.workload_namespace,
+                workload_type=cnv_wl.workload_type,
+                workload_placement_name=(
+                    cnv_wl.cnv_workload_placement_name
+                    if cnv_wl.workload_type != constants.SUBSCRIPTION
+                    else None
+                ),
+            )
+
+        relocate_tasks = []
         for wl in all_sub_appset:
             if wl not in verified_secondary_sub_appset:
                 logger.warning(
@@ -451,23 +520,9 @@ class TestWorkloadDeployRDR:
                     "because failover or secondary verification failed"
                 )
                 continue
-            try:
-                dr_helpers.relocate(
-                    preferred_cluster=primary_cluster_name,
-                    namespace=wl.workload_namespace,
-                    workload_type=wl.workload_type,
-                    workload_placement_name=(
-                        wl.appset_placement_name
-                        if wl.workload_type == constants.APPLICATION_SET
-                        else None
-                    ),
-                )
-                relocated_sub_appset.append(wl)
-            except Exception as e:
-                logger.error(f"Relocate failed for {wl.workload_namespace}: {e}")
-                errors.append(("Relocate", wl.workload_namespace, str(e)))
-
-        logger.info("Relocating Discovered Apps workloads back to primary")
+            relocate_tasks.append(
+                (lambda w=wl: _relocate_sub_appset(w), wl.workload_namespace)
+            )
         for wl in all_discovered_workloads:
             if wl not in verified_secondary_discovered:
                 logger.warning(
@@ -475,159 +530,140 @@ class TestWorkloadDeployRDR:
                     "because failover or secondary verification failed"
                 )
                 continue
-            try:
-                dr_helpers.relocate(
-                    preferred_cluster=primary_cluster_name,
-                    namespace=wl.workload_namespace,
-                    workload_placement_name=wl.discovered_apps_placement_name,
-                    discovered_apps=True,
-                    old_primary=secondary_cluster_name,
-                    workload_instance=wl,
-                    vm_auto_cleanup=(
-                        version.get_semantic_ocs_version_from_config()
-                        >= version.VERSION_4_22
-                    ),
+            relocate_tasks.append(
+                (lambda w=wl: _relocate_discovered(w), f"DA:{wl.workload_namespace}")
+            )
+        for cnv_wl in cnv_workloads:
+            if cnv_wl not in verified_secondary_cnv:
+                logger.warning(
+                    f"Skipping relocate for CNV {cnv_wl.workload_namespace} "
+                    "because failover or secondary verification failed"
                 )
-                relocated_discovered.append(wl)
-            except Exception as e:
-                logger.error(
-                    f"Relocate failed for Discovered App {wl.workload_namespace}: {e}"
+                continue
+            relocate_tasks.append(
+                (
+                    lambda w=cnv_wl: _relocate_cnv(w),
+                    f"CNV:{cnv_wl.workload_namespace}",
                 )
-                errors.append(("Relocate", f"DA:{wl.workload_namespace}", str(e)))
+            )
 
-        if cnv_workloads:
-            logger.info("Relocating CNV VM workloads back to primary")
-            for cnv_wl in cnv_workloads:
-                if cnv_wl not in verified_secondary_cnv:
-                    logger.warning(
-                        f"Skipping relocate for CNV {cnv_wl.workload_namespace} "
-                        "because failover or secondary verification failed"
-                    )
-                    continue
-                try:
-                    dr_helpers.relocate(
-                        preferred_cluster=primary_cluster_name,
-                        namespace=cnv_wl.workload_namespace,
-                        workload_type=cnv_wl.workload_type,
-                        workload_placement_name=(
-                            cnv_wl.cnv_workload_placement_name
-                            if cnv_wl.workload_type != constants.SUBSCRIPTION
-                            else None
-                        ),
-                    )
-                    relocated_cnv.append(cnv_wl)
-                except Exception as e:
-                    logger.error(
-                        f"Relocate failed for CNV workload {cnv_wl.workload_namespace}: {e}"
-                    )
-                    errors.append(
-                        ("Relocate", f"CNV:{cnv_wl.workload_namespace}", str(e))
-                    )
+        relocated_ids = _run_parallel(relocate_tasks, "Relocate", errors)
 
-        # ── 19. Verify resources deletion from secondary cluster ─────────────
+        relocated_sub_appset = [
+            wl
+            for wl in all_sub_appset
+            if wl in verified_secondary_sub_appset
+            and wl.workload_namespace in relocated_ids
+        ]
+        relocated_discovered = [
+            wl
+            for wl in all_discovered_workloads
+            if wl in verified_secondary_discovered
+            and f"DA:{wl.workload_namespace}" in relocated_ids
+        ]
+        relocated_cnv = [
+            wl
+            for wl in cnv_workloads
+            if wl in verified_secondary_cnv
+            and f"CNV:{wl.workload_namespace}" in relocated_ids
+        ]
+
+        # ── 19. Verify resources deletion from secondary cluster (in parallel) ─
         config.switch_to_cluster_by_name(secondary_cluster_name)
-        logger.info("Verifying workload resources deletion from secondary cluster")
+        logger.info(
+            "Verifying workload resources deletion from secondary cluster in parallel"
+        )
+
+        sec_deletion_tasks = []
         for wl in relocated_sub_appset:
-            try:
-                dr_helpers.wait_for_all_resources_deletion(wl.workload_namespace)
-            except Exception as e:
-                logger.error(
-                    f"Deletion verification on secondary failed for {wl.workload_namespace}: {e}"
+            sec_deletion_tasks.append(
+                (
+                    lambda w=wl: dr_helpers.wait_for_all_resources_deletion(
+                        w.workload_namespace
+                    ),
+                    wl.workload_namespace,
                 )
-                errors.append(
-                    ("Verify Secondary Deletion", wl.workload_namespace, str(e))
-                )
-
+            )
         for wl in relocated_discovered:
-            try:
-                dr_helpers.wait_for_all_resources_deletion(wl.workload_namespace)
-            except Exception as e:
-                logger.error(
-                    f"Deletion verification on secondary failed for Discovered App {wl.workload_namespace}: {e}"
+            sec_deletion_tasks.append(
+                (
+                    lambda w=wl: dr_helpers.wait_for_all_resources_deletion(
+                        w.workload_namespace
+                    ),
+                    f"DA:{wl.workload_namespace}",
                 )
-                errors.append(
-                    ("Verify Secondary Deletion", f"DA:{wl.workload_namespace}", str(e))
-                )
-
+            )
         for cnv_wl in relocated_cnv:
-            try:
-                dr_helpers.wait_for_all_resources_deletion(cnv_wl.workload_namespace)
-            except Exception as e:
-                logger.error(
-                    f"Deletion verification on secondary failed for CNV {cnv_wl.workload_namespace}: {e}"
+            sec_deletion_tasks.append(
+                (
+                    lambda w=cnv_wl: dr_helpers.wait_for_all_resources_deletion(
+                        w.workload_namespace
+                    ),
+                    f"CNV:{cnv_wl.workload_namespace}",
                 )
-                errors.append(
-                    (
-                        "Verify Secondary Deletion",
-                        f"CNV:{cnv_wl.workload_namespace}",
-                        str(e),
-                    )
-                )
+            )
 
-        # ── 20. Verify resources creation on primary cluster ─────────────────
+        _run_parallel(sec_deletion_tasks, "Verify Secondary Deletion", errors)
+
+        # ── 20. Verify resources creation on primary cluster (in parallel) ───
         config.switch_to_cluster_by_name(primary_cluster_name)
-        logger.info("Verifying Subscription and ApplicationSet workloads on primary")
+        logger.info("Verifying all workloads back on primary cluster in parallel")
+
+        def _verify_primary_sub_appset(wl):
+            dr_helpers.wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+                performed_dr_action=True,
+            )
+
+        def _verify_primary_discovered(wl):
+            dr_helpers.wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+                discovered_apps=True,
+                vrg_name=wl.discovered_apps_placement_name,
+                performed_dr_action=True,
+            )
+
+        def _verify_primary_cnv(cnv_wl):
+            dr_helpers.wait_for_all_resources_creation(
+                cnv_wl.workload_pvc_count,
+                cnv_wl.workload_pod_count,
+                cnv_wl.workload_namespace,
+                performed_dr_action=True,
+            )
+            dr_helpers.wait_for_cnv_workload(
+                vm_name=cnv_wl.vm_name,
+                namespace=cnv_wl.workload_namespace,
+                phase=constants.STATUS_RUNNING,
+            )
+
+        primary_verify_tasks = []
         for wl in relocated_sub_appset:
-            try:
-                dr_helpers.wait_for_all_resources_creation(
-                    wl.workload_pvc_count,
-                    wl.workload_pod_count,
+            primary_verify_tasks.append(
+                (
+                    lambda w=wl: _verify_primary_sub_appset(w),
                     wl.workload_namespace,
-                    performed_dr_action=True,
                 )
-            except Exception as e:
-                logger.error(
-                    f"Post-relocate verification failed on primary for {wl.workload_namespace}: {e}"
-                )
-                errors.append(
-                    ("Verify Relocate Primary", wl.workload_namespace, str(e))
-                )
-
-        logger.info("Verifying Discovered Apps workloads on primary")
+            )
         for wl in relocated_discovered:
-            try:
-                dr_helpers.wait_for_all_resources_creation(
-                    wl.workload_pvc_count,
-                    wl.workload_pod_count,
-                    wl.workload_namespace,
-                    discovered_apps=True,
-                    vrg_name=wl.discovered_apps_placement_name,
-                    performed_dr_action=True,
+            primary_verify_tasks.append(
+                (
+                    lambda w=wl: _verify_primary_discovered(w),
+                    f"DA:{wl.workload_namespace}",
                 )
-            except Exception as e:
-                logger.error(
-                    f"Post-relocate verification failed on primary for Discovered App {wl.workload_namespace}: {e}"
+            )
+        for cnv_wl in relocated_cnv:
+            primary_verify_tasks.append(
+                (
+                    lambda w=cnv_wl: _verify_primary_cnv(w),
+                    f"CNV:{cnv_wl.workload_namespace}",
                 )
-                errors.append(
-                    ("Verify Relocate Primary", f"DA:{wl.workload_namespace}", str(e))
-                )
+            )
 
-        if relocated_cnv:
-            logger.info("Verifying CNV VM workloads on primary")
-            for cnv_wl in relocated_cnv:
-                try:
-                    dr_helpers.wait_for_all_resources_creation(
-                        cnv_wl.workload_pvc_count,
-                        cnv_wl.workload_pod_count,
-                        cnv_wl.workload_namespace,
-                        performed_dr_action=True,
-                    )
-                    dr_helpers.wait_for_cnv_workload(
-                        vm_name=cnv_wl.vm_name,
-                        namespace=cnv_wl.workload_namespace,
-                        phase=constants.STATUS_RUNNING,
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Post-relocate verification failed on primary for CNV {cnv_wl.workload_namespace}: {e}"
-                    )
-                    errors.append(
-                        (
-                            "Verify Relocate Primary",
-                            f"CNV:{cnv_wl.workload_namespace}",
-                            str(e),
-                        )
-                    )
+        _run_parallel(primary_verify_tasks, "Verify Relocate Primary", errors)
 
         # ── 21. Check for any failures across all stages ─────────────────────
         if errors:
