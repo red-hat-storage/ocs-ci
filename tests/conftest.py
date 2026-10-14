@@ -1687,9 +1687,20 @@ def pvc_factory_fixture(request, project_factory):
 
     def finalizer():
         """
-        Delete the PVC
+        Delete the PVC.
+
+        Chaos tests leave volumes attached and Ceph unreachable. A delete that
+        times out in that state is logged and skipped so teardown does not fail
+        a test whose body already finished.
         """
         _switch_context_helper(request)
+        chaos_cleanup = request.node.get_closest_marker("chaos") is not None
+
+        def _skip_chaos_cleanup(action, name, exc):
+            log.warning(
+                f"Chaos cleanup: {action} {name} failed because the cluster is "
+                f"disrupted; continuing: {exc}"
+            )
 
         pv_objs = []
 
@@ -1707,28 +1718,59 @@ def pvc_factory_fixture(request, project_factory):
                 f"Waiting for {len(encrypted_pvcs)} encrypted volume(s) to detach "
                 "before PVC deletion"
             )
-            helpers.wait_for_volume_detachment(pvc_objs=encrypted_pvcs, timeout=180)
+            try:
+                helpers.wait_for_volume_detachment(pvc_objs=encrypted_pvcs, timeout=180)
+            except Exception as exc:
+                if not chaos_cleanup:
+                    raise
+                _skip_chaos_cleanup(
+                    "waiting for encrypted volume detach",
+                    f"{len(encrypted_pvcs)} volume(s)",
+                    exc,
+                )
 
         # Get PV form PVC instances and delete PVCs
         for instance in instances:
             if not instance.is_deleted:
-                pv_objs.append(instance.backed_pv_obj)
-                instance.delete()
-                instance.ocp.wait_for_delete(instance.name)
+                try:
+                    pv_objs.append(instance.backed_pv_obj)
+                    if chaos_cleanup:
+                        # ``oc delete --wait`` blocks for the full command timeout
+                        # while the volume is still attached.
+                        instance.delete(wait=False)
+                        try:
+                            instance.ocp.wait_for_delete(instance.name, timeout=180)
+                        except Exception as exc:
+                            _skip_chaos_cleanup(
+                                "waiting for PVC delete", instance.name, exc
+                            )
+                    else:
+                        instance.delete()
+                        instance.ocp.wait_for_delete(instance.name)
+                except Exception as exc:
+                    if not chaos_cleanup:
+                        raise
+                    _skip_chaos_cleanup("deleting PVC", instance.name, exc)
 
         # Wait for PVs to delete
         # If they have ReclaimPolicy set to Retain then change to Delete
         for pv_obj in pv_objs:
-            if (
-                pv_obj.data.get("spec", {}).get("persistentVolumeReclaimPolicy")
-                == constants.RECLAIM_POLICY_RETAIN
-                and pv_obj is not None
-            ):
-                helpers.wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
-                patch_param = '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
-                pv_obj.ocp.patch(resource_name=pv_obj.name, params=patch_param)
+            if pv_obj is None:
+                continue
+            try:
+                if (
+                    pv_obj.data.get("spec", {}).get("persistentVolumeReclaimPolicy")
+                    == constants.RECLAIM_POLICY_RETAIN
+                ):
+                    helpers.wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
+                    patch_param = '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
+                    pv_obj.ocp.patch(resource_name=pv_obj.name, params=patch_param)
 
-            pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+                pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+            except Exception as exc:
+                if not chaos_cleanup:
+                    raise
+                _skip_chaos_cleanup("deleting PV", pv_obj.name, exc)
 
     request.addfinalizer(finalizer)
     return factory
