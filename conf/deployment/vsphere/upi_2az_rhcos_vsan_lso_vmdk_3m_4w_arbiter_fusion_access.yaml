@@ -56,6 +56,6 @@ ENV_DATA:
 
   # Node sizing ------------------------------------------------------------
   worker_num_cpus: '16'
-  master_num_cpus: '8'
-  master_memory: '16384'
+  master_num_cpus: '16'
+  master_memory: '65536'
   compute_memory: '65536'
