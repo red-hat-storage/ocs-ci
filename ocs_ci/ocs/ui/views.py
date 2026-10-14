@@ -355,7 +355,10 @@ deployment_4_19 = {
     ),
     "0.5 TiB": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
 }
-deployment_4_20 = {
+# deployment_5_0: locators first observed on ODF 5.0 / OCP 5.0 nightly.
+# DOM parity with OCP 4.21/4.22 has NOT been verified; these keys are only
+# included in the locators["5.0"] bundle (and locators["4.23"] via its alias).
+deployment_5_0 = {
     "mcg_only_deployment_entry": (
         "#setup-object-storage button[class*='c-card__clickable-action']",
         By.CSS_SELECTOR,
@@ -4335,7 +4338,7 @@ locators = {
             **deployment_4_16,
             **deployment_4_17,
             **deployment_4_19,
-            **deployment_4_20,
+            **deployment_5_0,
             **deployment_4_21,
             **deployment_4_22,
         },
@@ -4417,7 +4420,7 @@ locators = {
             **deployment_4_16,
             **deployment_4_17,
             **deployment_4_19,
-            **deployment_4_20,
+            **deployment_5_0,
             **deployment_4_21,
             **deployment_4_22,
         },
@@ -4498,7 +4501,7 @@ locators = {
             **deployment_4_16,
             **deployment_4_17,
             **deployment_4_19,
-            **deployment_4_20,
+            **deployment_5_0,
             **deployment_4_21,
         },
         "obc": {**obc, **obc_4_21},
@@ -4569,7 +4572,7 @@ locators = {
             **deployment_4_16,
             **deployment_4_17,
             **deployment_4_19,
-            **deployment_4_20,
+            **deployment_5_0,
         },
         "obc": obc,
         "pvc": {
@@ -5080,7 +5083,7 @@ locators = {
         "validation": validation,
     },
 }
-# 4.23 uses the same locators as 5.0
+# 4.23 uses the same locators as 5.0 (includes deployment_5_0 keys)
 locators["4.23"] = locators["5.0"]
 
 

@@ -305,32 +305,38 @@ class DeploymentUI(PageNavigator):
         logger.info("Install MCG ONLY cluster via UI")
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_20:
-            # ODF 4.20 / 5.0 path.
+            # ODF 5.0 path.
             # Deployment type is already set to MCG (mode=object-storage) by the
             # URL the card click in install_storage_cluster() causes the wizard to
-            # navigate to.  There is no in-wizard deployment dropdown on 4.20+.
-            # Assumption: 4.20/4.21/4.22 DOM parity with 5.0 is assumed; if a
-            # mismatch surfaces, the assertions below will fire loudly.
+            # navigate to.  There is no in-wizard deployment dropdown on 5.0.
             if config.DEPLOYMENT.get("local_storage"):
                 raise ConfigurationError(
-                    "MCG-only + LSO is not verified on ODF >= 4.20. "
+                    "MCG-only + LSO is not verified on ODF >= 5.0. "
                     "The LOCAL_DEVICES step list differs from EXISTING and has "
                     "not been exercised. Aborting to avoid silent mis-deployment."
                 )
 
             # Defensive key check: convert axis-mismatch KeyError into something
             # diagnosable (dep_loc is keyed by OCP version; this branch by ODF).
-            missing = {"mcg_only_deployment_entry"} - set(self.dep_loc)
+            missing = {"mcg_only_deployment_entry", "next_button_element"} - set(
+                self.dep_loc
+            )
             if missing:
                 raise ConfigurationError(
                     f"ODF {ocs_version} MCG-only UI deploy needs {missing}, "
                     f"absent for OCP {self.ocp_version}"
                 )
 
-            # Assert the wizard is in MCG mode, not full-cluster mode, using two
-            # independent DOM signals.  Both must be true before we advance.
-            # "Capacity and nodes" appears only in the full-cluster step list;
-            # "Security" (without "and network") appears only in the MCG step list.
+            # Issue 4: wait for the wizard to finish SPA navigation before
+            # inspecting the DOM — without this the step-list may not be
+            # rendered yet, causing spurious assertion failures.
+            self.page_has_loaded(retries=10)
+
+            # Assert the wizard is in MCG mode using two independent signals:
+            # 1. "Capacity and nodes" is absent from the step list (DOM check).
+            # 2. "mode=object-storage" is present in the current URL (URL check).
+            # The earlier "Security" substring check was NOT independent because
+            # the full-cluster step "Security and network" also contains "Security".
             if self.check_element_text("Capacity and nodes"):
                 self.take_screenshot()
                 self.copy_dom()
@@ -340,31 +346,60 @@ class DeploymentUI(PageNavigator):
                     "(Backing storage → Optional settings → Security → "
                     "Review and create). Locator: mcg_only_deployment_entry"
                 )
-            if not self.check_element_text("Security"):
+            if "mode=object-storage" not in self.driver.current_url:
                 self.take_screenshot()
                 self.copy_dom()
                 raise UnexpectedBehaviour(
-                    "Wizard 'Security' step label not found — MCG mode may not have "
-                    "been selected. Locator: mcg_only_deployment_entry"
+                    f"URL does not contain 'mode=object-storage' — MCG mode was NOT "
+                    f"selected. Current URL: {self.driver.current_url}. "
+                    f"Locator: mcg_only_deployment_entry"
                 )
             logger.info(
-                "MCG mode confirmed: 'Security' step present, "
-                "'Capacity and nodes' absent"
+                "MCG mode confirmed: 'Capacity and nodes' absent from step list "
+                "and 'mode=object-storage' present in URL"
             )
+
+            # Issue 5: assert a StorageClass is available before advancing —
+            # Backing storage's canGoToNextStep requires one; if absent, Next
+            # stays disabled and the loop fails silently three steps later.
+            if not self.check_element_text("Backing storage"):
+                self.take_screenshot()
+                self.copy_dom()
+                raise UnexpectedBehaviour(
+                    "Expected to be on 'Backing storage' step but step label not "
+                    "found. Wizard may not have loaded correctly."
+                )
 
             # MCG step list: Backing storage → Optional settings → Security →
             # Review and create.  Three Next presses reach the submit button.
-            for step in ("Backing storage", "Optional settings", "Security"):
-                logger.info(f"Advancing past '{step}' step")
-                self.do_click(self.dep_loc["next"], enable_screenshot=True)
-
-            # Submit — use_fallback=False: a wrong-but-single-match substitution
-            # here would silently provision the wrong product.
-            self.do_click(
-                locator=self.dep_loc["create_storage_system"],
-                enable_screenshot=True,
-                use_fallback=False,
+            # Issue 3: use the tight next_button_element locator (exact-match
+            # button text) and assert the expected step label before each press
+            # so a disabled/missing Next surfaces here, not at create_storage_system.
+            mcg_steps = (
+                ("Backing storage", "Optional settings"),
+                ("Optional settings", "Security"),
+                ("Security", "Review and create"),
             )
+            for current_step, next_step in mcg_steps:
+                logger.info(
+                    f"On step '{current_step}', clicking Next to advance to '{next_step}'"
+                )
+                if not self.check_element_text(current_step):
+                    self.take_screenshot()
+                    self.copy_dom()
+                    raise UnexpectedBehaviour(
+                        f"Expected wizard to be on step '{current_step}' before "
+                        f"clicking Next, but step label not found in DOM."
+                    )
+                self.do_click(
+                    self.dep_loc["next_button_element"], enable_screenshot=True
+                )
+                self.page_has_loaded(retries=5)
+
+            # Submit — use create_storage_cluster() so the operator-name branch
+            # and the post-click stabilisation sleep are applied consistently
+            # (Issue 2: avoids hardcoding create_storage_system and dropping sleep).
+            self.create_storage_cluster()
         else:
             # Legacy path (≤ ODF 4.19).  Kept verbatim — the OCP-version string
             # comparisons are correct on the clusters that reach this branch and
