@@ -951,16 +951,25 @@ class Deployment(object):
 
         Runs the full sequence:
             1. Zone labels
-            2. Arbiter master designation
-            3. IBM Fusion operator
-            4. FDF service stack
-            5. KMM operator
-            6. Image registry
-            7. Fusion Access Operator + FusionAccess CR
-            8. UI deployment validation (node-selection wizard, LUN group,
+            2. Arbiter master identification
+            3. iSCSI LUNs on all nodes, masters included
+            4. IBM Fusion operator
+            5. FDF service stack only (storage skipped)
+            6. KMM operator
+            7. IBM entitlement secret in ibm-spectrum-scale
+            8. Image registry + Fusion Access Operator + external registry
+               connected to the SAN (node-selection wizard, LUN group,
                filesystem health in ibm-spectrum-scale)
+
+        ``deploy_cluster()`` runs in both the OCP and the OCS stage, so the
+        ``skip_ocs_deployment`` guard keeps this to the OCP stage only — the
+        sequence is not idempotent (a second pass would create a second LUN
+        group).
         """
-        if config.DEPLOYMENT.get("fusion_access"):
+        if (
+            config.DEPLOYMENT.get("fusion_access")
+            and config.ENV_DATA["skip_ocs_deployment"]
+        ):
             from ocs_ci.deployment.fusion_access_stretch_cluster import (
                 deploy_fusion_access_stretch_cluster,
             )

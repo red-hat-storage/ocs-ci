@@ -1,20 +1,21 @@
 """
 Deployment helper for RHSTOR-8877 — Fusion Access HA (Stretch Cluster).
 
-Orchestrates the following sequence for a 2 AZ + arbiter stretched OCP cluster:
+Orchestrates the following sequence for a 2 AZ + arbiter stretched OCP cluster.
+The base OCP cluster is already installed and zone-labelled by the provisioner;
+this module picks up from there:
 
-    1. Apply topology zone labels to master and worker nodes.
-    2. Designate the arbiter master node.
-    3. Deploy IBM Fusion components.
-    4. Install and verify the FDF service stack (standalone FDF path).
-    5. Configure KMM operator dependencies.
-    6. Configure image registry (external by default).
-    7. Deploy the Fusion Access Operator and create the FusionAccess CR.
-    8. Configure iSCSI LUNs on all cluster nodes (masters + workers) via iscsi_setup.
-    9. Run UI deployment validation.
+    1. Apply topology zone labels to master and worker nodes (idempotent).
+    2. Identify the arbiter master node.
+    3. Create LUNs/disks on *all* nodes, masters included, via the iSCSI server.
+    4. Deploy IBM Fusion components.
+    5. Install the standalone FDF service stack only — storage is skipped.
+    6. Install the KMM operator.
+    7. Create the ``ibm-entitlement-key`` secret in ``ibm-spectrum-scale``.
+    8. Configure the image registry and connect the external registry to SAN.
 
-UI deployment validation (step 9) exercises the Connect External Storage →
-Storage for SAN wizard to confirm:
+Step 8 exercises the Connect External Storage → Storage for SAN wizard to
+confirm:
     - Default node-selection state (workers only, disk-node role).
     - Include Control Plane Nodes toggle behaviour.
     - Stretch Cluster toggle behaviour (auto-check, role assignment, arbiter lock).
@@ -28,19 +29,20 @@ import logging
 
 from ocs_ci.deployment.fdf_standalone import StandaloneFDFCatalogSource
 from ocs_ci.deployment.fusion import FusionDeployment
-from ocs_ci.deployment.fusion_access import FusionAccessOperator
 from ocs_ci.deployment.image_registry import ImageRegistryConfigurator
 from ocs_ci.deployment.kmm import KMMInstaller
 from ocs_ci.deployment.zones import are_zone_labels_present, create_dummy_zone_labels
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
     create_custom_secret_for_cnsa_rm,
+    create_ibm_entitlement_secret,
     create_unique_resource_name,
 )
-from ocs_ci.ocs import constants, exceptions
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_master_nodes, get_worker_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.ocs.ui.base_ui import close_browser, login_ui
 from ocs_ci.ocs.ui.page_objects.stretch_cluster_san_ui import (
     ROLE_ARBITER_NODE,
     ROLE_CLUSTER_NODE,
@@ -55,9 +57,6 @@ logger = logging.getLogger(__name__)
 ARBITER_ZONE = "arbiter"
 DATA_ZONE_1 = "data-1"
 DATA_ZONE_2 = "data-2"
-
-# ibm-spectrum-scale namespace where CNSA / filesystem pods run
-IBM_SPECTRUM_SCALE_NAMESPACE = "ibm-spectrum-scale"
 
 # Prefix for LUN group names created during deployment validation
 _LUN_GROUP_NAME_PREFIX = "lun-group-ha"
@@ -97,13 +96,13 @@ def apply_stretch_cluster_zone_labels():
     )
     create_dummy_zone_labels()
 
-    assert are_zone_labels_present(), (
-        "Zone labels are still missing on at least one node after labelling"
-    )
+    assert (
+        are_zone_labels_present()
+    ), "Zone labels are still missing on at least one node after labelling"
     logger.info("Zone labels successfully applied to all cluster nodes")
 
 
-def designate_arbiter_master():
+def get_arbiter_node_name():
     """
     Verify and return the arbiter master node name.
 
@@ -133,6 +132,32 @@ def designate_arbiter_master():
     return arbiter_name
 
 
+def setup_iscsi_luns_on_all_nodes():
+    """
+    Create and attach the SAN LUNs on every cluster node, masters included.
+
+    Delegates to :func:`~ocs_ci.utility.iscsi_config.iscsi_setup`, which
+    configures the iSCSI target ACLs, logs the initiators in and validates the
+    resulting sessions and block devices.  ``iscsi_include_masters`` is forced
+    on so that ``get_worker_node_names()`` returns the control-plane nodes too
+    — on a stretch cluster the arbiter master must also see the LUNs.
+
+    The ``san_iscsi_*`` keys used by the Fusion Access SAN tests are accepted as
+    aliases for the ``iscsi_target_*`` keys ``iscsi_setup`` reads.
+    """
+    for san_key, iscsi_key in (
+        ("san_iscsi_ip", "iscsi_target_ip"),
+        ("san_iscsi_iqn", "iscsi_target_iqn"),
+    ):
+        if iscsi_key not in config.ENV_DATA and san_key in config.ENV_DATA:
+            config.ENV_DATA[iscsi_key] = config.ENV_DATA[san_key]
+
+    config.ENV_DATA["iscsi_include_masters"] = True
+    logger.info("Creating iSCSI LUNs on all cluster nodes (masters + workers)")
+    iscsi_setup()
+    logger.info("iSCSI LUNs are available on all cluster nodes")
+
+
 def deploy_fusion():
     """
     Install the IBM Fusion operator and create the SpectrumFusion CR.
@@ -147,111 +172,42 @@ def deploy_fusion():
 
 def deploy_fdf_service_stack():
     """
-    Install and verify the standalone FDF (Fusion Data Foundation) service stack.
+    Install the standalone FDF (Fusion Data Foundation) service stack only.
 
-    The IBM-owned ``ibm-operators`` CatalogSource is created first, then the
-    standard ODF deployment path proceeds via that catalog.
+    Creates the IBM-owned ``ibm-operators`` CatalogSource so the FDF operator
+    is installable.  **No StorageCluster is created** — on a Fusion Access HA
+    cluster the storage comes from the SAN LUNs connected later through the
+    Fusion Access wizard, so the ODF storage deployment is deliberately
+    skipped.
 
     Raises:
         AssertionError: If FDF standalone deployment is not enabled.
     """
-    assert config.DEPLOYMENT.get("fdf_standalone_deployment", False), (
-        "fdf_standalone_deployment must be True for Fusion Access HA deployment"
-    )
+    assert config.DEPLOYMENT.get(
+        "fdf_standalone_deployment", False
+    ), "fdf_standalone_deployment must be True for Fusion Access HA deployment"
     logger.info("Creating standalone FDF CatalogSource (ibm-operators)")
     StandaloneFDFCatalogSource().create_catalog_source()
-    logger.info("Standalone FDF CatalogSource created; proceeding with ODF deployment")
-
-
-def create_ibm_entitlement_secret(
-    namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
-):
-    """
-    Create the ``ibm-entitlement-key`` dockerconfigjson Secret in *namespace*.
-
-    This secret is required by KMM and the CNSA operator to pull kernel-module
-    and filesystem images from ``cp.icr.io``.  It must be created after the
-    ``ibm-spectrum-scale`` namespace exists (i.e. after KMM installation).
-
-    Reuses :func:`~ocs_ci.helpers.helpers.create_custom_secret_for_cnsa_rm`
-    — the canonical helper already used by
-    ``setup_scale_cluster_infrastructure_for_cnsa_rm`` in helpers.py — so the
-    secret structure is identical across both code paths.
-
-    The secret is skipped (idempotent) if it already exists.
-
-    Args:
-        namespace (str): Namespace in which to create the secret.
-            Defaults to ``ibm-spectrum-scale``.
-
-    Skips silently (with a warning) if ``config.AUTH["ibm_entitlement_key"]``
-    is not set.
-    """
-    ent_key = config.AUTH.get("ibm_entitlement_key")
-    if not ent_key:
-        logger.warning(
-            "ibm_entitlement_key is not set in config.AUTH — "
-            "skipping IBM entitlement secret creation. "
-            "KMM / CNSA image pulls from cp.icr.io may fail."
-        )
-        return
-
-    secret_name = constants.IBM_ENTITLEMENT_SECRET_NAME
-    secret_ocp = OCP(kind="Secret", namespace=namespace)
-
-    try:
-        secret_ocp.get(resource_name=secret_name)
-        logger.info(
-            f"Secret '{secret_name}' already exists in '{namespace}' — skipping creation"
-        )
-        return
-    except exceptions.CommandFailed:
-        pass  # secret does not exist yet; create it below
-
     logger.info(
-        f"Creating IBM entitlement secret '{secret_name}' in namespace '{namespace}'"
-    )
-    auth_b64 = base64.b64encode(f"cp:{ent_key}".encode()).decode()
-    docker_config = {
-        "auths": {
-            "cp.icr.io": {
-                "username": "cp",
-                "password": ent_key,  # pragma: allowlist secret
-                "auth": auth_b64,
-            }
-        }
-    }
-    create_custom_secret_for_cnsa_rm(
-        name=secret_name,
-        namespace=namespace,
-        data_dict={".dockerconfigjson": docker_config},
-        secret_type="kubernetes.io/dockerconfigjson",
-    )
-    logger.info(
-        f"IBM entitlement secret '{secret_name}' created successfully in '{namespace}'"
+        "Standalone FDF CatalogSource created — skipping StorageCluster creation; "
+        "storage is provided by the SAN LUNs"
     )
 
 
 def configure_kmm():
     """
-    Install KMM (Kernel Module Management) operator dependencies and create the
-    IBM entitlement secret required for image pulls from ``cp.icr.io``.
+    Install the KMM (Kernel Module Management) operator.
 
-    Sequence:
-        1. Create KMM namespace.
-        2. Create KMM subscription and wait for operator to be running.
-        3. Create the ``ibm-entitlement-key`` secret in ``ibm-spectrum-scale``
-           so KMM and CNSA can pull images.  The namespace is guaranteed to
-           exist after step 2 completes.
+    Delegates to :meth:`~ocs_ci.deployment.kmm.KMMInstaller.deploy_kmm_operator`,
+    which creates the namespace and subscription and then runs the post-install
+    verification (pods Running, deployments Available).  Passing both check
+    flags keeps the step idempotent across re-runs.
 
     Secure Boot validation is bypassed when ``DEPLOYMENT.kmm_secure_boot``
     is False (the default for the initial TP testing phase).
     """
     logger.info("Installing KMM operator")
-    installer = KMMInstaller()
-    installer.create_kmm_namespace()
-    installer.create_kmm_subscription()
-    installer.wait_for_the_resource_to_be_running()
+    KMMInstaller().deploy_kmm_operator(check_kmm_deployed=True, check_kmm_ready=True)
     logger.info("KMM operator installed successfully")
 
     if not config.DEPLOYMENT.get("kmm_secure_boot", False):
@@ -259,12 +215,6 @@ def configure_kmm():
             "kmm_secure_boot is False — Secure Boot validation bypassed "
             "(expected for initial TP phase)"
         )
-
-    logger.info(
-        "Creating IBM entitlement secret post-KMM installation "
-        "(required for cp.icr.io image pulls by KMM / CNSA)"
-    )
-    create_ibm_entitlement_secret()
 
 
 def configure_image_registry():
@@ -293,9 +243,62 @@ def deploy_fusion_access_operator():
     Delegates to :class:`~ocs_ci.deployment.fusion_access.FusionAccessOperator`
     which handles the certified-operators Subscription, CSV wait, and CR creation.
     """
+    # Imported lazily: ocs_ci.utility.operators, which fusion_access pulls in,
+    # cannot be imported before ocs_ci.helpers.helpers without tripping a
+    # pre-existing circular import. Keeping it local lets this module (and the
+    # fusion_access_ha conftest that imports it) load in any order.
+    from ocs_ci.deployment.fusion_access import FusionAccessOperator
+
     logger.info("Deploying Fusion Access Operator for SAN")
     FusionAccessOperator().deploy()
     logger.info("Fusion Access Operator deployed and FusionAccess CR is Ready")
+
+
+def _read_node_roles(san_ui):
+    """
+    Read the node-selection table and return the role of every visible node.
+
+    Args:
+        san_ui (StretchClusterSANUI): UI page-object positioned at the
+            node-selection page.
+
+    Returns:
+        dict: Mapping of node name to the role shown in the UI.
+    """
+    rows = san_ui.get_visible_node_rows()
+    return {
+        san_ui.get_node_name_in_row(i): san_ui.get_node_role_in_row(i)
+        for i in range(1, len(rows) + 1)
+    }
+
+
+def _assert_node_roles(role_by_name, nodes, expected_role):
+    """
+    Assert that every node in *nodes* is present in the table with the role
+    *expected_role*.
+
+    A node that is missing from the table is a failure in its own right — the
+    role check must not be skipped for it, or the validation would pass
+    vacuously.
+
+    Args:
+        role_by_name (dict): Mapping of node name to the role shown in the UI.
+        nodes (list[str]): Node names that must be present.
+        expected_role (str): Role each of those nodes must carry.
+
+    Raises:
+        AssertionError: If a node is missing or carries a different role.
+    """
+    missing = [n for n in nodes if n not in role_by_name]
+    assert not missing, (
+        f"Deployment validation FAIL: node(s) {missing} are absent from the "
+        f"node table; visible nodes: {sorted(role_by_name)}"
+    )
+    wrong = {n: role_by_name[n] for n in nodes if role_by_name[n] != expected_role}
+    assert not wrong, (
+        f"Deployment validation FAIL: expected role '{expected_role}' for "
+        f"{list(wrong)}, got {wrong}"
+    )
 
 
 def _validate_node_selection_default_state(san_ui):
@@ -339,9 +342,8 @@ def _validate_node_selection_default_state(san_ui):
 
 
 def _validate_include_control_plane_toggle(
-        san_ui, all_master_nodes, all_worker_nodes,
-        arbiter_node
-    ):
+    san_ui, all_master_nodes, all_worker_nodes, arbiter_node
+):
     """
     Enable the "Include control plane nodes" toggle and verify the resulting
     node table state.
@@ -371,24 +373,10 @@ def _validate_include_control_plane_toggle(
         f"control-plane toggle; found {len(rows)}"
     )
 
-    role_by_name = {}
-    for i in range(1, len(rows) + 1):
-        role_by_name[san_ui.get_node_name_in_row(i)] = san_ui.get_node_role_in_row(i)
+    role_by_name = _read_node_roles(san_ui)
 
-    for master in all_master_nodes:
-        if master in role_by_name:
-            assert role_by_name[master] == ROLE_CLUSTER_NODE, (
-                f"Deployment validation FAIL: "
-                f"Master '{master}' should be '{ROLE_CLUSTER_NODE}', "
-                f"got '{role_by_name[master]}'"
-            )
-    for worker in all_worker_nodes:
-        if worker in role_by_name:
-            assert role_by_name[worker] == ROLE_DISK_NODE, (
-                f"Deployment validation FAIL: "
-                f"Worker '{worker}' should be '{ROLE_DISK_NODE}', "
-                f"got '{role_by_name[worker]}'"
-            )
+    _assert_node_roles(role_by_name, all_master_nodes, ROLE_CLUSTER_NODE)
+    _assert_node_roles(role_by_name, all_worker_nodes, ROLE_DISK_NODE)
 
     non_arbiter_masters = [m for m in all_master_nodes if m != arbiter_node]
     if non_arbiter_masters:
@@ -406,9 +394,8 @@ def _validate_include_control_plane_toggle(
 
 
 def _validate_stretch_cluster_toggle(
-        san_ui, all_master_nodes, all_worker_nodes,
-        arbiter_node
-    ):
+    san_ui, all_master_nodes, all_worker_nodes, arbiter_node
+):
     """
     Enable the "Stretch cluster" toggle and verify the resulting page state.
 
@@ -438,42 +425,25 @@ def _validate_stretch_cluster_toggle(
         "'Include control plane nodes' must be disabled when Stretch is ON"
     )
 
-    rows = san_ui.get_visible_node_rows()
-    role_by_name = {}
-    for i in range(1, len(rows) + 1):
-        role_by_name[san_ui.get_node_name_in_row(i)] = san_ui.get_node_role_in_row(i)
+    role_by_name = _read_node_roles(san_ui)
 
-    if arbiter_node in role_by_name:
-        assert role_by_name[arbiter_node] == ROLE_ARBITER_NODE, (
-            f"Deployment validation FAIL: "
-            f"Arbiter '{arbiter_node}' should be '{ROLE_ARBITER_NODE}', "
-            f"got '{role_by_name[arbiter_node]}'"
-        )
+    _assert_node_roles(role_by_name, [arbiter_node], ROLE_ARBITER_NODE)
     assert san_ui.is_role_dropdown_disabled_for_node(arbiter_node), (
         f"Deployment validation FAIL: "
         f"Role dropdown must be disabled for arbiter node '{arbiter_node}'"
     )
-    for master in [m for m in all_master_nodes if m != arbiter_node]:
-        if master in role_by_name:
-            assert role_by_name[master] == ROLE_CLUSTER_NODE, (
-                f"Deployment validation FAIL: "
-                f"Master '{master}' should be '{ROLE_CLUSTER_NODE}', "
-                f"got '{role_by_name[master]}'"
-            )
-    for worker in all_worker_nodes:
-        if worker in role_by_name:
-            assert role_by_name[worker] == ROLE_DISK_NODE, (
-                f"Deployment validation FAIL: "
-                f"Worker '{worker}' should be '{ROLE_DISK_NODE}', "
-                f"got '{role_by_name[worker]}'"
-            )
+    _assert_node_roles(
+        role_by_name,
+        [m for m in all_master_nodes if m != arbiter_node],
+        ROLE_CLUSTER_NODE,
+    )
+    _assert_node_roles(role_by_name, all_worker_nodes, ROLE_DISK_NODE)
     logger.info("Stretch cluster toggle verified")
 
 
 def _validate_non_arbiter_role_changes(
-        san_ui, all_master_nodes, arbiter_node,
-        data_zone_1_workers
-    ):
+    san_ui, all_master_nodes, arbiter_node, data_zone_1_workers
+):
     """
     Verify that role changes are allowed for non-arbiter nodes and locked for
     the arbiter node (Stretch cluster toggle already enabled).
@@ -497,35 +467,13 @@ def _validate_non_arbiter_role_changes(
     if data_zone_1_workers:
         test_worker = data_zone_1_workers[0]
         san_ui.change_node_role(test_worker, ROLE_CLUSTER_NODE)
-        rows = san_ui.get_visible_node_rows()
-        new_role = next(
-            (san_ui.get_node_role_in_row(i + 1)
-             for i in range(len(rows))
-             if san_ui.get_node_name_in_row(i + 1) == test_worker),
-            None,
-        )
-        assert new_role == ROLE_CLUSTER_NODE, (
-            f"Deployment validation FAIL: "
-            f"Worker '{test_worker}' should be '{ROLE_CLUSTER_NODE}' "
-            f"after change, got '{new_role}'"
-        )
+        _assert_node_roles(_read_node_roles(san_ui), [test_worker], ROLE_CLUSTER_NODE)
 
     non_arbiter_masters = [m for m in all_master_nodes if m != arbiter_node]
     if non_arbiter_masters:
         test_master = non_arbiter_masters[0]
         san_ui.change_node_role(test_master, ROLE_DISK_NODE)
-        rows = san_ui.get_visible_node_rows()
-        new_role = next(
-            (san_ui.get_node_role_in_row(i + 1)
-             for i in range(len(rows))
-             if san_ui.get_node_name_in_row(i + 1) == test_master),
-            None,
-        )
-        assert new_role == ROLE_DISK_NODE, (
-            f"Deployment validation FAIL: "
-            f"Master '{test_master}' should be '{ROLE_DISK_NODE}' "
-            f"after change, got '{new_role}'"
-        )
+        _assert_node_roles(_read_node_roles(san_ui), [test_master], ROLE_DISK_NODE)
 
     assert san_ui.is_role_dropdown_disabled_for_node(arbiter_node), (
         f"Deployment validation FAIL: "
@@ -582,12 +530,14 @@ def _create_quay_registry_secret():
     quay_email = config.ENV_DATA.get("san_quay_email")
 
     missing = [
-        k for k, v in {
+        k
+        for k, v in {
             "san_quay_server": quay_server,
             "san_quay_username": quay_username,
             "san_quay_password": quay_password,
             "san_quay_email": quay_email,
-        }.items() if not v
+        }.items()
+        if not v
     ]
     if missing:
         raise ValueError(
@@ -596,7 +546,7 @@ def _create_quay_registry_secret():
         )
 
     secret_name = constants.IBM_QUAYIO_SECRET_NAME
-    namespace = IBM_SPECTRUM_SCALE_NAMESPACE
+    namespace = constants.IBM_STORAGE_SCALE_NAMESPACE
     logger.info(
         f"Creating Quay docker-registry secret '{secret_name}' "
         f"in namespace '{namespace}' for external registry access"
@@ -695,20 +645,24 @@ def _validate_lun_group_and_filesystem_health():
     logger.info(f"LUN group '{lun_group_name}' is Healthy/Connected")
 
     logger.info(
-        f"Verifying all pods are Running in namespace '{IBM_SPECTRUM_SCALE_NAMESPACE}'"
+        f"Verifying all pods are Running in namespace '{constants.IBM_STORAGE_SCALE_NAMESPACE}'"
     )
-    wait_for_pods_to_be_running(
-        namespace=IBM_SPECTRUM_SCALE_NAMESPACE,
-        timeout=300,
+    assert wait_for_pods_to_be_running(
+        namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
+        timeout=600,
+    ), (
+        "Deployment validation FAIL: not all pods reached the Running state in "
+        f"namespace '{constants.IBM_STORAGE_SCALE_NAMESPACE}'"
     )
     logger.info(
-        f"All pods in '{IBM_SPECTRUM_SCALE_NAMESPACE}' are Running — "
+        f"All pods in '{constants.IBM_STORAGE_SCALE_NAMESPACE}' are Running — "
         "deployment validation complete"
     )
 
 
-def validate_deployment_ui(arbiter_node, all_master_nodes, all_worker_nodes,
-                            data_zone_1_workers):
+def validate_deployment_ui(
+    arbiter_node, all_master_nodes, all_worker_nodes, data_zone_1_workers
+):
     """
     Execute the full UI deployment validation suite.
 
@@ -733,43 +687,42 @@ def validate_deployment_ui(arbiter_node, all_master_nodes, all_worker_nodes,
         data_zone_1_workers (list[str]): Worker nodes in data zone 1.
     """
     logger.info("Starting UI deployment validation")
+    login_ui()
+    try:
+        logger.info("Step 1 — Verify default node-selection page state")
+        san_ui = StretchClusterSANUI()
+        san_ui.navigate_to_connect_external_storage_san()
+        _validate_node_selection_default_state(san_ui)
 
-    # Steps 1–5 share a single wizard session (Stretch already ON after step 3).
-    logger.info("Step 1 — Verify default node-selection page state")
-    san_ui = StretchClusterSANUI()
-    san_ui.navigate_to_connect_external_storage_san()
-    _validate_node_selection_default_state(san_ui)
+        logger.info("Step 2 — Verify Include Control Plane Nodes toggle")
+        # Navigate fresh to reset toggle state before each check.
+        san_ui = StretchClusterSANUI().navigate_to_connect_external_storage_san()
+        _validate_include_control_plane_toggle(
+            san_ui, all_master_nodes, all_worker_nodes, arbiter_node
+        )
 
-    logger.info("Step 2 — Verify Include Control Plane Nodes toggle")
-    # Navigate fresh to reset toggle state before each check.
-    san_ui = StretchClusterSANUI()
-    san_ui.navigate_to_connect_external_storage_san()
-    _validate_include_control_plane_toggle(
-        san_ui, all_master_nodes, all_worker_nodes, arbiter_node
-    )
+        logger.info("Step 3 — Verify Stretch Cluster toggle")
+        san_ui = StretchClusterSANUI().navigate_to_connect_external_storage_san()
+        _validate_stretch_cluster_toggle(
+            san_ui, all_master_nodes, all_worker_nodes, arbiter_node
+        )
 
-    logger.info("Step 3 — Verify Stretch Cluster toggle")
-    san_ui = StretchClusterSANUI()
-    san_ui.navigate_to_connect_external_storage_san()
-    _validate_stretch_cluster_toggle(
-        san_ui, all_master_nodes, all_worker_nodes, arbiter_node
-    )
+        logger.info("Step 4 — Verify non-arbiter role changes (Stretch ON)")
+        # Reuse the same session; Stretch is already ON from step 3.
+        _validate_non_arbiter_role_changes(
+            san_ui, all_master_nodes, arbiter_node, data_zone_1_workers
+        )
 
-    logger.info("Step 4 — Verify non-arbiter role changes (Stretch ON)")
-    # Reuse the same session; Stretch is already ON from step 3.
-    _validate_non_arbiter_role_changes(
-        san_ui, all_master_nodes, arbiter_node, data_zone_1_workers
-    )
+        logger.info("Step 5 — Verify LUN discovery")
+        # Navigate fresh with Stretch ON to reach the LUN discovery page.
+        san_ui = StretchClusterSANUI().navigate_to_connect_external_storage_san()
+        san_ui.enable_stretch_cluster()
+        _validate_lun_discovery(san_ui)
 
-    logger.info("Step 5 — Verify LUN discovery")
-    # Navigate fresh with Stretch ON to reach the LUN discovery page.
-    san_ui = StretchClusterSANUI()
-    san_ui.navigate_to_connect_external_storage_san()
-    san_ui.enable_stretch_cluster()
-    _validate_lun_discovery(san_ui)
-
-    logger.info("Step 6 — Create LUN group and verify filesystem health")
-    _validate_lun_group_and_filesystem_health()
+        logger.info("Step 6 — Create LUN group and verify filesystem health")
+        _validate_lun_group_and_filesystem_health()
+    finally:
+        close_browser()
 
     logger.info("UI deployment validation completed successfully")
 
@@ -781,14 +734,14 @@ def deploy_fusion_access_stretch_cluster():
 
     Deployment steps:
         1. Apply topology zone labels (arbiter + data zones).
-        2. Designate the arbiter master node.
-        3. Deploy IBM Fusion components.
-        4. Install and verify the FDF service stack.
-        5. Configure KMM operator dependencies.
-        6. Configure image registry.
-        7. Deploy the Fusion Access Operator.
-        8. Configure iSCSI LUNs on cluster nodes (masters + workers) via iscsi_setup.
-        9. Run UI deployment validation.
+        2. Identify the arbiter master node.
+        3. Create the SAN LUNs on all nodes, masters included, over iSCSI.
+        4. Deploy IBM Fusion components.
+        5. Install the standalone FDF service stack only (storage skipped).
+        6. Install the KMM operator.
+        7. Create the IBM entitlement secret in ``ibm-spectrum-scale``.
+        8. Configure the image registry, deploy the Fusion Access Operator and
+           connect the external registry to the SAN through the UI wizard.
 
     Must be called after the base OCP cluster has been provisioned from::
 
@@ -797,56 +750,41 @@ def deploy_fusion_access_stretch_cluster():
     Raises:
         AssertionError: If any deployment step or validation check fails.
     """
-    logger.info(
-        "Starting Fusion Access HA stretch cluster deployment "
-    )
+    logger.info("Starting Fusion Access HA stretch cluster deployment")
 
     logger.info("Step 1 — Apply topology zone labels")
     apply_stretch_cluster_zone_labels()
 
-    logger.info("Step 2 — Designate arbiter master node")
-    arbiter_node = designate_arbiter_master()
+    logger.info("Step 2 — Identify arbiter master node")
+    arbiter_node = get_arbiter_node_name()
     logger.info(f"Arbiter node confirmed: {arbiter_node}")
 
-    logger.info("Step 3 — Deploy IBM Fusion components")
+    logger.info("Step 3 — Create iSCSI LUNs on all nodes (masters + workers)")
+    setup_iscsi_luns_on_all_nodes()
+
+    logger.info("Step 4 — Deploy IBM Fusion components")
     deploy_fusion()
 
-    logger.info("Step 4 — Install FDF service stack")
+    logger.info("Step 5 — Install FDF service stack (storage skipped)")
     deploy_fdf_service_stack()
 
-    logger.info("Step 5 — Configure KMM operator")
+    logger.info("Step 6 — Install KMM operator")
     configure_kmm()
 
-    logger.info("Step 6 — Configure image registry")
+    logger.info("Step 7 — Create IBM entitlement secret in ibm-spectrum-scale")
+    create_ibm_entitlement_secret(namespace=constants.IBM_STORAGE_SCALE_NAMESPACE)
+
+    logger.info("Step 8 — Configure image registry and connect it to the SAN")
     configure_image_registry()
-
-    logger.info("Step 7 — Deploy Fusion Access Operator")
     deploy_fusion_access_operator()
-
-    logger.info("Step 8 — Setup and discover iSCSI LUNs on cluster nodes")
-    # Normalize config keys if provided under san_iscsi_*
-    if "iscsi_target_ip" not in config.ENV_DATA and "san_iscsi_ip" in config.ENV_DATA:
-        config.ENV_DATA["iscsi_target_ip"] = config.ENV_DATA["san_iscsi_ip"]
-    if "iscsi_target_iqn" not in config.ENV_DATA and "san_iscsi_iqn" in config.ENV_DATA:
-        config.ENV_DATA["iscsi_target_iqn"] = config.ENV_DATA["san_iscsi_iqn"]
-
-    config.ENV_DATA["iscsi_setup"] = True
-    iscsi_setup()
-
-    logger.info("Step 9 — Run UI deployment validation")
-    all_master_nodes = get_master_nodes()
-    all_worker_nodes = get_worker_nodes()
-    data_zone_1_workers = get_data_zone_worker_nodes(DATA_ZONE_1)
     validate_deployment_ui(
         arbiter_node=arbiter_node,
-        all_master_nodes=all_master_nodes,
-        all_worker_nodes=all_worker_nodes,
-        data_zone_1_workers=data_zone_1_workers,
+        all_master_nodes=get_master_nodes(),
+        all_worker_nodes=get_worker_nodes(),
+        data_zone_1_workers=get_data_zone_worker_nodes(DATA_ZONE_1),
     )
 
-    logger.info(
-        "Fusion Access HA stretch cluster deployment completed successfully"
-    )
+    logger.info("Fusion Access HA stretch cluster deployment completed successfully")
 
 
 def get_nodes_by_zone(zone):

@@ -132,7 +132,7 @@ def zone_labels_applied(fusion_access_stretch_cluster_setup):
 
     Yields control after verifying labels; no teardown required.
     """
-    assert are_zone_labels_present(), (
-        "Zone labels are missing on one or more nodes before test execution"
-    )
+    assert (
+        are_zone_labels_present()
+    ), "Zone labels are missing on one or more nodes before test execution"
     yield

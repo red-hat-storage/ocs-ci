@@ -59,4 +59,3 @@ ENV_DATA:
   master_num_cpus: '8'
   master_memory: '16384'
   compute_memory: '65536'
-
