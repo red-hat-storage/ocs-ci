@@ -207,6 +207,10 @@ CEPHBLOCKPOOLRADOSNS = "cephblockpoolradosnamespaces"
 CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
 CEPH_NVMEOF_SC = "ocs-storagecluster-ceph-nvmeof"
+CEPHNVMEOFGATEWAY = "CephNVMeOFGateway"
+# Condition the ocs-operator reports on the StorageCluster for the outcome of
+# its last reconcile
+CONDITION_RECONCILE_COMPLETE = "ReconcileComplete"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 CEPHFILESYSTEM_SC_SELINUX = "ocs-storagecluster-cephfs-selinux-relabel"
 CEPHOBJECTSTORE = "CephObjectStore"
@@ -808,6 +812,11 @@ NVMEOF_APP_LABEL = "app=rook-ceph-nvmeof"
 # Number of gateway instances the operator deploys when NVMe-oF is enabled on
 # the StorageCluster without an explicit spec.nvmeof.gatewayInstances
 NVMEOF_DEFAULT_GATEWAY_INSTANCES = 2
+# Smallest number of instances the CephNVMeOFGateway CRD accepts. The
+# StorageCluster schema does not enforce it, so a smaller
+# spec.nvmeof.gatewayInstances is admitted but cannot be reconciled into the
+# gateway CR, which makes the ocs-operator report a reconcile failure.
+NVMEOF_MIN_GATEWAY_INSTANCES = 1
 # Map performance profile component name to pod label selector for Ceph daemons
 CEPH_DAEMON_LABEL_BY_COMPONENT = {
     "mgr": MGR_APP_LABEL,

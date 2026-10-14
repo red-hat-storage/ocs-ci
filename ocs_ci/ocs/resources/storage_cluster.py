@@ -30,6 +30,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     InvalidPodPresent,
     ResourceNotFoundError,
+    TimeoutExpiredError,
     UnsupportedFeatureError,
     PVNotSufficientException,
     ResourceWrongStatusException,
@@ -51,7 +52,6 @@ from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
     get_osd_pod_id,
     get_deviceclass_osd_pods,
-    wait_for_pods_deletion,
     wait_for_pods_by_label_count,
     wait_for_pods_to_be_running,
 )
@@ -2471,6 +2471,12 @@ def scale_nvmeof_gateway(instances, namespace=None, wait=True, timeout=600):
     spec.nvmeof.gatewayInstances on the StorageCluster, so the StorageCluster
     is patched instead of the gateway CR itself, which would be reverted.
 
+    Scaling below constants.NVMEOF_MIN_GATEWAY_INSTANCES is admitted by the
+    StorageCluster schema but is rejected by the CephNVMeOFGateway CRD, so the
+    gateway pods never follow such a request. Waiting for them would only block
+    until the timeout, hence it has to be requested with wait=False and the
+    resulting reconcile failure verified on the StorageCluster instead.
+
     Args:
         instances (int): The number of gateway instances to scale to
         namespace (str): Namespace of the StorageCluster
@@ -2479,10 +2485,19 @@ def scale_nvmeof_gateway(instances, namespace=None, wait=True, timeout=600):
         timeout (int): Time in seconds to wait for the gateway pods
 
     Raises:
-        TimeoutExpiredError: If the gateway pods did not reach the requested
-            number of instances within the timeout
+        ValueError: If waiting is requested for a number of instances the
+            gateway CR cannot be scaled to
 
     """
+    if wait and instances < constants.NVMEOF_MIN_GATEWAY_INSTANCES:
+        raise ValueError(
+            f"The CephNVMeOFGateway CRD accepts at least "
+            f"{constants.NVMEOF_MIN_GATEWAY_INSTANCES} instance, the gateway "
+            f"pods never reach {instances} instances. Request it with "
+            "wait=False and verify the reconcile failure reported by the "
+            "StorageCluster."
+        )
+
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     sc_obj = get_storage_cluster(namespace=namespace)
     sc_name = sc_obj.get()["items"][0]["metadata"]["name"]
@@ -2496,13 +2511,6 @@ def scale_nvmeof_gateway(instances, namespace=None, wait=True, timeout=600):
     ), f"Failed to scale the NVMe-oF gateway to {instances} instances"
 
     if not wait:
-        return
-
-    if instances == 0:
-        wait_for_pods_deletion(
-            label=constants.NVMEOF_APP_LABEL, timeout=timeout, namespace=namespace
-        )
-        log.info("All NVMe-oF gateway pods are terminated")
         return
 
     assert wait_for_pods_by_label_count(
@@ -2521,6 +2529,107 @@ def scale_nvmeof_gateway(instances, namespace=None, wait=True, timeout=600):
         namespace=namespace, pod_names=gateway_pod_names, timeout=timeout
     ), f"NVMe-oF gateway pods {gateway_pod_names} are not in Running state"
     log.info(f"NVMe-oF gateway pods {gateway_pod_names} are Running")
+
+
+def get_nvmeof_gateway_cr(namespace=None):
+    """
+    Get the CephNVMeOFGateway CR the ocs-operator reconciles from the NVMe-oF
+    section of the StorageCluster.
+
+    Args:
+        namespace (str): Namespace of the gateway CR
+
+    Returns:
+        dict: The CephNVMeOFGateway CR, None if no gateway CR is deployed
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    gateway_obj = OCP(kind=constants.CEPHNVMEOFGATEWAY, namespace=namespace)
+    gateway_crs = gateway_obj.get(dont_raise=True) or {}
+    gateway_crs = gateway_crs.get("items", [])
+    return gateway_crs[0] if gateway_crs else None
+
+
+def get_storage_cluster_condition(condition_type, namespace=None):
+    """
+    Get a condition of the StorageCluster by its type.
+
+    Args:
+        condition_type (str): Type of the condition, for example
+            "ReconcileComplete"
+        namespace (str): Namespace of the StorageCluster
+
+    Returns:
+        dict: The condition of the given type, None if the StorageCluster does
+            not report it
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    storage_cluster = sc_obj.get()["items"][0]
+    conditions = storage_cluster.get("status", {}).get("conditions", [])
+    return next(
+        (
+            condition
+            for condition in conditions
+            if condition.get("type") == condition_type
+        ),
+        None,
+    )
+
+
+def wait_for_storage_cluster_condition(
+    condition_type, status, message_substrs=None, timeout=300, sleep=10, namespace=None
+):
+    """
+    Wait until a condition of the StorageCluster reports the given status and,
+    optionally, a message containing all the given substrings.
+
+    Args:
+        condition_type (str): Type of the condition, for example
+            "ReconcileComplete"
+        status (str): The status the condition is expected to report, "True" or
+            "False"
+        message_substrs (list): If given, the condition is only considered
+            matching once its message contains all of these substrings. The
+            comparison is case insensitive.
+        timeout (int): Time in seconds to wait for the condition
+        sleep (int): Time in seconds between two checks of the condition
+        namespace (str): Namespace of the StorageCluster
+
+    Returns:
+        dict: The matching condition
+
+    Raises:
+        TimeoutExpiredError: If the condition did not match within the timeout
+
+    """
+    message_substrs = message_substrs or []
+    last_condition = None
+
+    def _condition_matches():
+        nonlocal last_condition
+        last_condition = get_storage_cluster_condition(
+            condition_type, namespace=namespace
+        )
+        if not last_condition or last_condition.get("status") != status:
+            return False
+        message = last_condition.get("message", "").lower()
+        return all(substr.lower() in message for substr in message_substrs)
+
+    log.info(
+        f"Waiting for the StorageCluster condition {condition_type} to be "
+        f"{status} with a message containing {message_substrs}"
+    )
+    sampler = TimeoutSampler(timeout=timeout, sleep=sleep, func=_condition_matches)
+    if not sampler.wait_for_func_status(True):
+        raise TimeoutExpiredError(
+            f"The StorageCluster condition {condition_type} did not report "
+            f"status {status} with a message containing {message_substrs} "
+            f"within {timeout}s. Last seen condition: {last_condition}"
+        )
+    log.info(f"StorageCluster reports condition {last_condition}")
+    return last_condition
 
 
 def get_osd_count():
