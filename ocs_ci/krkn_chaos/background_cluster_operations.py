@@ -772,8 +772,8 @@ class BackgroundClusterOperations:
         """
         Stop background ops when the cluster is unrecoverable.
 
-        Degraded (HEALTH_WARN, MDS failover in progress, one OSD down) is
-        expected during chaos and does not abort.
+        Degraded (HEALTH_WARN, MDS failover in progress, OSDs below pool
+        min_size) is expected during chaos and does not abort.
 
         Returns:
             bool: True if the run should stop.
