@@ -66,7 +66,6 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.helpers import create_project
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
-from ocs_ci.utility.retry import retry
 
 log = logging.getLogger(__name__)
 
@@ -1028,10 +1027,13 @@ def _cleanup_failed_cluster_import(cluster_name):
                 timeout=120,
             )
             log.info(f"Initiated deletion of {kind} '{cluster_name}'")
-        except Exception as ex:
-            log.warning(
-                f"Failed to delete {kind} '{cluster_name}' during cleanup: {ex}"
+        except CommandFailed as ex:
+            # --ignore-not-found means NotFound is success, so any failure here is real
+            log.error(
+                f"Failed to initiate deletion of {kind} '{cluster_name}': {ex}. "
+                f"Cannot proceed with cleanup."
             )
+            raise
 
     # Poll for namespace deletion with a total of 1200s (20 minutes)
     # Only proceed with retry after confirmed deletion
