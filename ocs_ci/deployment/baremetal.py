@@ -1092,21 +1092,7 @@ class BAREMETALAI(BAREMETALBASE):
             self.ai_cluster.create_infrastructure_environment()
 
             # configure DNS records for API and Ingress
-            if is_vpc_infra():
-                # Use IBM Cloud CIS for DNS
-                logger.info(
-                    f"VPC BM: Creating CIS DNS records (Public API VIP: {self.api_vip}, "
-                    f"Internal API VIP: {self.api_int_vip}, Ingress VIP: {self.ingress_vip})"
-                )
-                ibmcloud_bm.IBMCloudVPCBM.create_cis_dns_records(
-                    cluster_name=self.cluster_name,
-                    api_vip=self.api_vip,
-                    ingress_vip=self.ingress_vip,
-                    api_int_vip=self.api_int_vip,
-                )
-            else:
-                # Use AWS Route53 for other platforms
-                self.create_dns_records()
+            self.create_dns_records()
 
             # download discovery ipxe config
             ipxe_config_file = self.ai_cluster.download_ipxe_config(self.cluster_path)
@@ -1351,19 +1337,15 @@ class BAREMETALAI(BAREMETALBASE):
                 pending_user_action_handler=self.pending_user_action_handler
             )
 
-            # Classic baremetal only: Workaround for UEFI boot order issue
-            if not is_vpc_infra():
-                for machine in master_nodes + worker_nodes:
-                    if self.srv_details[machine].get(
-                        "fix_uefi_boot_order_first_option"
-                    ):
-                        update_uefi_boot_order(
-                            first_option_string=self.srv_details[machine].get(
-                                "fix_uefi_boot_order_first_option"
-                            ),
-                            ocp_node=machine,
-                            ignore_error=True,
-                        )
+            for machine in master_nodes + worker_nodes:
+                if self.srv_details[machine].get("fix_uefi_boot_order_first_option"):
+                    update_uefi_boot_order(
+                        first_option_string=self.srv_details[machine].get(
+                            "fix_uefi_boot_order_first_option"
+                        ),
+                        ocp_node=machine,
+                        ignore_error=True,
+                    )
 
             # Verify cluster health - common
             self.test_cluster()
@@ -1399,31 +1381,6 @@ class BAREMETALAI(BAREMETALBASE):
                 )
                 return
 
-            # IBM Cloud VPC BM: Force restart hung servers
-            if (
-                is_vpc_infra()
-                and self.srv_details[machine].get("mgmt_provider") == "vpc-bm"
-            ):
-                server_id = self.srv_details[machine].get("server_id")
-                if not server_id:
-                    logger.error(f"Cannot restart {machine}: server_id not found")
-                    return
-
-                logger.info(f"Force restarting VPC BM server {machine} ({server_id})")
-                vpc_bm = ibmcloud_bm.IBMCloudVPCBM(
-                    region=config.ENV_DATA.get("region", "us-south")
-                )
-                vpc_bm.stop_server(server_id, stop_type="hard")
-                time.sleep(60)
-                try:
-                    vpc_bm.wait_for_server_status(server_id, "stopped", timeout=300)
-                except Exception as e:
-                    logger.warning(f"Stop wait failed: {e}, proceeding to start")
-                vpc_bm.start_server(server_id)
-                logger.info(f"Server {machine} restart initiated")
-                self.handled_pending_user_actions[machine] = time.time()
-                return
-
             if self.srv_details[machine].get("mgmt_provider", "ipmitool") == "ipmitool":
                 secrets = [
                     self.srv_details[machine]["mgmt_username"],
@@ -1457,35 +1414,68 @@ class BAREMETALAI(BAREMETALBASE):
                 time.sleep(5)
                 ibmcloud.start_machines(m)
 
+            elif self.srv_details[machine].get("mgmt_provider") == "vpc-bm":
+                server_id = self.srv_details[machine].get("server_id")
+                if not server_id:
+                    logger.error(f"Cannot restart {machine}: server_id not found")
+                    return
+
+                logger.info(f"Force restarting VPC BM server {machine} ({server_id})")
+                vpc_bm = ibmcloud_bm.IBMCloudVPCBM(
+                    region=config.ENV_DATA.get("region", "us-south")
+                )
+                vpc_bm.stop_server(server_id, stop_type="hard")
+                time.sleep(60)
+                try:
+                    vpc_bm.wait_for_server_status(server_id, "stopped", timeout=300)
+                except Exception as e:
+                    logger.warning(f"Stop wait failed: {e}, proceeding to start")
+                vpc_bm.start_server(server_id)
+                logger.info(f"Server {machine} restart initiated")
+
             self.handled_pending_user_actions[machine] = time.time()
 
         def create_dns_records(self):
             """
             Configure DNS records for api and ingress
             """
-            response_list = []
-            zone_id = self.aws.get_hosted_zone_id_for_domain()
-            response_list.append(
-                self.aws.update_hosted_zone_record(
-                    zone_id=zone_id,
-                    record_name=f"api.{self.cluster_name}",
-                    data=self.api_vip,
-                    type="A",
-                    operation_type="Add",
+            if is_vpc_infra():
+                # Use IBM Cloud CIS for DNS
+                logger.info(
+                    f"VPC BM: Creating CIS DNS records (Public API VIP: {self.api_vip}, "
+                    f"Internal API VIP: {self.api_int_vip}, Ingress VIP: {self.ingress_vip})"
                 )
-            )
-            response_list.append(
-                self.aws.update_hosted_zone_record(
-                    zone_id=zone_id,
-                    record_name=f"*.apps.{self.cluster_name}",
-                    data=self.ingress_vip,
-                    type="A",
-                    operation_type="Add",
+                ibmcloud_bm.IBMCloudVPCBM.create_cis_dns_records(
+                    cluster_name=self.cluster_name,
+                    api_vip=self.api_vip,
+                    ingress_vip=self.ingress_vip,
+                    api_int_vip=self.api_int_vip,
                 )
-            )
-            logger.info("Waiting for Record Response")
-            self.aws.wait_for_record_set(response_list=response_list)
-            logger.info("Records Created Successfully")
+            else:
+                # Use AWS Route53 for other platforms
+                response_list = []
+                zone_id = self.aws.get_hosted_zone_id_for_domain()
+                response_list.append(
+                    self.aws.update_hosted_zone_record(
+                        zone_id=zone_id,
+                        record_name=f"api.{self.cluster_name}",
+                        data=self.api_vip,
+                        type="A",
+                        operation_type="Add",
+                    )
+                )
+                response_list.append(
+                    self.aws.update_hosted_zone_record(
+                        zone_id=zone_id,
+                        record_name=f"*.apps.{self.cluster_name}",
+                        data=self.ingress_vip,
+                        type="A",
+                        operation_type="Add",
+                    )
+                )
+                logger.info("Waiting for Record Response")
+                self.aws.wait_for_record_set(response_list=response_list)
+                logger.info("Records Created Successfully")
 
         def configure_ipxe_on_helper(self):
             """
