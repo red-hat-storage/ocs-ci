@@ -7,6 +7,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     ignore_leftovers,
+    jira,
     skipif_no_nvmeof,
     tier1,
     tier4a,
@@ -1054,6 +1055,7 @@ class TestNvmeofGatewayScaling(ManageTest):
             constants.STATUS_READY,
         )
 
+    @jira("DFBUGS-11728")
     def test_nvmeof_gateway_replica_scaling(
         self,
         nvmeof_gateway_instances,
