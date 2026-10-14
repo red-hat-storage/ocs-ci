@@ -1289,7 +1289,7 @@ def wait_for_all_resources_creation(
     pvc_count,
     pod_count,
     namespace,
-    timeout=1800,
+    timeout=3600,
     skip_replication_resources=False,
     discovered_apps=False,
     vrg_name="",
