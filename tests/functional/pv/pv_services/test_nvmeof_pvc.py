@@ -1212,6 +1212,11 @@ class TestNvmeofGatewayUpdateStrategy(ManageTest):
             logger.info(
                 "Restoring the NVMe-oF gateway resources to %s", original_resources
             )
+            # Only the resources that reached the gateway roll its pods when
+            # they are restored. If the operator never propagated them, the
+            # restore replaces no pod and waiting for a rollout would only
+            # block until the timeout.
+            rollout_expected = bool(storage_cluster.get_nvmeof_gateway_cr_resources())
             # The pods running with the test resources are recorded before the
             # restore so that the cleanup waits for the rollout it triggers. A
             # plain pod count would already be satisfied by those pods and the
@@ -1223,7 +1228,16 @@ class TestNvmeofGatewayUpdateStrategy(ManageTest):
                 )
             }
             gateway_instances = storage_cluster.get_nvmeof_gateway_instances()
-            storage_cluster.set_nvmeof_gateway_resources(original_resources)
+            storage_cluster.set_nvmeof_gateway_resources(
+                original_resources, verify=False
+            )
+            if not rollout_expected:
+                logger.info(
+                    "The gateway resources never reached the %s CR, restoring "
+                    "them does not roll out new gateway pods",
+                    constants.CEPHNVMEOFGATEWAY,
+                )
+                return
             monitor_nvmeof_gateway_rollout(pre_restore_uids, gateway_instances)
 
         request.addfinalizer(finalizer)

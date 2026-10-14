@@ -2411,16 +2411,45 @@ def get_nvmeof_gateway_resources(namespace=None):
     return storage_cluster["spec"].get("resources", {}).get("nvmeof")
 
 
-def set_nvmeof_gateway_resources(resources, namespace=None):
+def get_nvmeof_gateway_cr_resources(namespace=None):
+    """
+    Get the resource requirements the gateway CR actually runs with.
+
+    Args:
+        namespace (str): Namespace of the gateway CR
+
+    Returns:
+        dict: Value of spec.resources on the CephNVMeOFGateway CR, an empty
+            dict if no resource requirements reached the gateway
+
+    """
+    gateway_cr = get_nvmeof_gateway_cr(namespace=namespace) or {}
+    return gateway_cr.get("spec", {}).get("resources") or {}
+
+
+def set_nvmeof_gateway_resources(resources, namespace=None, verify=True, timeout=180):
     """
     Set the resource requirements of the NVMe-oF gateway, which makes the
     ocs-operator roll out new gateway pods.
+
+    spec.resources of the StorageCluster is a free form map, so an entry the
+    running ocs-operator does not know about is accepted and stored without
+    ever reaching the gateway. The propagation to the gateway CR is therefore
+    verified instead of assumed, otherwise the caller only finds out by waiting
+    for a rollout that is never triggered.
 
     Args:
         resources (dict): The resource requirements to set, for example
             {"requests": {"cpu": "1", "memory": "4Gi"}}. None removes the
             nvmeof entry, which is how a merge patch expresses a deletion.
         namespace (str): Namespace of the StorageCluster
+        verify (bool): True to wait for the resource requirements to reach the
+            gateway CR, False to only patch the StorageCluster
+        timeout (int): Time in seconds to wait for the propagation
+
+    Raises:
+        TimeoutExpiredError: If the resource requirements did not reach the
+            gateway CR within the timeout
 
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
@@ -2434,6 +2463,27 @@ def set_nvmeof_gateway_resources(resources, namespace=None):
     assert sc_obj.patch(
         resource_name=sc_name, params=patch_body, format_type="merge"
     ), f"Failed to set the NVMe-oF gateway resources to {resources}"
+
+    if not verify:
+        return
+
+    expected_resources = resources or {}
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=get_nvmeof_gateway_cr_resources,
+        namespace=namespace,
+    )
+    if not sampler.wait_for_func_status(expected_resources):
+        raise TimeoutExpiredError(
+            f"spec.resources.nvmeof of StorageCluster {sc_name} was set to "
+            f"{resources} but {constants.CEPHNVMEOFGATEWAY} still runs with "
+            f"{get_nvmeof_gateway_cr_resources(namespace=namespace)} after "
+            f"{timeout}s. The running ocs-operator does not propagate the "
+            "NVMe-oF gateway resource requirements from the StorageCluster, "
+            "so no gateway rollout is triggered by changing them."
+        )
+    log.info(f"The NVMe-oF gateway CR runs with resources {resources}")
 
 
 def get_nvmeof_gateway_instances(namespace=None):
