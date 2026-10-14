@@ -381,9 +381,12 @@ SCC_ADMISSION_ANNOTATION = "openshift.io/scc"
 
 # SCC names used by ODF components
 SCC_RESTRICTED_V2 = "restricted-v2"
+SCC_HOSTNETWORK_V2 = "hostnetwork-v2"
+SCC_NONROOT_V2 = "nonroot-v2"
 SCC_ROOK_CEPH = "rook-ceph"
 SCC_NOOBAA_CORE = "noobaa-core"
 SCC_NOOBAA_ENDPOINT = "noobaa-endpoint"
+SCC_NOOBAA_AGENT = "noobaa-agent"
 SCC_CEPH_CSI_OP = "ceph-csi-op-scc"
 SCC_ODF_BLACKBOX = "odf-blackbox-scc"
 
