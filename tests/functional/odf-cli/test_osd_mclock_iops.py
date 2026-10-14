@@ -218,7 +218,7 @@ class TestOSDMclockMaxCapacityIOPS:
             f"{self.CUSTOM_IOPS_VALUE}; pick a different value"
         )
 
-        logger.info(f"Setting osd.{target_osd} {key} = {self.CUSTOM_IOPS_VALUE}")
+        logger.test_step(f"Setting osd.{target_osd} {key} = {self.CUSTOM_IOPS_VALUE}")
         odf_cli.run_ceph_config(f"set osd.{target_osd} {key} {self.CUSTOM_IOPS_VALUE}")
 
         assert_osd_iops(
@@ -234,7 +234,9 @@ class TestOSDMclockMaxCapacityIOPS:
             f"found {entries}"
         )
 
-        logger.info(f"Removing osd.{target_osd} {key} override and verifying revert")
+        logger.test_step(
+            f"Removing osd.{target_osd} {key} override and verifying revert"
+        )
         odf_cli.run_ceph_config(f"rm osd.{target_osd} {key}")
         assert_osd_iops(odf_cli, [target_osd], key, baseline, "after override removal")
 
@@ -256,7 +258,7 @@ class TestOSDMclockMaxCapacityIOPS:
         odf_cli, osd_ids, key = mclock_config_cleanup
         target_osd, other_osds = osd_ids[0], osd_ids[1:]
 
-        logger.info(
+        logger.test_step(
             f"Setting global {key} = {self.GLOBAL_IOPS_VALUE} and "
             f"osd.{target_osd} {key} = {self.CUSTOM_IOPS_VALUE}"
         )
@@ -316,7 +318,7 @@ class TestOSDMclockMaxCapacityIOPS:
             who == "global" for who, _ in entries
         ), f"No global {key} entry in `ceph config dump`: {entries}"
 
-        logger.info(f"Removing global {key} override and verifying revert")
+        logger.test_step(f"Removing global {key} override and verifying revert")
         odf_cli.run_ceph_config(f"rm global {key}")
         assert_osd_iops(
             odf_cli, osd_ids, key, baseline, "after global override removal"
