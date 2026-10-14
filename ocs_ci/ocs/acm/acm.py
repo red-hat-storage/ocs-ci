@@ -1036,9 +1036,14 @@ def import_clusters_via_cli(clusters):
         )
         managed_cluster["metadata"]["name"] = cluster[0]
 
-        # TODO: This check is based on current requirements of RDR in provider mode. Change the condition and add
-        #  additional check to verify whether Multicluster Engine (MCE) is installed in the managedcluster
-        if config.ENV_DATA.get("configure_acm_to_import_mce"):
+        with config.RunWithConfigContext(config.get_cluster_index_by_name(cluster[0])):
+            multicluster_engine = OCP(
+                kind=constants.MULTICLUSTER_ENGINE,
+                resource_name=constants.MULTICLUSTER_ENGINE,
+                namespace=constants.MCE_NAMESPACE,
+            )
+            mce_present = multicluster_engine.is_exist()
+        if config.ENV_DATA.get("configure_acm_to_import_mce") and mce_present:
             # Find the klusterletconfig to import MCE cluster
             klusterletconfig_obj = OCP(kind=constants.KLUSTERLET_CONFIG)
             klusterletconfigs = klusterletconfig_obj.get().get("items", [])
