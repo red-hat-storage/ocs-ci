@@ -245,8 +245,24 @@ class IBMCloudIPI(CloudDeploymentBase):
             logger.error(f"During IBM Cloud cleanup some exception occurred {ex}")
             raise
         finally:
-            logger.info("Force cleaning up Service IDs and Account Policies leftovers")
+            self.cleanup_service_ids_and_policies()
+
+    def cleanup_service_ids_and_policies(self):
+        """
+        Clean up leftover IAM Service IDs and Account Policies for the cluster.
+
+        Always called after openshift-install destroy, even if later IBM-specific
+        cleanup fails, so one doesn't mask the other. Failures here are logged, not
+        raised - a leftover service ID shouldn't fail the teardown job.
+        """
+        logger.info("Force cleaning up Service IDs and Account Policies leftovers")
+        try:
             ibmcloud.cleanup_policies_and_service_ids(self.cluster_name)
+        except Exception as ex:
+            logger.error(
+                "Failed to clean up leftover Service IDs/Account Policies for "
+                f"cluster {self.cluster_name}: {ex}"
+            )
 
     def delete_bucket(self):
         """
