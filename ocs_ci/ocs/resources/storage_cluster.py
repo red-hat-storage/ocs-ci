@@ -2613,10 +2613,39 @@ def get_storage_cluster_condition(condition_type, namespace=None):
         dict: The condition of the given type, None if the StorageCluster does
             not report it
 
+    Raises:
+        ResourceNotFoundError: If the StorageCluster the conditions are read
+            from is not deployed in the namespace
+
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     sc_obj = get_storage_cluster(namespace=namespace)
-    storage_cluster = sc_obj.get()["items"][0]
+    storage_clusters = sc_obj.get().get("items") or []
+    if not storage_clusters:
+        raise ResourceNotFoundError(
+            f"No {constants.STORAGECLUSTER} found in namespace {namespace}, "
+            f"the {condition_type} condition cannot be read"
+        )
+    # A namespace can hold more than one StorageCluster, the conditions of the
+    # one under test are the ones the caller asks for
+    sc_name = config.ENV_DATA.get("storage_cluster_name")
+    if sc_name:
+        storage_cluster = next(
+            (
+                sc
+                for sc in storage_clusters
+                if sc.get("metadata", {}).get("name") == sc_name
+            ),
+            None,
+        )
+        if storage_cluster is None:
+            raise ResourceNotFoundError(
+                f"{constants.STORAGECLUSTER} {sc_name} not found in namespace "
+                f"{namespace}, found "
+                f"{[sc.get('metadata', {}).get('name') for sc in storage_clusters]}"
+            )
+    else:
+        storage_cluster = storage_clusters[0]
     conditions = storage_cluster.get("status", {}).get("conditions", [])
     return next(
         (
@@ -2664,7 +2693,8 @@ def wait_for_storage_cluster_condition(
         )
         if not last_condition or last_condition.get("status") != status:
             return False
-        message = last_condition.get("message", "").lower()
+        # The message is optional, an absent or null one is matched as empty
+        message = (last_condition.get("message") or "").lower()
         return all(substr.lower() in message for substr in message_substrs)
 
     log.info(
