@@ -3,6 +3,7 @@ from io import StringIO
 import logging
 import os
 import shlex
+import subprocess
 from tempfile import mkdtemp
 import threading
 import time
@@ -230,9 +231,21 @@ class Warp(object):
                 if attempt > 1:
                     log.info("Warp exec succeeded after %s attempts", attempt)
                 return
-            except CommandFailed as exc:
+            except (CommandFailed, subprocess.TimeoutExpired) as exc:
                 msg = str(exc).lower()
+                # Do not log ``exc``: a timeout includes the oc exec argv,
+                # and that argv carries the S3 keys.
+                timed_out = (
+                    isinstance(exc, subprocess.TimeoutExpired) or "timed out" in msg
+                )
                 retryable = any(marker in msg for marker in transient_markers)
+                if timed_out and attempt < 3:
+                    log.warning(
+                        f"Warp exec timed out (attempt {attempt}/3) because the "
+                        "cluster is disrupted; retrying"
+                    )
+                    time.sleep(5)
+                    continue
                 if retryable and attempt < max_attempts:
                     log.warning(
                         "Warp exec not ready (attempt %s/%s): %s; "
@@ -358,7 +371,9 @@ class Warp(object):
             )
         else:
             cmd_with_logging = f"nohup sh -c {shlex.quote(inner)} </dev/null &"
-            self._exec_warp_resilient(cmd_with_logging, exec_timeout=10)
+            # Background start should return immediately, but oc exec itself
+            # is slow while chaos has the API or node under load.
+            self._exec_warp_resilient(cmd_with_logging, exec_timeout=60)
             log.info(
                 "Warp benchmark started in background. Check logs with: "
                 "oc exec %s -n %s -c warp -- tail -f /tmp/warp.log",
