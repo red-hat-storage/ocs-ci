@@ -92,79 +92,48 @@ class TestWorkloadDeployRDR:
                         errors.append((stage, wl_id, str(exc)))
             return succeeded
 
-        # ── 1-4. Deploy Subscription and ApplicationSet workloads in parallel ──
+        # ── 1-4. Deploy Subscription and ApplicationSet workloads serially ──────
+        # These deployments switch the global cluster context (oc operations) so
+        # they must run one after another to avoid context-switch races.
         logger.info(
-            "Deploying Subscription + ApplicationSet BusyBox workloads in parallel (RBD + CephFS)"
+            "Deploying Subscription + ApplicationSet BusyBox workloads (RBD + CephFS)"
         )
-        sub_appset_rbd = []
-        sub_appset_cephfs = []
-
-        def _deploy_sub_appset_rbd():
-            return dr_workload(
-                num_of_subscription=1,
-                num_of_appset=1,
-                pvc_interface=constants.CEPHBLOCKPOOL,
-                skip_mirroring_validation=True,
-            )
-
-        def _deploy_sub_appset_cephfs():
-            return dr_workload(
-                num_of_subscription=1,
-                num_of_appset=1,
-                pvc_interface=constants.CEPHFILESYSTEM,
-                skip_mirroring_validation=True,
-            )
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            fut_rbd = pool.submit(_deploy_sub_appset_rbd)
-            fut_cephfs = pool.submit(_deploy_sub_appset_cephfs)
-            sub_appset_rbd = fut_rbd.result()
-            sub_appset_cephfs = fut_cephfs.result()
+        sub_appset_rbd = dr_workload(
+            num_of_subscription=1,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHBLOCKPOOL,
+            skip_mirroring_validation=True,
+        )
+        sub_appset_cephfs = dr_workload(
+            num_of_subscription=1,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHFILESYSTEM,
+            skip_mirroring_validation=True,
+        )
 
         all_sub_appset = sub_appset_rbd + sub_appset_cephfs
 
-        # ── 5-8. Deploy Discovered Apps workloads in parallel ──────────────────
-        logger.info("Deploying all Discovered Apps workloads in parallel")
-        da_busybox_rbd = []
-        da_busybox_cephfs = []
-        da_mongodb_rbd = []
-        da_filebrowser_rbd = []
-
-        def _deploy_da_bb_rbd():
-            return discovered_apps_dr_workload(
-                pvc_interface=constants.CEPHBLOCKPOOL, kubeobject=1, recipe=0
-            )
-
-        def _deploy_da_bb_cephfs():
-            return discovered_apps_dr_workload(
-                pvc_interface=constants.CEPHFILESYSTEM, kubeobject=1, recipe=0
-            )
-
-        def _deploy_da_mongodb():
-            return discovered_apps_dr_workload(
-                pvc_interface=constants.CEPHBLOCKPOOL,
-                kubeobject=1,
-                recipe=0,
-                workloads="mongodb",
-            )
-
-        def _deploy_da_filebrowser():
-            return discovered_apps_dr_workload(
-                pvc_interface=constants.CEPHBLOCKPOOL,
-                kubeobject=1,
-                recipe=0,
-                workloads="filebrowser",
-            )
-
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            fut_bb_rbd = pool.submit(_deploy_da_bb_rbd)
-            fut_bb_cephfs = pool.submit(_deploy_da_bb_cephfs)
-            fut_mongodb = pool.submit(_deploy_da_mongodb)
-            fut_fb = pool.submit(_deploy_da_filebrowser)
-            da_busybox_rbd = fut_bb_rbd.result()
-            da_busybox_cephfs = fut_bb_cephfs.result()
-            da_mongodb_rbd = fut_mongodb.result()
-            da_filebrowser_rbd = fut_fb.result()
+        # ── 5-8. Deploy Discovered Apps workloads serially ───────────────────────
+        # Same reason: discovered_apps_dr_workload uses the global cluster context.
+        logger.info("Deploying all Discovered Apps workloads")
+        da_busybox_rbd = discovered_apps_dr_workload(
+            pvc_interface=constants.CEPHBLOCKPOOL, kubeobject=1, recipe=0
+        )
+        da_busybox_cephfs = discovered_apps_dr_workload(
+            pvc_interface=constants.CEPHFILESYSTEM, kubeobject=1, recipe=0
+        )
+        da_mongodb_rbd = discovered_apps_dr_workload(
+            pvc_interface=constants.CEPHBLOCKPOOL,
+            kubeobject=1,
+            recipe=0,
+            workloads="mongodb",
+        )
+        da_filebrowser_rbd = discovered_apps_dr_workload(
+            pvc_interface=constants.CEPHBLOCKPOOL,
+            kubeobject=1,
+            recipe=0,
+            workloads="filebrowser",
+        )
 
         all_discovered_workloads = (
             da_busybox_rbd + da_busybox_cephfs + da_mongodb_rbd + da_filebrowser_rbd
@@ -253,6 +222,19 @@ class TestWorkloadDeployRDR:
 
         _run_parallel(initial_tasks, "Initial Primary Verification", errors)
         logger.info("Completed initial verification for all workloads on primary")
+
+        # ── 12b. Verify mirroring health before the sync wait ────────────────
+        # Count RBD PVCs only: CephFS PVCs are not mirrored via RBD mirroring.
+        # CNV workloads are always backed by RBD block volumes.
+        rbd_pvc_count = sum(
+            wl.workload_pvc_count
+            for wl in all_sub_appset + all_discovered_workloads
+            if wl.pvc_interface == constants.CEPHBLOCKPOOL
+        ) + sum(cnv_wl.workload_pvc_count for cnv_wl in cnv_workloads)
+        logger.info(
+            f"Checking mirroring health with {rbd_pvc_count} expected replaying images"
+        )
+        dr_helpers.wait_for_mirroring_status_ok(replaying_images=rbd_pvc_count)
 
         # ── 13. Wait for data sync to complete ───────────────────────────────
         scheduling_interval = dr_helpers.get_scheduling_interval(
