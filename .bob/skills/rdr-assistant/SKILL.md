@@ -332,7 +332,36 @@ KUBECONFIG=<managed_kubeconfig_path> oc get hyperconverged -A --no-headers
 ```
 - If `HyperConverged` CR (or CRD `hyperconvergeds.hco.kubevirt.io`) is present, CNV workloads are supported.
 
-#### E. Print Topology Summary
+#### E. Component Version Collection
+
+Collect the following on every run as part of the topology report. Run all commands with explicit `KUBECONFIG=<path>`; discover namespaces from the output rather than assuming them.
+
+```bash
+# OCP version (all clusters)
+KUBECONFIG=<kubeconfig_path> oc get clusterversion version -o jsonpath='{.status.desired.version}'
+
+# ACM (MultiClusterHub) version — hub only
+KUBECONFIG=<hub_kubeconfig_path> oc get multiclusterhub -A -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.currentVersion}{"\n"}{end}'
+
+# MCE (MultiClusterEngine) version — hub always; also check managed clusters (present in some deployments)
+KUBECONFIG=<kubeconfig_path> oc get multiclusterengine -A \
+  -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.currentVersion}{"\n"}{end}' 2>/dev/null || echo "not found"
+
+# Submariner operator version — managed clusters (CSV in submariner-operator namespace)
+KUBECONFIG=<managed_kubeconfig_path> oc get csv -n submariner-operator submariner.v* \
+  -o jsonpath='{.metadata.name}{" "}{.spec.version}' 2>/dev/null || echo "not found"
+
+# OADP operator version — hub and managed clusters
+KUBECONFIG=<kubeconfig_path> oc get csv -A --no-headers 2>/dev/null | grep oadp-operator | \
+  awk '{print $1, $3}'
+
+# GitOps (openshift-gitops-operator) version — hub and managed clusters
+KUBECONFIG=<kubeconfig_path> oc get csv -n openshift-operators \
+  -o jsonpath='{range .items[?(@.spec.displayName=="Red Hat OpenShift GitOps")]}{.spec.version}{"\n"}{end}' 2>/dev/null | \
+  head -1
+```
+
+#### F. Print Topology Summary
 ```
 ============================================================
 DR Topology Report
@@ -341,8 +370,14 @@ DR Mode               : Regional DR (RDR)
 DRPolicy Name         : <drpolicy_name>
 Scheduling Interval   : <scheduling_interval>
 Paired DRClusters     : <drcluster_1>, <drcluster_2>
-Consistency Groups    : Enabled / Disabled
+Consistency Groups    : Enabled / Disabled / Unknown
+OCP Version           : <version> (hub) / <version> (primary) / <version> (secondary)
 ODF Version           : <version_primary> (Primary) / <version_secondary> (Secondary)
+ACM Version           : <version>
+MCE Version           : <version> (hub) / <version or N/A> (primary) / <version or N/A> (secondary)
+Submariner Version    : <version> (or N/A if not installed)
+OADP Version          : <version_hub> (hub) / <version_managed> (managed)
+GitOps Version        : <version>
 CNV (HyperConverged)  : Present / Absent
 ============================================================
 ```
