@@ -7839,6 +7839,7 @@ def create_userns_pod(
     namespace,
     run_as_user=10900,
     run_as_group=10900,
+    fs_group=10000,
     interface_type=None,
     node_name=None,
     mount_path="/mnt/test",
@@ -7856,6 +7857,9 @@ def create_userns_pod(
         namespace (str): Target namespace
         run_as_user (int): Container UID (default 10900)
         run_as_group (int): Container GID (default 10900)
+        fs_group (int): fsGroup value for pod securityContext
+            (default 10000). Must be within namespace's
+            supplemental-groups range for restricted-v2 SCC.
         interface_type (str): CephFileSystem or CephBlockPool
             (default CephFileSystem)
         node_name (str): Schedule on this node (optional)
@@ -7884,6 +7888,8 @@ def create_userns_pod(
         scc={
             "runAsUser": run_as_user,
             "runAsGroup": run_as_group,
+            "fsGroup": fs_group,
+            "supplementalGroups": [fs_group],
             "runAsNonRoot": True,
         },
         volumemounts=[

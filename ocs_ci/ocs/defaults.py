@@ -182,7 +182,7 @@ CRUSH_DEVICE_CLASS = "ssd"
 
 # IBM Cloud
 IBM_CLOUD_LOAD_BALANCER_QUOTA = 100
-IBM_CLOUD_REGIONS = {"us-south", "us-east"}
+IBM_CLOUD_REGIONS = {"us-south", "us-east", "ca-tor"}
 
 # HyperShift defaults
 HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT = 3

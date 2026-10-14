@@ -45,8 +45,10 @@ from jinja2 import FileSystemLoader, Environment
 from ocs_ci.framework import config
 from ocs_ci.framework import GlobalVariables as GV
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
 from ocs_ci.utility.yaml_log_filter import filter_verbose_yaml
 from ocs_ci.ocs.exceptions import (
+    AuthError,
     CephHealthException,
     CephHealthRecoveredException,
     CephHealthNotRecoveredException,
@@ -3032,6 +3034,38 @@ def get_cluster_version_info():
     return cluster_version_info
 
 
+@retry(
+    CommandFailed,
+    tries=10,
+    delay=30,
+    backoff=1,
+)
+def label_nodes_platform_type(platform_type="vsphere"):
+    """
+    Label all nodes with the given platform-type.
+
+    Retries the command on failure to handle transient errors (e.g. "infra
+    config cache not synchronized") that can occur shortly after the nodes join
+    the cluster (OCPBUGS-100052).
+
+    Args:
+        platform_type (str): Platform type value to set on the
+            node.openshift.io/platform-type label (default: "vsphere").
+
+    Raises:
+        CommandFailed: If labeling the nodes keeps failing after all retries.
+
+    """
+    # importing here to avoid circular imports
+    from ocs_ci.ocs.ocp import OCP
+
+    ocp = OCP()
+    ocp.exec_oc_cmd(
+        f"label node --all node.openshift.io/platform-type={platform_type}"
+        " --overwrite"
+    )
+
+
 def get_ocs_build_number():
     """
     Gets the build number for ocs operator
@@ -4039,6 +4073,7 @@ def clone_repo(
     force_checkout=False,
     clone_token=None,
     sparse_checkout_dirs=None,
+    timeout=3600,
 ):
     """
     Clone a repository or checkout latest changes if it already exists at
@@ -4059,6 +4094,8 @@ def clone_repo(
         sparse_checkout_dirs (list): list of directories to include in sparse
             checkout. When provided, only the specified directories will be
             checked out, significantly reducing disk usage for large repos.
+        timeout (int): Timeout in seconds for git clone/fetch commands.
+            Defaults to 3600 (60 minutes).
 
     Raises:
         UnknownCloneTypeException: In case of incorrect clone_type is used
@@ -4086,7 +4123,9 @@ def clone_repo(
     if ("installer" in location) and installer_path_exist:
         if "coreos" not in location:
             installer_dir = os.path.join(constants.EXTERNAL_DIR, "installer")
-            remote_output = exec_cmd(f"git -C {installer_dir} remote -v")
+            remote_output = exec_cmd(
+                f"git -C {installer_dir} remote -v"
+            ).stdout.decode()
             if (("srozen" in remote_output) and ("openshift" in url)) or (
                 ("openshift" in remote_output) and ("srozen" in url)
             ):
@@ -4104,7 +4143,11 @@ def clone_repo(
         if clone_token:
             url = url.replace("https://", f"https://{clone_token}@")
             clone_token = [clone_token]
-        exec_cmd(cmd=f"git clone {git_params} {url} {location}", secrets=clone_token)
+        exec_cmd(
+            cmd=f"git clone {git_params} {url} {location}",
+            secrets=clone_token,
+            timeout=timeout,
+        )
         if sparse_checkout_dirs:
             sparse_paths = " ".join(sparse_checkout_dirs)
             log.info("Setting sparse checkout for directories: %s", sparse_paths)
@@ -4112,7 +4155,7 @@ def clone_repo(
     else:
         log.info("Repository already cloned at %s, skipping clone", location)
         log.info("Fetching latest changes from repository")
-        exec_cmd("git fetch --all", cwd=location)
+        exec_cmd("git fetch --all", cwd=location, timeout=timeout)
     log.info("Checking out repository to specific branch: %s", branch)
     if force_checkout:
         exec_cmd(f"git checkout --force {branch}", cwd=location)
@@ -7607,6 +7650,13 @@ def create_kubeconfig(kubeconfig_path):
         if ":6443" not in ocp_api_url:
             ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
 
+        kubeconfig_dir = os.path.dirname(kubeconfig_path)
+        os.makedirs(kubeconfig_dir, exist_ok=True)
+
+        # `oc login` creates a token-based kubeconfig directly at
+        # kubeconfig_path. This token expires after 24h, but it's a known
+        # working fallback in case the permanent kubeconfig creation below
+        # fails.
         cmd = (
             f"oc login --username {config.RUN['username']} "
             f"--password {config.RUN['kubeadmin_password']} "
@@ -7614,14 +7664,43 @@ def create_kubeconfig(kubeconfig_path):
             f"--kubeconfig {kubeconfig_path} "
             "--insecure-skip-tls-verify=true"
         )
-        result = exec_cmd(cmd, secrets=(config.RUN["kubeadmin_password"],))
+        secrets = (config.RUN["kubeadmin_password"],)
+        # ignore_error is required here, otherwise exec_cmd raises CommandFailed
+        # on its own and the more descriptive AuthError below is never raised
+        result = exec_cmd(cmd, secrets=secrets, ignore_error=True)
+        if result.returncode:
+            log.warning(f"executed command: {mask_secrets(cmd, secrets)}")
+            log.warning(f"returncode: {result.returncode}")
+            log.warning(f"stdout: {mask_secrets(result.stdout.decode(), secrets)}")
+            log.warning(f"stderr: {mask_secrets(result.stderr.decode(), secrets)}")
+            raise AuthError(f"Failed to login to OCP cluster at {ocp_api_url}")
+        log.info(f"Kubeconfig file was created: {kubeconfig_path}.")
+
+        # Try to upgrade the token-based kubeconfig to a permanent
+        # (certificate-based) one that never expires. Capture the output in
+        # Python instead of shell-redirecting it (`> {kubeconfig_path}`)
+        # directly to kubeconfig_path: the shell truncates the redirection
+        # target before `oc` starts, and since KUBECONFIG also points at
+        # kubeconfig_path, `oc` would read an already-emptied file and
+        # silently fall back to the in-cluster service account instead of
+        # the intended cluster.
+        cmd = "oc config new-admin-kubeconfig"
+        result = exec_cmd(cmd, ignore_error=True)
         if result.returncode:
             log.warning(f"executed command: {cmd}")
             log.warning(f"returncode: {result.returncode}")
-            log.warning(f"stdout: {result.stdout}")
-            log.warning(f"stderr: {result.stderr}")
+            log.warning(f"stdout: {result.stdout.decode()}")
+            log.warning(f"stderr: {result.stderr.decode()}")
+            log.warning(
+                "Failed to create permanent kubeconfig via 'oc config "
+                "new-admin-kubeconfig', falling back to the token-based "
+                f"kubeconfig created by 'oc login' at {kubeconfig_path}."
+            )
         else:
-            log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
+            with open(kubeconfig_path, "wb") as fd:
+                fd.write(result.stdout)
+            log.info(f"Permanent kubeconfig file was created: {kubeconfig_path}.")
+        update_kubeconfig_with_proxy_url_for_client(kubeconfig_path)
 
         kubeadmin_password_file = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["password_location"]

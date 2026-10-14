@@ -20,6 +20,9 @@ from ocs_ci.ocs.bucket_utils import (
     wait_for_pv_backingstore,
     check_pv_backingstore_status,
     write_random_test_objects_to_bucket,
+    s3_put_object,
+    s3_get_object,
+    s3_delete_object,
 )
 from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
@@ -28,6 +31,10 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_node,
     get_pod_logs,
     get_noobaa_core_pod,
+)
+from ocs_ci.ocs.node import (
+    get_worker_node_allocatable,
+    get_pod_requests_per_node,
 )
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.constants import MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHBLOCKPOOL_SC
@@ -42,6 +49,82 @@ from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 LOCAL_DIR_PATH = "/awsfiles"
+
+# Datasets larger than this are written file by file instead of being generated
+# as a single file and split, to avoid filling up the awscli pod
+MAX_BATCHED_DATASET_SIZE_IN_BYTES = 2 * 1024**3
+
+BLOCK_SIZE_UNIT_IN_BYTES = {"K": 1024, "M": 1024**2, "G": 1024**3}
+
+# Resources requested per pv pool pod by test_pv_data_dist
+PV_POOL_POD_REQ_CPU_IN_MILLICORES = 400
+PV_POOL_POD_REQ_MEM_IN_MI = 400
+
+# Share of a node's free capacity that is considered usable, to leave room for the
+# node overhead that isn't visible in the pod requests
+NODE_FREE_CAPACITY_BUFFER = 0.9
+
+
+def skip_if_pv_pool_pods_dont_fit(pod_count, req_cpu_in_millicores, req_mem_in_mi):
+    """
+    Skip the test if the worker nodes can't accommodate the pv pool pods it needs.
+
+    Pods are indivisible, so a cluster can have enough free capacity in total and
+    still fail to place them all - which is what makes the noobaa CLI sit on a
+    backingstore whose pods stay Pending until the create call times out. Bin pack
+    the pods onto the free capacity of each node to find out how many really fit.
+
+    Args:
+        pod_count (int): Number of pv pool pods the test needs
+        req_cpu_in_millicores (int): CPU requested by each pv pool pod
+        req_mem_in_mi (int): Memory requested by each pv pool pod
+
+    """
+    req_cpu_in_cores = req_cpu_in_millicores / 1000
+    req_mem_in_gib = req_mem_in_mi / 1024
+
+    node_allocatable = get_worker_node_allocatable()
+    requests_per_node = get_pod_requests_per_node(worker_nodes=node_allocatable.keys())
+
+    pods_that_fit = 0
+    for node_name, allocatable in node_allocatable.items():
+        requested = requests_per_node.get(node_name, {"cpu": 0, "mem": 0})
+        free_cpu = (allocatable["cpu"] - requested["cpu"]) * NODE_FREE_CAPACITY_BUFFER
+        free_mem = (allocatable["mem"] - requested["mem"]) * NODE_FREE_CAPACITY_BUFFER
+        pods_that_fit += max(
+            0, int(min(free_cpu // req_cpu_in_cores, free_mem // req_mem_in_gib))
+        )
+
+    if pods_that_fit < pod_count:
+        pytest.skip(
+            f"The cluster can only place {pods_that_fit} of the {pod_count} pv pool "
+            f"pods this test needs, at {req_cpu_in_millicores}m cpu and "
+            f"{req_mem_in_mi}Mi memory each"
+        )
+    logger.info(
+        f"The cluster has room for {pods_that_fit} pv pool pods, {pod_count} are needed"
+    )
+
+
+@retry(Exception, tries=8, delay=15, backoff=1)
+def wait_for_bucket_to_serve_io(mcg_obj, bucket_name):
+    """
+    Wait until the bucket actually serves S3 I/O by running a PUT/GET/DELETE cycle.
+
+    PV-backed backingstores may be reported as Phase=Ready, and their OBC as Bound,
+    before NooBaa is able to route I/O to the PV pool pods. S3 commands issued during
+    that window hang until the client read timeout fires.
+
+    Args:
+        mcg_obj (MCG): An MCG object
+        bucket_name (str): Name of the bucket to probe
+
+    """
+    probe_key = "data_plane_readiness_probe"
+    s3_put_object(mcg_obj, bucket_name, probe_key, "readiness probe")
+    s3_get_object(mcg_obj, bucket_name, probe_key)
+    s3_delete_object(mcg_obj, bucket_name, probe_key)
+    logger.info(f"Bucket {bucket_name} is serving S3 I/O")
 
 
 @mcg
@@ -545,12 +628,21 @@ class TestPvPool:
 
         """
 
+        # Each backingstore brings up one pod per pv, and the noobaa CLI blocks on
+        # the create call until they are all connected - so bail out early and
+        # clearly rather than sitting on pods the cluster will never schedule
+        skip_if_pv_pool_pods_dont_fit(
+            pod_count=pv_in_bs * 2,
+            req_cpu_in_millicores=PV_POOL_POD_REQ_CPU_IN_MILLICORES,
+            req_mem_in_mi=PV_POOL_POD_REQ_MEM_IN_MI,
+        )
+
         pv_backingstore_specs = {
             "vol_num": pv_in_bs,
             "size": MIN_PV_BACKINGSTORE_SIZE_IN_GB,
             "storagecluster": CEPHBLOCKPOOL_SC,
-            "req_cpu": "800m",
-            "req_mem": "800Mi",
+            "req_cpu": f"{PV_POOL_POD_REQ_CPU_IN_MILLICORES}m",
+            "req_mem": f"{PV_POOL_POD_REQ_MEM_IN_MI}Mi",
             "lim_cpu": "1000m",
             "lim_mem": "4000Mi",
         }
@@ -569,15 +661,23 @@ class TestPvPool:
             f"The bucket with name {bucket.name} was successfully created on {pv_in_bs * 2} pvs."
         )
 
+        # The backingstores may be Ready and the OBC Bound before NooBaa can route
+        # I/O to the pv pool pods, which makes the first S3 command hang and time out
+        wait_for_bucket_to_serve_io(mcg_obj_session, bucket.name)
+
         base_path = "/tmp/datasets"
         block_size_int, block_size_char = int(block_size[:-1]), block_size[-1]
+        total_size = (
+            block_size_int
+            * BLOCK_SIZE_UNIT_IN_BYTES[block_size_char.upper()]
+            * block_count
+            * file_count
+        )
 
         # Cleanup the session scoped pod directory
         awscli_pod_session.exec_cmd_on_pod(f"rm -rf {base_path}")
 
-        total_size_too_big = (block_size_char == "M") and (
-            block_count * file_count >= 2000
-        )
+        total_size_too_big = total_size >= MAX_BATCHED_DATASET_SIZE_IN_BYTES
 
         if total_size_too_big:
             # Make individual dd and s3 cp calls for bigger datasets
@@ -605,9 +705,12 @@ class TestPvPool:
                     else (remainder or batch_size)
                 )
 
+                # /dev/urandom rather than /dev/zero - identical objects make NooBaa's
+                # dedup engine scan a growing index on every PUT, which slows the
+                # upload down progressively until the s3 sync times out
                 awscli_pod_session.exec_cmd_on_pod(
                     f"sh -ec 'mkdir -p {dataset_dir}; "
-                    f"dd if=/dev/zero bs={block_size} of={dataset_dir}/bigfile "
+                    f"dd if=/dev/urandom bs={block_size} of={dataset_dir}/bigfile "
                     f"count={block_count * file_count_in_batch} status=none; "
                     f"split -a 4 -b {block_size_int * block_count}{block_size_char.lower()} "
                     f"{dataset_dir}/bigfile {dataset_dir}/testfile_; "
@@ -627,12 +730,21 @@ class TestPvPool:
                 pod_obj = Pod(**pod)
                 df_res = pod_obj.exec_cmd_on_pod(command="df -kh /noobaa_storage/")
                 logger.info(df_res)
-                usage_str = df_res.split()[9]
-                usage = int(usage_str[:-1])
+                # The data row is "<Filesystem> <Size> <Used> <Avail> <Use%> <Mounted on>".
+                # Index from the end so that a long filesystem name, which df wraps onto
+                # a line of its own, doesn't shift the columns
+                fields = df_res.split()
+                used_str, usage_str = fields[-4], fields[-2]
+                usage = int(usage_str.rstrip("%"))
+                logger.info(f"{pod_obj.name} uses {used_str} ({usage}%)")
                 pv_pods_usage_list.append(usage)
 
         std_dev_st = statistics.stdev(pv_pods_usage_list)
         mean_st = statistics.mean(pv_pods_usage_list)
+        assert mean_st > 0, (
+            "The pvs report no usage at all, so the distribution cannot be evaluated: "
+            f"{pv_pods_usage_list}"
+        )
         st_dev_percent = (std_dev_st / mean_st) * 100
         logger.info(f"Standard deviation in percents is = {st_dev_percent}%")
 

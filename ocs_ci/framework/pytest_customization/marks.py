@@ -113,6 +113,7 @@ mdr = pytest.mark.mdr
 resiliency = pytest.mark.resiliency
 chaos = pytest.mark.chaos
 ec_allowed = pytest.mark.ec_allowed
+fa_functional = pytest.mark.fa_functional
 
 tier_marks = [
     tier1,
@@ -617,6 +618,11 @@ external_mode_required = pytest.mark.skipif(
     reason="Test will run on External Mode cluster only",
 )
 
+multi_storagecluster_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("multi_storagecluster") is not True,
+    reason="Test requires a multi-storagecluster deployment",
+)
+
 fusion_access_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("fusion_access") is not True,
     reason="Test will run on Fusion Access cluster only",
@@ -762,6 +768,12 @@ skipif_rhel_os = pytest.mark.skipif(
     (config.ENV_DATA.get("rhel_workers", None) is True)
     or (config.ENV_DATA.get("rhel_user", None) is not None),
     reason="Test will not run on cluster with RHEL OS",
+)
+
+skipif_rhel9_nodes = pytest.mark.skipif(
+    config.ENV_DATA.get("rhel_workers") is True
+    and str(config.ENV_DATA.get("rhel_version", "")).startswith("9"),
+    reason="Test is not supported on RHEL 9 nodes",
 )
 
 skipif_vsphere_ipi = pytest.mark.skipif(

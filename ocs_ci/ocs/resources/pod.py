@@ -1097,6 +1097,25 @@ def get_noobaa_db_pod():
     return get_primary_nb_db_pod()
 
 
+def get_noobaa_core_pods(namespace=None):
+    """
+    Fetch all NooBaa core pods in the cluster namespace.
+
+    Args:
+        namespace (str): Namespace to search. Defaults to the configured
+            cluster namespace.
+
+    Returns:
+        list: List of NooBaa core Pod objects
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    core_pods = get_pods_having_label(
+        label=constants.NOOBAA_CORE_POD_LABEL, namespace=namespace
+    )
+    return [Pod(**core_pod) for core_pod in core_pods]
+
+
 def get_noobaa_core_pod():
     """
     Fetches Noobaa core pod details
@@ -1105,12 +1124,40 @@ def get_noobaa_core_pod():
         Pod object: Noobaa core pod object
 
     """
-    noobaa_core = get_pods_having_label(
-        label=constants.NOOBAA_CORE_POD_LABEL,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
-    noobaa_core_pod = Pod(**noobaa_core[0])
-    return noobaa_core_pod
+    return get_noobaa_core_pods()[0]
+
+
+def get_active_core_pod(core_pods=None, namespace=None):
+    """
+    Identify the active (leader) NooBaa core pod from the leader-election lease.
+
+    The search is scoped to NooBaa-owned leases and the holderIdentity is
+    matched exactly or on the ``<pod-name>_`` prefix, so an unrelated lease
+    cannot be mistaken for the core leader.
+
+    Args:
+        core_pods (list): NooBaa core Pod objects to match against. Defaults to
+            the current core pods in the cluster.
+        namespace (str): Namespace containing the lease. Defaults to the
+            configured cluster namespace.
+
+    Returns:
+        Pod: The active (leader) Pod object, or None if no holder matches.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    core_pods = core_pods if core_pods is not None else get_noobaa_core_pods(namespace)
+    leases = OCP(kind="Lease", namespace=namespace).get().get("items", [])
+    for lease in leases:
+        if "noobaa" not in lease.get("metadata", {}).get("name", ""):
+            continue
+        holder = lease.get("spec", {}).get("holderIdentity")
+        if not holder:
+            continue
+        for core_pod in core_pods:
+            if holder == core_pod.name or holder.startswith(f"{core_pod.name}_"):
+                return core_pod
+    return None
 
 
 def get_noobaa_endpoint_pods():

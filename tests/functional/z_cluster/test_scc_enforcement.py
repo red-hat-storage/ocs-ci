@@ -13,7 +13,6 @@ from ocs_ci.helpers.scc_helpers import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
-    jira,
     polarion_id,
     post_upgrade,
     skipif_external_mode,
@@ -251,7 +250,6 @@ class TestSCCEnforcement(ManageTest):
     @tier1
     @skipif_mcg_only
     @polarion_id("OCS-8070")
-    @jira("DFBUGS-10771")
     def test_rook_ceph_daemons_scc(self):
         """
         Verify Rook-Ceph workloads use their expected SCCs.
@@ -292,7 +290,6 @@ class TestSCCEnforcement(ManageTest):
 
     @tier1
     @polarion_id("OCS-8068")
-    @jira("DFBUGS-10771")
     def test_odf_operators_scc(self):
         """
         Verify all ODF operator pods are pinned to their expected SCCs.
@@ -470,7 +467,6 @@ class TestSCCEnforcement(ManageTest):
 
     @tier1
     @polarion_id("OCS-8076")
-    @jira("DFBUGS-10771")
     def test_full_cluster_scc_audit(self):
         """
         Check the expected and admitted SCC on every active storage pod.
