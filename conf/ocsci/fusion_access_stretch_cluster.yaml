@@ -13,6 +13,11 @@
 # and belong in your private cluster config, not here.
 DEPLOYMENT:
   fusion_access_deployment: true
+  # The 'fusion_access_required' mark skips unless this is true. It is a
+  # separate key from 'fusion_access_deployment' above, which only drives the
+  # deployment itself, so both are needed to run these tests against an
+  # already deployed cluster
+  fusion_access: true
   # The 'stretchcluster_required' mark skips unless this is true. The flag is
   # named after the ODF arbiter stretch cluster, which is the only stretch
   # topology it originally covered. A Fusion Access stretch cluster is also a

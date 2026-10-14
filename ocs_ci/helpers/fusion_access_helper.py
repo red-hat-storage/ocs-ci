@@ -24,7 +24,8 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.node import get_node_objs, get_worker_nodes
+from ocs_ci.ocs.node import get_node_objs, get_nodes_having_label, get_worker_nodes
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     Pod,
     get_pod_node,
@@ -50,6 +51,28 @@ def get_fusion_access_storageclass():
 
     """
     return config.ENV_DATA.get("fusion_access_storageclass", constants.FUSION_ACCESS_SC)
+
+
+def get_arbiter_nodes():
+    """
+    Get the nodes of the arbiter zone of the stretch cluster
+
+    Returns:
+        list: OCS objects representing the arbiter nodes
+
+    Raises:
+        UnexpectedBehaviour: If the cluster has no arbiter node
+
+    """
+    label = f"{constants.ZONE_LABEL}={constants.FUSION_ACCESS_ARBITER_ZONE_LABEL}"
+    arbiter_nodes = [OCS(**node_info) for node_info in get_nodes_having_label(label)]
+    if not arbiter_nodes:
+        raise UnexpectedBehaviour(
+            f"No node labeled {label} was found, this is not a stretch cluster "
+            f"with an arbiter zone"
+        )
+    logger.info(f"Arbiter nodes: {[node.name for node in arbiter_nodes]}")
+    return arbiter_nodes
 
 
 def get_zone_of_node(node_name):
@@ -490,3 +513,379 @@ def verify_workload_moved_out_of_zone(
             f"Workload {label} has no running pod in the surviving zone "
             f"{surviving_zone} after {timeout} seconds"
         )
+
+
+def get_scale_filesystem_name():
+    """
+    Get the name of the IBM Storage Scale filesystem backing the Fusion Access
+    storage class.
+
+    Read from the 'volBackendFs' parameter of the storage class rather than
+    hardcoded, the filesystem name is chosen at deployment time.
+
+    Returns:
+        str: Name of the Storage Scale filesystem, for example 'fs1'
+
+    Raises:
+        UnexpectedBehaviour: If the storage class has no 'volBackendFs'
+            parameter
+
+    """
+    sc_name = get_fusion_access_storageclass()
+    sc_data = OCP(kind=constants.STORAGECLASS, resource_name=sc_name).get()
+    filesystem = sc_data.get("parameters", {}).get("volBackendFs")
+    if not filesystem:
+        raise UnexpectedBehaviour(
+            f"Storage class {sc_name} has no 'volBackendFs' parameter, it does "
+            f"not look like an IBM Storage Scale storage class"
+        )
+    logger.info(f"Storage class {sc_name} is backed by the filesystem {filesystem}")
+    return filesystem
+
+
+def get_scale_core_pod(exclude_nodes=None):
+    """
+    Get a running IBM Storage Scale core pod to run the 'mm' admin commands
+    from.
+
+    The core pods are named after the node they run on and there is one per
+    node of the Scale cluster. A test that takes a node down must not try to
+    exec into the core pod of that node, so the nodes that are expected to be
+    unreachable are excluded.
+
+    Args:
+        exclude_nodes (list): Names of the nodes whose core pod must not be
+            used, typically the nodes that have been shut down
+
+    Returns:
+        Pod: Pod object of a running core pod
+
+    Raises:
+        UnexpectedBehaviour: If there is no usable core pod
+
+    """
+    exclude_nodes = exclude_nodes or []
+    for pod_data in get_pods_having_label(
+        label=constants.SCALE_CORE_POD_LABEL,
+        namespace=constants.SCALE_NAMESPACE,
+        statuses=[constants.STATUS_RUNNING],
+    ):
+        pod_obj = Pod(**pod_data)
+        if pod_obj.name not in exclude_nodes:
+            return pod_obj
+
+    raise UnexpectedBehaviour(
+        f"No running IBM Storage Scale core pod found outside of the nodes "
+        f"{exclude_nodes}"
+    )
+
+
+def exec_scale_cmd(command, exclude_nodes=None, timeout=600):
+    """
+    Run an IBM Storage Scale 'mm' admin command from a core pod
+
+    Args:
+        command (str): The 'mm' command to run, without the path, for example
+            'mmgetstate -a -Y'
+        exclude_nodes (list): Names of the nodes whose core pod must not be
+            used to run the command
+        timeout (int): Timeout in seconds for the command
+
+    Returns:
+        str: Raw output of the command
+
+    """
+    pod_obj = get_scale_core_pod(exclude_nodes=exclude_nodes)
+    output = pod_obj.exec_cmd_on_pod(
+        command=f"{constants.SCALE_MM_BIN_PATH}/{command}",
+        container_name=constants.SCALE_CORE_CONTAINER,
+        out_yaml_format=False,
+        timeout=timeout,
+    )
+    return str(output)
+
+
+def parse_scale_cmd_output(output):
+    """
+    Parse the colon delimited output of an 'mm' command run with '-Y'.
+
+    The format is one 'HEADER' line naming the fields followed by one line per
+    record, both using the same field positions, for example::
+
+        mmgetstate::HEADER:version:reserved:reserved:nodeName:nodeNumber:state:...
+        mmgetstate::0:1:::control-plane-2.admin...:1:active:3:5:7:quorum node:...
+
+    The field positions differ between commands and between releases, so the
+    indices are taken from the HEADER line instead of being hardcoded.
+
+    Args:
+        output (str): Raw output of an 'mm' command run with '-Y'
+
+    Returns:
+        list: One dict per record, mapping field name to value
+
+    """
+    header = None
+    records = []
+    for line in output.splitlines():
+        fields = line.strip().split(":")
+        if len(fields) < 3:
+            continue
+        if fields[2] == "HEADER":
+            header = fields
+            continue
+        if header is None:
+            continue
+        records.append(
+            {
+                name: fields[index]
+                for index, name in enumerate(header)
+                if index < len(fields) and name not in ("", "HEADER", "reserved")
+            }
+        )
+
+    return records
+
+
+def get_scale_node_states(exclude_nodes=None):
+    """
+    Get the GPFS daemon state of every node of the Storage Scale cluster.
+
+    A node that is unreachable is reported as 'unknown', one that is reachable
+    but whose daemon has not joined the cluster as 'down', and a healthy node
+    as 'active'.
+
+    Args:
+        exclude_nodes (list): Names of the nodes whose core pod must not be
+            used to run the command
+
+    Returns:
+        dict: Mapping of the short node name to its GPFS state
+
+    """
+    records = parse_scale_cmd_output(
+        exec_scale_cmd("mmgetstate -a -Y", exclude_nodes=exclude_nodes)
+    )
+    node_states = {
+        record["daemonShortName"]: record["state"]
+        for record in records
+        if record.get("daemonShortName")
+    }
+    logger.info(f"GPFS node states: {node_states}")
+    return node_states
+
+
+def verify_scale_quorum_maintained(exclude_nodes=None):
+    """
+    Verify the Storage Scale cluster still has a majority quorum.
+
+    'mmgetstate' reports, on every record, how many quorum nodes are needed for
+    a majority and how many are currently up, which is the authoritative answer
+    from the daemon itself and is used here rather than counting nodes.
+
+    Args:
+        exclude_nodes (list): Names of the nodes whose core pod must not be
+            used to run the command
+
+    Returns:
+        tuple: Number of quorum nodes needed and number currently up
+
+    Raises:
+        UnexpectedBehaviour: If the output cannot be read
+        AssertionError: If the cluster has lost its majority quorum
+
+    """
+    records = parse_scale_cmd_output(
+        exec_scale_cmd("mmgetstate -a -Y", exclude_nodes=exclude_nodes)
+    )
+    if not records:
+        raise UnexpectedBehaviour("'mmgetstate -a -Y' returned no record")
+
+    quorum_needed = int(records[0]["quorum"])
+    quorum_up = int(records[0]["nodesUp"])
+    assert quorum_up >= quorum_needed, (
+        f"The IBM Storage Scale cluster has lost its quorum, only {quorum_up} "
+        f"quorum nodes are up and {quorum_needed} are needed for a majority"
+    )
+    logger.info(
+        f"Storage Scale quorum is maintained, {quorum_up} quorum nodes are up "
+        f"and {quorum_needed} are needed for a majority"
+    )
+    return quorum_needed, quorum_up
+
+
+def get_nodes_with_filesystem_mounted(filesystem=None, exclude_nodes=None):
+    """
+    Get the nodes the Storage Scale filesystem is currently mounted on
+
+    Args:
+        filesystem (str): Name of the Storage Scale filesystem. Discovered from
+            the storage class when not provided
+        exclude_nodes (list): Names of the nodes whose core pod must not be
+            used to run the command
+
+    Returns:
+        list: Sorted names of the nodes the filesystem is mounted on
+
+    """
+    filesystem = filesystem or get_scale_filesystem_name()
+    records = parse_scale_cmd_output(
+        exec_scale_cmd(f"mmlsmount {filesystem} -L -Y", exclude_nodes=exclude_nodes)
+    )
+    mounted_on = sorted(
+        record["nodeName"] for record in records if record.get("nodeName")
+    )
+    logger.info(f"Filesystem {filesystem} is mounted on {mounted_on}")
+    return mounted_on
+
+
+def get_scale_quorum_nodes():
+    """
+    Get the set of nodes currently holding the quorum role, as recorded by the
+    CNSA operator on the Daemon CR.
+
+    The operator moves the quorum role off a node whose daemon goes down, so
+    that the configured number of quorum nodes stays available, and moves it
+    back once the node returns. That makes this annotation, rather than the
+    GPFS daemon state, the thing to check to decide whether a node has really
+    rejoined the quorum.
+
+    Returns:
+        set: Short names of the nodes currently designated as quorum nodes
+
+    """
+    daemon_obj = OCP(
+        kind=constants.SCALE_DAEMON_KIND,
+        namespace=constants.SCALE_NAMESPACE,
+        resource_name=constants.SCALE_DAEMON_NAME,
+    )
+    annotation = (
+        daemon_obj.get()["metadata"]
+        .get("annotations", {})
+        .get(constants.SCALE_QUORUM_NODES_ANNOTATION, "")
+    )
+    quorum_nodes = {node for node in annotation.split(",") if node}
+    logger.info(f"Storage Scale quorum nodes: {sorted(quorum_nodes)}")
+    return quorum_nodes
+
+
+def wait_for_scale_nodes_active(
+    node_names, exclude_nodes=None, timeout=900, sleep_time=30
+):
+    """
+    Wait for the GPFS daemon of the given nodes to reach the 'active' state
+
+    Args:
+        node_names (list): Short names of the nodes to wait for
+        exclude_nodes (list): Names of the nodes whose core pod must not be
+            used to run the command
+        timeout (int): Time in seconds to wait for the nodes to become active
+        sleep_time (int): Time in seconds between two checks
+
+    Raises:
+        UnexpectedBehaviour: If a node is not active within the timeout
+
+    """
+
+    def _nodes_active():
+        node_states = get_scale_node_states(exclude_nodes=exclude_nodes)
+        not_active = {
+            name: node_states.get(name)
+            for name in node_names
+            if node_states.get(name) != constants.SCALE_NODE_STATE_ACTIVE
+        }
+        if not_active:
+            logger.info(f"Waiting for the GPFS daemon of {not_active} to be active")
+        return not not_active
+
+    try:
+        for is_active in TimeoutSampler(
+            timeout=timeout, sleep=sleep_time, func=_nodes_active
+        ):
+            if is_active:
+                logger.info(f"The GPFS daemon of the nodes {node_names} is active")
+                return
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"The GPFS daemon of the nodes {node_names} did not become active "
+            f"within {timeout} seconds"
+        )
+
+
+def wait_for_scale_quorum_nodes(expected_quorum_nodes, timeout=900, sleep_time=30):
+    """
+    Wait for the quorum node designation to match the given set.
+
+    Used after a node that used to hold the quorum role comes back, to wait for
+    the operator to move the role back onto it. The operator only does so once
+    it has removed the 'gpfs-down-since' annotation from the node, which is
+    well after the GPFS daemon of that node reports 'active', so this has to be
+    waited for rather than checked straight away.
+
+    Args:
+        expected_quorum_nodes (set): Short names of the nodes expected to hold
+            the quorum role
+        timeout (int): Time in seconds to wait for the designation to match
+        sleep_time (int): Time in seconds between two checks
+
+    Raises:
+        UnexpectedBehaviour: If the quorum nodes do not match within the
+            timeout
+
+    """
+
+    def _quorum_nodes_match():
+        quorum_nodes = get_scale_quorum_nodes()
+        if quorum_nodes != expected_quorum_nodes:
+            logger.info(
+                f"Quorum nodes are {sorted(quorum_nodes)}, waiting for them to "
+                f"be {sorted(expected_quorum_nodes)}"
+            )
+        return quorum_nodes == expected_quorum_nodes
+
+    try:
+        for is_restored in TimeoutSampler(
+            timeout=timeout, sleep=sleep_time, func=_quorum_nodes_match
+        ):
+            if is_restored:
+                logger.info(
+                    f"The quorum nodes are back to {sorted(expected_quorum_nodes)}"
+                )
+                return
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"The quorum nodes are still not {sorted(expected_quorum_nodes)} "
+            f"after {timeout} seconds"
+        )
+
+
+def get_workload_placement(labels, namespace):
+    """
+    Get where the pods of the given workloads run and how often they have
+    restarted.
+
+    Used by the arbiter failure test to assert the workloads were not disturbed
+    at all. A pod that was evicted and recreated gets a new name, one that was
+    restarted in place keeps its name but its restart count goes up, so both
+    are captured.
+
+    Args:
+        labels (list): Labels of the workloads
+        namespace (str): Namespace of the workloads
+
+    Returns:
+        dict: Mapping of the pod name to a tuple of its node name and the sum
+            of the restart counts of its containers
+
+    """
+    placement = {}
+    for label in labels:
+        for pod_obj in get_running_workload_pods(label=label, namespace=namespace):
+            restarts = sum(
+                container.get("restartCount", 0)
+                for container in pod_obj.get()["status"].get("containerStatuses", [])
+            )
+            placement[pod_obj.name] = (get_pod_node(pod_obj).name, restarts)
+
+    logger.info(f"Workload placement: {placement}")
+    return placement

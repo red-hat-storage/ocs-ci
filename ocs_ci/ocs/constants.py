@@ -4003,6 +4003,31 @@ FILE_UPLOADER_FUSION_NAME = "file-uploader-fusion"
 # assert data integrity once the workloads have moved to the surviving zone
 FUSION_ACCESS_BASELINE_FILE = "zonetest-baseline.txt"
 
+# IBM Storage Scale (CNSA) core pods. There is one per node of the Scale
+# cluster, each named after the node it runs on, and on a container native
+# deployment they are the only place the 'mm' admin commands can be run from
+SCALE_NAMESPACE = "ibm-spectrum-scale"
+SCALE_CORE_POD_LABEL = "app.kubernetes.io/name=core"
+SCALE_CORE_CONTAINER = "gpfs"
+SCALE_MM_BIN_PATH = "/usr/lpp/mmfs/bin"
+
+# GPFS daemon states reported by 'mmgetstate'. A node that is unreachable shows
+# up as 'unknown', one that is reachable but whose daemon has not joined the
+# cluster yet as 'down', and a recovering node passes through both on its way
+# back to 'active'
+SCALE_NODE_STATE_ACTIVE = "active"
+SCALE_NODE_STATE_DOWN = "down"
+SCALE_NODE_STATE_UNKNOWN = "unknown"
+
+# Daemon CR of the Scale cluster and the annotation its Quorum controller keeps
+# the current set of quorum nodes in. The operator moves the quorum role off a
+# node whose daemon goes down and moves it back once the node returns, so this
+# annotation, and not 'mmgetstate', is what tells a test whether a node has
+# really rejoined the quorum
+SCALE_DAEMON_KIND = "Daemon"
+SCALE_DAEMON_NAME = "ibm-spectrum-scale"
+SCALE_QUORUM_NODES_ANNOTATION = "scale.spectrum.ibm.com/quorum-nodes"
+
 # prometheus metrics queries
 PVC_NAMESPACES_BY_USED = (
     "sum by (namespace, persistentvolumeclaim) "
