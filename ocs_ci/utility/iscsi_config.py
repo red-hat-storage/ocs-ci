@@ -31,11 +31,10 @@ def get_worker_node_names():
         list: A list of node names (strings).
     """
     try:
-        if (
-            config.DEPLOYMENT.get("arbiter_deployment")
-            or config.ENV_DATA.get("iscsi_include_masters")
+        if config.DEPLOYMENT.get("arbiter_deployment") or config.ENV_DATA.get(
+            "iscsi_include_masters"
         ):
-            return node.get_node_names()
+            return node.get_all_nodes()
         return node.get_worker_nodes()
     except Exception as e:
         log.error(f"Error getting node names for iSCSI: {e}")

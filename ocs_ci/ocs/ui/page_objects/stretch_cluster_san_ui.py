@@ -8,14 +8,15 @@ introduced in RHSTOR-8877.
 
 import logging
 
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.ocs.ui.base_ui import BaseUI, wait_for_element_to_be_clickable
+from ocs_ci.ocs.ui.base_ui import SeleniumDriver, wait_for_element_to_be_clickable
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.fusion_access_ui import FusionAccessUI
-from ocs_ci.ocs.ui.views import STRETCH_CLUSTER_LOCATORS, FDF_SAN_LOCATORS
+from ocs_ci.ocs.ui.views import STRETCH_CLUSTER_LOCATORS
 
 logger = logging.getLogger(__name__)
 
@@ -40,19 +41,85 @@ class StretchClusterSANUI(FusionAccessUI):
         assert not ui.is_stretch_cluster_enabled()
     """
 
-
     def navigate_to_connect_external_storage_san(self):
         """
         Navigate through the wizard to the node-selection step for SAN storage.
 
-        Clicks: Connect external systems → SAN radio → Next.
+        Clicks: Storage > External systems → Connect external systems →
+        SAN radio → Next.
+
+        Returns:
+            StretchClusterSANUI: self, so the call can be chained.
         """
         logger.info("Navigating to Connect External Storage > Storage for SAN")
+        self.nav_external_systems_page()
         self.click_connect_external_systems()
         self.select_storage_area_network()
         self.click_next_button()
         logger.info("Reached the SAN node-selection wizard page")
+        return self
 
+    def _get_toggle(self, locator_key, label):
+        """
+        Return the toggle element for *locator_key*.
+
+        Args:
+            locator_key (str): Key into ``STRETCH_CLUSTER_LOCATORS``.
+            label (str): Human readable toggle name, used in the error message.
+
+        Returns:
+            selenium.webdriver.remote.webelement.WebElement: The toggle.
+
+        Raises:
+            TimeoutExpiredError: If the toggle is not present on the page. A
+                missing toggle is a product/locator problem and must not be
+                reported as "off" or "enabled" — that would silently pass the
+                default-state assertions.
+        """
+        elements = self.get_elements(STRETCH_CLUSTER_LOCATORS[locator_key])
+        if not elements:
+            self.take_screenshot(f"{locator_key}_not_found")
+            raise TimeoutExpiredError(
+                f"'{label}' toggle was not found on the node-selection page"
+            )
+        return elements[0]
+
+    @staticmethod
+    def _is_checked(element):
+        """
+        Return whether a toggle element is in the checked/on state.
+
+        Args:
+            element (selenium.webdriver.remote.webelement.WebElement): Toggle.
+
+        Returns:
+            bool: True when the toggle is ON.
+        """
+        state = element.get_attribute("aria-checked") or element.get_attribute(
+            "checked"
+        )
+        return str(state).lower() in ("true", "checked")
+
+    @staticmethod
+    def _is_disabled(element):
+        """
+        Return whether an element is disabled.
+
+        A boolean ``disabled`` attribute is reported by Selenium either as
+        ``"true"`` or as an empty string, so both count as disabled; a missing
+        attribute comes back as ``None`` and does not.
+
+        Args:
+            element (selenium.webdriver.remote.webelement.WebElement): Element.
+
+        Returns:
+            bool: True when the element is disabled.
+        """
+        for attribute in ("disabled", "aria-disabled"):
+            value = element.get_attribute(attribute)
+            if value is not None and str(value).lower() in ("true", ""):
+                return True
+        return False
 
     def is_include_control_plane_enabled(self):
         """
@@ -60,13 +127,15 @@ class StretchClusterSANUI(FusionAccessUI):
 
         Returns:
             bool: True when the toggle is ON, False when OFF.
+
+        Raises:
+            TimeoutExpiredError: If the toggle is not present on the page.
         """
-        el = self.get_elements(STRETCH_CLUSTER_LOCATORS["include_control_plane_toggle"])
-        if not el:
-            logger.debug("include_control_plane_toggle element not found — returning False")
-            return False
-        state = el[0].get_attribute("aria-checked") or el[0].get_attribute("checked")
-        enabled = state in ("true", "checked", True)
+        enabled = self._is_checked(
+            self._get_toggle(
+                "include_control_plane_toggle", "Include control plane nodes"
+            )
+        )
         logger.debug(f"Include control plane nodes toggle state: {enabled}")
         return enabled
 
@@ -76,13 +145,13 @@ class StretchClusterSANUI(FusionAccessUI):
 
         Returns:
             bool: True when the toggle is ON, False when OFF.
+
+        Raises:
+            TimeoutExpiredError: If the toggle is not present on the page.
         """
-        el = self.get_elements(STRETCH_CLUSTER_LOCATORS["stretch_cluster_toggle"])
-        if not el:
-            logger.debug("stretch_cluster_toggle element not found — returning False")
-            return False
-        state = el[0].get_attribute("aria-checked") or el[0].get_attribute("checked")
-        enabled = state in ("true", "checked", True)
+        enabled = self._is_checked(
+            self._get_toggle("stretch_cluster_toggle", "Stretch cluster")
+        )
         logger.debug(f"Stretch cluster toggle state: {enabled}")
         return enabled
 
@@ -93,15 +162,16 @@ class StretchClusterSANUI(FusionAccessUI):
 
         Returns:
             bool: True when the element is disabled.
+
+        Raises:
+            TimeoutExpiredError: If the toggle is not present on the page.
         """
-        el = self.get_elements(STRETCH_CLUSTER_LOCATORS["include_control_plane_toggle"])
-        if not el:
-            return False
-        disabled = el[0].get_attribute("disabled") or el[0].get_attribute("aria-disabled")
-        result = disabled in ("true", "", True)
+        element = self._get_toggle(
+            "include_control_plane_toggle", "Include control plane nodes"
+        )
+        result = self._is_disabled(element)
         logger.debug(f"Include control plane nodes disabled: {result}")
         return result
-
 
     def enable_include_control_plane(self):
         """
@@ -136,7 +206,6 @@ class StretchClusterSANUI(FusionAccessUI):
             enable_screenshot=True,
         )
         logger.info("'Stretch cluster' toggle enabled")
-
 
     def get_visible_node_rows(self):
         """
@@ -215,16 +284,49 @@ class StretchClusterSANUI(FusionAccessUI):
         )
         elements = self.get_elements(locator)
         if not elements:
-            logger.debug(
-                f"Role dropdown not found for node '{node_name}' — treating as absent"
+            self.take_screenshot(f"role_dropdown_missing_{node_name}")
+            raise TimeoutExpiredError(
+                f"Role dropdown was not found for node '{node_name}'"
             )
-            return False
-        disabled = elements[0].get_attribute("disabled") or elements[0].get_attribute(
-            "aria-disabled"
-        )
-        result = disabled in ("true", "", True)
+        result = self._is_disabled(elements[0])
         logger.debug(f"Role dropdown disabled for '{node_name}': {result}")
         return result
+
+    def _open_role_dropdown(self, node_name):
+        """
+        Open the role dropdown for ``node_name`` and return its options.
+
+        Args:
+            node_name (str): Node hostname as shown in the table.
+
+        Returns:
+            list[selenium.webdriver.remote.webelement.WebElement]: Option
+                elements of the open dropdown.
+
+        Raises:
+            TimeoutExpiredError: If the dropdown is not clickable or no option
+                appears.
+        """
+        dropdown_locator = format_locator(
+            STRETCH_CLUSTER_LOCATORS["node_role_dropdown_by_name"],
+            node_name=node_name,
+        )
+        logger.info(f"Opening role dropdown for node '{node_name}'")
+        wait_for_element_to_be_clickable(dropdown_locator, timeout=15)
+        self.do_click(dropdown_locator)
+
+        options_locator = STRETCH_CLUSTER_LOCATORS["node_role_dropdown_options"]
+        try:
+            WebDriverWait(SeleniumDriver(), 10).until(
+                EC.presence_of_element_located((options_locator[1], options_locator[0]))
+            )
+        except TimeoutException as err:
+            self.take_screenshot(f"role_dropdown_no_options_{node_name}")
+            raise TimeoutExpiredError(
+                f"Role dropdown options did not appear for node '{node_name}'"
+            ) from err
+
+        return self.get_elements(options_locator)
 
     def get_role_dropdown_options_for_node(self, node_name):
         """
@@ -240,36 +342,12 @@ class StretchClusterSANUI(FusionAccessUI):
         Raises:
             TimeoutExpiredError: If the dropdown is not found or not clickable.
         """
-        dropdown_locator = format_locator(
-            STRETCH_CLUSTER_LOCATORS["node_role_dropdown_by_name"],
-            node_name=node_name,
-        )
-        logger.info(f"Opening role dropdown for node '{node_name}'")
-        wait_for_element_to_be_clickable(dropdown_locator, timeout=15)
-        self.do_click(dropdown_locator)
-
-        try:
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located(
-                    (
-                        STRETCH_CLUSTER_LOCATORS["node_role_dropdown_options"][1],
-                        STRETCH_CLUSTER_LOCATORS["node_role_dropdown_options"][0],
-                    )
-                )
-            )
-        except Exception as err:
-            self.take_screenshot("role_dropdown_no_options")
-            raise TimeoutExpiredError(
-                f"Role dropdown options did not appear for node '{node_name}'"
-            ) from err
-
-        options = self.get_elements(STRETCH_CLUSTER_LOCATORS["node_role_dropdown_options"])
+        options = self._open_role_dropdown(node_name)
         option_texts = [o.text.strip() for o in options if o.text.strip()]
-        logger.info(
-            f"Role dropdown options for '{node_name}': {option_texts}"
-        )
-        # Close dropdown by pressing Escape or clicking elsewhere
-        self.driver.execute_script("arguments[0].blur();", options[0])
+        logger.info(f"Role dropdown options for '{node_name}': {option_texts}")
+        # Close the dropdown again so the next interaction starts from a known
+        # state.
+        SeleniumDriver().execute_script("arguments[0].blur();", options[0])
         return option_texts
 
     def change_node_role(self, node_name, target_role):
@@ -283,44 +361,18 @@ class StretchClusterSANUI(FusionAccessUI):
         Raises:
             TimeoutExpiredError: If the dropdown or the target option is not found.
         """
-        dropdown_locator = format_locator(
-            STRETCH_CLUSTER_LOCATORS["node_role_dropdown_by_name"],
-            node_name=node_name,
-        )
         logger.info(f"Changing role of node '{node_name}' to '{target_role}'")
-        wait_for_element_to_be_clickable(dropdown_locator, timeout=15)
-        self.do_click(dropdown_locator)
-
-        try:
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located(
-                    (
-                        STRETCH_CLUSTER_LOCATORS["node_role_dropdown_options"][1],
-                        STRETCH_CLUSTER_LOCATORS["node_role_dropdown_options"][0],
-                    )
-                )
-            )
-        except Exception as err:
-            self.take_screenshot("change_role_no_options")
-            raise TimeoutExpiredError(
-                f"Role dropdown options did not appear for node '{node_name}'"
-            ) from err
-
-        options = self.get_elements(STRETCH_CLUSTER_LOCATORS["node_role_dropdown_options"])
+        options = self._open_role_dropdown(node_name)
         for option in options:
             if target_role.lower() in option.text.lower():
                 option.click()
-                logger.info(
-                    f"Role of node '{node_name}' changed to '{target_role}'"
-                )
+                logger.info(f"Role of node '{node_name}' changed to '{target_role}'")
                 return
 
         self.take_screenshot(f"change_role_not_found_{target_role}")
         raise TimeoutExpiredError(
             f"Role option '{target_role}' not found in dropdown for node '{node_name}'"
         )
-
-
 
     def is_no_arbiter_alert_visible(self):
         """
@@ -333,8 +385,6 @@ class StretchClusterSANUI(FusionAccessUI):
         visible = bool(el)
         logger.debug(f"No-arbiter alert visible: {visible}")
         return visible
-
-
 
     def get_lun_discovery_rows(self):
         """
@@ -352,9 +402,9 @@ class StretchClusterSANUI(FusionAccessUI):
         """
         Return WWID strings for every LUN row currently displayed.
 
-        Uses the second column (WWID) of the LUN table, consistent with how
-        :class:`~ocs_ci.ocs.ui.page_objects.fusion_access_ui.FusionAccessUI`
-        reads row IDs.
+        Rows and WWID cells are read from the same table — the one
+        :meth:`get_lun_discovery_rows` counts — so the row indices always line
+        up with the cells they address.
 
         Returns:
             list[str]: WWID value for each row.
@@ -362,11 +412,9 @@ class StretchClusterSANUI(FusionAccessUI):
         rows = self.get_lun_discovery_rows()
         wwids = []
         for i, _ in enumerate(rows, start=1):
-            locator = (
-                FDF_SAN_LOCATORS["lun_table_row_id"][0].format(i=i),
-                FDF_SAN_LOCATORS["lun_table_row_id"][1],
+            locator = format_locator(
+                STRETCH_CLUSTER_LOCATORS["lun_discovery_wwid_cell"], i=i
             )
-            wwid = self.get_element_text(locator).strip()
-            wwids.append(wwid)
+            wwids.append(self.get_element_text(locator).strip())
         logger.debug(f"Discovered LUN WWIDs: {wwids}")
         return wwids

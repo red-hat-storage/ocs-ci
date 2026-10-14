@@ -7916,6 +7916,77 @@ def create_custom_secret_for_cnsa_rm(name, namespace, data_dict, secret_type="Op
             os.remove(temp_path)
 
 
+def create_ibm_entitlement_secret(
+    namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
+    tracked_resources=None,
+):
+    """
+    Create the ``ibm-entitlement-key`` dockerconfigjson Secret in *namespace*.
+
+    The secret holds the ``cp.icr.io`` credentials that KMM and the CNSA
+    operator need in order to pull the kernel-module and filesystem images.
+    It is the single implementation shared by the CNSA RM test setup and the
+    Fusion Access HA (stretch cluster) deployment flow.
+
+    The call is idempotent: the secret is left untouched if it already exists.
+    The namespace is created when missing, so the caller does not have to care
+    whether the component that normally owns it has run yet.
+
+    Args:
+        namespace (str): Namespace in which to create the secret.
+            Defaults to ``ibm-spectrum-scale``.
+        tracked_resources (list): Optional list to record the created resource
+            for later cleanup, as ``("Secret", name, namespace)``.
+
+    Returns:
+        bool: True when the secret was created, False when it already existed.
+
+    Raises:
+        ValueError: If ``config.AUTH["ibm_entitlement_key"]`` is not set.
+    """
+    ent_key = config.AUTH.get("ibm_entitlement_key")
+    if not ent_key:
+        raise ValueError(
+            "ibm_entitlement_key is not set in config.AUTH. "
+            "Cannot create the IBM entitlement secret; image pulls from "
+            "cp.icr.io would fail."
+        )
+
+    secret_name = constants.IBM_ENTITLEMENT_SECRET_NAME
+    if not OCP(kind=constants.NAMESPACE).is_exist(resource_name=namespace):
+        logger.info(f"Namespace '{namespace}' not found. Creating...")
+        OCP().exec_oc_cmd(f"create namespace {namespace}")
+
+    secret_ocp = OCP(kind="Secret", namespace=namespace)
+    try:
+        secret_ocp.get(resource_name=secret_name)
+        logger.info(f"Secret '{secret_name}' already exists.")
+        return False
+    except exceptions.CommandFailed:
+        logger.info(f"Secret '{secret_name}' not found. Creating...")
+
+    auth_b64 = base64.b64encode(f"cp:{ent_key}".encode()).decode()
+    docker_config = {
+        "auths": {
+            "cp.icr.io": {
+                "username": "cp",
+                "password": ent_key,  # pragma: allowlist secret
+                "auth": auth_b64,
+            }
+        }
+    }
+    create_custom_secret_for_cnsa_rm(
+        name=secret_name,
+        namespace=namespace,
+        data_dict={".dockerconfigjson": docker_config},
+        secret_type="kubernetes.io/dockerconfigjson",
+    )
+    if tracked_resources is not None:
+        tracked_resources.append(("Secret", secret_name, namespace))
+    logger.info(f"Secret '{secret_name}' created in namespace '{namespace}'")
+    return True
+
+
 def _apply_mco():
     """
     Apply the IBM Storage Scale MCO (Meta Cluster Operator) manifest using a
@@ -7963,31 +8034,9 @@ def setup_scale_cluster_infrastructure_for_cnsa_rm(
     _apply_mco()
 
     # 2. Check and Create Entitlement Secret
-    secret_name = "ibm-entitlement-key"
-    secret_ocp = OCP(kind="Secret", namespace=namespace)
-    try:
-        secret_ocp.get(resource_name=secret_name)
-        logger.info(f"Secret '{secret_name}' already exists.")
-    except exceptions.CommandFailed:
-        logger.info(f"Secret '{secret_name}' not found. Creating...")
-        auth_b64 = base64.b64encode(f"cp:{ent_key}".encode()).decode()
-        docker_config = {
-            "auths": {
-                "cp.icr.io": {
-                    "username": "cp",
-                    "password": ent_key,
-                    "auth": auth_b64,
-                }
-            }
-        }
-        create_custom_secret_for_cnsa_rm(
-            name=secret_name,
-            namespace=namespace,
-            data_dict={".dockerconfigjson": docker_config},
-            secret_type="kubernetes.io/dockerconfigjson",
-        )
-        if tracked_resources is not None:
-            tracked_resources.append(("Secret", secret_name, namespace))
+    create_ibm_entitlement_secret(
+        namespace=namespace, tracked_resources=tracked_resources
+    )
 
     # 3. Create Cluster CR
     scale_cluster_kind = constants.IBM_STORAGE_SCALE_CLUSTER_KIND
