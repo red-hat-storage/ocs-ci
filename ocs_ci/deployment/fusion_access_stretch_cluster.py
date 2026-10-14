@@ -16,6 +16,7 @@ this module picks up from there:
 
 Step 8 exercises the Connect External Storage → Storage for SAN wizard to
 confirm:
+
     - Default node-selection state (workers only, disk-node role).
     - Include Control Plane Nodes toggle behaviour.
     - Stretch Cluster toggle behaviour (auto-check, role assignment, arbiter lock).
@@ -152,6 +153,11 @@ def setup_iscsi_luns_on_all_nodes():
         if iscsi_key not in config.ENV_DATA and san_key in config.ENV_DATA:
             config.ENV_DATA[iscsi_key] = config.ENV_DATA[san_key]
 
+    # Set on the shared config on purpose, not just for this call: every later
+    # stretch-cluster operation that resolves the node list through
+    # get_worker_node_names() — the validations and iscsi_teardown() — must see
+    # the masters too, or it would act on a narrower set of nodes than the one
+    # the LUNs were attached to.
     config.ENV_DATA["iscsi_include_masters"] = True
     logger.info("Creating iSCSI LUNs on all cluster nodes (masters + workers)")
     iscsi_setup()

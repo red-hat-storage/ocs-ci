@@ -1139,6 +1139,10 @@ _STRETCH_NODE_ROW_BY_NAME = (
     "[normalize-space(td[@data-label='Name'])='{node_name}']"
 )
 _STRETCH_ROLE_DROPDOWN = "//button[@data-test='node-role-dropdown']"
+# XPath 1.0 has no lower-case(); translate() is the portable way to compare text
+# case-insensitively.
+_XPATH_UPPER = "'ABCDEFGHIJKLMNOPQRSTUVWXYZ'"
+_XPATH_LOWER = "'abcdefghijklmnopqrstuvwxyz'"
 
 STRETCH_CLUSTER_LOCATORS = {
     "include_control_plane_toggle": (
@@ -1170,7 +1174,8 @@ STRETCH_CLUSTER_LOCATORS = {
         By.XPATH,
     ),
     "no_arbiter_alert": (
-        "//*[@role='alert'][contains(., 'arbiter') or contains(., 'Arbiter')]",
+        "//*[@role='alert']"
+        f"[contains(translate(., {_XPATH_UPPER}, {_XPATH_LOWER}), 'arbiter')]",
         By.XPATH,
     ),
     "lun_discovery_table": (_STRETCH_LUN_TABLE, By.XPATH),
