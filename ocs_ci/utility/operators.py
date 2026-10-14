@@ -75,6 +75,7 @@ class Operator:
     """
     unreleased_images: list[str] = []
     unreleased_mirror: str = UNRELEASED_DEFAULT_MIRROR
+    source_registry_prefix: str = None
 
     def __init__(self, create_catalog: bool = False):
         """
@@ -133,9 +134,18 @@ class Operator:
         unreleased_catalog_idms_data["metadata"]["name"] = self.catalog_name
         unreleased_catalog_idms_data["spec"]["imageDigestMirrors"] = []
         for image in self.unreleased_images:
+            # If source_registry_prefix is set, replace it in the image path
+            # to construct the full mirror path (e.g., for OADP)
+            # Otherwise, use unreleased_mirror as-is (default behavior)
+            if self.source_registry_prefix:
+                mirror_image = image.replace(
+                    self.source_registry_prefix, self.unreleased_mirror
+                )
+            else:
+                mirror_image = self.unreleased_mirror
             unreleased_catalog_idms_data["spec"]["imageDigestMirrors"].append(
                 {
-                    "mirrors": [self.unreleased_mirror],
+                    "mirrors": [mirror_image],
                     "source": image,
                 }
             )
@@ -688,6 +698,8 @@ class OADPOperator(Operator):
             self.unreleased_catalog_image_tag = config.ENV_DATA.get(
                 "use_custom_unreleased_catalog_image_tag_oadp"
             )
+        self.source_registry_prefix = "registry.redhat.io"
+        self.unreleased_mirror = "registry.stage.redhat.io"
         self.unreleased_images = [
             "registry.redhat.io/oadp/oadp-cli-binaries-rhel9",
             "registry.redhat.io/oadp/oadp-hypershift-velero-plugin-rhel9",
