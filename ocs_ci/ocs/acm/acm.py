@@ -66,7 +66,6 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.helpers import create_project
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
-from ocs_ci.utility.retry import retry
 
 log = logging.getLogger(__name__)
 
@@ -1028,10 +1027,13 @@ def _cleanup_failed_cluster_import(cluster_name):
                 timeout=120,
             )
             log.info(f"Initiated deletion of {kind} '{cluster_name}'")
-        except Exception as ex:
-            log.warning(
-                f"Failed to delete {kind} '{cluster_name}' during cleanup: {ex}"
+        except CommandFailed as ex:
+            # --ignore-not-found means NotFound is success, so any failure here is real
+            log.error(
+                f"Failed to initiate deletion of {kind} '{cluster_name}': {ex}. "
+                f"Cannot proceed with cleanup."
             )
+            raise
 
     # Poll for namespace deletion with a total of 1200s (20 minutes)
     # Only proceed with retry after confirmed deletion
@@ -1220,28 +1222,6 @@ def import_clusters_via_cli(clusters):
         Exception: If cluster import fails after all retries
 
     """
-    # Check for KlusterletConfig once if MCE import is configured
-    # This check happens before any retry logic to avoid retrying configuration errors
-    klusterletconfig_name = None
-    if config.ENV_DATA.get("configure_acm_to_import_mce"):
-        klusterletconfig_obj = OCP(kind=constants.KLUSTERLET_CONFIG)
-        klusterletconfigs = klusterletconfig_obj.get().get("items", [])
-        for klusterletconfig in klusterletconfigs:
-            if (
-                klusterletconfig.get("spec", {})
-                .get("installMode", {})
-                .get("noOperator", {})
-                .get("postfix")
-                == "mce-import"
-            ):
-                klusterletconfig_name = klusterletconfig.get("metadata").get("name")
-                break
-        if not klusterletconfig_name:
-            raise ResourceNotFoundError(
-                "No KlusterletConfig found to import MCE clusters"
-            )
-        log.info(f"Using KlusterletConfig '{klusterletconfig_name}' for MCE import")
-
     for cluster in clusters:
         cluster_name, kubeconfig = cluster[0], cluster[1]
 
@@ -1256,7 +1236,9 @@ def import_clusters_via_cli(clusters):
 
         # Check if MCE is present on this specific cluster (per-cluster check from PR #16536)
         mce_present = False
-        with config.RunWithConfigContext(config.get_cluster_index_by_name(cluster_name)):
+        with config.RunWithConfigContext(
+            config.get_cluster_index_by_name(cluster_name)
+        ):
             multicluster_engine = OCP(
                 kind=constants.MULTICLUSTER_ENGINE,
                 namespace=constants.MCE_NAMESPACE,
@@ -1283,9 +1265,9 @@ def import_clusters_via_cli(clusters):
                     .get("postfix")
                     == "mce-import"
                 ):
-                    cluster_klusterletconfig_name = klusterletconfig.get("metadata").get(
-                        "name"
-                    )
+                    cluster_klusterletconfig_name = klusterletconfig.get(
+                        "metadata"
+                    ).get("name")
                     break
             if not cluster_klusterletconfig_name:
                 raise ResourceNotFoundError(
