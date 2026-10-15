@@ -2464,6 +2464,26 @@ class Deployment(object):
                     phase != "ReconcileFailed"
                 ), f"ObjectStoreUser {name} is in phase: {phase}"
 
+    def apply_post_deployment_tls_profile(self):
+        """
+        Apply the ENV_DATA TLSProfile after this deployment path has finished.
+
+        ROSA HCP keeps running checks after ``Deployment.deploy_ocs`` returns.
+        ``ROSA.deploy_ocs`` applies the profile after those checks.
+        """
+        if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+            if (
+                config.ENV_DATA.get("enable_tls_profile")
+                and config.ENV_DATA.get("fips") != "true"
+            ):
+                logger.info(
+                    "Deferring TLSProfile apply until ROSA HCP deployment checks finish"
+                )
+            return
+        from ocs_ci.helpers.tlsprofile_helper import apply_tls_profile_after_deployment
+
+        apply_tls_profile_after_deployment()
+
     def deploy_ocs(self):
         """
         Handle OCS deployment, since OCS deployment steps are common to any
@@ -2512,6 +2532,7 @@ class Deployment(object):
             self.deploy_ocs_via_operator(image)
             if config.ENV_DATA["mcg_only_deployment"]:
                 mcg_only_post_deployment_checks()
+                self.apply_post_deployment_tls_profile()
                 return
 
             # get ODF version and set MGR count based on ODF version
@@ -2720,6 +2741,7 @@ class Deployment(object):
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
         self.objectstore_user_check()
+        self.apply_post_deployment_tls_profile()
 
     def deploy_lvmo(self):
         """
