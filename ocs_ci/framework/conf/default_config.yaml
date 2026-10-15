@@ -145,7 +145,7 @@ DEPLOYMENT:
   # Erasure Coding: deploy ODF with EC as default pool type instead of replication
   ec_default_pools: False
   # FDF
-  fdf_upgrade_registry: "cp.stg.icr.io/cp/df"
+  fdf_upgrade_registry: "preprod.icr.io/cpopen"
 
 # Section for reporting configuration
 REPORTING:
