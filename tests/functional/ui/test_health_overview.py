@@ -862,10 +862,7 @@ class TestHealthOverview(ManageTest):
         logger.info("Triggering StorageCluster reconciliation")
         trigger_storage_cluster_reconciliation()
         sc_obj = get_default_storagecluster()
-        for sample in TimeoutSampler(120, 10, sc_obj.get):
-            if sample.get("status", {}).get("phase") == "Ready":
-                logger.info("StorageCluster reconciliation complete")
-                break
+        sc_obj.wait_for_phase(phase=constants.STATUS_READY, timeout=300, sleep=10)
 
         logger.info("Verifying excluded alerts are maintained after reconciliation")
         for alert in alerts_to_disable:
