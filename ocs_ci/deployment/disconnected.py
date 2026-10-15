@@ -937,6 +937,8 @@ def mirror_index_image_via_oc_mirror(
             cluster-logging, …), for which the ODF channel/version is invalid.
             Build the map with resolve_pinned_versions().
 
+            Example::
+
                 {
                     "odf-operator": {
                         "to": {"channel": "stable-4.20", "version": "4.20.14-rhodf"},
