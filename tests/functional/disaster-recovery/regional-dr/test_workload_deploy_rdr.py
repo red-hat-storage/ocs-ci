@@ -166,9 +166,13 @@ class TestWorkloadDeployRDR:
             sub_appset_rbd[0].workload_namespace
         )
         config.switch_to_cluster_by_name(primary_cluster_name)
+        primary_cluster_index = config.get_cluster_index_by_name(primary_cluster_name)
+        secondary_cluster_index = config.get_cluster_index_by_name(
+            secondary_cluster_name
+        )
         logger.info(
-            f"Primary cluster: {primary_cluster_name}, "
-            f"Secondary cluster: {secondary_cluster_name}"
+            f"Primary cluster: {primary_cluster_name} (index {primary_cluster_index}), "
+            f"Secondary cluster: {secondary_cluster_name} (index {secondary_cluster_index})"
         )
 
         # ── 12. Verify all workloads on primary (in parallel) ────────────────
@@ -209,15 +213,33 @@ class TestWorkloadDeployRDR:
         initial_tasks = []
         for wl in all_sub_appset:
             initial_tasks.append(
-                (lambda w=wl: _verify_sub_appset(w), wl.workload_namespace)
+                (
+                    lambda w=wl, idx=primary_cluster_index: (
+                        config.switch_ctx(idx),
+                        _verify_sub_appset(w),
+                    ),
+                    wl.workload_namespace,
+                )
             )
         for wl in all_discovered_workloads:
             initial_tasks.append(
-                (lambda w=wl: _verify_discovered_app(w), f"DA:{wl.workload_namespace}")
+                (
+                    lambda w=wl, idx=primary_cluster_index: (
+                        config.switch_ctx(idx),
+                        _verify_discovered_app(w),
+                    ),
+                    f"DA:{wl.workload_namespace}",
+                )
             )
         for cnv_wl in cnv_workloads:
             initial_tasks.append(
-                (lambda w=cnv_wl: _verify_cnv(w), f"CNV:{cnv_wl.workload_namespace}")
+                (
+                    lambda w=cnv_wl, idx=primary_cluster_index: (
+                        config.switch_ctx(idx),
+                        _verify_cnv(w),
+                    ),
+                    f"CNV:{cnv_wl.workload_namespace}",
+                )
             )
 
         _run_parallel(initial_tasks, "Initial Primary Verification", errors)
@@ -361,21 +383,30 @@ class TestWorkloadDeployRDR:
         for wl in failed_over_sub_appset:
             secondary_verify_tasks.append(
                 (
-                    lambda w=wl: _verify_secondary_sub_appset(w),
+                    lambda w=wl, idx=secondary_cluster_index: (
+                        config.switch_ctx(idx),
+                        _verify_secondary_sub_appset(w),
+                    ),
                     wl.workload_namespace,
                 )
             )
         for wl in failed_over_discovered:
             secondary_verify_tasks.append(
                 (
-                    lambda w=wl: _verify_secondary_discovered(w),
+                    lambda w=wl, idx=secondary_cluster_index: (
+                        config.switch_ctx(idx),
+                        _verify_secondary_discovered(w),
+                    ),
                     f"DA:{wl.workload_namespace}",
                 )
             )
         for cnv_wl in failed_over_cnv:
             secondary_verify_tasks.append(
                 (
-                    lambda w=cnv_wl: _verify_secondary_cnv(w),
+                    lambda w=cnv_wl, idx=secondary_cluster_index: (
+                        config.switch_ctx(idx),
+                        _verify_secondary_cnv(w),
+                    ),
                     f"CNV:{cnv_wl.workload_namespace}",
                 )
             )
@@ -410,8 +441,11 @@ class TestWorkloadDeployRDR:
         for wl in failed_over_sub_appset:
             deletion_tasks.append(
                 (
-                    lambda w=wl: dr_helpers.wait_for_all_resources_deletion(
-                        w.workload_namespace
+                    lambda w=wl, idx=primary_cluster_index: (
+                        config.switch_ctx(idx),
+                        dr_helpers.wait_for_all_resources_deletion(
+                            w.workload_namespace
+                        ),
                     ),
                     wl.workload_namespace,
                 )
@@ -419,8 +453,11 @@ class TestWorkloadDeployRDR:
         for wl in failed_over_discovered:
             deletion_tasks.append(
                 (
-                    lambda w=wl: dr_helpers.wait_for_all_resources_deletion(
-                        w.workload_namespace
+                    lambda w=wl, idx=primary_cluster_index: (
+                        config.switch_ctx(idx),
+                        dr_helpers.wait_for_all_resources_deletion(
+                            w.workload_namespace
+                        ),
                     ),
                     f"DA:{wl.workload_namespace}",
                 )
@@ -428,8 +465,11 @@ class TestWorkloadDeployRDR:
         for cnv_wl in failed_over_cnv:
             deletion_tasks.append(
                 (
-                    lambda w=cnv_wl: dr_helpers.wait_for_all_resources_deletion(
-                        w.workload_namespace
+                    lambda w=cnv_wl, idx=primary_cluster_index: (
+                        config.switch_ctx(idx),
+                        dr_helpers.wait_for_all_resources_deletion(
+                            w.workload_namespace
+                        ),
                     ),
                     f"CNV:{cnv_wl.workload_namespace}",
                 )
@@ -560,8 +600,11 @@ class TestWorkloadDeployRDR:
         for wl in relocated_sub_appset:
             sec_deletion_tasks.append(
                 (
-                    lambda w=wl: dr_helpers.wait_for_all_resources_deletion(
-                        w.workload_namespace
+                    lambda w=wl, idx=secondary_cluster_index: (
+                        config.switch_ctx(idx),
+                        dr_helpers.wait_for_all_resources_deletion(
+                            w.workload_namespace
+                        ),
                     ),
                     wl.workload_namespace,
                 )
@@ -569,8 +612,11 @@ class TestWorkloadDeployRDR:
         for wl in relocated_discovered:
             sec_deletion_tasks.append(
                 (
-                    lambda w=wl: dr_helpers.wait_for_all_resources_deletion(
-                        w.workload_namespace
+                    lambda w=wl, idx=secondary_cluster_index: (
+                        config.switch_ctx(idx),
+                        dr_helpers.wait_for_all_resources_deletion(
+                            w.workload_namespace
+                        ),
                     ),
                     f"DA:{wl.workload_namespace}",
                 )
@@ -578,8 +624,11 @@ class TestWorkloadDeployRDR:
         for cnv_wl in relocated_cnv:
             sec_deletion_tasks.append(
                 (
-                    lambda w=cnv_wl: dr_helpers.wait_for_all_resources_deletion(
-                        w.workload_namespace
+                    lambda w=cnv_wl, idx=secondary_cluster_index: (
+                        config.switch_ctx(idx),
+                        dr_helpers.wait_for_all_resources_deletion(
+                            w.workload_namespace
+                        ),
                     ),
                     f"CNV:{cnv_wl.workload_namespace}",
                 )
@@ -626,21 +675,30 @@ class TestWorkloadDeployRDR:
         for wl in relocated_sub_appset:
             primary_verify_tasks.append(
                 (
-                    lambda w=wl: _verify_primary_sub_appset(w),
+                    lambda w=wl, idx=primary_cluster_index: (
+                        config.switch_ctx(idx),
+                        _verify_primary_sub_appset(w),
+                    ),
                     wl.workload_namespace,
                 )
             )
         for wl in relocated_discovered:
             primary_verify_tasks.append(
                 (
-                    lambda w=wl: _verify_primary_discovered(w),
+                    lambda w=wl, idx=primary_cluster_index: (
+                        config.switch_ctx(idx),
+                        _verify_primary_discovered(w),
+                    ),
                     f"DA:{wl.workload_namespace}",
                 )
             )
         for cnv_wl in relocated_cnv:
             primary_verify_tasks.append(
                 (
-                    lambda w=cnv_wl: _verify_primary_cnv(w),
+                    lambda w=cnv_wl, idx=primary_cluster_index: (
+                        config.switch_ctx(idx),
+                        _verify_primary_cnv(w),
+                    ),
                     f"CNV:{cnv_wl.workload_namespace}",
                 )
             )
