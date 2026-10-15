@@ -5278,7 +5278,8 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             enable_mco_console_plugin()
         # Configure mirror peer
         config.switch_acm_ctx()
-        self.configure_mirror_peer()
+        # Temporaray comment for PR verification
+        # self.configure_mirror_peer()
         self.apply_custom_ramen_image()
         # Deploy dr policy
         self.deploy_dr_policy()
