@@ -133,7 +133,7 @@ DEPLOYMENT:
   deploy_mce: false
   fusion_channel: v2.0
   # FDF
-  fdf_upgrade_registry: "cp.stg.icr.io/cp/df"
+  fdf_upgrade_registry: "preprod.icr.io/cpopen"
 
 # Section for reporting configuration
 REPORTING:
