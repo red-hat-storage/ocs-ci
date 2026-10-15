@@ -11,7 +11,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -32,6 +32,8 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_ocs_version("<4.10")
 @pytest.mark.polarion_id("OCS-4684")
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestRookCephLogRotate(ManageTest):
     """
     Test Rook Ceph Log Rotate
