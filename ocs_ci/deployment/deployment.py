@@ -4669,7 +4669,6 @@ class MultiClusterDROperatorsDeploy(object):
                 timeout=300,
             )
 
-            # --- Version check + DR hub operator check ------------------------
             # Verify the installed orchestrator CSV matches the expected channel
             # version, and that the DR hub operator CSV (deployed automatically
             # by the orchestrator) has reached Succeeded phase.
@@ -5248,7 +5247,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         acm_indexes = get_all_acm_indexes()
         for i in acm_indexes:
             config.switch_ctx(i)
-            if self.check_mco_presence_and_version:
+            if self.check_mco_presence_and_version():
                 continue
             if config.ENV_DATA.get("setup_fdf_catsrc_for_hub"):
                 setup_fdf_catsrc_for_hub()
