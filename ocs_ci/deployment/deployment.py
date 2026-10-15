@@ -3761,6 +3761,20 @@ class MultiClusterDROperatorsDeploy(object):
                 primary.ENV_DATA["cluster_name"],
                 non_acm_clusters[0].ENV_DATA["cluster_name"],
             ]
+
+        storagecluster_name = None
+        provider_client_setup = config.is_provider_exist()
+        if (
+            config.MULTICLUSTER["multicluster_mode"] == "metro-dr"
+            and provider_client_setup
+        ):
+            storagecluster_name = constants.DEFAULT_CLUSTERNAME
+            # Remove keys if present
+            mirror_peer_data.get("metadata", {}).get("labels", {}).pop(
+                "control-plane", None
+            )
+            mirror_peer_data.get("spec", {}).pop("overlappingCIDR", None)
+            mirror_peer_data.get("spec", {}).pop("schedulingIntervals", None)
         index = -1
         # First entry should be the primary cluster
         # in the mirror peer
@@ -3769,6 +3783,11 @@ class MultiClusterDROperatorsDeploy(object):
                 cluster_entry["clusterName"] = current_dr_clusters_list[0]
             else:
                 cluster_entry["clusterName"] = current_dr_clusters_list[1]
+            if storagecluster_name:
+                cluster_entry["storageClusterRef"]["name"] = storagecluster_name
+            if provider_client_setup:
+                # Remove namespace if present
+                cluster_entry.get("storageClusterRef", {}).pop("namespace", None)
             index += 1
 
         # Use unique cluster name to easily identify the managed clusters.
@@ -4028,6 +4047,7 @@ class MultiClusterDROperatorsDeploy(object):
     def deploy_dr_policy(self):
         # Create DR policy on ACM hub cluster
         dr_policy_hub_data = templating.load_yaml(constants.DR_POLICY_ACM_HUB)
+        policy_name_from_yaml = dr_policy_hub_data["metadata"]["name"]
         # Update DR cluster name and s3profile name
         dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
         primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
@@ -4092,7 +4112,8 @@ class MultiClusterDROperatorsDeploy(object):
             dr_policy_hub_data["spec"]["schedulingInterval"] = "10m"
 
         if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
-            dr_policy_hub_data["metadata"]["name"] = constants.MDR_DR_POLICY
+            if dr_policy_hub_data["metadata"]["name"] == policy_name_from_yaml:
+                dr_policy_hub_data["metadata"]["name"] = constants.MDR_DR_POLICY
             dr_policy_hub_data["spec"]["schedulingInterval"] = "0m"
 
         dr_policy_hub_yaml = tempfile.NamedTemporaryFile(
