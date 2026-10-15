@@ -426,6 +426,7 @@ class TestObcUserInterface(object):
         assert test_obc.check_resource_existence(should_exist=False)
 
 
+@mcg
 @ui
 @black_squad
 class TestBucketCreate:
@@ -534,6 +535,9 @@ class TestBucketCreate:
         bucket_ui.nav_buckets_page()
 
         # Get CLI bucket list for comparison
+        logger.info("Verifying NooBaa is ready before bucket operations")
+        mcg_obj.wait_for_ready_status(timeout=300)
+
         cli_buckets = list(mcg_obj.cli_list_all_buckets())
         logger.info(f"CLI bucket count: {len(cli_buckets)}")
 
