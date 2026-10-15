@@ -492,6 +492,28 @@ def workload_fio_storageutilization(
         else:
             return
 
+    # Filling the cluster to a particular utilization percentage takes time
+    # proportional to the amount of data to be written, so on large clusters
+    # the fixture would run for hours. In such a case the test is skipped
+    # instead, as the runtime is not worth the coverage.
+    max_pvc_size = config.ENV_DATA.get("fio_storageutilization_max_gib")
+    if (
+        target_percentage is not None
+        and max_pvc_size is not None
+        and pvc_size > max_pvc_size
+    ):
+        skip_msg = (
+            "the cluster is too large for this test, "
+            f"reaching {target_percentage*100}% of total utilization "
+            f"requires writing {pvc_size} Gi of data, which is more than "
+            f"the fio_storageutilization_max_gib limit ({max_pvc_size} Gi)"
+        )
+        logger.warning(skip_msg)
+        if throw_skip:
+            pytest.skip(skip_msg)
+        else:
+            return
+
     fio_conf = textwrap.dedent(
         """
         [simple-write]
