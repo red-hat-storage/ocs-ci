@@ -2365,7 +2365,7 @@ def get_odf_snapshotter_leader(
     snapshotter_pods = [Pod(**pod) for pod in pods]
     pod_names = {p.name for p in snapshotter_pods}
 
-    lease_ocp = OCP(kind="Lease", namespace=namespace)
+    lease_ocp = OCP(kind=constants.LEASE, namespace=namespace)
     try:
         leases = lease_ocp.get().get("items", [])
     except CommandFailed as e:
