@@ -2366,7 +2366,14 @@ def get_odf_snapshotter_leader(
     pod_names = {p.name for p in snapshotter_pods}
 
     lease_ocp = OCP(kind="Lease", namespace=namespace)
-    leases = lease_ocp.get().get("items", [])
+    try:
+        leases = lease_ocp.get().get("items", [])
+    except CommandFailed as e:
+        logger.warning(
+            f"Failed to list Lease objects in namespace '{namespace}': {e}; "
+            "falling back to log-scan leader detection."
+        )
+        leases = []
     for lease in leases:
         holder = lease.get("spec", {}).get("holderIdentity", "")
         if holder in pod_names:
