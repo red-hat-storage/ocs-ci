@@ -5282,7 +5282,8 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         self.apply_custom_ramen_image()
         # Deploy dr policy
         self.deploy_dr_policy()
-        update_volsync_channel()
+        if not config.is_provider_exist():
+            update_volsync_channel()
         # Configure DRClusters for fencing automation
         configure_drcluster_for_fencing()
 
