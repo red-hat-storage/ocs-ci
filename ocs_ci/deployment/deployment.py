@@ -5273,7 +5273,9 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                 continue
             if config.ENV_DATA.get("setup_fdf_catsrc_for_hub"):
                 setup_fdf_catsrc_for_hub()
-            self.deploy_dr_multicluster_orchestrator()
+            self.deploy_dr_multicluster_orchestrator(
+                use_fdf_catsrc=bool(config.ENV_DATA.get("setup_fdf_catsrc_for_hub"))
+            )
             # Enable MCO console plugin
             enable_mco_console_plugin()
         # Configure mirror peer
