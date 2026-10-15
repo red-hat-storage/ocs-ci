@@ -170,9 +170,11 @@ class TestWorkloadDeployRDR:
         secondary_cluster_index = config.get_cluster_index_by_name(
             secondary_cluster_name
         )
+        acm_cluster_index = config.get_active_acm_index() or 0
         logger.info(
             f"Primary cluster: {primary_cluster_name} (index {primary_cluster_index}), "
-            f"Secondary cluster: {secondary_cluster_name} (index {secondary_cluster_index})"
+            f"Secondary cluster: {secondary_cluster_name} (index {secondary_cluster_index}), "
+            f"ACM cluster index: {acm_cluster_index}"
         )
 
         # ── 12. Verify all workloads on primary (in parallel) ────────────────
@@ -317,15 +319,33 @@ class TestWorkloadDeployRDR:
         failover_tasks = []
         for wl in all_sub_appset:
             failover_tasks.append(
-                (lambda w=wl: _failover_sub_appset(w), wl.workload_namespace)
+                (
+                    lambda w=wl, idx=acm_cluster_index: (
+                        config.switch_ctx(idx),
+                        _failover_sub_appset(w),
+                    ),
+                    wl.workload_namespace,
+                )
             )
         for wl in all_discovered_workloads:
             failover_tasks.append(
-                (lambda w=wl: _failover_discovered(w), f"DA:{wl.workload_namespace}")
+                (
+                    lambda w=wl, idx=acm_cluster_index: (
+                        config.switch_ctx(idx),
+                        _failover_discovered(w),
+                    ),
+                    f"DA:{wl.workload_namespace}",
+                )
             )
         for cnv_wl in cnv_workloads:
             failover_tasks.append(
-                (lambda w=cnv_wl: _failover_cnv(w), f"CNV:{cnv_wl.workload_namespace}")
+                (
+                    lambda w=cnv_wl, idx=acm_cluster_index: (
+                        config.switch_ctx(idx),
+                        _failover_cnv(w),
+                    ),
+                    f"CNV:{cnv_wl.workload_namespace}",
+                )
             )
 
         failed_over_ids = _run_parallel(failover_tasks, "Failover", errors)
@@ -543,7 +563,13 @@ class TestWorkloadDeployRDR:
                 )
                 continue
             relocate_tasks.append(
-                (lambda w=wl: _relocate_sub_appset(w), wl.workload_namespace)
+                (
+                    lambda w=wl, idx=acm_cluster_index: (
+                        config.switch_ctx(idx),
+                        _relocate_sub_appset(w),
+                    ),
+                    wl.workload_namespace,
+                )
             )
         for wl in all_discovered_workloads:
             if wl not in verified_secondary_discovered:
@@ -553,7 +579,13 @@ class TestWorkloadDeployRDR:
                 )
                 continue
             relocate_tasks.append(
-                (lambda w=wl: _relocate_discovered(w), f"DA:{wl.workload_namespace}")
+                (
+                    lambda w=wl, idx=acm_cluster_index: (
+                        config.switch_ctx(idx),
+                        _relocate_discovered(w),
+                    ),
+                    f"DA:{wl.workload_namespace}",
+                )
             )
         for cnv_wl in cnv_workloads:
             if cnv_wl not in verified_secondary_cnv:
@@ -564,7 +596,10 @@ class TestWorkloadDeployRDR:
                 continue
             relocate_tasks.append(
                 (
-                    lambda w=cnv_wl: _relocate_cnv(w),
+                    lambda w=cnv_wl, idx=acm_cluster_index: (
+                        config.switch_ctx(idx),
+                        _relocate_cnv(w),
+                    ),
                     f"CNV:{cnv_wl.workload_namespace}",
                 )
             )
