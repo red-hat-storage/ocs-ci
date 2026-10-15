@@ -387,8 +387,16 @@ def workload_fio_storageutilization(
     on both total capacity and current utilization. If the current storage
     utilization already exceeds the target, the test is skipped.
 
+    Since the time needed to fill the cluster grows with the amount of data to
+    be written, the test is also skipped when reaching the target percentage
+    would require writing more data than the
+    ``ENV_DATA["fio_storageutilization_max_gib"]`` limit, so that the fixture
+    doesn't run for hours on large clusters. Setting the option to ``None``
+    disables this check.
+
     On the other hand with ``target_size``, you can specify the size of data
-    written by fio directly.
+    written by fio directly. Neither of the two skips above applies in that
+    mode.
 
     Args:
         fixture_name (str): name of the fixture using this function (for
