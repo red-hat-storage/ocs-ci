@@ -8515,6 +8515,7 @@ def discovered_apps_dr_workload(request):
                         if multi_ns
                         else workload_namespace
                     ),
+                    pvc_interface=pvc_interface,
                     discovered_apps_pvc_selector_key=workload_details[
                         "dr_workload_app_pvc_selector_key"
                     ],
@@ -8589,6 +8590,7 @@ def discovered_apps_dr_workload(request):
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
                     workload_namespace=workload_namespace + "-recipe-ns",
+                    pvc_interface=pvc_interface,
                     workload_placement_name=workload_details[
                         "dr_workload_app_placement_name"
                     ]
