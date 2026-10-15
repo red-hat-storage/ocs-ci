@@ -149,7 +149,7 @@ DEPLOYMENT:
   # Erasure Coding: deploy ODF with EC as default pool type instead of replication
   ec_default_pools: False
   # FDF
-  fdf_upgrade_registry: "cp.stg.icr.io/cp/df"
+  fdf_upgrade_registry: "preprod.icr.io/cpopen"
   # Standalone FDF (RHSTOR-8840): set true to deploy FDF via its own IBM catalog
   # source instead of the full Fusion Operator stack. All other deployment steps
   # (namespace, OperatorGroup, Subscription, StorageCluster) reuse the ODF path.
