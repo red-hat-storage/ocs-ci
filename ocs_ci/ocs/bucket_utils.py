@@ -2001,6 +2001,64 @@ def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey-", bs=
     return obj_lst
 
 
+def start_background_object_upload(
+    mcg_obj, awscli_pod, bucket_name, origin_dir, size="1G", max_attempts=20
+):
+    """
+    Create a random object on the awscli pod and start uploading it to the given
+    bucket in the background.
+
+    Object creation reuses ``write_random_objects_in_pod``. The upload is run
+    directly rather than via ``sync_object_directory`` because this is meant for
+    scenarios that need two things that helper does not offer: a configurable
+    (here >2 minute) retry window - ``sync_object_directory`` always uses
+    ``craft_s3_command``'s default ~1 minute ``max_attempts`` - and a background,
+    non-blocking run so the caller can disrupt the cluster (e.g. kill a pod or
+    shut down a node) while the upload is in flight. ``aws s3 cp`` auto-switches
+    to a multipart upload for a file this size, and AWS_MAX_ATTEMPTS drives the
+    retry window (~1 minute per 8 attempts), so the default 20 attempts gives the
+    in-flight part uploads over 2 minutes to ride out a disruption.
+
+    The caller owns the returned executor and future: resolve the future with
+    ``future.result()`` to surface any upload error, and shut the executor down.
+
+    Args:
+        mcg_obj (MCG): MCG object holding the S3 credentials
+        awscli_pod (Pod): Pod running the AWS CLI tools
+        bucket_name (str): Bucket to upload the object to
+        origin_dir (str): Directory on the awscli pod to create the object in
+        size (str): Size of the object to create (``dd`` block size, e.g. ``"1G"``)
+        max_attempts (int): AWS CLI retry attempts for the upload
+
+    Returns:
+        tuple: ``(executor, future, object_key, local_path, s3_path)``
+
+    """
+    object_key = write_random_objects_in_pod(awscli_pod, origin_dir, amount=1, bs=size)[
+        0
+    ]
+    local_path = f"{origin_dir}/{object_key}"
+    s3_path = f"s3://{bucket_name}/{object_key}"
+    secrets = [
+        mcg_obj.access_key_id,
+        mcg_obj.access_key,
+        mcg_obj.s3_internal_endpoint,
+    ]
+    upload_cmd = craft_s3_command(
+        f"cp {local_path} {s3_path}", mcg_obj, max_attempts=max_attempts
+    )
+    executor = ThreadPoolExecutor(max_workers=1)
+    logger.info(f"Starting the background upload of {local_path} to {s3_path}")
+    future = executor.submit(
+        awscli_pod.exec_cmd_on_pod,
+        command=upload_cmd,
+        out_yaml_format=False,
+        secrets=secrets,
+        timeout=900,
+    )
+    return executor, future, object_key, local_path, s3_path
+
+
 def setup_base_objects(awscli_pod, original_dir, amount=2):
     """
     Creates a directory and populates it with random objects

@@ -7,6 +7,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
+    ignore_leftovers,
     mcg,
     post_upgrade,
     red_squad,
@@ -14,20 +15,24 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     stretchcluster_required,
     tier2,
+    tier4b,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.node import schedule_nodes, unschedule_nodes
+from ocs_ci.ocs.node import schedule_nodes, unschedule_nodes, wait_for_nodes_status
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     delete_pods,
     get_active_core_pod,
     get_noobaa_core_pods,
     get_pod_node,
+    get_standby_core_pod,
     wait_for_pods_by_label_count,
     wait_for_pods_to_be_running,
 )
 from ocs_ci.ocs.bucket_utils import (
+    copy_objects,
+    start_background_object_upload,
     sync_object_directory,
     verify_s3_object_integrity,
     write_random_objects_in_pod,
@@ -50,6 +55,7 @@ RETRY_PERIOD_KEY = "NOOBAA_CORE_RETRY_PERIOD"
 @mcg
 @red_squad
 @runs_on_provider
+@ignore_leftovers
 class TestNoobaaCoreHA(MCGTest):
     """
     Test NooBaa core high availability (HA).
@@ -301,6 +307,30 @@ class TestNoobaaCoreHA(MCGTest):
         ), "NooBaa core pods did not reach Running state within 300 seconds"
         return core_pods
 
+    def _wait_for_core_pods_replaced(self, original_core_pods, timeout=300):
+        """
+        Wait until both NooBaa core pods are replaced (new UIDs) and Running.
+
+        Used after a kill that does not wait for deletion (e.g. a simultaneous
+        kill with wait=False), so topology validation runs against the recovered
+        pods rather than passing on the pre-kill pods that are still terminating.
+
+        Args:
+            original_core_pods (list): Core Pod objects present before the kill
+            timeout (int): Seconds to wait for both pods to be replaced
+
+        """
+        original_uids = {pod.pod_data["metadata"]["uid"] for pod in original_core_pods}
+        for current in TimeoutSampler(
+            timeout=timeout, sleep=10, func=get_noobaa_core_pods
+        ):
+            if len(current) != 2:
+                continue
+            if original_uids & {pod.pod_data["metadata"]["uid"] for pod in current}:
+                continue
+            if all(pod.status() == constants.STATUS_RUNNING for pod in current):
+                break
+
     def _wait_for_active_core_pod(self, core_pods, namespace, timeout=120):
         """
         Return the active (leader) NooBaa core pod, waiting for the
@@ -335,6 +365,143 @@ class TestNoobaaCoreHA(MCGTest):
             active_pod
         ), "Could not identify the active NooBaa core pod before standby selection"
         return active_pod
+
+    def _wait_for_leader_change(
+        self, previous_active_name, namespace, timeout=60, start_time=None
+    ):
+        """
+        Wait for the NooBaa core leader-election lease to move off the given pod
+        and return the pod that took over along with how long the takeover took.
+
+        Used after the active pod is lost (killed or its node shut down): the
+        lease keeps naming the old leader until it stops renewing, so this polls
+        ``get_active_core_pod`` until a different pod holds the lease. The
+        ``timeout`` caps the allowed takeover window - reaching the return proves
+        the takeover happened within it. The new leader is also confirmed Running
+        (healthy and able to serve) before returning. For accurate SLA enforcement,
+        pass ``start_time`` as the time before the disruption; otherwise timing
+        starts when this function is called.
+
+        Args:
+            previous_active_name (str): Name of the pod that held leadership
+            namespace (str): Namespace holding the leader-election lease
+            timeout (int): Maximum seconds to allow for the takeover
+            start_time (float): Monotonic time before the disruption (for SLA enforcement)
+
+        Returns:
+            tuple: (Pod, float) the new active pod and the takeover time in
+                seconds
+
+        """
+        start = start_time or time.monotonic()
+        new_active = None
+        for candidate in TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=get_active_core_pod,
+            namespace=namespace,
+        ):
+            if candidate and candidate.name != previous_active_name:
+                new_active = candidate
+                break
+        elapsed = time.monotonic() - start
+        assert new_active, (
+            f"No new NooBaa core leader took over within {timeout}s after "
+            f"{previous_active_name} stopped being the leader"
+        )
+        # TimeoutSampler can yield a result slightly past the deadline; enforce the SLA explicitly.
+        assert (
+            elapsed <= timeout
+        ), f"Leadership transfer took {elapsed:.1f}s, exceeding the {timeout}s deadline"
+        # Confirm the new leader is Running (healthy and able to serve) before returning.
+        assert wait_for_pods_to_be_running(
+            namespace=namespace, pod_names=[new_active.name], timeout=120
+        ), f"New active core pod {new_active.name} did not reach Running state after takeover"
+        logger.info(
+            f"Leadership moved from {previous_active_name} to {new_active.name} "
+            f"in {elapsed:.1f}s"
+        )
+        return new_active, elapsed
+
+    def _assert_upload_in_progress(self, upload_future):
+        """
+        Fail loudly if a background upload has already finished.
+
+        The failover tests kill a pod "while the upload is in progress"; if the
+        object is small enough to upload before the kill, the kill would land
+        after the upload and the scenario would pass without ever exercising a
+        mid-upload failover. This guards against that silent loss of coverage,
+        re-raising a genuine upload failure first if the future already errored.
+
+        Args:
+            upload_future (Future): The background upload future
+
+        """
+        if upload_future.done():
+            upload_future.result()
+            raise AssertionError(
+                "Background upload finished before the pod was killed, so the "
+                "failover was not exercised mid-upload; increase the object size"
+            )
+
+    def _upload_through_pod_disruption(
+        self, mcg_obj, awscli_pod, bucket_factory, test_directory_setup, disrupt_fn, msg
+    ):
+        """
+        Run a background object upload through a cluster disruption and verify it
+        survives intact.
+
+        Starts a background upload, waits for it to begin streaming, invokes
+        ``disrupt_fn`` (which kills a core pod and performs any failover checks)
+        while the upload is in flight, then confirms the upload completes without
+        error, the HA topology recovers, and the downloaded object matches the
+        original by checksum.
+
+        Args:
+            mcg_obj (MCG): MCG object holding the S3 credentials
+            awscli_pod (Pod): Pod running the AWS CLI tools
+            bucket_factory: Fixture creating a new bucket
+            test_directory_setup: Fixture providing origin/result directories
+            disrupt_fn (callable): Called once the upload is streaming; performs
+                the pod kill and any takeover assertions
+            msg (str): Assertion message on checksum mismatch
+
+        Returns:
+            list: The running NooBaa core Pod objects after recovery
+
+        """
+        bucket_name = bucket_factory(1)[0].name
+        result_dir = test_directory_setup.result_dir
+        (
+            executor,
+            upload_future,
+            object_key,
+            object_path,
+            s3_object_path,
+        ) = start_background_object_upload(
+            mcg_obj, awscli_pod, bucket_name, test_directory_setup.origin_dir
+        )
+        try:
+            # Let the upload start streaming before disrupting, so it is interrupted mid-flight.
+            time.sleep(10)
+            self._assert_upload_in_progress(upload_future)
+            disrupt_fn()
+            upload_future.result(timeout=900)
+            logger.info("S3 upload completed without failure during the disruption")
+        finally:
+            executor.shutdown(wait=True)
+
+        # The HA topology should recover to two running core pods.
+        core_pods = self._validate_core_ha_topology()
+
+        # Download via copy_objects (aws s3 cp), not sync: sync treats a single-object key as a prefix.
+        copy_objects(awscli_pod, s3_object_path, f"{result_dir}/{object_key}", mcg_obj)
+        assert verify_s3_object_integrity(
+            original_object_path=object_path,
+            result_object_path=f"{result_dir}/{object_key}",
+            awscli_pod=awscli_pod,
+        ), msg
+        return core_pods
 
     @staticmethod
     def _parse_seconds(value):
@@ -457,7 +624,7 @@ class TestNoobaaCoreHA(MCGTest):
         namespace = config.ENV_DATA["cluster_namespace"]
         core_pods = get_noobaa_core_pods()
         active_pod = self._wait_for_active_core_pod(core_pods, namespace)
-        standby_pod = next((pod for pod in core_pods if pod != active_pod), None)
+        standby_pod = get_standby_core_pod(core_pods, namespace, active_pod=active_pod)
         assert standby_pod, "Could not identify the standby NooBaa core pod"
 
         logger.info(f"Rolling restart: deleting standby pod {standby_pod.name} first")
@@ -507,6 +674,7 @@ class TestNoobaaCoreHA(MCGTest):
     @tier2
     @post_upgrade
     @skipif_ocs_version("<5.0")
+    @pytest.mark.polarion_id("OCS-8366")
     def test_noobaa_core_ha_availability(
         self, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
     ):
@@ -571,7 +739,181 @@ class TestNoobaaCoreHA(MCGTest):
         logger.info("Baseline object checksums survived the HA toggle")
 
     @tier2
+    @pytest.mark.polarion_id("OCS-8367")
+    def test_noobaa_core_ha_multipart_upload_failover(
+        self, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
+    ):
+        """
+        Verifies that an in-flight multipart upload survives an active NooBaa
+        core pod failover: the active (leader) core pod is killed mid-upload, the
+        standby pod takes over leadership, and the S3 upload retries and
+        completes without failure with the downloaded object matching the
+        original data.
+
+        1. Confirm 2 NooBaa core pods run on different nodes with a matching
+           leader-election lease.
+        2. Start uploading a 1GB multipart object with a >2 minute retry window.
+        3. Kill the active core pod so the in-flight upload goes into retry mode.
+        4. Confirm the standby pod takes over leadership within 60 seconds.
+        5. Confirm the S3 multipart upload completes without failure.
+        6. Download the object and validate its checksum against the original.
+
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        # 1. Confirm the initial HA topology (2 core pods on different nodes)
+        logger.info("Verifying the initial NooBaa core HA topology")
+        core_pods = self._validate_core_ha_topology()
+
+        def kill_active_and_assert_failover():
+            # 3. Kill the active (leader) core pod mid-upload to force the upload into retry mode.
+            active_pod = self._wait_for_active_core_pod(core_pods, namespace)
+            logger.info(f"Killing active NooBaa core pod {active_pod.name} mid-upload")
+            start_time = time.monotonic()
+            delete_pods([active_pod])
+            # 4. The standby pod should take over leadership within 60 seconds.
+            self._wait_for_leader_change(
+                active_pod.name, namespace, start_time=start_time
+            )
+
+        # 2-6. Upload 1GB mid-kill, then verify the upload completes and the object round-trips.
+        self._upload_through_pod_disruption(
+            mcg_obj,
+            awscli_pod,
+            bucket_factory,
+            test_directory_setup,
+            kill_active_and_assert_failover,
+            "Checksum mismatch for the multipart object after the core pod failover",
+        )
+        logger.info("Multipart object checksum validated after core pod failover")
+
+    @tier4b
+    @pytest.mark.polarion_id("OCS-8368")
+    def test_noobaa_core_ha_failover_resilience(
+        self,
+        mcg_obj,
+        awscli_pod,
+        bucket_factory,
+        test_directory_setup,
+        nodes,
+        node_restart_teardown,
+    ):
+        """
+        Verifies NooBaa core HA failover resilience across pod kills, a node
+        shutdown and repeated/simultaneous pod kills, always returning to the
+        two-pod HA topology with leadership taken over within 60 seconds.
+
+        1. Confirm the initial HA topology.
+        2. Kill the active core pod.
+        3. Confirm the standby pod takes over leadership within 60 seconds.
+        4. Confirm the HA topology recovers with a new standby core pod.
+        5. Kill the new standby pod while an S3 upload is in progress and confirm
+           the upload completes without failure.
+        6. Shut down the node running the active pod.
+        7. Confirm the standby pod takes over leadership within 60 seconds.
+        8. Recover the node and confirm the cluster converges back to a healthy
+           single-active HA topology (a leadership re-election during recovery is
+           an accepted, self-healing transient per DFBUGS-10829).
+        9. Kill the active pod 5 times, letting both pods recover between kills.
+        10. Kill the active and standby pods simultaneously and confirm recovery.
+
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        # 1. Confirm the initial HA topology
+        logger.info("Verifying the initial NooBaa core HA topology")
+        core_pods = self._validate_core_ha_topology()
+
+        # 2-3. Kill the active core pod; the standby must take over within 60s
+        active_pod = self._wait_for_active_core_pod(core_pods, namespace)
+        logger.info(f"Killing active core pod {active_pod.name}")
+        start_time = time.monotonic()
+        delete_pods([active_pod])
+        self._wait_for_leader_change(active_pod.name, namespace, start_time=start_time)
+
+        # 4. The topology must recover with a new standby core pod
+        core_pods = self._validate_core_ha_topology()
+        standby_pod = get_standby_core_pod(core_pods, namespace)
+        assert standby_pod, "Could not identify the standby NooBaa core pod"
+        logger.info(f"New standby core pod is {standby_pod.name}")
+
+        # 5. Kill the standby during an upload; it must not disrupt the leader or the S3 I/O.
+        def kill_standby():
+            logger.info(f"Killing standby core pod {standby_pod.name} during S3 I/O")
+            delete_pods([standby_pod])
+
+        core_pods = self._upload_through_pod_disruption(
+            mcg_obj,
+            awscli_pod,
+            bucket_factory,
+            test_directory_setup,
+            kill_standby,
+            "Checksum mismatch for the object uploaded while the standby was killed",
+        )
+
+        # 6-7. Shut down the active pod's node; the standby must take over within 60 seconds.
+        active_pod = self._wait_for_active_core_pod(core_pods, namespace)
+        active_node = get_pod_node(active_pod)
+        logger.info(
+            f"Shutting down node {active_node.name} hosting active pod "
+            f"{active_pod.name}"
+        )
+        start_time = time.monotonic()
+        nodes.stop_nodes(nodes=[active_node])
+        try:
+            wait_for_nodes_status(
+                node_names=[active_node.name], status=constants.NODE_NOT_READY
+            )
+            self._wait_for_leader_change(
+                active_pod.name, namespace, start_time=start_time
+            )
+        finally:
+            # 8. Recover the node (always, even if the assertions above failed).
+            logger.info(f"Starting node {active_node.name} back up")
+            nodes.start_nodes(nodes=[active_node])
+            wait_for_nodes_status(
+                node_names=[active_node.name], status=constants.NODE_READY
+            )
+
+        # 8. After recovery, assert HA converges to one active pod; switchback is an accepted transient (DFBUGS-10829).
+        self._validate_core_ha_topology()
+        current_active_pod = self._wait_for_active_core_pod(
+            get_noobaa_core_pods(), namespace
+        )
+        logger.info(
+            "HA topology healthy after node recovery; active core pod is "
+            f"{current_active_pod.name}"
+        )
+
+        # 9. Kill the active pod 5x, asserting HA converges between kills (no leader-change assertion).
+        for iteration in range(5):
+            core_pods = self._validate_core_ha_topology()
+            active_pod = self._wait_for_active_core_pod(core_pods, namespace)
+            logger.info(
+                f"Kill iteration {iteration + 1}/5: deleting active pod "
+                f"{active_pod.name}"
+            )
+            delete_pods([active_pod])
+        self._validate_core_ha_topology()
+
+        # 10. Kill the active and standby pods simultaneously and confirm HA recovers.
+        core_pods = self._wait_for_core_pods_running(
+            expected_count=2,
+            assert_msg="Core pods not running before the simultaneous kill",
+        )
+        logger.info(
+            f"Killing both core pods simultaneously: {[p.name for p in core_pods]}"
+        )
+        # wait=False fires both deletions back-to-back; wait=True would delete them sequentially.
+        delete_pods(core_pods, wait=False)
+        # Wait until both pods are actually replaced so validation runs on the recovered pods, not the pre-kill ones.
+        self._wait_for_core_pods_replaced(core_pods)
+        self._validate_core_ha_topology()
+        logger.info("NooBaa core HA recovered after killing both pods simultaneously")
+
+    @tier2
     @stretchcluster_required
+    @pytest.mark.polarion_id("OCS-8369")
     def test_noobaa_core_ha_zone_spread(self):
         """
         Verifies NooBaa core HA behavior across zones in a stretch cluster.
@@ -688,9 +1030,9 @@ class TestNoobaaCoreHA(MCGTest):
         logger.info("Step 7: Killing standby core pod")
         core_pods = get_noobaa_core_pods()
         active_pod = self._wait_for_active_core_pod(core_pods, namespace)
-        standby_pod = next((pod for pod in core_pods if pod != active_pod), None)
+        standby_pod = get_standby_core_pod(core_pods, namespace, active_pod=active_pod)
+        assert standby_pod, "Could not identify the standby NooBaa core pod"
 
-        assert standby_pod, "Could not identify standby pod"
         # After the cordon forced both pods into zone B, the standby must be
         # there; killing it should let it respin back into the recovered zone A.
         standby_zone = self._get_pod_zones([standby_pod]).get(standby_pod.name)
@@ -718,6 +1060,7 @@ class TestNoobaaCoreHA(MCGTest):
         logger.info(f"Confirmed: Respawned standby pod is in zone A ({zone_a})")
 
     @tier2
+    @pytest.mark.polarion_id("OCS-8370")
     def test_noobaa_core_lease_configuration(self):
         """
         Verifies the NooBaa core leader-election lease tunables are configurable

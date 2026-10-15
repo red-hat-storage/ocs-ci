@@ -1160,6 +1160,39 @@ def get_active_core_pod(core_pods=None, namespace=None):
     return None
 
 
+def get_standby_core_pod(core_pods=None, namespace=None, active_pod=None):
+    """
+    Identify the standby (non-leader) NooBaa core pod.
+
+    The standby is the core pod that does not hold the leader-election lease. If
+    the caller already resolved the active (leader) pod it can pass it as
+    ``active_pod`` to avoid a redundant lease lookup; otherwise the active pod is
+    resolved via ``get_active_core_pod``. Assumes the two-pod HA topology (one
+    active, one standby).
+
+    Args:
+        core_pods (list): NooBaa core Pod objects to choose from. Defaults to
+            the current core pods in the cluster.
+        namespace (str): Namespace containing the lease. Defaults to the
+            configured cluster namespace.
+        active_pod (Pod): The already-resolved active (leader) pod, if known.
+
+    Returns:
+        Pod: The standby (non-leader) Pod object, or None if the active pod
+            cannot be identified or no distinct standby exists.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    core_pods = core_pods if core_pods is not None else get_noobaa_core_pods(namespace)
+    active_pod = active_pod or get_active_core_pod(core_pods, namespace)
+    if active_pod is None:
+        return None
+    for core_pod in core_pods:
+        if core_pod.name != active_pod.name:
+            return core_pod
+    return None
+
+
 def get_noobaa_endpoint_pods():
     """
     Fetches noobaa endpoint pod details
