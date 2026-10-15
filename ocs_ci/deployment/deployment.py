@@ -3867,7 +3867,8 @@ class MultiClusterDROperatorsDeploy(object):
             if (
                 is_acm_cluster(cluster)
                 or is_recovery_cluster(cluster)
-                or cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
+                or cluster.ENV_DATA.get("cluster_type").lower()
+                in (constants.HCI_CLIENT, constants.EXT_CLIENT)
             ):
                 continue
             else:
