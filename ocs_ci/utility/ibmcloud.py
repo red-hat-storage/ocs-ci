@@ -1045,6 +1045,10 @@ def get_cluster_service_ids(cluster_name, get_infra_id_from_metadata=True):
     """
     Get cluster service IDs
 
+    Matches by infra ID prefix, falling back to a reconstructed infra ID
+    pattern if the infra ID is unavailable. Also matches known exact names
+    that are based on the cluster name rather than the infra ID.
+
     Args:
         cluster_name (str): cluster name
         get_infra_id_from_metadata (bool): if set to true it will try to get
@@ -1056,19 +1060,29 @@ def get_cluster_service_ids(cluster_name, get_infra_id_from_metadata=True):
     """
     cmd = "ibmcloud iam service-ids --output json"
     out = run_ibmcloud_cmd(cmd)
-    infra_id = ""
-    pattern = rf"{cluster_name}-[a-z0-9]{{5}}-.*"
-    service_ids = []
+    infra_id = None
     if get_infra_id_from_metadata:
         try:
             cluster_path = config.ENV_DATA["cluster_path"]
             infra_id = get_infra_id(cluster_path)
-            pattern = rf"{infra_id}-.*"
-
         except (FileNotFoundError, JSONDecodeError, KeyError):
             logger.warning("Could not get infra ID")
+    if infra_id:
+        prefix_pattern = re.compile(rf"^{re.escape(infra_id)}-")
+    else:
+        logger.warning(
+            "No infra ID available, falling back to a best-effort name match "
+            "for this cluster's service IDs"
+        )
+        prefix_pattern = re.compile(rf"^{re.escape(cluster_name)}-[a-z0-9]{{5}}-")
+    # Service IDs named directly off the cluster name rather than the infra ID,
+    # e.g. the COS-backed image-registry credential.
+    cluster_name_suffixes = ["image-registry"]
+    exact_names = {f"{cluster_name}-{suffix}" for suffix in cluster_name_suffixes}
+    service_ids = []
     for service_id in json.loads(out):
-        if re.match(pattern, service_id["name"]):
+        name = service_id.get("name", "")
+        if prefix_pattern.match(name) or name in exact_names:
             service_ids.append(service_id)
     return service_ids
 
@@ -1094,7 +1108,6 @@ def get_cluster_account_policies(cluster_name, cluster_service_ids):
             "No service ID provided, we cannot match any account policy without it!"
         )
         return matched_account_policies
-        cluster_service_ids = get_cluster_service_ids(cluster_name)
     for account_policy in account_policies:
         for subject in account_policy.get("subjects", []):
             for attr in subject.get("attributes", []):
@@ -1108,14 +1121,33 @@ def get_cluster_account_policies(cluster_name, cluster_service_ids):
 
 def delete_service_id(service_id):
     """
-    Delete service ID
+    Delete service ID.
+
+    A "not found" error is retried once before being treated as success, since
+    IBM Cloud's IAM API occasionally reports one spuriously for a service ID
+    that still exists and deletes fine moments later.
 
     Args:
         service_id (str): ID of service ID to delete
     """
-    logger.info(f"Deleting service ID: {service_id}")
     cmd = f"ibmcloud iam service-id-delete -f {service_id}"
-    run_ibmcloud_cmd(cmd)
+    logger.info(f"Deleting service ID: {service_id}")
+    try:
+        run_ibmcloud_cmd(cmd)
+    except CommandFailed as ex:
+        if "not found" not in str(ex).lower():
+            raise
+        logger.warning(
+            f"Service ID {service_id} reported as not found, retrying once "
+            "after a short delay before treating it as already deleted"
+        )
+        time.sleep(10)
+        try:
+            run_ibmcloud_cmd(cmd)
+        except CommandFailed as retry_ex:
+            if "not found" not in str(retry_ex).lower():
+                raise
+            logger.info(f"Service ID {service_id} confirmed gone after retry")
 
 
 def get_api_token():
@@ -1166,6 +1198,9 @@ def cleanup_policies_and_service_ids(cluster_name, get_infra_id_from_metadata=Tr
     """
     Cleanup Account Policies and Service IDs for cluster.
 
+    A failure deleting one policy or service ID is logged and doesn't stop
+    cleanup of the rest.
+
     Args:
         cluster_name (str): cluster name
         get_infra_id_from_metadata (bool): if set to true it will try to get
@@ -1179,9 +1214,18 @@ def cleanup_policies_and_service_ids(cluster_name, get_infra_id_from_metadata=Tr
     account_policies = get_cluster_account_policies(cluster_name, service_ids)
     api_token = get_api_token()
     for policy in account_policies:
-        delete_account_policy(policy["id"], api_token)
+        try:
+            delete_account_policy(policy["id"], api_token)
+        except Exception as ex:
+            logger.error(f"Failed to delete account policy {policy['id']}: {ex}")
     for service_id in service_ids:
-        delete_service_id(service_id["id"])
+        try:
+            delete_service_id(service_id["id"])
+        except Exception as ex:
+            logger.error(
+                f"Failed to delete service ID {service_id['id']} "
+                f"({service_id.get('name')}): {ex}"
+            )
 
 
 def create_resource_group(resource_group):
