@@ -5440,13 +5440,9 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         super().__init__()
 
     def deploy(self):
-        logger.info(
-            "Deploying Metro-DR.Need multicluster orchestrator on both the active/passive ACM clusters"
-        )
+        # We need multicluster orchestrator on both the active/passive ACM clusters
         acm_indexes = get_all_acm_indexes()
-        logger.info(f"Acm indexes {acm_indexes}")
         for i in acm_indexes:
-            logger.info(f"Deploying MCO in ACM index {i}")
             config.switch_ctx(i)
             self.deploy_dr_multicluster_orchestrator()
             # Enable MCO console plugin
