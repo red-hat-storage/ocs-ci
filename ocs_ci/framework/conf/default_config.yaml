@@ -135,7 +135,7 @@ DEPLOYMENT:
   host_network: False # Use host network for ODF pods, propagates to spec of StorageCluster. Mandatory for Hub/Spoke deployments.
   enable_data_replication_separation: False # separates client data path from data replication
   # FDF
-  fdf_upgrade_registry: "cp.stg.icr.io/cp/df"
+  fdf_upgrade_registry: "preprod.icr.io/cpopen"
 
 # Section for reporting configuration
 REPORTING:
