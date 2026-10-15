@@ -242,8 +242,27 @@ class ConfigurePerformancePage(BaseUI):
             )
             logger.info("Clicking MCG profile option: %s", profile_name)
             option.click()
-            time.sleep(2)
-            logger.info("Waited for profile selection to register")
+            # Wait for the button text to reflect the new profile, confirming the
+            # selection registered in the UI form before we attempt to save.
+            expected_ui_profile = profile_name.strip().lower().replace(" ", "-")
+            button_text = ""
+            for _ in range(5):
+                time.sleep(1)
+                try:
+                    button_text = (
+                        self.get_element_text(button_loc)
+                        .strip()
+                        .lower()
+                        .replace(" ", "-")
+                    )
+                except Exception:
+                    button_text = ""
+                if button_text == expected_ui_profile:
+                    break
+            logger.info(
+                "Waited for profile selection to register (button text: %s)",
+                button_text,
+            )
         except TimeoutException as e:
             logger.error(
                 "MCG profile option '%s' did not appear after 15 seconds", profile_name
@@ -325,13 +344,26 @@ class ConfigurePerformancePage(BaseUI):
         logger.info("Saving configuration")
         save_button = self.configure_performance_loc["save_button"]
 
-        try:
-            save_btn = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable((save_button[1], save_button[0]))
-            )
-            logger.info("Save button is enabled, clicking it")
-        except TimeoutException:
-            logger.warning("Save button did not become enabled within 10 seconds")
+        # Let the page/React settle so the form dirty-state and save-button
+        # enablement catch up with the profile selection.
+        self.page_has_loaded(retries=3, sleep_time=2)
+
+        save_btn = None
+        for attempt in range(1, 4):
+            try:
+                save_btn = WebDriverWait(self.driver, 10).until(
+                    EC.element_to_be_clickable((save_button[1], save_button[0]))
+                )
+                logger.info("Save button is enabled, clicking it")
+                break
+            except TimeoutException:
+                logger.warning(
+                    "Save button not clickable on attempt %s, waiting for page to settle",
+                    attempt,
+                )
+                self.page_has_loaded(retries=2, sleep_time=2)
+        if save_btn is None:
+            logger.warning("Save button did not become enabled; checking state")
             save_btns = self.get_elements(save_button)
             if not save_btns:
                 logger.error("Save button not found on page")
