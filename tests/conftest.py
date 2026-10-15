@@ -8471,6 +8471,7 @@ def discovered_apps_dr_workload(request):
             list: objects of workload class
 
         """
+        start = len(instances)
         total_pvc_count = 0
         workload_key = "dr_workload_discovered_apps_rbd"
         multi_ns_list = []
@@ -8557,9 +8558,9 @@ def discovered_apps_dr_workload(request):
             )
             placement_name = drpc_name + "-plmnt-1"
             for index in range(kubeobject):
-                instances[index].discovered_apps_placement_name = drpc_name
-            instances[0].create_placement(placement_name=placement_name)
-            instances[0].create_drpc(
+                instances[start + index].discovered_apps_placement_name = drpc_name
+            instances[start].create_placement(placement_name=placement_name)
+            instances[start].create_drpc(
                 drpc_name=drpc_name,
                 placement_name=placement_name,
                 protected_namespaces=multi_ns_list,
@@ -8571,7 +8572,7 @@ def discovered_apps_dr_workload(request):
                 ],
             )
             for index in range(kubeobject):
-                instances[index].verify_workload_deployment(vrg_name=drpc_name)
+                instances[start + index].verify_workload_deployment(vrg_name=drpc_name)
             dr_helpers.validate_application_odf_cli(
                 drpc_name=drpc_name,
                 namespace=constants.DR_OPS_NAMESPACE,
@@ -8632,7 +8633,7 @@ def discovered_apps_dr_workload(request):
                     namespace=constants.DR_OPS_NAMESPACE,
                 )
 
-        return instances
+        return instances[start:]
 
     def teardown():
         for index, instance in enumerate(instances):
