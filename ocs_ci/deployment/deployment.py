@@ -4460,12 +4460,52 @@ class MultiClusterDROperatorsDeploy(object):
         except CommandFailed as e:
             logger.error(f"[ramenctl-e2e] E2E tests failed: {e}")
             logger.error(f"[ramenctl-e2e] Check detailed results at: {output_path}")
+            # The results dir under the ocs-ci log path is not part of the job's
+            # archived artifacts, so echo the ramenctl run log into the
+            # deployment log (which is archived) to preserve the root cause.
+            self._log_ramenctl_result_file(output_path)
         finally:
             # Always attempt to tear down the test artifacts deployed on the
             # clusters by the test run, while config.yaml still exists in
             # ramenctl_dir. Best-effort: failures must not block workspace
             # deletion in the caller.
             self._clean_ramenctl_e2e(ramenctl_dir)
+
+    def _log_ramenctl_result_file(self, output_path, max_lines=500):
+        """
+        Echo the ramenctl test run log into the deployment log.
+
+        The results directory under the ocs-ci log path is not part of the
+        Jenkins job's archived artifacts, so on failure its contents are lost
+        once the agent workspace is reclaimed. Dumping the tail of
+        ``test-run.log`` into the deployment log (which is archived) keeps the
+        root cause available. Best-effort: never raises.
+
+        Args:
+            output_path (str): ramenctl test run output directory (``-o``)
+            max_lines (int): maximum number of trailing lines to log
+
+        """
+        log_file = os.path.join(output_path, "test-run.log")
+        try:
+            if not os.path.exists(log_file):
+                logger.warning(
+                    f"[ramenctl-e2e] Result log not found at {log_file}"
+                )
+                return
+            with open(log_file) as f:
+                lines = f.readlines()
+            tail = lines[-max_lines:]
+            truncated = len(lines) > max_lines
+            logger.error(
+                f"[ramenctl-e2e] Contents of {log_file} "
+                f"({'last ' + str(max_lines) + ' of ' + str(len(lines)) if truncated else str(len(lines))} lines):\n"
+                + "".join(tail)
+            )
+        except Exception as e:
+            logger.warning(
+                f"[ramenctl-e2e] Could not read result log {log_file}: {e}"
+            )
 
     def _clean_ramenctl_e2e(self, ramenctl_dir):
         """
