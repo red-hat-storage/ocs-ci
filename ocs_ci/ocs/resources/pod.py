@@ -2330,30 +2330,72 @@ def get_odf_snapshotter_leader(
     """
     Get the snapshotter leader pod (leader-elected).
 
-    Defaults to the ODF external snapshotter operator, but can identify the leader
-    for any leader-elected snapshotter that uses the same lease messages (e.g. the
-    csi-snapshot-controller) by passing its label and container.
+    Resolves the leader by reading the Lease object whose name matches the
+    label-selector value (e.g. ``snapshot-controller-leader``).  The Lease
+    ``spec.holderIdentity`` field is the authoritative pod name — it is set
+    atomically by client-go and is always present regardless of whether the
+    pod logged any leader-election messages (uncontested wins produce no
+    success log line).
+
+    Falls back to log scanning (legacy behaviour) only when no matching
+    Lease exists in the namespace.
 
     Args:
-        namespace (str): Name of the namespace. Defaults to the cluster namespace.
-        label (str): Pod label selector used to find the snapshotter pods.
-        container (str): Container name to read logs from. Pass None to let
-            'oc logs' select the pod's only/default container.
+        namespace (str): Namespace to look in. Defaults to the cluster namespace.
+        label (str): Pod label selector used to find the snapshotter pods
+            (e.g. ``"app=csi-snapshot-controller"``).
+        container (str): Container name used only in the log-scan fallback path.
+            Pass ``None`` to let ``oc logs`` pick the pod's default container.
 
     Returns:
-        Pod: snapshotter leader pod
+        Pod: the current leader pod object
 
+    Raises:
+        AssertionError: when the leader pod cannot be identified
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
-    non_leader_msg = "Failed to acquire lease"
-    lease_acq_msg = "Successfully acquired lease"
-    lease_renew_msg = "Successfully renewed lease"
-    leader_pod = ""
-
-    # Get all snapshotter pods
+    # ── Primary path: read the Lease holderIdentity ──────────────────────────
+    # The label value (the part after "=") is typically the Lease name
+    # (e.g. "app=csi-snapshot-controller" → lease "snapshot-controller-leader",
+    #  "app.kubernetes.io/name=odf-external-snapshotter-operator" → same pattern).
+    # We list all Leases in the namespace and pick the one whose holderIdentity
+    # matches one of the running pods, which avoids hardcoding Lease names.
     pods = get_pods_having_label(label, namespace)
     snapshotter_pods = [Pod(**pod) for pod in pods]
+    pod_names = {p.name for p in snapshotter_pods}
+
+    lease_ocp = OCP(kind=constants.LEASE, namespace=namespace)
+    try:
+        leases = lease_ocp.get().get("items", [])
+    except CommandFailed as e:
+        logger.warning(
+            f"Failed to list Lease objects in namespace '{namespace}': {e}; "
+            "falling back to log-scan leader detection."
+        )
+        leases = []
+    for lease in leases:
+        holder = lease.get("spec", {}).get("holderIdentity", "")
+        if holder in pod_names:
+            leader_pod = next(p for p in snapshotter_pods if p.name == holder)
+            logger.info(
+                f"Snapshotter leader pod identified via Lease "
+                f"'{lease['metadata']['name']}': {leader_pod.name}"
+            )
+            return leader_pod
+
+    # ── Fallback: legacy log-scan (kept for backwards compatibility) ─────────
+    logger.warning(
+        "No Lease found whose holderIdentity matches a snapshotter pod; "
+        "falling back to log-scan leader detection."
+    )
+    leader_pod = ""
+    non_leader_msgs = ("Failed to acquire lease", "failed to acquire")
+    leader_msgs = (
+        "Successfully acquired lease",
+        "Successfully renewed lease",
+        "became leader",
+    )
 
     pods_log = {}
     for pod in snapshotter_pods:
@@ -2366,15 +2408,14 @@ def get_odf_snapshotter_leader(
     for pod, log_list in pods_log.items():
         log_list.reverse()
         for log_msg in log_list:
-            # Check for last occurrence of leader message
-            # This will be the first occurrence in reversed list.
-            if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
+            if any(m in log_msg for m in leader_msgs):
                 curr_index = log_list.index(log_msg)
-                # Ensure that there is no non leader message logged after
-                # the last occurrence of leader message
-                if not any(non_leader_msg in msg for msg in log_list[:curr_index]):
+                if not any(
+                    nl in msg for msg in log_list[:curr_index] for nl in non_leader_msgs
+                ):
                     leader_pod = pod
                 break
+
     assert leader_pod, "Couldn't identify snapshotter leader pod."
     logger.info(f"Snapshotter leader pod is {leader_pod.name}")
     return leader_pod
