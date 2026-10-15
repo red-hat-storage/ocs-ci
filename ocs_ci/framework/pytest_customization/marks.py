@@ -113,6 +113,7 @@ mdr = pytest.mark.mdr
 resiliency = pytest.mark.resiliency
 chaos = pytest.mark.chaos
 ec_allowed = pytest.mark.ec_allowed
+fa_functional = pytest.mark.fa_functional
 
 tier_marks = [
     tier1,
@@ -617,6 +618,11 @@ external_mode_required = pytest.mark.skipif(
     reason="Test will run on External Mode cluster only",
 )
 
+multi_storagecluster_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("multi_storagecluster") is not True,
+    reason="Test requires a multi-storagecluster deployment",
+)
+
 fusion_access_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("fusion_access") is not True,
     reason="Test will run on Fusion Access cluster only",
@@ -764,6 +770,12 @@ skipif_rhel_os = pytest.mark.skipif(
     reason="Test will not run on cluster with RHEL OS",
 )
 
+skipif_rhel9_nodes = pytest.mark.skipif(
+    config.ENV_DATA.get("rhel_workers") is True
+    and str(config.ENV_DATA.get("rhel_version", "")).startswith("9"),
+    reason="Test is not supported on RHEL 9 nodes",
+)
+
 skipif_vsphere_ipi = pytest.mark.skipif(
     (
         config.ENV_DATA["platform"].lower() == "vsphere"
@@ -801,6 +813,11 @@ skipif_flexy_deployment = pytest.mark.skipif(
 skipif_noobaa_external_pgsql = pytest.mark.skipif(
     config.ENV_DATA.get("noobaa_external_pgsql") is True,
     reason="This test will not run correctly in external DB deployed cluster.",
+)
+
+skipif_noobaa_external_pgsql_not_set = pytest.mark.skipif(
+    config.ENV_DATA.get("noobaa_external_pgsql") is not True,
+    reason="This test requires NooBaa to be deployed with an external PostgreSQL DB.",
 )
 
 skipif_compact_mode = pytest.mark.skipif(

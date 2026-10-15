@@ -215,6 +215,7 @@ from ocs_ci.utility.utils import (
     get_infra_id,
     apply_oadp_workaround,
     mute_mon_netsplit,
+    label_nodes_platform_type,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -377,18 +378,41 @@ class Deployment(object):
         Deploy Submariner operator
 
         """
-        if config.ENV_DATA.get("skip_submariner_deployment", False):
-            return
+        try:
+            if config.ENV_DATA.get("skip_submariner_deployment", False):
+                return
 
-        # Multicluster operations
-        if config.multicluster:
-            # Configure submariner only on non-ACM clusters
-            submariner = Submariner()
-            submariner.deploy()
-            # Temporary workaround for submariner 0.24.1: immediately after
-            # submariner is installed, create the submariner-lighthouse-agent
-            # configmap
-            configure_submariner_lighthouse_import_namespace_deny_list()
+            # Multicluster operations
+            if config.multicluster:
+                # Configure submariner only on non-ACM clusters
+                submariner = Submariner()
+                submariner.deploy()
+                # Temporary workaround for submariner 0.24.1: immediately after
+                # submariner is installed, create the submariner-lighthouse-agent
+                # configmap
+                configure_submariner_lighthouse_import_namespace_deny_list()
+        except Exception as e:
+            logger.error(e)
+            if config.REPORTING["gather_on_deploy_failure"]:
+                # Let's do the collections separately to guard against one
+                # of them failing
+                try:
+                    collect_ocs_logs(
+                        "submariner_deployment",
+                        ocs=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCP logs: {e}")
+                try:
+                    collect_ocs_logs(
+                        "submariner_deployment",
+                        ocp=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCS logs: {e}")
+            raise
 
     def deploy_gitops_operator(self, switch_ctx=None):
         """
@@ -441,22 +465,6 @@ class Deployment(object):
                 gitops_subscription_manifest.name,
             )
             run_cmd(f"oc apply -f {gitops_subscription_manifest.name}")
-        elif ocp_version >= version.VERSION_5_0:
-            # Use the temporary GitOps workaround CatalogSource
-            gitops_subscription_yaml_data = templating.load_yaml(
-                constants.GITOPS_SUBSCRIPTION_YAML
-            )
-            gitops_subscription_yaml_data["spec"][
-                "source"
-            ] = constants.TEMP_GITOPS_WA_CATSRC_NAME
-            gitops_subscription_manifest = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="gitops_subscription_manifest", delete=False
-            )
-            templating.dump_data_to_temp_yaml(
-                gitops_subscription_yaml_data,
-                gitops_subscription_manifest.name,
-            )
-            exec_cmd(f"oc apply -f {gitops_subscription_manifest.name}")
         else:
             run_cmd(f"oc apply -f {constants.GITOPS_SUBSCRIPTION_YAML}")
 
@@ -494,10 +502,6 @@ class Deployment(object):
         """
         # Multicluster operations
         if config.multicluster:
-            # Temporary workaround: create the GitOps CatalogSource on all
-            # clusters before deploying the GitOps operator and OADP.
-            if version.get_semantic_ocp_version_from_config() >= version.VERSION_5_0:
-                run_cmd_multicluster(f"oc apply -f {constants.TEMP_GITOPS_WA_YAML}")
 
             # Gitops operator is needed on all clusters for appset type workload deployment using pull model
             for cluster_index in range(config.nclusters):
@@ -731,7 +735,20 @@ class Deployment(object):
                         namespace=constants.OADP_NAMESPACE,
                     ):
                         logger.info(
-                            f"Found {constants.OADP_OPERATOR_NAME} skipping creation"
+                            f"Found {constants.OADP_OPERATOR_NAME} CSV, skipping creation"
+                        )
+                        continue
+                    if ocp.OCP(
+                        kind=constants.SUBSCRIPTION_WITH_ACM,
+                        resource_name=constants.OADP_OPERATOR_NAME,
+                        namespace=constants.OADP_NAMESPACE,
+                    ).check_resource_existence(
+                        timeout=10,
+                        should_exist=True,
+                        resource_name=constants.OADP_OPERATOR_NAME,
+                    ):
+                        logger.info(
+                            f"Found {constants.OADP_OPERATOR_NAME} subscription, skipping creation"
                         )
                         continue
                     if config.DEPLOYMENT.get("disconnected"):
@@ -847,12 +864,35 @@ class Deployment(object):
         Call Regional DR deploy
 
         """
-        # Multicluster: Handle all ODF multicluster DR ops
-        if config.ENV_DATA.get("skip_dr_deployment", False):
-            return
-        if config.multicluster:
-            deploy_dr = get_multicluster_dr_deployment()()
-            deploy_dr.deploy()
+        try:
+            # Multicluster: Handle all ODF multicluster DR ops
+            if config.ENV_DATA.get("skip_dr_deployment", False):
+                return
+            if config.multicluster:
+                deploy_dr = get_multicluster_dr_deployment()()
+                deploy_dr.deploy()
+        except Exception as e:
+            logger.error(e)
+            if config.REPORTING["gather_on_deploy_failure"]:
+                # Let's do the collections separately to guard against one
+                # of them failing
+                try:
+                    collect_ocs_logs(
+                        "rdr_deployment",
+                        ocs=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCP logs: {e}")
+                try:
+                    collect_ocs_logs(
+                        "rdr_deployment",
+                        ocp=False,
+                        timeout=defaults.MUST_GATHER_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to collect OCS logs: {e}")
+            raise
 
     def do_deploy_lvmo(self):
         """
@@ -1147,11 +1187,7 @@ class Deployment(object):
             and version.get_semantic_ocp_version_from_config() >= version.VERSION_4_22
         ):
             logger.info("Labeling all nodes with platform-type=vsphere for vSphere UPI")
-            ocp = OCP()
-            ocp.exec_oc_cmd(
-                "label node --all node.openshift.io/platform-type=vsphere"
-                " --overwrite"
-            )
+            label_nodes_platform_type(platform_type="vsphere")
         # configure Ingress Node Firewall and restrict SSH access to nodes
         if config.ENV_DATA.get("restrict_ssh_access_to_nodes", False):
             try:
@@ -1694,7 +1730,16 @@ class Deployment(object):
             templating.dump_data_to_temp_yaml(olm_ns_op_group_data, constants.OLM_YAML)
 
         try:
-            run_cmd(f"oc create -f {constants.OLM_YAML}")
+            retry(
+                CommandFailed,
+                tries=5,
+                delay=15,
+                backoff=1,
+                text_in_exception=(
+                    "resource quota evaluation timed out",
+                    "Internal error occurred",
+                ),
+            )(run_cmd)(f"oc create -f {constants.OLM_YAML}")
         except CommandFailed as ex:
             if "AlreadyExists" in str(ex):
                 logger.info("OLM resources already exist, calling apply to update!")
@@ -2419,6 +2464,26 @@ class Deployment(object):
                     phase != "ReconcileFailed"
                 ), f"ObjectStoreUser {name} is in phase: {phase}"
 
+    def apply_post_deployment_tls_profile(self):
+        """
+        Apply the ENV_DATA TLSProfile after this deployment path has finished.
+
+        ROSA HCP keeps running checks after ``Deployment.deploy_ocs`` returns.
+        ``ROSA.deploy_ocs`` applies the profile after those checks.
+        """
+        if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+            if (
+                config.ENV_DATA.get("enable_tls_profile")
+                and config.ENV_DATA.get("fips") != "true"
+            ):
+                logger.info(
+                    "Deferring TLSProfile apply until ROSA HCP deployment checks finish"
+                )
+            return
+        from ocs_ci.helpers.tlsprofile_helper import apply_tls_profile_after_deployment
+
+        apply_tls_profile_after_deployment()
+
     def deploy_ocs(self):
         """
         Handle OCS deployment, since OCS deployment steps are common to any
@@ -2467,6 +2532,7 @@ class Deployment(object):
             self.deploy_ocs_via_operator(image)
             if config.ENV_DATA["mcg_only_deployment"]:
                 mcg_only_post_deployment_checks()
+                self.apply_post_deployment_tls_profile()
                 return
 
             # get ODF version and set MGR count based on ODF version
@@ -2675,6 +2741,7 @@ class Deployment(object):
         # patch gp2/thin storage class as 'non-default'
         self.patch_default_sc_to_non_default()
         self.objectstore_user_check()
+        self.apply_post_deployment_tls_profile()
 
     def deploy_lvmo(self):
         """

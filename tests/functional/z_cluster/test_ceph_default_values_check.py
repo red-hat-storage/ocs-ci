@@ -404,11 +404,14 @@ class TestECPoolOptimizationsCheck(ManageTest):
             f"{cluster_default}"
         )
 
-        for pool_name, flag_set in ec_pools.items():
-            assert (
-                flag_set
-            ), f"EC pool '{pool_name}' does not have ec_optimizations flag set"
-            log.info(f"Pool '{pool_name}': ec_optimizations=True")
+        for pool_name, flags in ec_pools.items():
+            assert flags[
+                "ec_optimizations"
+            ], f"EC pool '{pool_name}' does not have ec_optimizations flag set"
+            assert flags[
+                "ec_overwrites"
+            ], f"EC pool '{pool_name}' does not have ec_overwrites flag set"
+            log.info(f"Pool '{pool_name}': ec_optimizations=True, ec_overwrites=True")
 
         assert cluster_default == "true", (
             f"Cluster default osd_pool_default_flag_ec_optimizations "

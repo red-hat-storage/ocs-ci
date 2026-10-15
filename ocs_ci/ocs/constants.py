@@ -235,6 +235,7 @@ NODE = "Node"
 DEPLOYMENTCONFIG = "deploymentconfig"
 CONFIG = "Config"
 CONFIGMAP = "ConfigMap"
+EVENT = "Event"
 MACHINESETS = "machinesets"
 STORAGECLUSTER = "storagecluster"
 CLUSTER_OPERATOR = "ClusterOperator"
@@ -604,6 +605,7 @@ DEFAULT_MCG_BUCKET_LOGS_PVC = "noobaa-bucket-logging-pvc"
 DEFAULT_MCG_BUCKET_NOTIFS_PVC = "noobaa-bucket-notifications-pvc"
 CUSTOM_MCG_LABEL = "custom=mcg-label"
 NOOBAA_RESOURCE_NAME = "noobaa"
+NOOBAA_KIND = "NooBaa"
 NOOBAA_DB_PVC_NAME = "noobaa-db-pg-cluster-1"
 NOOBAA_INITIALIZING_REASON = "NoobaaInitializing"
 NOOBAA_HEALTH_CHECK_DELAY = 30
@@ -835,6 +837,12 @@ OSD_CEPHX_GET_OR_CREATE_LOG = "auth get-or-create"
 OSD_ENCRYPTED_LABEL = "encrypted"
 OSD_LOCKBOX_AUTH_PREFIX = "client.osd-lockbox."
 OSD_ACTIVATE_INIT_CONTAINER = "activate"
+OSD_ENCRYPTION_OPEN_INIT_CONTAINER = "encryption-open"
+# encryption-open prints one of these when the LUKS device is usable.
+OSD_ENCRYPTION_DEVICE_OPENED_LOGS = (
+    "already opened",
+    "Opening encrypted device",
+)
 OSD_LOCKBOX_INIT_SUCCESS_LOG = "got latest cephx lockbox key for OSD successfully"
 # Same get-or-create token as OSD cephx init; alias kept for lockbox call sites.
 OSD_LOCKBOX_GET_OR_CREATE_LOG = OSD_CEPHX_GET_OR_CREATE_LOG
@@ -1894,6 +1902,12 @@ DEFAULT_DESIRED_CEPHX_KEY_GEN = 2
 CEPHX_KEY_GENERATION_DECREASE_ERROR = "keyGeneration cannot be decreased"
 CEPHX_KEY_GENERATION_REMOVE_ERROR = "keyGeneration cannot be removed once set"
 CEPHX_KEY_GENERATION_TYPE_ERROR = "must be of type integer"
+# Boolean ``true`` on an int64 CRD field is rejected as ``must be of type int64``
+# with an empty value, not ``must be of type integer: "boolean"``.
+CEPHX_KEY_GENERATION_TYPE_ERRORS = (
+    CEPHX_KEY_GENERATION_TYPE_ERROR,
+    "must be of type int64",
+)
 
 # DR Pending Cleanup Alert (OCS 4.22+)
 ALERT_APPLICATION_CLEANUP_PENDING = "ApplicationCleanupPending"
@@ -2154,7 +2168,7 @@ HCI_PROVIDER_CLIENT_PLATFORMS = [
     IBM_HCI_PLATFORM,
 ]
 
-IBM_REGIONS = ["us-east", "us-south", "us"]
+IBM_REGIONS = ["us-east", "us-south", "ca-tor", "us"]
 IBM_CLOUD_SUBNETS = {
     # Washington D.C.
     "us-east": {
@@ -2162,11 +2176,17 @@ IBM_CLOUD_SUBNETS = {
         "us-east-2": "10.241.64.0/18",
         "us-east-3": "10.241.128.0/18",
     },
-    # Dalas
+    # Dallas
     "us-south": {
         "us-south-1": "10.240.0.0/18",
         "us-south-2": "10.240.64.0/18",
         "us-south-3": "10.240.128.0/18",
+    },
+    # Toronto
+    "ca-tor": {
+        "ca-tor-1": "10.242.0.0/18",
+        "ca-tor-2": "10.242.64.0/18",
+        "ca-tor-3": "10.242.128.0/18",
     },
 }
 
@@ -2324,6 +2344,7 @@ MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
 MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
 NOOBAA_CONFIGMAP = "noobaa-config"
+NOOBAA_CORE_LEASE_NAME = "noobaa-core-lease"
 NOOBAA_POSTGRES_SECRET = "noobaa-pgsql-secret"
 NOOBAA_POSTGRES_12_VERSION = 12
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
@@ -3701,13 +3722,6 @@ SUBMARINER_BROKER_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "submariner_broker.yaml"
 )
 CLUSTERSET_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "clusterset.yaml")
-# GitOps
-# Temporary workaround CatalogSource applied before GitOps/OADP deployment on
-# OCP >= 5.0
-TEMP_GITOPS_WA_YAML = os.path.join(
-    TEMPLATE_DIR, "gitops-deployment", "temp-gitops-wa.yaml"
-)
-TEMP_GITOPS_WA_CATSRC_NAME = "temp-gitops-wa"
 GITOPS_NAMESPACE = "openshift-gitops"
 GITOPS_OPERATOR_NAME = "openshift-gitops-operator"
 GITOPS_CLUSTER_NAME = "gitops-cluster"
@@ -4324,3 +4338,22 @@ FUSION_ACCESS_CR_YAML = os.path.join(
 )
 
 CONFIRM_DELETION_ANNOTATION = "uninstall.ocs.openshift.io/confirm-deletion"
+
+# Deployment names
+OCS_OPERATOR_DEPLOYMENT = "ocs-operator"
+
+# MCG Performance Profiles
+# Profiles accepted by the StorageCluster CRD enum. The NooBaa CRD additionally
+# accepts "dev-env" and "mini-env", which must be rejected on the StorageCluster CR.
+MCG_PROFILES = ("default", "mixed-workload", "small-objects")
+MCG_ONLY_PROFILES = ("dev-env", "mini-env")
+
+# Volume count the default pv-pool backingstore is created with, per profile.
+# Stamped at creation only - getPVPoolNumVolumes never lowers an existing count.
+MCG_PV_POOL_NUM_VOLUMES = {
+    "default": 3,
+    "mixed-workload": 3,
+    "small-objects": 3,
+    "dev-env": 1,
+    "mini-env": 1,
+}

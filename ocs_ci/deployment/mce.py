@@ -193,7 +193,7 @@ class MCEInstaller(object):
                 ] = f"stable-{config.ENV_DATA.get('mce_version')}"
 
             # Determine catalog source based on whether using released or unreleased MCE
-            use_released_mce = not config.ENV_DATA.get("mce_unreleased_image")
+            use_released_mce = not config.ENV_DATA.get("unreleased_mce")
 
             if use_released_mce:
                 # For released MCE, get catalog name from PackageManifest
