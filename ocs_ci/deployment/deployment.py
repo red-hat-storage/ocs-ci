@@ -1109,8 +1109,9 @@ class Deployment(object):
         self.do_deploy_submariner()
         if config.DEPLOYMENT.get("unique_rack_node_labels"):
             create_unique_rack_labels()
-        self.do_gitops_deploy()
-        self.do_deploy_oadp()
+        # Temporary comment to test PR
+        # self.do_gitops_deploy()
+        # self.do_deploy_oadp()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_mce()
@@ -5439,9 +5440,13 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         super().__init__()
 
     def deploy(self):
-        # We need multicluster orchestrator on both the active/passive ACM clusters
+        logger.info(
+            "Deploying Metro-DR.Need multicluster orchestrator on both the active/passive ACM clusters"
+        )
         acm_indexes = get_all_acm_indexes()
+        logger.info(f"Acm indexes {acm_indexes}")
         for i in acm_indexes:
+            logger.info(f"Deploying MCO in ACM index {i}")
             config.switch_ctx(i)
             self.deploy_dr_multicluster_orchestrator()
             # Enable MCO console plugin
