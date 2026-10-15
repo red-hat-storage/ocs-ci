@@ -4338,6 +4338,76 @@ external_systems = {
         By.XPATH,
     ),
 }
+
+configure_performance = {
+    "core_storage_section": (
+        "//*[contains(text(), 'Core storage')]"
+        "/ancestor::*[contains(@class, 'panel') or contains(@class, 'form') "
+        "or contains(@class, 'Section') or self::section]",
+        By.XPATH,
+    ),
+    "mcg_section": (
+        "//*[contains(text(), 'Multicloud Object Gateway')]"
+        "/ancestor::*[contains(@class, 'panel') or contains(@class, 'form') "
+        "or contains(@class, 'Section') or self::section]",
+        By.XPATH,
+    ),
+    "mcg_select_profile_button": (
+        "//button[contains(@class, 'pf-v6-c-menu-toggle') and contains(@aria-label, 'Object Gateway profile')]",
+        By.XPATH,
+    ),
+    "mcg_profile_option": (
+        "//*[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+        "'abcdefghijklmnopqrstuvwxyz'), translate('{}', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+        "'abcdefghijklmnopqrstuvwxyz'))]"
+        "[ancestor::*[contains(@class, 'dropdown') or contains(@class, 'menu') "
+        "or contains(@class, 'popover') or contains(@class, 'modal') "
+        "or contains(@role, 'listbox') or contains(@role, 'menu')]]",
+        By.XPATH,
+    ),
+    "core_storage_select_profile_button": (
+        "//button[contains(@class, 'pf-v6-c-menu-toggle') and contains(@aria-label, 'performance mode from the list')]",
+        By.XPATH,
+    ),
+    "core_storage_profile_option": (
+        "//div[contains(@class, 'dropdown') or contains(@class, 'menu') "
+        "or contains(@class, 'popover') or contains(@role, 'listbox')]"
+        "//*/text()[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+        "'abcdefghijklmnopqrstuvwxyz'), translate('{}', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+        "'abcdefghijklmnopqrstuvwxyz'))]/ancestor::*[contains(@class, 'item') "
+        "or contains(@class, 'option') or @role='option' or @role='menuitem']",
+        By.XPATH,
+    ),
+    "save_button": (
+        "//button[normalize-space()='Save']",
+        By.XPATH,
+    ),
+    "cancel_button": (
+        "//button[normalize-space()='Cancel']",
+        By.XPATH,
+    ),
+    "node_item": (
+        ".//div[contains(@class, 'node')]",
+        By.XPATH,
+    ),
+    "node_name": (
+        ".//*[contains(@class, 'node-name')]",
+        By.XPATH,
+    ),
+    "node_selection_option": (
+        ".//input[@type='checkbox' or @type='radio'] | .//button[normalize-space()='Select']",
+        By.XPATH,
+    ),
+}
+
+storage_cluster_locators = {
+    "configure_performance_button": (
+        "//button[normalize-space()='Configure performance profiles']",
+        By.XPATH,
+    ),
+    "kebab_storage_cluster": ("//button[@data-test='kebab-button']", By.XPATH),
+}
+
 locators = {
     "5.0": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -4420,6 +4490,8 @@ locators = {
         "attach_storage": attach_storage,
         "virtualmachine": virtualmachine,
         "fusion_access_storage_cluster": fusion_access_storage_cluster,
+        "configure_performance": configure_performance,
+        "storage_cluster": storage_cluster_locators,
     },
     "4.22": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -4500,6 +4572,8 @@ locators = {
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
         "virtualmachine": virtualmachine,
+        "configure_performance": configure_performance,
+        "storage_cluster": storage_cluster_locators,
     },
     "4.21": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
