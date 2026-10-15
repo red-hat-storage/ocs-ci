@@ -146,19 +146,35 @@ class BaseUpgrade(object):
             str: Name of the resource CSV
 
         """
-        csv_name = None
         csv_list = get_csvs_start_with_prefix(resource_name, namespace=self.namespace)
-        for csv in csv_list:
-            if resource_name in csv.get("metadata").get("name"):
-                logger.info(
-                    "searching for pre-upgrade csv with version: "
-                    f"{config.PREUPGRADE_CONFIG.get('ENV_DATA').get('ocs_version')}"
-                )
-                if config.PREUPGRADE_CONFIG.get("ENV_DATA").get(
-                    "ocs_version"
-                ) in csv.get("metadata").get("name"):
-                    csv_name = csv.get("metadata").get("name")
+        matching_csvs = [
+            csv.get("metadata").get("name")
+            for csv in csv_list
+            if resource_name in csv.get("metadata").get("name")
+        ]
+        # Match the installed CSV by a known pre-upgrade version string, trying the
+        # most-trusted source first. PREUPGRADE_CONFIG is a config snapshot taken at
+        # pytest collection time and may not match the installed CSV, so fall back to
+        # self.version_before_upgrade.
+        candidate_versions = [
+            config.PREUPGRADE_CONFIG.get("ENV_DATA", {}).get("ocs_version"),
+            self.version_before_upgrade,
+        ]
+        for candidate in candidate_versions:
+            if not candidate:
+                continue
+            logger.info(f"Searching for pre-upgrade csv with version: {candidate}")
+            for csv_name in matching_csvs:
+                if candidate in csv_name:
                     return csv_name
+        # Fallback: in a valid pre-upgrade state there is exactly one operator CSV,
+        # so if only one matches the prefix it must be the pre-upgrade CSV.
+        if len(matching_csvs) == 1:
+            logger.warning(
+                f"Could not match pre-upgrade csv by version {candidate_versions}; "
+                f"falling back to the only installed csv: {matching_csvs[0]}"
+            )
+            return matching_csvs[0]
         raise CSVNotFound(f"No preupgrade CSV found for {resource_name}")
 
     def get_pre_upgrade_image(self, csv_name_pre_upgrade):
