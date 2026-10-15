@@ -4613,7 +4613,9 @@ def validate_application_odf_cli(
         return None
 
     for cluster in config.clusters:
-        if cluster.MULTICLUSTER.get("is_hosted", False):
+        if cluster.MULTICLUSTER.get("is_hosted", False) or cluster.ENV_DATA.get(
+            "cluster_type"
+        ) in (constants.HCI_CLIENT, constants.EXT_CLIENT):
             cluster_name = cluster.MULTICLUSTER.get(
                 "name", cluster.ENV_DATA.get("cluster_name", "unknown")
             )
