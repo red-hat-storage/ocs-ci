@@ -1,4 +1,5 @@
 import logging
+from functools import partial
 
 import pytest
 
@@ -147,14 +148,16 @@ def mclock_config_cleanup(mclock_iops_context, request):
                 logger.info(f"Clearing {who} {iops_key}")
                 odf_cli.run_ceph_config(f"rm {who} {iops_key}")
 
-    def restore_entries():
-        clear_entries()
-        for (who, iops_key), value in original_entries.items():
-            logger.info(f"Restoring {who} {iops_key} = {value}")
-            odf_cli.run_ceph_config(f"set {who} {iops_key} {value}")
+    def restore_entry(who, iops_key, value):
+        logger.info(f"Restoring {who} {iops_key} = {value}")
+        odf_cli.run_ceph_config(f"set {who} {iops_key} {value}")
+
+    for (who, iops_key), value in reversed(original_entries.items()):
+        request.addfinalizer(partial(restore_entry, who, iops_key, value))
+    # Finalizers run in reverse order, so clear entries before restoring them.
+    request.addfinalizer(clear_entries)
 
     clear_entries()
-    request.addfinalizer(restore_entries)
     return odf_cli, osd_ids, key
 
 
