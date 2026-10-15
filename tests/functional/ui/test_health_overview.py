@@ -859,9 +859,12 @@ class TestHealthOverview(ManageTest):
             current_score == 100
         ), f"Final health score after disabling all alerts: {current_score}%"
 
-        logger.info("Triggering StorageCluster reconciliation")
+        logger.test_step("Triggering StorageCluster reconciliation")
         trigger_storage_cluster_reconciliation()
         sc_obj = get_default_storagecluster()
+        logger.test_step(
+            "Waiting for StorageCluster to reach Ready phase after reconciliation"
+        )
         sc_obj.wait_for_phase(phase=constants.STATUS_READY, timeout=300, sleep=10)
 
         logger.info("Verifying excluded alerts are maintained after reconciliation")
