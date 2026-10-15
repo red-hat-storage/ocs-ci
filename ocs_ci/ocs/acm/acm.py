@@ -1046,6 +1046,8 @@ def import_clusters_via_cli(clusters):
             except CommandFailed as exc:
                 if "the server doesn't have a resource type" in str(exc):
                     mce_present = False
+                else:
+                    raise
 
         if config.ENV_DATA.get("configure_acm_to_import_mce") and mce_present:
             # Find the klusterletconfig to import MCE cluster
