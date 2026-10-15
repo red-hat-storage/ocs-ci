@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     skipif_aws_creds_are_missing,
     skipif_managed_service,
+    skipif_noobaa_external_pgsql_not_set,
     mcg,
 )
 from ocs_ci.ocs.constants import BS_OPTIMAL
@@ -18,6 +19,12 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.mcg_workload import wait_for_active_pods
+from ocs_ci.ocs.resources.pod import wait_for_noobaa_pods_running
+from ocs_ci.ocs.resources.storage_cluster import (
+    get_noobaa_external_pgsql_config,
+    get_noobaa_external_pgsql_db_url_digest,
+    verify_noobaa_external_pgsql_config,
+)
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
@@ -25,11 +32,10 @@ logger = logging.getLogger(__name__)
 LOCAL_TESTOBJS_DIR_PATH = "/aws/original"
 LOCAL_TEMP_PATH = "/aws/temp"
 DOWNLOADED_OBJS = []
+CACHE_KEY_PGSQL_CONFIG = "noobaa_external_pgsql/pre_upgrade_config"
+CACHE_KEY_PGSQL_DB_URL_DIGEST = "noobaa_external_pgsql/pre_upgrade_db_url_digest"
 
 
-@pytest.mark.skip(
-    "Skipping due to noobaa-core-0 OOMKill - https://redhat.atlassian.net/browse/DFBUGS-6945"
-)
 @skipif_aws_creds_are_missing
 @skipif_managed_service
 @pre_upgrade
@@ -84,9 +90,6 @@ def test_fill_bucket(
     bucket.verify_health()
 
 
-@pytest.mark.skip(
-    "Skipping due to noobaa-core-0 OOMKill - https://redhat.atlassian.net/browse/DFBUGS-6945"
-)
 @skipif_aws_creds_are_missing
 @skipif_managed_service
 @post_upgrade
@@ -192,3 +195,94 @@ def deprecated_test_upgrade_mcg_io(mcg_workload_job):
     assert wait_for_active_pods(
         mcg_workload_job, 1
     ), f"Job {mcg_workload_job.name} doesn't have any running pod"
+
+
+# TODO: add @pytest.mark.polarion_id("OCS-XXXXX") once the Polarion case is created
+@skipif_managed_service
+@skipif_noobaa_external_pgsql_not_set
+@pre_upgrade
+@mcg
+@red_squad
+def test_noobaa_external_pgsql_before_upgrade(request):
+    """
+    Capture and verify the NooBaa external PostgreSQL configuration before upgrade,
+    so it can be compared against the post-upgrade state.
+
+    Captures the full externalPgConfig block and a digest of the connection
+    string (db_url) - both of which would change if the upgrade mangled the
+    configuration - so the post-upgrade comparison can actually fail on drift.
+    """
+    verify_noobaa_external_pgsql_config()
+
+    pre_upgrade_config = get_noobaa_external_pgsql_config()
+    assert (
+        pre_upgrade_config
+    ), "No external PostgreSQL config on the StorageCluster before upgrade"
+    pre_upgrade_db_url_digest = get_noobaa_external_pgsql_db_url_digest()
+    assert (
+        pre_upgrade_db_url_digest
+    ), "Could not compute the external PostgreSQL db_url digest before upgrade"
+
+    request.config.cache.set(CACHE_KEY_PGSQL_CONFIG, pre_upgrade_config)
+    request.config.cache.set(CACHE_KEY_PGSQL_DB_URL_DIGEST, pre_upgrade_db_url_digest)
+    logger.info(
+        "Captured pre-upgrade NooBaa external PostgreSQL config "
+        f"{pre_upgrade_config} and db_url digest"
+    )
+
+
+# TODO: add @pytest.mark.polarion_id("OCS-XXXXX") once the Polarion case is created
+@skipif_managed_service
+@skipif_noobaa_external_pgsql_not_set
+@post_upgrade
+@mcg
+@red_squad
+def test_noobaa_external_pgsql_after_upgrade(request, mcg_obj_session):
+    """
+    Verify that the NooBaa external PostgreSQL configuration survived the upgrade
+    and that NooBaa reconnects to the external database.
+
+    Steps:
+        1. Confirm the external PostgreSQL config on the StorageCluster survived
+           (secret reference unchanged, no internal noobaa-db pod).
+        2. Confirm NooBaa pods reach Running state (reconnect to external DB).
+        3. Confirm NooBaa reports Ready and its system is readable, which requires
+           a live connection to the external PostgreSQL database.
+    """
+    # 1. Config survived the upgrade. Compare against the state captured
+    #    pre-upgrade: both the externalPgConfig block and the db_url digest would
+    #    differ if the upgrade dropped or rewrote the external DB configuration.
+    verify_noobaa_external_pgsql_config()
+
+    pre_upgrade_config = request.config.cache.get(CACHE_KEY_PGSQL_CONFIG, None)
+    pre_upgrade_db_url_digest = request.config.cache.get(
+        CACHE_KEY_PGSQL_DB_URL_DIGEST, None
+    )
+    assert pre_upgrade_config and pre_upgrade_db_url_digest, (
+        "No pre-upgrade external PostgreSQL state found in cache; "
+        "test_noobaa_external_pgsql_before_upgrade must run first"
+    )
+
+    post_upgrade_config = get_noobaa_external_pgsql_config()
+    assert post_upgrade_config == pre_upgrade_config, (
+        "NooBaa externalPgConfig changed across upgrade: "
+        f"before={pre_upgrade_config}, after={post_upgrade_config}"
+    )
+    post_upgrade_db_url_digest = get_noobaa_external_pgsql_db_url_digest()
+    assert post_upgrade_db_url_digest == pre_upgrade_db_url_digest, (
+        "NooBaa external PostgreSQL connection string (db_url) changed across "
+        "upgrade (digests differ)"
+    )
+
+    # 2. NooBaa pods reconnect and reach Running state
+    wait_for_noobaa_pods_running(timeout=600)
+
+    # 3. NooBaa reconnects to the external DB - reaching Ready and being able to
+    #    read the system both require a live connection to external PostgreSQL
+    assert (
+        mcg_obj_session.status
+    ), "NooBaa is not in Ready state after upgrade with external PostgreSQL"
+    assert (
+        mcg_obj_session.read_system().get("buckets") is not None
+    ), "Failed to read NooBaa system after upgrade with external PostgreSQL"
+    logger.info("NooBaa reconnected to external PostgreSQL and is Ready after upgrade")
