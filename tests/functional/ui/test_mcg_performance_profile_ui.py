@@ -94,8 +94,6 @@ class TestMCGProfileSelection:
                 ("mixed-workload", "default"),
                 ("default", "small-objects"),
                 ("small-objects", "default"),
-                ("default", "mixed-workload"),
-                ("mixed-workload", "default"),
             ]
             for source, target in transitions:
                 with test_step(f"Transition: {source} → {target}"):

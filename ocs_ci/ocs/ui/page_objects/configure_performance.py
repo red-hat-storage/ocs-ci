@@ -195,7 +195,15 @@ class ConfigurePerformancePage(BaseUI):
         return len(elements) > 0
 
     def select_mcg_profile(self, profile_name: str):
-        """Select MCG profile from menu."""
+        """Select MCG profile from menu, retrying if the click does not register.
+
+        The MCG option locator must target the actual clickable menuitem
+        (role="menuitem" or class item/option). A broad locator can match a
+        non-interactive wrapper (e.g. a <li> or <span>) whose click never
+        reaches React's handler, leaving the button text unchanged. Retry the
+        full open→select→verify sequence until the button text reflects the
+        chosen profile.
+        """
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
         from selenium.common.exceptions import TimeoutException
@@ -204,75 +212,130 @@ class ConfigurePerformancePage(BaseUI):
         logger.info("Selecting MCG profile: %s", profile_name)
 
         button_loc = self.configure_performance_loc["mcg_select_profile_button"]
-        logger.info("Waiting for MCG dropdown button to be clickable")
-        try:
-            button = WebDriverWait(self.driver, 15).until(
-                EC.element_to_be_clickable((button_loc[1], button_loc[0]))
-            )
-            logger.info("Clicking MCG dropdown button")
-            button.click()
-            time.sleep(2)
-            logger.info("Waited for dropdown menu to appear and overlays to clear")
-        except TimeoutException:
-            logger.warning("Primary locator failed, trying fallback")
-            fallback_xpath = "//button[contains(@class, 'menu-toggle') and contains(@class, 'toggle')]"
-            try:
-                button = WebDriverWait(self.driver, 15).until(
-                    EC.element_to_be_clickable((By.XPATH, fallback_xpath))
-                )
-                logger.info("Found MCG button with fallback locator")
-                button.click()
-                time.sleep(2)
-                logger.info("Waited for dropdown menu to appear and overlays to clear")
-            except TimeoutException as e:
-                logger.error("MCG dropdown button not found after 30 seconds total")
-                self.take_screenshot("mcg_dropdown_button_timeout")
-                raise TimeoutException("MCG dropdown button not found on page") from e
-
-        profile_option_loc = self.configure_performance_loc["mcg_profile_option"]
         # UI displays profile names with spaces (e.g. "Mixed workload"), while the
         # test/CR uses hyphenated names (e.g. "mixed-workload"). Normalize so the
         # case-insensitive contains() XPath matches the rendered option text.
-        profile_xpath = profile_option_loc[0].format(profile_name.replace("-", " "))
-        logger.info("Waiting for MCG profile option '%s' to be clickable", profile_name)
+        profile_display = profile_name.replace("-", " ")
+        expected_ui_profile = profile_name.strip().lower().replace(" ", "-")
 
-        try:
-            option = WebDriverWait(self.driver, 15).until(
-                EC.element_to_be_clickable((profile_option_loc[1], profile_xpath))
-            )
-            logger.info("Clicking MCG profile option: %s", profile_name)
-            option.click()
-            # Wait for the button text to reflect the new profile, confirming the
-            # selection registered in the UI form before we attempt to save.
-            expected_ui_profile = profile_name.strip().lower().replace(" ", "-")
-            button_text = ""
-            for _ in range(5):
-                time.sleep(1)
-                try:
-                    button_text = (
-                        self.get_element_text(button_loc)
-                        .strip()
-                        .lower()
-                        .replace(" ", "-")
-                    )
-                except Exception:
-                    button_text = ""
-                if button_text == expected_ui_profile:
-                    break
+        # XPath for the clickable menuitem whose text matches the profile,
+        # scoped to a dropdown/menu container so we do not match unrelated page
+        # text. Targeting role="menuitem" / class item/option (like the Core
+        # Storage locator that UI-2 uses) ensures the click reaches React's
+        # selection handler instead of a non-interactive wrapper.
+        menuitem_xpath = (
+            "//*[contains(@class, 'dropdown') or contains(@class, 'menu') "
+            "or contains(@class, 'popover') or contains(@class, 'modal') "
+            "or contains(@role, 'listbox') or contains(@role, 'menu')]"
+            "//*[@role='menuitem' or contains(@class, 'item') or contains(@class, 'option')]"
+            "[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+            "'abcdefghijklmnopqrstuvwxyz'), '{}')]".format(profile_display.lower())
+        )
+
+        last_button_text = ""
+        for attempt in range(1, 4):
             logger.info(
-                "Waited for profile selection to register (button text: %s)",
-                button_text,
+                "MCG profile selection attempt %s/3 for %s", attempt, profile_name
             )
-        except TimeoutException as e:
-            logger.error(
-                "MCG profile option '%s' did not appear after 15 seconds", profile_name
-            )
-            self.take_screenshot("mcg_profile_option_timeout")
-            raise TimeoutException(
-                f"MCG profile '{profile_name}' not found in dropdown menu"
-            ) from e
-        logger.info("Selected MCG profile: %s", profile_name)
-        return self
+            # Open the dropdown.
+            try:
+                button = WebDriverWait(self.driver, 15).until(
+                    EC.element_to_be_clickable((button_loc[1], button_loc[0]))
+                )
+                logger.info("Clicking MCG dropdown button")
+                button.click()
+                time.sleep(2)
+                logger.info("Waited for dropdown menu to appear and overlays to clear")
+            except TimeoutException:
+                logger.warning(
+                    "Primary locator failed on attempt %s, trying fallback", attempt
+                )
+                fallback_xpath = "//button[contains(@class, 'menu-toggle') and contains(@class, 'toggle')]"
+                try:
+                    button = WebDriverWait(self.driver, 15).until(
+                        EC.element_to_be_clickable((By.XPATH, fallback_xpath))
+                    )
+                    logger.info("Found MCG button with fallback locator")
+                    button.click()
+                    time.sleep(2)
+                except TimeoutException:
+                    logger.error("MCG dropdown button not found on attempt %s", attempt)
+                    self.take_screenshot("mcg_dropdown_button_timeout")
+                    if attempt == 3:
+                        raise TimeoutException("MCG dropdown button not found on page")
+                    continue
+
+            # Click the profile menuitem. Native click first (dropdown is open,
+            # so no overlay should intercept); fall back to a JS click.
+            registered = False
+            for click_kind in ("native", "js"):
+                try:
+                    menuitem = WebDriverWait(self.driver, 15).until(
+                        EC.element_to_be_clickable((By.XPATH, menuitem_xpath))
+                    )
+                    if click_kind == "native":
+                        logger.info(
+                            "Clicking MCG profile menuitem: %s (native)", profile_name
+                        )
+                        menuitem.click()
+                    else:
+                        logger.info(
+                            "Clicking MCG profile menuitem: %s (JS click)",
+                            profile_name,
+                        )
+                        self.click_with_script((menuitem_xpath, By.XPATH))
+                except TimeoutException:
+                    logger.error(
+                        "MCG profile option '%s' did not appear on attempt %s",
+                        profile_name,
+                        attempt,
+                    )
+                    self.take_screenshot("mcg_profile_option_timeout")
+                    registered = False
+                    break
+
+                # Wait for the button text to reflect the new profile, confirming
+                # the selection registered in the UI form before we save.
+                button_text = ""
+                for _ in range(5):
+                    time.sleep(1)
+                    try:
+                        button_text = (
+                            self.get_element_text(button_loc)
+                            .strip()
+                            .lower()
+                            .replace(" ", "-")
+                        )
+                    except Exception:
+                        button_text = ""
+                    if button_text == expected_ui_profile:
+                        break
+                last_button_text = button_text
+                if button_text == expected_ui_profile:
+                    logger.info(
+                        "MCG profile '%s' selected and registered (button text: %s)",
+                        profile_name,
+                        button_text,
+                    )
+                    registered = True
+                    break
+                logger.warning(
+                    "MCG profile option click did not register; button text still '%s'",
+                    button_text,
+                )
+
+            if registered:
+                return self
+
+        logger.error(
+            "Failed to select MCG profile '%s' after 3 attempts (last button text: %s)",
+            profile_name,
+            last_button_text,
+        )
+        self.take_screenshot("mcg_profile_selection_failed")
+        raise TimeoutException(
+            f"MCG profile '{profile_name}' did not register after 3 attempts"
+        )
 
     def select_core_storage_profile(self, profile_name: str):
         """Select Core Storage profile from menu."""
