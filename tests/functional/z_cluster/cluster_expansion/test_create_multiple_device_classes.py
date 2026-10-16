@@ -26,6 +26,7 @@ from ocs_ci.ocs.device_classes import (
     add_disks_matching_lvs_size,
     get_default_lvs_obj,
     verify_available_pvs_for_deviceclass,
+    ensure_storagecluster_ready_for_deviceclass_test,
 )
 from ocs_ci.ocs.resources.pv import (
     wait_for_pvs_in_lvs_to_reach_status,
@@ -86,22 +87,25 @@ class TestMultipleDeviceClasses(ManageTest):
     ):
         """
         The test will perform the following steps:
-        1. Get the osd nodes.
-        2. Create a new LocalVolumeSet for the new deviceclass as defined in the function
-        'create_new_lvs_for_new_deviceclass'.
-        3. Wait for the PVS in the LocalVolumeSet above to be available.
-        4. Add a new device set in the storagecluster for the new LocalVolumeSet above,
-        which will also create a new deviceclass.
-        5. Wait for the storagecluster to be ready.
-        6. Create a new CephBlockPool for the device class above.
-        7. Wait for the CephBlockPool to be ready.
-        8. Create a new StorageClass for the pool.
-        9. Run the Verification steps as defined in the function
+        1. Heal leftover deviceset count if needed and wait for StorageCluster
+        Ready.
+        2. Get the osd nodes.
+        3. Create a new LocalVolumeSet for the new deviceclass as defined in the
+        function 'create_new_lvs_for_new_deviceclass'.
+        4. Wait for the PVS in the LocalVolumeSet above to be available.
+        5. Add a new device set in the storagecluster for the new LocalVolumeSet
+        above, which will also create a new deviceclass.
+        6. Wait for the storagecluster to be ready.
+        7. Create a new CephBlockPool for the device class above.
+        8. Wait for the CephBlockPool to be ready.
+        9. Create a new StorageClass for the pool.
+        10. Run the Verification steps as defined in the function
         'verification_steps_after_adding_new_deviceclass'.
-        10. Check the cluster and Ceph health.
-        11. Check basic cluster functionality by creating some resources.
+        11. Check the cluster and Ceph health.
+        12. Check basic cluster functionality by creating some resources.
 
         """
+        ensure_storagecluster_ready_for_deviceclass_test()
         osd_node_names = get_osd_running_nodes()
         log.info(f"osd node names = {osd_node_names}")
         num_of_new_pvs = len(osd_node_names)
@@ -166,22 +170,26 @@ class TestMultipleDeviceClasses(ManageTest):
     ):
         """
         The test will perform the following steps:
-        1. Get the osd nodes.
-        2. Add new disks for the new deviceclass using the same existing LocalVolumeSet
-        with the same storage size.
-        3. Wait for the PVS in the LocalVolumeSet above to be available.
-        4. Add a new device set in the storagecluster for the existing LocalVolumeSet above
-        with the same storage class name and size, which will also create a new deviceclass.
-        5. Wait for the storagecluster to be ready.
-        6. Create a new CephBlockPool for the device class above.
-        7. Wait for the CephBlockPool to be ready.
-        8. Create a new StorageClass for the pool.
-        9. Run the Verification steps as defined in the function
+        1. Heal leftover deviceset count if needed and wait for StorageCluster
+        Ready.
+        2. Get the osd nodes.
+        3. Add new disks for the new deviceclass using the same existing
+        LocalVolumeSet with the same storage size.
+        4. Wait for the PVS in the LocalVolumeSet above to be available.
+        5. Add a new device set in the storagecluster for the existing
+        LocalVolumeSet above with the same storage class name and size, which
+        will also create a new deviceclass.
+        6. Wait for the storagecluster to be ready.
+        7. Create a new CephBlockPool for the device class above.
+        8. Wait for the CephBlockPool to be ready.
+        9. Create a new StorageClass for the pool.
+        10. Run the Verification steps as defined in the function
         'verification_steps_after_adding_new_deviceclass'.
-        10. Check the cluster and Ceph health.
-        11. Check basic cluster functionality by creating some resources.
+        11. Check the cluster and Ceph health.
+        12. Check basic cluster functionality by creating some resources.
 
         """
+        ensure_storagecluster_ready_for_deviceclass_test()
         sc_name = get_first_sc_name_from_storagecluster()
         log.info(f"StorageCluster first storageclass name = {sc_name}")
         current_pv_objs = get_pv_objs_in_sc(sc_name)
@@ -303,7 +311,10 @@ class TestMultipleDeviceClassesUI(ManageTest):
         new_deviceset_name_per_deviceclass = get_deviceset_name_per_deviceclass()
         # Get the new deviceset name by comparing the old and new deviceset name per device class
         deviceset_name = None
-        for deviceset_name, deviceclass in new_deviceset_name_per_deviceclass.items():
+        for (
+            deviceset_name,
+            deviceclass,
+        ) in new_deviceset_name_per_deviceclass.items():
             if deviceclass not in self.old_deviceset_name_per_deviceclass.values():
                 break
         assert (
@@ -380,12 +391,17 @@ class TestMultipleDeviceClassesUI(ManageTest):
     def test_add_new_device_class_ui(self, setup_ui_session):
         """
         The test will perform the following steps:
-        1. Verify that there are available PVs for attaching a new device class.
-        2. Navigate to the 'Attach Storage' form in the UI.
-        3. Fill the form with the default values and submit it, which will add a new device class.
-        4. Run the verification steps as defined in the method 'post_deviceclass_checks'.
+        1. Heal leftover deviceset count if needed and wait for StorageCluster
+        Ready.
+        2. Verify that there are available PVs for attaching a new device class.
+        3. Navigate to the 'Attach Storage' form in the UI.
+        4. Fill the form with the default values and submit it, which will add a
+        new device class.
+        5. Run the verification steps as defined in the method
+        'post_deviceclass_checks'.
 
         """
+        ensure_storagecluster_ready_for_deviceclass_test()
         self.available_pvs_count = verify_available_pvs_for_deviceclass()
         attach_storage = PageNavigator().nav_to_attach_storage_page()
         self.new_device_class_name = attach_storage.send_form_with_default_values()
