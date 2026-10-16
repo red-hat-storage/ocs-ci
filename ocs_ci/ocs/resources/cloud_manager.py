@@ -24,6 +24,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     ClusterNotInSTSModeException,
 )
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
@@ -32,6 +33,7 @@ from ocs_ci.utility.utils import (
     load_auth_config,
     get_role_arn_from_sub,
     get_azure_sts_creds_from_sub,
+    get_gcp_sts_creds_from_sub,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,8 +62,10 @@ class CloudManager(ABC):
             "AZURE": AzureClient,
             "AZURE_WITH_LOGS": AzureWithLogsClient,
             "AZURE_STS": AzureSTSClient,
+            "GCP_STS": GcpSTSClient,
             "IBMCOS": IbmCosClient,
             "RGW": RgwClient,
+            "SELF_REF_MCG": SelfRefMcgClient,
         }
         try:
             logger.info(
@@ -130,6 +134,25 @@ class CloudManager(ABC):
             )
         except ClusterNotInSTSModeException:
             setattr(self, "azure_sts_client", None)
+
+        # set the client for GCP STS enabled cluster
+        try:
+            setattr(
+                self,
+                "gcp_sts_client",
+                cloud_map["GCP_STS"](full_auth_dict=cred_dict),
+            )
+        except ClusterNotInSTSModeException:
+            setattr(self, "gcp_sts_client", None)
+
+        try:
+            setattr(
+                self,
+                "self_ref_mcg_client",
+                cloud_map["SELF_REF_MCG"](),
+            )
+        except Exception:
+            setattr(self, "self_ref_mcg_client", None)
 
 
 class CloudClient(ABC):
@@ -449,6 +472,52 @@ class RgwClient(S3Client):
             "RGW_SECRET_ACCESS_KEY": secret_key,
         }
         super().__init__(rgw_creds_dict, verify, endpoint, *args, **kwargs)
+
+
+class SelfRefMcgClient(S3Client):
+    """
+    S3 client for the self-ref MCG platform - an S3-compatible store
+    backed by an MCG's own bucket on the same cluster.
+    Fetches credentials directly from the NooBaa CR and admin secret.
+    """
+
+    @config.run_with_provider_context_if_available
+    def __init__(self, auth_dict=None, verify=True, *args, **kwargs):
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        # Endpoints from the NooBaa CR status
+        get_noobaa = OCP(kind="noobaa", namespace=namespace).get()
+        noobaa_s3 = get_noobaa["items"][0]["status"]["services"]["serviceS3"]
+        external_endpoint = noobaa_s3["externalDNS"][0]
+        # Internal endpoint is used in backingstore/namespacestore specs
+        internal_endpoint = noobaa_s3["internalDNS"][0]
+
+        # Admin credentials from the NooBaa admin secret
+        creds_secret_name = get_noobaa["items"][0]["status"]["accounts"]["admin"][
+            "secretRef"
+        ]["name"]
+        secret_data = OCP(kind="secret", namespace=namespace).get(creds_secret_name)[
+            "data"
+        ]
+        access_key_id = base64.b64decode(secret_data["AWS_ACCESS_KEY_ID"]).decode()
+        secret_access_key = base64.b64decode(
+            secret_data["AWS_SECRET_ACCESS_KEY"]
+        ).decode()
+
+        # HTTP on port 80 for the boto3 client (used by cloud_uls_factory)
+        http_endpoint = external_endpoint.replace("https://", "http://").replace(
+            ":443", ":80"
+        )
+
+        mcg_creds_dict = {
+            "SECRET_PREFIX": "MCG",
+            "DATA_PREFIX": "AWS",
+            "ENDPOINT": http_endpoint,
+            "S3_INTERNAL_ENDPOINT": internal_endpoint,
+            "MCG_ACCESS_KEY_ID": access_key_id,
+            "MCG_SECRET_ACCESS_KEY": secret_access_key,
+        }
+        super().__init__(mcg_creds_dict, verify, http_endpoint, *args, **kwargs)
 
 
 class IbmCosClient(S3Client):
@@ -818,3 +887,29 @@ class AzureSTSClient(AzureClient):
         ).decode("ascii")
 
         return create_resource(**bs_secret_data)
+
+
+class GcpSTSClient(GoogleClient):
+    """
+    Implementation of a GCP Client for STS (Workload Identity Federation) clusters.
+
+    Reuses GoogleClient's GCS storage client for ULS operations but provides
+    WIF parameters (project_number, pool_id, provider_id, service_account_email)
+    for creating google-cloud-storage-sts backingstores.
+
+    """
+
+    @config.run_with_provider_context_if_available
+    def __init__(self, full_auth_dict, *args, **kwargs):
+        sts_creds = get_gcp_sts_creds_from_sub()
+        gcp_auth_dict = full_auth_dict.get("GCP")
+        if not gcp_auth_dict:
+            logger.error("Cluster is in GCP STS mode, but no GCP credentials found")
+            raise ClusterNotInSTSModeException
+
+        self.project_number = sts_creds["project_number"]
+        self.pool_id = sts_creds["pool_id"]
+        self.provider_id = sts_creds["provider_id"]
+        self.service_account_email = sts_creds["service_account_email"]
+
+        super().__init__(auth_dict=gcp_auth_dict, *args, **kwargs)

@@ -61,12 +61,58 @@ def get_hosted_cluster_names():
     """
 
     logger.info("Getting HyperShift hosted cluster names")
-    hosted_clusters_obj = OCP(
-        kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
-    ).get()
+    hosted_clusters_obj = OCP(kind=constants.HOSTED_CLUSTERS).get(all_namespaces=True)
     return [
         cluster.get("metadata").get("name") for cluster in hosted_clusters_obj["items"]
     ]
+
+
+def get_hosted_cluster_namespace(cluster_name=None):
+    """
+    Resolve the namespace that contains the HostedCluster CR. Default value is constants.CLUSTERS_NAMESPACE
+
+    Args:
+        cluster_name (str): Name of the hosted cluster.
+
+    Returns:
+        str: Namespace on the management cluster that owns the HostedCluster CR.
+    """
+    cluster_name = cluster_name or config.ENV_DATA.get("cluster_name")
+
+    # Get the hostedcluster namespace if available in config
+    hc_namespace = config.ENV_DATA.get("hostedcluster_namespace")
+    with config.RunWithProviderConfigContextIfAvailable():
+        # Explicit per-cluster config override
+        hc_namespace = (
+            config.ENV_DATA.get("clusters", {})
+            .get(cluster_name, {})
+            .get("hostedcluster_namespace", hc_namespace)
+        )
+        if hc_namespace:
+            logger.debug(
+                f"Using configured hostedcluster_namespace '{hc_namespace}' for '{cluster_name}'"
+            )
+            return hc_namespace
+
+        # Dynamic discovery — find from the list of HostedClusters across all namespaces
+        # If not available, return the default value constants.CLUSTERS_NAMESPACE because there are usages to identify
+        # if a cluster is hostedcluster or not.
+        try:
+            all_hc = OCP(kind=constants.HOSTED_CLUSTERS).get(all_namespaces=True)
+            for item in all_hc.get("items", []):
+                if item.get("metadata", {}).get("name") == cluster_name:
+                    hc_namespace = item["metadata"]["namespace"]
+                    logger.debug(
+                        f"Discovered hostedcluster_namespace '{hc_namespace}' for '{cluster_name}'"
+                    )
+                    break
+        except CommandFailed as exc:
+            logger.warning(
+                f"Could not list HostedClusters to resolve namespace for '{cluster_name}': {exc}. "
+                f"Use the default value {constants.CLUSTERS_NAMESPACE}"
+            )
+
+    return hc_namespace or constants.CLUSTERS_NAMESPACE
 
 
 @catch_exceptions((CommandFailed, TimeoutExpiredError))
@@ -249,7 +295,8 @@ def is_hosted_cluster(cluster_name=None):
     except ClusterNotFoundException:
         return False
     ocp_obj = OCP(
-        kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
+        kind=constants.HOSTED_CLUSTERS,
+        namespace=get_hosted_cluster_namespace(cluster_name),
     )
     return ocp_obj.is_exist(resource_name=cluster_name)
 
@@ -272,7 +319,7 @@ def get_hosted_cluster_type(cluster_name=None):
     config.switch_to_provider()
     ocp_hosted_cluster_obj = OCP(
         kind=constants.HOSTED_CLUSTERS,
-        namespace=constants.CLUSTERS_NAMESPACE,
+        namespace=get_hosted_cluster_namespace(cluster_name),
         resource_name=cluster_name,
     )
     return ocp_hosted_cluster_obj.get()["spec"]["platform"]["type"].lower()
@@ -293,7 +340,7 @@ def get_current_nodepool_size(name):
 
     logger.info(f"Getting existing nodepool of HyperShift hosted cluster {name}")
     with config.RunWithProviderConfigContextIfAvailable():
-        nodepools = OCP(kind="nodepools", namespace=constants.CLUSTERS_NAMESPACE).get()
+        nodepools = OCP(kind="nodepools").get(all_namespaces=True)
     total = sum(
         item.get("status", {}).get("replicas", 0)
         for item in nodepools.get("items", [])
@@ -316,7 +363,7 @@ def get_desired_nodepool_size(name: str):
 
     logger.info(f"Getting desired nodepool of HyperShift hosted cluster {name}")
     with config.RunWithProviderConfigContextIfAvailable():
-        nodepools = OCP(kind="nodepools", namespace=constants.CLUSTERS_NAMESPACE).get()
+        nodepools = OCP(kind="nodepools").get(all_namespaces=True)
     total = sum(
         item.get("spec", {}).get("replicas", 0)
         for item in nodepools.get("items", [])
@@ -384,7 +431,7 @@ def get_hosted_cluster_kubeconfig_name(name: str):
     with config.RunWithProviderConfigContextIfAvailable():
         data = OCP(
             kind=constants.HOSTED_CLUSTERS,
-            namespace=constants.CLUSTERS_NAMESPACE,
+            namespace=get_hosted_cluster_namespace(name),
             resource_name=name,
         ).get()
     return data.get("status", {}).get("kubeconfig", {}).get("name", "")
@@ -506,6 +553,27 @@ class HyperShiftBase:
 
         return os.path.isfile(self.hypershift_binary_path)
 
+    def ensure_hcp_binaries(self, download_hcp_binary=False):
+        """
+        Ensure hcp and hypershift binaries are available.
+
+        Downloads them if explicitly requested or if they are missing (self-heal
+        for partial dependency setups that failed before completing the download).
+
+        Args:
+            download_hcp_binary (bool): If True, always download/update the binaries.
+
+        """
+        if download_hcp_binary:
+            self.update_hcp_binary()
+        elif not (self.hcp_binary_exists() and self.hypershift_binary_exists()):
+            logger.warning(
+                "HCP/hypershift binary not found but download_hcp_binary=False. "
+                "This may happen when a previous cluster's dependency setup failed "
+                "before completing the download. Downloading now."
+            )
+            self.update_hcp_binary()
+
     def install_hcp_and_hypershift_from_git(self, install_latest=False):
         """
         Install hcp binary from git
@@ -531,17 +599,26 @@ class HyperShiftBase:
                 logger.error("Falling back to configured hcp_version.")
                 return self.install_hcp_and_hypershift_from_git(install_latest=False)
         else:
-            hcp_version = config.ENV_DATA.get("hcp_version")
+            raw_version = config.ENV_DATA.get("hcp_version")
+            match = re.match(r"^(\d+\.\d+)", str(raw_version))
+            hcp_version = match.group(1) if match else str(raw_version)
+            if hcp_version != str(raw_version):
+                logger.warning(
+                    f"Configured hcp_version '{raw_version}' contains extra qualifiers; "
+                    f"normalized to '{hcp_version}' for git branch name."
+                )
             logger.info(
-                f"Using configured hcp_version: {hcp_version} (branch release-{hcp_version})."
+                f"Using configured hcp_version: {raw_version} (branch release-{hcp_version})."
             )
+
+        hcp_branch_version = hcp_version.split("-")[0] if hcp_version else hcp_version
 
         logger.info("Downloading hcp binary from git")
 
         temp_dir = tempfile.mkdtemp()
 
         exec_cmd(
-            f"git clone --single-branch --branch release-{hcp_version} "
+            f"git clone --single-branch --branch release-{hcp_branch_version} "
             f"--depth 1 {constants.HCP_REPOSITORY} {temp_dir}"
         )
 
@@ -1174,7 +1251,7 @@ class HyperShiftBase:
             with config.RunWithProviderConfigContextIfAvailable():
                 data = OCP(
                     kind=constants.HOSTED_CLUSTERS,
-                    namespace=constants.CLUSTERS_NAMESPACE,
+                    namespace=get_hosted_cluster_namespace(name),
                     resource_name=name,
                 ).get()
             history = data.get("status", {}).get("version", {}).get("history", [])
@@ -1249,7 +1326,7 @@ class HyperShiftBase:
                     return True
                 ocp_hc = OCP(
                     kind=constants.HOSTED_CLUSTERS,
-                    namespace=constants.CLUSTERS_NAMESPACE,
+                    namespace=get_hosted_cluster_namespace(name),
                 )
                 hosted = ocp_hc.get(name)
                 existing = hosted.get("spec", {}).get("imageContentSources") or []
@@ -1652,7 +1729,8 @@ def get_hosted_cluster_condition_status(cluster_name, condition_type="Available"
 
     try:
         ocp_hc = OCP(
-            kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
+            kind=constants.HOSTED_CLUSTERS,
+            namespace=get_hosted_cluster_namespace(cluster_name),
         )
         jsonpath = f'{{.status.conditions[?(@.type=="{condition_type}")].status}}'
 

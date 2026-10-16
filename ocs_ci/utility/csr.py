@@ -4,6 +4,7 @@ import time
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp
 from ocs_ci.utility.vsphere import VSPHERE
+from ocs_ci.utility.vsphere_nodes import VSPHERENode
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler, get_ocp_version
 from semantic_version import Version
@@ -134,6 +135,111 @@ def get_nodes_csr():
     return csr_nodes
 
 
+def fix_nodes_with_wrong_ostree_image(vsphere_object, csr_nodes):
+    """
+    Detect and fix nodes that have an IP but are running the wrong RHCOS
+    base image (missing kubelet/CRI-O). This happens when a node is
+    provisioned with the base RHCOS OCI archive instead of the full OCP
+    node image.
+
+    For each node that has an IP but no CSR, SSH in and check kubelet
+    status. If kubelet is inactive due to a wrong ostree image, rebase
+    to the correct image (obtained from a working node) and reboot.
+
+    Args:
+        vsphere_object (VSPHERE): vSphere connection object
+        csr_nodes (dict): Current CSR nodes dict from get_nodes_csr()
+
+    Returns:
+        bool: True if any node was rebased and rebooted
+
+    """
+    cluster_name = config.ENV_DATA.get("cluster_name")
+    dc = config.ENV_DATA["vsphere_datacenter"]
+    cluster = config.ENV_DATA["vsphere_cluster"]
+
+    all_vms = vsphere_object.get_all_vms_in_pool(cluster_name, dc, cluster)
+    node_vms = {
+        vm.name: vm
+        for vm in all_vms
+        if vm.name.startswith("compute") or vm.name.startswith("control-plane")
+    }
+
+    nodes_with_csr = set(csr_nodes.keys())
+    missing_nodes = []
+    for vm_name, vm in node_vms.items():
+        if vm_name not in nodes_with_csr and vm.summary.guest.ipAddress:
+            missing_nodes.append((vm_name, vm.summary.guest.ipAddress))
+
+    if not missing_nodes:
+        return False
+
+    logger.info(
+        f"Nodes with IP but no CSR: " f"{[(name, ip) for name, ip in missing_nodes]}"
+    )
+
+    correct_image = None
+    for vm_name, vm in node_vms.items():
+        if vm_name in nodes_with_csr and vm.summary.guest.ipAddress:
+            try:
+                working_node = VSPHERENode(vm.summary.guest.ipAddress)
+                correct_image = working_node.get_active_ostree_image()
+                if correct_image and "openshift-release-dev" in correct_image:
+                    # Strip the ostree transport prefix to get the registry ref
+                    if ":" in correct_image:
+                        correct_image = correct_image.split(":", 1)[1]
+                    logger.info(
+                        f"Got correct ostree image from {vm_name}: {correct_image}"
+                    )
+                    break
+            except Exception as e:
+                logger.warning(
+                    f"Failed to get ostree image from working node {vm_name}: {e}"
+                )
+                continue
+
+    if not correct_image:
+        logger.warning("Could not determine correct ostree image from working nodes")
+        return False
+
+    fixed = False
+    for node_name, node_ip in missing_nodes:
+        try:
+            node = VSPHERENode(node_ip)
+            if node.is_kubelet_active():
+                logger.info(f"{node_name} kubelet is active, skipping ostree check")
+                continue
+
+            current_image = node.get_active_ostree_image()
+            logger.info(f"{node_name} current ostree image: {current_image}")
+
+            if current_image and "openshift-release-dev" in current_image:
+                logger.info(
+                    f"{node_name} has correct OCP image, "
+                    f"kubelet issue is not image-related"
+                )
+                continue
+
+            logger.warning(
+                f"{node_name} is running wrong RHCOS image: {current_image}. "
+                f"Rebasing to {correct_image}"
+            )
+            retcode, stdout, stderr = node.rpm_ostree_rebase(correct_image)
+            if retcode != 0:
+                logger.error(f"rpm-ostree rebase failed on {node_name}: {stderr}")
+                continue
+
+            logger.info(f"Rebooting {node_name} after successful rebase")
+            node.reboot()
+            fixed = True
+        except Exception as e:
+            logger.warning(
+                f"Failed to fix ostree image on {node_name} ({node_ip}): {e}"
+            )
+
+    return fixed
+
+
 def wait_for_all_nodes_csr_and_approve(
     timeout=900, sleep=10, expected_node_num=None, ignore_existing_csr=None
 ):
@@ -160,6 +266,7 @@ def wait_for_all_nodes_csr_and_approve(
     reboot_timeout = 300
     vsphere_object = None
     is_vms_without_ip = False
+    is_ostree_fix_attempted = False
     if config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
         vsphere_object = VSPHERE(
             config.ENV_DATA["vsphere_server"],
@@ -228,3 +335,14 @@ def wait_for_all_nodes_csr_and_approve(
                     start_time = time.time()
                 else:
                     is_vms_without_ip = True
+            if not is_ostree_fix_attempted:
+                is_ostree_fix_attempted = True
+                try:
+                    if fix_nodes_with_wrong_ostree_image(vsphere_object, csr_nodes):
+                        logger.info(
+                            "Nodes with wrong ostree image were rebased "
+                            "and rebooted, resetting timeout"
+                        )
+                        start_time = time.time()
+                except Exception:
+                    logger.exception("Failed to fix nodes with wrong ostree image")

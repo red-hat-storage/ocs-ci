@@ -45,7 +45,10 @@ from jinja2 import FileSystemLoader, Environment
 from ocs_ci.framework import config
 from ocs_ci.framework import GlobalVariables as GV
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
+from ocs_ci.utility.yaml_log_filter import filter_verbose_yaml
 from ocs_ci.ocs.exceptions import (
+    AuthError,
     CephHealthException,
     CephHealthRecoveredException,
     CephHealthNotRecoveredException,
@@ -452,6 +455,8 @@ def mask_secrets(plaintext, secrets):
     """
     if secrets:
         for secret in secrets:
+            if secret is None:
+                continue
             if isinstance(plaintext, list):
                 plaintext = [string.replace(secret, "*" * 5) for string in plaintext]
             else:
@@ -475,7 +480,7 @@ def _is_base64_block(text_block: str, min_length: int = 100) -> bool:
         return False
 
     # Base64 alphabet: A-Z, a-z, 0-9, +, /, = (padding)
-    # Using string module to avoid detect-secrets false positive
+    # Using string module to avoid secret scanner false positive
     base64_chars = set(string.ascii_letters + string.digits + "+/=")
     non_whitespace = (
         text_block.replace("\n", "")
@@ -742,7 +747,12 @@ def run_cmd_multicluster(
     tries=6,
     delay=10,
     backoff=1,
-    text_in_exception="client connection lost",
+    text_in_exception=(
+        "client connection lost",
+        "proxyconnect tcp",
+        "i/o timeout",
+        "websocket: close 1006",
+    ),
 )
 def exec_cmd(
     cmd,
@@ -754,6 +764,7 @@ def exec_cmd(
     cluster_config=None,
     lock_timeout=7200,
     output_file=None,
+    cmd_log_level=logging.DEBUG,
     **kwargs,
 ):
     """
@@ -777,6 +788,8 @@ def exec_cmd(
                 will be non-null
         lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
         output_file (str): path where to write output of stderr from command - apply only when silent mode is True
+        cmd_log_level (int): Log level for the "Executing command" message.
+            Defaults to logging.DEBUG. Use logging.INFO, logging.WARNING, etc. to override.
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -836,7 +849,7 @@ def exec_cmd(
             masked_cmd = mask_secrets(cmd, secrets)
         else:
             masked_cmd = shlex.join(mask_secrets(cmd, secrets))
-        log.info(f"Executing command: {masked_cmd}")
+        log.log(cmd_log_level, f"Executing command: {masked_cmd}")
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
         run_kw = {
@@ -854,7 +867,8 @@ def exec_cmd(
         if threading_lock and cmd[0] == "oc":
             threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
-    truncated_stdout = truncate_long_lines(masked_stdout)
+    log_stdout = filter_verbose_yaml(masked_stdout)
+    truncated_stdout = truncate_long_lines(log_stdout)
     if len(completed_process.stdout) > 0:
         truncated_stdout = truncate_large_base64(truncated_stdout)
         log.debug(f"Command stdout: {truncated_stdout}")
@@ -1328,9 +1342,29 @@ def get_registry_svc(version):
 
     """
     major = version.split(".")[0]
-    if int(major) >= 5:
-        return "registry.ci.openshift.org/ocp/release-5"
+    if int(major) == 5:
+        return constants.REGISTRY_SVC_V5
     return constants.REGISTRY_SVC
+
+
+def get_ocp_release_mirror_path(version):
+    """
+    Get the OCP release image mirror path for the given OCP version.
+
+    OCP 5.x release images are published under ocp/release-5
+    instead of ocp/release.
+
+    Args:
+        version (str): OCP version string (e.g. "5.0.0-0.nightly-2026-06-18-000016")
+
+    Returns:
+        str: Mirror path (e.g. "ocp/release-5")
+
+    """
+    major = version.split(".")[0]
+    if int(major) == 5:
+        return constants.OCP_RELEASE_IMAGE_MIRROR_PATH_V5
+    return constants.OCP_RELEASE_IMAGE_MIRROR_PATH
 
 
 @retry(CommandFailed, tries=2, delay=5, backoff=2)
@@ -2235,6 +2269,10 @@ class TimeoutSampler(object):
 
     Feel free to set the instance variables.
 
+    Once iteration starts, the following attributes are available for
+    inspection: `attempt` (number of samples so far), `last_result` (most
+    recent value returned by func) and `last_exception` (the exception raised
+    by the most recent sample, None if that sample succeeded).
 
     Args:
         timeout (int): Timeout in seconds
@@ -2243,6 +2281,9 @@ class TimeoutSampler(object):
         func_args: Arguments for the function
         func_kwargs: Keyword arguments for the function
     """
+
+    # How often (seconds, at most) to log the INFO-level progress heartbeat
+    progress_log_interval = 60
 
     def __init__(self, timeout, sleep, func, *func_args, **func_kwargs):
         self.timeout = timeout
@@ -2268,6 +2309,18 @@ class TimeoutSampler(object):
         self.last_sample_time = None
         # Timestamp of the last INFO-level exception log (for rate limiting)
         self.last_exception_info_log_time = None
+        # Number of sampling attempts made so far
+        self.attempt = 0
+        # Outcome of recent sampling attempts: the value func
+        # returned last time it succeeded, and the exception it raised on the
+        # most recent attempt (None if that attempt succeeded)
+        self.last_result = None
+        # Whether func has returned at least once, so a genuine None result is
+        # distinguishable from "func never succeeded"
+        self._has_result = False
+        self.last_exception = None
+        # Timestamp of the last INFO-level progress log (for rate limiting)
+        self.last_progress_log_time = None
         # The exception to raise
         self.timeout_exc_cls = TimeoutExpiredError
         # Arguments that will be passed to the exception
@@ -2277,9 +2330,65 @@ class TimeoutSampler(object):
                 f"Timed out after {timeout}s running {self._build_call_string()}"
             )
         except Exception:
-            log.exception(
-                "Failed to assemble call string. Not necessarily a test failure."
+            log.debug(
+                "Failed to assemble call string. Not necessarily a test failure.",
+                exc_info=True,
             )
+
+    def _get_func_name(self):
+        """
+        Returns:
+            str: Name of the sampled function, or its repr when it has no
+                __name__ attribute (e.g. functools.partial objects)
+
+        """
+        return getattr(self.func, "__name__", repr(self.func))
+
+    @staticmethod
+    def _describe_exception(exc):
+        """
+        Args:
+            exc (Exception): Exception to summarize
+
+        Returns:
+            str: One-line summary of the exception: its type and the first
+                line of its message, truncated to keep log entries short
+
+        """
+        try:
+            message_lines = str(exc).splitlines()
+            first_line = message_lines[0] if message_lines else ""
+        except Exception:
+            first_line = "<unprintable exception>"
+        return f"{type(exc).__name__}: {first_line[:150]}"
+
+    def _describe_last_result(self):
+        """
+        Render last_result for logging: simple scalar values are shown
+        verbatim, other objects only as their type, to keep error logs short
+        and avoid dumping potentially sensitive content into them.
+
+        Returns:
+            str: Safe short representation of the last sampled value
+
+        """
+        if not self._has_result:
+            return "<no successful sample>"
+        if isinstance(self.last_result, (bool, int, float, type(None))):
+            return repr(self.last_result)
+        if isinstance(self.last_result, str) and len(self.last_result) <= 80:
+            return repr(self.last_result)
+        return f"<{type(self.last_result).__name__}>"
+
+    def _raise_timeout(self):
+        """
+        Raise the configured timeout exception. When func raised an exception
+        on the most recent attempt, chain to it so the root cause is visible
+        directly in the resulting traceback.
+        """
+        if self.last_exception is not None:
+            raise self.timeout_exc_cls(*self.timeout_exc_args) from self.last_exception
+        raise self.timeout_exc_cls(*self.timeout_exc_args)
 
     def _build_call_string(self):
         def stringify(value):
@@ -2290,38 +2399,69 @@ class TimeoutSampler(object):
         args = list(map(stringify, self.func_args))
         kwargs = [f"{stringify(k)}={stringify(v)}" for k, v in self.func_kwargs.items()]
         all_args_string = ", ".join(args + kwargs)
-        return f"{self.func.__name__}({all_args_string})"
+        return f"{self._get_func_name()}({all_args_string})"
+
+    def _log_progress(self):
+        """
+        Log an INFO-level progress message at most once per
+        `progress_log_interval` seconds, so that long-running samplers show
+        a heartbeat without logging every iteration.
+        """
+        now = time.time()
+        if self.last_progress_log_time is None:
+            self.last_progress_log_time = self.start_time
+        if (now - self.last_progress_log_time) < self.progress_log_interval:
+            return
+        log.info(
+            "Still waiting for results of %s: elapsed %ss of %ss timeout, "
+            "sleeping %ss between samples",
+            self._get_func_name(),
+            int(now - self.start_time),
+            self.timeout,
+            self.sleep,
+        )
+        self.last_progress_log_time = now
 
     def __iter__(self):
         if self.start_time is None:
             self.start_time = time.time()
-        attempt = 0
         while True:
             self.last_sample_time = time.time()
             if self.timeout <= (self.last_sample_time - self.start_time):
-                raise self.timeout_exc_cls(*self.timeout_exc_args)
-            attempt += 1
+                self._raise_timeout()
+            self.attempt += 1
             try:
-                yield self.func(*self.func_args, **self.func_kwargs)
-            except Exception:
+                result = self.func(*self.func_args, **self.func_kwargs)
+                self.last_result = result
+                self._has_result = True
+                self.last_exception = None
+                yield result
+            except Exception as exc:
+                self.last_exception = exc
                 # Rate-limit INFO logging to once per minute to reduce log noise
                 current_time = time.time()
                 if (
                     self.last_exception_info_log_time is None
                     or (current_time - self.last_exception_info_log_time) >= 60
                 ):
+                    # Surface only the exception type here: this line is
+                    # emitted at INFO, so keep it free of the (possibly
+                    # sensitive) exception message. The full message and
+                    # traceback are logged at DEBUG below.
                     log.info(
-                        f"TimeoutSampler attempt {attempt} for function '{self.func.__name__}' failed, "
-                        "see debug level logs for details"
+                        f"TimeoutSampler attempt {self.attempt} for function "
+                        f"'{self._get_func_name()}' failed with "
+                        f"{type(exc).__name__}, see debug level logs for details"
                     )
                     self.last_exception_info_log_time = current_time
                 log.debug(
-                    f"Exception raised during iteration attempt {attempt}:",
+                    f"Exception raised during iteration attempt {self.attempt}:",
                     exc_info=True,
                 )
             if self.timeout <= (time.time() - self.start_time):
-                raise self.timeout_exc_cls(*self.timeout_exc_args)
-            log.info("Going to sleep for %d seconds before next iteration", self.sleep)
+                self._raise_timeout()
+            self._log_progress()
+            log.debug("Going to sleep for %s seconds before next iteration", self.sleep)
             time.sleep(self.sleep)
 
     def wait_for_func_value(self, value):
@@ -2337,12 +2477,19 @@ class TimeoutSampler(object):
                 if i_value == value:
                     break
         except self.timeout_exc_cls:
+            last_attempt_info = f"last sampled value: {self._describe_last_result()}"
+            if self.last_exception is not None:
+                last_attempt_info += (
+                    ", last attempt raised "
+                    f"{self._describe_exception(self.last_exception)}"
+                )
             log.error(
                 "function %s failed to return expected value %s "
-                "after multiple retries during %d second timeout",
-                self.func.__name__,
+                "after multiple retries during %d second timeout (%s)",
+                self._get_func_name(),
                 value,
                 self.timeout,
+                last_attempt_info,
             )
             raise
 
@@ -2657,6 +2804,11 @@ def add_squad_analysis_to_email(session, soup):
         background-color: yellow;
         display: inline;
     }
+    h4.squad-white {
+        color: black;
+        background-color: white;
+        display: inline;
+    }
     """
     # prepare place for the Squad Analysis in the email
     squad_analysis_div = soup.new_tag("div")
@@ -2880,6 +3032,38 @@ def get_cluster_version_info():
     ocp = OCP(kind="clusterversion")
     cluster_version_info = ocp.get("version")
     return cluster_version_info
+
+
+@retry(
+    CommandFailed,
+    tries=10,
+    delay=30,
+    backoff=1,
+)
+def label_nodes_platform_type(platform_type="vsphere"):
+    """
+    Label all nodes with the given platform-type.
+
+    Retries the command on failure to handle transient errors (e.g. "infra
+    config cache not synchronized") that can occur shortly after the nodes join
+    the cluster (OCPBUGS-100052).
+
+    Args:
+        platform_type (str): Platform type value to set on the
+            node.openshift.io/platform-type label (default: "vsphere").
+
+    Raises:
+        CommandFailed: If labeling the nodes keeps failing after all retries.
+
+    """
+    # importing here to avoid circular imports
+    from ocs_ci.ocs.ocp import OCP
+
+    ocp = OCP()
+    ocp.exec_oc_cmd(
+        f"label node --all node.openshift.io/platform-type={platform_type}"
+        " --overwrite"
+    )
 
 
 def get_ocs_build_number():
@@ -3887,6 +4071,9 @@ def clone_repo(
     to_checkout=None,
     clone_type="shallow",
     force_checkout=False,
+    clone_token=None,
+    sparse_checkout_dirs=None,
+    timeout=3600,
 ):
     """
     Clone a repository or checkout latest changes if it already exists at
@@ -3903,6 +4090,12 @@ def clone_repo(
             clone_type as "normal".
         force_checkout (bool): True for force checkout to branch.
             force checkout will ignore the unmerged entries.
+        clone_token (str): Token to clone repo
+        sparse_checkout_dirs (list): list of directories to include in sparse
+            checkout. When provided, only the specified directories will be
+            checked out, significantly reducing disk usage for large repos.
+        timeout (int): Timeout in seconds for git clone/fetch commands.
+            Defaults to 3600 (60 minutes).
 
     Raises:
         UnknownCloneTypeException: In case of incorrect clone_type is used
@@ -3930,7 +4123,9 @@ def clone_repo(
     if ("installer" in location) and installer_path_exist:
         if "coreos" not in location:
             installer_dir = os.path.join(constants.EXTERNAL_DIR, "installer")
-            remote_output = run_cmd(f"git -C {installer_dir} remote -v")
+            remote_output = exec_cmd(
+                f"git -C {installer_dir} remote -v"
+            ).stdout.decode()
             if (("srozen" in remote_output) and ("openshift" in url)) or (
                 ("openshift" in remote_output) and ("srozen" in url)
             ):
@@ -3940,22 +4135,36 @@ def clone_repo(
                 )
                 time.sleep(5)
 
+    if sparse_checkout_dirs:
+        git_params += " --sparse"
+
     if not os.path.isdir(location) or (tmp_repo and os.path.isdir(location)):
         log.info("Cloning repository into %s", location)
-        run_cmd(f"git clone {git_params} {url} {location}")
+        if clone_token:
+            url = url.replace("https://", f"https://{clone_token}@")
+            clone_token = [clone_token]
+        exec_cmd(
+            cmd=f"git clone {git_params} {url} {location}",
+            secrets=clone_token,
+            timeout=timeout,
+        )
+        if sparse_checkout_dirs:
+            sparse_paths = " ".join(sparse_checkout_dirs)
+            log.info("Setting sparse checkout for directories: %s", sparse_paths)
+            exec_cmd(f"git sparse-checkout set {sparse_paths}", cwd=location)
     else:
         log.info("Repository already cloned at %s, skipping clone", location)
         log.info("Fetching latest changes from repository")
-        run_cmd("git fetch --all", cwd=location)
+        exec_cmd("git fetch --all", cwd=location, timeout=timeout)
     log.info("Checking out repository to specific branch: %s", branch)
     if force_checkout:
-        run_cmd(f"git checkout --force {branch}", cwd=location)
+        exec_cmd(f"git checkout --force {branch}", cwd=location)
     else:
-        run_cmd(f"git checkout {branch}", cwd=location)
+        exec_cmd(f"git checkout {branch}", cwd=location)
     log.info("Reset branch: %s with latest changes", branch)
-    run_cmd(f"git reset --hard origin/{branch}", cwd=location)
+    exec_cmd(f"git reset --hard origin/{branch}", cwd=location)
     if to_checkout:
-        run_cmd(f"git checkout {to_checkout}", cwd=location)
+        exec_cmd(f"git checkout {to_checkout}", cwd=location)
 
 
 def get_latest_ds_olm_tag(upgrade=False, latest_tag=None, stable_upgrade_version=False):
@@ -3980,8 +4189,6 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None, stable_upgrade_version
     latest_tag = latest_tag or config.DEPLOYMENT.get("default_latest_tag", "latest")
     if stable_upgrade_version:
         latest_tag = config.UPGRADE.get("default_latest_stable_upgrade_tag", latest_tag)
-    tags = get_ocs_olm_operator_tags()
-    latest_image = None
     ocs_version = config.ENV_DATA["ocs_version"]
     upgrade_ocs_version = config.UPGRADE.get("upgrade_ocs_version")
     use_rc_build = config.UPGRADE.get("use_rc_build")
@@ -3991,12 +4198,24 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None, stable_upgrade_version
         latest_tag = previous_rc_build
     if upgrade_version_change:
         upgrade = False
+    tags = get_ocs_olm_operator_tags(filter_tag_name=f"like:{ocs_version}")
+    latest_image = None
     for tag in tags:
         if tag["name"] == latest_tag:
             latest_image = tag["manifest_digest"]
             break
     if not latest_image:
-        raise TagNotFoundException("Couldn't find latest tag!")
+        log.warning(
+            f"Tag '{latest_tag}' not found in version-filtered results, "
+            "fetching all tags"
+        )
+        tags = get_ocs_olm_operator_tags()
+        for tag in tags:
+            if tag["name"] == latest_tag:
+                latest_image = tag["manifest_digest"]
+                break
+        if not latest_image:
+            raise TagNotFoundException("Couldn't find latest tag!")
     latest_tag_found = False
     for tag in tags:
         if not upgrade:
@@ -4151,7 +4370,7 @@ def load_auth_config():
         return {}
 
 
-def get_ocs_olm_operator_tags(limit=100):
+def get_ocs_olm_operator_tags(limit=100, filter_tag_name=""):
     """
     Query the OCS OLM Operator repo and retrieve a list of tags. Since we are limited
     to 100 tags per page, we end up making several API calls and combining the results
@@ -4159,6 +4378,7 @@ def get_ocs_olm_operator_tags(limit=100):
 
     Args:
         limit: the number of tags to limit the request to
+        filter_tag_name (str): Optional tag name filter (e.g. "like:4.22")
 
     Raises:
         KeyError: if the auth config isn't setup properly
@@ -4189,7 +4409,9 @@ def get_ocs_olm_operator_tags(limit=100):
     all_tags = []
     page = 1
     while True:
-        tags = query_quay_for_operator_tags(image, headers, limit, page)
+        tags = query_quay_for_operator_tags(
+            image, headers, limit, page, filter_tag_name=filter_tag_name
+        )
         if len(tags) == 0:
             log.info("No more tags to retrieve")
             break
@@ -4201,7 +4423,7 @@ def get_ocs_olm_operator_tags(limit=100):
 
 @retry(requests.RequestException, 20, 30, 1)
 def query_quay_for_operator_tags(
-    image: str, headers: dict, limit: int, page: int
+    image: str, headers: dict, limit: int, page: int, filter_tag_name: str = ""
 ) -> list:
     """
     Query quay tags for the specified image.
@@ -4211,6 +4433,7 @@ def query_quay_for_operator_tags(
         headers (dict): Request headers
         limit (int): Maximum number of tags to query
         page (int): Which page of results to return
+        filter_tag_name (str): Optional tag name filter (e.g. "like:4.22")
 
     Raises:
         requests.RequestException: If we do not receive an ok response from quay after several retries.
@@ -4220,12 +4443,15 @@ def query_quay_for_operator_tags(
 
     """
     log.info(f"Retrieving OCS OLM Operator tags (limit {limit}, page {page})")
+    url = constants.OPERATOR_CS_QUAY_API_QUERY.format(
+        tag_limit=limit,
+        image=image,
+        page=page,
+    )
+    if filter_tag_name:
+        url += f"&filter_tag_name={filter_tag_name}"
     resp = requests.get(
-        constants.OPERATOR_CS_QUAY_API_QUERY.format(
-            tag_limit=limit,
-            image=image,
-            page=page,
-        ),
+        url,
         headers=headers,
         timeout=120,
     )
@@ -4547,6 +4773,10 @@ def convert_yaml2tfvars(yaml):
 
             if key == "vm_dns_addresses":
                 fd.write(f'vm_dns_addresses = ["{val}"]\n')
+                continue
+
+            if key == "vm_dns_ipv6_addresses":
+                fd.write(f'vm_dns_ipv6_addresses = ["{val}"]\n')
                 continue
 
             fd.write(key)
@@ -5078,7 +5308,13 @@ def prepare_customized_pull_secret(images=None):
 
 def inspect_image(image, authfile_fo, cluster_config=None):
     """
-    Inspect image
+    Inspect image remotely using skopeo (no local pull required).
+
+    Uses ``skopeo inspect`` to query the registry API directly, avoiding
+    the need to pull and extract image layers locally.  This eliminates
+    UID/GID namespace issues that cause ``podman image pull`` to fail on
+    containerized CI agents with restricted user-namespace mappings
+    (e.g. disconnected Fusion HCI Jenkins agents).
 
     Args:
         image (str): image to inspect
@@ -5086,20 +5322,43 @@ def inspect_image(image, authfile_fo, cluster_config=None):
         cluster_config (MultiClusterConfig): Holds the context of a cluster
 
     Returns:
-        dict: json object of the inspected image
+        list[dict]: a single-element list whose dict contains the keys
+            ``RepoTags``, ``RepoDigests`` and ``Digest``, matching the
+            structure previously returned by ``podman image inspect``.
 
     """
-    # pull original image (to be able to inspect it)
-    exec_cmd(
-        f"podman image pull {image} --authfile {authfile_fo.name}",
+    cmd_result = exec_cmd(
+        f"skopeo inspect --authfile {authfile_fo.name} docker://{image}",
         cluster_config=cluster_config,
     )
-    # inspect the image
-    cmd_result = exec_cmd(
-        f"podman image inspect {image}", cluster_config=cluster_config
-    )
-    image_inspect = json.loads(cmd_result.stdout)
-    return image_inspect
+    skopeo_data = json.loads(cmd_result.stdout)
+
+    repo_name = skopeo_data.get("Name", "")
+    digest = skopeo_data.get("Digest", "")
+
+    # For a digest-pinned reference the caller explicitly wants the immutable
+    # image, so RepoTags is left empty to avoid selecting a mutable repo tag
+    # (mirror_image falls back to RepoDigests in that case).
+    is_digest_ref = "@sha256" in image
+
+    # Extract the tag from the input image reference so it appears first
+    # in RepoTags (callers use RepoTags[0]).
+    input_tag = None
+    if ":" in image and "@" not in image:
+        input_tag = image.rsplit(":", 1)[-1]
+
+    repo_tags = []
+    if not is_digest_ref:
+        if input_tag:
+            repo_tags.append(f"{repo_name}:{input_tag}")
+        for tag in skopeo_data.get("RepoTags", []):
+            full_ref = f"{repo_name}:{tag}"
+            if full_ref not in repo_tags:
+                repo_tags.append(full_ref)
+
+    repo_digests = [f"{repo_name}@{digest}"] if digest else []
+
+    return [{"RepoTags": repo_tags, "RepoDigests": repo_digests, "Digest": digest}]
 
 
 def get_image_with_digest(image):
@@ -5211,13 +5470,15 @@ def mirror_image(image, cluster_config=None):
         if "@sha256" in mirrored_image:
             mirrored_image = mirrored_image.split("@")[0]
             mirrored_image += f":odf-qe-temp-tag-{get_random_str(10)}"
-        # mirror the image
+        # mirror the image using skopeo copy (direct registry-to-registry
+        # transfer without pulling layers to local storage)
         log.info(
             f"Mirroring image '{image}' ('{orig_image_full}') to '{mirrored_image}'"
         )
         exec_cmd(
-            f"oc image mirror --insecure --registry-config"
-            f" {authfile_fo.name} {orig_image_full} {mirrored_image}",
+            f"skopeo copy --all --authfile {authfile_fo.name}"
+            f" --dest-tls-verify=false"
+            f" docker://{orig_image_full} docker://{mirrored_image}",
             cluster_config=cluster_config,
         )
     return mirrored_image
@@ -5395,7 +5656,7 @@ def get_terraform(version=None, bin_dir=None):
     previous_dir = os.getcwd()
     os.chdir(bin_dir)
     url = f"https://releases.hashicorp.com/terraform/{version}/" f"{terraform_zip_file}"
-    download_file(url, terraform_zip_file)
+    download_with_retries(url, terraform_zip_file)
     run_cmd(f"unzip -o {terraform_zip_file}")
     delete_file(terraform_zip_file)
     # return to the previous working directory
@@ -5431,7 +5692,7 @@ def get_terraform_ignition_provider(terraform_dir, version=None):
     )
 
     # Download and untar
-    download_file(url, terraform_ignition_provider_zip_file)
+    download_with_retries(url, terraform_ignition_provider_zip_file)
     run_cmd(f"unzip -o {terraform_ignition_provider_zip_file}")
 
     # move the ignition provider binary to plugins path
@@ -5708,7 +5969,7 @@ def skipif_upgraded_from(version_list):
                 break
         return skip_this
     except Exception as err:
-        log.error(str(err))
+        log.debug(f"Could not determine upgrade origin, skipping check: {err}")
         return False
 
 
@@ -5865,13 +6126,47 @@ def clone_notify():
 
 def add_chrony_to_ocp_deployment():
     """
-    Create and Add necessary chrony resources
+    Create and Add necessary chrony resources with dynamic NTP server configuration.
+
+    The NTP server is read from ENV_DATA['ntp_server'], with 'clock.redhat.com'
+    as the default. For disconnected deployments, ENV_DATA['disconnected_ntp_server']
+    takes precedence if defined.
+
+    This ensures the NTP server is set correctly from deployment start via MachineConfig,
+    avoiding conflicts with Machine Config Operator (MCO) that would occur if the file
+    is edited directly on nodes later.
 
     """
+    # Get NTP server from config, fallback to default
+    ntp_server = config.ENV_DATA.get("ntp_server", "clock.redhat.com")
+
+    # Handle disconnected mode
+    if config.ENV_DATA.get("disconnected_installation"):
+        ntp_server = config.ENV_DATA.get("disconnected_ntp_server", ntp_server)
+
+    log.info(f"Configuring chrony with NTP server: {ntp_server}")
+
+    # Generate chrony.conf content dynamically
+    chrony_conf_content = (
+        f"server {ntp_server} iburst\n\n"
+        "driftfile /var/lib/chrony/drift\n\n"
+        "makestep 1.0 3\n\n"
+        "rtcsync\n"
+    )
+
+    # Encode to base64 for data URL
+    chrony_conf_base64 = base64.b64encode(chrony_conf_content.encode()).decode()
+
     for role in ["master", "worker"]:
-        log.info(f"Creating and Adding Chrony file for {role}")
+        log.info(f"Creating Chrony MachineConfig for {role}")
         with open(constants.CHRONY_TEMPLATE) as file_stream:
             chrony_template_obj = yaml.safe_load(file_stream)
+
+        # Update the base64 content with dynamic NTP server
+        chrony_template_obj["spec"]["config"]["storage"]["files"][0]["contents"][
+            "source"
+        ] = f"data:text/plain;charset=utf-8;base64,{chrony_conf_base64}"
+
         chrony_template_obj["metadata"]["labels"][
             "machineconfiguration.openshift.io/role"
         ] = role
@@ -6462,7 +6757,7 @@ def is_cluster_y_version_upgraded():
     return is_upgraded
 
 
-def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_primary_nb_db_pod(namespace=None):
     """
     Get the NooBaa DB pod that has been assigned the
     primary role by the CNPG operator.
@@ -6473,10 +6768,11 @@ def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     Raises:
         ResourceNotFoundError: If no NooBaa DB pod is found
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     return get_nb_db_pod_by_cnpg_label(constants.NB_DB_PRIMARY_POD_LABEL, namespace)
 
 
-def get_secondary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_secondary_nb_db_pod(namespace=None):
     """
     Get the NooBaa DB pod that has been assigned the
     secondary role by the CNPG operator.
@@ -6487,13 +6783,12 @@ def get_secondary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
     Raises:
         ResourceNotFoundError: If no NooBaa DB pod is found
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     return get_nb_db_pod_by_cnpg_label(constants.NB_DB_SECONDARY_POD_LABEL, namespace)
 
 
 @config.run_with_provider_context_if_available
-def get_nb_db_pod_by_cnpg_label(
-    cnpg_label, namespace=config.ENV_DATA["cluster_namespace"]
-):
+def get_nb_db_pod_by_cnpg_label(cnpg_label, namespace=None):
     """
     Get one of the NooBaa DB CNPG pods
 
@@ -6507,6 +6802,8 @@ def get_nb_db_pod_by_cnpg_label(
     Raises:
         ResourceNotFoundError: If no NooBaa DB pod is found
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
     # importing here to avoid circular imports
     from ocs_ci.ocs.resources import pod
 
@@ -6620,6 +6917,54 @@ def get_azure_sts_creds_from_sub():
             creds[env_key_map[item["name"]]] = item["value"]
 
     required = {"client_id", "tenant_id", "subscription_id"}
+    if not required.issubset(creds):
+        raise ClusterNotInSTSModeException
+
+    return creds
+
+
+def get_gcp_sts_creds_from_sub():
+    """
+    Get GCP WIF/STS credentials from the ODF Subscription.
+
+    GCP equivalent of ``get_azure_sts_creds_from_sub``.
+
+    Returns:
+        dict: Keys are ``project_number``, ``pool_id``,
+            ``provider_id``, and ``service_account_email``.
+
+    Raises:
+        ClusterNotInSTSModeException: If cluster is not in STS
+            mode or if any required env vars are missing
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    if not config.DEPLOYMENT.get("sts_enabled"):
+        raise ClusterNotInSTSModeException
+
+    # Maps ODF Subscription env var names to the dict keys returned.
+    # These env vars are injected by subscribe_ocs() during GCP STS
+    # deployment - see Deployment.subscribe_ocs() in deployment.py.
+    env_key_map = {
+        "PROJECT_NUMBER": "project_number",
+        "POOL_ID": "pool_id",
+        "PROVIDER_ID": "provider_id",
+        "SERVICE_ACCOUNT_EMAIL": "service_account_email",
+    }
+    odf_sub = OCP(
+        kind=constants.SUBSCRIPTION,
+        resource_name=constants.ODF_SUBSCRIPTION,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    creds = {}
+    env_items = odf_sub.get().get("spec", {}).get("config", {}).get("env", [])
+    for item in env_items:
+        if item["name"] in env_key_map:
+            creds[env_key_map[item["name"]]] = item["value"]
+
+    # All four values are required for GCP WIF to function
+    required = {"project_number", "pool_id", "provider_id", "service_account_email"}
     if not required.issubset(creds):
         raise ClusterNotInSTSModeException
 
@@ -7080,6 +7425,27 @@ def clean_up_pods_for_provider(node_type, max_retries=45, retry_delay_seconds=30
                         f"Eviction error found '{pod_name_to_delete}' in namespace '{ns_to_delete_from}'"
                         f"(related {node.name} being stuck)."
                     )
+                    # Ceph OSD, MON, MDS and MGR pods are protected by PodDisruptionBudgets.
+                    # Force-deleting them bypasses PDB protection and can cause data
+                    # inconsistency or stalled Ceph recovery. The MCO drain controller
+                    # retries automatically once PDB headroom opens up.
+                    pdb_protected_prefixes = (
+                        "rook-ceph-osd-",
+                        "rook-ceph-mon-",
+                        "rook-ceph-mds-",
+                        "rook-ceph-mgr-",
+                    )
+                    if any(
+                        pod_name_to_delete.startswith(prefix)
+                        for prefix in pdb_protected_prefixes
+                    ):
+                        log.warning(
+                            f"Skipping force-delete of '{pod_name_to_delete}': "
+                            f"Ceph daemon pods are protected by PodDisruptionBudget. "
+                            f"The MCO drain controller will retry automatically once "
+                            f"Ceph recovers."
+                        )
+                        continue
                     try:
                         # Prefer using the ocs_ci resource object for deletion
                         pod_to_delete_obj = OCP(
@@ -7284,6 +7650,13 @@ def create_kubeconfig(kubeconfig_path):
         if ":6443" not in ocp_api_url:
             ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
 
+        kubeconfig_dir = os.path.dirname(kubeconfig_path)
+        os.makedirs(kubeconfig_dir, exist_ok=True)
+
+        # `oc login` creates a token-based kubeconfig directly at
+        # kubeconfig_path. This token expires after 24h, but it's a known
+        # working fallback in case the permanent kubeconfig creation below
+        # fails.
         cmd = (
             f"oc login --username {config.RUN['username']} "
             f"--password {config.RUN['kubeadmin_password']} "
@@ -7291,14 +7664,43 @@ def create_kubeconfig(kubeconfig_path):
             f"--kubeconfig {kubeconfig_path} "
             "--insecure-skip-tls-verify=true"
         )
-        result = exec_cmd(cmd, secrets=(config.RUN["kubeadmin_password"],))
+        secrets = (config.RUN["kubeadmin_password"],)
+        # ignore_error is required here, otherwise exec_cmd raises CommandFailed
+        # on its own and the more descriptive AuthError below is never raised
+        result = exec_cmd(cmd, secrets=secrets, ignore_error=True)
+        if result.returncode:
+            log.warning(f"executed command: {mask_secrets(cmd, secrets)}")
+            log.warning(f"returncode: {result.returncode}")
+            log.warning(f"stdout: {mask_secrets(result.stdout.decode(), secrets)}")
+            log.warning(f"stderr: {mask_secrets(result.stderr.decode(), secrets)}")
+            raise AuthError(f"Failed to login to OCP cluster at {ocp_api_url}")
+        log.info(f"Kubeconfig file was created: {kubeconfig_path}.")
+
+        # Try to upgrade the token-based kubeconfig to a permanent
+        # (certificate-based) one that never expires. Capture the output in
+        # Python instead of shell-redirecting it (`> {kubeconfig_path}`)
+        # directly to kubeconfig_path: the shell truncates the redirection
+        # target before `oc` starts, and since KUBECONFIG also points at
+        # kubeconfig_path, `oc` would read an already-emptied file and
+        # silently fall back to the in-cluster service account instead of
+        # the intended cluster.
+        cmd = "oc config new-admin-kubeconfig"
+        result = exec_cmd(cmd, ignore_error=True)
         if result.returncode:
             log.warning(f"executed command: {cmd}")
             log.warning(f"returncode: {result.returncode}")
-            log.warning(f"stdout: {result.stdout}")
-            log.warning(f"stderr: {result.stderr}")
+            log.warning(f"stdout: {result.stdout.decode()}")
+            log.warning(f"stderr: {result.stderr.decode()}")
+            log.warning(
+                "Failed to create permanent kubeconfig via 'oc config "
+                "new-admin-kubeconfig', falling back to the token-based "
+                f"kubeconfig created by 'oc login' at {kubeconfig_path}."
+            )
         else:
-            log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
+            with open(kubeconfig_path, "wb") as fd:
+                fd.write(result.stdout)
+            log.info(f"Permanent kubeconfig file was created: {kubeconfig_path}.")
+        update_kubeconfig_with_proxy_url_for_client(kubeconfig_path)
 
         kubeadmin_password_file = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["password_location"]
@@ -7607,7 +8009,18 @@ def genereate_cred_file_rack():
         json.dump(rack_dict, f, indent=2)
     log.info(f"Rack details saved to {file_path} with restrictive permissions (0o600)")
 
-    # Also save a timestamped backup copy in home directory
+    # Verify BMC connectivity for every node via ping from the MGem.
+    # Any rackIP corrections discovered are applied to rack_dict and persisted
+    # back to the primary JSON file before the backup is written, so the backup
+    # always reflects the final corrected rackIP values.
+    if not config.ENV_DATA.get("skip_bmc_verification"):
+        rack_dict = _verify_bmc_connectivity_rack(
+            rack_dict=rack_dict,
+            file_path=str(file_path),
+        )
+
+    # Save a timestamped backup copy in home directory — written after ping
+    # verification so the backup contains any corrected rackIP values.
     try:
         home_dir = Path.home()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -7633,6 +8046,158 @@ def genereate_cred_file_rack():
         f"File location: {file_path}"
     )
 
+    return rack_dict
+
+
+def _verify_bmc_connectivity_rack(rack_dict, file_path):
+    """
+    Ping every node BMC IP (IPv6 then IPv4) from its rack's MGem (SSH hop host)
+    and verify reachability.  Any rackIP corrections are applied in-place and
+    persisted back to ``file_path``.
+
+    Multi-AZ clusters have one MGem (rackIP) per rack.  If a node's BMC is not
+    reachable from its own rack's MGem, every other rack's MGem is tried.  The
+    first MGem that responds is recorded as the working rackIP for that rack
+    (and propagated to every other rack that shared the same broken rackIP).
+
+    Args:
+        rack_dict (dict): Rack details as returned by genereate_cred_file_rack.
+        file_path (str): Path to the JSON file — rackIP corrections are written
+            back here so the on-disk file stays consistent.
+
+    Returns:
+        dict: rack_dict with any rackIP corrections applied.
+
+    Raises:
+        NodeBMCUnreachableError: If any node has no reachable BMC IP from any MGem.
+    """
+    import ipaddress
+    from paramiko import SSHClient, AutoAddPolicy
+    from ocs_ci.framework import config
+
+    rack_ssh_username = config.AUTH.get("ibm_hci", {}).get("rack_ssh_username")
+    rack_ssh_password = config.AUTH.get("ibm_hci", {}).get("rack_ssh_password")
+
+    def _ssh_ping(rack_ip, node_ip):
+        """Return True if node_ip responds to a ping executed on rack_ip via SSH."""
+        if not node_ip:
+            return False
+        try:
+            addr = ipaddress.ip_address(node_ip)
+        except ValueError:
+            log.debug(f"_ssh_ping: invalid IP '{node_ip}', skipping")
+            return False
+        cmd = (
+            f"ping -6 -c 1 -W 5 {node_ip}"
+            if addr.version == 6
+            else f"ping -c 1 -W 5 {node_ip}"
+        )
+        ssh = SSHClient()
+        ssh.set_missing_host_key_policy(AutoAddPolicy())
+        try:
+            ssh.connect(
+                rack_ip,
+                username=rack_ssh_username,
+                password=rack_ssh_password,
+                timeout=30,
+            )
+            _, stdout, _ = ssh.exec_command(cmd)
+            return stdout.channel.recv_exit_status() == 0
+        except Exception as e:
+            log.debug(f"SSH ping from MGem {rack_ip} to {node_ip} failed: {e}")
+            return False
+        finally:
+            ssh.close()
+
+    # Collect all rackIP values available across all racks
+    all_rack_ips = {
+        serial: data.get("rackInfo", {}).get("rackIP")
+        for serial, data in rack_dict.items()
+        if data.get("rackInfo", {}).get("rackIP")
+    }
+
+    unreachable = []
+    rackip_fixes = {}
+
+    for rack_serial, rack_data in rack_dict.items():
+        rack_ip = rack_data.get("rackInfo", {}).get("rackIP")
+        if not rack_ip:
+            log.warning(f"Rack {rack_serial} has no rackIP, skipping BMC ping check")
+            continue
+
+        for node_role, node_info in rack_data.get("nodes", {}).items():
+            ipv6 = node_info.get("ipv6")
+            ipv4 = node_info.get("ipv4")
+            node_label = f"{node_role}.{rack_serial}"
+
+            if not ipv6 and not ipv4:
+                log.warning(f"No BMC IP configured for {node_label}, skipping ping")
+                continue
+
+            bmc_ips = [(t, ip) for t, ip in [("IPv6", ipv6), ("IPv4", ipv4)] if ip]
+            mgem_candidates = [rack_ip] + [
+                ip
+                for s, ip in all_rack_ips.items()
+                if s != rack_serial and ip != rack_ip
+            ]
+
+            log.info(
+                f"Verifying BMC connectivity for {node_label} "
+                f"(trying {len(mgem_candidates)} MGem(s))"
+            )
+
+            working_mgem = None
+            for mgem_ip in mgem_candidates:
+                for ip_type, bmc_ip in bmc_ips:
+                    log.info(
+                        f"Pinging BMC {ip_type} ({bmc_ip}) for {node_label} from MGem {mgem_ip}"
+                    )
+                    if _ssh_ping(mgem_ip, bmc_ip):
+                        log.info(
+                            f"BMC {ip_type} ({bmc_ip}) reachable for {node_label} via MGem {mgem_ip}"
+                        )
+                        working_mgem = mgem_ip
+                        break
+                    else:
+                        log.warning(
+                            f"BMC {ip_type} ({bmc_ip}) not reachable for {node_label} from MGem {mgem_ip}"
+                        )
+                if working_mgem:
+                    break
+
+            if working_mgem is None:
+                unreachable.append(node_label)
+                continue
+
+            if working_mgem != rack_ip:
+                log.warning(
+                    f"rack {rack_serial} rackIP {rack_ip} could not reach "
+                    f"{node_label}; updating to working MGem {working_mgem}"
+                )
+                rackip_fixes[rack_ip] = working_mgem
+
+    # Apply rackIP corrections and persist to disk
+    if rackip_fixes:
+        for serial, rack_data in rack_dict.items():
+            current_ip = rack_data.get("rackInfo", {}).get("rackIP")
+            if current_ip in rackip_fixes:
+                new_ip = rackip_fixes[current_ip]
+                rack_data["rackInfo"]["rackIP"] = new_ip
+                log.info(f"Updated rackIP for rack {serial}: {current_ip} -> {new_ip}")
+        fd = os.open(file_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(rack_dict, f, indent=2)
+        log.info(f"Persisted rackIP corrections to {file_path}")
+
+    if unreachable:
+        from ocs_ci.ocs.exceptions import NodeBMCUnreachableError
+
+        raise NodeBMCUnreachableError(
+            f"BMC unreachable for the following nodes (tried all MGems, "
+            f"no IPv6 or IPv4 responded to ping): {unreachable}"
+        )
+
+    log.info("BMC connectivity verified for all nodes")
     return rack_dict
 
 

@@ -5,7 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs.cosbench import Cosbench
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="function")
@@ -52,10 +52,13 @@ class TestCosbenchWorkload(E2ETest):
         bucket_prefix = "mcg-bucket-"
         buckets = 5
 
-        # Deployment of cosbench
+        logger.test_step("Deploy Cosbench")
         cosbench.setup_cosbench()
 
-        # Create initial containers and objects
+        logger.test_step(
+            f"Create initial containers and objects: "
+            f"{buckets} buckets with {objects} objects of {size}{size_unit} each"
+        )
         cosbench.run_init_workload(
             prefix=bucket_prefix,
             containers=buckets,
@@ -67,7 +70,7 @@ class TestCosbenchWorkload(E2ETest):
             sleep=30,
         )
 
-        # Dispose containers and objects
+        logger.test_step("Cleanup containers and objects")
         cosbench.run_cleanup_workload(
             prefix=bucket_prefix,
             containers=buckets,
@@ -85,19 +88,19 @@ class TestCosbenchWorkload(E2ETest):
         bucket_prefix = "bucket-"
         buckets = 10
         objects = 50
-
-        # Operations to perform and its ratio(%)
         operations = {"read": 50, "write": 50}
 
-        # Deployment of cosbench
+        logger.test_step("Deploy Cosbench")
         cosbench.setup_cosbench()
 
-        # Create initial containers and objects
+        logger.test_step(
+            f"Create initial containers and objects: {buckets} buckets with {objects} objects each"
+        )
         cosbench.run_init_workload(
             prefix=bucket_prefix, containers=buckets, objects=objects, validate=True
         )
 
-        # Run main workload
+        logger.test_step(f"Run main workload with operations: {operations}")
         cosbench.run_main_workload(
             operation_type=operations,
             prefix=bucket_prefix,
@@ -107,7 +110,7 @@ class TestCosbenchWorkload(E2ETest):
             timeout=1200,
         )
 
-        # Dispose containers and objects
+        logger.test_step("Cleanup containers and objects")
         cosbench.run_cleanup_workload(
             prefix=bucket_prefix, containers=buckets, objects=objects, validate=True
         )

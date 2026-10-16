@@ -28,7 +28,7 @@ import pytest
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad, chaos, polarion_id
+from ocs_ci.framework.pytest_customization.marks import white_squad, chaos, polarion_id
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -45,7 +45,7 @@ from ocs_ci.krkn_chaos.noobaa_chaos_helper import get_noobaa_db_chaos_target
 log = logging.getLogger(__name__)
 
 
-@green_squad
+@white_squad
 @chaos
 class TestKrKnNooBaaContainerChaos:
     """
@@ -166,17 +166,11 @@ class TestKrKnNooBaaContainerChaos:
                 style="detailed",
             )
 
-            # Create container chaos scenario file
-            scenario_file = ContainerScenarios.container_kill(
-                scenario_dir=scenario_dir,
-                scenarios=noobaa_scenarios,
-            )
-
-            log.info(f"Created NooBaa container kill scenario file: {scenario_file}")
-
-            # Create Krkn configuration
+            # Isolate each component so one kill-count miss cannot abort the other.
             config = KrknConfigGenerator()
-            config.add_scenario("container_scenarios", scenario_file)
+            scenario_helper.register_isolated_container_kill_scenarios(
+                config, scenario_dir, noobaa_scenarios
+            )
 
             # =================================================================
             # EXECUTION: Single Krkn run with specified kill signal
@@ -606,15 +600,11 @@ class TestKrKnNooBaaContainerChaos:
                     components=noobaa_components,
                 )
 
-                # Create scenario file
-                scenario_file = ContainerScenarios.container_kill(
-                    scenario_dir=scenario_dir,
-                    scenarios=noobaa_scenarios,
-                )
-
-                # Create Krkn configuration
+                # Isolate each component so one kill-count miss cannot abort the other.
                 config = KrknConfigGenerator()
-                config.add_scenario("container_scenarios", scenario_file)
+                scenario_helper.register_isolated_container_kill_scenarios(
+                    config, scenario_dir, noobaa_scenarios
+                )
 
                 # Number of iterations based on stress level
                 base_iterations = 2

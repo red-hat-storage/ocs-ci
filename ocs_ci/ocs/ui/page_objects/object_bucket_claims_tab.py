@@ -91,8 +91,15 @@ class ObjectBucketClaimsTab(ObjectStorage, CreateResourceForm):
         Returns:
             bool: True if the input text length not violated, False otherwise.
         """
+        # The "Cannot be used before" validation is namespace-scoped.
+        # Re-open the form in the namespace where OBCs exist.
+        cluster_namespace = config.ENV_DATA["cluster_namespace"]
+        self.navigate_object_bucket_claims_page()
+        self.select_openshift_storage_default_project()
+        self.proceed_resource_creation()
+
         existing_obc = OCP().exec_oc_cmd(
-            "get obc --all-namespaces -o custom-columns=':metadata.name'"
+            f"get obc -n {cluster_namespace} -o custom-columns=':metadata.name'"
         )
         if not existing_obc:
             obc_name = create_unique_resource_name(
@@ -103,10 +110,12 @@ class ObjectBucketClaimsTab(ObjectStorage, CreateResourceForm):
                 obc_name, "openshift-storage.noobaa.io", "noobaa-default-bucket-class"
             )
             self.navigate_object_bucket_claims_page()
+            self.select_openshift_storage_default_project()
             self.proceed_resource_creation()
             existing_obc = str(
                 OCP().exec_oc_cmd(
-                    "get obc --all-namespaces -o custom-columns=':metadata.name'"
+                    f"get obc -n {cluster_namespace}"
+                    " -o custom-columns=':metadata.name'"
                 )
             )
 

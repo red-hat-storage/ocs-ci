@@ -15,7 +15,7 @@ from ocs_ci.ocs.must_gather.const_must_gather import (
     GATHER_COMMANDS_LOG,
 )
 from ocs_ci.utility import version
-from ocs_ci.ocs.constants import MANAGED_SERVICE_PLATFORMS
+from ocs_ci.ocs.constants import DEFAULT_CEPHBLOCKPOOL, MANAGED_SERVICE_PLATFORMS
 
 
 logger = logging.getLogger(__name__)
@@ -71,14 +71,14 @@ class MustGather(object):
         """
         upgrade_version = config.UPGRADE.get("upgrade_ocs_version")
         if upgrade_version:
-            ocs_version = float(upgrade_version)
+            ocs_version = version.get_semantic_version(
+                upgrade_version, only_major_minor=True
+            )
             logger.debug(
                 f"Using upgrade version for must-gather validation: {ocs_version}"
             )
         else:
-            ocs_version = float(
-                f"{version.get_ocs_version_from_csv(only_major_minor=True)}"
-            )
+            ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
             logger.debug(f"Using CSV version for must-gather validation: {ocs_version}")
         if ocs_version not in GATHER_COMMANDS_VERSION:
             candidates = [v for v in GATHER_COMMANDS_VERSION if v <= ocs_version]
@@ -101,14 +101,44 @@ class MustGather(object):
             files = GATHER_COMMANDS_VERSION[ocs_version]["OTHERS_EXTERNAL"]
         else:
             files = GATHER_COMMANDS_VERSION[ocs_version][self.type_log]
+
+        # On EC clusters some must-gather files are named after the
+        # replicated metadata pool instead of the default block pool.
+        from ocs_ci.ocs.cluster import get_ec_metadata_pool_name
+
+        ec_pool = ""
+        try:
+            ec_pool = get_ec_metadata_pool_name()
+        except (IndexError, KeyError):
+            pass
+        if ec_pool:
+            logger.info(
+                f"EC metadata pool detected ({ec_pool}), will try EC "
+                f"pool name as fallback for must-gather file matching"
+            )
+
         self.get_all_paths()
+        basenames = {}
+        for p in self.full_paths:
+            bn = os.path.basename(p)
+            if bn not in basenames or os.path.isfile(p):
+                basenames[bn] = p
         for file in files:
-            self.files_not_exist.append(file)
-            for full_path in self.full_paths:
-                if os.path.basename(full_path) == file:
-                    self.files_path[file] = full_path
-                    self.files_not_exist.remove(file)
-                    break
+            if file in basenames:
+                self.files_path[file] = basenames[file]
+            elif (
+                ec_pool
+                and DEFAULT_CEPHBLOCKPOOL in file
+                and file.replace(DEFAULT_CEPHBLOCKPOOL, ec_pool) in basenames
+            ):
+                ec_file = file.replace(DEFAULT_CEPHBLOCKPOOL, ec_pool)
+                logger.info(
+                    f"Must-gather file '{file}' not found, matched EC "
+                    f"variant '{ec_file}'"
+                )
+                self.files_path[file] = basenames[ec_file]
+            else:
+                self.files_not_exist.append(file)
 
     def validate_file_size(self):
         """

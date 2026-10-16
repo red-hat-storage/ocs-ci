@@ -1,0 +1,12 @@
+---
+# this configuration file was tested on bm-octo-argo environment, but might be
+# working elsewhere as well
+# related to OCSQE-3874
+COMPONENTS:
+  disable_rgw: true
+  disable_cephobjectstoreusers: true
+  disable_noobaa: true
+  disable_cephfs: true
+  disable_blockpools: false
+REPORTING:
+  rp_additional_info: 'This is "Block only" deployment, which means that other components (RGW, Obejectstore, Noobaa, CephFS) are not deployed and all tests using those components should be skipped. See https://github.com/red-hat-storage/ocs-ci/pull/15478/.'

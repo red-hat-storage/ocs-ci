@@ -8,6 +8,7 @@ import logging
 import os
 import yaml
 import re
+import json
 
 from ocs_ci.framework import config
 from ocs_ci.utility.templating import load_yaml
@@ -21,7 +22,6 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +244,11 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
 
     This function retrieves the private IP and network information from
     a worker node using the 'ip addr' command and configures the storage
-    cluster's public network address range accordingly.
+    cluster's network address ranges accordingly.
+
+    Supports two modes:
+    - Public network: requires NAD, MachineConfig, and mon-ip annotations
+    - Cluster network: only requires CIDR in StorageCluster spec
 
     Args:
         cluster_data (dict): storage cluster YAML data
@@ -252,33 +256,49 @@ def add_data_replication_separation_to_cluster_data(cluster_data):
     Returns:
         dict: updated storage storage cluster yaml
     """
-    if config.DEPLOYMENT.get("enable_data_replication_separation"):
-        worker_nodes = get_worker_nodes()
-        if not worker_nodes:
-            raise UnavailableResourceException("No worker node found!")
+    public_enabled = config.DEPLOYMENT.get("enable_data_replication_separation_public")
+    cluster_enabled = config.DEPLOYMENT.get(
+        "enable_data_replication_separation_cluster"
+    )
 
-        # Get private IP and prefix from the first worker node using ip addr command
-        interface, private_ip, prefix_length = get_node_private_ip(worker_nodes[0])
+    if not (public_enabled or cluster_enabled):
+        return cluster_data
 
-        ip_network = ipaddress.IPv4Network(
-            f"{private_ip}/{prefix_length}",
-            strict=False,
-        )
-        str_network = f"{ip_network.network_address}/{ip_network.prefixlen}"
+    if "spec" not in cluster_data or not isinstance(cluster_data["spec"], dict):
+        raise ValueError("cluster_data missing or invalid 'spec' field")
 
+    worker_nodes = get_worker_nodes()
+    if not worker_nodes:
+        raise UnavailableResourceException("No worker node found!")
+
+    # Get private IP and prefix from the first worker node using ip addr command
+    interface, private_ip, prefix_length = get_node_private_ip(worker_nodes[0])
+
+    ip_network = ipaddress.IPv4Network(
+        f"{private_ip}/{prefix_length}",
+        strict=False,
+    )
+    str_network = f"{ip_network.network_address}/{ip_network.prefixlen}"
+
+    if "network" not in cluster_data["spec"]:
+        cluster_data["spec"]["network"] = {}
+    if "addressRanges" not in cluster_data["spec"]["network"]:
+        cluster_data["spec"]["network"]["addressRanges"] = {}
+
+    if public_enabled:
         logger.info(
-            f"Configuring data replication separation for the storage cluster "
-            f"with network range: {str_network} (interface: {interface})"
+            f"Configuring data replication separation with public network: "
+            f"{str_network} (interface: {interface})"
         )
-
-        if "network" not in cluster_data["spec"]:
-            cluster_data["spec"]["network"] = {}
-        if "addressRanges" not in cluster_data["spec"]["network"]:
-            cluster_data["spec"]["network"]["addressRanges"] = {}
-        if "public" not in cluster_data["spec"]["network"]["addressRanges"]:
-            cluster_data["spec"]["network"]["addressRanges"]["public"] = []
-
         cluster_data["spec"]["network"]["addressRanges"]["public"] = [str_network]
+
+    if cluster_enabled:
+        logger.info(
+            f"Configuring data replication separation with cluster network: "
+            f"{str_network} (interface: {interface})"
+        )
+        cluster_data["spec"]["network"]["addressRanges"]["cluster"] = [str_network]
+
     return cluster_data
 
 
@@ -499,3 +519,71 @@ def get_pod_ips(pod_selector, namespace):
 
     logger.info(f"Found {len(pod_ips)} pod IPs for selector: {pod_selector}")
     return pod_ips
+
+
+def get_pod_multus_ips(pod_selector, namespace):
+    """
+    Get multus network IPs for pods matching the selector in a given namespace.
+    Only returns IPs from multus secondary networks (not the primary network).
+
+    Args:
+        pod_selector (str): Label selector to filter pods (e.g., "app=rook-ceph-osd")
+        namespace (str): Namespace to search for pods
+
+    Returns:
+        dict: Dictionary mapping pod names to list of their multus network IP addresses
+    """
+    logger.info(
+        f"Getting multus network IPs for selector: {pod_selector} in namespace: {namespace}"
+    )
+    pod_ocp = OCP(kind=constants.POD, namespace=namespace)
+    pods = pod_ocp.get(selector=pod_selector)
+
+    if not pods or "items" not in pods:
+        logger.warning(f"No pods found with selector: {pod_selector}")
+        return {}
+    pod_multus_ips = {}
+    for pod in pods["items"]:
+        pod_name = pod["metadata"]["name"]
+
+        pod_phase = pod.get("status", {}).get("phase")
+        deletion_timestamp = pod.get("metadata", {}).get("deletionTimestamp")
+
+        if pod_phase != "Running" or deletion_timestamp:
+            logger.debug(
+                f"Skipping pod {pod_name} - phase: {pod_phase}, "
+                f"terminating: {bool(deletion_timestamp)}"
+            )
+            continue
+        multus_ips = []
+        annotations = pod.get("metadata", {}).get("annotations", {})
+        network_status = annotations.get("k8s.v1.cni.cncf.io/network-status")
+
+        if network_status:
+            try:
+                network_data = json.loads(network_status)
+                for network in network_data:
+                    if not network.get("default", False):
+                        network_ips = network.get("ips", [])
+                        network_name = network.get("name", "unknown")
+                        for ip in network_ips:
+                            multus_ips.append(ip)
+                            logger.debug(
+                                f"Pod {pod_name}: Found multus IP {ip} from network {network_name}"
+                            )
+                if multus_ips:
+                    pod_multus_ips[pod_name] = multus_ips
+                    logger.info(f"Pod: {pod_name}, Multus IPs: {multus_ips}")
+                else:
+                    logger.debug(f"No multus network IPs found for pod: {pod_name}")
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(
+                    f"Failed to parse network-status annotation for pod {pod_name}: {e}"
+                )
+        else:
+            logger.debug(f"No network-status annotation found for pod: {pod_name}")
+
+    logger.info(
+        f"Found {len(pod_multus_ips)} pods with multus IPs for selector: {pod_selector}"
+    )
+    return pod_multus_ips

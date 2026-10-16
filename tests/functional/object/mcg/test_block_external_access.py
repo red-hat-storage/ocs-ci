@@ -12,7 +12,6 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
-    skipif_mcg_only,
     post_upgrade,
 )
 from ocs_ci.ocs import constants, ocp
@@ -27,11 +26,11 @@ logger = logging.getLogger(__name__)
 @pytest.fixture(scope="class")
 def save_original_state(request):
     """
-    Save the ODF route names and original cluster object and noobaa configurations and store them
-    in the class members
+    Save the ODF route names and original disableRoutes values from storagecluster
+    and noobaa configurations and store them in the class members
     """
 
-    # Save original multiCloudGateway section of storagecluster object configuration
+    # Save original disableRoutes value from the multiCloudGateway section of storagecluster
     storagecluster_obj = ocp.OCP(
         resource_name=constants.DEFAULT_CLUSTERNAME,
         namespace=config.ENV_DATA["cluster_namespace"],
@@ -40,11 +39,11 @@ def save_original_state(request):
 
     sc_dict = storagecluster_obj.get()
     logger.info(f"Initial storagecluster configuration is {sc_dict}")
-    request.cls.sc_multiCloudGateway_orig_val = sc_dict.get("spec", {}).get(
-        "multiCloudGateway", None
+    request.cls.sc_disableRoutes_orig_val = (
+        sc_dict.get("spec", {}).get("multiCloudGateway", {}).get("disableRoutes", None)
     )
     logger.info(
-        f"Initial sc_dict multiCloudGateway  is {request.cls.sc_multiCloudGateway_orig_val}"
+        f"Initial sc_dict multiCloudGateway disableRoutes is {request.cls.sc_disableRoutes_orig_val}"
     )
 
     # Save original disableRoutes flag in noobaa object configuration
@@ -94,34 +93,52 @@ def save_original_state(request):
 @pytest.mark.usefixtures("save_original_state")
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
-@skipif_mcg_only  # Workaround for https://github.com/red-hat-storage/ocs-ci/issues/14813
 @post_upgrade
 class TestBlockExternalAccess(MCGTest):
     @pytest.fixture(scope="class", autouse=True)
     def cleanup(self, request):
         def finalizer():
             """
-            This method restores the original settings of storagecluster and noobaa configurations that
-             may have be changed by the tests
+            This method restores the original disableRoutes settings of storagecluster
+            and noobaa configurations that may have been changed by the tests
             """
-            # Restore storagecluster configuration
+            # Restore storagecluster disableRoutes configuration
             storagecluster_obj = ocp.OCP(
                 resource_name=constants.DEFAULT_CLUSTERNAME,
                 namespace=config.ENV_DATA["cluster_namespace"],
                 kind=constants.STORAGECLUSTER,
             )
 
-            sc_patch_params = [
-                {
-                    "op": "replace",
-                    "path": "/spec/multiCloudGateway",
-                    "value": self.sc_multiCloudGateway_orig_val,
-                }
-            ]
-            storagecluster_obj.patch(
-                params=dumps(sc_patch_params),
-                format_type="json",
-            )
+            if self.sc_disableRoutes_orig_val is not None:
+                sc_patch_params = [
+                    {
+                        "op": "add",
+                        "path": "/spec/multiCloudGateway/disableRoutes",
+                        "value": self.sc_disableRoutes_orig_val,
+                    }
+                ]
+            else:
+                current_disable_routes = (
+                    storagecluster_obj.get()
+                    .get("spec", {})
+                    .get("multiCloudGateway", {})
+                    .get("disableRoutes", None)
+                )
+                sc_patch_params = (
+                    [
+                        {
+                            "op": "remove",
+                            "path": "/spec/multiCloudGateway/disableRoutes",
+                        }
+                    ]
+                    if current_disable_routes is not None
+                    else None
+                )
+            if sc_patch_params:
+                storagecluster_obj.patch(
+                    params=dumps(sc_patch_params),
+                    format_type="json",
+                )
 
             # Restore noobaa configuration
             noobaa_obj = ocp.OCP(
@@ -130,17 +147,33 @@ class TestBlockExternalAccess(MCGTest):
                 kind=constants.NOOBAA_RESOURCE_NAME,
             )
 
-            noobaa_patch_params = [
-                {
-                    "op": "replace",
-                    "path": "/spec/disableRoutes",
-                    "value": self.noobaa_disableRoutes_orig_val,
-                }
-            ]
-            noobaa_obj.patch(
-                params=dumps(noobaa_patch_params),
-                format_type="json",
-            )
+            if self.noobaa_disableRoutes_orig_val is not None:
+                noobaa_patch_params = [
+                    {
+                        "op": "add",
+                        "path": "/spec/disableRoutes",
+                        "value": self.noobaa_disableRoutes_orig_val,
+                    }
+                ]
+            else:
+                current_disable_routes = (
+                    noobaa_obj.get().get("spec", {}).get("disableRoutes", None)
+                )
+                noobaa_patch_params = (
+                    [
+                        {
+                            "op": "remove",
+                            "path": "/spec/disableRoutes",
+                        }
+                    ]
+                    if current_disable_routes is not None
+                    else None
+                )
+            if noobaa_patch_params:
+                noobaa_obj.patch(
+                    params=dumps(noobaa_patch_params),
+                    format_type="json",
+                )
 
         request.addfinalizer(finalizer)
 
@@ -311,64 +344,3 @@ class TestBlockExternalAccess(MCGTest):
                 if noobaa_disable_routes == val:
                     logger.info("disableRoutes successfully propagated to noobaa CR")
                     break
-
-    def delete_multiCloudGateway_section_from_storagecluster(self):
-        """
-        This method removes 'multiCloudGateway' section from storagecluster configuration if this section exists there
-        """
-        storagecluster_obj = ocp.OCP(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            kind=constants.STORAGECLUSTER,
-        )
-
-        sc_dict = storagecluster_obj.get()
-        logger.info(f"Initial storagecluster configuration is {sc_dict}")
-
-        multi_cloud_gateway = sc_dict.get("spec", {}).get("multiCloudGateway")
-        if multi_cloud_gateway is not None:
-            logger.info(
-                f"multiCloudGateway section with value {multi_cloud_gateway} found , trying to delete"
-            )
-            storagecluster_obj.patch(
-                params=[{"op": "remove", "path": "/spec/multiCloudGateway"}],
-                format_type="json",
-            )
-            sc_dict = storagecluster_obj.get()
-            logger.info(f"Storagecluster configuration after patch is {sc_dict}")
-
-    def test_block_access_from_noobaa(
-        self,
-    ):
-        """
-        This method validates that
-         - if disableRoutes flag in noobaa yaml is set to False then all routes are recreated after deletion
-         - if disableRoutes flag in noobaa yaml is set to True then noobaa-mgmt, s3 and sts routes are not
-        recreated after deletion
-        """
-
-        # The test is meaningful only when there is no 'disableRoutes' flag in storagecluster configuration
-        self.delete_multiCloudGateway_section_from_storagecluster()
-
-        noobaa_obj = ocp.OCP(
-            resource_name=constants.NOOBAA_RESOURCE_NAME,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            kind=constants.NOOBAA_RESOURCE_NAME,
-        )
-
-        # validate that initial value of disableRoutes is false or missing (and is false by default)
-        noobaa_dict = noobaa_obj.get()
-        logger.info(f"Initial noobaa configuration is {noobaa_dict}")
-
-        disable_routes_status = noobaa_dict.get("spec", {}).get("disableRoutes")
-        assert (
-            not disable_routes_status
-        ), "Disable Routes should be not defined or false when test starts"
-
-        self.check_disable_routes(False)
-
-        self.set_disable_routes_value(noobaa_obj, False, True)
-        self.check_disable_routes(True)
-
-        self.set_disable_routes_value(noobaa_obj, False, False)
-        self.check_disable_routes(False)

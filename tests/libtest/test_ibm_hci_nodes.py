@@ -295,5 +295,78 @@ class TestIBMHCINodeOperations:
         ceph_health_check(tries=30, delay=60)
         logger.info("Ceph cluster health is OK")
 
+    def test_power_status_direct_after_bmc_ping(self):
+        """
+        Verify power_status_direct works for every node after BMC ping succeeds.
+
+        IBMHCI.__init__ runs _verify_bmc_connectivity which confirms each
+        node's BMC is reachable from the MGem via ping.  This test goes one
+        step further: it calls power_status_direct on every node in rack_details
+        and asserts that a valid power state ("on" or "off") is returned,
+        proving the full IPMI/Redfish path works end-to-end without relying
+        on the Kubernetes API.
+
+        Steps:
+        1. Instantiate IBMHCI (triggers BMC ping validation at init).
+        2. Iterate every rack and every node in rack_details.
+        3. Construct the full node FQDN from rack serial + domain suffix.
+        4. Call power_status_direct for each node.
+        5. Assert the result is "on" or "off" (not None / not an error).
+        """
+        logger.info("Test: Verify power_status_direct for all nodes after BMC ping")
+
+        # IBMHCINode instantiates IBMHCI (which runs _verify_bmc_connectivity)
+        # and exposes it as .ibm_hci; reuse that instance instead of creating
+        # a separate IBMHCI().
+        ibm_hci_node = IBMHCINode()
+        domain_suffix = ibm_hci_node.domain_suffix
+
+        failed_nodes = []
+        checked_count = 0
+
+        for rack_serial, rack_data in ibm_hci_node.ibm_hci.rack_details.items():
+            rack_ip = rack_data.get("rackInfo", {}).get("rackIP")
+            if not rack_ip:
+                logger.warning(f"Skipping rack {rack_serial}: no rackIP available")
+                continue
+
+            nodes_dict = rack_data.get("nodes", {})
+            for node_role in nodes_dict:
+                node_name = f"{node_role}.{rack_serial}.{domain_suffix}"
+                logger.info(f"Checking power status (direct) for: {node_name}")
+                checked_count += 1
+
+                try:
+                    status = ibm_hci_node.ibm_hci.power_status_direct(node_name)
+                except RuntimeError as e:
+                    logger.error(
+                        f"power_status_direct raised RuntimeError for "
+                        f"{node_name}: {e}"
+                    )
+                    failed_nodes.append((node_name, str(e)))
+                    continue
+
+                logger.info(f"  {node_name} -> {status}")
+
+                if status not in ("on", "off"):
+                    logger.error(
+                        f"power_status_direct returned unexpected value "
+                        f"'{status}' for {node_name}"
+                    )
+                    failed_nodes.append((node_name, status))
+
+        assert checked_count > 0, (
+            "No nodes were checked — rack_details is empty or all racks "
+            "are missing rackIP. Verify the rack-details JSON is populated."
+        )
+        assert not failed_nodes, (
+            "power_status_direct failed or returned unexpected status for "
+            f"the following nodes: {failed_nodes}"
+        )
+        logger.info(
+            f"power_status_direct verified successfully for all "
+            f"{checked_count} node(s)"
+        )
+
 
 # Made with Bob

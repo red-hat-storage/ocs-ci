@@ -22,6 +22,12 @@ from ocs_ci.ocs.constants import (
     ORDER_OCS_UPGRADE,
     ORDER_AFTER_OCP_UPGRADE,
     ORDER_AFTER_OCS_UPGRADE,
+    ORDER_BEFORE_FDF_UPGRADE,
+    ORDER_FDF_UPGRADE,
+    ORDER_AFTER_FDF_UPGRADE,
+    ORDER_BEFORE_FDF_MIGRATION,
+    ORDER_FDF_MIGRATION,
+    ORDER_AFTER_FDF_MIGRATION,
     ORDER_AFTER_UPGRADE,
     CLOUD_PLATFORMS,
     ON_PREM_PLATFORMS,
@@ -37,6 +43,7 @@ from ocs_ci.ocs.constants import (
     MS_CONSUMER_TYPE,
     HCI_PROVIDER,
     BAREMETAL_PLATFORMS,
+    IBM_HCI_PLATFORM,
     AZURE_KV_PROVIDER_NAME,
     ROSA_HCP_PLATFORM,
     VAULT_KMS_PROVIDER,
@@ -51,7 +58,6 @@ from ocs_ci.utility.utils import load_auth_config
 from ocs_ci.deployment.hub_spoke import hypershift_cluster_factory
 from ocs_ci.utility.nfs_utils import check_cluster_resources_for_nfs
 from ocs_ci.ocs.node import check_cluster_resources
-
 
 # tier marks
 
@@ -107,6 +113,7 @@ mdr = pytest.mark.mdr
 resiliency = pytest.mark.resiliency
 chaos = pytest.mark.chaos
 ec_allowed = pytest.mark.ec_allowed
+fa_functional = pytest.mark.fa_functional
 
 tier_marks = [
     tier1,
@@ -135,6 +142,7 @@ tier_marks = [
 order_pre_upgrade = pytest.mark.order(ORDER_BEFORE_UPGRADE)
 order_pre_ocp_upgrade = pytest.mark.order(ORDER_BEFORE_OCP_UPGRADE)
 order_pre_ocs_upgrade = pytest.mark.order(ORDER_BEFORE_OCS_UPGRADE)
+order_pre_fdf_upgrade = pytest.mark.order(ORDER_BEFORE_FDF_UPGRADE)
 order_ocp_upgrade = pytest.mark.order(ORDER_OCP_UPGRADE)
 order_mco_upgrade = pytest.mark.order(ORDER_MCO_UPGRADE)
 order_dr_hub_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
@@ -144,10 +152,15 @@ order_dr_cluster_operator_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
 order_acm_upgrade = pytest.mark.order(ORDER_ACM_UPGRADE)
 order_mce_upgrade = pytest.mark.order(ORDER_MCE_UPGRADE)
 order_ocs_upgrade = pytest.mark.order(ORDER_OCS_UPGRADE)
+order_fdf_upgrade = pytest.mark.order(ORDER_FDF_UPGRADE)
 order_ocp_on_kubevirt_upgrade = pytest.mark.order(ORDER_OCP_ON_KUBEVIRT_UPGRADE)
 order_post_upgrade = pytest.mark.order(ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.order(ORDER_AFTER_OCP_UPGRADE)
 order_post_ocs_upgrade = pytest.mark.order(ORDER_AFTER_OCS_UPGRADE)
+order_post_fdf_upgrade = pytest.mark.order(ORDER_AFTER_FDF_UPGRADE)
+order_pre_fdf_migration = pytest.mark.order(ORDER_BEFORE_FDF_MIGRATION)
+order_fdf_migration = pytest.mark.order(ORDER_FDF_MIGRATION)
+order_post_fdf_migration = pytest.mark.order(ORDER_AFTER_FDF_MIGRATION)
 ocp_upgrade = compose(order_ocp_upgrade, pytest.mark.ocp_upgrade)
 
 # multicluster orchestrator
@@ -162,6 +175,8 @@ acm_upgrade = compose(order_acm_upgrade, pytest.mark.acm_upgrade)
 mce_upgrade = compose(order_mce_upgrade, pytest.mark.mce_upgrade)
 
 ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
+
+fdf_upgrade = compose(order_fdf_upgrade, pytest.mark.fdf_upgrade)
 
 # provider operator upgrade
 provider_operator_upgrade = compose(
@@ -181,10 +196,23 @@ pre_ocs_upgrade = compose(
     order_pre_ocs_upgrade,
     pytest.mark.pre_ocs_upgrade,
 )
+pre_fdf_upgrade = compose(
+    order_pre_fdf_upgrade,
+    pytest.mark.pre_fdf_upgrade,
+)
 # post_*_upgrade markers
 post_upgrade = compose(order_post_upgrade, pytest.mark.post_upgrade)
 post_ocp_upgrade = compose(order_post_ocp_upgrade, pytest.mark.post_ocp_upgrade)
 post_ocs_upgrade = compose(order_post_ocs_upgrade, pytest.mark.post_ocs_upgrade)
+post_fdf_upgrade = compose(order_post_fdf_upgrade, pytest.mark.post_fdf_upgrade)
+
+# ODF to FDF migration markers
+pre_fdf_migration = compose(
+    order_pre_fdf_migration,
+    pytest.mark.pre_fdf_migration,
+)
+fdf_migration = compose(order_fdf_migration, pytest.mark.fdf_migration)
+post_fdf_migration = compose(order_post_fdf_migration, pytest.mark.post_fdf_migration)
 
 upgrade_marks = [
     ocp_upgrade,
@@ -192,12 +220,18 @@ upgrade_marks = [
     dr_hub_upgrade,
     acm_upgrade,
     ocs_upgrade,
+    fdf_upgrade,
     pre_upgrade,
     pre_ocp_upgrade,
     pre_ocs_upgrade,
+    pre_fdf_upgrade,
     post_upgrade,
     post_ocp_upgrade,
     post_ocs_upgrade,
+    post_fdf_upgrade,
+    pre_fdf_migration,
+    fdf_migration,
+    post_fdf_migration,
 ]
 
 # mark the test class with marker below to ignore leftover check
@@ -284,7 +318,7 @@ skipif_less_than_five_workers = pytest.mark.skipif(
 )
 
 skipif_ec_pools_disabled = pytest.mark.skipif(
-    config.DEPLOYMENT.get("ec_default_pools") is not True,
+    not any(c.DEPLOYMENT.get("ec_default_pools") for c in config.clusters),
     reason="Test runs only on EC pools",
 )
 
@@ -422,10 +456,13 @@ ms_provider_and_consumer_required = pytest.mark.skipif(
     ),
     reason="Test runs ONLY on Managed service with provider and consumer clusters",
 )
+
 fdf_required = pytest.mark.skipif(
     not config.DEPLOYMENT.get("fdf_cluster"),
     reason="Test runs ONLY on FDF cluster",
 )
+
+cnsa_remote_mount = pytest.mark.cnsa_remote_mount
 
 
 # when run_on_all_clients marker is used, there needs to be added cluster_index
@@ -513,8 +550,21 @@ hci_provider_and_client_required = pytest.mark.skipif(
 )
 
 data_replication_separation_required = pytest.mark.skipif(
-    config.DEPLOYMENT.get("enable_data_replication_separation") is False,
+    not (
+        config.DEPLOYMENT.get("enable_data_replication_separation_public")
+        or config.DEPLOYMENT.get("enable_data_replication_separation_cluster")
+    ),
     reason="Test runs only on deployments with enabled data replication separation",
+)
+
+data_replication_separation_public_required = pytest.mark.skipif(
+    not config.DEPLOYMENT.get("enable_data_replication_separation_public"),
+    reason="Test runs only on deployments with enabled public network data replication separation",
+)
+
+data_replication_separation_cluster_required = pytest.mark.skipif(
+    not config.DEPLOYMENT.get("enable_data_replication_separation_cluster"),
+    reason="Test runs only on deployments with enabled cluster network data replication separation",
 )
 
 kms_config_required = pytest.mark.skipif(
@@ -566,6 +616,16 @@ hcp_required = pytest.mark.skipif(
 external_mode_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is not True,
     reason="Test will run on External Mode cluster only",
+)
+
+multi_storagecluster_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("multi_storagecluster") is not True,
+    reason="Test requires a multi-storagecluster deployment",
+)
+
+fusion_access_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("fusion_access") is not True,
+    reason="Test will run on Fusion Access cluster only",
 )
 
 skipif_aws_i3 = pytest.mark.skipif(
@@ -710,6 +770,12 @@ skipif_rhel_os = pytest.mark.skipif(
     reason="Test will not run on cluster with RHEL OS",
 )
 
+skipif_rhel9_nodes = pytest.mark.skipif(
+    config.ENV_DATA.get("rhel_workers") is True
+    and str(config.ENV_DATA.get("rhel_version", "")).startswith("9"),
+    reason="Test is not supported on RHEL 9 nodes",
+)
+
 skipif_vsphere_ipi = pytest.mark.skipif(
     (
         config.ENV_DATA["platform"].lower() == "vsphere"
@@ -728,6 +794,11 @@ skipif_azure_platform = pytest.mark.skipif(
     reason="Test will not run on Azure deployed cluster",
 )
 
+skipif_ibm_hci_platform = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == IBM_HCI_PLATFORM,
+    reason="Test will not run on IBM HCI platform",
+)
+
 skipif_tainted_nodes = pytest.mark.skipif(
     config.DEPLOYMENT.get("infra_nodes") is True
     or config.DEPLOYMENT.get("ocs_operator_nodes_to_taint") > 0,
@@ -742,6 +813,11 @@ skipif_flexy_deployment = pytest.mark.skipif(
 skipif_noobaa_external_pgsql = pytest.mark.skipif(
     config.ENV_DATA.get("noobaa_external_pgsql") is True,
     reason="This test will not run correctly in external DB deployed cluster.",
+)
+
+skipif_noobaa_external_pgsql_not_set = pytest.mark.skipif(
+    config.ENV_DATA.get("noobaa_external_pgsql") is not True,
+    reason="This test requires NooBaa to be deployed with an external PostgreSQL DB.",
 )
 
 skipif_compact_mode = pytest.mark.skipif(
@@ -789,6 +865,9 @@ skipif_lvm_not_installed = pytest.mark.skipif_lvm_not_installed
 # encryption with KMS properly
 skipif_no_kms = pytest.mark.skipif_no_kms
 
+# Marker for skipping tests if NVMe-oF is not enabled/configured on the cluster
+skipif_no_nvmeof = pytest.mark.skipif_no_nvmeof
+
 skipif_ibm_flash = pytest.mark.skipif(
     config.ENV_DATA.get("ibm_flash"),
     reason="This test doesn't work correctly on IBM Flash system",
@@ -823,6 +902,7 @@ orange_squad = pytest.mark.orange_squad
 purple_squad = pytest.mark.purple_squad
 red_squad = pytest.mark.red_squad
 turquoise_squad = pytest.mark.turquoise_squad
+white_squad = pytest.mark.white_squad
 yellow_squad = pytest.mark.yellow_squad
 
 # Ignore test during squad decorator check in pytest collection
@@ -833,6 +913,10 @@ ocs_ci_utility = pytest.mark.ocs_ci_utility
 
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider
+
+# Mark to indicate environment_checker should run on consumer cluster
+# (test must handle its own context switching)
+consumer_env_check = pytest.mark.consumer_env_check
 
 # Marks to identify the regression tests for provider-client cluster
 provider_mode = pytest.mark.provider_mode
@@ -898,6 +982,27 @@ skipif_lean_deployment = pytest.mark.skipif(
     config.ENV_DATA.get("performance_profile") == "lean"
     or not check_cluster_resources_for_nfs(),
     reason="Test cannot run on lean profile or requires higher cluster resources (insufficient CPU/memory)",
+)
+
+# Markers for disabled components
+skipif_noobaa_disabled = pytest.mark.skipif(
+    config.COMPONENTS.get("disable_noobaa", False),
+    reason="Test requires NooBaa but it is disabled",
+)
+
+skipif_rgw_disabled = pytest.mark.skipif(
+    config.COMPONENTS.get("disable_rgw", False),
+    reason="Test requires RGW but it is disabled",
+)
+
+skipif_cephfs_disabled = pytest.mark.skipif(
+    config.COMPONENTS.get("disable_cephfs", False),
+    reason="Test requires CephFS but it is disabled",
+)
+
+skipif_blockpools_disabled = pytest.mark.skipif(
+    config.COMPONENTS.get("disable_blockpools", False),
+    reason="Test requires block pools but they are disabled",
 )
 
 

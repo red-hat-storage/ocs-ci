@@ -34,6 +34,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     get_infra_id_from_openshift_install_state,
     get_infra_id,
+    get_openshift_installer,
 )
 
 
@@ -161,21 +162,24 @@ class IBMCloudIPI(CloudDeploymentBase):
                 "IBM Cloud IPI deployments are only supported on OCP versions >= 4.10"
             )
 
-        # By default, IBM cloud has load balancer limit of 50 per region.
-        # switch to us-south, if current load balancers are more than 45.
+        # IBM cloud has a load balancer quota per region.
+        # Switch to the region with the fewest load balancers.
         # https://cloud.ibm.com/docs/vpc?topic=vpc-quotas
         ibmcloud.login()
         current_region = config.ENV_DATA["region"]
-        other_region = list(IBM_CLOUD_REGIONS - {current_region})[0]
         if config.ENV_DATA.get("enable_region_dynamic_switching"):
-            current_region_lb_count = self.get_load_balancers_count()
-            ibmcloud.login(region=other_region)
-            other_region_lb_count = self.get_load_balancers_count(other_region)
-            if current_region_lb_count > other_region_lb_count:
+            lb_counts = {}
+            lb_counts[current_region] = self.get_load_balancers_count()
+            for other_region in IBM_CLOUD_REGIONS - {current_region}:
+                ibmcloud.login(region=other_region)
+                lb_counts[other_region] = self.get_load_balancers_count(other_region)
+            best_region = min(lb_counts, key=lb_counts.get)
+            if best_region != current_region:
                 logger.info(
-                    f"Switching region to {other_region} due to lack of load balancers"
+                    f"Switching region to {best_region} due to load balancer "
+                    f"counts: {lb_counts}"
                 )
-                ibmcloud.set_region(other_region)
+                ibmcloud.set_region(best_region)
             else:
                 ibmcloud.login()
         if config.ENV_DATA.get("custom_vpc"):
@@ -223,10 +227,13 @@ class IBMCloudIPI(CloudDeploymentBase):
                 f"Prefix used for destroy resources from odf-qe-vpc VPC: {prefix}"
             )
             super(IBMCloudIPI, self).destroy_cluster(log_level)
-            self.destroy_cluster_from_existing_vpc(prefix)
-            logger.info("IBM Cloud cluster destroyed successfully")
-            ibmcloud.delete_dns_records(prefix)
-            logger.info("DNS records deleted successfully")
+            try:
+                self.destroy_cluster_from_existing_vpc(prefix)
+                logger.info("IBM Cloud cluster destroyed successfully")
+                ibmcloud.delete_dns_records(self.cluster_name)
+                logger.info("DNS records deleted successfully")
+            finally:
+                self.cleanup_service_ids_and_policies()
         else:
             resource_group = self.get_resource_group()
             if resource_group:
@@ -246,6 +253,12 @@ class IBMCloudIPI(CloudDeploymentBase):
                 )
             try:
                 # Make sure ccoctl is downloaded before using it in destroy job.
+                # Ensure installer is available (needed to download ccoctl)
+                if not config.ENV_DATA.get("installer_path"):
+                    logger.info(
+                        "Installer not available. Downloading installer to enable CCO cleanup."
+                    )
+                    get_openshift_installer()
                 cco.configure_cloud_credential_operator()
                 cco.delete_service_id(self.cluster_name, self.credentials_requests_dir)
                 if resource_group:
@@ -261,8 +274,25 @@ class IBMCloudIPI(CloudDeploymentBase):
             except Exception as ex:
                 logger.error(f"During IBM Cloud cleanup some exception occurred {ex}")
                 raise
+            finally:
+                self.cleanup_service_ids_and_policies()
+
+    def cleanup_service_ids_and_policies(self):
+        """
+        Clean up leftover IAM Service IDs and Account Policies for the cluster.
+
+        Always called after openshift-install destroy, even if later IBM-specific
+        cleanup fails, so one doesn't mask the other. Failures here are logged, not
+        raised - a leftover service ID shouldn't fail the teardown job.
+        """
         logger.info("Force cleaning up Service IDs and Account Policies leftovers")
-        ibmcloud.cleanup_policies_and_service_ids(self.cluster_name)
+        try:
+            ibmcloud.cleanup_policies_and_service_ids(self.cluster_name)
+        except Exception as ex:
+            logger.error(
+                "Failed to clean up leftover Service IDs/Account Policies for "
+                f"cluster {self.cluster_name}: {ex}"
+            )
 
     def delete_bucket(self):
         """
@@ -1198,7 +1228,10 @@ class IBMCloudIPI(CloudDeploymentBase):
             proc = exec_cmd(cmd)
             load_balancers = json.loads(proc.stdout)
             lb_list = [
-                lb for lb in load_balancers if lb.get("name", "").startswith(prefix)
+                lb
+                for lb in load_balancers
+                if lb.get("name", "").startswith(prefix)
+                or lb.get("name", "").startswith(f"kube-{prefix}")
             ]
             count = len(lb_list)
 

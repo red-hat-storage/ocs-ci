@@ -29,6 +29,7 @@ and functionality using AWS and other supported platforms.
    results.md
    stable_branch.md
    supported_platforms.md
+   ui_guidelines.md
    unit_tests.md
    upgrade.md
    usecases/index.rst

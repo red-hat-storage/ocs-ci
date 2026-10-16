@@ -2,13 +2,16 @@
 StorageCluster related functionalities
 """
 
+import base64
 import copy
+import hashlib
 import ipaddress
 import logging
 import re
 import tempfile
 import json
 import time
+from typing import Optional
 
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
@@ -320,7 +323,6 @@ def ocs_install_verification(
     skip_osd_distribution_check=False,
     ocs_registry_image=None,
     post_upgrade_verification=False,
-    version_before_upgrade=None,
 ):
     """
     Perform steps necessary to verify a successful OCS installation
@@ -334,7 +336,6 @@ def ocs_install_verification(
             properly.
         post_upgrade_verification (bool): Set to True if this function is
             called after upgrade.
-        version_before_upgrade (float): Set to OCS version before upgrade
 
     """
     from ocs_ci.ocs.node import get_nodes
@@ -401,9 +402,7 @@ def ocs_install_verification(
     rgw_count = None
     if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
         if not disable_rgw:
-            rgw_count = get_rgw_count(
-                f"{ocs_version}", post_upgrade_verification, version_before_upgrade
-            )
+            rgw_count = get_rgw_count()
 
     min_eps = constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
 
@@ -459,6 +458,13 @@ def ocs_install_verification(
         resources_dict.update(
             {
                 constants.NOOBAA_CNPG_POD_LABEL: 1,
+            }
+        )
+
+    if odf_running_version >= version.VERSION_4_23:
+        resources_dict.update(
+            {
+                constants.NOOBAA_CORE_POD_LABEL: 2,
             }
         )
 
@@ -555,9 +561,11 @@ def ocs_install_verification(
                 or disable_rgw
             ):
                 continue
-        if "noobaa" in label and (disable_noobaa or managed_service or client_cluster):
+        if ("noobaa" in label or label is constants.NOOBAA_CNPG_POD_LABEL) and (
+            disable_noobaa or managed_service or client_cluster
+        ):
             continue
-        if "mds" in label and disable_cephfs:
+        if ("mds" in label or "cephfs" in label) and disable_cephfs:
             continue
         if label == constants.MANAGED_CONTROLLER_LABEL:
             if fusion_aas_provider:
@@ -671,7 +679,12 @@ def ocs_install_verification(
                 f"{namespace}.rbd.csi.ceph.com",
             }.issubset(csi_drivers)
         else:
-            assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
+            csi_provisioners = set(defaults.CSI_PROVISIONERS)
+            if disable_cephfs:
+                csi_provisioners.discard(defaults.CEPHFS_PROVISIONER)
+            if disable_blockpools:
+                csi_provisioners.discard(defaults.RBD_PROVISIONER)
+            assert csi_provisioners.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
@@ -1074,24 +1087,36 @@ def ocs_install_verification(
         else constants.ROOK_CEPH_OPERATOR
     )
     if odf_running_version >= version.VERSION_4_19 or hci_cluster:
-        provisioner_deployment_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
-        }
-        nodeplugin_daemonset_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-nodeplugin": constants.RBD_PROVISIONER,
-        }
+        provisioner_deployment_and_owner_names = {}
+        nodeplugin_daemonset_and_owner_names = {}
+        if not disable_cephfs:
+            provisioner_deployment_and_owner_names[
+                f"{constants.CEPHFS_PROVISIONER}-ctrlplugin"
+            ] = constants.CEPHFS_PROVISIONER
+            nodeplugin_daemonset_and_owner_names[
+                f"{constants.CEPHFS_PROVISIONER}-nodeplugin"
+            ] = constants.CEPHFS_PROVISIONER
+        if not disable_blockpools:
+            provisioner_deployment_and_owner_names[
+                f"{constants.RBD_PROVISIONER}-ctrlplugin"
+            ] = constants.RBD_PROVISIONER
+            nodeplugin_daemonset_and_owner_names[
+                f"{constants.RBD_PROVISIONER}-nodeplugin"
+            ] = constants.RBD_PROVISIONER
         csi_owner_kind = constants.DRIVER
     else:
-        provisioner_deployment_and_owner_names = {
-            "csi-cephfsplugin-provisioner": csi_owner_name,
-            "csi-rbdplugin-provisioner": csi_owner_name,
-        }
-        nodeplugin_daemonset_and_owner_names = {
-            "csi-cephfsplugin": csi_owner_name,
-            "csi-rbdplugin": csi_owner_name,
-        }
+        provisioner_deployment_and_owner_names = {}
+        nodeplugin_daemonset_and_owner_names = {}
+        if not disable_cephfs:
+            provisioner_deployment_and_owner_names["csi-cephfsplugin-provisioner"] = (
+                csi_owner_name
+            )
+            nodeplugin_daemonset_and_owner_names["csi-cephfsplugin"] = csi_owner_name
+        if not disable_blockpools:
+            provisioner_deployment_and_owner_names["csi-rbdplugin-provisioner"] = (
+                csi_owner_name
+            )
+            nodeplugin_daemonset_and_owner_names["csi-rbdplugin"] = csi_owner_name
         csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
 
     deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
@@ -1142,7 +1167,11 @@ def ocs_install_verification(
         ), "Host network is not set to False for cephObjectStores when spec.hostNetwork is True"
     log.info("Verified the providerAPIServerServiceType setting in StorageCluster")
     log.info("Verifying the csi driver ownership")
-    csi_driver_list = [constants.RBD_PROVISIONER, constants.CEPHFS_PROVISIONER]
+    csi_driver_list = []
+    if not disable_blockpools:
+        csi_driver_list.append(constants.RBD_PROVISIONER)
+    if not disable_cephfs:
+        csi_driver_list.append(constants.CEPHFS_PROVISIONER)
     if odf_running_version >= version.VERSION_4_19 or hci_cluster:
         csi_driver_obj = OCP(kind=constants.DRIVER, namespace=namespace)
         for driver in csi_driver_list:
@@ -1303,6 +1332,55 @@ def verify_storage_system():
         )
 
 
+def get_noobaa_phase(namespace: str) -> Optional[str]:
+    """
+    Get the current phase of the NooBaa CR via a single lightweight API call.
+
+    Args:
+        namespace (str): Kubernetes namespace where NooBaa is deployed.
+
+    Returns:
+        Optional[str]: NooBaa phase string (e.g. "Ready", "Configuring"),
+            or None if the CR cannot be retrieved.
+
+    """
+    try:
+        noobaa = OCP(kind="noobaa", namespace=namespace).get(
+            resource_name=constants.NOOBAA_RESOURCE_NAME
+        )
+        return noobaa.get("status", {}).get("phase", "")
+    except CommandFailed as ex:
+        log.warning("Failed to get NooBaa CR (%s) — skipping NooBaa health check", ex)
+        return None
+
+
+def get_storage_cluster_phase(namespace: str) -> Optional[str]:
+    """
+    Get the current phase of the StorageCluster CR via a single lightweight
+    API call.
+
+    Args:
+        namespace (str): Kubernetes namespace where the StorageCluster is
+            deployed.
+
+    Returns:
+        Optional[str]: StorageCluster phase string (e.g. "Ready",
+            "Progressing"), or None if the CR cannot be retrieved.
+
+    """
+    try:
+        sc_name = config.ENV_DATA["storage_cluster_name"]
+        sc = OCP(kind=constants.STORAGECLUSTER, namespace=namespace).get(
+            resource_name=sc_name
+        )
+        return sc.get("status", {}).get("phase", "")
+    except CommandFailed as ex:
+        log.warning(
+            "Failed to get StorageCluster CR (%s) — skipping SC phase check", ex
+        )
+        return None
+
+
 def verify_storage_cluster():
     """
     Verify storage cluster status
@@ -1325,7 +1403,51 @@ def verify_storage_cluster():
             timeout = 1800
         else:
             timeout = 600
-        storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+
+        try:
+            storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+        except ResourceWrongStatusException:
+            noobaa_issue = config.RUN.get("noobaa_not_ready_at_setup")
+            if not noobaa_issue:
+                raise
+
+            fresh_sc = storage_cluster.get()
+            conditions = fresh_sc.get("status", {}).get("conditions", [])
+
+            noobaa_is_cause = any(
+                c.get("reason") == constants.NOOBAA_INITIALIZING_REASON
+                and c.get("type") == "Progressing"
+                for c in conditions
+            )
+            ceph_has_issues = any(
+                c.get("reason") in constants.CEPH_CONDITION_REASONS for c in conditions
+            )
+
+            if not noobaa_is_cause or ceph_has_issues:
+                raise
+
+            namespace = config.ENV_DATA["cluster_namespace"]
+            current_nb_phase = get_noobaa_phase(namespace)
+
+            if current_nb_phase == constants.STATUS_READY:
+                config.RUN.pop("noobaa_not_ready_at_setup", None)
+                raise
+
+            if current_nb_phase != noobaa_issue.get("phase"):
+                log.warning(
+                    "NooBaa phase changed from '%s' to '%s'"
+                    " — running full verification",
+                    noobaa_issue["phase"],
+                    current_nb_phase,
+                )
+                raise
+
+            log.warning(
+                "StorageCluster not Ready due to NooBaa (phase: %s),"
+                " which was already unhealthy at test setup."
+                " Waiving SC phase check — version check still runs.",
+                current_nb_phase,
+            )
 
     # verify storage cluster version
     if not config.ENV_DATA.get("disable_storage_cluster_version_check"):
@@ -1390,6 +1512,23 @@ def verify_storage_cluster_version(storage_cluster):
                     raise e
 
 
+def get_cephcluster_storage_spec() -> Optional[dict]:
+    """
+    Fetch the CephCluster CR and return its spec.storage section.
+
+    Returns:
+        dict: The spec.storage section, or None if the key path is missing.
+
+    """
+    cephcluster = OCP(
+        kind="CephCluster",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.CEPH_CLUSTER_NAME,
+    )
+    resource = cephcluster.get()
+    return resource.get("spec", {}).get("storage")
+
+
 def verify_storage_device_class(
     device_class,
     check_multiple_deviceclasses=False,
@@ -1397,13 +1536,17 @@ def verify_storage_device_class(
     """
     Verifies the parameters of storageClassDeviceSets in CephCluster.
 
-    For internal deployments, if user is not specified any DeviceClass in the StorageDeviceSet, then
-    tunefastDeviceClass will be true and
-    crushDeviceClass will set to "ssd"
+    For internal deployments, if user is not specified any DeviceClass in the
+    StorageDeviceSet, then tunefastDeviceClass will be true and
+    crushDeviceClass will set to "ssd".
+
+    Operator-generated device sets (arbiter zone sets, non-resilient pool
+    rack sets, etc.) are filtered out before verification.
 
     Args:
         device_class (str): Name of the device class
-        check_multiple_deviceclasses (bool): If true, then check multiple deviceclasses. False, otherwise.
+        check_multiple_deviceclasses (bool): If true, then check multiple
+            deviceclasses. False, otherwise.
 
     """
     if check_multiple_deviceclasses:
@@ -1412,79 +1555,180 @@ def verify_storage_device_class(
         deviceset_name_per_deviceclass = {}
     log.info(f"deviceset name per deviceclass = {deviceset_name_per_deviceclass}")
 
-    # If the user has not provided any specific DeviceClass in the StorageDeviceSet for internal deployment then
-    # tunefastDeviceClass will be true and crushDeviceClass will set to "ssd"
     log.info("Verifying crushDeviceClass for storageClassDeviceSets")
     cephcluster = OCP(
         kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
     )
     cephcluster_data = cephcluster.get()
-    storage_class_device_sets = cephcluster_data["items"][0]["spec"]["storage"][
+    all_device_sets = cephcluster_data["items"][0]["spec"]["storage"][
         "storageClassDeviceSets"
     ]
+    storage_class_device_sets = filter_user_defined_device_sets(all_device_sets)
+    log.info(
+        "storage class device sets: %s",
+        storage_class_device_sets,
+    )
 
-    log.info(f"storage class device sets: {storage_class_device_sets}")
-
+    expected_device_classes = set()
     for each_devise_set in storage_class_device_sets:
         if deviceset_name_per_deviceclass:
             device_set_name = each_devise_set["name"]
-            # Remove the -<number> suffix from device set name to get the original device set name
-            orig_device_set_name = re.sub(r"-[0-9]$", "", device_set_name)
-            log.info(f"original device set name = {orig_device_set_name}")
-            # Get the deviceclass per the storagecluster deviceset name if exist or get the provided deviceclass
+            orig_device_set_name = re.sub(r"-[0-9]+$", "", device_set_name)
+            log.info(
+                "original device set name = %s",
+                orig_device_set_name,
+            )
             device_class = deviceset_name_per_deviceclass.get(
                 orig_device_set_name, device_class
             )
+
+        expected_device_classes.add(device_class)
 
         # check tuneFastDeviceClass
         device_set_name = each_devise_set["name"]
         log.info(f"device set name = {device_set_name}")
         if config.ENV_DATA.get("tune_fast_device_class"):
             tune_fast_device_class = each_devise_set["tuneFastDeviceClass"]
-            msg = f"tuneFastDeviceClass for {device_set_name} is set to {tune_fast_device_class}"
+            msg = (
+                f"tuneFastDeviceClass for {device_set_name}"
+                f" is set to {tune_fast_device_class}"
+            )
             log.debug(msg)
-            assert (
-                tune_fast_device_class
-            ), f"{msg} when {constants.DEVICECLASS} is not selected explicitly"
+            assert tune_fast_device_class, (
+                f"{msg} when {constants.DEVICECLASS}" " is not selected explicitly"
+            )
 
         # check crushDeviceClass
         crush_device_class = each_devise_set["volumeClaimTemplates"][0]["metadata"][
             "annotations"
         ]["crushDeviceClass"]
         crush_device_class_msg = (
-            f"crushDeviceClass for {device_set_name} is set to {crush_device_class}"
+            f"crushDeviceClass for {device_set_name}" f" is set to {crush_device_class}"
         )
         log.debug(crush_device_class_msg)
-        assert (
-            crush_device_class == device_class
-        ), f"{crush_device_class_msg} but it should be set to {device_class}"
+        assert crush_device_class == device_class, (
+            f"{crush_device_class_msg} but it should be" f" set to {device_class}"
+        )
 
+    operator_device_classes = get_operator_generated_device_classes(all_device_sets)
     sc_device_classes = deviceset_name_per_deviceclass.values()
-    # get deviceClasses for overall storage
     device_classes = cephcluster_data["items"][0]["status"]["storage"]["deviceClasses"]
     log.debug(f"deviceClasses are {device_classes}")
     for each_device_class in device_classes:
         device_class_name = each_device_class["name"]
+        # Only skip classes owned by filtered-out CephCluster device sets.
+        # An unexpected class (e.g. hdd when SC only defines ssd) must still fail.
+        if (
+            device_class_name in operator_device_classes
+            and device_class_name not in expected_device_classes
+        ):
+            log.info(
+                "Skipping operator-generated device class '%s'",
+                device_class_name,
+            )
+            continue
         if sc_device_classes:
-            assert (
-                device_class_name in sc_device_classes
-            ), f"deviceClass {device_class_name} is not in the expected device classes {sc_device_classes}"
+            assert device_class_name in sc_device_classes, (
+                f"deviceClass {device_class_name} is not in"
+                " the expected device classes"
+                f" {sc_device_classes}"
+            )
         else:
-            assert (
-                device_class_name == device_class
-            ), f"deviceClass is set to {device_class_name} but it should be set to {device_class}"
+            assert device_class_name == device_class, (
+                f"deviceClass is set to {device_class_name}"
+                f" but it should be set to {device_class}"
+            )
+
+
+def _get_crush_device_class(device_set):
+    """
+    Read crushDeviceClass from a CephCluster storageClassDeviceSet.
+
+    Args:
+        device_set (dict): A storageClassDeviceSets entry
+
+    Returns:
+        str or None: crushDeviceClass value, or None if missing
+
+    """
+    try:
+        return device_set["volumeClaimTemplates"][0]["metadata"]["annotations"][
+            "crushDeviceClass"
+        ]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
+def get_operator_generated_device_classes(cephcluster_device_sets=None):
+    """
+    Get crushDeviceClass values owned only by operator-generated
+    CephCluster device sets (sets not present in the StorageCluster).
+
+    Examples include arbiter/zone-based classes (e.g. europe-west1-b)
+    and non-resilient pool rack classes (e.g. rack0, rack1).
+
+    Classes that also appear on user-defined device sets are not
+    returned, so a shared class like ``ssd`` is still verified.
+
+    Args:
+        cephcluster_device_sets (list): Optional storageClassDeviceSets
+            from the CephCluster spec. Fetched from the cluster when
+            omitted.
+
+    Returns:
+        set: Device class names owned exclusively by excluded
+            (operator-generated) CephCluster device sets.
+
+    """
+    if cephcluster_device_sets is None:
+        cephcluster = OCP(
+            kind="CephCluster",
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        cephcluster_data = cephcluster.get()
+        cephcluster_device_sets = cephcluster_data["items"][0]["spec"]["storage"][
+            "storageClassDeviceSets"
+        ]
+
+    user_defined_sets = filter_user_defined_device_sets(cephcluster_device_sets)
+    user_defined_names = {d["name"] for d in user_defined_sets}
+    user_classes = set()
+    operator_classes = set()
+    for device_set in cephcluster_device_sets:
+        crush_device_class = _get_crush_device_class(device_set)
+        if not crush_device_class:
+            continue
+        if device_set["name"] in user_defined_names:
+            user_classes.add(crush_device_class)
+        else:
+            operator_classes.add(crush_device_class)
+
+    # Only classes exclusive to excluded sets are ignorable
+    operator_only_classes = operator_classes - user_classes
+    if operator_only_classes:
+        log.info(
+            "Operator-generated device classes: %s",
+            operator_only_classes,
+        )
+    return operator_only_classes
 
 
 def verify_device_class_in_osd_tree(
     ct_pod, device_class, check_multiple_deviceclasses=False
 ):
     """
-    Verifies device class in ceph osd tree output
+    Verifies device class in ceph osd tree output.
+
+    Skips OSDs whose device class is owned exclusively by
+    operator-generated CephCluster device sets (arbiter/zone classes
+    like europe-west1-b, or non-resilient pool classes like rack0).
+    Unexpected classes (e.g. hdd when only ssd is defined) still fail.
 
     Args:
-        ct_pod (:obj:`OCP`):  Object of the Ceph tools pod
+        ct_pod (:obj:`OCP`): Object of the Ceph tools pod
         device_class (str): Name of the device class
-        check_multiple_deviceclasses (bool): If true, then check multiple deviceclasses. False, otherwise.
+        check_multiple_deviceclasses (bool): If true, then check multiple
+            deviceclasses. False, otherwise.
 
     """
     if check_multiple_deviceclasses:
@@ -1493,15 +1737,26 @@ def verify_device_class_in_osd_tree(
         osd_id_per_deviceclass = {}
     log.info(f"osd id per deviceclass = {osd_id_per_deviceclass}")
 
+    operator_device_classes = get_operator_generated_device_classes()
+
     log.info("Verifying DeviceClass in ceph osd tree")
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
     for each in osd_tree["nodes"]:
         if each["type"] == "osd":
             osd_id = each.get("id")
-            current_device_class = osd_id_per_deviceclass.get(osd_id, device_class)
             osd_name = each["name"]
             device_class_in_osd_tree = each["device_class"]
             log.debug(f"DeviceClass for {osd_name} is {device_class_in_osd_tree}")
+
+            if device_class_in_osd_tree in operator_device_classes:
+                log.debug(
+                    "Skipping operator-generated device class '%s' for %s",
+                    device_class_in_osd_tree,
+                    osd_name,
+                )
+                continue
+
+            current_device_class = osd_id_per_deviceclass.get(osd_id, device_class)
             assert (
                 device_class_in_osd_tree == current_device_class
             ), f"DeviceClass for {osd_name} is {device_class_in_osd_tree} but expected value is {current_device_class}"
@@ -1643,6 +1898,8 @@ def verify_mcg_only_pods():
     # DFBUGS-5211 ocs-metrics-exporter disabled from ODF 4.21
     if odf_running_version >= version.VERSION_4_21:
         del resources_dict[constants.OCS_METRICS_EXPORTER]
+    if odf_running_version >= version.VERSION_4_23:
+        resources_dict[constants.NOOBAA_CORE_POD_LABEL] = 2
     if odf_running_version >= version.VERSION_4_19:
         del resources_dict[constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL]
         del resources_dict[constants.NOOBAA_DB_LABEL_47_AND_ABOVE]
@@ -2133,6 +2390,115 @@ def get_storage_cluster(namespace=None):
             namespace = config.ENV_DATA["cluster_namespace"]
         sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
     return sc_obj
+
+
+def get_noobaa_external_pgsql_secret_name():
+    """
+    Get the external PostgreSQL secret name configured on the StorageCluster for NooBaa.
+
+    Returns:
+        str: The pgSecretName from spec.multiCloudGateway.externalPgConfig,
+            or None if not configured
+
+    """
+    sc = get_storage_cluster()
+    sc_data = sc.get().get("items")[0]
+    return (
+        sc_data["spec"]
+        .get("multiCloudGateway", {})
+        .get("externalPgConfig", {})
+        .get("pgSecretName")
+    )
+
+
+def get_noobaa_external_pgsql_config():
+    """
+    Get the full external PostgreSQL config block configured on the StorageCluster.
+
+    Returns:
+        dict: spec.multiCloudGateway.externalPgConfig (empty dict if not set)
+
+    """
+    sc = get_storage_cluster()
+    sc_data = sc.get().get("items")[0]
+    return (
+        sc_data["spec"].get("multiCloudGateway", {}).get("externalPgConfig", {}) or {}
+    )
+
+
+def get_noobaa_external_pgsql_db_url_digest():
+    """
+    Return a SHA-256 digest of the decoded external PostgreSQL ``db_url``.
+
+    The digest lets callers detect whether the connection string / credential
+    changed (for example across an upgrade) without ever handling or logging the
+    secret value itself.
+
+    Returns:
+        str: Hex SHA-256 digest of the decoded db_url, or None if it is not
+            available
+
+    """
+    pg_secret_name = get_noobaa_external_pgsql_secret_name()
+    if not pg_secret_name:
+        return None
+    secret_obj = OCP(
+        kind=constants.SECRET,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=pg_secret_name,
+    )
+    db_url_b64 = secret_obj.get().get("data", {}).get("db_url")
+    if not db_url_b64:
+        return None
+    db_url = base64.b64decode(db_url_b64).decode("utf-8")
+    return hashlib.sha256(db_url.encode("utf-8")).hexdigest()
+
+
+def verify_noobaa_external_pgsql_config():
+    """
+    Verify that NooBaa is configured to use an external PostgreSQL database.
+
+    Checks that:
+        - StorageCluster spec.multiCloudGateway.externalPgConfig.pgSecretName is set
+          to the expected external PostgreSQL secret
+        - The referenced secret exists and contains a db_url
+        - No internal noobaa-db pod is running (the external DB replaces it)
+
+    Raises:
+        AssertionError: If any of the external PostgreSQL configuration checks fail
+
+    """
+    # Imported here to avoid a circular import at module load time
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    pg_secret_name = get_noobaa_external_pgsql_secret_name()
+    assert pg_secret_name == constants.NOOBAA_POSTGRES_SECRET, (
+        f"StorageCluster externalPgConfig.pgSecretName is '{pg_secret_name}', "
+        f"expected '{constants.NOOBAA_POSTGRES_SECRET}'"
+    )
+
+    secret_obj = OCP(
+        kind=constants.SECRET,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=pg_secret_name,
+    )
+    secret_data = secret_obj.get()
+    assert secret_data.get("data", {}).get(
+        "db_url"
+    ), f"External PostgreSQL secret '{pg_secret_name}' is missing 'db_url'"
+
+    internal_db_pods = get_pods_having_label(
+        constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    assert not internal_db_pods, (
+        "Found internal noobaa-db pod(s) while external PostgreSQL is configured: "
+        f"{[pod['metadata']['name'] for pod in internal_db_pods]}"
+    )
+    log.info(
+        "Verified NooBaa is configured with external PostgreSQL "
+        f"(secret: {pg_secret_name}, no internal noobaa-db pod running)"
+    )
 
 
 def get_osd_count():
@@ -3763,6 +4129,36 @@ def get_deviceset_name_per_deviceclass():
     """
     device_sets = get_all_device_sets()
     return {d.get("name"): get_deviceclass_name(d) for d in device_sets}
+
+
+def filter_user_defined_device_sets(cephcluster_device_sets):
+    """
+    Filter CephCluster storageClassDeviceSets to only include
+    device sets that correspond to StorageCluster entries,
+    excluding operator-generated ones (e.g. arbiter zone device
+    sets, non-resilient pool rack device sets).
+
+    Args:
+        cephcluster_device_sets (list): The storageClassDeviceSets
+            from the CephCluster spec
+
+    Returns:
+        list: Filtered list of device sets
+
+    """
+    sc_device_set_names = {d.get("name") for d in get_all_device_sets()}
+    result = []
+    for device_set in cephcluster_device_sets:
+        name = device_set["name"]
+        orig_name = re.sub(r"-[0-9]+$", "", name)
+        if orig_name in sc_device_set_names:
+            result.append(device_set)
+        else:
+            log.info(
+                "Skipping operator-generated device set '%s'",
+                name,
+            )
+    return result
 
 
 def get_deviceset_name_per_count():

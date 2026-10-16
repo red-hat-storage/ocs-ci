@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     runs_on_provider,
 )
+from ocs_ci.deployment.helpers.hypershift_base import get_hosted_cluster_namespace
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster
@@ -381,7 +382,9 @@ class TestAddNodeToClientCluster(ManageTest):
                     with config.RunWithProviderConfigContextIfAvailable():
                         nodepool_ocp = ocp.OCP(
                             kind="NodePool",
-                            namespace=constants.CLUSTERS_NAMESPACE,
+                            namespace=get_hosted_cluster_namespace(
+                                config.ENV_DATA.get("cluster_name")
+                            ),
                             resource_name=self._np_name,
                         )
                         patch = {"spec": {"replicas": self._initial_replicas}}
@@ -409,7 +412,9 @@ class TestAddNodeToClientCluster(ManageTest):
         with config.RunWithProviderConfigContextIfAvailable():
             nodepool_ocp = ocp.OCP(
                 kind="NodePool",
-                namespace=constants.CLUSTERS_NAMESPACE,
+                namespace=get_hosted_cluster_namespace(
+                    config.ENV_DATA.get("cluster_name")
+                ),
                 resource_name=np_name,
             )
             patch = {"spec": {"replicas": target_replicas}}

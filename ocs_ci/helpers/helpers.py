@@ -18,6 +18,7 @@ import inspect
 import stat
 import platform
 import ipaddress
+import pytest
 
 from urllib.parse import urlparse, urlunparse
 from concurrent.futures import ThreadPoolExecutor
@@ -284,6 +285,7 @@ def create_pod(
     volumemounts=None,
     pvc_read_only_mode=None,
     priorityClassName=None,
+    host_users=None,
 ):
     """
     Create a pod
@@ -311,6 +313,8 @@ def create_pod(
         deployment (bool): True for Deployment creation, False otherwise
         scc (dict): Set security context on pod like fsGroup, runAsUer, runAsGroup
         volumemounts (list): Value of mountPath parameter in pod yaml
+        host_users (bool): Set spec.hostUsers on the pod
+            (False enables user namespaces)
 
     Returns:
         Pod: A Pod instance
@@ -442,6 +446,11 @@ def create_pod(
             pod_data["spec"]["template"]["securityContext"] = scc
         else:
             pod_data["spec"]["securityContext"] = scc
+    if host_users is not None:
+        if deployment:
+            pod_data["spec"]["template"]["spec"]["hostUsers"] = host_users
+        else:
+            pod_data["spec"]["hostUsers"] = host_users
     if node_name:
         if deployment:
             pod_data["spec"]["template"]["spec"]["nodeName"] = node_name
@@ -716,6 +725,77 @@ def get_pool_size_factor(pool_name):
     factor = float(size_info["size"])
     logger.info(f"Pool '{pool_name}' replicated size from ceph = {factor}")
     return factor
+
+
+def get_pool_data_protection_scheme(pool_name):
+    """
+    Return the data protection scheme of a Ceph pool, matching what the ODF
+    Storage Pools list shows in the "Data protection policy" column.
+
+    The scheme is read from the ``CephBlockPool`` CR (RBD pools) or, when no
+    such CR exists, from the matching entry in a ``CephFilesystem`` CR's
+    ``spec.dataPools`` (CephFS pools). CephFS data pools without an explicit
+    ``name`` follow Rook's ``<filesystem>-data<index>`` naming, while named
+    pools follow ``<filesystem>-<name>``. No Ceph toolbox commands are required.
+
+    Args:
+        pool_name (str): Full pool name as shown in the UI, e.g.
+            'ocs-storagecluster-cephblockpool' or
+            'ocs-storagecluster-cephfilesystem-data0'.
+
+    Returns:
+        dict: For an erasure coded pool
+              ``{"type": "erasure_coded", "data_chunks": k, "coding_chunks": m,
+              "scheme": "k+m"}``; for a replicated pool
+              ``{"type": "replicated", "replica": size}``.
+
+    Raises:
+        ResourceNotFoundError: if the pool is not found in any CephBlockPool or
+            CephFilesystem CR.
+    """
+    namespace = config.ENV_DATA["cluster_namespace"]
+
+    def _scheme_from_spec(spec):
+        ec_spec = spec.get("erasureCoded", {}) or {}
+        k = ec_spec.get("dataChunks", 0)
+        m = ec_spec.get("codingChunks", 0)
+        if k:
+            return {
+                "type": "erasure_coded",
+                "data_chunks": k,
+                "coding_chunks": m,
+                "scheme": f"{k}+{m}",
+            }
+        replica = spec.get("replicated", {}).get("size", 0)
+        return {"type": "replicated", "replica": int(replica)}
+
+    block_pools = (
+        ocp.OCP(kind=constants.CEPHBLOCKPOOL, namespace=namespace)
+        .get()
+        .get("items", [])
+    )
+    for pool in block_pools:
+        if pool["metadata"]["name"] == pool_name:
+            return _scheme_from_spec(pool.get("spec", {}))
+
+    filesystems = (
+        ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=namespace)
+        .get()
+        .get("items", [])
+    )
+    for filesystem in filesystems:
+        fs_name = filesystem["metadata"]["name"]
+        for index, data_pool in enumerate(
+            filesystem.get("spec", {}).get("dataPools", [])
+        ):
+            data_pool_name = data_pool.get("name") or f"data{index}"
+            if f"{fs_name}-{data_pool_name}" == pool_name:
+                return _scheme_from_spec(data_pool)
+
+    raise exceptions.ResourceNotFoundError(
+        f"Pool '{pool_name}' not found in any CephBlockPool or CephFilesystem "
+        f"CR in namespace '{namespace}'"
+    )
 
 
 def create_ceph_block_pool(
@@ -6730,48 +6810,73 @@ def remove_toleration():
     return success
 
 
-def get_reclaimspacecronjob_for_pvc(pvc_obj):
+def get_reclaimspacecronjob_for_pvc(pvc_obj, timeout=120):
     """
     Retrieve the ReclaimSpaceCronJob object associated with a given PVC.
 
+    Waits until the ReclaimSpaceCronJob CR exists. The controller may set the
+    ``reclaimspace.csiaddons.openshift.io/cronjob`` annotation on the PVC, or
+    create the CR as ``<pvc_name>-reclaimspace`` without the annotation first;
+    both patterns are handled (same as storageclass reclaim-space tests).
+
     Args:
         pvc_obj (object): PersistentVolumeClaim (PVC) object.
+        timeout (int): Seconds to wait for the ReclaimSpaceCronJob to appear.
 
     Returns:
         object: OCP object representing the ReclaimSpaceCronJob associated with the PVC.
 
     Raises:
-        ValueError: If the PVC does not have the required annotation for ReclaimSpaceCronJob.
+        ValueError: If no ReclaimSpaceCronJob is found within the timeout.
     """
-    # Reload PVC object if annotations are missing
-    if "annotations" not in pvc_obj.data["metadata"]:
-        pvc_obj.reload()
+    cronjob_annotation_key = "reclaimspace.csiaddons.openshift.io/cronjob"
+    default_name = f"{pvc_obj.name}-reclaimspace"
+    sleep = min(5, timeout)
 
-    # Retrieve the CronJob name from annotations
-    cron_job_name = pvc_obj.data["metadata"]["annotations"].get(
-        "reclaimspace.csiaddons.openshift.io/cronjob"
+    try:
+        for _ in TimeoutSampler(timeout=timeout, sleep=sleep, func=lambda: None):
+            pvc_obj.reload()
+            annotations = pvc_obj.data.get("metadata", {}).get("annotations") or {}
+            cron_job_name = annotations.get(cronjob_annotation_key) or default_name
+            try:
+                cron_obj = OCP(
+                    kind=constants.RECLAIMSPACECRONJOB,
+                    namespace=pvc_obj.namespace,
+                    resource_name=cron_job_name,
+                )
+                cron_obj.get()
+                logger.info(
+                    f"Found ReclaimSpaceCronJob '{cron_job_name}' for PVC '{pvc_obj.name}'"
+                )
+                return cron_obj
+            except CommandFailed as ex:
+                if "Not Found" not in str(ex) and "NotFound" not in str(ex):
+                    raise
+                logger.debug(
+                    f"ReclaimSpaceCronJob '{cron_job_name}' not yet available for PVC "
+                    f"'{pvc_obj.name}': {ex}"
+                )
+    except TimeoutExpiredError:
+        pass
+
+    logger.error(
+        f"ReclaimSpaceCronJob not found for PVC '{pvc_obj.name}' within {timeout}s "
+        f"(tried annotation '{cronjob_annotation_key}' and default name '{default_name}')."
     )
-    if not cron_job_name:
-        logger.error(f"PVC '{pvc_obj.name}' lacks annotation for reclaimspace cronjob.")
-        raise ValueError("PVC has no annotation for reclaimspace cronjob")
-
-    logger.info(f"Found ReclaimSpaceCronJob '{cron_job_name}' for PVC '{pvc_obj.name}'")
-
-    # Create and return the CronJob object
-    return OCP(
-        kind=constants.RECLAIMSPACECRONJOB,
-        namespace=pvc_obj.namespace,
-        resource_name=cron_job_name,
+    raise ValueError(
+        f"ReclaimSpaceCronJob not found for PVC '{pvc_obj.name}' within {timeout} seconds"
     )
 
 
-def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True):
+def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True, timeout=120):
     """
     Enable or disable the ReclaimSpace operation for the PVC's ReclaimSpaceCronJob.
 
     Args:
         pvc_objs (list): List of PersistentVolumeClaim (PVC) objects.
         suspend (bool): If True, disables ReclaimSpace; if False, enables ReclaimSpace.
+        timeout (int): Seconds to wait for the ReclaimSpaceCronJob CR to exist
+            (see ``get_reclaimspacecronjob_for_pvc``).
 
     Returns:
         bool: True if the operation was successfully applied to all PVCs.
@@ -6782,7 +6887,7 @@ def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True):
         logger.info(f"{action} ReclaimSpace operation for PVC '{pvc_obj.name}'")
 
         # Retrieve the associated CronJob object
-        cron_obj = get_reclaimspacecronjob_for_pvc(pvc_obj)
+        cron_obj = get_reclaimspacecronjob_for_pvc(pvc_obj, timeout=timeout)
 
         # Update the annotation state
         state_value = "unmanaged" if suspend else "managed"
@@ -6832,18 +6937,20 @@ def set_schedule_precedence(precedence):
     update_csi_addons_config("schedule-precedence", precedence)
 
 
-def verify_reclaimspacecronjob_suspend_state_for_pvc(pvc_obj):
+def verify_reclaimspacecronjob_suspend_state_for_pvc(pvc_obj, timeout=120):
     """
     Verify the suspend state of the ReclaimSpaceCronJob associated with the given PVC.
 
     Args:
         pvc_obj (object): PersistentVolumeClaim (PVC) object.
+        timeout (int): Seconds to wait for the ReclaimSpaceCronJob CR to exist
+            (see ``get_reclaimspacecronjob_for_pvc``).
 
     Returns:
         bool: True if the suspend state is True and the state annotation is 'unmanaged', False otherwise.
     """
     # Retrieve the ReclaimSpaceCronJob object for the PVC
-    reclaimspace_cronjob = get_reclaimspacecronjob_for_pvc(pvc_obj)
+    reclaimspace_cronjob = get_reclaimspacecronjob_for_pvc(pvc_obj, timeout=timeout)
 
     # Extract and log the suspend state
     suspend_state = reclaimspace_cronjob.data["spec"].get("suspend", False)
@@ -7033,16 +7140,28 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
                 namespace=config.ENV_DATA["cluster_namespace"],
             ).get()["items"]
         ]
+    # If there are custom pools there will be multiple radosnamespace for internal storageconsumer and
+    # remote storageconsumers. The default interal cephblockpoolradosnamespace will start with
+    # ocs-storagecluster-cephblockpool or replicated-metadata-pool
     if storageconsumer == constants.INTERNAL_STORAGE_CONSUMER_NAME:
         cephbpradosns = list(
-            filter(lambda x: "-builtin-implicit" in x, cephblockpool_rns_names)
+            filter(
+                lambda x: "replicated-metadata-pool-builtin-implicit" in x
+                or "ocs-storagecluster-cephblockpool-builtin-implicit" in x,
+                cephblockpool_rns_names,
+            )
         )[0]
     else:
         cephbpradosns = list(
-            filter(lambda x: f"-{storageconsumer}" in x, cephblockpool_rns_names)
+            filter(
+                lambda x: f"replicated-metadata-pool-{storageconsumer}" in x
+                or f"ocs-storagecluster-cephblockpool-{storageconsumer}" in x,
+                cephblockpool_rns_names,
+            )
         )[0]
     logger.info(
-        f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
+        f"StorageClient is {storageclient_name} with uid {storageclient_uid}. "
+        f"StorageConsumer is {storageconsumer}. Cephblockpoolradosnamespace is {cephbpradosns}."
     )
 
     # from ODF 4.19 and onwards, StorageRequest does not exist on new clusters, upgraded clusters have it,
@@ -7548,3 +7667,672 @@ def wait_for_osds_down(osd_ids: list[str], timeout: int = 300, sleep: int = 10) 
         )
 
     log.info(f"All OSDs {osd_ids} are now marked as 'down'")
+
+
+def create_cephfs_ec_pool(
+    pool_name,
+    data_chunks=None,
+    coding_chunks=None,
+    replica=3,
+    compression="none",
+    erasure_coded=True,
+):
+    """
+    Add an EC data pool to the CephFilesystem via StorageCluster patch.
+
+    Patches spec.managedResources.cephFilesystems.additionalDataPools
+    and waits for the Ceph pool to appear.
+
+    Args:
+        pool_name (str): Short pool name (e.g. "test-ec-fs")
+        data_chunks (int): Number of data chunks (k)
+        coding_chunks (int): Number of coding chunks (m)
+        replica (int): Number of replicas for the pool
+        compression (str): Compression mode (none, passive, aggressive, force)
+        erasure_coded (bool): True to create an erasure coded pool instead of replicated.
+            If True, arguments not related to erasure coding will be invalidated.
+
+    Returns:
+        str: Full pool name (e.g. "ocs-storagecluster-cephfilesystem-test-ec-fs")
+    """
+
+    # TODO: Change the name of the function to create_cephfs_data_pool and make erasure_coded=False as default.
+    # TODO: This function can handle replica pool as well.
+    from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
+
+    allowed = {"none", "passive", "aggressive", "force", ""}
+    if compression not in allowed:
+        raise ValueError(
+            f"Invalid compressionMode '{compression}'. Supported values: {allowed}"
+        )
+
+    sc_obj = get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"])
+    sc_data = sc_obj.get()["items"][0]
+    sc_name = sc_data["metadata"]["name"]
+
+    current_pools = (
+        sc_data.get("spec", {})
+        .get("managedResources", {})
+        .get("cephFilesystems", {})
+        .get("additionalDataPools", [])
+    )
+
+    fs_name = get_cephfs_name()
+    full_pool_name = f"{fs_name}-{pool_name}"
+
+    pool_names = {p.get("name") for p in current_pools}
+    if pool_name in pool_names:
+        logger.warning(
+            f"Data pool '{pool_name}' already exists in CephFilesystem. The configuration is not verified"
+        )
+        return full_pool_name
+
+    if erasure_coded:
+        from ocs_ci.ocs.cluster import get_ec_profile
+
+        resolved_data_chunks, resolved_coding_chunks = (
+            (data_chunks, coding_chunks)
+            if data_chunks is not None and coding_chunks is not None
+            else get_ec_profile()
+        )
+        new_entry = {
+            "name": pool_name,
+            "erasureCoded": {
+                "dataChunks": resolved_data_chunks,
+                "codingChunks": resolved_coding_chunks,
+            },
+        }
+    else:
+        new_entry = {
+            "name": pool_name,
+            "compressionMode": compression,
+            "replicated": {"size": replica},
+        }
+    updated_pools = current_pools + [new_entry]
+
+    patch = {
+        "spec": {
+            "managedResources": {
+                "cephFilesystems": {"additionalDataPools": updated_pools}
+            }
+        }
+    }
+    logger.info(f"Patching StorageCluster to add CephFS EC pool '{pool_name}'")
+    sc_obj.patch(resource_name=sc_name, params=json.dumps(patch), format_type="merge")
+
+    ct_pod = pod.get_ceph_tools_pod()
+    logger.info(f"Waiting for Ceph pool '{full_pool_name}' to appear")
+    for pools in TimeoutSampler(300, 10, ct_pod.exec_ceph_cmd, "ceph osd pool ls"):
+        if full_pool_name in pools:
+            logger.info(f"Ceph pool '{full_pool_name}' created successfully")
+            break
+
+    return full_pool_name
+
+
+def delete_cephfs_ec_pool(pool_name):
+    """
+    Remove an EC data pool from CephFilesystem via StorageCluster patch.
+
+    Removes the entry with matching name from
+    spec.managedResources.cephFilesystems.additionalDataPools
+    and waits for the Ceph pool to disappear.
+
+    Args:
+        pool_name (str): Short pool name (e.g. "test-ec-fs")
+    """
+    from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
+
+    sc_obj = get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"])
+    sc_data = sc_obj.get()["items"][0]
+    sc_name = sc_data["metadata"]["name"]
+
+    current_pools = (
+        sc_data.get("spec", {})
+        .get("managedResources", {})
+        .get("cephFilesystems", {})
+        .get("additionalDataPools", [])
+    )
+
+    updated_pools = [p for p in current_pools if p.get("name") != pool_name]
+
+    patch = {
+        "spec": {
+            "managedResources": {
+                "cephFilesystems": {"additionalDataPools": updated_pools}
+            }
+        }
+    }
+    logger.info(f"Patching StorageCluster to remove CephFS EC pool '{pool_name}'")
+    sc_obj.patch(resource_name=sc_name, params=json.dumps(patch), format_type="merge")
+
+    fs_name = get_cephfs_name()
+    full_pool_name = f"{fs_name}-{pool_name}"
+
+    ct_pod = pod.get_ceph_tools_pod()
+    logger.info(f"Waiting for Ceph pool '{full_pool_name}' to be removed")
+    try:
+        for pools in TimeoutSampler(600, 15, ct_pod.exec_ceph_cmd, "ceph osd pool ls"):
+            if full_pool_name not in pools:
+                logger.info(f"Ceph pool '{full_pool_name}' removed successfully")
+                break
+    except TimeoutExpiredError:
+        logger.warning(
+            f"Ceph pool '{full_pool_name}' was not removed within timeout. "
+            "The pool entry was already removed from StorageCluster CR."
+        )
+
+
+def create_userns_project(project_name=None, uid_range="10000/1000"):
+    """
+    Create a project with restricted PSA policy and user namespace
+    UID/GID annotations.
+
+    Sets both ``openshift.io/sa.scc.uid-range`` and
+    ``openshift.io/sa.scc.supplemental-groups`` to *uid_range*.
+
+    Args:
+        project_name (str): Name for the new project.
+            Auto-generated if not provided.
+        uid_range (str): UID/GID range in ``start/count`` format
+            (default ``10000/1000``).
+
+    Returns:
+        ocp.OCP: Project object (kind ``Project``)
+    """
+    namespace = project_name or create_unique_resource_name("test-userns", "namespace")
+    project_obj = ocp.OCP(kind="Project", namespace=namespace)
+    assert project_obj.new_project(
+        namespace, policy=constants.PSA_RESTRICTED
+    ), f"Failed to create project {namespace}"
+
+    ns_ocp = ocp.OCP(kind="namespace")
+    ns_ocp.annotate(
+        f"{constants.SA_SCC_SUPPLEMENTAL_GROUPS}={uid_range}",
+        resource_name=namespace,
+    )
+    ns_ocp.annotate(
+        f"{constants.SA_SCC_UID_RANGE}={uid_range}",
+        resource_name=namespace,
+    )
+    logger.info(
+        f"Created user namespace project {namespace} "
+        f"with restricted PSA and uid-range={uid_range}"
+    )
+    return project_obj
+
+
+def create_userns_pod(
+    pvc_name,
+    namespace,
+    run_as_user=10900,
+    run_as_group=10900,
+    fs_group=10000,
+    interface_type=None,
+    node_name=None,
+    mount_path="/mnt/test",
+    pod_name=None,
+):
+    """
+    Create a pod with user namespace isolation (hostUsers=false)
+    and a restricted-v2 compatible security context.
+
+    The pod runs ``sleep infinity`` so it stays alive for exec
+    commands.
+
+    Args:
+        pvc_name (str): PVC to attach
+        namespace (str): Target namespace
+        run_as_user (int): Container UID (default 10900)
+        run_as_group (int): Container GID (default 10900)
+        fs_group (int): fsGroup value for pod securityContext
+            (default 10000). Must be within namespace's
+            supplemental-groups range for restricted-v2 SCC.
+        interface_type (str): CephFileSystem or CephBlockPool
+            (default CephFileSystem)
+        node_name (str): Schedule on this node (optional)
+        mount_path (str): Container mount path for the PVC
+            (default ``/mnt/test``)
+        pod_name (str): Explicit pod name (optional)
+
+    Returns:
+        Pod: Created Pod object
+    """
+    interface_type = interface_type or constants.CEPHFILESYSTEM
+    return create_pod(
+        interface_type=interface_type,
+        pvc_name=pvc_name,
+        namespace=namespace,
+        node_name=node_name,
+        pod_name=pod_name,
+        command=["sh", "-c", "sleep infinity"],
+        security_context={
+            "allowPrivilegeEscalation": False,
+            "capabilities": {"drop": ["ALL"]},
+            "seccompProfile": {
+                "type": "RuntimeDefault",
+            },
+        },
+        scc={
+            "runAsUser": run_as_user,
+            "runAsGroup": run_as_group,
+            "fsGroup": fs_group,
+            "supplementalGroups": [fs_group],
+            "runAsNonRoot": True,
+        },
+        volumemounts=[
+            {"mountPath": mount_path, "name": "mypvc"},
+        ],
+        host_users=False,
+    )
+
+
+def verify_file_ownership(pod_obj, file_path, expected_uid, expected_gid):
+    """
+    Verify file ownership inside a pod using ``ls -ln``.
+
+    Args:
+        pod_obj (Pod): Pod to exec into
+        file_path (str): Absolute path to the file
+        expected_uid (int): Expected numeric UID
+        expected_gid (int): Expected numeric GID
+
+    Returns:
+        tuple: ``(uid, gid)`` parsed from ``ls -ln`` output
+    """
+    out = pod_obj.exec_sh_cmd_on_pod(f"ls -ln {file_path}")
+    logger.info(f"ls -ln {file_path}: {out}")
+    parts = out.split()
+    assert len(parts) >= 4, f"Unexpected ls -ln output for {file_path}: {out}"
+    file_uid = int(parts[2])
+    file_gid = int(parts[3])
+    assert (
+        file_uid == expected_uid
+    ), f"File UID {file_uid} != expected {expected_uid} for {file_path}"
+    assert (
+        file_gid == expected_gid
+    ), f"File GID {file_gid} != expected {expected_gid} for {file_path}"
+    return file_uid, file_gid
+
+
+def create_custom_secret_for_cnsa_rm(name, namespace, data_dict, secret_type="Opaque"):
+    """
+    Helper to create a Kubernetes Secret using OCP class and temporary YAML files.
+
+    Args:
+        name (str): Name of the Secret
+        namespace (str): Namespace in which the Secret is created
+        data_dict (dict): Mapping of Secret keys to values
+        secret_type (str): Kubernetes Secret type
+
+    Returns:
+        dict: Result of the Secret creation
+    """
+    # Base64-encode every value so it can be placed under the Secret's `data`
+    # field (which requires base64-encoded strings). Dict values are first
+    # serialized to a JSON string before encoding.
+    encoded_data = {}
+    for k, v in data_dict.items():
+        val_str = json.dumps(v) if isinstance(v, dict) else str(v)
+        encoded_data[k] = base64.b64encode(val_str.encode()).decode()
+
+    manifest = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {"name": name, "namespace": namespace},
+        "type": secret_type,
+        "data": encoded_data,
+    }
+    fd, temp_path = tempfile.mkstemp(suffix=".yaml")
+    try:
+        dump_data_to_temp_yaml(manifest, temp_path, log=False)
+        secret_ocp = OCP(kind="Secret", namespace=namespace)
+        return secret_ocp.create(yaml_file=temp_path)
+    finally:
+        os.close(fd)
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+def _apply_mco():
+    """
+    Apply the IBM Storage Scale MCO (Meta Cluster Operator) manifest using a
+    pinned commit URL. Isolated in its own function because the URL is not
+    stable and is expected to change over time.
+
+    Raises:
+        CommandFailed: if applying the MCO manifest fails
+    """
+    mco_url = (
+        "https://raw.githubusercontent.com/IBM/ibm-spectrum-scale-container-native/"
+        "502fbcbe968651d2c94bd6b8419958c835383696/generated/scale/mco/mco.yaml"
+    )
+    try:
+        exec_cmd(f"oc apply -f {mco_url}")
+    except CommandFailed as e:
+        raise CommandFailed(f"Scale operator deployment failed: {e}") from e
+
+
+def setup_scale_cluster_infrastructure_for_cnsa_rm(
+    namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
+    tracked_resources=None,
+):
+    """
+    Deploys core Scale operator (MCO), Entitlement key, and local IBM Scale Cluster CR.
+
+    Args:
+        namespace (str): Target namespace
+        tracked_resources (list): Optional list to record created resources for cleanup
+    """
+    logger.info("--- Setup: IBM Storage Scale Infrastructure ---")
+
+    # Validate required AUTH parameters early before mutating cluster state
+    ent_key = config.AUTH.get("ibm_entitlement_key")
+    if not ent_key:
+        pytest.skip("ibm_entitlement_key not configured in config.AUTH")
+
+    host_aliases = config.AUTH.get("scale_host_aliases")
+    if not host_aliases:
+        pytest.skip("scale_host_aliases not configured in config.AUTH")
+
+    cluster_name = constants.IBM_STORAGE_SCALE_CLUSTER_NAME
+
+    # 1. Apply MCO (Operator) using pinned commit URL
+    _apply_mco()
+
+    # 2. Check and Create Entitlement Secret
+    secret_name = "ibm-entitlement-key"
+    secret_ocp = OCP(kind="Secret", namespace=namespace)
+    try:
+        secret_ocp.get(resource_name=secret_name)
+        logger.info(f"Secret '{secret_name}' already exists.")
+    except exceptions.CommandFailed:
+        logger.info(f"Secret '{secret_name}' not found. Creating...")
+        auth_b64 = base64.b64encode(f"cp:{ent_key}".encode()).decode()
+        docker_config = {
+            "auths": {
+                "cp.icr.io": {
+                    "username": "cp",
+                    "password": ent_key,
+                    "auth": auth_b64,
+                }
+            }
+        }
+        create_custom_secret_for_cnsa_rm(
+            name=secret_name,
+            namespace=namespace,
+            data_dict={".dockerconfigjson": docker_config},
+            secret_type="kubernetes.io/dockerconfigjson",
+        )
+        if tracked_resources is not None:
+            tracked_resources.append(("Secret", secret_name, namespace))
+
+    # 3. Create Cluster CR
+    scale_cluster_kind = constants.IBM_STORAGE_SCALE_CLUSTER_KIND
+    scale_cluster_ocp = OCP(kind=scale_cluster_kind, namespace=namespace)
+
+    try:
+        scale_cluster_ocp.get(resource_name=cluster_name)
+        logger.info(f"Scale Cluster CR '{cluster_name}' already exists.")
+    except exceptions.CommandFailed:
+        logger.info(f"Creating local IBM Scale Cluster CR '{cluster_name}'...")
+        cluster_manifest = {
+            "apiVersion": "scale.spectrum.ibm.com/v1beta1",
+            "kind": "Cluster",
+            "metadata": {"name": cluster_name, "namespace": namespace},
+            "spec": {
+                "license": {"accept": True, "license": "data-management"},
+                "daemon": {
+                    "roles": [],
+                    "hostAliases": host_aliases,
+                    "nodeSelector": {"scale.spectrum.ibm.com/daemon-selector": ""},
+                    "resources": {"requests": {"cpu": "2", "memory": "6Gi"}},
+                },
+            },
+        }
+
+        fd, temp_path = tempfile.mkstemp(suffix=".yaml")
+        try:
+            os.close(fd)
+            dump_data_to_temp_yaml(cluster_manifest, temp_path)
+            exec_cmd(f"oc create -f {temp_path}")
+            if tracked_resources is not None:
+                tracked_resources.append(
+                    (
+                        constants.IBM_STORAGE_SCALE_CLUSTER_KIND,
+                        cluster_name,
+                        namespace,
+                    )
+                )
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        logger.info(f"Successfully created Cluster {cluster_name}")
+
+
+def setup_scale_remote_connection(
+    rc_name,
+    user_secret_name,
+    namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
+    tracked_resources=None,
+):
+    """
+    Creates authentication secrets and RemoteCluster resource, then waits for it to reach Ready state.
+
+    Args:
+        rc_name (str): RemoteCluster name
+        user_secret_name (str): Secret name for user details
+        namespace (str): Target namespace
+        tracked_resources (list): Optional tracking handle for cleanup
+    """
+    gui_user = config.AUTH.get("scale_gui_user")
+    gui_password = config.AUTH.get("scale_gui_password")
+    gui_hosts = config.AUTH.get("scale_gui_hosts")
+
+    if not gui_user or not gui_password:
+        pytest.skip("Scale GUI Auth credentials not configured.")
+    if not gui_hosts:
+        pytest.skip("scale_gui_hosts target endpoint mapping not configured.")
+
+    create_custom_secret_for_cnsa_rm(
+        name=user_secret_name,
+        namespace=namespace,
+        data_dict={
+            "username": gui_user,
+            "password": gui_password,
+        },
+    )
+    if tracked_resources is not None:
+        tracked_resources.append(("Secret", user_secret_name, namespace))
+
+    rc_data = {
+        "apiVersion": "scale.spectrum.ibm.com/v1beta1",
+        "kind": "RemoteCluster",
+        "metadata": {"name": rc_name, "namespace": namespace},
+        "spec": {
+            "gui": {
+                "hosts": gui_hosts,
+                "insecureSkipVerify": True,
+                "port": 443,
+                "scheme": "https",
+                "secretName": user_secret_name,
+            }
+        },
+    }
+
+    fd, temp_path = tempfile.mkstemp(suffix=".yaml")
+    try:
+        os.close(fd)
+        dump_data_to_temp_yaml(rc_data, temp_path)
+        exec_cmd(f"oc create -f {temp_path}")
+        if tracked_resources is not None:
+            tracked_resources.append(
+                (
+                    constants.IBM_STORAGE_SCALE_REMOTECLUSTER_KIND,
+                    rc_name,
+                    namespace,
+                )
+            )
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+    rc_ocp = OCP(
+        kind=constants.IBM_STORAGE_SCALE_REMOTECLUSTER_KIND,
+        namespace=namespace,
+        resource_name=rc_name,
+    )
+    sampler = TimeoutSampler(
+        timeout=600,
+        sleep=15,
+        func=lambda: any(
+            c.get("type") == "Ready" and c.get("status") == "True"
+            for c in rc_ocp.get().get("status", {}).get("conditions", [])
+        ),
+    )
+    assert sampler.wait_for_func_status(
+        True
+    ), "RemoteCluster failed to reach Ready state."
+
+
+def assert_pvc_volume_health_event(pvc_obj, reason, event_type, message_substr):
+    """
+    Assert that at least one K8s event matching the given criteria exists
+    for the PVC, with ``source.component == 'CSI-Addons'``.
+
+    Args:
+        pvc_obj: PVC object
+        reason (str): Expected event reason
+            (e.g. 'VolumeConditionHealthy', 'VolumeConditionAbnormal')
+        event_type (str): Expected event type ('Normal' or 'Warning')
+        message_substr (str): Substring expected in the event message
+
+    Returns:
+        list: Matching event dicts (for caller to do additional checks)
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    event_ocp = OCP(kind="Event", namespace=pvc_obj.namespace)
+    events = event_ocp.get(
+        field_selector=f"involvedObject.name={pvc_obj.name}",
+    )["items"]
+    matching = [
+        e
+        for e in events
+        if e.get("reason") == reason and message_substr in e.get("message", "")
+    ]
+    assert len(matching) >= 1, (
+        f"No {reason} events with '{message_substr}' "
+        f"for PVC {pvc_obj.name}. "
+        f"Events: {[(e.get('reason'), e.get('message')) for e in events]}"
+    )
+    for evt in matching:
+        assert (
+            evt["type"] == event_type
+        ), f"Expected event type '{event_type}', got '{evt['type']}'"
+        source = evt.get("source", {})
+        assert source.get("component") == "CSI-Addons", (
+            f"Expected source.component 'CSI-Addons', "
+            f"got '{source.get('component')}'"
+        )
+    return matching
+
+
+def blocklist_cephfs_client(pvc_obj, subvolume_path=None):
+    """
+    Find the CephFS client for a PVC's subvolume, add it to the
+    Ceph OSD blocklist, and evict it from the active MDS.
+
+    Args:
+        pvc_obj: PVC object (must be CephFS-backed and have a bound PV).
+            Not used when subvolume_path is provided.
+        subvolume_path (str, optional): Pre-resolved subvolume path.
+            If provided, skips PVC/PV lookup. Required for HCI platforms
+            where PVC/PV exist on client cluster but blocklisting happens
+            on provider cluster.
+
+    Returns:
+        tuple: (client_id, client_addr) for use in cleanup
+    """
+    from ocs_ci.ocs.ocp import OCP
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    if subvolume_path is None:
+        pvc_obj.reload()
+        pv_name = pvc_obj.backed_pv
+        assert pv_name, f"PVC {pvc_obj.name} has no bound PV"
+
+        pv_ocp = OCP(kind="pv", resource_name=pv_name)
+        pv_data = pv_ocp.get()
+        subvolume_path = pv_data["spec"]["csi"]["volumeAttributes"]["subvolumePath"]
+
+    logger.info(f"Subvolume path: {subvolume_path}")
+
+    toolbox = get_ceph_tools_pod()
+    client_ls_out = toolbox.exec_sh_cmd_on_pod(command="ceph tell mds.0 client ls")
+    clients = json.loads(client_ls_out)
+
+    client_id = None
+    client_addr = None
+    for c in clients:
+        root = c.get("client_metadata", {}).get("root", "")
+        if subvolume_path in root:
+            client_id = c["id"]
+            client_addr = c["inst"].split(" ")[-1]
+            break
+
+    assert (
+        client_id is not None
+    ), f"No CephFS client found for subvolume {subvolume_path}"
+    logger.info(f"Found client id={client_id}, addr={client_addr}")
+
+    toolbox.exec_sh_cmd_on_pod(command=f"ceph osd blocklist add {client_addr}")
+    logger.info(f"Blocklisted client {client_addr}")
+
+    try:
+        fs_status_out = toolbox.exec_sh_cmd_on_pod(command="ceph fs status -f json")
+        fs_status = json.loads(fs_status_out)
+        active_mds = [m["name"] for m in fs_status["mdsmap"] if m["state"] == "active"][
+            0
+        ]
+        logger.info(f"Active MDS: {active_mds}")
+
+        toolbox.exec_sh_cmd_on_pod(
+            command=f"ceph tell mds.{active_mds} client evict id={client_id}"
+        )
+        logger.info(f"Evicted client id={client_id}")
+    except Exception:
+        logger.warning(
+            f"MDS lookup or client eviction failed after blocklisting "
+            f"{client_addr}. Removing blocklist before re-raising."
+        )
+        remove_cephfs_client_blocklist(client_addr)
+        raise
+
+    return client_id, client_addr
+
+
+def remove_cephfs_client_blocklist(client_addr):
+    """
+    Remove a CephFS client address from the Ceph OSD blocklist.
+
+    Idempotent: logs a warning if the address is not currently
+    blocklisted. Re-raises unexpected errors.
+
+    Args:
+        client_addr (str): Client address previously blocklisted
+    """
+    from ocs_ci.ocs.exceptions import CommandFailed
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    toolbox = get_ceph_tools_pod()
+    try:
+        toolbox.exec_sh_cmd_on_pod(command=f"ceph osd blocklist rm {client_addr}")
+        logger.info(f"Removed blocklist for {client_addr}")
+    except CommandFailed as ex:
+        if "isn't blocklisted" in str(ex) or "not blocklisted" in str(ex):
+            logger.warning(
+                f"{client_addr} is not currently blocklisted, " f"nothing to remove"
+            )
+        else:
+            raise

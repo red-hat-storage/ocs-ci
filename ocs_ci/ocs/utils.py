@@ -56,6 +56,7 @@ from ocs_ci.utility.version import (
     get_submariner_operator_version,
     get_volsync_operator_version,
 )
+from ocs_ci.helpers.odf_cli import ODFCLIRetriever
 
 
 log = logging.getLogger(__name__)
@@ -805,6 +806,12 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
         log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
         return
 
+    if ocsci_config.DEPLOYMENT.get("fusion_access"):
+        log.info(
+            "Skipping Ceph toolbox setup — Fusion Access cluster has no CephCluster"
+        )
+        return
+
     with config.RunWithProviderConfigContextIfAvailable():
         namespace = ocsci_config.ENV_DATA["cluster_namespace"]
         ceph_toolbox = get_pod_name_by_pattern("rook-ceph-tools", namespace)
@@ -1282,6 +1289,42 @@ def _collect_ocs_logs(
             ocs_must_gather_image_and_tag = mirror_image(
                 ocs_must_gather_image_and_tag, cluster_config
             )
+        try:
+            if (
+                version.get_semantic_ocs_version_from_config(
+                    cluster_config=cluster_config
+                )
+                >= version.VERSION_5_0
+            ):
+                # Avoid circular import: ocs.utils -> utility.utils -> ocs.utils
+                from ocs_ci.utility.utils import exec_cmd as _exec_cmd
+
+                retriever = ODFCLIRetriever()
+                retriever.retrieve_odf_cli_binary()
+                ns = cluster_config.ENV_DATA["cluster_namespace"]
+                log.info(
+                    f"Collecting 'odf get health' for cluster "
+                    f"{cluster_config.ENV_DATA['cluster_name']}"
+                )
+                result = _exec_cmd(
+                    f"{retriever.local_cli_path} -n {ns} get health",
+                    cluster_config=cluster_config,
+                    ignore_error=True,
+                )
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                odf_health_file = os.path.join(
+                    ocs_log_dir_path,
+                    f"odf_get_health_{timestamp}.log",
+                )
+                os.makedirs(ocs_log_dir_path, exist_ok=True)
+                with open(odf_health_file, "w") as f:
+                    f.write(result.stdout.decode())
+                    if result.stderr:
+                        f.write("\n--- stderr ---\n")
+                        f.write(result.stderr.decode())
+                log.info(f"'odf get health' output saved to {odf_health_file}")
+        except Exception as e:
+            log.warning(f"Failed to collect 'odf get health' output: {e}")
         mg_output = run_must_gather(
             ocs_log_dir_path,
             ocs_must_gather_image_and_tag,
@@ -1380,9 +1423,7 @@ def _collect_ocs_logs(
                 )
 
             # We want to skip submariner log collection if it's in import clusters phase
-            if not cluster_config.ENV_DATA.get(
-                "import_clusters_to_acm", False
-            ) or cluster_config.ENV_DATA.get("submariner_source", ""):
+            if not cluster_config.ENV_DATA.get("import_clusters_to_acm", False):
                 subctl_available = True
                 with subctl_lock:
                     try:
@@ -1438,6 +1479,10 @@ def collect_ocs_logs(
     """
     Collects OCS logs
 
+    Also copies Krkn scenario/output logs from ``data/krkn_scenarios`` and
+    ``data/krkn_output`` into the collected log directory when those trees
+    exist. Missing or empty sources are skipped.
+
     Args:
         dir_name (str): directory name to store OCS logs. Logs will be stored
             in dir_name suffix with _ocs_logs.
@@ -1457,6 +1502,18 @@ def collect_ocs_logs(
         since_time (str): Only return logs after a specific date (RFC3339). For example "2024-01-15T10:30:00Z"
 
     """
+    try:
+        from ocs_ci.krkn_chaos.krkn_log_collector import (
+            collect_krkn_run_logs,
+            get_krkn_logs_collection_dir,
+        )
+
+        collect_krkn_run_logs(
+            get_krkn_logs_collection_dir(dir_name, status_failure=status_failure)
+        )
+    except Exception:
+        log.exception("Failed to collect Krkn run logs")
+
     cwd = os.getcwd()
     results = list()
     with ThreadPoolExecutor() as executor:
@@ -1867,22 +1924,31 @@ def get_all_acm_and_recovery_indexes():
 
 def enable_mco_console_plugin():
     """
-    Enables console plugin for MCO
+    Enables the ODF multicluster console plugin on the ACM hub cluster.
+
+    This function is idempotent — it checks whether the plugin is already
+    present in ``console.operator/cluster`` before patching, so it is safe
+    to call multiple times without side effects.
+
+    If ``spec.plugins`` does not exist yet (fresh cluster with no plugins),
+    the key is treated as an empty list so the membership check never raises
+    a KeyError.
     """
-    if (
-        "odf-multicluster-console"
-        in OCP(kind="console.operator", resource_name="cluster").get()["spec"][
-            "plugins"
-        ]
-    ):
-        log.info("MCO console plugin is enabled")
+    plugins = (
+        OCP(kind="console.operator", resource_name="cluster")
+        .get()
+        .get("spec", {})
+        .get("plugins", [])
+    )
+    if "odf-multicluster-console" in plugins:
+        log.info("MCO console plugin is already enabled — skipping patch")
     else:
+        log.info("Enabling MCO console plugin")
         patch = '\'[{"op": "add", "path": "/spec/plugins/-", "value": "odf-multicluster-console"}]\''
         patch_cmd = (
             f"patch console.operator cluster -n openshift-console"
             f" --type json -p {patch}"
         )
-        log.info("Enabling MCO console plugin")
         ocp_obj = OCP()
         ocp_obj.exec_oc_cmd(command=patch_cmd)
 
@@ -1932,6 +1998,60 @@ def get_recovery_cluster_config():
     for cluster in ocsci_config.clusters:
         if cluster.MULTICLUSTER.get("recovery_cluster"):
             return cluster
+
+
+def get_secondary_cluster_config():
+    """
+    Get the secondary cluster config object in a DR scenario.
+    The secondary cluster is the one that is not primary, not recovery,
+    not active_acm, and not passive_acm.
+
+    If multiple clusters remain after filtering, it uses dr_cluster_relations
+    to identify which one is the secondary (the one that is not primary).
+
+    Return:
+        framework.config: secondary cluster config object from config.clusters
+
+    """
+    # Get primary cluster name
+    primary_cluster = get_primary_cluster_config()
+    primary_cluster_name = (
+        primary_cluster.ENV_DATA["cluster_name"] if primary_cluster else None
+    )
+
+    # Filter out primary, recovery, and ACM clusters
+    candidate_clusters = []
+    for cluster in ocsci_config.clusters:
+        if (
+            not cluster.MULTICLUSTER.get("primary_cluster")
+            and not cluster.MULTICLUSTER.get("recovery_cluster")
+            and not cluster.MULTICLUSTER.get("active_acm_cluster")
+            and not (
+                cluster.MULTICLUSTER.get("acm_cluster")
+                and not cluster.MULTICLUSTER.get("active_acm_cluster")
+            )
+        ):
+            candidate_clusters.append(cluster)
+
+    # If only one candidate, return it
+    if len(candidate_clusters) == 1:
+        return candidate_clusters[0]
+
+    # If multiple candidates, use dr_cluster_relations to find secondary
+    if len(candidate_clusters) > 1 and primary_cluster_name:
+        dr_relations = ocsci_config.MULTICLUSTER.get("dr_cluster_relations", [])
+        for relation in dr_relations:
+            if primary_cluster_name in relation:
+                # Find the other cluster in the relation (the secondary)
+                for cluster_name in relation:
+                    if cluster_name != primary_cluster_name:
+                        # Find the cluster config with this name
+                        for cluster in candidate_clusters:
+                            if cluster.ENV_DATA["cluster_name"] == cluster_name:
+                                return cluster
+
+    # Fallback: return first candidate if no match found
+    return candidate_clusters[0] if candidate_clusters else None
 
 
 def set_recovery_as_primary():
@@ -2196,6 +2316,8 @@ def get_nb_db_psql_version_from_image():
         )
 
 
+# Retry on failures as during upgrades we may encounter transient errors like "the database system is shutting down"
+@retry(UnexpectedBehaviour, tries=10, delay=10, backoff=1)
 def query_nb_db_psql_version():
     """
     Query the NooBaa DB for its PostgreSQL version

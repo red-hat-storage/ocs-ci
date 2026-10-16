@@ -1,3 +1,4 @@
+import json
 import os
 import logging
 from datetime import datetime
@@ -29,11 +30,11 @@ from ocs_ci.deployment.helpers.odf_deployment_helpers import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.defaults import (
     EXTERNAL_CLUSTER_USER,
     MUST_GATHER_UPSTREAM_IMAGE,
     MUST_GATHER_UPSTREAM_TAG,
-    OCS_OPERATOR_NAME,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
@@ -166,6 +167,139 @@ def prune_old_df_repo_idms(keep_latest: int = 1, force_delete_pods: bool = False
     return to_delete
 
 
+def _patch_max_openshift_version_in_annotation(annotation_value, target_version):
+    """
+    Parse a JSON annotation string containing olm.maxOpenShiftVersion
+    and replace its value with target_version.
+
+    Args:
+        annotation_value (str): JSON string from CSV annotation
+        target_version (str): New maxOpenShiftVersion value
+
+    Returns:
+        str: Updated JSON string, or None if no change was needed
+
+    """
+    try:
+        data = json.loads(annotation_value)
+    except (json.JSONDecodeError, TypeError):
+        log.warning("Failed to parse annotation value as JSON: %s", annotation_value)
+        return None
+
+    changed = False
+    if isinstance(data, list):
+        for entry in data:
+            if (
+                isinstance(entry, dict)
+                and entry.get("type") == "olm.maxOpenShiftVersion"
+            ):
+                if entry.get("value") != target_version:
+                    entry["value"] = target_version
+                    changed = True
+    elif isinstance(data, dict):
+        props = data.get("properties", [])
+        if not isinstance(props, list):
+            log.warning(
+                "Unexpected type for 'properties' in annotation: %s",
+                type(props).__name__,
+            )
+            return None
+        for entry in props:
+            if (
+                isinstance(entry, dict)
+                and entry.get("type") == "olm.maxOpenShiftVersion"
+            ):
+                if entry.get("value") != target_version:
+                    entry["value"] = target_version
+                    changed = True
+
+    return json.dumps(data) if changed else None
+
+
+def patch_csv_max_openshift_version(target_version, csv_prefixes=None, namespace=None):
+    """
+    Patch maxOpenShiftVersion in olm.properties and
+    operatorframework.io/properties annotations on ODF CSVs.
+
+    During EUS-to-EUS upgrades, ODF CSVs restrict OCP upgrades via the
+    maxOpenShiftVersion annotation. This patches the restriction so that
+    OCP can advance to the target version.
+
+    Args:
+        target_version (str): The maxOpenShiftVersion value to set
+            (e.g., "4.22")
+        csv_prefixes (list): CSV name prefixes to patch. Defaults to
+            config UPGRADE.eus_csvs_to_patch or
+            ["odf-operator", "odf-dependencies"].
+        namespace (str): Namespace where CSVs live. Defaults to
+            config ENV_DATA.cluster_namespace.
+
+    """
+    if csv_prefixes is None:
+        csv_prefixes = config.UPGRADE.get(
+            "eus_csvs_to_patch", ["odf-operator", "odf-dependencies"]
+        )
+    if namespace is None:
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+    log.info(
+        "EUS upgrade: patching maxOpenShiftVersion to %s on CSVs "
+        "matching prefixes %s in namespace %s",
+        target_version,
+        csv_prefixes,
+        namespace,
+    )
+
+    annotation_keys = ["olm.properties", "operatorframework.io/properties"]
+    csv_ocp = OCP(kind="csv", namespace=namespace)
+
+    for prefix in csv_prefixes:
+        matching_csvs = get_csvs_start_with_prefix(prefix, namespace)
+        if not matching_csvs:
+            log.warning("No CSVs found matching prefix %s", prefix)
+            continue
+
+        for csv_data in matching_csvs:
+            csv_name = csv_data["metadata"]["name"]
+            annotations = csv_data.get("metadata", {}).get("annotations", {})
+
+            for ann_key in annotation_keys:
+                ann_value = annotations.get(ann_key)
+                if not ann_value:
+                    continue
+
+                updated = _patch_max_openshift_version_in_annotation(
+                    ann_value, target_version
+                )
+                if updated is None:
+                    log.info(
+                        "No maxOpenShiftVersion change needed in %s "
+                        "annotation on CSV %s",
+                        ann_key,
+                        csv_name,
+                    )
+                    continue
+
+                escaped = json.dumps(updated)
+                patch_str = (
+                    f'{{"metadata":{{"annotations":' f'{{"{ann_key}":{escaped}}}}}}}'
+                )
+                log.info(
+                    "Patching annotation %s on CSV %s to allow "
+                    "maxOpenShiftVersion %s",
+                    ann_key,
+                    csv_name,
+                    target_version,
+                )
+                csv_ocp.patch(
+                    resource_name=csv_name,
+                    params=patch_str,
+                    format_type="merge",
+                )
+
+    log.info("EUS upgrade: maxOpenShiftVersion patch complete")
+
+
 def get_upgrade_image_info(old_csv_images, new_csv_images):
     """
     Log the info about the images which are going to be upgraded.
@@ -232,6 +366,8 @@ def get_expected_noobaa_pod_count(upgrade_version):
         "noobaa-db-pg-cluster-1",
         "noobaa-db-pg-cluster-2",
     ]
+    if upgrade_version >= parse_version("4.23"):
+        expected_noobaa_pods.append("noobaa-core-1")
 
     endpoint_count = 0
     noobaa_pod_obj = get_noobaa_pods()
@@ -294,6 +430,12 @@ def verify_noobaa_pods_upgraded(old_images, upgrade_version):
         + config.ENV_DATA.get("infra_replicas", 0)
     )
     timeout = 600 if num_nodes < 6 else 900
+    # Workaround: In EUS-to-EUS upgrades to ODF 4.22+ the noobaa-core pod takes
+    # considerably longer to roll to the new image (the NooBaa DB is migrated to
+    # a CNPG-managed PostgreSQL cluster and noobaa-core only rolls once that
+    # migration completes). Extend the timeout for this scenario.
+    if config.UPGRADE.get("eus_upgrade") and upgrade_version >= parse_version("4.22"):
+        timeout = max(timeout, 1800)
 
     verify_pods_upgraded(
         old_images,
@@ -412,9 +554,7 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         )
         verify_pods_upgraded(old_images, selector=constants.MDS_APP_LABEL, count=2)
         if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
-            rgw_count = get_rgw_count(
-                upgrade_version.base_version, True, version_before_upgrade
-            )
+            rgw_count = get_rgw_count()
             verify_pods_upgraded(
                 old_images,
                 selector=constants.RGW_APP_LABEL,
@@ -553,7 +693,7 @@ class OCSUpgrade(object):
             config.REPORTING["ocs_must_gather_image"] = must_gather_image
             config.REPORTING["ocs_must_gather_latest_tag"] = must_gather_tag
 
-    def get_csv_name_pre_upgrade(self, resource_name=OCS_OPERATOR_NAME):
+    def get_csv_name_pre_upgrade(self, resource_name=None):
         """
         Get pre-upgrade CSV name
 
@@ -563,7 +703,12 @@ class OCSUpgrade(object):
         finding csv name from csv list and also look for pre-upgrade ocs version for finding out
         the actual csv
 
+        Args:
+            resource_name (str): Operator package name. Defaults to odf-operator.
+
         """
+        if resource_name is None:
+            resource_name = defaults.ODF_OPERATOR_NAME
         csv_name = None
         csv_list = get_csvs_start_with_prefix(resource_name, namespace=self.namespace)
         for csv in csv_list:
@@ -599,23 +744,34 @@ class OCSUpgrade(object):
         )
         return get_images(csv_pre_upgrade.get())
 
-    def set_upgrade_channel(self, resource_name=OCS_OPERATOR_NAME):
+    def set_upgrade_channel(self, resource_name=None):
         """
         Wait for the new package manifest for upgrade.
+
+        Args:
+            resource_name (str): Operator package name. Defaults to odf-operator.
 
         Returns:
             str: OCS subscription channel
 
         """
+        # Check if channel is already configured (required for unreleased versions)
+        channel = config.DEPLOYMENT.get("ocs_csv_channel")
+        if channel:
+            log.info(f"Using pre-configured channel: {channel}")
+            return channel
+
+        # For released versions, query packagemanifest for default channel
+        if resource_name is None:
+            resource_name = defaults.ODF_OPERATOR_NAME
+
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
             resource_name=resource_name,
             selector=operator_selector,
         )
         package_manifest.wait_for_resource(timeout=120)
-        channel = config.DEPLOYMENT.get("ocs_csv_channel")
-        if not channel:
-            channel = package_manifest.get_default_channel()
+        channel = package_manifest.get_default_channel()
 
         return channel
 
@@ -665,7 +821,7 @@ class OCSUpgrade(object):
             return False
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME,
+            resource_name=defaults.ODF_OPERATOR_NAME,
             selector=operator_selector,
             subscription_plan_approval=self.subscription_plan_approval,
         )
@@ -682,7 +838,7 @@ class OCSUpgrade(object):
         channel,
         pre_upgrade_images,
         upgrade_version,
-        resource_name=OCS_OPERATOR_NAME,
+        resource_name=None,
     ):
         """
         Checks if all images of OCS cluster upgraded,
@@ -692,11 +848,14 @@ class OCSUpgrade(object):
             channel: (str): OCS subscription channel
             pre_upgrade_images: (dict): Contains all OCS cluster images
             upgrade_version: (str): version to be upgraded
+            resource_name (str): Operator package name. Defaults to odf-operator.
 
         Returns:
             set: Contains full path of OCS cluster old images
 
         """
+        if resource_name is None:
+            resource_name = defaults.ODF_OPERATOR_NAME
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
             resource_name=resource_name,
@@ -762,7 +921,16 @@ class OCSUpgrade(object):
             if not ocs_catalog.is_exist():
                 log.info("OCS catalog source doesn't exist. Creating new one.")
                 create_catalog_source(self.ocs_registry_image, ignore_upgrade=True)
-                prune_old_df_repo_idms()
+                if config.ENV_DATA.get("platform", "").lower() not in (
+                    constants.HCI_PROVIDER_CLIENT_PLATFORMS
+                ):
+                    prune_old_df_repo_idms()
+                else:
+                    log.info(
+                        "Skipping IDMS pruning during upgrade on "
+                        "provider/client platform to avoid "
+                        "simultaneous MCP rollout on all workers"
+                    )
                 # We can return here as new CatalogSource contains right images
                 return
             image_url = ocs_catalog.get_image_url()
@@ -788,7 +956,16 @@ class OCSUpgrade(object):
                 if not config.DEPLOYMENT.get("disconnected"):
                     # on Disconnected cluster, ICSP /IDMS from the ocs-registry image is not needed/valid
                     get_and_apply_idms_from_catalog(f"{image_url}:{new_image_tag}")
-                    prune_old_df_repo_idms()
+                    if config.ENV_DATA.get("platform", "").lower() not in (
+                        constants.HCI_PROVIDER_CLIENT_PLATFORMS
+                    ):
+                        prune_old_df_repo_idms()
+                    else:
+                        log.info(
+                            "Skipping IDMS pruning during upgrade on "
+                            "provider/client platform to avoid "
+                            "simultaneous MCP rollout on all workers"
+                        )
 
                 # Wait for catalog source to be ready
                 log.info("Waiting for catalog source to be ready after update.")
@@ -832,6 +1009,16 @@ def run_ocs_upgrade(
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
     )
+
+    if config.UPGRADE.get("eus_upgrade"):
+        eus_target = config.UPGRADE.get("eus_max_ocp_version_override")
+        if eus_target:
+            patch_csv_max_openshift_version(eus_target, namespace=namespace)
+        else:
+            log.warning(
+                "EUS upgrade enabled but eus_max_ocp_version_override is not set, "
+                "skipping maxOpenShiftVersion patch"
+            )
 
     # Update values CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE and CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE
     # in rook-ceph-operator-config configmap
@@ -913,7 +1100,7 @@ def run_ocs_upgrade(
 
             operator_selector = get_selector_for_ocs_operator()
             package_manifest = PackageManifest(
-                resource_name=OCS_OPERATOR_NAME,
+                resource_name=defaults.ODF_OPERATOR_NAME,
                 selector=operator_selector,
             )
             try:
@@ -1199,7 +1386,6 @@ def run_ocs_upgrade(
             skip_osd_distribution_check=True,
             ocs_registry_image=upgrade_ocs.ocs_registry_image,
             post_upgrade_verification=True,
-            version_before_upgrade=upgrade_ocs.version_before_upgrade,
         )
 
 

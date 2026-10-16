@@ -84,14 +84,20 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             NoSuchElementException: If UI elements are not found.
         """
         try:
-            self.do_click(self.bucket_tab["edit_policy_button"], timeout=QUICK_WAIT)
+            self.do_click(
+                self.bucket_tab["edit_policy_button"],
+                timeout=QUICK_WAIT,
+                use_fallback=False,
+            )
             return
         except (NoSuchElementException, TimeoutException):
             pass
 
         try:
             self.do_click(
-                self.bucket_tab["policy_editor_start_scratch"], timeout=QUICK_WAIT
+                self.bucket_tab["policy_editor_start_scratch"],
+                timeout=QUICK_WAIT,
+                use_fallback=False,
             )
             return
         except (NoSuchElementException, TimeoutException):
@@ -110,7 +116,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             bucket_name (str): Name of the bucket to get account ID for.
 
         Returns:
-            str: Real account ID associated with the bucket.
+            str: Real account ID (or ARN, on OCS >= 4.21) associated with the bucket.
 
         Raises:
             ValueError: If bucket is not found or account ID cannot be retrieved.
@@ -122,8 +128,8 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                     continue
 
                 obc_obj = OBC(obc["metadata"]["name"])
-                if hasattr(obc_obj, "obc_account") and obc_obj.obc_account:
-                    return obc_obj.obc_account
+                if obc_obj.id_for_policy_principal:
+                    return obc_obj.id_for_policy_principal
 
                 break
 
@@ -399,7 +405,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         """
         for button_key in self._POLICY_ACTION_BUTTONS:
             try:
-                self.do_click(self.bucket_tab[button_key])
+                self.do_click(self.bucket_tab[button_key], use_fallback=False)
                 return
             except (
                 NoSuchElementException,
@@ -620,15 +626,20 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
             self.bucket_tab["delete_policy_confirmation_input"]
         )
         confirmation_input.click()
-        confirmation_input.clear()
         confirmation_input.send_keys("delete")
 
+        # Wait for PatternFly aria-disabled="true" to be removed after React processes
+        # the input event.  `not(@disabled)` is always true in PF v6 — the button uses
+        # aria-disabled instead — so we must check aria-disabled explicitly here.
         self.wait_for_element_to_be_visible(
             self.bucket_tab["delete_policy_confirm_button_enabled"],
             timeout=DEFAULT_UI_WAIT,
         )
 
-        self.do_click(self.bucket_tab["delete_policy_confirm_button_enabled"])
+        self.do_click(
+            self.bucket_tab["delete_policy_confirm_button_enabled"],
+            enable_screenshot=True,
+        )
 
     def delete_bucket_policy_ui(self, bucket_name: str = None) -> None:
         """

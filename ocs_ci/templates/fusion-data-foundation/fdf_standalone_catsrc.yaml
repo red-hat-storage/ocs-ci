@@ -1,0 +1,27 @@
+---
+# CatalogSource for standalone Fusion Data Foundation (RHSTOR-8840).
+#
+# FDF standalone installs identically to ODF. The only difference is that
+# the odf-operator package is served from this IBM catalog source instead of
+# the default Red Hat operators catalog.  Once this CatalogSource is READY,
+# the standard ODF Subscription (pointing spec.source here) installs FDF.
+#
+# spec.image is overwritten at deploy-time from:
+#   config.DEPLOYMENT["fdf_standalone_catalog_image"]
+# Example value: cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.23.0-40
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: ibm-operators
+  namespace: openshift-marketplace
+spec:
+  displayName: IBM
+  image: PLACEHOLDER
+  publisher: IBM
+  sourceType: grpc
+  grpcPodConfig:
+    securityContextConfig: legacy
+  priority: 100
+  updateStrategy:
+    registryPoll:
+      interval: 60m

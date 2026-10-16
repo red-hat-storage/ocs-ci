@@ -95,7 +95,9 @@
                 "iam:DeleteRolePolicy",
                 "iam:UpdateRole",
                 "iam:DeleteOpenIDConnectProvider",
-                "iam:GetRolePolicy"
+                "iam:GetRolePolicy",
+                "iam:TagOpenIDConnectProvider",
+                "iam:TagInstanceProfile"
             ],
             "Resource": "*"
         },
@@ -110,7 +112,9 @@
                 "route53:ListResourceRecordSets",
                 "route53:DeleteHostedZone",
                 "route53:AssociateVPCWithHostedZone",
-                "route53:ListHostedZonesByName"
+                "route53:ListHostedZonesByName",
+                "route53:ChangeTagsForResource",
+                "route53:ListTagsForResource"
             ],
             "Resource": "*"
         },

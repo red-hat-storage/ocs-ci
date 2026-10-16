@@ -13,6 +13,7 @@ from botocore.exceptions import (
     NoCredentialsError,
     WaiterError,
     EndpointConnectionError,
+    ProxyConnectionError,
 )
 
 from ocs_ci.utility.retry import retry
@@ -2776,6 +2777,67 @@ def terminate_rhel_workers(worker_list):
         raise exceptions.FailedToDeleteInstance()
 
 
+def terminate_rosa_hcp_worker_instances(infra_id):
+    """
+    Safety-net: find and terminate EC2 worker instances still tagged with the
+    ROSA HCP cluster infra_id after OCM reports the cluster gone.
+
+    With best_effort=true, OCM may declare deletion complete even when the
+    CAPI NodePool controller failed to terminate worker instances. This function
+    provides an explicit cleanup step to prevent orphaned EC2 instances.
+
+    Args:
+        infra_id (str): The cluster infrastructure name (e.g. 'j041arh13t1')
+    """
+    if not infra_id:
+        logger.warning("No infra_id provided, skipping EC2 worker cleanup")
+        return
+    aws = AWS()
+    filters = [
+        {
+            "Name": f"tag:kubernetes.io/cluster/{infra_id}",
+            "Values": ["owned"],
+        },
+        {
+            "Name": "instance-state-name",
+            "Values": ["pending", "running", "stopping", "stopped"],
+        },
+    ]
+    response = aws.ec2_client.describe_instances(Filters=filters)
+    instance_ids = [
+        inst["InstanceId"]
+        for reservation in response["Reservations"]
+        for inst in reservation["Instances"]
+    ]
+    if not instance_ids:
+        logger.info(f"No leftover EC2 instances found for cluster {infra_id}")
+        return
+    logger.info(
+        f"Terminating {len(instance_ids)} leftover EC2 worker instance(s) "
+        f"for cluster {infra_id}: {instance_ids}"
+    )
+    aws.ec2_client.terminate_instances(InstanceIds=instance_ids)
+    try:
+        waiter = aws.ec2_client.get_waiter("instance_terminated")
+        waiter.wait(
+            InstanceIds=instance_ids,
+            WaiterConfig={"Delay": 15, "MaxAttempts": 40},
+        )
+    except Exception as e:
+        logger.warning(f"EC2 termination waiter failed for {infra_id}: {e}")
+
+    remaining = aws.ec2_client.describe_instances(Filters=filters)
+    remaining_ids = [
+        inst["InstanceId"]
+        for reservation in remaining["Reservations"]
+        for inst in reservation["Instances"]
+    ]
+    assert (
+        not remaining_ids
+    ), f"EC2 instances for cluster {infra_id} were not terminated: {remaining_ids}"
+    logger.info(f"All EC2 instances for cluster {infra_id} terminated successfully")
+
+
 def destroy_volumes(cluster_name):
     """
     Destroy cluster volumes
@@ -2814,6 +2876,13 @@ def check_root_volume(volume):
     return True if volume["attachments"][0]["DeleteOnTermination"] else False
 
 
+@retry(
+    ProxyConnectionError,
+    tries=4,
+    delay=5,
+    backoff=2,
+    text_in_exception="Tunnel connection failed",
+)
 def update_config_from_s3(
     bucket_name=constants.OCSCI_DATA_BUCKET, filename=constants.AUTHYAML
 ):
@@ -2845,6 +2914,11 @@ def update_config_from_s3(
         return None
     except EndpointConnectionError:
         logger.warning("Failed to fetch auth.yaml from ocs-ci-data")
+        return None
+    except ProxyConnectionError:
+        logger.warning(
+            "Proxy connection error while fetching auth.yaml from ocs-ci-data"
+        )
         return None
 
 

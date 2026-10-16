@@ -5,7 +5,7 @@
 #
 # This automatically configures:
 # - VM template from vm_templates["10"] in OCP version config
-# - featureSet: "TechPreviewNoUpgrade" in install-config.yaml
-# - osImageStream: "rhel-10" in install-config.yaml
+# - On OCP < 5.0: featureSet: "TechPreviewNoUpgrade" and osImageStream: "rhel-10"
+# - On OCP 5.0+: no install-config changes needed (RHEL 10 is the default)
 ENV_DATA:
   rhcos_version: "10"

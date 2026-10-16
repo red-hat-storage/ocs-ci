@@ -5,7 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import check_fio_status
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -38,7 +38,7 @@ class TestVmOperationsUseClusterCapacity(E2ETest):
 
         """
 
-        # Create a project
+        logger.test_step("Create project and deploy VMs based on cluster capacity")
         proj_obj = project_factory()
 
         (
@@ -48,10 +48,16 @@ class TestVmOperationsUseClusterCapacity(E2ETest):
             self.sc_obj_aggressive,
         ) = multi_cnv_workload(namespace=proj_obj.namespace, use_cluster_capacity=True)
         all_vm_list = self.vm_objs_def + self.vm_objs_aggr
-        log.info("All vms created successfully")
+        logger.info(f"Created {len(all_vm_list)} VMs based on cluster capacity")
 
+        logger.test_step("Restart VMs, verify FIO, and stop")
         for vm_obj in all_vm_list:
+            logger.info(f"Restarting VM '{vm_obj.name}'")
             vm_obj.restart()
-            if check_fio_status(vm_obj):
-                log.info("FIO started after restarting VM")
+            assert check_fio_status(
+                vm_obj
+            ), f"FIO failed to run on VM '{vm_obj.name}' after restart"
+            logger.info(f"FIO running successfully on VM '{vm_obj.name}' after restart")
+            logger.info(f"Stopping VM '{vm_obj.name}'")
             vm_obj.stop()
+        logger.info("VM lifecycle operations completed for all VMs")

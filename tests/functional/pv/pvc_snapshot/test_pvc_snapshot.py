@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     provider_mode,
     run_on_all_clients_push_missing_configs,
+    skipif_cephfs_disabled,
 )
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -32,7 +33,8 @@ log = logging.getLogger(__name__)
     argvalues=[
         pytest.param(constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-251")),
         pytest.param(
-            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-251")
+            constants.CEPHFILESYSTEM,
+            marks=[pytest.mark.polarion_id("OCS-251"), skipif_cephfs_disabled],
         ),
     ],
 )

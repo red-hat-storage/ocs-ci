@@ -8,7 +8,7 @@ from ocs_ci.ocs.ocp import switch_to_project
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass, get_all_pvcs
 from ocs_ci.ocs.resources.storage_cluster import get_all_storageclass
-from ocs_ci.utility import rosa
+from ocs_ci.utility import rosa, version
 from ocs_ci.utility.localstorage import check_local_volume_local_volume_set
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -141,6 +141,32 @@ def uninstall_ocs():
     """
     ocp_obj = ocp.OCP()
 
+    if (
+        config.ENV_DATA["platform"].lower() != constants.ROSA_PLATFORM
+        and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_23
+    ):
+        log.test_step("Annotating storageCluster to confirm deletion")
+        ns_name = config.ENV_DATA["cluster_namespace"]
+        storage_cluster = ocp.OCP(
+            kind=constants.STORAGECLUSTER,
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            namespace=ns_name,
+        )
+        confirm_annotation = (
+            f'{{"metadata":{{"annotations":'
+            f'{{"{constants.CONFIRM_DELETION_ANNOTATION}":"true"}}}}}}'
+        )
+        result = storage_cluster.patch(
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            params=confirm_annotation,
+            format_type="merge",
+        )
+        if not result:
+            raise CommandFailed(
+                f"StorageCluster '{constants.DEFAULT_CLUSTERNAME}' "
+                "confirm-deletion annotation failed; aborting uninstall"
+            )
+
     log.info("deleting volume snapshots")
     vs_ocp_obj = ocp.OCP(kind=constants.VOLUMESNAPSHOT)
     vs_list = vs_ocp_obj.get(all_namespaces=True)["items"]
@@ -185,17 +211,17 @@ def uninstall_ocs():
     except CommandFailed:
         log.info("No cluster logging found")
 
-    log.info("Deleting OCS PVCs")
-    for pvc in pvc_to_delete:
-        log.info(f"Deleting PVC: {pvc.name}")
-        pvc.delete()
-
     ns_name = config.ENV_DATA["cluster_namespace"]
     storage_cluster = ocp.OCP(
         kind=constants.STORAGECLUSTER,
         resource_name=constants.DEFAULT_CLUSTERNAME,
         namespace=ns_name,
     )
+
+    log.info("Deleting OCS PVCs")
+    for pvc in pvc_to_delete:
+        log.info(f"Deleting PVC: {pvc.name}")
+        pvc.delete()
 
     log.info("Checking for local storage")
     lso_sc = None

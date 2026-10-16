@@ -733,6 +733,23 @@ def verify_consumer_configmap(
     disable_blockpools = config.COMPONENTS["disable_blockpools"]
     disable_cephfs = config.COMPONENTS["disable_cephfs"]
 
+    # Get the actual CSI ClientProfile name from the cluster.
+    # The ClientProfile name is a stable CSI identity (e.g. "openshift-storage") that
+    # may differ from cluster_namespace (e.g. "odf-storage" in ROSA HCP odf deployments).
+    client_profile_items = (
+        ocp.OCP(
+            kind=constants.CLIENT_PROFILE,
+            namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+        )
+        .get()
+        .get("items", [])
+    )
+    csi_client_profile_name = (
+        client_profile_items[0]["metadata"]["name"]
+        if client_profile_items
+        else config.cluster_ctx.ENV_DATA["cluster_namespace"]
+    )
+
     def convergence_ver(version):
         return get_semantic_version(
             version, only_major_minor=True
@@ -839,11 +856,10 @@ def verify_consumer_configmap(
         )
         ceph_data_on_consumer_match_arg["csiop-cephfs-client-profile"] = (
             ceph_data_arg.get("csiop-cephfs-client-profile", "")
-            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
+            == csi_client_profile_name
         )
         ceph_data_on_consumer_match_arg["csiop-rbd-client-profile"] = (
-            ceph_data_arg.get("csiop-rbd-client-profile", "")
-            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
+            ceph_data_arg.get("csiop-rbd-client-profile", "") == csi_client_profile_name
         )
 
     if internal_consumer and not (disable_blockpools or disable_cephfs):
@@ -871,6 +887,25 @@ def verify_consumer_configmap(
         )
 
         _handle_converged_client_ceph_names(ceph_data, ceph_data_on_consumer_match)
+    elif internal_consumer and disable_cephfs and not disable_blockpools:
+        """
+        Handle internal consumer with CephFS disabled.
+        Only verify RBD-related configuration.
+        """
+        # Only check RBD configuration
+        ceph_data_on_consumer_match["rbd-rados-ns"] = (
+            ceph_data.get("rbd-rados-ns", "") == "<implicit>"
+        )
+        ceph_data_on_consumer_match["csi-rbd-node-ceph-user"] = (
+            ceph_data.get("csi-rbd-node-ceph-user", "") == "rook-csi-rbd-node"
+        )
+        ceph_data_on_consumer_match["csi-rbd-provisioner-ceph-user"] = (
+            ceph_data.get("csi-rbd-provisioner-ceph-user", "")
+            == "rook-csi-rbd-provisioner"
+        )
+        ceph_data_on_consumer_match["csiop-rbd-client-profile"] = (
+            ceph_data.get("csiop-rbd-client-profile", "") == csi_client_profile_name
+        )
     elif (
         not internal_consumer
         and not (disable_blockpools or disable_cephfs)
@@ -974,18 +1009,26 @@ def get_ready_consumers_names():
     return [consumer.name for consumer in ready_consumers]
 
 
-def find_consumer_for_storage_client(storage_client_name):
+def find_consumer_for_storage_client(storage_client_name, client_cluster_name=None):
     """
-    Find the StorageConsumer CR on the provider that owns ``storage_client_name``.
+    Find the StorageConsumer CR on the provider that owns
+    ``storage_client_name``.
 
     Must be called within an active provider config context.
 
     Args:
-        storage_client_name (str): StorageClient CR name on the client cluster.
+        storage_client_name (str): StorageClient CR name on the client
+            cluster.
+        client_cluster_name (str or None): When multiple consumers share
+            the same storage-client name, pass the client cluster name
+            (e.g. ``config.ENV_DATA["cluster_name"]``) to disambiguate.
+            The value is matched against the prefix of the consumer's
+            ``status.client.clusterName`` field.  When ``None`` the first
+            name-only match is returned (original behaviour).
 
     Returns:
-        tuple[str, dict]: ``(consumer_name, consumer_data)`` for the matching
-            StorageConsumer.
+        tuple[str, dict]: ``(consumer_name, consumer_data)`` for the
+            matching StorageConsumer.
 
     Raises:
         AssertionError: If no matching StorageConsumer is found.
@@ -994,17 +1037,22 @@ def find_consumer_for_storage_client(storage_client_name):
     consumer_ocp = ocp.OCP(kind=constants.STORAGECONSUMER, namespace=consumer_ns)
     for name in get_consumer_names():
         consumer_data = consumer_ocp.get(resource_name=name)
-        if (
-            consumer_data.get("status", {}).get("client", {}).get("name")
-            == storage_client_name
-        ):
-            return name, consumer_data
+        client_info = consumer_data.get("status", {}).get("client", {})
+        if client_info.get("name") != storage_client_name:
+            continue
+        if client_cluster_name:
+            cluster_name_field = client_info.get("clusterName", "")
+            if not cluster_name_field.startswith(client_cluster_name + "."):
+                continue
+        return name, consumer_data
     raise AssertionError(
-        f"No StorageConsumer found for storage client '{storage_client_name}'"
+        f"No StorageConsumer found for storage client "
+        f"'{storage_client_name}'"
+        + (f" on cluster '{client_cluster_name}'" if client_cluster_name else "")
     )
 
 
-def get_consumer_svg_on_provider(storage_client_name):
+def get_consumer_svg_on_provider(storage_client_name, client_cluster_name=None):
     """
     Return the CephFS subvolume group name for a storage client on the
     provider cluster.
@@ -1015,6 +1063,9 @@ def get_consumer_svg_on_provider(storage_client_name):
     Args:
         storage_client_name (str): StorageClient CR name on the client
             cluster.
+        client_cluster_name (str or None): Pass ``config.ENV_DATA["cluster_name"]``
+            from the client context when multiple consumers share the same
+            storage-client name, to ensure the correct consumer is found.
 
     Returns:
         str: Subvolume group name on the provider cluster.
@@ -1022,7 +1073,10 @@ def get_consumer_svg_on_provider(storage_client_name):
     Raises:
         AssertionError: If no matching StorageConsumer is found.
     """
-    consumer_name, _ = find_consumer_for_storage_client(storage_client_name)
+    consumer_name, _ = find_consumer_for_storage_client(
+        storage_client_name,
+        client_cluster_name=client_cluster_name,
+    )
     # The CephFS subvolume group name on the provider equals the
     # StorageConsumer CR name (this mapping may change in future versions).
     return consumer_name

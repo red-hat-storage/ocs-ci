@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     polarion_id,
     tier2,
+    tier4,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework import config
@@ -17,6 +18,7 @@ from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.pod import (
     get_noobaa_core_pod,
     get_noobaa_endpoint_pods,
+    get_noobaa_operator_pod,
     get_noobaa_pvpool_pods,
     get_pods_having_label,
     Pod,
@@ -224,6 +226,129 @@ class TestNoobaaPriorityClass(MCGTest):
                 f"noobaa-db pod {db_pod.name} priorityClassName mismatch: "
                 f"expected={db_pc!r}, actual={actual!r}"
             )
+
+    @tier4
+    @polarion_id("OCS-8021")
+    @config.run_with_provider_context_if_available
+    def test_priority_class_persists_after_operator_restart(self, request):
+        """
+        Test that PriorityClassName settings persist across a NooBaa operator
+        restart and that the operator does not trigger unnecessary pod restarts.
+
+        1. Patch NooBaa CR with per-component PriorityClassNames
+        2. Wait for operator reconciliation; restart db pods
+        3. Verify all NooBaa pods have the correct PriorityClassName
+        4. Record the creation times of all NooBaa core, db, and endpoint pods
+        5. Restart the NooBaa operator pod
+        6. Wait for the NooBaa operator pod to be ready
+        7. Verify all NooBaa pods still have the correct PriorityClassName
+        8. Verify no pods were unnecessarily restarted (creation times unchanged)
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+        noobaa_ocp = OCP(kind=constants.NOOBAA_RESOURCE_NAME, namespace=namespace)
+
+        def finalizer():
+            logger.info("Removing PriorityClass fields from NooBaa CR")
+            self._remove_noobaa_priority_classes(noobaa_ocp=noobaa_ocp)
+            self._restart_db_and_wait(namespace=namespace)
+
+        request.addfinalizer(finalizer)
+
+        # 1. Patch NooBaa CR with per-component priority classes
+        logger.test_step(
+            f"Step 1: Patching NooBaa CR - core={SYSTEM_CLUSTER_CRITICAL}, "
+            f"db={OPENSHIFT_USER_CRITICAL}, endpoint={SYSTEM_CLUSTER_CRITICAL}"
+        )
+        self._patch_noobaa_priority_classes(
+            noobaa_ocp=noobaa_ocp,
+            core_pc=SYSTEM_CLUSTER_CRITICAL,
+            db_pc=OPENSHIFT_USER_CRITICAL,
+            endpoint_pc=SYSTEM_CLUSTER_CRITICAL,
+        )
+
+        # 2. Wait for reconciliation and restart db pods
+        logger.test_step("Step 2: Waiting for reconciliation and restarting db pods")
+        self._restart_db_and_wait(namespace=namespace)
+
+        # 3. Verify priority classes on all pods
+        logger.test_step("Step 3: Verifying pod priority classes")
+        self._verify_pod_priority_classes(
+            namespace=namespace,
+            core_pc=SYSTEM_CLUSTER_CRITICAL,
+            db_pc=OPENSHIFT_USER_CRITICAL,
+            endpoint_pc=SYSTEM_CLUSTER_CRITICAL,
+        )
+
+        # 4. Capture pod creation times before operator restart
+        logger.test_step("Step 4: Recording creation times of all NooBaa pods")
+        noobaa_pods = get_pods_having_label(
+            label=constants.NOOBAA_APP_LABEL, namespace=namespace
+        )
+        creation_times_before = {
+            p["metadata"]["name"]: p["metadata"]["creationTimestamp"]
+            for p in noobaa_pods
+            if "noobaa-operator" not in p["metadata"]["name"]
+        }
+        logger.info(
+            f"Pod creation times before operator restart: {creation_times_before}"
+        )
+
+        # 5. Restart the NooBaa operator pod
+        logger.test_step("Step 5: Restarting the NooBaa operator pod")
+        operator_pod = get_noobaa_operator_pod()
+        logger.info(f"Deleting NooBaa operator pod {operator_pod.name}")
+        operator_pod.delete(wait=True)
+
+        # 6. Wait for the operator pod to be ready
+        logger.test_step("Step 6: Waiting for the NooBaa operator pod to be ready")
+        for operator_pod_list in TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=get_pods_having_label,
+            label=constants.NOOBAA_OPERATOR_POD_LABEL,
+            namespace=namespace,
+        ):
+            if operator_pod_list:
+                new_operator_pod = Pod(**operator_pod_list[0])
+                status = new_operator_pod.ocp.get_resource_status(new_operator_pod.name)
+                if status == constants.STATUS_RUNNING:
+                    logger.info(
+                        f"NooBaa operator pod {new_operator_pod.name} is Running"
+                    )
+                    break
+        MCG.wait_for_ready_status()
+
+        # 7. Verify PriorityClassNames persist after operator restart
+        logger.test_step(
+            "Step 7: Verifying PriorityClassNames persist after operator restart"
+        )
+        self._verify_pod_priority_classes(
+            namespace=namespace,
+            core_pc=SYSTEM_CLUSTER_CRITICAL,
+            db_pc=OPENSHIFT_USER_CRITICAL,
+            endpoint_pc=SYSTEM_CLUSTER_CRITICAL,
+        )
+
+        # 8. Verify no pods were unnecessarily restarted
+        logger.test_step("Step 8: Verifying no pods were unnecessarily restarted")
+        noobaa_pods = get_pods_having_label(
+            label=constants.NOOBAA_APP_LABEL, namespace=namespace
+        )
+        creation_times_after = {
+            p["metadata"]["name"]: p["metadata"]["creationTimestamp"]
+            for p in noobaa_pods
+            if "noobaa-operator" not in p["metadata"]["name"]
+        }
+        logger.info(
+            f"Pod creation times after operator restart: {creation_times_after}"
+        )
+        for pod_name, created_before in creation_times_before.items():
+            created_after = creation_times_after.get(pod_name)
+            assert created_after == created_before, (
+                f"Pod {pod_name} was unnecessarily restarted after operator restart: "
+                f"creationTimestamp changed from {created_before} to {created_after}"
+            )
+        logger.info("No pods were unnecessarily restarted after operator restart")
 
     def _wait_for_pvpool_pods_priority_class(
         self, bs_name, expected_pc, namespace, expected_count=None, timeout=360

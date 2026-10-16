@@ -14,69 +14,223 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
 )
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
+CEPH_CSI_OPERATOR_CONFIG = "ceph-csi-operator-config"
+_CLUSTERNAME_ARG = "--clustername"
 
-def check_setmetadata_availability(pod_obj):
+
+def _ctrlplugin_labels():
+    """Return cephfs and rbd CSI ctrlplugin/provisioner labels for this ODF version."""
+    return [
+        get_provisioner_label(constants.CEPHFILESYSTEM),
+        get_provisioner_label(constants.CEPHBLOCKPOOL),
+    ]
+
+
+def _ctrlplugin_selector_values():
+    """Return label values (without ``app=``) for get_all_pods selector."""
+    return [
+        label.replace("app=", "")
+        for label in _ctrlplugin_labels()
+        if isinstance(label, str)
+    ]
+
+
+def _arg_cluster_name(arg):
+    """Return cluster name from ``--clustername=...`` or None."""
+    if not isinstance(arg, str):
+        return None
+    if arg.startswith(f"{_CLUSTERNAME_ARG}="):
+        return arg.split("=", 1)[-1]
+    return None
+
+
+def csi_enable_metadata_is_deprecated():
     """
-    Check if --setmetadata=true is present in CSI plugin pods' args.
+    Return True if Driver CRD ``spec.enableMetadata`` is marked deprecated.
+
+    The ceph-csi-operator CRD keeps the field for compatibility and documents
+    that it is no longer used and will be ignored.
+    """
+    crd = OCP(kind=constants.CRD_KIND, resource_name="drivers.csi.ceph.io")
+    data = crd.get(dont_raise=True, silent=True)
+    if not data:
+        return False
+    for ver in (data.get("spec") or {}).get("versions") or []:
+        enable_md = ((ver.get("schema") or {}).get("openAPIV3Schema") or {}).get(
+            "properties", {}
+        ).get("spec", {}).get("properties", {}).get("enableMetadata") or {}
+        desc = (enable_md.get("description") or "").lower()
+        if (
+            "deprecated" in desc
+            or "no longer used" in desc
+            or "will be ignored" in desc
+        ):
+            return True
+    return False
+
+
+def csi_metadata_is_unconditional():
+    """
+    Return True when CSI PVC/PV metadata is always-on (no ``--setmetadata`` gate).
+
+    Capability probe first: if the Driver CRD marks ``enableMetadata`` deprecated
+    (ignored by ceph-csi), the container flag is gone and metadata is
+    unconditional. Version ``>= VERSION_5_0`` is the fallback when the CRD
+    cannot be read. Flag absence on a running ctrlplugin is not used as the
+    probe — a pre-5.0 cluster with metadata disabled also has no flag.
+    """
+    if csi_enable_metadata_is_deprecated():
+        log.info(
+            "Driver CRD marks enableMetadata deprecated; CSI metadata is unconditional"
+        )
+        return True
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version >= version.VERSION_5_0:
+        log.info(
+            "ODF %s >= 5.0; treating CSI metadata as unconditional",
+            ocs_version,
+        )
+        return True
+    return False
+
+
+def iter_ctrlplugin_containers(pod_obj):
+    """
+    Yield ``(pod_name, container_name, args)`` for every container on cephfs
+    and rbd CSI ctrlplugin (or provisioner) pods.
 
     Args:
-        pod_obj (obj): pod object
+        pod_obj (ocs_ci.ocs.ocp.OCP): Pod OCP object in the storage namespace.
 
-    Returns:
-        bool: True if --setmetadata=true is set on all CSI plugin pods, else False.
+    Yields:
+        tuple: pod name, container name, args list (may be empty).
     """
-    selectors = [get_provisioner_label(constants.CEPHFILESYSTEM)] + [
-        get_provisioner_label(constants.CEPHBLOCKPOOL)
-    ]
-    selectors = [
-        label.replace("app=", "") for label in selectors if isinstance(label, str)
-    ]
 
     @retry((CommandFailed, ResourceWrongStatusException), tries=3, delay=15)
-    def get_and_validate_plugin_pods():
+    def _plugin_pods():
         plugin_pods = pod.get_all_pods(
             namespace=config.ENV_DATA["cluster_namespace"],
-            selector=selectors,
+            selector=_ctrlplugin_selector_values(),
         )
-        log.info(f"Provisioner pods: {plugin_pods}")
+        log.info("CSI ctrlplugin/provisioner pods: %s", plugin_pods)
         pod.validate_pods_are_respinned_and_running_state(plugin_pods)
         return plugin_pods
 
-    # Get validated plugin pods
-    plugin_pods = get_and_validate_plugin_pods()
-
-    all_containers_have_flag = True
-
-    for p in plugin_pods:
+    for p in _plugin_pods():
         containers = pod_obj.exec_oc_cmd(
             f"get pod {p.name} --output jsonpath='{{.spec.containers}}'"
         )
-        found_flag = False
-        for container in containers:
-            args = container.get("args", [])
-            if "--setmetadata=true" in args:
-                found_flag = True
-                break
-        if not found_flag:
-            log.warning(
-                f"Pod {p.name} does not have '--setmetadata=true' in any container args."
-            )
-            all_containers_have_flag = False
+        for container in containers or []:
+            yield p.name, container.get("name") or "", container.get("args") or []
 
-    return all_containers_have_flag
+
+def check_setmetadata_availability(pod_obj):
+    """
+    Return True if CSI metadata is enabled for this cluster.
+
+    On ODF versions that still gate the feature with ``--setmetadata=true``,
+    every cephfs and rbd ctrlplugin/provisioner pod must have that arg on at
+    least one container (including ``csi-addons``, where the flag also lived).
+
+    When metadata is unconditional (ODF 5.0+: flag removed, ``enableMetadata``
+    ignored), this returns True. Absence of the flag is expected there; it is
+    not treated as "metadata disabled".
+
+    Args:
+        pod_obj (ocs_ci.ocs.ocp.OCP): Pod OCP object in the storage namespace.
+
+    Returns:
+        bool: True if metadata is enabled (flag present, or always-on).
+    """
+    if csi_metadata_is_unconditional():
+        log.info(
+            "CSI metadata is unconditional; --setmetadata is not expected on "
+            "ctrlplugin containers"
+        )
+        return True
+
+    pods_with_flag = set()
+    pods_seen = set()
+    for pod_name, container_name, args in iter_ctrlplugin_containers(pod_obj):
+        pods_seen.add(pod_name)
+        if "--setmetadata=true" in args:
+            log.info(
+                "Found --setmetadata=true on pod %s container %s",
+                pod_name,
+                container_name,
+            )
+            pods_with_flag.add(pod_name)
+
+    missing = pods_seen - pods_with_flag
+    if missing:
+        log.warning(
+            "Pods without --setmetadata=true in any container: %s",
+            sorted(missing),
+        )
+        return False
+    return bool(pods_seen)
+
+
+@retry(AssertionError, tries=3, delay=15, backoff=1)
+def _assert_setmetadata_enabled(pod_obj):
+    assert check_setmetadata_availability(pod_obj), "Metadata not enabled"
+
+
+def get_csi_cluster_name(pod_obj):
+    """
+    Return the CSI cluster name from ctrlplugin ``--clustername`` or OperatorConfig.
+
+    Args:
+        pod_obj (ocs_ci.ocs.ocp.OCP): Pod OCP object used to run ``oc get``.
+
+    Returns:
+        str | None: Cluster name, or None if it cannot be determined.
+    """
+    for _pod_name, _cname, args in iter_ctrlplugin_containers(pod_obj):
+        for arg in args:
+            name = _arg_cluster_name(arg)
+            if name:
+                log.info("Cluster name from --clustername: %s", name)
+                return name
+    try:
+        name = pod_obj.exec_oc_cmd(
+            f"get operatorconfig {CEPH_CSI_OPERATOR_CONFIG} "
+            "--output jsonpath='{.spec.driverSpecDefaults.clusterName}'"
+        )
+    except CommandFailed:
+        log.warning(
+            "Could not read OperatorConfig %s driverSpecDefaults.clusterName",
+            CEPH_CSI_OPERATOR_CONFIG,
+        )
+        return None
+    if name:
+        name = str(name).strip()
+        log.info(
+            "Cluster name from OperatorConfig %s: %s",
+            CEPH_CSI_OPERATOR_CONFIG,
+            name,
+        )
+        return name or None
+    return None
 
 
 def patch_metadata(enable=True):
     """
-    Patch CSI drivers to enable or disable metadata collection.
+    Patch CSI Driver CRs ``spec.enableMetadata``.
+
+    On ODF >= 5.0 this field is deprecated and ignored by ceph-csi (the
+    ``--setmetadata`` container flag was removed). Callers must skip this
+    patch when :func:`csi_metadata_is_unconditional` is True rather than
+    treating a successful patch as enabling the feature.
 
     Args:
-        enable (bool): Whether to enable or disable metadata.
+        enable (bool): Value to write to spec.enableMetadata.
     """
     patch_data = [{"op": "add", "path": "/spec/enableMetadata", "value": enable}]
     patch_json = json.dumps(patch_data)
@@ -100,12 +254,20 @@ def patch_metadata(enable=True):
 
 def enable_metadata(config_map_obj, pod_obj):
     """
-    Enable CSI_ENABLE_METADATA through configmap or patch depending on OCS version.
+    Enable CSI metadata for PVC/PV objects, then return the CSI cluster name.
+
+    - ODF < 4.19: patch rook-ceph-operator-config ``CSI_ENABLE_METADATA``.
+    - ODF 4.19–4.x: patch Driver ``spec.enableMetadata`` and wait for
+      ``--setmetadata=true`` on ctrlplugin containers.
+    - ODF >= 5.0 (unconditional metadata): do not patch the deprecated
+      field and do not assert on ``--setmetadata``. Callers verify metadata
+      on subvolumes/images via :func:`fetch_metadata`.
 
     Returns:
-        str: Cluster name if found, else None.
+        str: Cluster name from ``--clustername`` or OperatorConfig, else None.
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
+    always_on = csi_metadata_is_unconditional()
 
     if ocs_version < version.VERSION_4_19:
         assert config_map_obj.patch(
@@ -113,38 +275,25 @@ def enable_metadata(config_map_obj, pod_obj):
             params='{"data":{"CSI_ENABLE_METADATA": "true"}}',
         ), "Failed to patch rook-ceph-operator-config"
 
-        for selector in [
-            get_provisioner_label(constants.CEPHFILESYSTEM),
-            get_provisioner_label(constants.CEPHBLOCKPOOL),
-        ]:
+        for selector in _ctrlplugin_labels():
             assert pod_obj.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
                 selector=selector,
                 dont_allow_other_resources=True,
                 timeout=60,
             ), f"Pods with selector {selector} are not running"
-
-    else:
+    elif not always_on:
         patch_metadata(enable=True)
+    else:
+        log.info(
+            "Skipping Driver spec.enableMetadata patch; CSI metadata is "
+            "unconditional on this ODF version"
+        )
 
-    @retry(AssertionError, tries=3, delay=15, backoff=1)
-    def _retry_check_metadata_enabled(pod_obj):
-        assert check_setmetadata_availability(pod_obj), "Metadata not enabled"
-        return True
+    if not always_on:
+        _assert_setmetadata_enabled(pod_obj)
 
-    _retry_check_metadata_enabled(pod_obj)
-
-    cephfs_pods = pod.get_cephfsplugin_provisioner_pods(
-        cephfsplugin_provisioner_label=(get_provisioner_label(constants.CEPHFILESYSTEM))
-    )
-    args = pod_obj.exec_oc_cmd(
-        f"get pod {cephfs_pods[0].name} --output jsonpath='{{.spec.containers[].args}}'"
-    )
-    for arg in args:
-        if "--clustername" in arg:
-            log.info(f"Cluster name parameter: {arg}")
-            return arg.split("=", 1)[-1]
-    return None
+    return get_csi_cluster_name(pod_obj)
 
 
 def available_subvolumes(sc_name, toolbox_pod, fs):

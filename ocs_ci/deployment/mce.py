@@ -6,12 +6,15 @@ import logging
 import tempfile
 import json
 import re
+import time
+
 from packaging.version import parse as parse_version
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.framework import config
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
@@ -23,7 +26,9 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_acm_mce_build_tag,
 )
+from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.utility.utils import get_running_ocp_version
 from ocs_ci.ocs.exceptions import (
@@ -148,6 +153,13 @@ class MCEInstaller(object):
             operatorgroup_yaml.create()
             logger.info("mce OperatorGroup created successfully")
 
+    @retry(
+        CommandFailed,
+        tries=5,
+        delay=10,
+        backoff=1,
+        text_in_exception="no endpoints available for service",
+    )
     def create_multiclusterengine_resource(self):
         """
         Creates multiclusterengine resource
@@ -161,6 +173,7 @@ class MCEInstaller(object):
     def create_mce_subscription(self):
         """
         Creates subscription for mce operator
+        Supports both released MCE (from redhat-operators) and unreleased MCE (from custom catalog)
 
         """
         logger.info("Check if mce subscription already exist")
@@ -178,9 +191,43 @@ class MCEInstaller(object):
                 mce_subscription_yaml_data["spec"][
                     "channel"
                 ] = f"stable-{config.ENV_DATA.get('mce_version')}"
-            mce_subscription_yaml_data["spec"][
-                "source"
-            ] = constants.MCE_DEV_CATALOG_SOURCE_NAME
+
+            # Determine catalog source based on whether using released or unreleased MCE
+            use_released_mce = not config.ENV_DATA.get("unreleased_mce")
+
+            if use_released_mce:
+                # For released MCE, get catalog name from PackageManifest
+                # This handles both connected and disconnected environments
+                logger.info(
+                    "Using released MCE - getting catalog source from PackageManifest"
+                )
+                desired_channel = mce_subscription_yaml_data["spec"]["channel"]
+                try:
+                    pm = PackageManifest(resource_name=constants.MCE_OPERATOR)
+                    mce_catalog_name = pm.get()["metadata"]["labels"]["catalog"]
+                    available_channels = [ch["name"] for ch in pm.get_channels()]
+                    if desired_channel not in available_channels:
+                        logger.warning(
+                            f"Channel '{desired_channel}' not available in catalog "
+                            f"'{mce_catalog_name}' (available: {available_channels}). "
+                            f"Falling back to dev catalog: {constants.MCE_DEV_CATALOG_SOURCE_NAME}"
+                        )
+                        mce_catalog_name = constants.MCE_DEV_CATALOG_SOURCE_NAME
+                    else:
+                        logger.info(f"Found MCE catalog source: {mce_catalog_name}")
+                    mce_subscription_yaml_data["spec"]["source"] = mce_catalog_name
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to get catalog from PackageManifest: {e}. "
+                        f"Using default catalog source: redhat-operators"
+                    )
+                    mce_subscription_yaml_data["spec"]["source"] = "redhat-operators"
+            else:
+                # For unreleased MCE, use custom catalog source
+                logger.info("Using unreleased MCE - using custom catalog source")
+                mce_subscription_yaml_data["spec"][
+                    "source"
+                ] = constants.MCE_DEV_CATALOG_SOURCE_NAME
 
             mce_subscription_manifest = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="mce_subscription_manifest", delete=False
@@ -188,7 +235,10 @@ class MCEInstaller(object):
             templating.dump_data_to_temp_yaml(
                 mce_subscription_yaml_data, mce_subscription_manifest.name
             )
-            logger.info("Creating subscription for the mce operator")
+            logger.info(
+                f"Creating subscription for MCE operator from catalog: "
+                f"{mce_subscription_yaml_data['spec']['source']}"
+            )
             exec_cmd(f"oc apply -f {mce_subscription_manifest.name}")
             OCP(
                 kind=constants.SUBSCRIPTION_COREOS,
@@ -335,13 +385,22 @@ class MCEInstaller(object):
     def deploy_mce(self):
         """
         Installs mce enabling software emulation.
+        Supports both released and unreleased MCE deployments.
 
         """
 
         if not self.mce_installed():
             logger.info("Installing mce")
-            # we create catsrc with nightly builds only if config.DEPLOYMENT does not have mce_latest_stable
-            create_mce_catsrc()
+            # Check if using released or unreleased MCE
+            use_released_mce = not config.ENV_DATA.get("unreleased_mce")
+            if use_released_mce:
+                logger.info("Deploying released MCE from default catalog")
+                # For released MCE, no custom catalog source needed
+            else:
+                logger.info("Deploying unreleased MCE from custom catalog")
+                # Create custom catalog source for unreleased builds
+                create_mce_catsrc()
+
             self.create_mce_namespace()
             self.create_multiclusterengine_operatorgroup()
             self.create_mce_subscription()
@@ -351,6 +410,11 @@ class MCEInstaller(object):
                 raise MultiClusterEngineNotDeployedException(
                     f"crd {constants.MULTICLUSTER_ENGINE_CRD} is unavailable"
                 )
+            logger.info(
+                "mce deployment in progress, waiting 10 sec for csv to be Succeeded and CRDs ready state"
+            )
+            time.sleep(10)
+            self.wait_csv_upgraded()
 
         # check whether mce instance is created, if it is installed but mce don't pass validation we can not heal it in
         # script here, hence no sense for full validation of mce
@@ -385,17 +449,32 @@ class MCEInstaller(object):
     def mce_installed(self):
         """
         Check if MCE is already installed.
+        Verifies both the operator resource and the subscription exist.
 
         Returns:
              bool: True if MCE is installed, False otherwise
         """
         ocp_obj = OCP(kind=constants.ROOK_OPERATOR)
         # unlike other k8s resources, operators are OLM manager resources that identified by merged name.namespace
-        return ocp_obj.check_resource_existence(
+        operator_exists = ocp_obj.check_resource_existence(
             timeout=12,
             should_exist=True,
             resource_name=constants.MCE_OPERATOR_OPERATOR_NAME_WITH_NS,
         )
+        if not operator_exists:
+            return False
+        sub_exists = self.subs.check_resource_existence(
+            timeout=12,
+            should_exist=True,
+            resource_name=constants.MCE_OPERATOR,
+        )
+        if not sub_exists:
+            logger.warning(
+                "MCE operator resource exists but subscription is missing. "
+                "Likely leftover from partial cleanup."
+            )
+            return False
+        return True
 
     def mce_exists(self):
         """
@@ -638,15 +717,24 @@ class MCEInstaller(object):
             TimeoutExpiredError: If the CSV is not in the 'Succeeded' state within the timeout
 
         """
-        csv_ocp_obj = OCP(
-            kind=constants.CLUSTER_SERVICE_VERSION,
-            namespace=self.mce_namespace,
+        sampler = TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=self.get_mce_csv_name,
         )
-        csv_name = csv_ocp_obj.get(resource_name="")["items"][0]["metadata"]["name"]
-        csv_obj = ocp.OCP(
-            kind=constants.CLUSTER_SERVICE_VERSION,
-            namespace=self.mce_namespace,
+        csv_name = ""
+        try:
+            for csv_name in sampler:
+                if csv_name:
+                    logger.info(f"Found MCE CSV: {csv_name}")
+                    break
+        except TimeoutExpiredError:
+            raise MultiClusterEngineNotDeployedException(
+                "MCE CSV not found in namespace %s" % self.mce_namespace
+            )
+        csv_obj = CSV(
             resource_name=csv_name,
+            namespace=self.mce_namespace,
         )
         csv_obj.wait_for_phase("Succeeded", timeout=900)
 

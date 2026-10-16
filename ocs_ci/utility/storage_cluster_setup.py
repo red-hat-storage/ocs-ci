@@ -21,6 +21,26 @@ from ocs_ci.utility.utils import get_az_count, run_cmd
 logger = logging.getLogger(__name__)
 
 
+def apply_ceph_cluster_mon_count(cluster_data, mon_count):
+    """
+    Set managedResources.cephCluster.monCount when mon_count is 5.
+
+    Args:
+        cluster_data (dict): StorageCluster CR data
+        mon_count (int | None): Desired mon count from DEPLOYMENT.mon_count
+
+    Returns:
+        dict: Updated cluster_data
+
+    """
+    if mon_count == 5:
+        cluster_data["spec"].setdefault("managedResources", {}).setdefault(
+            "cephCluster", {}
+        )["monCount"] = 5
+        logger.info("Setting StorageCluster managedResources.cephCluster.monCount=5")
+    return cluster_data
+
+
 class StorageClusterSetup(object):
     """
     Performs the setup of the StorageCluster for Data Foundation deployments
@@ -442,6 +462,18 @@ class StorageClusterSetup(object):
         # Enable data replication separation
         cluster_data = add_data_replication_separation_to_cluster_data(cluster_data)
 
+        # Enable NVMe-oF (NVMe over Fabrics) gateway
+        if config.DEPLOYMENT.get("nvmeof_enable"):
+            gateway_instances = config.DEPLOYMENT.get("nvmeof_gateway_instances")
+            logger.info(
+                "Enabling NVMe-oF on StorageCluster with %s gateway instances",
+                gateway_instances,
+            )
+            cluster_data["spec"]["nvmeof"] = {
+                "enable": config.DEPLOYMENT.get("nvmeof_enable"),
+                "gatewayInstances": gateway_instances,
+            }
+
         # Erasure Coding: configure EC as default pool type
         if config.DEPLOYMENT.get("ec_default_pools"):
             k = config.DEPLOYMENT.get("ec_data_chunks", 2)
@@ -574,7 +606,7 @@ class StorageClusterSetup(object):
                     }
                 },
             )
-            config.ENV_DATA.set("noobaa_db_backup_enabled", False)
+            config.ENV_DATA["noobaa_db_backup_enabled"] = False
         # Add NooBaa DB backup configuration if enabled
         if config.ENV_DATA.get("noobaa_db_backup_enabled"):
             log_step("Adding NooBaa DB backup configuration to StorageCluster")
@@ -700,6 +732,12 @@ class StorageClusterSetup(object):
                 cp = managed_resources_ceph_cluster.setdefault("cleanupPolicy", {})
                 cp["wipeDevicesFromOtherClusters"] = True
 
+        # Lazy import avoids circular import with deployment.Deployment
+        from ocs_ci.deployment.deployment import get_expected_mon_count
+
+        cluster_data = apply_ceph_cluster_mon_count(
+            cluster_data, get_expected_mon_count()
+        )
         storage_cluster_override = config.DEPLOYMENT.get("storage_cluster_override", {})
         if storage_cluster_override:
             logger.info(

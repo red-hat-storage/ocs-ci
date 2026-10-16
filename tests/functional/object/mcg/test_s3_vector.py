@@ -1,7 +1,11 @@
+import json
 import logging
 import math
 import random
 import string
+import time
+
+import pytest
 
 from botocore.exceptions import ClientError, ParamValidationError
 
@@ -10,7 +14,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     post_upgrade,
     mcg,
-    jira,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework import config
@@ -69,6 +72,20 @@ class TestS3Vector(MCGTest):
                 )
             else:
                 raise
+
+    @staticmethod
+    def _assert_access_denied(fn, label, *args, **kwargs):
+        """Assert that fn raises AccessDeniedException; fail if it succeeds."""
+        try:
+            fn(*args, **kwargs)
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code == "AccessDeniedException":
+                logger.info(f"  ✓ {label} denied as expected by policy")
+            else:
+                raise
+        else:
+            pytest.fail(f"{label} succeeded when policy should have denied it")
 
     @tier2
     @post_upgrade
@@ -997,7 +1014,14 @@ class TestS3Vector(MCGTest):
             )
             logger.info(f"✓ [{dim_label}] Updated vector: {target_key}")
 
-            results_step6 = vector_utils.query_vectors(
+            # Lance DB indexes updates asynchronously — poll until the distance
+            # changes or the key drops out of results, rather than querying once
+            # immediately after the put (which races the index flush on Jenkins).
+            results_step6 = []
+            for _sample in TimeoutSampler(
+                60,
+                5,
+                vector_utils.query_vectors,
                 s3vectors_client,
                 query_vector=query_vector,
                 top_k=top_k,
@@ -1005,7 +1029,21 @@ class TestS3Vector(MCGTest):
                 indexName=index_name,
                 returnDistance=True,
                 returnMetadata=True,
-            ).get("vectors", [])
+            ):
+                results_step6 = _sample.get("vectors", [])
+                if len(results_step6) != top_k:
+                    continue
+                keys_now = [r.get("key") for r in results_step6]
+                if target_key not in keys_now:
+                    break
+                dist_now = next(
+                    r.get("distance")
+                    for r in results_step6
+                    if r.get("key") == target_key
+                )
+                if dist_now != target_distance_before:
+                    break
+
             assert len(results_step6) == top_k, (
                 f"[{dim_label}] Expected exactly {top_k} results after update, "
                 f"got {len(results_step6)}"
@@ -1093,7 +1131,6 @@ class TestS3Vector(MCGTest):
 
         logger.info("✅ Vector query operations test completed successfully!")
 
-    @jira("DFBUGS-7337")
     @tier2
     def test_vector_distance_metrics(self, vector_bucket_factory, mcg_obj):
         """
@@ -1310,3 +1347,643 @@ class TestS3Vector(MCGTest):
                 )
 
         logger.info("✅ Vector distance metrics test completed successfully!")
+
+    @tier2
+    def test_vector_bucket_policy_operations(self, vector_bucket_factory, mcg_obj):
+        """
+        Test vector bucket policy CRUD operations and enforcement:
+            1. Create vector bucket, index, and test vectors
+            2. Define initial bucket policy (AllowListVectors + DenyDeleteVectors/GetVectors)
+            3. Call PutVectorBucketPolicy API
+            4. Verify policy application response
+            5. Get bucket policy and verify contents match
+            6. Enforce initial policy — ListVectors allowed; GetVectors + DeleteVectors denied
+            7. Update policy with new rules (AllowQueryVectors + DenyPutVectors)
+            8. Get bucket policy and verify new rules are applied
+            9. Enforce updated policy — QueryVectors allowed; PutVectors denied
+            10. Call DeleteVectorBucketPolicy API
+            11. Verify deletion response
+            12. Attempt GetVectorBucketPolicy after deletion
+            13. Verify default access rules apply (no explicit policy)
+            14. Enforce post-deletion — previously-denied PutVectors now succeeds
+        """
+        # Step 1: Create vector bucket, index, and test vectors
+        logger.info("Step 1: Creating vector bucket, index, and test vectors")
+        vector_bucket_name = vector_bucket_factory(amount=1)[0].name
+        logger.info(f"✓ Vector bucket created: {vector_bucket_name}")
+
+        obc_obj = OBC(vector_bucket_name)
+        s3vectors_client = vector_utils.create_s3vectors_client(mcg_obj, obc_obj)
+
+        policy_index_name = "policy-test-index"
+        policy_dimension = 3
+        self._create_index(
+            s3vectors_client,
+            policy_index_name,
+            policy_dimension,
+            vector_bucket_name,
+        )
+        test_vectors = vector_utils.generate_test_vectors_with_metadata(
+            dimension=policy_dimension, num_vectors=5, key_prefix="policy_vec"
+        )
+        vector_utils.put_vectors(
+            s3vectors_client,
+            test_vectors,
+            vectorBucketName=vector_bucket_name,
+            indexName=policy_index_name,
+        )
+        test_vector_key = test_vectors[0]["key"]
+        logger.info(
+            f"✓ Created index '{policy_index_name}' with {len(test_vectors)} test vectors"
+        )
+
+        # Step 2: Define bucket policy JSON with Allow and Deny rules.
+        logger.info("Step 2: Defining bucket policy with Allow and Deny statements")
+        allow_stmt = vector_utils.gen_vector_bucket_policy(
+            user_list=obc_obj.id_for_policy_principal,
+            actions_list=["ListVectors"],
+            resources_list=[vector_bucket_name],
+            effect="Allow",
+            sid="AllowListBucket",
+        )
+        deny_stmt = vector_utils.gen_vector_bucket_policy(
+            user_list=obc_obj.id_for_policy_principal,
+            actions_list=["DeleteVectors", "GetVectors"],
+            resources_list=[vector_bucket_name],
+            effect="Deny",
+            sid="DenyDeleteVector",
+        )
+        initial_policy = {
+            "Version": "2012-10-17",
+            "Statement": allow_stmt["Statement"] + deny_stmt["Statement"],
+        }
+        initial_policy_str = json.dumps(initial_policy)
+        logger.info(
+            f"✓ Initial policy defined with {len(initial_policy['Statement'])} statements: "
+            f"{[s['Sid'] for s in initial_policy['Statement']]}"
+        )
+
+        # Step 3: Call PutVectorBucketPolicy API
+        logger.info("Step 3: Calling PutVectorBucketPolicy API")
+        put_response = vector_utils.put_vector_bucket_policy(
+            s3vectors_client, vector_bucket_name, initial_policy_str
+        )
+
+        # Step 4: Verify policy application response
+        logger.info("Step 4: Verifying policy application response")
+        assert (
+            put_response.get("ResponseMetadata", {}).get("HTTPStatusCode") == 200
+        ), f"PutVectorBucketPolicy failed: {put_response}"
+        logger.info("✓ PutVectorBucketPolicy succeeded (HTTP 200)")
+
+        # Hardcoded sleep is needed for policy to reflect
+        # we could wait for — even GetVectorBucketPolicy returning the policy does not
+        # guarantee the policy is actually enforced (same behaviour observed in S3 policies).
+        policy_propagation_wait = 60
+        logger.info(
+            f"Waiting {policy_propagation_wait}s for initial policy to take effect"
+        )
+        time.sleep(policy_propagation_wait)
+
+        # Step 5: Get bucket policy and verify contents match
+        logger.info("Step 5: Getting bucket policy and verifying contents match")
+        get_response = vector_utils.get_vector_bucket_policy(
+            s3vectors_client, vector_bucket_name
+        )
+        assert (
+            get_response.get("ResponseMetadata", {}).get("HTTPStatusCode") == 200
+        ), f"GetVectorBucketPolicy failed: {get_response}"
+
+        retrieved_policy = json.loads(get_response.get("policy", "{}"))
+        retrieved_stmts = {
+            s.get("Sid"): s for s in retrieved_policy.get("Statement", [])
+        }
+        assert (
+            "AllowListBucket" in retrieved_stmts
+        ), f"AllowListBucket missing from retrieved policy. Found: {set(retrieved_stmts)}"
+        assert (
+            "DenyDeleteVector" in retrieved_stmts
+        ), f"DenyDeleteVector missing from retrieved policy. Found: {set(retrieved_stmts)}"
+        assert (
+            retrieved_stmts["AllowListBucket"].get("Effect") == "Allow"
+        ), f"AllowListBucket Effect mismatch: {retrieved_stmts['AllowListBucket']}"
+        assert (
+            retrieved_stmts["DenyDeleteVector"].get("Effect") == "Deny"
+        ), f"DenyDeleteVector Effect mismatch: {retrieved_stmts['DenyDeleteVector']}"
+        logger.info(
+            f"✓ Retrieved policy matches initial policy. Sids: {set(retrieved_stmts)}"
+        )
+
+        # Step 6: Enforce initial policy
+        logger.info("Step 6: Enforcing initial policy")
+
+        # AllowListBucket — ListVectors must succeed
+        logger.info("  [6a] Verifying ListVectors is allowed by policy")
+        list_resp = vector_utils.list_vectors(
+            s3vectors_client,
+            vectorBucketName=vector_bucket_name,
+            indexName=policy_index_name,
+        )
+        assert (
+            list_resp.get("ResponseMetadata", {}).get("HTTPStatusCode") == 200
+        ), f"ListVectors should be allowed but failed: {list_resp}"
+        logger.info("  ✓ ListVectors allowed as expected")
+
+        # DenyDeleteVector — GetVectors must be denied
+        logger.info("  [6b] Verifying GetVectors is denied by policy")
+        self._assert_access_denied(
+            vector_utils.get_vectors,
+            "GetVectors",
+            s3vectors_client,
+            keys=[test_vector_key],
+            vectorBucketName=vector_bucket_name,
+            indexName=policy_index_name,
+        )
+
+        # DenyDeleteVector — DeleteVectors must be denied
+        logger.info("  [6c] Verifying DeleteVectors is denied by policy")
+        self._assert_access_denied(
+            vector_utils.delete_vectors,
+            "DeleteVectors",
+            s3vectors_client,
+            keys=[test_vector_key],
+            vectorBucketName=vector_bucket_name,
+            indexName=policy_index_name,
+        )
+
+        logger.info("✓ Initial policy enforcement verified")
+
+        # Step 7: Update policy with new rules
+        logger.info("Step 7: Updating policy with new rules")
+        allow_query_stmt = vector_utils.gen_vector_bucket_policy(
+            user_list=obc_obj.id_for_policy_principal,
+            actions_list=["QueryVectors"],
+            resources_list=[vector_bucket_name],
+            effect="Allow",
+            sid="AllowQueryVectors",
+        )
+        deny_put_stmt = vector_utils.gen_vector_bucket_policy(
+            user_list=obc_obj.id_for_policy_principal,
+            actions_list=["PutVectors"],
+            resources_list=[vector_bucket_name],
+            effect="Deny",
+            sid="DenyPutVectors",
+        )
+        updated_policy = {
+            "Version": "2012-10-17",
+            "Statement": allow_query_stmt["Statement"] + deny_put_stmt["Statement"],
+        }
+        updated_policy_str = json.dumps(updated_policy)
+        put_update_response = vector_utils.put_vector_bucket_policy(
+            s3vectors_client, vector_bucket_name, updated_policy_str
+        )
+        assert (
+            put_update_response.get("ResponseMetadata", {}).get("HTTPStatusCode") == 200
+        ), f"Policy update failed: {put_update_response}"
+        logger.info(
+            f"✓ Policy updated with new statements: "
+            f"{[s['Sid'] for s in updated_policy['Statement']]}"
+        )
+
+        # Poll QueryVectors until AllowQueryVectors is enforced — exits early when
+        # the updated policy propagates rather than always waiting the full 60s.
+        # TimeoutSampler swallows AccessDeniedException during propagation delay.
+        logger.info(
+            f"Waiting up to {policy_propagation_wait}s for updated policy to take effect "
+            f"(polling QueryVectors until allowed)"
+        )
+        _poll_qv = [random.uniform(0.0, 2.0) for _ in range(policy_dimension)]
+        for _sample in TimeoutSampler(
+            policy_propagation_wait,
+            5,
+            vector_utils.query_vectors,
+            s3vectors_client,
+            query_vector=_poll_qv,
+            top_k=1,
+            vectorBucketName=vector_bucket_name,
+            indexName=policy_index_name,
+        ):
+            if _sample.get("ResponseMetadata", {}).get("HTTPStatusCode") == 200:
+                logger.info("✓ Updated policy in effect — QueryVectors now allowed")
+                break
+
+        # Step 8: Get bucket policy and verify new rules are applied
+        logger.info("Step 8: Getting updated policy and verifying new rules")
+        get_updated_response = vector_utils.get_vector_bucket_policy(
+            s3vectors_client, vector_bucket_name
+        )
+        assert (
+            get_updated_response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+            == 200
+        ), f"GetVectorBucketPolicy after update failed: {get_updated_response}"
+
+        updated_retrieved = json.loads(get_updated_response.get("policy", "{}"))
+        updated_stmts = {
+            s.get("Sid"): s for s in updated_retrieved.get("Statement", [])
+        }
+        assert (
+            "AllowQueryVectors" in updated_stmts
+        ), f"AllowQueryVectors not found in updated policy. Sids: {set(updated_stmts)}"
+        assert (
+            "DenyPutVectors" in updated_stmts
+        ), f"DenyPutVectors not found in updated policy. Sids: {set(updated_stmts)}"
+        assert (
+            "AllowListBucket" not in updated_stmts
+        ), f"Old rule AllowListBucket still present after update. Sids: {set(updated_stmts)}"
+        assert (
+            "DenyDeleteVector" not in updated_stmts
+        ), f"Old rule DenyDeleteVector still present after update. Sids: {set(updated_stmts)}"
+        assert (
+            updated_stmts["AllowQueryVectors"].get("Effect") == "Allow"
+        ), f"AllowQueryVectors Effect mismatch: {updated_stmts['AllowQueryVectors']}"
+        assert (
+            updated_stmts["DenyPutVectors"].get("Effect") == "Deny"
+        ), f"DenyPutVectors Effect mismatch: {updated_stmts['DenyPutVectors']}"
+        logger.info(
+            f"✓ Updated policy verified — new sids: {set(updated_stmts)}, old rules removed"
+        )
+
+        # Step 9: Enforce updated policy
+        logger.info("Step 9: Enforcing updated policy")
+
+        # AllowQueryVectors — QueryVectors must succeed
+        logger.info("  [9a] Verifying QueryVectors is allowed by policy")
+        query_vector = [random.uniform(0.0, 2.0) for _ in range(policy_dimension)]
+        query_resp = vector_utils.query_vectors(
+            s3vectors_client,
+            query_vector=query_vector,
+            top_k=3,
+            vectorBucketName=vector_bucket_name,
+            indexName=policy_index_name,
+            returnDistance=True,
+        )
+        assert (
+            query_resp.get("ResponseMetadata", {}).get("HTTPStatusCode") == 200
+        ), f"QueryVectors should be allowed but failed: {query_resp}"
+        logger.info("  ✓ QueryVectors allowed as expected")
+
+        # DenyPutVectors — PutVectors must be denied
+        logger.info("  [9b] Verifying PutVectors is denied by policy")
+        new_vectors = vector_utils.generate_test_vectors_with_metadata(
+            dimension=policy_dimension, num_vectors=1, key_prefix="denied_vec"
+        )
+        self._assert_access_denied(
+            vector_utils.put_vectors,
+            "PutVectors",
+            s3vectors_client,
+            new_vectors,
+            vectorBucketName=vector_bucket_name,
+            indexName=policy_index_name,
+        )
+
+        # Step 9c: verify GetVectors is now allowed — the initial DenyGetVectors
+        # was replaced by the updated policy, so access should be restored
+        logger.info(
+            "  [9c] Verifying GetVectors is now allowed after old deny rule was replaced"
+        )
+        get_resp = vector_utils.get_vectors(
+            s3vectors_client,
+            keys=[test_vector_key],
+            vectorBucketName=vector_bucket_name,
+            indexName=policy_index_name,
+            returnMetadata=True,
+        )
+        assert (
+            get_resp.get("ResponseMetadata", {}).get("HTTPStatusCode") == 200
+        ), f"GetVectors should be allowed after policy update but got: {get_resp}"
+        logger.info("  ✓ GetVectors allowed — old deny rule no longer in effect")
+
+        # Step 9d: verify ListVectors is now denied — AllowListBucket was removed from
+        # the updated policy; no explicit allow means access should be denied
+        logger.info(
+            "  [9d] Verifying ListVectors is denied after AllowListBucket was removed"
+        )
+        self._assert_access_denied(
+            vector_utils.list_vectors,
+            "ListVectors",
+            s3vectors_client,
+            vectorBucketName=vector_bucket_name,
+            indexName=policy_index_name,
+        )
+
+        logger.info("✓ Updated policy enforcement verified")
+
+        # Step 10: Call DeleteVectorBucketPolicy API
+        logger.info("Step 10: Calling DeleteVectorBucketPolicy API")
+        delete_response = vector_utils.delete_vector_bucket_policy(
+            s3vectors_client, vector_bucket_name
+        )
+
+        # Step 11: Verify deletion response
+        logger.info("Step 11: Verifying deletion response")
+        assert delete_response.get("ResponseMetadata", {}).get("HTTPStatusCode") in [
+            200,
+            204,
+        ], f"DeleteVectorBucketPolicy unexpected status: {delete_response}"
+        logger.info("✓ Policy deleted successfully")
+
+        # Step 12: Attempt GetVectorBucketPolicy after deletion
+        logger.info("Step 12: Attempting GetVectorBucketPolicy after deletion")
+        try:
+            post_delete_response = vector_utils.get_vector_bucket_policy(
+                s3vectors_client, vector_bucket_name
+            )
+
+            # Step 13: API returned a response — verify deleted rules are gone
+            logger.info("Step 13: Verifying default access rules after deletion")
+            post_delete_policy_str = post_delete_response.get("policy", "")
+            if post_delete_policy_str:
+                post_delete_policy = json.loads(post_delete_policy_str)
+                post_sids = {
+                    s.get("Sid") for s in post_delete_policy.get("Statement", [])
+                }
+                assert (
+                    "AllowQueryVectors" not in post_sids
+                ), f"Deleted rule AllowQueryVectors still present: {post_sids}"
+                assert (
+                    "DenyPutVectors" not in post_sids
+                ), f"Deleted rule DenyPutVectors still present: {post_sids}"
+                logger.info(
+                    "✓ Default access rules confirmed — deleted rules no longer present"
+                )
+            else:
+                logger.info(
+                    "✓ Policy is empty after deletion — default access rules apply"
+                )
+
+        except ClientError as e:
+            # Step 13: Policy-not-found error is the expected NooBaa/S3 response
+            error_code = e.response.get("Error", {}).get("Code", "")
+            assert (
+                error_code == "NoSuchVectorBucketPolicy"
+            ), f"Unexpected error after policy deletion: {error_code} — {e}"
+            logger.info(
+                f"Step 13: ✓ GetVectorBucketPolicy raised '{error_code}' after deletion — "
+                f"default access rules apply, no explicit policy set"
+            )
+
+        # Step 14: Enforce post-deletion — previously-denied PutVectors must now succeed.
+        # Also serves as the propagation wait: poll until allowed rather than sleeping.
+        # TimeoutSampler swallows AccessDeniedException while deletion propagates.
+        logger.info(
+            "Step 14: Verifying previously-denied PutVectors is allowed after policy deletion"
+            f" (polling up to {policy_propagation_wait}s)"
+        )
+        new_vector = vector_utils.generate_test_vectors_with_metadata(
+            dimension=policy_dimension, num_vectors=1, key_prefix="post_delete_vec"
+        )
+        for _sample in TimeoutSampler(
+            policy_propagation_wait,
+            5,
+            vector_utils.put_vectors,
+            s3vectors_client,
+            new_vector,
+            vectorBucketName=vector_bucket_name,
+            indexName=policy_index_name,
+        ):
+            if _sample.get("ResponseMetadata", {}).get("HTTPStatusCode") == 200:
+                logger.info(
+                    "✓ PutVectors succeeded after policy deletion — enforcement lifted"
+                )
+                break
+
+        logger.info("✅ Vector bucket policy operations test completed successfully!")
+
+    @tier2
+    def test_vector_metadata_operations(self, vector_bucket_factory, mcg_obj):
+        """
+        Test vector metadata storage, retrieval, update, and filter-based querying:
+            1. Create vector bucket with 3D cosine index
+            2. Generate and insert 100 vectors
+            3. Update a vector's metadata fields
+            4. Verify metadata is updated via GetVectors
+            5. Query with old genre filter returns no results for updated vector
+            6. Query with new genre filter returns the updated vector
+            7. Update vectors with category='A' (first 50) and category='B' (last 50) metadata
+            8. Query with category='A' filter and verify only category='A' vectors returned
+        """
+        # Step 1: Create vector bucket with 3D cosine index
+        logger.info("Step 1: Creating vector bucket with 3D cosine index")
+        vector_bucket_name = vector_bucket_factory(amount=1)[0].name
+        logger.info(f"✓ Vector bucket created: {vector_bucket_name}")
+
+        obc_obj = OBC(vector_bucket_name)
+        s3vectors_client = vector_utils.create_s3vectors_client(mcg_obj, obc_obj)
+
+        random_suffix = "".join(
+            random.choices(string.ascii_lowercase + string.digits, k=8)
+        )
+        index_name = f"meta-test-index-{random_suffix}"
+        dimension = 3
+        self._create_index(
+            s3vectors_client,
+            index_name,
+            dimension,
+            vector_bucket_name,
+            distance_metric="cosine",
+        )
+        logger.info(f"✓ Created 3D cosine index: {index_name}")
+
+        # Step 2: Generate and insert 100 vectors using generate_test_vectors_with_metadata
+        logger.info(
+            "Step 2: Generating and inserting 100 vectors with default metadata"
+        )
+        vectors_a = vector_utils.generate_test_vectors_with_metadata(
+            dimension, 50, key_prefix="vec_a"
+        )
+        vectors_b = vector_utils.generate_test_vectors_with_metadata(
+            dimension, 50, key_prefix="vec_b"
+        )
+        # Seed 'category' in the initial insert so the field is part of the
+        # index schema from the first put_vectors call.
+        for v in vectors_a:
+            v["metadata"]["category"] = ""
+        for v in vectors_b:
+            v["metadata"]["category"] = ""
+        vector_utils.put_vectors(
+            s3vectors_client,
+            vectors_a + vectors_b,
+            vectorBucketName=vector_bucket_name,
+            indexName=index_name,
+        )
+        logger.info("✓ Inserted 100 vectors with default metadata")
+
+        target_key = vectors_a[0]["key"]
+        original_genre = vectors_a[0]["metadata"]["genre"]
+
+        # Step 3: Update a vector with new metadata fields
+        logger.info("Step 3: Updating a vector with new metadata fields")
+        updated_metadata = {
+            "genre": "genre_updated",
+            "price": 0,
+            "source_text": "updated source text",
+        }
+        vector_utils.put_vectors(
+            s3vectors_client,
+            [
+                {
+                    "key": target_key,
+                    "data": {"float32": vectors_a[0]["data"]["float32"]},
+                    "metadata": updated_metadata,
+                }
+            ],
+            vectorBucketName=vector_bucket_name,
+            indexName=index_name,
+        )
+        logger.info(f"✓ Updated '{target_key}' with new metadata: {updated_metadata}")
+        # Keep local dict in sync so Step 7's spread doesn't revert the server state
+        vectors_a[0]["metadata"].update(updated_metadata)
+
+        # Step 4: Verify metadata is updated via GetVectors
+        logger.info("Step 4: Verifying metadata is updated")
+        get_updated_resp = vector_utils.get_vectors(
+            s3vectors_client,
+            keys=[target_key],
+            vectorBucketName=vector_bucket_name,
+            indexName=index_name,
+            returnMetadata=True,
+        )
+        updated_retrieved = get_updated_resp.get("vectors", [])[0].get("metadata", {})
+        assert (
+            updated_retrieved.get("genre") == "genre_updated"
+        ), f"Expected genre='genre_updated', got: {updated_retrieved}"
+        assert (
+            updated_retrieved.get("price") == 0
+        ), f"Expected price=0, got: {updated_retrieved}"
+        assert (
+            updated_retrieved.get("source_text") == "updated source text"
+        ), f"Expected source_text='updated source text', got: {updated_retrieved}"
+        logger.info(f"✓ Updated metadata confirmed: {updated_retrieved}")
+
+        # Step 5: Query with old metadata filter returns no results for updated vector
+        # Lance DB indexes metadata updates asynchronously — poll until the index
+        # no longer returns the updated vector under its original genre.
+        logger.info(
+            f"Step 5: Querying with old genre filter (genre='{original_genre}') — "
+            "updated vector must NOT appear"
+        )
+        query_vector = [random.uniform(0.0, 1.0) for _ in range(dimension)]
+        old_filter_results = []
+        for _sample in TimeoutSampler(
+            60,
+            5,
+            vector_utils.query_vectors,
+            s3vectors_client,
+            query_vector=query_vector,
+            top_k=100,
+            vectorBucketName=vector_bucket_name,
+            indexName=index_name,
+            filter={"genre": {"$eq": original_genre}},
+            returnMetadata=True,
+            returnDistance=True,
+        ):
+            old_filter_results = _sample.get("vectors", [])
+            if target_key not in [r.get("key") for r in old_filter_results]:
+                break
+        returned_keys = [r.get("key") for r in old_filter_results]
+        assert target_key not in returned_keys, (
+            f"Updated vector '{target_key}' still appears in genre='{original_genre}' "
+            f"filter results after timeout: {returned_keys}"
+        )
+        logger.info(
+            f"✓ '{target_key}' not in genre='{original_genre}' results after update — "
+            f"old filter correctly excludes it"
+        )
+
+        # Step 6: Query with new metadata filter returns the updated vector
+        # Poll until the index reflects the updated genre value.
+        logger.info(
+            "Step 6: Querying with new genre filter (genre='genre_updated') — "
+            "updated vector must appear"
+        )
+        new_filter_results = []
+        for _sample in TimeoutSampler(
+            60,
+            5,
+            vector_utils.query_vectors,
+            s3vectors_client,
+            query_vector=query_vector,
+            top_k=100,
+            vectorBucketName=vector_bucket_name,
+            indexName=index_name,
+            filter={"genre": {"$eq": "genre_updated"}},
+            returnMetadata=True,
+            returnDistance=True,
+        ):
+            new_filter_results = _sample.get("vectors", [])
+            if target_key in [r.get("key") for r in new_filter_results]:
+                break
+        new_keys = [r.get("key") for r in new_filter_results]
+        assert target_key in new_keys, (
+            f"Updated vector '{target_key}' not found in genre='genre_updated' results "
+            f"after timeout: {new_keys}"
+        )
+        logger.info(
+            f"✓ '{target_key}' found in genre='genre_updated' results — "
+            f"new metadata filter works correctly"
+        )
+
+        # Step 7: Update vectors with category='A' and category='B' metadata
+        logger.info(
+            "Step 7: Updating vectors with category='A' and category='B' metadata"
+        )
+        vector_utils.put_vectors(
+            s3vectors_client,
+            [
+                {
+                    "key": v["key"],
+                    "data": v["data"],
+                    "metadata": {**v["metadata"], "category": "A"},
+                }
+                for v in vectors_a
+            ]
+            + [
+                {
+                    "key": v["key"],
+                    "data": v["data"],
+                    "metadata": {**v["metadata"], "category": "B"},
+                }
+                for v in vectors_b
+            ],
+            vectorBucketName=vector_bucket_name,
+            indexName=index_name,
+        )
+        logger.info("✓ Updated 50 vectors with category='A' and 50 with category='B'")
+
+        # Step 8: Query with category='A' filter and verify only category='A' vectors returned
+        # Lance DB indexes metadata updates asynchronously — poll until the full set of
+        # expected category-A keys is returned before asserting.
+        logger.info(
+            "Step 8: Querying with category='A' filter and verifying only category='A' "
+            "vectors are returned"
+        )
+        expected_cat_a_keys = {v["key"] for v in vectors_a}
+        cat_a_results = []
+        for _sample in TimeoutSampler(
+            60,
+            5,
+            vector_utils.query_vectors,
+            s3vectors_client,
+            query_vector=query_vector,
+            top_k=100,
+            vectorBucketName=vector_bucket_name,
+            indexName=index_name,
+            filter={"category": {"$eq": "A"}},
+            returnMetadata=True,
+            returnDistance=True,
+        ):
+            cat_a_results = _sample.get("vectors", [])
+            if {r.get("key") for r in cat_a_results} == expected_cat_a_keys:
+                break
+        returned_cat_a_keys = {r.get("key") for r in cat_a_results}
+        assert expected_cat_a_keys == returned_cat_a_keys, (
+            f"Category='A' key mismatch.\n"
+            f"  Expected ({len(expected_cat_a_keys)}): {sorted(expected_cat_a_keys)}\n"
+            f"  Got     ({len(returned_cat_a_keys)}): {sorted(returned_cat_a_keys)}"
+        )
+        logger.info(
+            f"✓ All {len(cat_a_results)} category='A' vectors returned — "
+            f"metadata filter correctly excludes category='B' vectors"
+        )
+
+        logger.info("✅ Vector metadata operations test completed successfully!")

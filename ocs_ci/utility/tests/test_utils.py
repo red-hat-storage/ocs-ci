@@ -54,7 +54,7 @@ def test_run_cmd_simple_positive(caplog):
     cmd = "echo -n hello"
     assert utils.run_cmd(cmd) == "hello"
     # check that run_cmd logged the run as expected
-    assert caplog.records[0].levelname == "INFO"
+    assert caplog.records[0].levelname == "DEBUG"
     assert caplog.records[0].message == f"Executing command: {cmd}"
     assert caplog.records[1].levelname == "DEBUG"
     assert caplog.records[1].message == "Command stdout: hello"
@@ -88,7 +88,7 @@ def test_run_cmd_simple_negative(caplog):
         utils.run_cmd(cmd)
         assert "No such file or directory" in str(excinfo.value)
     # check that run_cmd logged the run as expected
-    assert caplog.records[0].levelname == "INFO"
+    assert caplog.records[0].levelname == "DEBUG"
     assert caplog.records[0].message == f"Executing command: {cmd}"
     assert caplog.records[1].levelname == "DEBUG"
     assert caplog.records[1].message == "Command stdout is empty"
@@ -127,7 +127,7 @@ def test_run_cmd_simple_negative_ignoreerror(caplog):
     cmd = "ls /tmp/this/file/isindeednotthereatall"
     assert utils.run_cmd(cmd, ignore_error=True) == ""
     # check that run_cmd logged the run as expected
-    assert caplog.records[0].levelname == "INFO"
+    assert caplog.records[0].levelname == "DEBUG"
     assert caplog.records[0].message == f"Executing command: {cmd}"
     assert caplog.records[1].levelname == "DEBUG"
     assert caplog.records[1].message == "Command stdout is empty"

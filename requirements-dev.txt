@@ -1,5 +1,5 @@
 pre-commit==2.15.0
 black==24.3.0
 tox==3.25.1
-git+https://github.com/ibm/detect-secrets.git@master#egg=detect-secrets
+# Gitleaks is installed via pre-commit hook, no pip dependency needed
 -r requirements.txt

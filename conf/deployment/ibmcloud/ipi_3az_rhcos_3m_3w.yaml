@@ -6,8 +6,8 @@ ENV_DATA:
   deployment_type: 'ipi'
   region: 'us-east'
   base_domain: 'ibmcloud2.qe.rh-ocs.com'
-  worker_instance_type: 'bx2-16x64'
-  master_instance_type: 'bx2-4x16'
+  worker_instance_type: 'bxf-16x64'
+  master_instance_type: 'bxf-4x16'
   worker_availability_zones:
     - 'us-east-1'
     - 'us-east-2'

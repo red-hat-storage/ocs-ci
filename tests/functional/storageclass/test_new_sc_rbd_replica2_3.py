@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ec_allowed,
 )
 from ocs_ci.ocs.cluster import (
+    get_ceph_pool_property,
     get_percent_used_capacity,
     is_ec_pool_supported,
     validate_compression,
@@ -170,7 +171,16 @@ class TestCreateNewScWithNeWRbDPool(ManageTest):
             f"Cluster used space with replica size {replica}, "
             f"compression mode {compression}={cluster_used_space}"
         )
-        if not erasure_coded:
+        if erasure_coded:
+            data_pool = sc_obj.get().get("parameters").get("dataPool")
+            if data_pool:
+                ec_opt = get_ceph_pool_property(data_pool, "allow_ec_optimizations")
+                log.info(f"EC pool '{data_pool}' allow_ec_optimizations: {ec_opt}")
+                assert ec_opt, (
+                    f"EC pool '{data_pool}' does not have "
+                    f"allow_ec_optimizations enabled"
+                )
+        else:
             cbp_name = sc_obj.get().get("parameters").get("pool")
             if compression != "none":
                 validate_compression(cbp_name)

@@ -18,6 +18,9 @@ from ocs_ci.ocs.bucket_utils import (
     cli_create_aws_sts_backingstore,
     cli_create_azure_sts_backingstore,
     oc_create_azure_sts_backingstore,
+    oc_create_gcp_sts_backingstore,
+    oc_create_self_ref_mcg_backingstore,
+    cli_create_self_ref_mcg_backingstore,
 )
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
@@ -286,8 +289,10 @@ def backingstore_factory(
                 "azure": oc_create_azure_backingstore,
                 "ibmcos": oc_create_ibmcos_backingstore,
                 "rgw": oc_create_rgw_backingstore,
+                "self-ref-mcg": oc_create_self_ref_mcg_backingstore,
                 "pv": oc_create_pv_backingstore,
                 "azure-sts": oc_create_azure_sts_backingstore,
+                "gcp-sts": oc_create_gcp_sts_backingstore,
             },
             "cli": {
                 "aws": cli_create_aws_backingstore,
@@ -295,6 +300,7 @@ def backingstore_factory(
                 "azure": cli_create_azure_backingstore,
                 "ibmcos": cli_create_ibmcos_backingstore,
                 "rgw": cli_create_rgw_backingstore,
+                "self-ref-mcg": cli_create_self_ref_mcg_backingstore,
                 "pv": cli_create_pv_backingstore,
                 "aws-sts": cli_create_aws_sts_backingstore,
                 "azure-sts": cli_create_azure_sts_backingstore,
@@ -313,6 +319,10 @@ def backingstore_factory(
             i.e. - 'aws': [(3, us-west-1),(2, eu-west-2)]
             PV form - 'pv': [(amount, size_in_gb, storagecluster), ...]
             i.e. - 'pv': [(3, 32, ocs-storagecluster-ceph-rbd),(2, 100, ocs-storagecluster-ceph-rbd)]
+            A PV tuple may also carry explicit agent pod resources, which take
+            precedence over the MCG performance profile's pvPoolResources -
+            'pv': [(amount, size_in_gb, storagecluster, req_cpu, req_mem, lim_cpu, lim_mem), ...]
+            i.e. - 'pv': [(1, 32, ocs-storagecluster-ceph-rbd, '600m', '1Gi', '600m', '1Gi')]
             timeout (int): Timeout until backingstore reaches desired state
         Returns:
             list: A list of backingstore names.
@@ -387,7 +397,14 @@ def backingstore_factory(
                             )
                         else:
                             cmdMap[method.lower()][cloud.lower()](
-                                backingstore_name, vol_num, size, storagecluster
+                                backingstore_name,
+                                vol_num,
+                                size,
+                                storagecluster,
+                                req_cpu=req_cpu,
+                                req_mem=req_mem,
+                                lim_cpu=lim_cpu,
+                                lim_mem=lim_mem,
                             )
                     else:
                         _, region = uls_tup

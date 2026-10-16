@@ -61,6 +61,84 @@ def login():
     logger.info("Successfully logged in to ROSA")
 
 
+def get_rosa_hcp_subnet_ids():
+    """
+    Resolve the ROSA HCP subnet IDs from config.
+
+    Returns the same subnet IDs that create_cluster() uses, read from
+    config.ENV_DATA rather than querying AWS by Name tag (which doesn't
+    work for shared BYO VPC subnets).
+
+    Returns:
+        list: Subnet ID strings [public_subnet, private_subnet]
+
+    """
+    if config.ENV_DATA.get("subnet_ids", ""):
+        return config.ENV_DATA["subnet_ids"].split(",")
+    region = config.ENV_DATA.get("region", "us-west-2")
+    hcp_subnets = config.ENV_DATA.get("rosahcp_subnet_ids_per_region_default", {})
+    region_subnets = hcp_subnets.get(region, {})
+    public = region_subnets.get("public_subnet", "").split(",")[0]
+    private = region_subnets.get("private_subnet", "").split(",")[0]
+    return [s for s in [public, private] if s]
+
+
+def clean_stale_subnet_tags(subnet_ids):
+    """
+    Remove stale kubernetes.io/cluster/* tags from subnets.
+
+    AWS limits subnets to 50 tags. ROSA adds a kubernetes.io/cluster/<id>
+    tag on cluster creation. If destroy fails to clean up, tags accumulate
+    until the limit is reached, blocking new deployments.
+
+    This function removes tags for clusters that no longer exist in OCM.
+
+    Args:
+        subnet_ids (list): Subnet IDs to clean
+
+    Returns:
+        int: Number of stale tags removed
+
+    """
+    aws = AWSUtil()
+    removed = 0
+    active_clusters = set()
+    try:
+        out = utils.exec_cmd(
+            "ocm get /api/clusters_mgmt/v1/clusters --parameter size=200",
+            timeout=120,
+        )
+        clusters_data = json.loads(out.stdout.decode())
+        active_clusters = {c["id"] for c in clusters_data.get("items", [])}
+        logger.info(f"Found {len(active_clusters)} active clusters in OCM")
+    except Exception as e:
+        logger.warning(f"Could not fetch active cluster list: {e}")
+
+    for subnet_id in subnet_ids:
+        response = aws.ec2_client.describe_tags(
+            Filters=[{"Name": "resource-id", "Values": [subnet_id]}]
+        )
+        stale_keys = []
+        for tag in response.get("Tags", []):
+            key = tag.get("Key", "")
+            if not key.startswith("kubernetes.io/cluster/"):
+                continue
+            cluster_id = key.replace("kubernetes.io/cluster/", "")
+            if cluster_id not in active_clusters:
+                stale_keys.append(key)
+
+        if stale_keys:
+            logger.info(
+                f"Removing {len(stale_keys)} stale cluster tags from {subnet_id}"
+            )
+            aws.ec2_client.delete_tags(
+                Resources=[subnet_id],
+                Tags=[{"Key": k} for k in stale_keys],
+            )
+            removed += len(stale_keys)
+    return removed
+
+
 def create_cluster(cluster_name, version_str, region):
     """
     Create OCP cluster.
@@ -179,7 +257,19 @@ def create_cluster(cluster_name, version_str, region):
         cmd += " --hosted-cp "
 
     log_step("Running create rosa cluster command")
-    utils.run_cmd(cmd, timeout=create_timeout)
+    try:
+        utils.run_cmd(cmd, timeout=create_timeout)
+    except CommandFailed as e:
+        if "tag quota" in str(e).lower() and rosa_hcp:
+            logger.warning(
+                "Subnet tag quota exceeded. Cleaning stale cluster tags and retrying."
+            )
+            cleanup_subnet_ids = subnet_ids.split(",")
+            removed = clean_stale_subnet_tags(cleanup_subnet_ids)
+            logger.info(f"Removed {removed} stale tags. Retrying cluster creation.")
+            utils.run_cmd(cmd, timeout=create_timeout)
+        else:
+            raise
     if rosa_mode != "auto" and not rosa_hcp:
         logger.info(
             "Waiting for ROSA cluster status changed to waiting or pending state"
@@ -619,10 +709,7 @@ def download_rosa_cli():
         str: path to the installer
 
     """
-    force_download = (
-        config.RUN["cli_params"].get("deploy")
-        and config.DEPLOYMENT["force_download_rosa_cli"]
-    )
+    force_download = config.DEPLOYMENT["force_download_rosa_cli"]
     return utils.get_rosa_cli(
         config.DEPLOYMENT["rosa_cli_version"], force_download=force_download
     )
@@ -1093,6 +1180,41 @@ def wait_console_url(cluster_name, timeout=600, sleep=10):
         if console_url and "https" in console_url:
             logger.info(f"Console URL: {console_url}")
             return console_url
+
+
+def get_rosa_hcp_infra_id(cluster_name):
+    """
+    Get the infrastructure name (infra_id) of a ROSA HCP cluster.
+    Must be called while the cluster API is still reachable.
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        str: The infra_id (e.g. 'j041arh13t1'), or "" if unavailable
+    """
+    try:
+        infra_id = ocp.OCP().exec_oc_cmd(
+            "get infrastructure cluster " "-o jsonpath='{.status.infrastructureName}'"
+        )
+        if infra_id:
+            logger.info(f"Pre-fetched infra_id from cluster: {infra_id}")
+            return str(infra_id).strip()
+    except Exception as e:
+        logger.warning(f"Could not fetch infra_id from live cluster: {e}")
+
+    cmd = (
+        f"rosa describe cluster --cluster {cluster_name} -o json "
+        "| jq -r '.infra_id // \"\"'"
+    )
+    proc = utils.exec_cmd(cmd, shell=True)
+    if proc.returncode == 0:
+        infra_id = proc.stdout.decode().strip()
+        if infra_id:
+            logger.info(f"Pre-fetched infra_id from rosa CLI: {infra_id}")
+            return infra_id
+    logger.warning(f"Could not determine infra_id for cluster {cluster_name}")
+    return ""
 
 
 def get_associated_oidc_config_id(cluster_name):

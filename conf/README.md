@@ -179,6 +179,9 @@ version.
 * `fdf_image_tag`: FDF image tag, used to retrieve fdf_pre_release_image_digest.
 * `fdf_pre_release_registry`: Registry where the pre-release image of FDF is hosted.
 * `fdf_pre_release_image_digest`: sha256 of the pre-release image of FDF to deploy.
+* `fdf_upgrade_registry`: Registry URL for the FDF upgrade catalog image (Default: cp.stg.icr.io/cp/df). If not specified during upgrade, falls back to fdf_pre_release_registry.
+* `fdf_upgrade_image_tag`: Image tag for the FDF upgrade catalog (e.g., v4.22). If not specified during upgrade, falls back to fdf_image_tag.
+* `fdf_upgrade_image_digest`: sha256 of the pre-release image for FDF upgrade. If not provided, automatically retrieved using skopeo.
 * `storage_cluster_override` - Dictionary with data which will allow you to dynamically override data in storageCluster CR.
 * `konflux_build` - Set to True if build is made by Konflux build system.
 * `enable_data_replication_separation` - Set to True to label worker nodes with `network.rook.io/mon-ip: <IPAddress>` and enable data replication separation.
@@ -189,12 +192,15 @@ version.
 * `hub_cluster_name` - Name of the Management cluster. Applicable for Agent deployments, where the hub cluster is pre-created.
 * `hub_cluster_path` - Path to the Management cluster directory to store auth_path, credentials files or cluster related files.
 * `partitioned_disk_primary_affinity` - Configure primaryAffinity for OSDs on partitioned disks, https://access.redhat.com/solutions/5807201 (default: "0.0")
-* `vsphere_vm_start_timeout` - Number of seconds to wait for vsphere vms to start up (default: 240)
+* `vsphere_vm_start_timeout` - Number of seconds to wait for vsphere vms to start up (default: 900)
 * `deploy_multiple_device_classes` - Deploy a second storageDeviceSet with a separate device class on LSO-backed vSphere clusters. When enabled, additional disks are attached to each worker node and a second device class (e.g. `localblock-1`) is added to the StorageCluster (Default: false)
 * `ec_default_pools` - Deploy ODF with Erasure Coding as the default pool type instead of replication. When true, the StorageCluster CR is patched with EC spec for block, file, and object pools. No user-facing replicated pools are created (Default: false)
 * `ec_data_chunks` - The k value for erasure coding — number of data chunks. Data is split into this many pieces. Requires `ec_default_pools: true` (Default: 2)
 * `ec_coding_chunks` - The m value for erasure coding — number of parity (coding) chunks. Determines how many simultaneous host failures the pool can tolerate. Requires `ec_default_pools: true` (Default: 1)
 * `ec_failure_domain` - CRUSH failure domain for EC pools. Each chunk is placed on a different unit of this domain. Use `host` for vSphere/bare metal. Requires k+m failure domain units. (Default: "host")
+* `fusion_access_deployment` - Enable IBM Fusion Access for SAN operator deployment after OCP is deployed. When `true`, the `openshift-fusion-access-operator` is installed from the `certified-operators` CatalogSource. (Default: false). Use with `conf/ocsci/fusion_access_deployment.yaml`.
+* `fusion_access_channel` - Subscription channel for the Fusion Access operator. (Default: `"stable-v1"`)
+* `fusion_access_skip_cr` - When `true`, skip creation of the `FusionAccess` CR after the operator CSV reaches `Succeeded`. Useful when the CR is managed externally or created manually. (Default: false)
 
 #### REPORTING
 
@@ -260,7 +266,7 @@ higher priority).
 * `vm_template` - VMWare template to use for RHCOS images (legacy single template, used as fallback)
 * `vm_template_overwrite` - VM template to overwirthe for early testing deployment e.g. rhcos-47.84.202103151537-0-vmware.x86_64
 * `vm_templates` - Dictionary of available RHCOS templates by major version for VMWare deployments (e.g., `{"9": "rhcos-9.6...", "10": "rhcos-10.2..."}`)
-* `rhcos_version` - Select which RHCOS major version to use from vm_templates dictionary (e.g., "9" or "10"). Defaults to "9" if not specified. When set to "10", automatically configures `featureSet: "TechPreviewNoUpgrade"` and `osImageStream: "rhel-10"` in install-config.yaml.
+* `rhcos_version` - Select which RHCOS major version to use from vm_templates dictionary (e.g., "9" or "10"). Defaults to "9" for OCP 4.x and "10" for OCP 5.0+. When set to "10" on OCP < 5.0, automatically configures `featureSet: "TechPreviewNoUpgrade"` and `osImageStream: "rhel-10"` in install-config.yaml. On OCP 5.0+, RHEL 10 is the default and no TechPreviewNoUpgrade or osImageStream is needed.
 * `fio_storageutilization_min_mbps` - Minimal write speed of FIO used in workload_fio_storageutilization
 * `TF_LOG_LEVEL` - Terraform log level
 * `TF_LOG_FILE` - Terraform log file
@@ -570,6 +576,7 @@ Configurations specific to disable/enable OCS components
 * `disable_noobaa` - Disable noobaa component deployment (Default: False)
 * `disable_cephfs` - Disable cephfs component deployment (Default: False)
 * `disable_blockpools` - Disable blockpools (rbd) component deployment (Default: False)
+* `disable_cephobjectstoreusers` - Disable cephObjectStoreUsers, this should be disabled together with RGW! (Default: False)
 
 ## Example of accessing config/default data
 

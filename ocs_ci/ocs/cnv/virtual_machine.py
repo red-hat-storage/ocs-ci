@@ -736,6 +736,29 @@ chpasswd:
         """
         return self.get().get("status").get("printableStatus")
 
+    def _cleanup_backing_pv(self, pv_obj):
+        """
+        Clean up the backing PV.
+
+        Handles the case where the PV was already deleted due to the
+        Delete reclaim policy before VM teardown reaches it.
+
+        Args:
+            pv_obj (PV): PersistentVolume object associated with the VM.
+        """
+        try:
+            pv_obj.reload()
+        except CommandFailed as ex:
+            if "not found" in str(ex).lower():
+                logger.info(
+                    "PV %s already deleted. Skipping PV cleanup.",
+                    pv_obj.name,
+                )
+            else:
+                raise
+        else:
+            delete_pv_with_force_and_finalizers(pv_obj, timeout=600)
+
     def delete(self):
         """
         Delete the VirtualMachine
@@ -762,13 +785,8 @@ chpasswd:
                     resource_name=self.pvc_obj.name, timeout=180
                 )
                 # Clean up backing PV (handles Retain policy Released PVs)
-                # PV may already be deleted by PVC (Delete reclaim policy) - check first
-                if (
-                    self.pv_obj.ocp.get(resource_name=self.pv_obj.name, dont_raise=True)
-                    is not None
-                ):
-                    self.pv_obj.reload()
-                    delete_pv_with_force_and_finalizers(self.pv_obj, timeout=600)
+                self._cleanup_backing_pv(self.pv_obj)
+
             if self.volumeimportsource_obj:
                 self.volumeimportsource_obj.delete()
         elif self.volume_interface == constants.VM_VOLUME_DV:
@@ -786,12 +804,7 @@ chpasswd:
                     resource_name=self.dv_obj.name, timeout=300
                 )
                 # Clean up backing PV (handles Retain policy Released PVs)
-                # PV may already be deleted (Delete reclaim policy) - check first
-                if (
-                    self.dv_pv.ocp.get(resource_name=self.dv_pv.name, dont_raise=True)
-                    is not None
-                ):
-                    delete_pv_with_force_and_finalizers(self.dv_pv, timeout=600)
+                self._cleanup_backing_pv(self.dv_pv)
         if self.ns_obj:
             self.ns_obj.delete_project(project_name=self.namespace)
 
@@ -966,9 +979,7 @@ class VMCloner(VirtualMachine):
             self.pvc_obj.ocp.wait_for_delete(
                 resource_name=self.pvc_obj.name, timeout=180
             )
-            # PV may already be deleted (Delete reclaim policy) - check first
-            if pv_obj.ocp.get(resource_name=pv_obj.name, dont_raise=True) is not None:
-                delete_pv_with_force_and_finalizers(pv_obj, timeout=600)
+            self._cleanup_backing_pv(pv_obj)
         elif self.volume_interface == constants.VM_VOLUME_DV:
             dv_pvc_name = self.dv_obj.get().get("status").get("claimName")
             data = dict()
@@ -979,9 +990,7 @@ class VMCloner(VirtualMachine):
             dv_pv = dv_pvc.backed_pv_obj
             self.dv_obj.delete()
             self.dv_obj.ocp.wait_for_delete(resource_name=self.dv_obj.name, timeout=180)
-            # PV may already be deleted (Delete reclaim policy) - check first
-            if dv_pv.ocp.get(resource_name=dv_pv.name, dont_raise=True) is not None:
-                delete_pv_with_force_and_finalizers(dv_pv, timeout=600)
+            self._cleanup_backing_pv(dv_pv)
         elif self.volume_interface == constants.VM_VOLUME_DVT:
             self.dv_rb_data_obj.delete()
             self.dv_cr_data_obj.delete()

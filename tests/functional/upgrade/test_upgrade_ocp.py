@@ -12,7 +12,7 @@ from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.ocs.node import get_nodes_in_statuses
 from ocs_ci.ocs.ocp import check_cluster_operator_versions
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
-from ocs_ci.deployment.disconnected import mirror_ocp_release_images
+from ocs_ci.deployment.disconnected import apply_idms, mirror_ocp_release_images
 from ocs_ci.framework import config
 from ocs_ci.utility.rosa import upgrade_rosa_cluster
 from ocs_ci.utility.utils import (
@@ -246,9 +246,17 @@ class TestUpgradeOCP(ManageTest):
             # disconnected environment prerequisites
             if config.DEPLOYMENT.get("disconnected"):
                 # mirror OCP release images to mirror registry
-                image_path, target_image, _, _ = mirror_ocp_release_images(
+                image_path, target_image, _, idms = mirror_ocp_release_images(
                     image_path, target_image
                 )
+                if idms:
+                    version_match = re.match(r"^(\d+\.\d+)", ocp_upgrade_version or "")
+                    idms_name_suffix = (
+                        version_match.group(1).replace(".", "-")
+                        if version_match
+                        else config.RUN["run_id"]
+                    )
+                    apply_idms(idms, idms_name_suffix)
 
             # Verify Upgrade subscription channel:
             if not rosa_platform:
@@ -319,7 +327,8 @@ class TestUpgradeOCP(ManageTest):
                     continue
                 ver = ocp.get_cluster_operator_version(ocp_operator)
                 logger.info(f"current {ocp_operator} version: {ver}")
-                check_cluster_operator_versions(target_image, operator_upgrade_timeout)
+
+            check_cluster_operator_versions(target_image, operator_upgrade_timeout)
 
             # resume a MachineHealthCheck resource
             if get_semantic_ocp_running_version() > VERSION_4_8 and not rosa_platform:
@@ -363,9 +372,14 @@ class TestUpgradeOCP(ManageTest):
         # load new config file
         self.load_ocp_version_config_file(ocp_upgrade_version)
 
+        acm_cluster = config.multicluster and is_acm_cluster(config)
+        hci_client = (
+            config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
+        )
         if (
             not config.ENV_DATA["mcg_only_deployment"]
-            and not config.multicluster
+            and not acm_cluster
+            and not hci_client
             and not config.DEPLOYMENT.get("ocp_only_upgrade")
         ):
             new_ceph_cluster = CephCluster()

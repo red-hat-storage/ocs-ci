@@ -135,7 +135,9 @@ class TopologySidebar(BaseUI):
         Note:
             If `canvas` is True, the method clicks on the topology graph canvas to open the side bar.
             Otherwise, it searches for the entity and clicks on it. The method attempts to open the
-            sidebar up to three times, zooming out the topology view if necessary.
+            sidebar up to three times, zooming out the topology view if necessary. A node click may
+            drill into the node group instead of opening the sidebar; in that case the method returns
+            to the main view and retries the selection.
 
         """
         if canvas:
@@ -148,19 +150,29 @@ class TopologySidebar(BaseUI):
             for i in range(1, 4):
                 try:
                     self.do_click(loc, use_fallback=False)
-                    break
                 except (NoSuchElementException, TimeoutException):
                     logger.info("zooming out topology view")
                     self.do_click(self.topology_loc["zoom_out"])
                     self.page_has_loaded(module_loc=self.topology_loc["topology_graph"])
                     logger.info(f"try read topology again. attempt number {i} ")
+                    continue
                 except ElementClickInterceptedException:
                     logger.info(
                         "Click intercepted by page container (PF6 layout). "
                         "Falling back to JS dispatchEvent click for topology node."
                     )
                     self.click_with_script(loc)
+
+                if self.get_elements(self.topology_loc["close_sidebar"]):
                     break
+
+                if self.get_elements(self.topology_loc["back_btn"]):
+                    logger.info(
+                        "Entered node group instead of opening sidebar, "
+                        f"returning to main view. attempt number {i} "
+                    )
+                    self.do_click(self.topology_loc["back_btn"])
+                    self.page_has_loaded(module_loc=self.topology_loc["topology_graph"])
             logger.info(f"Entity {entity_name} sidebar is opened")
 
     def close_sidebar(self, soft=False):

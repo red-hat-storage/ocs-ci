@@ -1,0 +1,6 @@
+# Enables simulation of encrypted Ceph OSD BlueStore metadata (dm-crypt/LUKS)
+# on OSD disks. Used to test whether Ceph correctly detects existing encrypted
+# BlueStore metadata when deploying a new cluster.
+# Intended for use only with LSO (Local Storage Operator) deployments.
+ENV_DATA:
+  simulate_bluestore_label_dmcrypt: true

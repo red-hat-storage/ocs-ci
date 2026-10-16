@@ -91,7 +91,10 @@ class OCP(object):
         if (
             (not cluster_kubeconfig)
             and config.multicluster
-            and "hci_" in config.ENV_DATA["platform"]
+            and (
+                "hci_" in config.ENV_DATA["platform"]
+                or "ibm_hci" in config.ENV_DATA["platform"]
+            )
             and kind.lower() in constants.PROVIDER_CLUSTER_RESOURCE_KINDS
         ):
             provider_cluster_index = config.get_provider_index()
@@ -1014,6 +1017,9 @@ class OCP(object):
                 constants.STATUS_ACTIVE,
                 constants.STATUS_TERMINATING,
             ],
+            constants.ACM_MULTICLUSTER_HUB.lower(): [
+                constants.STATUS_RUNNING,
+            ],
         }
 
         if (
@@ -1121,24 +1127,44 @@ class OCP(object):
                 # Only 1 resource expected to be returned
                 if resource_name:
                     retry = int(timeout / sleep if sleep else timeout / 1)
-                    status = self.get_resource(
-                        resource_name,
-                        column,
-                        retry=retry,
-                        wait=sleep,
-                    )
+                    try:
+                        status = self.get_resource(
+                            resource_name,
+                            column,
+                            retry=retry,
+                            wait=sleep,
+                        )
+                    except IndexError:
+                        # The column header may be present while the row has no
+                        # value for it yet (e.g. a freshly created
+                        # ManagedCluster whose AVAILABLE/JOINED columns are
+                        # still empty during import). Treat this as "not ready
+                        # yet" and keep waiting until the real timeout instead
+                        # of aborting early.
+                        log.info(
+                            f"status of {resource_name} at column {column} is "
+                            "not populated yet, but we were waiting for "
+                            f"{condition}"
+                        )
+                        actual_status = None
+                        continue
                     if status == condition:
                         log.info(
-                            f"status of {resource_name} at {column}"
-                            " reached condition!"
+                            f"status of {resource_name} at column {column}"
+                            f" reached desired condition: {condition}"
                         )
                         return True
-                    log.info(
-                        (
+                    if status != actual_status:
+                        log.info(
+                            f"status of {resource_name} at column {column} "
+                            f"changed: {actual_status} -> {status} "
+                            f"(waiting for {condition})"
+                        )
+                    else:
+                        log.debug(
                             f"status of {resource_name} at column {column} was {status},"
                             f" but we were waiting for {condition}"
                         )
-                    )
                     actual_status = status
                     if error_condition is not None and status == error_condition:
                         raise ResourceWrongStatusException(
@@ -1151,14 +1177,14 @@ class OCP(object):
                 elif sample.get("kind") == "List":
                     in_condition = []
                     in_condition_len = 0
-                    actual_status = []
+                    current_status = []
                     sample = sample["items"]
                     sample_len = len(sample)
                     for item in sample:
                         try:
                             item_name = item.get("metadata").get("name")
                             status = self.get_resource(item_name, column)
-                            actual_status.append(status)
+                            current_status.append(status)
                             if status == condition:
                                 in_condition.append(item)
                                 in_condition_len = len(in_condition)
@@ -1202,13 +1228,19 @@ class OCP(object):
                         exp_num_str = f"all {resource_count}"
                     else:
                         exp_num_str = "all"
-                    log.info(
-                        (
-                            f"status of {resource_name} at column {column} - item(s) were {actual_status},"
-                            f" but we were waiting"
-                            f" for {exp_num_str} of them to be {condition}"
+                    if current_status != actual_status:
+                        log.info(
+                            f"status of {resource_name} at column {column} "
+                            f"changed: {in_condition_len}/{len(sample)} "
+                            f"reached {condition} (waiting for {exp_num_str})"
                         )
-                    )
+                    else:
+                        log.debug(
+                            f"status of {resource_name} at column {column} "
+                            f"- {in_condition_len}/{len(sample)} "
+                            f"reached {condition} (waiting for {exp_num_str})"
+                        )
+                    actual_status = current_status
         except TimeoutExpiredError as ex:
             log.error(f"timeout expired: {ex}")
             # run `oc describe` on the resources we were waiting for to provide
@@ -1451,7 +1483,14 @@ class OCP(object):
                 current_phase = data["status"]["operationState"]["phase"]
             else:
                 current_phase = data["status"]["phase"]
-            log.info(f"Resource {self.resource_name} is in phase: {current_phase}!")
+            last_phase = getattr(self, "_last_logged_phase", None)
+            if current_phase != last_phase:
+                log.info(f"Resource {self.resource_name} is in phase: {current_phase}!")
+                self._last_logged_phase = current_phase
+            else:
+                log.debug(
+                    f"Resource {self.resource_name} is in phase: {current_phase}!"
+                )
             return current_phase == phase
         except KeyError:
             log.info(
@@ -1483,6 +1522,20 @@ class OCP(object):
         self.check_name_is_specified()
         sampler = TimeoutSampler(timeout, sleep, func=self.check_phase, phase=phase)
         if not sampler.wait_for_func_status(True):
+            # Log detailed status information for debugging
+            try:
+                resource_data = self.get()
+                current_phase = resource_data.get("status", {}).get("phase", "Unknown")
+                conditions = resource_data.get("status", {}).get("conditions", [])
+                log.error(
+                    f"Resource {self.resource_name} failed to reach expected phase '{phase}'. "
+                    f"Current phase: {current_phase}. Status conditions: {conditions}"
+                )
+            except Exception as e:
+                log.warning(
+                    f"Could not retrieve detailed status for {self.resource_name}: {e}"
+                )
+
             raise ResourceWrongStatusException(
                 f"Resource: {self.resource_name} is not in expected phase: " f"{phase}"
             )
@@ -1843,7 +1896,7 @@ def verify_images_upgraded(old_images, object_data, ignore_psql_12_verification=
     """
     name = object_data.get("metadata").get("name")
     current_images = get_images(object_data)
-    log.info(
+    log.debug(
         f"Current object {name} images: {current_images}, old images: {old_images}"
     )
     # from 4.15, noobaa-operator pod has NOOBAA_PSQL_12_IMAGE along with NOOBAA_DB_IMAGE
@@ -1866,7 +1919,8 @@ def verify_images_upgraded(old_images, object_data, ignore_psql_12_verification=
         raise NonUpgradedImagesFoundError(
             f"Images: {not_upgraded_images} weren't upgraded in: {name}!"
         )
-    log.info(f"All the images: {current_images} were successfully upgraded in: {name}!")
+    log.info(f"All images were successfully upgraded in: {name}")
+    log.debug(f"Upgraded images for {name}: {current_images}")
 
 
 def confirm_cluster_operator_version(target_version, cluster_operator):
@@ -1881,9 +1935,8 @@ def confirm_cluster_operator_version(target_version, cluster_operator):
         bool: True if success, False if failed
 
     """
-    log.info(f"target_version: {target_version}")
     cur_version = get_cluster_operator_version(cluster_operator)
-    log.info(f"current {cluster_operator} operator version is: {cur_version}")
+    log.debug(f"current {cluster_operator} operator version is: {cur_version}")
     if cur_version == target_version or target_version.startswith(cur_version):
         log.info(
             f"{cluster_operator} cluster operator upgrade to build"
@@ -1940,6 +1993,7 @@ def check_cluster_operator_versions(target_image, operator_upgrade_timeout):
         target_image (str): target image to be upgraded
         operator_upgrade_timeout (int): timeout for operator upgrade
     """
+    log.info(f"Checking all cluster operators have upgraded to {target_image}")
     cluster_operators = get_all_cluster_operators()
     if "aro" in cluster_operators:
         log.debug("aro cluster operator check will be ignored!")
@@ -1956,7 +2010,7 @@ def check_cluster_operator_versions(target_image, operator_upgrade_timeout):
                 log.info(f"{ocp_operator} upgrade is completed!")
                 break
             else:
-                log.info(f"{ocp_operator} upgrade is not completed yet!")
+                log.debug(f"{ocp_operator} upgrade is not completed yet!")
 
 
 def get_cluster_operator_version(cluster_operator_name):
@@ -2002,10 +2056,10 @@ def get_all_cluster_operators():
     for name in operators_full_names:
         log.debug(f"original operator name: {name}")
         new_name = name.lstrip("clusteroperator.config.openshift.io").lstrip("/")
-        log.info(f"fixed operator name: {new_name}")
+        log.debug(f"fixed operator name: {new_name}")
         operator_names.append(new_name)
 
-    log.info(f"ClusterOperators full list: {operator_names}")
+    log.debug(f"ClusterOperators full list: {operator_names}")
 
     return operator_names
 

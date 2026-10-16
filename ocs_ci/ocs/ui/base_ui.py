@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from pathlib import Path
 import datetime
 import logging
@@ -37,7 +38,7 @@ from ocs_ci.ocs.exceptions import (
     NotSupportedProxyConfiguration,
 )
 from ocs_ci.ocs.ocp import get_ocp_url
-from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
+from ocs_ci.ocs.ui.views import locators_for_current_ocp_version, login as login_view
 from ocs_ci.ocs.ui.llm_tools.locator_fallback import LocatorFallback
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
@@ -185,6 +186,9 @@ class BaseUI:
         )
         self.attach_storage_loc = self.deep_get(
             locators_for_current_ocp_version(), "attach_storage"
+        )
+        self.vm_loc = self.deep_get(
+            locators_for_current_ocp_version(), "virtualmachine"
         )
         self._locator_fallback = None
 
@@ -680,6 +684,53 @@ class BaseUI:
         """
         self.driver.refresh()
 
+    @contextmanager
+    def run_in_new_tab(self, locator, timeout=15):
+        """
+        Click a locator that opens a new browser tab, switch to it, and
+        guarantee cleanup on exit.
+
+        Usage::
+
+            with self.run_in_new_tab(some_locator):
+                content = self.driver.find_element(By.TAG_NAME, "pre").text
+
+        Args:
+            locator: Selenium locator tuple that triggers a new tab on click.
+            timeout (int): Seconds to wait for the new tab to appear.
+
+        Yields:
+            The WebDriver instance, now focused on the new tab.
+
+        Raises:
+            TimeoutException: If no new tab opens within ``timeout`` seconds.
+
+        """
+        driver = SeleniumDriver()
+        parent_handle = driver.current_window_handle
+        original_handles = set(driver.window_handles)
+
+        self.do_click(locator, enable_screenshot=True)
+
+        try:
+            WebDriverWait(driver, timeout).until(
+                lambda d: len(d.window_handles) > len(original_handles)
+            )
+        except TimeoutException as err:
+            raise TimeoutException(
+                f"No new tab opened within {timeout}s after clicking {locator}"
+            ) from err
+
+        new_handle = (set(driver.window_handles) - original_handles).pop()
+        driver.switch_to.window(new_handle)
+        try:
+            yield driver
+        finally:
+            if new_handle in driver.window_handles:
+                driver.switch_to.window(new_handle)
+                driver.close()
+            driver.switch_to.window(parent_handle)
+
     def navigate_backward(self):
         """
         Navigate to a previous Web Page
@@ -794,7 +845,9 @@ class BaseUI:
         element.send_keys(Keys.CONTROL, "a")
         element.send_keys(Keys.DELETE)
 
-    def wait_until_expected_text_is_found(self, locator, expected_text, timeout=60):
+    def wait_until_expected_text_is_found(
+        self, locator, expected_text, timeout=60, use_fallback=True
+    ):
         """
         Method to wait for a expected text to appear on the UI (use of explicit wait type),
         this method is helpful in working with elements which appear on completion of certain action and
@@ -804,6 +857,10 @@ class BaseUI:
             locator (tuple): (GUI element needs to operate on (str), type (By))
             expected_text (str): Text which needs to be searched on UI
             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
+            use_fallback (bool): If True, attempt AI locator fallback on TimeoutException.
+                Set to False when this method is used as a probe/detection call where a
+                timeout is the expected "not found" outcome — avoids spurious fallback
+                activation noise in the logs.
 
         Returns:
             bool: Returns True if the expected element text is found, False otherwise
@@ -826,31 +883,36 @@ class BaseUI:
             logger.warning(
                 f"Locator {locator[1]} {locator[0]} did not find text {expected_text}"
             )
-            new_locator = self.locator_fallback.attempt_fallback(
-                locator, "wait_text", stack_trace=traceback.format_exc()
-            )
-            if new_locator:
-                try:
-                    WebDriverWait(self.driver, min(timeout, 10)).until(
-                        ec.text_to_be_present_in_element(
-                            (new_locator[1], new_locator[0]), expected_text
+            if use_fallback:
+                new_locator = self.locator_fallback.attempt_fallback(
+                    locator, "wait_text", stack_trace=traceback.format_exc()
+                )
+                if new_locator:
+                    try:
+                        WebDriverWait(self.driver, min(timeout, 10)).until(
+                            ec.text_to_be_present_in_element(
+                                (new_locator[1], new_locator[0]), expected_text
+                            )
                         )
-                    )
-                    return True
-                except TimeoutException:
-                    pass
+                        return True
+                    except TimeoutException:
+                        pass
             return False
 
-    def check_element_presence(self, locator, timeout=5):
+    def check_element_presence(self, locator, timeout=5, use_fallback=True):
         """
         Check if an web element is present on the web console or not.
-
 
         Args:
              locator (tuple): (GUI element needs to operate on (str), type (By))
              timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
+             use_fallback (bool): When False, skip the AI locator fallback entirely.
+                 Set to False when this method is used as an optional probe (e.g. checking
+                 whether an optional modal is present) — the element is not expected to
+                 always exist and firing the AI fallback on every miss wastes minutes.
+
         Returns:
-            bool: True if the element is found, returns False otherwise and raises NoSuchElementException
+            bool: True if the element is found, returns False otherwise
 
         """
         try:
@@ -869,6 +931,8 @@ class BaseUI:
         except (NoSuchElementException, StaleElementReferenceException):
             logger.error("Expected element not found on UI")
             self.take_screenshot()
+            if not use_fallback:
+                return False
             # locator here is (By, value) — reverse for fallback which expects (value, By)
             new_locator = self.locator_fallback.attempt_fallback(
                 (locator[1], locator[0]),
@@ -887,6 +951,8 @@ class BaseUI:
         except TimeoutException:
             logger.error(f"Timedout while waiting for element with {locator}")
             self.take_screenshot()
+            if not use_fallback:
+                return False
             # locator here is (By, value) — reverse for fallback which expects (value, By)
             new_locator = self.locator_fallback.attempt_fallback(
                 (locator[1], locator[0]),
@@ -1181,9 +1247,38 @@ class SeleniumDriver(WebDriver):
                         "Unable to configure authenticated proxy in headless browser mode!"
                     )
             else:
-                logger.info("No proxy configuration for browser")
-                # to bypass http_proxy / https_proxy env variables and connect directly to internal WebDriver endpoint
-                chrome_options.add_argument("--no-proxy-server")
+                # Check for proxy configuration from config or environment variables
+                # Config settings have higher precedence than environment variables
+                http_proxy = (
+                    config.ENV_DATA.get("http_proxy")
+                    or os.getenv("HTTP_PROXY")
+                    or os.getenv("http_proxy")
+                )
+                https_proxy = (
+                    config.ENV_DATA.get("https_proxy")
+                    or os.getenv("HTTPS_PROXY")
+                    or os.getenv("https_proxy")
+                )
+                no_proxy = (
+                    config.ENV_DATA.get("no_proxy")
+                    or os.getenv("NO_PROXY")
+                    or os.getenv("no_proxy")
+                )
+
+                if http_proxy or https_proxy:
+                    # Use HTTPS proxy if available, otherwise HTTP proxy
+                    proxy_server = https_proxy if https_proxy else http_proxy
+                    logger.info(f"Configuring proxy ({proxy_server}) for browser")
+                    chrome_options.add_argument(f"--proxy-server={proxy_server}")
+
+                    # Configure proxy bypass list for local/cluster addresses
+                    if no_proxy:
+                        logger.info(f"Configuring proxy bypass list: {no_proxy}")
+                        chrome_options.add_argument(f"--proxy-bypass-list={no_proxy}")
+                else:
+                    logger.info("No proxy configuration for browser")
+                    # Bypass http_proxy/https_proxy env vars and connect directly to WebDriver
+                    chrome_options.add_argument("--no-proxy-server")
 
             chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
             chrome_service = Service(
@@ -1395,6 +1490,11 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
     password_el.send_keys(password)
 
     logger.info("Username and password filled in, clicking Log in")
+    # ROSA HCP uses the standard login button, not the 4.19+ co-login-button
+    if config.ENV_DATA.get("platform", "").lower() == constants.ROSA_HCP_PLATFORM:
+        click_login_locator = login_view["click_login"]
+    else:
+        click_login_locator = login_loc["click_login"]
     # Client clusters have OAuth-based login with different button structure
     is_client_cluster = (
         config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
@@ -1409,9 +1509,7 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
         )
         confirm_login_el.click()
     else:
-        confirm_login_el = wait_for_element_to_be_clickable(
-            login_loc["click_login"], 60
-        )
+        confirm_login_el = wait_for_element_to_be_clickable(click_login_locator, 60)
         confirm_login_el.click()
 
     hci_platform_conf = (
@@ -1535,12 +1633,16 @@ def proceed_to_login_console():
     """
     driver = SeleniumDriver()
     login_loc = locators_for_current_ocp_version()["login"]
-    if login_loc["pre_login_page_title"].lower() in driver.title.lower():
-        proceed_btn = driver.find_element(
-            by=login_loc["proceed_to_login_btn"][1],
-            value=login_loc["proceed_to_login_btn"][0],
-        )
-        proceed_btn.click()
+    if driver.title == login_loc["pre_login_page_title"]:
+        try:
+            proceed_btn = wait_for_element_to_be_clickable(
+                login_loc["proceed_to_login_btn"], 60
+            )
+            proceed_btn.click()
+        except WebDriverException:
+            take_screenshot("proceed_to_login_console_click")
+            copy_dom("proceed_to_login_console_click")
+            raise
         try:
             WebDriverWait(driver, 60).until(ec.title_is(login_loc["login_page_title"]))
         except TimeoutException:
@@ -1551,10 +1653,18 @@ def proceed_to_login_console():
 
 def navigate_to_local_cluster(**kwargs):
     """
-    Navigate to Local Cluster page, if not already there
+    Navigate to Local Cluster page, if not already there.
+
+    On multicluster-hub (MCE/ACM) consoles the perspective switcher is a real
+    dropdown, while on single-cluster consoles it is a static title. In both cases
+    its title reflects the currently selected perspective, so the current
+    perspective is read from that title to decide whether navigation is needed.
+    This avoids probing for absent elements, which would otherwise emit failure
+    screenshots and DOM dumps for the common "already local" case.
+
     :param kwargs: acm_page locators dict, timeout
 
-    :raises TimeoutException: if timeout occurs, and local clusters page is not loaded
+    :raises TimeoutException: if the perspective switcher is not found
     """
     if "acm_page" in kwargs:
         acm_page_loc = kwargs["acm_page"]
@@ -1565,26 +1675,43 @@ def navigate_to_local_cluster(**kwargs):
     else:
         timeout = 30
 
-    all_clusters_dropdown = acm_page_loc["all-clusters_dropdown"]
-    try:
-        logger.info("Navigate to Local Cluster page. Click all clusters dropdown")
-        acm_dropdown = wait_for_element_to_be_visible(all_clusters_dropdown, timeout)
-        acm_dropdown.click()
-        local_cluster_item = wait_for_element_to_be_visible(
-            acm_page_loc["local-cluster_dropdown_item"]
-        )
-        logger.info("Navigate to Local Cluster page. Click local cluster item")
-        local_cluster_item.click()
-    except TimeoutException:
-        wait_for_element_to_be_visible(acm_page_loc["local-cluster_dropdown"])
+    switcher = wait_for_element_to_be_visible(
+        acm_page_loc["perspective-switcher-toggle"], timeout
+    )
+    current_perspective = switcher.text.strip()
+    logger.info(f"Current perspective switcher title: '{current_perspective}'")
+
+    if any(
+        title in current_perspective
+        for title in ("Core platform", "local-cluster", "Administrator")
+    ):
+        logger.info("Already on local cluster — skipping cluster navigation.")
+        return
+
+    logger.info(
+        f"Perspective '{current_perspective}' is not the local cluster. "
+        "Opening the perspective switcher to select the local cluster."
+    )
+    switcher.click()
+    local_cluster_item = wait_for_element_to_be_visible(
+        acm_page_loc["local-cluster_dropdown_item"], timeout
+    )
+    logger.info("Selecting the local cluster from the perspective switcher")
+    local_cluster_item.click()
 
 
 def navigate_to_all_clusters(**kwargs):
     """
-    Navigate to All Clusters page, if not already there
+    Navigate to All Clusters (Fleet management) page, if not already there.
+
+    Mirrors navigate_to_local_cluster: the currently selected perspective is read
+    from the perspective switcher title before deciding whether to switch, so no
+    absent elements are searched (and no failure screenshots emitted) when the
+    page is already on the all-clusters view.
+
     :param kwargs: acm_page locators dict, timeout
 
-    :raises TimeoutException: if timeout occurs, and All clusters acm page is not loaded
+    :raises TimeoutException: if the perspective switcher is not found
     """
     if "acm_page" in kwargs:
         acm_page = kwargs["acm_page"]
@@ -1595,13 +1722,25 @@ def navigate_to_all_clusters(**kwargs):
     else:
         timeout = 30
 
-    local_clusters_dropdown = acm_page["local-cluster_dropdown"]
-    try:
-        acm_dropdown = wait_for_element_to_be_visible(local_clusters_dropdown, timeout)
-        acm_dropdown.click()
-        all_clusters_item = wait_for_element_to_be_visible(
-            acm_page["all-clusters_dropdown_item"]
-        )
-        all_clusters_item.click()
-    except TimeoutException:
-        wait_for_element_to_be_visible(acm_page["all-clusters_dropdown"])
+    switcher = wait_for_element_to_be_visible(
+        acm_page["perspective-switcher-toggle"], timeout
+    )
+    current_perspective = switcher.text.strip()
+    logger.info(f"Current perspective switcher title: '{current_perspective}'")
+
+    if any(
+        title in current_perspective for title in ("Fleet management", "All Clusters")
+    ):
+        logger.info("Already on all clusters — skipping cluster navigation.")
+        return
+
+    logger.info(
+        f"Perspective '{current_perspective}' is not all clusters. "
+        "Opening the perspective switcher to select all clusters."
+    )
+    switcher.click()
+    all_clusters_item = wait_for_element_to_be_visible(
+        acm_page["all-clusters_dropdown_item"], timeout
+    )
+    logger.info("Selecting all clusters from the perspective switcher")
+    all_clusters_item.click()

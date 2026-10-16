@@ -94,22 +94,41 @@ class ResiliencyWorkloadOps:
 
     def _start_background_cluster_operations(self):
         """Start background cluster operations during workload execution."""
+        workload_config = ResiliencyWorkloadConfig()
+
         try:
             from ocs_ci.krkn_chaos.background_cluster_operations import (
                 BackgroundClusterOperations,
+            )
+            from ocs_ci.krkn_chaos.background_cluster_validator import (
                 BackgroundClusterValidator,
             )
 
-            self.background_cluster_ops = BackgroundClusterOperations()
-            self.background_cluster_ops.start_operations()
-
+            enabled_operations = workload_config.get_enabled_background_operations()
             self.background_cluster_validator = BackgroundClusterValidator(
-                self.background_cluster_ops
+                self.namespace
             )
+            self.background_cluster_validator.pre_operation_validation()
 
-            log.info("Background cluster operations started successfully")
+            self.background_cluster_ops = BackgroundClusterOperations(
+                workload_ops=self,
+                enabled_operations=enabled_operations if enabled_operations else None,
+                operation_interval=workload_config.get_background_operations_interval(),
+                max_concurrent_operations=workload_config.get_background_operations_max_concurrent(),
+            )
+            self.background_cluster_ops.start()
+
+            ops_count = len(enabled_operations) if enabled_operations else "all"
+            log.info(
+                f"Background cluster operations started with {ops_count} "
+                f"operation types (interval: "
+                f"{workload_config.get_background_operations_interval()}s, "
+                f"max concurrent: "
+                f"{workload_config.get_background_operations_max_concurrent()})"
+            )
         except Exception as e:
             log.warning(f"Failed to start background cluster operations: {e}")
+            self.background_cluster_ops = None
 
     def _start_background_scaling(self):
         """Start background scaling operations."""
@@ -166,13 +185,14 @@ class ResiliencyWorkloadOps:
         # Stop background cluster operations
         if self.background_cluster_ops:
             log.info("Stopping background cluster operations")
+            preserve_controller = False
             try:
-                self.background_cluster_ops.stop_operations()
+                self.background_cluster_ops.stop(cleanup=True)
 
                 # Validate background operations
                 if self.background_cluster_validator:
-                    validation_result = (
-                        self.background_cluster_validator.validate_all_operations()
+                    validation_result, _ = (
+                        self.background_cluster_validator.post_operation_validation()
                     )
                     if not validation_result:
                         validation_errors.append(
@@ -180,6 +200,19 @@ class ResiliencyWorkloadOps:
                         )
             except Exception as e:
                 log.warning(f"Failed to stop background cluster operations: {e}")
+                from ocs_ci.krkn_chaos.background_cluster_operations import (
+                    BackgroundOperationEscalationError,
+                )
+
+                if isinstance(e, BackgroundOperationEscalationError):
+                    raise
+                if isinstance(e, RuntimeError) and "did not stop" in str(e):
+                    preserve_controller = True
+                    raise
+            finally:
+                if not preserve_controller:
+                    self.background_cluster_ops = None
+                    self.background_cluster_validator = None
 
         # Validate and cleanup workloads
         for workload in self.workloads:
@@ -413,12 +446,18 @@ class ResiliencyWorkloadFactory:
             }
 
         # Get PVC configuration from config
-        num_pvcs_per_interface = self.config.get_num_pvcs_per_interface()
+        num_rbd_pvcs = self.config.get_num_rbd_pvcs()
+        num_cephfs_pvcs = self.config.get_num_cephfs_pvcs()
+        num_pvcs_by_interface = {
+            constants.CEPHBLOCKPOOL: num_rbd_pvcs,
+            constants.CEPHFILESYSTEM: num_cephfs_pvcs,
+        }
         pvc_size = self.config.get_pvc_size()
         use_encrypted = self.config.use_encrypted_pvc()
 
         log.info(
-            f"Creating {num_pvcs_per_interface} PVCs per storage interface with size {pvc_size}Gi"
+            f"Creating {num_rbd_pvcs} RBD PVCs and {num_cephfs_pvcs} CephFS PVCs "
+            f"with size {pvc_size}Gi"
         )
         if use_encrypted:
             log.info(
@@ -459,7 +498,8 @@ class ResiliencyWorkloadFactory:
 
         # Create workloads for each interface
         for interface, config_data in interface_configs.items():
-            log.info(f"Creating workloads for interface: {interface}")
+            num_pvcs = num_pvcs_by_interface[interface]
+            log.info(f"Creating {num_pvcs} workloads for interface: {interface}")
 
             # Use encrypted storage class if available and encryption is enabled
             storageclass = None
@@ -474,7 +514,7 @@ class ResiliencyWorkloadFactory:
                 storageclass=storageclass,  # Pass encrypted SC if available
                 access_modes=config_data["access_modes"],
                 size=pvc_size,
-                num_of_pvc=num_pvcs_per_interface,
+                num_of_pvc=num_pvcs,
                 timeout=180,  # Increased timeout to 180 seconds for PVC bound state
             )
 

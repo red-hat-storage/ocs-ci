@@ -328,7 +328,7 @@ def get_all_nodes():
 
 
 def wait_for_nodes_status(
-    node_names=None, status=constants.NODE_READY, timeout=180, sleep=3
+    node_names=None, status=constants.NODE_READY, timeout=600, sleep=3
 ):
     """
     Wait until all nodes are in the given status
@@ -3678,11 +3678,11 @@ def get_worker_node_allocatable():
     This function queries the OpenShift (okd) cluster's API using 'oc' command to retrieve the
     available CPU and memory resources for each worker node. The results are then parsed
     and returned as a dictionary with node names as keys, and nested dictionaries containing
-    CPU (in millicores) and Memory (in GB) values.
+    CPU (in fractional cores) and Memory (in GB) values.
 
     Returns:
         dict: A dictionary where keys are worker node names and values are another
-            dictionary containing 'cpu' (int, in millicores) and 'mem' (float, in GB).
+            dictionary containing 'cpu' (float, in fractional cores) and 'mem' (float, in GB).
     """
     cmd = [
         "oc",
@@ -3700,9 +3700,9 @@ def get_worker_node_allocatable():
         name = node["metadata"]["name"]
         cpu_str = node["status"]["allocatable"]["cpu"]
         if cpu_str.endswith("m"):  # e.g. "500m"
-            cpu = int(int(cpu_str[:-1]) / 1000)
+            cpu = int(cpu_str[:-1]) / 1000
         else:
-            cpu = int(cpu_str)
+            cpu = float(cpu_str)
         mem_raw = node["status"]["allocatable"]["memory"]  # e.g. "31948256Ki"
         mem_gib = int(mem_raw.replace("Ki", "")) / (1024**2)
         alloc[name] = {"cpu": cpu, "mem": mem_gib}
@@ -3898,3 +3898,51 @@ def check_cluster_resources(ram_gb=65, cpu_cores=6):
             f"Resource capacity check failed due to environment or parsing error: {e}"
         )
         return True
+
+
+def get_host_uid_for_pod(node_name, pod_name):
+    """
+    Get the host-level UID for the container process of a pod.
+
+    Uses ``crictl`` on the node (via ``oc debug``) to find the
+    container PID, then reads ``/proc/<pid>/status`` to extract the
+    real UID as seen by the host kernel.  Useful for verifying user
+    namespace UID remapping (``hostUsers: false``).
+
+    Args:
+        node_name (str): Node where the pod runs
+        pod_name (str): Kubernetes pod name
+
+    Returns:
+        int: Host-level real UID of the container process
+    """
+    oc_cmd = OCP()
+    pod_id_cmd = f"crictl pods --name ^{pod_name}$ --state ready -q | head -1"
+    pod_id = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[pod_id_cmd]).strip()
+    assert pod_id, f"crictl found no ready pod matching {pod_name} on {node_name}"
+    log.info(f"crictl pod ID for {pod_name}: {pod_id}")
+
+    container_id_cmd = f"crictl ps --pod {pod_id} --state running -q | head -1"
+    container_id = oc_cmd.exec_oc_debug_cmd(
+        node=node_name, cmd_list=[container_id_cmd]
+    ).strip()
+    assert container_id, f"No running container found in pod {pod_id} on {node_name}"
+    log.info(f"Container ID: {container_id}")
+
+    inspect_cmd = f"crictl inspect {container_id}"
+    inspect_output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[inspect_cmd])
+    pid_match = re.search(r'"pid"\s*:\s*(\d+)', inspect_output)
+    assert pid_match, (
+        f"Could not find container PID in crictl inspect "
+        f"output for pod {pod_name} on node {node_name}"
+    )
+    pid = pid_match.group(1)
+    log.info(f"Container PID for {pod_name} on {node_name}: {pid}")
+
+    status_cmd = f"cat /proc/{pid}/status"
+    status_output = oc_cmd.exec_oc_debug_cmd(node=node_name, cmd_list=[status_cmd])
+    uid_match = re.search(r"Uid:\s+(\d+)", status_output)
+    assert uid_match, f"Could not parse Uid from /proc/{pid}/status on node {node_name}"
+    host_uid = int(uid_match.group(1))
+    log.info(f"Host UID for {pod_name} on {node_name}: {host_uid}")
+    return host_uid

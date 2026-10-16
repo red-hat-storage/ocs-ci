@@ -1,0 +1,6 @@
+DEPLOYMENT:
+  image_registry_pvc_deployment: True
+  image_registry_pvc_size: "100Gi"
+  image_registry_pvc_storageclass: "thin-csi"
+
+# Made with Bob

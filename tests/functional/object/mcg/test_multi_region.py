@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     mcg,
     tier2,
+    jira,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import ocp, constants
@@ -87,9 +88,7 @@ class TestMultiRegion(MCGTest):
     @tier4a
     @skipif_ocs_version("==4.4")
     @pytest.mark.polarion_id("OCS-1784")
-    @pytest.mark.skip(
-        reason="DFBUGS-6945: noobaa-core-0 OOMKilled breaks RPC operations"
-    )
+    @jira("DFBUGS-9429")
     def test_multiregion_mirror(
         self,
         cld_mgr,

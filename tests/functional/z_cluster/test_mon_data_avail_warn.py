@@ -93,6 +93,7 @@ class TestMonDataAvailWarn(E2ETest):
             path = f"/var/lib/ceph/mon/ceph-{self.mon_suffix}"
             cmd = f"df -Th {path}"
             mount_details = self.mon_pod.exec_sh_cmd_on_pod(command=cmd, sh="sh")
+            mount_details = mount_details.strip().splitlines()[-1]
         used_percent = mount_details.split()[5].replace("%", "")
         return int(used_percent)
 

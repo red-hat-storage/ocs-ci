@@ -24,7 +24,9 @@ class TestCephfsStressCleanUp(E2ETest):
     Test Cephfs incremental bulk operations cleanup
     """
 
-    def test_cephfs_stress_cleanup(self, project_factory, teardown_factory):
+    def test_cephfs_stress_cleanup(
+        self, project_factory, teardown_factory, storageclass_factory
+    ):
         """
         Stress the cluster by performing bulk Cephfs data operations - Data creation, deletion and File operations
         in incremental stages and perform a stress clean up at the end by executing a parallelized deletion.
@@ -53,7 +55,9 @@ class TestCephfsStressCleanUp(E2ETest):
         project_factory(project_name=proj_name)
         stress_mgr = CephFSStressTestManager(namespace=proj_name)
 
-        pvc_obj, _ = stress_mgr.setup_stress_test_environment(pvc_size="500Gi")
+        pvc_obj, _ = stress_mgr.setup_stress_test_environment(
+            pvc_size="500Gi", storageclass_factory=storageclass_factory
+        )
 
         pods_list = []
         pod_count = int(parallelism)

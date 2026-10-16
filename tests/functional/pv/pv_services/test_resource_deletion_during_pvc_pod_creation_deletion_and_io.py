@@ -15,7 +15,11 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.cluster import is_hci_cluster
+from ocs_ci.ocs.cluster import (
+    get_ec_pool_ec_optimizations,
+    is_hci_cluster,
+    verify_ec_optimizations_unchanged,
+)
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
@@ -250,6 +254,14 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
         and IO are progressing
 
         """
+        # Snapshot EC optimizations flags before resource deletion
+        ec_baseline_pools, ec_baseline_default = get_ec_pool_ec_optimizations()
+        if ec_baseline_pools:
+            log.info(
+                f"FastEC baseline: pools={ec_baseline_pools}, "
+                f"default={ec_baseline_default}"
+            )
+
         if config.DEPLOYMENT["external_mode"]:
             ceph_csi_pods_to_delete = [
                 "cephfsplugin",
@@ -739,3 +751,12 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
             f"{num_of_resource_pods}. Total number of pods of each type present now: "
             f"{final_num_resource_name}"
         )
+
+        # Verify EC optimizations flags persisted across resource deletion
+        if ec_baseline_pools:
+            log.info("Verifying EC optimizations flags after resource deletion")
+            verify_ec_optimizations_unchanged(
+                ec_baseline_pools,
+                ec_baseline_default,
+                context="resource pod deletion (osd, mon, mgr, mds, plugins)",
+            )

@@ -515,7 +515,8 @@ class CreateResourceForm(PageNavigator):
         Args:
             store_name (str): backing store or namespace store name
             provider (str): backing store or namespace store provider
-            region (str): backing store or namespace store region
+            region (str): backing store or namespace store region.
+                None to skip region selection (e.g. Google Cloud Storage).
             secret (str): backing store or namespace store secret
             uls_name (str): uls name
 
@@ -535,13 +536,27 @@ class CreateResourceForm(PageNavigator):
             format_locator(self.mcg_stores["store_dropdown_option"], value=provider)
         )
 
-        logger.info("Select region")
-        self.do_click(self.mcg_stores["store_region_dropdown"])
-        self.do_click(
-            format_locator(self.mcg_stores["store_dropdown_option"], value=region)
-        )
+        if region:
+            logger.info("Select region")
+            self.do_click(self.mcg_stores["store_region_dropdown"])
+            self.do_click(
+                format_locator(self.mcg_stores["store_dropdown_option"], value=region)
+            )
 
         logger.info("Select secret")
+        switch_to_secret = self.mcg_stores.get("store_switch_to_secret")
+        if switch_to_secret:
+            try:
+                WebDriverWait(self.driver, 3).until(
+                    expected_conditions.presence_of_element_located(
+                        (switch_to_secret[1], switch_to_secret[0])
+                    )
+                )
+            except TimeoutException:
+                pass
+            else:
+                logger.info("Clicking 'Switch to Secret' to reveal the secret dropdown")
+                self.do_click(switch_to_secret)
         self.do_click(self.mcg_stores["store_secret_dropdown"])
         self.do_click(format_locator(self.mcg_stores["store_secret_option"], secret))
 
@@ -607,7 +622,9 @@ class DataFoundationTabBar(PageNavigator):
         Navigate to Block and File tab. Accessible from any Data Foundation tabs
         """
         self.do_click(self.validation_loc["block-and-file-tab"], enable_screenshot=True)
-        self.page_has_loaded()
+        self.wait_for_element_to_be_present(
+            self.validation_loc["block-and-file-tab-active"], timeout=60
+        )
 
         from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 
@@ -629,7 +646,9 @@ class DataFoundationTabBar(PageNavigator):
         Navigate to Object tab. Accessible from any Data Foundation tabs
         """
         self.do_click(self.validation_loc["object-tab"], enable_screenshot=True)
-        self.page_has_loaded()
+        self.wait_for_element_to_be_present(
+            self.validation_loc["object-tab-active"], timeout=60
+        )
 
         from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
 

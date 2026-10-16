@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import (
     StorageSizeNotReflectedException,
     ResourceWrongStatusException,
@@ -17,6 +18,7 @@ from ocs_ci.ocs.resources.pv import get_pv_size
 from ocs_ci.ocs.resources.storage_cluster import (
     get_storage_size,
     get_device_class,
+    get_all_device_sets,
     verify_storage_device_class,
     verify_device_class_in_osd_tree,
     resize_osd,
@@ -240,9 +242,17 @@ def check_ceph_state_post_resize_osd():
     logger.info("Check the Ceph device classes and osd tree")
     device_class = get_device_class()
     ct_pod = get_ceph_tools_pod()
+    multiple_device_classes = len(get_all_device_sets()) > 1
     try:
-        verify_storage_device_class(device_class)
-        verify_device_class_in_osd_tree(ct_pod, device_class)
+        verify_storage_device_class(
+            device_class,
+            check_multiple_deviceclasses=multiple_device_classes,
+        )
+        verify_device_class_in_osd_tree(
+            ct_pod,
+            device_class,
+            check_multiple_deviceclasses=multiple_device_classes,
+        )
     except AssertionError as ex:
         raise CephHealthException(ex)
     if not check_ceph_osd_tree():
@@ -284,7 +294,9 @@ def base_ceph_verification_steps_post_resize_osd(
     logger.info("Check the resources size post resize OSD")
     check_storage_size_is_reflected(expected_storage_size, expected_ceph_capacity)
     logger.info("Check the Ceph state post resize OSD")
-    check_ceph_state_post_resize_osd()
+    retry(CephHealthException, tries=5, delay=30, backoff=1)(
+        check_ceph_state_post_resize_osd
+    )()
     logger.info("All the Ceph verification steps post resize osd finished successfully")
 
 

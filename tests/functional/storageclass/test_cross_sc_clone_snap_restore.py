@@ -2,7 +2,11 @@ import pytest
 import logging
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad, ec_allowed
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    ec_allowed,
+    skipif_stretch_cluster,
+)
 from ocs_ci.ocs.cluster import is_ec_pool_supported
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -179,13 +183,47 @@ class TestCrossScCloneSnapRestore(ManageTest):
             "sc1_erasure_coded",
         ],
         argvalues=[
-            pytest.param(*[constants.CEPHBLOCKPOOL], "", "", False, False, False),
+            # Stretch/arbiter requires CephBlockPool replica size 4. These
+            # params create size 2/3 (or default 3) pools via new_rbd_pool.
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                "",
+                "",
+                False,
+                False,
+                False,
+                marks=skipif_stretch_cluster,
+            ),
             pytest.param(*[constants.CEPHFILESYSTEM], "", "", False, False, False),
-            pytest.param(*[constants.CEPHBLOCKPOOL], "", "", True, False, False),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                "",
+                "",
+                True,
+                False,
+                False,
+                marks=skipif_stretch_cluster,
+            ),
             pytest.param(*[constants.CEPHFILESYSTEM], "", "", True, False, False),
-            pytest.param(*[constants.CEPHBLOCKPOOL], 3, 2, False, False, False),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                3,
+                2,
+                False,
+                False,
+                False,
+                marks=skipif_stretch_cluster,
+            ),
             pytest.param(*[constants.CEPHFILESYSTEM], 3, 2, False, False, False),
-            pytest.param(*[constants.CEPHBLOCKPOOL], 2, 3, False, False, False),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                2,
+                3,
+                False,
+                False,
+                False,
+                marks=skipif_stretch_cluster,
+            ),
             pytest.param(*[constants.CEPHFILESYSTEM], 2, 3, False, False, False),
             # SC1=replicated, SC2=EC
             pytest.param(
@@ -196,6 +234,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 True,
                 False,
                 marks=[
+                    skipif_stretch_cluster,
                     ec_allowed,
                     pytest.mark.polarion_id("OCS-7966"),
                     pytest.mark.skipif(
@@ -212,6 +251,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 True,
                 False,
                 marks=[
+                    skipif_stretch_cluster,
                     ec_allowed,
                     pytest.mark.polarion_id("OCS-7967"),
                     pytest.mark.skipif(
@@ -228,6 +268,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 True,
                 False,
                 marks=[
+                    skipif_stretch_cluster,
                     ec_allowed,
                     pytest.mark.polarion_id("OCS-7968"),
                     pytest.mark.skipif(
@@ -245,6 +286,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 False,
                 True,
                 marks=[
+                    skipif_stretch_cluster,
                     ec_allowed,
                     pytest.mark.polarion_id("OCS-7969"),
                     pytest.mark.skipif(
@@ -261,8 +303,94 @@ class TestCrossScCloneSnapRestore(ManageTest):
                 False,
                 True,
                 marks=[
+                    skipif_stretch_cluster,
                     ec_allowed,
                     pytest.mark.polarion_id("OCS-7970"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+            # CephFS: SC1=replicated data0, SC2=EC data pool
+            pytest.param(
+                *[constants.CEPHFILESYSTEM],
+                "",
+                "",
+                False,
+                True,
+                False,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-8240"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+            # CephFS: SC1=replicated replica3, SC2=EC data pool
+            pytest.param(
+                *[constants.CEPHFILESYSTEM],
+                3,
+                "",
+                False,
+                True,
+                False,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-8241"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+            # CephFS: SC1=replicated replica2, SC2=EC data pool
+            pytest.param(
+                *[constants.CEPHFILESYSTEM],
+                2,
+                "",
+                False,
+                True,
+                False,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-8242"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+            # CephFS: SC1=EC data pool, SC2=replicated replica3
+            pytest.param(
+                *[constants.CEPHFILESYSTEM],
+                "",
+                3,
+                False,
+                False,
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-8244"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+            # CephFS: SC1=EC data pool, SC2=replicated replica2
+            pytest.param(
+                *[constants.CEPHFILESYSTEM],
+                "",
+                2,
+                False,
+                False,
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-8245"),
                     pytest.mark.skipif(
                         not is_ec_pool_supported(),
                         reason="Erasure coded pools are not supported on this cluster",

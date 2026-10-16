@@ -1,4 +1,5 @@
 import logging
+import sys
 import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
@@ -7,12 +8,13 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     brown_squad,
 )
+from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
-from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.deployment.cnv import CNVInstaller
-from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.deployment.vmware import enable_hardware_virtualization
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -29,11 +31,12 @@ class TestVirtSCAutoProvisioning:
         Setup: Ensure CNV is installed and Hardware Virtualization is checked.
         Teardown: Uninstall CNV after the test completion ONLY if it wasn't pre-installed.
         """
-        log.info("Checking for OpenShift Virtualization (CNV) status...")
+        log.info("Checking OpenShift Virtualization CNV status...")
+        self.virt_sc_name = constants.EXTERNAL_VIRT_SC_NAME
+        self.sc_handler = ocp.OCP(kind=constants.STORAGECLASS)
         cnv_installer = CNVInstaller()
         ns_handler = ocp.OCP(kind=constants.NAMESPACE)
 
-        # 1. Hardware Virtualization Check
         if (
             config.ENV_DATA.get("enable_hw_virtualization")
             or config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM
@@ -41,14 +44,13 @@ class TestVirtSCAutoProvisioning:
             log.info("Verifying if Hardware Virtualization is available on nodes...")
             try:
                 enable_hardware_virtualization()
-            except Exception as e:
+            except (OSError, CommandFailed) as e:
                 log.warning(
-                    f"Hardware virtualization check failed: {e}. Emulation will be used."
+                    "Hardware virtualization check failed: %s. Emulation will be used.",
+                    str(e),
                 )
 
-        # 2. Robust Installation & Pre-existing State Tracking Check
         ns_exists = ns_handler.is_exist(resource_name=constants.CNV_NAMESPACE)
-
         self.cnv_pre_installed = False
 
         if ns_exists and cnv_installer.cnv_hyperconverged_installed():
@@ -64,20 +66,18 @@ class TestVirtSCAutoProvisioning:
             )
             cnv_installer.deploy_cnv(check_cnv_deployed=False)
 
-        # 3. Force Software Emulation (Safety for vSphere/Cloud labs)
         cnv_installer.enable_software_emulation()
+        self.is_virt_enabled_by_default = cnv_installer.cnv_hyperconverged_installed()
 
-        yield  # Execute the test
+        yield
 
-        # --- TEARDOWN ---
-        # FIX: Only run uninstallation if CNV was not already active prior to execution
         if not self.cnv_pre_installed:
             log.info("Test finished. Initiating CNV Uninstallation (Teardown)...")
             try:
                 cnv_installer.uninstall_cnv(check_cnv_installed=True)
                 log.info("CNV uninstallation completed successfully.")
-            except Exception as e:
-                log.error(f"Failed to uninstall CNV during teardown: {str(e)}")
+            except CommandFailed as e:
+                log.error("Failed to uninstall CNV during teardown: %s", str(e))
                 raise e
         else:
             log.info(
@@ -86,52 +86,128 @@ class TestVirtSCAutoProvisioning:
 
     def test_virt_sc_and_vm_deployment(self):
         """
-        1. Verify the ODF Virtualization StorageClass exists.
-        2. Deploy a VM using that specific StorageClass.
+        Validate automatic provisioning behavior based on platform configuration.
         """
-        virt_sc_name = constants.EXTERNAL_VIRT_SC_NAME
-        vm_name = create_unique_resource_name("test-virt-sc", "vm")
-        vm_namespace = create_unique_resource_name("virt-sc-verify", "ns")
-
-        # Initialize the VM object
-        vm_obj = VirtualMachine(vm_name=vm_name, namespace=vm_namespace)
-
-        try:
-            # 1. Verify Virt StorageClass existence
-            log.info(f"Step 1: Verifying {virt_sc_name} presence on the cluster.")
-            sc_handler = ocp.OCP(kind=constants.STORAGECLASS)
-
+        if self.is_virt_enabled_by_default:
+            log.info("Validating automatic provisioning with Virtualization Enabled.")
             sampler = TimeoutSampler(
                 timeout=420,
                 sleep=15,
-                func=sc_handler.is_exist,
-                resource_name=virt_sc_name,
+                func=self.sc_handler.is_exist,
+                resource_name=self.virt_sc_name,
             )
-            if not sampler.wait_for_func_status(True):
+            if not sampler.wait_for_func_status(result=True):
                 pytest.fail(
-                    f"Failure: {virt_sc_name} was not provisioned. Check if ODF virtualization pool is enabled."
+                    f"Failure: {self.virt_sc_name} was not automatically provisioned."
                 )
 
-            # 2. Deploy VM Workload
-            log.info(f"Step 2: Creating VM '{vm_name}' using SC '{virt_sc_name}'.")
-            vm_obj.create_vm_workload(sc_name=virt_sc_name, ssh=False, verify=False)
+            vm_name = create_unique_resource_name("test-virt-sc", "vm")
+            vm_namespace = create_unique_resource_name("virt-sc-verify", "ns")
+            vm_obj = VirtualMachine(vm_name=vm_name, namespace=vm_namespace)
 
-            # 2. Manually wait for ONLY the "Running" status
-            log.info(f"Waiting for VM {vm_name} to reach Running status...")
-            vm_obj.wait_for_vm_status(status=constants.VM_RUNNING, timeout=300)
-
-        except Exception as e:
-            log.error(f"Test logic failed: {str(e)}")
-            raise e
-
-        finally:
-            log.info(f"Cleaning up VM resources in {vm_namespace}...")
             try:
-                vm_obj.delete()
-            except Exception as e:
-                log.warning(f"VM deletion failed (might already be gone): {e}")
+                log.info(
+                    f"Step 2: Creating VM '{vm_name}' using SC '{self.virt_sc_name}'."
+                )
+                vm_obj.create_vm_workload(
+                    sc_name=self.virt_sc_name, ssh=False, verify=False
+                )
+                log.info(f"Waiting for VM {vm_name} to reach Running status...")
+                vm_obj.wait_for_vm_status(status=constants.VM_RUNNING, timeout=300)
+            except CommandFailed as e:
+                log.error(
+                    "VM Deployment testcase failed during creation phase: %s", str(e)
+                )
+                raise e
+            finally:
+                log.info("Cleaning up VM resources in namespace: %s", vm_namespace)
 
-            ns_handler = ocp.OCP(kind=constants.NAMESPACE)
-            if ns_handler.is_exist(resource_name=vm_namespace):
-                ns_handler.delete(resource_name=vm_namespace)
-                ns_handler.wait_for_delete(resource_name=vm_namespace, timeout=300)
+                # Check if a primary test exception is currently propagating
+                primary_exception_active = sys.exc_info()[0] is not None
+                cleanup_exception = None
+
+                try:
+                    vm_obj.delete()
+                except CommandFailed as e:
+                    # Specific scenario handling: catch expected cluster API failures on resource dropping
+                    if primary_exception_active:
+                        log.warning(
+                            "VM workload deletion failed during teardown, but suppressing "
+                            "to prioritize the primary test failure. Cleanup error: %s",
+                            str(e),
+                        )
+                    else:
+                        log.error(
+                            "VM workload deletion resource trace failed: %s", str(e)
+                        )
+                        cleanup_exception = e
+
+                ns_handler = ocp.OCP(kind=constants.NAMESPACE)
+                if ns_handler.is_exist(resource_name=vm_namespace):
+                    try:
+                        ns_handler.delete(resource_name=vm_namespace)
+                        ns_handler.wait_for_delete(
+                            resource_name=vm_namespace, timeout=300
+                        )
+                    except CommandFailed as e:
+                        if primary_exception_active:
+                            log.warning(
+                                "Namespace deletion tracking failed during active error bubble up: %s",
+                                str(e),
+                            )
+                        else:
+                            log.error(
+                                "Namespace deletion failed explicitly: %s", str(e)
+                            )
+                            if not cleanup_exception:
+                                cleanup_exception = e
+
+                # Only raise the cleanup error if the test body itself ran cleanly
+                if cleanup_exception and not primary_exception_active:
+                    raise cleanup_exception
+        else:
+            log.info(
+                "Validating that Virt SC does not exist when Virtualization is disabled."
+            )
+            assert not self.sc_handler.is_exist(
+                resource_name=self.virt_sc_name
+            ), f"Testcase Failed: {self.virt_sc_name} exists even though OpenShift Virtualization is disabled."
+
+    def test_self_healing_of_deleted_virt_sc(self):
+        """
+        Validate self-healing behavior of deleted Virt StorageClass.
+        """
+        log.info(
+            "Validating self-healing loop by dropping the Virt StorageClass resource."
+        )
+        if not self.is_virt_enabled_by_default:
+            pytest.skip(
+                "Virtualization not enabled on this deployment template. Skipping testcase."
+            )
+
+        pre_sampler = TimeoutSampler(
+            timeout=420,
+            sleep=15,
+            func=self.sc_handler.is_exist,
+            resource_name=self.virt_sc_name,
+        )
+        if not pre_sampler.wait_for_func_status(result=True):
+            pytest.fail(
+                f"Precondition Failed: {self.virt_sc_name} did not appear during initial stabilization window."
+            )
+
+        self.sc_handler.delete(resource_name=self.virt_sc_name)
+
+        post_sampler = TimeoutSampler(
+            timeout=180,
+            sleep=15,
+            func=self.sc_handler.is_exist,
+            resource_name=self.virt_sc_name,
+        )
+        assert post_sampler.wait_for_func_status(
+            result=True
+        ), f"Testcase Failed: The operator did not re-create {self.virt_sc_name} after manual deletion."
+
+        log.info(
+            f"Self-healing verified successfully: {self.virt_sc_name} was restored automatically."
+        )

@@ -42,7 +42,7 @@ class TestCnvNodeReplace(E2ETest):
 
         """
 
-        # Create a project
+        logger.test_step("Create project and deploy CNV workload VMs")
         proj_obj = project_factory()
         (
             self.vm_objs_def,
@@ -50,6 +50,9 @@ class TestCnvNodeReplace(E2ETest):
             self.sc_obj_def_compr,
             self.sc_obj_aggressive,
         ) = multi_cnv_workload(namespace=proj_obj.namespace)
+        logger.info(
+            f"Created {len(self.vm_objs_def + self.vm_objs_aggr)} VMs successfully"
+        )
 
     def test_vms_with_node_replacement(
         self,
@@ -62,21 +65,18 @@ class TestCnvNodeReplace(E2ETest):
         """
         Node Replacement proactive
         """
+        logger.test_step("Write initial data and create clone/snapshot VMs")
         all_vms = self.vm_objs_def + self.vm_objs_aggr
-        logger.info(f"list of all vms: {all_vms}")
         file_paths = ["/source_file.txt", "/new_file.txt"]
         source_csums = {}
         for vm_obj in all_vms:
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             source_csums[vm_obj.name] = source_csum
 
-        # Filter out VMs that do not have ReadWriteOnce access mode
         eligible_vms = [vm for vm in all_vms if vm.pvc_access_mode != "ReadWriteOnce"]
 
-        # Pick one VM for replacing_node from eligible set
         self.vm_obj_on_replacing_node = random.choice(eligible_vms)
 
-        # Pick 3 random VMs from the remaining pool
         remaining_vms = [
             vm
             for vm in all_vms
@@ -86,69 +86,97 @@ class TestCnvNodeReplace(E2ETest):
         self.vm_for_clone, self.vm_for_stop, self.vm_for_snap = random.sample(
             remaining_vms, 3
         )
+        logger.info(
+            f"Selected VMs: on_replacing_node='{self.vm_obj_on_replacing_node.name}', "
+            f"clone='{self.vm_for_clone.name}', stop='{self.vm_for_stop.name}', "
+            f"snapshot='{self.vm_for_snap.name}'"
+        )
 
         for vm in [self.vm_for_clone, self.vm_for_snap]:
+            op = "clone" if vm == self.vm_for_clone else "snapshot"
+            logger.info(f"Creating {op} of VM '{vm.name}'")
             vm_obj = (
                 vm_clone_fixture(vm, admin_client)
                 if vm == self.vm_for_clone
                 else vm_snapshot_restore_fixture(vm, admin_client)
             )
 
-            # Use cal_md5sum_vm here
             source_csums[vm_obj.name] = cal_md5sum_vm(vm_obj, file_paths[0])
             if vm == self.vm_for_clone:
                 all_vms.append(vm_obj)
 
-        # Find node where VM is running
+        logger.test_step("Set VM states and perform node replacement")
         node_name = self.vm_obj_on_replacing_node.get_vmi_instance().node()
+        logger.info(f"Target node for replacement: '{node_name}'")
 
-        # Stop VM if its not live migratable to avoid drain stuck issue.
+        stopped_rwo_vm = None
         for vm_rwo in all_vms:
             if (
                 vm_rwo != self.vm_obj_on_replacing_node
                 and vm_rwo.get_vmi_instance().node() == node_name
+                and vm_rwo.pvc_access_mode == "ReadWriteOnce"
+                and vm_rwo.ready()
             ):
-                if vm_rwo.pvc_access_mode == "ReadWriteOnce" and vm_rwo.ready():
-                    vm_rwo.stop()
-                    break
+                logger.info(
+                    f"Stopping RWO VM '{vm_rwo.name}' on target node to avoid drain stuck"
+                )
+                vm_rwo.stop()
+                stopped_rwo_vm = vm_rwo
+                break
 
-        # Keep vms in different states(paused, stoped)
+        logger.info(
+            f"Stopping VM '{self.vm_for_stop.name}' and pausing VM '{self.vm_for_snap.name}'"
+        )
         self.vm_for_stop.stop()
         self.vm_for_snap.pause()
 
-        # Replace Node
+        logger.info(f"Replacing node '{node_name}'")
         delete_and_create_osd_node(node_name)
 
-        logger.info("Verifying All resources are Running and matches expected result")
+        logger.test_step("Verify cluster health and Ceph rebalance")
         self.sanity_helpers = Sanity()
         self.sanity_helpers.health_check(tries=120)
 
         ceph_cluster_obj = CephCluster()
+        logger.assertion("Ceph data rebalance completion")
         assert ceph_cluster_obj.wait_for_rebalance(
             timeout=1800
         ), "Data re-balance failed to complete"
 
+        logger.assertion("StorageCluster node topology validity")
         assert (
-            verify_storagecluster_nodetopology
-        ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
+            verify_storagecluster_nodetopology()
+        ), "StorageCluster node topology contains non-OCS node entries"
 
-        # Check VM status
+        logger.test_step("Verify VM state after node replacement")
+        vm_status = self.vm_obj_on_replacing_node.printableStatus()
+        logger.assertion(
+            f"VM running state: vm='{self.vm_obj_on_replacing_node.name}', "
+            f"expected='{constants.VM_RUNNING}', actual='{vm_status}', "
+            f"match={vm_status == constants.VM_RUNNING}"
+        )
         assert (
-            self.vm_obj_on_replacing_node.printableStatus() == constants.VM_RUNNING
-        ), "VM is not in ruuning state after node replacement."
-        logger.info("After Node replacement vm is running.")
+            vm_status == constants.VM_RUNNING
+        ), f"VM '{self.vm_obj_on_replacing_node.name}' not running after node replacement, status: '{vm_status}'"
 
-        logger.info("Starting vms")
+        logger.info(
+            f"Starting VM '{self.vm_for_stop.name}' and unpausing VM '{self.vm_for_snap.name}'"
+        )
         self.vm_for_stop.start()
-        if not vm_rwo.ready():
-            vm_rwo.start()
+        if stopped_rwo_vm and not stopped_rwo_vm.ready():
+            stopped_rwo_vm.start()
         if self.vm_for_snap.printableStatus() == constants.VM_PAUSED:
             self.vm_for_snap.unpause()
 
-        # Perform post node replacement data integrity check
+        logger.test_step("Verify data integrity on all VMs after node replacement")
         for vm_obj in all_vms:
             new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
-            assert source_csums[vm_obj.name] == new_csum, (
-                f"ERROR: Failed data integrity before replacing node and after replacing the node "
-                f"for VM '{vm_obj.name}'."
+            logger.assertion(
+                f"Data integrity: vm='{vm_obj.name}', "
+                f"expected='{source_csums[vm_obj.name]}', actual='{new_csum}', "
+                f"match={source_csums[vm_obj.name] == new_csum}"
             )
+            assert (
+                source_csums[vm_obj.name] == new_csum
+            ), f"MD5 mismatch for VM '{vm_obj.name}' after node replacement"
+        logger.info("Data integrity verified on all VMs")

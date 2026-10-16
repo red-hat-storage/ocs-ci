@@ -12,7 +12,7 @@ from ocs_ci.helpers.cnv_helpers import (
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -42,18 +42,22 @@ class TestVmHotPlugUnplug(E2ETest):
         4. Hotplugging another disk without the --persist flag and verifying it is detached correctly.
         """
 
+        logger.test_step("Create project and deploy CNV workload VMs")
         proj_obj = project_factory()
         file_paths = ["/file.txt", "/new_file.txt"]
         vm_objs_def, vm_objs_aggr, sc_objs_def, sc_objs_aggr = multi_cnv_workload(
             namespace=proj_obj.namespace
         )
         vm_list = vm_objs_def + vm_objs_aggr
-        log.info(f"Total VMs to process: {len(vm_list)}")
+        logger.info(f"Created {len(vm_list)} VMs for hotplug testing")
 
+        logger.test_step(
+            "Hotplug persistent PVC, run I/O, reboot, and verify data persistence per VM"
+        )
         for vm_obj in vm_list:
             sc_obj = sc_objs_def if vm_obj in vm_objs_def else sc_objs_aggr
             before_disks = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
-            log.info(f"Disks before hotplug:\n{before_disks}")
+            logger.debug(f"Disks before hotplug on VM '{vm_obj.name}':\n{before_disks}")
             pvc_name = (f"pvc-hotplug-1-{vm_obj.name}")[:35]
             pvc_obj = pvc_factory(
                 project=proj_obj,
@@ -63,10 +67,9 @@ class TestVmHotPlugUnplug(E2ETest):
                 volume_mode=constants.VOLUME_MODE_BLOCK,
                 pvc_name=pvc_name,
             )
-            log.info(f"PVC {pvc_obj.name} created successfully")
 
+            logger.info(f"Hotplugging PVC '{pvc_obj.name}' to VM '{vm_obj.name}'")
             vm_obj.addvolume(volume_name=pvc_obj.name)
-            log.info(f"Hotplugged PVC {pvc_obj.name} to VM {vm_obj.name}")
 
             sample = TimeoutSampler(
                 timeout=600,
@@ -76,22 +79,38 @@ class TestVmHotPlugUnplug(E2ETest):
                 disks_before_hotplug=before_disks,
             )
             sample.wait_for_func_value(value=True)
+            logger.info(
+                f"PVC '{pvc_obj.name}' hotplugged successfully to VM '{vm_obj.name}'"
+            )
 
-            log.info(f"Running I/O operation on VM {vm_obj.name}")
+            logger.info(f"Running I/O on VM '{vm_obj.name}'")
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
 
-            log.info(f"Rebooting VM {vm_obj.name}")
+            logger.info(f"Rebooting VM '{vm_obj.name}'")
             vm_obj.restart(wait=True, verify=True)
-            log.info(f"Reboot Success for VM: {vm_obj.name}")
+            logger.info(f"VM '{vm_obj.name}' rebooted successfully")
 
-            assert verifyvolume(
+            volume_attached = verifyvolume(
                 vm_obj.name, volume_name=pvc_obj.name, namespace=vm_obj.namespace
-            ), f"Unable to find volume {pvc_obj.name} mounted on VM: {vm_obj.name}"
+            )
+            logger.assertion(
+                f"Volume attached after reboot: vm='{vm_obj.name}', "
+                f"volume='{pvc_obj.name}', expected=True, actual={volume_attached}"
+            )
+            assert (
+                volume_attached
+            ), f"Volume '{pvc_obj.name}' not found on VM '{vm_obj.name}' after reboot"
 
             new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
+            logger.assertion(
+                f"Data persistence after reboot: vm='{vm_obj.name}', "
+                f"expected='{source_csum}', actual='{new_csum}', "
+                f"match={source_csum == new_csum}"
+            )
             assert (
                 source_csum == new_csum
-            ), f"MD5 mismatch after reboot for VM {vm_obj.name}"
+            ), f"MD5 mismatch after reboot for VM '{vm_obj.name}'"
+
             pvc_name = (f"pvc-hotplug-2-{vm_obj.name}")[:35]
             pvc_obj_wout = pvc_factory(
                 project=proj_obj,
@@ -101,12 +120,15 @@ class TestVmHotPlugUnplug(E2ETest):
                 volume_mode=constants.VOLUME_MODE_BLOCK,
                 pvc_name=pvc_name,
             )
-            log.info(f"PVC {pvc_obj_wout.name} created successfully")
-            before_disks_wout = vm_obj.run_ssh_cmd(
-                "lsblk -o NAME,SIZE," "MOUNTPOINT -P"
-            )
-            log.info(f"Disks before hotplug (without persist):\n{before_disks_wout}")
 
+            before_disks_wout = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
+            logger.debug(
+                f"Disks before non-persistent hotplug on VM '{vm_obj.name}':\n{before_disks_wout}"
+            )
+
+            logger.info(
+                f"Hotplugging PVC '{pvc_obj_wout.name}' to VM '{vm_obj.name}' without persist"
+            )
             vm_obj.addvolume(volume_name=pvc_obj_wout.name, persist=False, verify=False)
 
             sample = TimeoutSampler(
@@ -118,12 +140,13 @@ class TestVmHotPlugUnplug(E2ETest):
             )
             sample.wait_for_func_value(value=True)
 
-            log.info(f"Running I/O operation on VM {vm_obj.name}")
+            logger.info(f"Running I/O on non-persistent disk of VM '{vm_obj.name}'")
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
 
             before_disks_wout_rm = vm_obj.run_ssh_cmd(
-                "lsblk -o NAME,SIZE," "MOUNTPOINT -P"
+                "lsblk -o NAME,SIZE,MOUNTPOINT -P"
             )
+            logger.info(f"Unplugging PVC '{pvc_obj_wout.name}' from VM '{vm_obj.name}'")
             vm_obj.removevolume(volume_name=pvc_obj_wout.name)
 
             sample = TimeoutSampler(
@@ -134,4 +157,10 @@ class TestVmHotPlugUnplug(E2ETest):
                 disks_before_hotplug=before_disks_wout_rm,
             )
             sample.wait_for_func_value(value=True)
+            logger.info(
+                f"PVC '{pvc_obj_wout.name}' unplugged and verified for VM '{vm_obj.name}'"
+            )
+
+            logger.info(f"Stopping VM '{vm_obj.name}'")
             vm_obj.stop()
+        logger.info("Hotplug/unplug testing completed for all VMs")

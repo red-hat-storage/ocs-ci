@@ -8,7 +8,7 @@ from ocs_ci.ocs.exceptions import (
     NoRunningCephToolBoxException,
 )
 from ocs_ci.ocs import ocp
-from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.resiliency.resiliency_tools import CephStatusTool
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ class PlatformStress:
         self.run_status = False  # Flag to control stress test execution
         self.active_threads = []  # To keep track of active threads
         self.stop_event = threading.Event()  # Event to signal threads to stop
+        self.health_error = None
         log.info("Initialized PlatformStress with nodes: %s", [n.name for n in nodes])
 
     def _apply_stress(self, node_obj, cmd_args, timeout=60, wait=True):
@@ -239,8 +240,15 @@ class PlatformStress:
                 if not thread.is_alive():
                     self.active_threads.remove(thread)
 
-            if not ceph_health_check(fix_ceph_health=True):
-                log.error("Ceph health check failed after scenario execution.")
+            if self.stop_event.is_set():
+                break
+            try:
+                CephStatusTool().wait_till_ceph_status_became_healthy()
+            except Exception as err:
+                log.error("Ceph health wait failed during platform stress: %s", err)
+                self.health_error = err
+                self.stop_event.set()
+                break
 
     def start_random_stress(self, timeout=0, node_selection="ALL"):
         """Starts random stress tests in the background.
@@ -256,6 +264,7 @@ class PlatformStress:
             log.warning("Random stress test is already running")
             return False
 
+        self.health_error = None
         self.stop_event.clear()
         self.run_status = True
         self.background_thread = threading.Thread(

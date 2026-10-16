@@ -20,7 +20,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
 )
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
-
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 logger = logging.getLogger(__name__)
 
@@ -141,3 +141,60 @@ class TestUserInterfaceValidation(object):
             "OCS operator is present in the installed operator tab, expected to see only ODF "
             "operator"
         )
+
+    @ui
+    @polarion_id("OCS-7681")
+    @runs_on_provider
+    @skipif_ocs_version("<4.20")
+    @skipif_mcg_only
+    def test_external_systems_empty_state(self, setup_ui_class_factory):
+        """
+        Verify that the External Systems page shows correct information
+        when no external system is connected.
+
+        Steps:
+        1. Navigate to Storage -> External systems
+        2. Verify page title 'External systems'
+        3. Verify empty state heading, description, Connect button, and Explore link
+
+        """
+        setup_ui_class_factory()
+        external_systems = PageNavigator().nav_external_systems_page()
+        external_systems.page_has_loaded()
+        page_title = external_systems.get_page_title()
+        logger.info("Verify page title 'External systems'")
+        assert (
+            page_title == "External systems"
+        ), f"Expected page title 'External systems', got '{page_title}'"
+        empty_state = external_systems.get_empty_state_elements()
+        logger.info("Verify empty state message 'No external systems connected'")
+        assert empty_state["heading_text"] == "No external systems connected", (
+            f"Expected heading 'No external systems connected', "
+            f"got '{empty_state['heading_text']}'"
+        )
+        logger.info("Verify description text")
+        assert (
+            empty_state["description_text"] is not None
+        ), "Empty state description not found"
+        assert (
+            "Start configuring your storage platform" in empty_state["description_text"]
+        ), (
+            f"Expected description containing 'Start configuring your storage platform', "
+            f"got '{empty_state['description_text']}'"
+        )
+        logger.info("Verify 'Connect external system' button is present")
+        assert empty_state[
+            "connect_button_enabled"
+        ], "'Connect external systems' button is not visible or not enabled"
+        logger.info("Verify 'Explore all supported external systems' link is present")
+        assert (
+            empty_state["explore_link_text"] == "Explore all supported external systems"
+        ), (
+            f"Expected link text 'Explore all supported external systems', "
+            f"got '{empty_state['explore_link_text']}'"
+        )
+        logger.info(
+            "External Systems empty state validated successfully — "
+            "all expected elements are present"
+        )
+        external_systems.take_screenshot()

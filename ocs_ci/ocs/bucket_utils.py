@@ -8,6 +8,8 @@ import os
 import shlex
 import time
 
+from subprocess import TimeoutExpired
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import uuid4
 
@@ -38,6 +40,10 @@ from ocs_ci.utility import version
 from ocs_ci.utility.prometheus import PrometheusAPI
 
 logger = logging.getLogger(__name__)
+
+# The noobaa CLI waits for the backingstore to become healthy by itself. It only needs
+# to stay alive long enough to create the CR, so cap its share of the create timeout
+PV_BACKINGSTORE_CLI_CREATE_TIMEOUT = 120
 
 
 def craft_s3_command(
@@ -845,6 +851,41 @@ def oc_create_azure_sts_backingstore(cld_mgr, backingstore_name, uls_name, regio
     create_resource(**bs_data)
 
 
+def oc_create_gcp_sts_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new backingstore of type google-cloud-storage-sts via oc apply,
+    referencing the existing WIF secret from the default GCP STS backingstore
+
+    Args:
+        cld_mgr (CloudManager): holds GCP STS credentials for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    namespace = config.ENV_DATA["cluster_namespace"]
+    default_bs = OCP(
+        kind="backingstore",
+        namespace=namespace,
+        resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
+    ).get()
+    secret_name = default_bs["spec"]["googleCloudStorage"]["secret"]["name"]
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = namespace
+    bs_data["spec"] = {
+        "type": constants.BACKINGSTORE_TYPE_GOOGLE,
+        "googleCloudStorage": {
+            "targetBucket": uls_name,
+            "secret": {
+                "name": secret_name,
+                "namespace": namespace,
+            },
+        },
+    }
+    create_resource(**bs_data)
+
+
 def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
     """
     Create a new backingstore with GCP underlying storage using oc create command
@@ -1052,7 +1093,73 @@ def cli_create_rgw_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
     )
 
 
-def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
+def oc_create_self_ref_mcg_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new self-ref MCG backingstore using oc create command.
+    Self-ref MCG is an S3-compatible store backed by an MCG's own
+    bucket on the same cluster.
+
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): unused, kept for interface compatibility
+
+    """
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+    bs_data["spec"] = {
+        "type": "s3-compatible",
+        "s3Compatible": {
+            "targetBucket": uls_name,
+            "endpoint": cld_mgr.self_ref_mcg_client.s3_internal_endpoint,
+            "signatureVersion": "v4",
+            "secret": {
+                "name": cld_mgr.self_ref_mcg_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
+        },
+    }
+    create_resource(**bs_data)
+
+
+def cli_create_self_ref_mcg_backingstore(
+    mcg_obj, cld_mgr, backingstore_name, uls_name, region
+):
+    """
+    Create a new self-ref MCG backingstore using the NooBaa CLI.
+    Self-ref MCG is an S3-compatible store backed by an MCG's own
+    bucket on the same cluster.
+
+    Args:
+        mcg_obj (MCG): MCG object for executing CLI commands
+        cld_mgr (CloudManager): holds self-ref MCG client credentials
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): unused, kept for interface compatibility
+
+    """
+    mcg_obj.exec_mcg_cmd(
+        f"backingstore create s3-compatible {backingstore_name} "
+        f"--endpoint {cld_mgr.self_ref_mcg_client.s3_internal_endpoint} "
+        f"--access-key {cld_mgr.self_ref_mcg_client.access_key} "
+        f"--secret-key {cld_mgr.self_ref_mcg_client.secret_key} "
+        f"--target-bucket {uls_name}",
+        use_yes=True,
+    )
+
+
+def oc_create_pv_backingstore(
+    backingstore_name,
+    vol_num,
+    size,
+    storage_class,
+    req_cpu=None,
+    req_mem=None,
+    lim_cpu=None,
+    lim_mem=None,
+):
     """
     Create a new backingstore with pv underlying storage using oc create command
 
@@ -1061,6 +1168,10 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
         vol_num (int): number of pv volumes
         size (int): each volume size in GB
         storage_class (str): which storage class to use
+        req_cpu (str): requested cpu value for the agent pods
+        req_mem (str): requested memory value for the agent pods
+        lim_cpu (str): cpu limit for the agent pods
+        lim_mem (str): memory limit for the agent pods
 
     """
     bs_data = templating.load_yaml(constants.PV_BACKINGSTORE_YAML)
@@ -1070,6 +1181,21 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     bs_data["spec"]["pvPool"]["numVolumes"] = vol_num
     if storage_class:
         bs_data["spec"]["pvPool"]["storageClass"] = storage_class
+    # spec.pvPool.resources is a VolumeResources: its cpu/memory keys override
+    # the performance profile's pvPoolResources for the agent pods, while its
+    # storage key sizes the PVC. requests.storage is always set above, which is
+    # required - the noobaa admission webhook rejects a backingstore whose
+    # volume size is unset or below the minimum.
+    if req_cpu:
+        bs_data["spec"]["pvPool"]["resources"]["requests"]["cpu"] = req_cpu
+    if req_mem:
+        bs_data["spec"]["pvPool"]["resources"]["requests"]["memory"] = req_mem
+    if lim_cpu or lim_mem:
+        limits = bs_data["spec"]["pvPool"]["resources"].setdefault("limits", {})
+        if lim_cpu:
+            limits["cpu"] = lim_cpu
+        if lim_mem:
+            limits["memory"] = lim_mem
     create_resource(**bs_data)
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
 
@@ -1084,6 +1210,7 @@ def cli_create_pv_backingstore(
     req_mem=None,
     lim_cpu=None,
     lim_mem=None,
+    timeout=600,
 ):
     """
     Create a new backingstore with pv underlying storage using noobaa cli command
@@ -1097,6 +1224,7 @@ def cli_create_pv_backingstore(
         req_mem (str): requested memory value
         lim_cpu (str): limit cpu value
         lim_mem (str): limit memory value
+        timeout (int): total time to wait for the backingstore to become healthy
 
     """
     cmd = (
@@ -1113,23 +1241,41 @@ def cli_create_pv_backingstore(
         cmd += f" --limit-cpu {lim_cpu}"
     if lim_mem:
         cmd += f" --limit-memory {lim_mem}"
-    mcg_obj.exec_mcg_cmd(cmd)
-    wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
+
+    # The noobaa CLI blocks until the backingstore is healthy, so on a slow cluster
+    # the subprocess timeout kills it and raises an opaque TimeoutExpired even though
+    # the backingstore CR itself was created. Keep the CLI on a short leash and let
+    # wait_for_pv_backingstore decide whether the creation actually succeeded.
+    cli_timeout = min(PV_BACKINGSTORE_CLI_CREATE_TIMEOUT, timeout // 2)
+    try:
+        mcg_obj.exec_mcg_cmd(cmd, timeout=cli_timeout)
+    except TimeoutExpired:
+        logger.warning(
+            f"The noobaa CLI did not return within {cli_timeout} seconds while waiting "
+            f"for backingstore {backingstore_name} to become healthy. Falling back to "
+            "polling the backingstore CR."
+        )
+    wait_for_pv_backingstore(
+        backingstore_name,
+        config.ENV_DATA["cluster_namespace"],
+        timeout=max(timeout - cli_timeout, 60),
+    )
 
 
-def wait_for_pv_backingstore(backingstore_name, namespace=None):
+def wait_for_pv_backingstore(backingstore_name, namespace=None, timeout=360):
     """
     wait for existing pv backing store to reach OPTIMAL state
 
     Args:
         backingstore_name (str): backingstore name
         namespace (str): backing store's namespace
+        timeout (int): time to wait for the backing store to become healthy
 
     """
 
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     sample = TimeoutSampler(
-        timeout=360,
+        timeout=timeout,
         sleep=15,
         func=check_pv_backingstore_status,
         backingstore_name=backingstore_name,
@@ -1137,10 +1283,67 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
     )
     if not sample.wait_for_func_status(result=True):
         raise TimeoutExpiredError(
-            f"Backing Store {backingstore_name} never reached OPTIMAL state"
+            f"Backing Store {backingstore_name} never reached OPTIMAL state. "
+            f"{get_pv_backingstore_unhealthy_reason(backingstore_name, namespace)}"
         )
     else:
         logger.info(f"Backing Store {backingstore_name} created successfully")
+
+
+def get_pv_backingstore_unhealthy_reason(backingstore_name, namespace=None):
+    """
+    Collect why a pv backing store hasn't become healthy.
+
+    Meant for enriching timeout messages, so it never raises - a failure to collect
+    the details is reported in the returned string instead.
+
+    Args:
+        backingstore_name (str): backingstore name
+        namespace (str): backing store's namespace
+
+    Returns:
+        str: The backing store phase and conditions, plus the phase and the
+            scheduling reason of every pv pool pod that isn't running
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    details = []
+    try:
+        status = (
+            OCP(
+                kind=constants.BACKINGSTORE,
+                namespace=namespace,
+                resource_name=backingstore_name,
+            )
+            .get()
+            .get("status", {})
+        )
+        details.append(f"Backing store phase: {status.get('phase')}")
+        for condition in status.get("conditions", []):
+            details.append(
+                f"condition {condition.get('type')}={condition.get('status')} "
+                f"({condition.get('reason')}): {condition.get('message')}"
+            )
+
+        pods = OCP(kind=constants.POD, namespace=namespace).get(
+            selector=f"pool={backingstore_name}"
+        )["items"]
+        for pod_data in pods:
+            pod_status = pod_data.get("status", {})
+            if pod_status.get("phase") == constants.STATUS_RUNNING:
+                continue
+            reasons = [
+                f"{cond.get('reason')}: {cond.get('message')}"
+                for cond in pod_status.get("conditions", [])
+                if cond.get("reason")
+            ]
+            details.append(
+                f"pod {pod_data['metadata']['name']} is "
+                f"{pod_status.get('phase')} - {'; '.join(reasons) or 'no reason given'}"
+            )
+    except Exception as ex:
+        details.append(f"Could not collect the backing store details: {ex}")
+    return " | ".join(details)
 
 
 def check_pv_backingstore_status(
@@ -2173,6 +2376,53 @@ def compare_bucket_object_list(
     except TimeoutExpiredError:
         logger.error(
             f"The compared buckets did not contain the same set of objects after {timeout} seconds"
+        )
+        return False
+
+
+def wait_for_expected_objects_in_bucket(
+    mcg_obj, object_names, bucket_name, timeout=600
+):
+    """
+    Wait for specific objects to appear in a bucket (subset check).
+
+    Unlike compare_bucket_object_list which checks for exact set equality
+    between two buckets, this function checks that a given set of object
+    names exists in the target bucket. Use this when multiple sources
+    replicate to the same target, making exact comparison impossible.
+
+    Args:
+        mcg_obj (MCG): An initialized MCG object
+        object_names (list): Object names expected to appear in the bucket
+        bucket_name (str): Bucket to check
+        timeout (int): The maximum time in seconds to wait for the objects
+            to appear
+
+    Returns:
+        bool: True if all expected objects are found within timeout,
+        False otherwise
+    """
+    expected = set(object_names)
+    try:
+        for bucket_objects in TimeoutSampler(
+            timeout,
+            30,
+            mcg_obj.s3_list_all_objects_in_bucket,
+            bucketname=bucket_name,
+        ):
+            found = {obj.key for obj in bucket_objects}
+            if expected.issubset(found):
+                logger.info(
+                    f"All {len(expected)} expected objects found in {bucket_name}"
+                )
+                return True
+            logger.debug(
+                f"Waiting for objects in {bucket_name}: " f"missing={expected - found}"
+            )
+    except TimeoutExpiredError:
+        logger.error(
+            f"Expected objects were not found in {bucket_name} "
+            f"after {timeout} seconds"
         )
         return False
 
@@ -3740,3 +3990,70 @@ def get_bucket_status_value(mcg_obj, bucket_name, key):
     op = bucket_status.split("\n")
     value = next(item.split(":")[1].strip() for item in op if key in item)
     return value
+
+
+def assert_store_phase_and_mode(
+    store_name, store_kind, expected_phase, expected_mode, mcg_obj, timeout=180
+):
+    """
+    Assert both the K8s CR PHASE and NooBaa mode of a store.
+
+    For backingstores, the mode is read from the "pools" section
+    of the NooBaa system info.
+    For namespacestores, the mode is read from the
+    "namespace_resources" section (resource name = store name).
+
+    Args:
+        store_name (str): Store resource name
+        store_kind (str): K8s kind - constants.BACKINGSTORE or
+            constants.NAMESPACESTORE
+        expected_phase (str): Expected K8s PHASE (e.g. "Ready", "Rejected")
+        expected_mode (str): Expected NooBaa mode (e.g. "OPTIMAL",
+            "AUTH_FAILED", "STORAGE_NOT_EXIST")
+        mcg_obj: MCG object for RPC calls
+        timeout (int): Timeout in seconds for each check
+
+    Raises:
+        TimeoutExpiredError: If the PHASE or mode does not reach
+            the expected value within the timeout
+
+    """
+    store_ocp = OCP(
+        kind=store_kind,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    assert store_ocp.wait_for_resource(
+        condition=expected_phase,
+        resource_name=store_name,
+        column="PHASE",
+        timeout=timeout,
+    ), f"{store_kind} {store_name} did not reach PHASE {expected_phase}"
+
+    rpc_name = store_name
+    rpc_collection = (
+        "pools" if store_kind == constants.BACKINGSTORE else "namespace_resources"
+    )
+
+    def _check_mode():
+        sysinfo = mcg_obj.read_system()
+        for item in sysinfo.get(rpc_collection, []):
+            if item.get("name") == rpc_name:
+                current_mode = item.get("mode")
+                logger.info(
+                    f"Current mode of {store_kind} {store_name}: {current_mode}"
+                )
+                return current_mode == expected_mode
+        logger.debug(f"{rpc_name} not found in {rpc_collection}")
+        return False
+
+    try:
+        for reached in TimeoutSampler(timeout, 10, _check_mode):
+            if reached:
+                logger.info(f"{store_kind} {store_name} reached mode {expected_mode}")
+                return
+    except TimeoutExpiredError:
+        logger.error(
+            f"{store_kind} {store_name} did not reach mode "
+            f"{expected_mode} within {timeout}s"
+        )
+        raise

@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework import config
 from ocs_ci.deployment.helpers.ceph_cluster import (
     simulate_full_ceph_bluestore_process_on_wnodes,
+    simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes,
 )
 
 log = logging.getLogger(__name__)
@@ -37,3 +38,24 @@ class TestSimulateCephBlueStoreLabel(ManageTest):
         result = simulate_full_ceph_bluestore_process_on_wnodes()
         assert result, "BlueStore label simulation failed on worker nodes"
         log.info("BlueStore label simulation succeeded on all worker nodes disks")
+
+    def test_simulate_bluestore_label_dmcrypt_on_worker_nodes(self):
+        """
+        Test simulates encrypted Ceph OSD dm-crypt data on the worker node disks.
+
+        Creates a LUKS container on each node's disk, writes BlueStore metadata
+        inside the encrypted container via ceph-volume, and stamps the LUKS
+        header with Rook-compatible metadata (ceph_fsid subsystem, pvc_name label).
+
+        """
+        if not config.ENV_DATA.get("simulate_bluestore_label_dmcrypt", False):
+            pytest.skip("simulate_bluestore_label_dmcrypt not set in config")
+        # clear_signatures=False: the LUKS header must remain on disk so
+        # that Rook can detect the encrypted OSD layout during ODF install.
+        result = simulate_full_ceph_bluestore_dmcrypt_process_on_wnodes(
+            clear_signatures=False
+        )
+        assert (
+            result
+        ), "Encrypted BlueStore (dm-crypt) simulation failed on worker nodes"
+        log.info("Encrypted BlueStore simulation succeeded on all worker nodes disks")

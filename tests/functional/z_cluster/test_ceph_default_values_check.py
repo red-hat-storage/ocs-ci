@@ -3,8 +3,10 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
+    skipif_ec_pools_disabled,
     skipif_ocs_version,
     brown_squad,
+    polarion_id,
 )
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -18,6 +20,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.cluster import (
+    get_ec_pool_ec_optimizations,
     get_pg_balancer_status,
     get_mon_config_value,
     is_lower_requirements,
@@ -128,12 +131,10 @@ class TestCephDefaultValuesCheck(ManageTest):
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_414.split("\n")
         elif ocs_version == version.VERSION_4_15:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_415.split("\n")
-        elif ocs_version in [
-            version.VERSION_4_16,
-            version.VERSION_4_17,
-            version.VERSION_4_18,
-        ]:
+        elif ocs_version in [version.VERSION_4_16, version.VERSION_4_17]:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_416.split("\n")
+        elif ocs_version == version.VERSION_4_18:
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_418.split("\n")
         elif ocs_version == version.VERSION_4_19:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_419.split("\n")
         else:
@@ -176,6 +177,15 @@ class TestCephDefaultValuesCheck(ManageTest):
 
         # Get expected values - currently only 4.20+ supported
         expected_config = constants.ROOK_CEPH_CONFIG_VALUES_420
+
+        if is_lower_requirements():
+            expected_config = {
+                **expected_config,
+                "global": {
+                    **expected_config["global"],
+                    "mon_target_pg_per_osd": "100",
+                },
+            }
 
         log.info(f"OCS version is {ocs_version}")
         log.info(f"Expected config values: {expected_config}")
@@ -331,7 +341,7 @@ class TestCephDefaultValuesCheck(ManageTest):
         Testcase to check number of pgs per pool
 
         """
-        # Create a RWO PVC
+        log.test_step("Create CephFS PVC with RWO access")
         project = project_factory()
         pvc_obj = pvc_factory(
             interface=constants.CEPHFILESYSTEM,
@@ -341,7 +351,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             size=200,
         )
 
-        # Create a pod using the PVC
+        log.test_step("Create pod and run IO workload")
         pod_obj = pod_factory(
             interface=constants.CEPHFILESYSTEM,
             pvc=pvc_obj,
@@ -353,9 +363,57 @@ class TestCephDefaultValuesCheck(ManageTest):
             io_direction="write",
             runtime=10,
         )
+        log.test_step("Validate PG counts differ from default after autoscaling")
         expected_pgs = {
             "ocs-storagecluster-cephblockpool": 1,
             "ocs-storagecluster-cephfilesystem-data0": 1,
             "ocs-storagecluster-cephfilesystem-metadata0": 1,
         }
-        assert not validate_num_of_pgs(expected_pgs)
+        result = validate_num_of_pgs(expected_pgs)
+        log.assertion(
+            f"PG autoscaler validation: pools_checked={list(expected_pgs.keys())}, "
+            f"all_match_default={result}, expected_autoscaled=True"
+        )
+        assert (
+            not result
+        ), "PG counts still match defaults — autoscaler may not have adjusted PGs"
+
+
+@brown_squad
+@tier1
+@skipif_external_mode
+@skipif_ec_pools_disabled
+@runs_on_provider
+@polarion_id("OCS-8230")
+class TestECPoolOptimizationsCheck(ManageTest):
+    """
+    Validate EC pool ec_optimizations (FastEC) flags on day-1 EC clusters.
+    """
+
+    def test_validate_ec_pool_optimizations(self):
+        """
+        Verify that all EC pools have ec_optimizations enabled and the
+        cluster-wide default osd_pool_default_flag_ec_optimizations is true.
+        """
+        ec_pools, cluster_default = get_ec_pool_ec_optimizations()
+        assert ec_pools, "No EC pools found despite ec_default_pools being set"
+
+        log.info(f"EC pools ec_optimizations state: {ec_pools}")
+        log.info(
+            f"Cluster default osd_pool_default_flag_ec_optimizations: "
+            f"{cluster_default}"
+        )
+
+        for pool_name, flags in ec_pools.items():
+            assert flags[
+                "ec_optimizations"
+            ], f"EC pool '{pool_name}' does not have ec_optimizations flag set"
+            assert flags[
+                "ec_overwrites"
+            ], f"EC pool '{pool_name}' does not have ec_overwrites flag set"
+            log.info(f"Pool '{pool_name}': ec_optimizations=True, ec_overwrites=True")
+
+        assert cluster_default == "true", (
+            f"Cluster default osd_pool_default_flag_ec_optimizations "
+            f"is '{cluster_default}', expected 'true'"
+        )

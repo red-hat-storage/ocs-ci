@@ -12,7 +12,7 @@ from ocs_ci.helpers.cnv_helpers import (
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -47,10 +47,8 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         Raises:
             Exception: If there is an error during hotplugging or I/O operation.
         """
-        # Hotplug the PVC volume to the VM
-        log.info(f"Hotplugging PVC {pvc.name} to VM {vm_obj.name}")
+        logger.info(f"Hotplugging PVC '{pvc.name}' to VM '{vm_obj.name}'")
         vm_obj.addvolume(volume_name=pvc.name)
-        # Wait for the disk to be hotplugged successfully
         sample = TimeoutSampler(
             timeout=600,
             sleep=5,
@@ -59,15 +57,16 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             disks_before_hotplug=before_disks,
         )
         sample.wait_for_func_value(value=True)
-        log.info(f"Hotplugged PVC {pvc.name} to VM {vm_obj.name}")
+        logger.info(f"PVC '{pvc.name}' hotplugged successfully to VM '{vm_obj.name}'")
 
         if not cross_pvc:
-            # Run I/O operation
-            log.info(f"Running I/O operation on VM {vm_obj.name}")
+            logger.info(f"Running I/O on VM '{vm_obj.name}'")
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             return source_csum
         else:
-            log.info(f"Running I/O operation {pvc.name}")
+            logger.info(
+                f"Running cross-PVC I/O on VM '{vm_obj.name}' with PVC '{pvc.name}'"
+            )
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1], verify=True)
 
     def unplug_disks_and_verify(self, vm_obj, pvc):
@@ -81,7 +80,9 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         Returns:
             None
         """
+        logger.info(f"Unplugging PVC '{pvc.name}' from VM '{vm_obj.name}'")
         vm_obj.removevolume(volume_name=pvc.name, persist=True, verify=True)
+        logger.info(f"PVC '{pvc.name}' unplugged and verified for VM '{vm_obj.name}'")
 
     def test_vm_hotpl_unplg_snap_clone(
         self,
@@ -104,7 +105,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         7. Unplug the disks and verify detachment
         """
 
-        # Create an encryption enabled storageclass for RBD
+        logger.test_step("Create StorageClass, VMs, and hotplug PVCs")
         sc_obj_def = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
             new_rbd_pool=True,
@@ -115,14 +116,12 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         proj_obj = project_factory()
         file_paths = ["/source_file.txt", "/new_file.txt"]
 
-        # Create a PVC-based VM (VM1)
         vm_obj_pvc = cnv_workload(
             storageclass=sc_obj_def.name,
             namespace=proj_obj.namespace,
             volume_interface=constants.VM_VOLUME_PVC,
         )
         pvc_name = (f"pvc-hotplug-vm1-{vm_obj_pvc.name}")[:35]
-        # Create the PVC for VM1
         pvc_obj = pvc_factory(
             project=proj_obj,
             storageclass=sc_obj_def,
@@ -131,16 +130,16 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             volume_mode=constants.VOLUME_MODE_BLOCK,
             pvc_name=pvc_name,
         )
-        log.info(f"PVC {pvc_obj.name} created successfully")
+        logger.info(
+            f"PVC-based VM '{vm_obj_pvc.name}' and PVC '{pvc_obj.name}' created"
+        )
 
-        # Create a DVT-based VM (VM2)
         vm_obj_dvt = cnv_workload(
             storageclass=sc_obj_def.name,
             namespace=proj_obj.namespace,
             volume_interface=constants.VM_VOLUME_DVT,
         )
         pvc_name = (f"pvc-hotplug-vm2-{vm_obj_dvt.name}")[:35]
-        # Create the PVC for VM2
         dvt_obj = pvc_factory(
             project=proj_obj,
             storageclass=sc_obj_def,
@@ -149,48 +148,57 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             volume_mode=constants.VOLUME_MODE_BLOCK,
             pvc_name=pvc_name,
         )
-        log.info(f"PVC {dvt_obj.name} created successfully")
+        logger.info(
+            f"DVT-based VM '{vm_obj_dvt.name}' and PVC '{dvt_obj.name}' created"
+        )
 
-        # List of VM-PVC pairs for hotplug testing
         vms_pvc = [(vm_obj_pvc, pvc_obj), (vm_obj_dvt, dvt_obj)]
 
-        # Hotplug disks and perform I/O operations
+        logger.test_step("Hotplug disks, run I/O, reboot, and verify persistence")
         for i, (vm_obj, pvc) in enumerate(vms_pvc):
             try:
-                # Verify disks before hotplugging
                 disks_before_hotplug = vm_obj.run_ssh_cmd(
                     "lsblk -o NAME,SIZE,MOUNTPOINT -P"
                 )
-                log.info(
-                    f"Disks before hotplug on VM {vm_obj.name}:\n{disks_before_hotplug}"
+                logger.debug(
+                    f"Disks before hotplug on VM '{vm_obj.name}':\n{disks_before_hotplug}"
                 )
 
                 source_csum = self.hotplug_and_run_io(
                     vm_obj, pvc, file_paths, disks_before_hotplug
                 )
 
-                # Reboot the VM
-                log.info(f"Rebooting VM {vm_obj.name}")
+                logger.info(f"Rebooting VM '{vm_obj.name}'")
                 vm_obj.restart()
-                log.info(f"Reboot Success for VM: {vm_obj.name}")
+                logger.info(f"VM '{vm_obj.name}' rebooted successfully")
 
-                # Verify disk is still attached after reboot
-                assert verifyvolume(
+                volume_attached = verifyvolume(
                     vm_obj.name, volume_name=pvc.name, namespace=vm_obj.namespace
-                ), f"Unable to find volume {pvc.name} mounted on VM: {vm_obj.name}"
+                )
+                logger.assertion(
+                    f"Volume attached after reboot: vm='{vm_obj.name}', "
+                    f"volume='{pvc.name}', expected=True, actual={volume_attached}"
+                )
+                assert (
+                    volume_attached
+                ), f"Volume '{pvc.name}' not found on VM '{vm_obj.name}' after reboot"
 
-                # Verify data persistence by checking MD5 checksum
                 new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
+                logger.assertion(
+                    f"Data persistence after reboot: vm='{vm_obj.name}', "
+                    f"expected='{source_csum}', actual='{new_csum}', "
+                    f"match={source_csum == new_csum}"
+                )
                 assert (
                     source_csum == new_csum
-                ), f"MD5 mismatch after reboot for VM {vm_obj.name}"
+                ), f"MD5 mismatch after reboot for VM '{vm_obj.name}'"
             except Exception as e:
-                log.error(
-                    f"An error occurred during hotplugging and I/O operations on VM {vm_obj.name}: {str(e)}"
+                logger.exception(
+                    f"Hotplug and I/O operations failed on VM '{vm_obj.name}': {e}"
                 )
                 raise
 
-        # Create PVC clones and attach them to opposite VMs
+        logger.test_step("Create PVC clones and attach to opposite VMs")
         try:
             clone_obj_pvc = pvc_clone_factory(
                 pvc_obj, clone_name=f"clone-{pvc_obj.name}"
@@ -198,30 +206,27 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             clone_obj_dvt = pvc_clone_factory(
                 dvt_obj, clone_name=f"clone-{dvt_obj.name}"
             )
-            log.info(
-                f"Clones of PVCs {pvc_obj.name}:{clone_obj_pvc.name} and "
-                f"{dvt_obj.name}:{clone_obj_dvt.name} created!"
+            logger.info(
+                f"Created clones: '{pvc_obj.name}' -> '{clone_obj_pvc.name}', "
+                f"'{dvt_obj.name}' -> '{clone_obj_dvt.name}'"
             )
 
-            # Attach clones to the opposite VMs
-            log.info(f"Attaching clone of {dvt_obj.name} to VM {vm_obj_pvc.name}")
+            logger.info(
+                f"Attaching clone '{clone_obj_dvt.name}' to VM '{vm_obj_pvc.name}'"
+            )
             before_disks_pvc = vm_obj_pvc.run_ssh_cmd(
                 "lsblk -o NAME,SIZE,MOUNTPOINT -P"
-            )
-            log.info(
-                f"Disks before clone hotplug on VM {vm_obj_pvc.name}:\n{before_disks_pvc}"
             )
 
             self.hotplug_and_run_io(
                 vm_obj_pvc, clone_obj_dvt, file_paths, before_disks_pvc, cross_pvc=True
             )
 
-            log.info(f"Attaching clone of {pvc_obj.name} to VM {vm_obj_dvt.name}")
+            logger.info(
+                f"Attaching clone '{clone_obj_pvc.name}' to VM '{vm_obj_dvt.name}'"
+            )
             before_disks_dvt = vm_obj_dvt.run_ssh_cmd(
                 "lsblk -o NAME,SIZE,MOUNTPOINT -P"
-            )
-            log.info(
-                f"Disks before clone hotplug on VM {vm_obj_dvt.name}:\n{before_disks_dvt}"
             )
 
             self.hotplug_and_run_io(
@@ -229,20 +234,17 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             )
 
         except Exception as e:
-            log.error(f"An error occurred during PVC cloning and hotplugging: {str(e)}")
+            logger.exception(f"PVC cloning and cross-VM hotplug failed: {e}")
             raise
 
+        logger.test_step("Unplug all hotplugged disks and verify detachment")
         try:
-            # Unplug cloned disks and verify detachment
-            log.info(f"Unplugging clone of {dvt_obj.name} from VM {vm_obj_pvc.name}")
             self.unplug_disks_and_verify(vm_obj_pvc, clone_obj_dvt)
-
-            log.info(f"Unplugging clone of {pvc_obj.name} from VM {vm_obj_dvt.name}")
             self.unplug_disks_and_verify(vm_obj_dvt, clone_obj_pvc)
 
-            # Unplug normal disks and verify detachment
             for i, (vm_obj, pvc) in enumerate(vms_pvc):
                 self.unplug_disks_and_verify(vm_obj, pvc)
+            logger.info("All hotplugged disks unplugged and verified")
         except Exception as e:
-            log.error(f"An error occurred during PVC Unplugging: {str(e)}")
+            logger.exception(f"PVC unplug failed: {e}")
             raise

@@ -31,6 +31,142 @@ reviews:
 
   # Path-specific instructions
   path_instructions:
+    - path: "ocs_ci/ocs/ui/**/*.py"
+      instructions: |
+        This file belongs to the Black Squad UI framework (Page Object Model layer).
+        Enforce these rules — violations are blocking:
+
+        DRIVER ACCESS
+        - Never use `self.driver` directly. Always call the singleton: `SeleniumDriver()`.
+          Every `self.driver` reference is a violation.
+
+        PAGE OBJECT MODEL (POM)
+        - New UI functionality must live in a POM class under ocs_ci/ocs/ui/page_objects/.
+        - Every POM class must inherit from the closest relevant parent (CreateResourceForm,
+          EditLabelForm, ResourceList, PageNavigator, or BaseUI as last resort).
+        - PageNavigator is the required base when the component is always visible in the sidebar.
+        - Helper methods belong on the POM class, not in test files.
+        - Not only full pages but modals, cards, and wizards may have dedicated POM classes —
+          reusability and DRY principle are the deciding factors.
+        - Navigation methods must return the target page-object instance (fluent interface).
+        - POM methods must not contain assertions; assertions belong in test files only.
+
+        LOCATORS
+        - All locators must be defined in ocs_ci/ocs/ui/views.py; no inline selectors in POM
+          files or test files.
+        - Access locators only through BaseUI attribute dictionaries (e.g. self.pvc_loc,
+          self.generic_locators). Never access the raw `locators` dict directly.
+        - New locator categories must be registered both in the `locators` master dict in
+          views.py AND as a new attribute in BaseUI.__init__.
+        - Dynamic locators (with {} placeholders) must be resolved with format_locator()
+          from helpers_ui.py — never use f-strings or string concatenation on locators.
+        - Locators are stored as (selector_string, By.TYPE) tuples — selector first, By second.
+
+        LOCATOR QUALITY — HARD REQUIREMENTS
+        - New locators must NOT use "|" / "or" / "," (multi-alternative syntax). That syntax
+          is reserved for upgrading existing locators across OCP versions only.
+        - New locators must NOT reference PatternFly version-prefixed classes
+          (e.g. pf-v5-c-button). Use contains() or class* substring matching so locators
+          survive PF version bumps.
+        - Prefer XPath with normalize-space() for text matching:
+            (By.XPATH, "//button[normalize-space()='Create']")
+        - Prefer data-test attributes over generated class names:
+            (By.XPATH, "//button[@data-test='create-storage-system']")
+        - Combine 2–3 stable attributes for uniqueness rather than a single fragile one.
+        - Avoid index-based selectors ([1], [2]); avoid auto-generated AI/recorder locators.
+        - Resilient XPath: //div[contains(@class, 'c-menu-toggle')]
+          Resilient CSS: div[class*='c-menu-toggle']
+        - For OCP/ODF version cross-support (one release behind), use the "|" syntax but
+          limit to at most 2 complete alternatives per locator entry.
+
+        SELENIUM DRIVER INTEGRITY
+        - Never modify the WebDriver instance for a specific test: no changes to implicit
+          wait timeouts (driver.implicitly_wait()), window size/resolution, or any driver
+          option that would affect other tests. Such changes leak across tests and produce
+          non-deterministic failures.
+        - Never close and re-open the Selenium connection inside a test or POM method.
+          The singleton lifecycle is managed by the framework; tear-down is handled globally.
+
+        LOCATOR COMMENTS
+        - Do not add inline comments to locator entries in views.py. The locator key name
+          must carry the meaning of the web element — this is also required by the AI
+          fallback mechanism which uses the variable name to locate elements at runtime.
+          Keep views.py lean: name the key well, omit the comment.
+
+        LOGGING
+        - UI code must include comprehensive logging. Because Selenium commands produce no
+          log output by default, every meaningful action (navigation, form fill, click that
+          triggers a state change, wait result) must be explicitly logged with logger.info().
+        - Follow docs/logging_guide.md for level selection: test_step for phases,
+          assertion before assert statements, info for progress, debug for iteration detail.
+        - Log before performing the action (intent) and after for state-change confirmation.
+
+        AI FALLBACK — ABSENCE CHECKS
+        - The AI locator fallback is designed for finding elements that are expected to be
+          present. Do NOT rely on it to verify that an element is absent or hidden.
+        - When asserting an element does not exist, use framework helpers or native Selenium
+          that return an empty list:
+            elements = self.get_elements(self.generic_locators["some_key"])
+            assert len(elements) == 0
+          Never wrap an absence check in a try/except around a standard do_click or
+          wait_for_element call that would trigger AI fallback.
+
+        WAITS & TIMING
+        - No time.sleep() calls. Use helpers from helpers_ui.py
+          (wait_for_element_to_be_clickable, page_has_loaded, etc.).
+        - Prefer explicit waits (WebDriverWait) over any implicit wait.
+
+        VERSIONED LOCATORS
+        - Override dicts follow the pattern {**base_dict, **override_4_XX}.
+        - Use locators_for_current_ocp_version() to select locators at runtime — never
+          hardcode version strings in POM files.
+        - Locators depend on OCP version, not ODF version.
+        - Navigation methods should return the target page-object instance to enable
+          fluent method chaining.
+        - Use deep_get() for safe nested dict traversal; never chain raw dict access.
+        - POM action methods should return self or a new page-object for chaining.
+
+    - path: "tests/functional/ui/**/*.py"
+      instructions: |
+        This file belongs to the Black Squad UI test suite.
+        Enforce these rules — violations are blocking:
+
+        POM USAGE
+        - Tests must use POM classes from ocs_ci/ocs/ui/page_objects/; no inline Selenium
+          calls (find_element, click, send_keys) in test files.
+        - Never use `self.driver` or instantiate SeleniumDriver() directly in tests; obtain
+          the driver through POM class methods only.
+        - No locator strings or By.* calls in test files.
+
+        ASSERTIONS
+        - Assertions belong in the test file, never in POM methods.
+        - Use descriptive assertion messages so failures are self-explanatory.
+
+        SELENIUM DRIVER INTEGRITY
+        - Never modify the WebDriver instance inside a test: no driver.implicitly_wait(),
+          window resize, or close/re-open of the Selenium connection. The framework owns
+          the driver lifecycle.
+
+        LOGGING
+        - Every test must include test_step calls for major phases and logger.info() for
+          meaningful UI interactions. Follow docs/logging_guide.md.
+
+        AI FALLBACK — ABSENCE CHECKS
+        - To assert an element is absent, use get_elements() and check the list length.
+          Never use a try/except around a wait or click helper to infer absence.
+
+        TEST DESIGN
+        - Tests must be independent and isolated; no shared mutable state between tests.
+        - Each test must clean up resources it creates (teardown / yield fixtures).
+        - No time.sleep(); use POM wait helpers.
+
+    - path: "tests/cross_functional/ui/**/*.py"
+      instructions: |
+        Same rules as tests/functional/ui/**/*.py apply here.
+        Cross-functional UI tests additionally span multiple squad areas; ensure that any
+        non-UI framework components used are accessed through their established APIs, not
+        via raw Kubernetes/OC calls inside the test body.
+
     - path: "tests/**/*.py"
       instructions: |
         Focus on:
@@ -163,6 +299,7 @@ knowledge_base:
       - "docs/coding_guidelines.md"
       - "docs/logging_guide.md"
       - "docs/fixture_usage.md"
+      - "docs/ui_guidelines.md"
       - ".github/CONTRIBUTING.md"
       - "**/.cursorrules"
 

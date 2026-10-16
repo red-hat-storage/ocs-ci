@@ -95,3 +95,7 @@ def my_example(arg1, arg2=10):
 * **Logging**
 
 See the [Logging Guide](logging_guide.md) for comprehensive logging best practices and guidelines.
+
+* **UI Tests**
+
+See the [UI Test Guidelines](ui_guidelines.md) for writing, structuring, and reviewing UI tests.
