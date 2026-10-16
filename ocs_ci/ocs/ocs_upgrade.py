@@ -1205,8 +1205,19 @@ def run_ocs_upgrade(
                         "subscription_plan_approval"
                     )
                     if subscription_plan_approval == "Manual":
+                        # For z-stream upgrades (same major.minor, different patch)
+                        # the odf-operator webhook can momentarily have no
+                        # endpoints while its pod is being upgraded, causing OLM
+                        # to mark the whole install plan as Failed without retry.
+                        # Enable recovery so a failed install plan is deleted and
+                        # re-approved once OLM regenerates it.
+                        is_zstream_upgrade = (
+                            parsed_versions[0].major == parsed_versions[1].major
+                            and parsed_versions[0].minor == parsed_versions[1].minor
+                        )
                         wait_for_install_plan_and_approve(
-                            config.ENV_DATA["cluster_namespace"]
+                            config.ENV_DATA["cluster_namespace"],
+                            recover_failed_install_plan=is_zstream_upgrade,
                         )
                 if managed_ibmcloud_platform and not upgrade_in_current_source:
                     for attempt in range(2):
