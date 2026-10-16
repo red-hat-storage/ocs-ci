@@ -86,6 +86,7 @@ class DeploymentFactory(object):
                     "baremetal_upi": BAREMETALUPI,
                     "baremetal_ai": BAREMETALAI,
                     "hci_baremetal_ai": BAREMETALAI,
+                    "ibm_vpc_bm_ai": BAREMETALAI,
                 }
             )
         elif self.deployment_platform == constants.OPENSHIFT_DEDICATED_PLATFORM:
