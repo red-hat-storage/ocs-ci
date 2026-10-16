@@ -972,14 +972,138 @@ class Deployment(object):
         """
         Enable IBM Fusion Access for SAN operator deployment after OCP is deployed.
         Triggered when ``config.DEPLOYMENT["fusion_access_deployment"]`` is True.
+
+        Per cluster the order is KMM, pull secret, operator, storage:
+
+        - KMM builds and loads the out of tree gpfs kmod, so it has to be there
+          before the Scale daemon starts.
+        - the cluster pull secret needs the IBM registry credentials before any
+          Scale image can be pulled.
+        - the storage step drives the console plugin the operator installs, so
+          it can only run once the operator is up.
+
+        In a multicluster run this only touches the managed clusters, the ACM
+        hubs carry no SAN storage.
         """
-        if (
+        if not (
             config.DEPLOYMENT.get("fusion_access_deployment")
             and config.ENV_DATA["skip_ocs_deployment"]
         ):
-            from ocs_ci.deployment.fusion_access import FusionAccessOperator
+            return
 
-            FusionAccessOperator().deploy()
+        from ocs_ci.deployment.fusion_access import FusionAccessOperator
+        from ocs_ci.deployment.fusion_access_storage import (
+            FusionAccessStorage,
+            add_entitlement_to_pull_secret,
+        )
+        from ocs_ci.utility.operators import KernelModuleManagementOperator
+
+        if config.multicluster:
+            indexes = [
+                cluster.MULTICLUSTER["multicluster_index"]
+                for cluster in get_non_acm_cluster_config()
+            ]
+        else:
+            indexes = [config.cur_index]
+
+        old_ctx = config.cur_index
+        try:
+            for index in indexes:
+                config.switch_ctx(index)
+                logger.info(
+                    f"Deploying Fusion Access on {config.ENV_DATA['cluster_name']}"
+                )
+                if config.DEPLOYMENT.get("kmm_deployment", True):
+                    KernelModuleManagementOperator().deploy()
+                add_entitlement_to_pull_secret()
+                FusionAccessOperator().deploy()
+
+                if config.DEPLOYMENT.get("fusion_access_storage"):
+                    FusionAccessStorage().deploy()
+        finally:
+            config.switch_ctx(old_ctx)
+
+    def apply_acm_idms(self):
+        """
+        Apply the ACM ImageDigestMirrorSet on every cluster.
+
+        An unreleased ACM hub pulls its klusterlet images from the brew
+        registry, so the managed clusters need the mirror set before they can
+        be imported. Only relevant from ACM 2.14 onwards, and never on a
+        disconnected cluster, which carries its own mirror configuration.
+
+        """
+        if not version.compare_versions(
+            f"{config.ENV_DATA.get('acm_version', '2.13')} >= 2.14"
+        ):
+            return
+        if not config.ENV_DATA.get("acm_hub_unreleased"):
+            return
+
+        old_ctx = config.cur_index
+        patched_indexes = []
+        try:
+            for cluster in config.clusters:
+                index = cluster.MULTICLUSTER["multicluster_index"]
+                cluster_name = cluster.ENV_DATA.get("cluster_name", f"cluster-{index}")
+                if cluster.DEPLOYMENT.get("disconnected", False):
+                    logger.info(f"{cluster_name} is disconnected, skipping IDMS")
+                    continue
+                config.switch_ctx(index)
+                idms_obj = ocp.OCP(
+                    kind=constants.IMAGEDIGESTMIRRORSET, resource_name="acm-idms"
+                )
+                if idms_obj.check_resource_existence(
+                    timeout=10, should_exist=True, resource_name="acm-idms"
+                ):
+                    logger.info(
+                        f"ImageDigestMirrorSet 'acm-idms' already present on "
+                        f"{cluster_name}, skipping creation"
+                    )
+                    continue
+                logger.info(f"Applying IDMS on {cluster_name}")
+                exec_cmd(f"oc apply -f {constants.ACM_BREW_IDMS_YAML}")
+                patched_indexes.append(index)
+            # An IDMS rewrites the container runtime config on every node, so
+            # wait for the rollout, but only where we actually changed something.
+            for index in patched_indexes:
+                config.switch_ctx(index)
+                logger.info(
+                    f"Waiting for MachineConfigPool update on "
+                    f"{config.ENV_DATA['cluster_name']}"
+                )
+                wait_for_machineconfigpool_status(node_type="all")
+        finally:
+            config.switch_ctx(old_ctx)
+
+    def do_deploy_acm_import(self):
+        """
+        Import the managed clusters into the ACM hub.
+
+        Has to run before anything that addresses the managed clusters through
+        ACM, submariner, GitOps and the DR operators all resolve ManagedCluster
+        resources. Both this and import_clusters_with_acm() are idempotent, so
+        a cluster that is already imported is left alone.
+
+        """
+        if not config.multicluster:
+            return
+        if not config.ENV_DATA.get("import_clusters_to_acm"):
+            return
+        if config.ENV_DATA.get("skip_acm_import", False):
+            logger.info("skip_acm_import is set, not importing clusters into ACM")
+            return
+
+        from ocs_ci.ocs.acm.acm import import_clusters_with_acm
+
+        self.apply_acm_idms()
+
+        old_ctx = config.cur_index
+        try:
+            config.switch_ctx(get_active_acm_index())
+            import_clusters_with_acm()
+        finally:
+            config.switch_ctx(old_ctx)
 
     def do_deploy_hosted_spoke_clusters(self):
         """
@@ -1080,6 +1204,11 @@ class Deployment(object):
         ):
             self.deploy_acm_hub()
 
+        # The hub has to know about the managed clusters before submariner,
+        # GitOps or the DR operators, all of them resolve ManagedCluster
+        # resources.
+        self.do_deploy_acm_import()
+
         perform_lso_standalone_deployment = config.DEPLOYMENT.get(
             "lso_standalone_deployment", False
         ) and not ocp.OCP(kind=constants.STORAGECLASS).is_exist(
@@ -1112,12 +1241,17 @@ class Deployment(object):
         self.do_gitops_deploy()
         self.do_deploy_oadp()
         self.do_deploy_ocs()
+        # Fusion Access has to come before the DR operators. On a Fusion Access
+        # deployment it is what provides the storage, so deploying DR first would
+        # leave deploy_dr_policy() waiting on a DRPolicy that has no storage behind
+        # it. The step is self gated on DEPLOYMENT["fusion_access_deployment"], so
+        # for every other deployment this ordering makes no difference.
+        self.do_deploy_fusion_access()
         self.do_deploy_rdr()
         self.do_deploy_mce()
         self.do_deploy_cnv()
         self.do_deploy_hyperconverged()
         self.do_deploy_metallb()
-        self.do_deploy_fusion_access()
         self.do_deploy_hosted_spoke_clusters()
         self.do_deploy_external_spoke_clusters()
 
@@ -4598,6 +4732,170 @@ class MultiClusterDROperatorsDeploy(object):
             bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
         return bucket_name
 
+    def create_s3_bucket_in_region(self, access_key, secret_key, bucket_name, region):
+        """
+        Create an AWS S3 bucket in an explicit region.
+
+        Unlike create_s3_bucket() this never falls back to an ODF
+        ObjectBucketClaim, the Ramen metadata buckets have to live outside the
+        clusters they are protecting.
+
+        Args:
+            access_key (str): S3 access key
+            secret_key (str): S3 secret key
+            bucket_name (str): Name of the bucket to create
+            region (str): AWS region to create the bucket in
+
+        """
+        client = boto3.resource(
+            "s3",
+            verify=True,
+            endpoint_url=f"https://s3.{region}.amazonaws.com",
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+        )
+        kwargs = {"Bucket": bucket_name}
+        # us-east-1 is the API default and passing it as a LocationConstraint
+        # is rejected with InvalidLocationConstraint.
+        if region != "us-east-1":
+            kwargs["CreateBucketConfiguration"] = {"LocationConstraint": region}
+        try:
+            client.create_bucket(**kwargs)
+            logger.info(f"Created S3 bucket '{bucket_name}' in {region}")
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            if error_code in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
+                logger.warning(
+                    f"S3 bucket '{bucket_name}' already exists — skipping creation"
+                )
+            else:
+                logger.error(f"Failed to create s3 bucket '{bucket_name}': {e}")
+                raise
+        except BotoCoreError as e:
+            logger.error(f"Failed to create s3 bucket '{bucket_name}': {e}")
+            raise
+
+    def configure_ramen_s3_store_profiles(self):
+        """
+        Create the Ramen metadata S3 buckets and write them into the Ramen hub
+        ConfigMap as s3StoreProfiles.
+
+        On an ODF based DR deployment the Multicluster Orchestrator provisions
+        an ObjectBucketClaim per managed cluster through NooBaa and fills
+        s3StoreProfiles in on its own. A Fusion Access deployment has no ODF on
+        the managed clusters, so nothing creates those buckets and DRPolicy
+        validation would never pass. We create one AWS S3 bucket per managed
+        cluster instead and register the profiles and their secrets by hand.
+
+        Config keys (ENV_DATA):
+
+        * ``dr_s3_region`` (str): region for the metadata buckets. Defaults to
+          ``us-east-1``.
+        * ``dr_s3_bucket_prefix`` (str): bucket name prefix. Defaults to
+          ``dnd``.
+
+        """
+        region = config.ENV_DATA.get("dr_s3_region", "us-east-1")
+        prefix = config.ENV_DATA.get("dr_s3_bucket_prefix", "dnd")
+        self.meta_obj.get_meta_access_secret_keys()
+        access_key = self.meta_obj.access_key
+        secret_key = self.meta_obj.secret_key
+
+        profiles = []
+        for cluster in get_non_acm_cluster_config():
+            cluster_name = cluster.ENV_DATA["cluster_name"]
+            bucket_name = f"{prefix}-{cluster_name}"
+            self.create_s3_bucket_in_region(access_key, secret_key, bucket_name, region)
+            profiles.append(
+                {
+                    "s3ProfileName": self.ramen_s3_profile_name(cluster_name),
+                    "s3CompatibleEndpoint": f"https://s3.{region}.amazonaws.com",
+                    "s3Region": region,
+                    "s3Bucket": bucket_name,
+                    "s3SecretRef": {
+                        "name": f"s3secret-{cluster_name}",
+                        "namespace": constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+                    },
+                }
+            )
+
+        # Both the hub and the cluster Ramen instances resolve the secret ref,
+        # so it has to exist on every cluster taking part in the DR setup.
+        self.create_ramen_s3_secrets(profiles, access_key, secret_key)
+
+        logger.info("Adding s3StoreProfiles to the Ramen hub ConfigMap")
+        dr_ramen_hub_configmap_data = self.meta_obj.get_ramen_resource()
+        ramen_config = yaml.safe_load(
+            dr_ramen_hub_configmap_data.data["data"][
+                constants.DR_RAMEN_CONFIG_MANAGER_KEY
+            ]
+        )
+        existing = {
+            p["s3ProfileName"]: p for p in ramen_config.get("s3StoreProfiles") or []
+        }
+        for profile in profiles:
+            existing[profile["s3ProfileName"]] = profile
+        ramen_config["s3StoreProfiles"] = list(existing.values())
+        config_map_data = dr_ramen_hub_configmap_data.get()
+        config_map_data["data"][constants.DR_RAMEN_CONFIG_MANAGER_KEY] = str(
+            ramen_config
+        )
+        self.update_config_map_commit(dict(config_map_data))
+
+    @staticmethod
+    def ramen_s3_profile_name(cluster_name):
+        """
+        Name of the Ramen s3 store profile belonging to a managed cluster.
+
+        Args:
+            cluster_name (str): managed cluster name
+
+        Returns:
+            str: the s3 profile name
+
+        """
+        return f"s3profile-{cluster_name}"
+
+    def create_ramen_s3_secrets(self, profiles, access_key, secret_key):
+        """
+        Create the S3 secrets referenced by the Ramen s3StoreProfiles, on the
+        ACM hub(s) and on every managed cluster.
+
+        Args:
+            profiles (list): s3StoreProfiles entries, as built by
+                configure_ramen_s3_store_profiles()
+            access_key (str): S3 access key
+            secret_key (str): S3 secret key
+
+        """
+        old_index = config.cur_index
+        indexes = get_all_acm_indexes() + [
+            cluster.MULTICLUSTER["multicluster_index"]
+            for cluster in get_non_acm_cluster_config()
+        ]
+        try:
+            for index in indexes:
+                config.switch_ctx(index)
+                for profile in profiles:
+                    secret_name = profile["s3SecretRef"]["name"]
+                    namespace = profile["s3SecretRef"]["namespace"]
+                    secret_ocp = ocp.OCP(kind=constants.SECRET, namespace=namespace)
+                    if secret_ocp.is_exist(resource_name=secret_name):
+                        logger.info(
+                            f"Secret '{secret_name}' already exists in "
+                            f"{namespace} on {config.ENV_DATA['cluster_name']}"
+                        )
+                        continue
+                    exec_cmd(
+                        f"oc create secret generic {secret_name} -n {namespace} "
+                        f"--from-literal=AWS_ACCESS_KEY_ID={access_key} "
+                        f"--from-literal=AWS_SECRET_ACCESS_KEY={secret_key}",
+                        secrets=[access_key, secret_key],
+                    )
+                    logger.info(f"Created secret '{secret_name}' in {namespace}")
+        finally:
+            config.switch_ctx(old_index)
+
     @retry(
         (
             TimeoutExpiredError,
@@ -5439,6 +5737,17 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         super().__init__()
 
     def deploy(self):
+        # Fusion Access replicates at the SAN layer rather than through Ceph, so the
+        # Ceph-specific parts of the MDR flow do not apply to it.
+        fusion_access = config.DEPLOYMENT.get("fusion_access")
+
+        # Every cluster in the DR setup has to trust the others' ingress CA,
+        # Ramen and the ACM agents talk to each other over those endpoints.
+        # This patches the cluster wide proxy trustedCA and therefore rolls
+        # every node, so it is done first rather than in the middle of the flow.
+        if not config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+            create_ingress_cert_dr()
+
         # We need multicluster orchestrator on both the active/passive ACM clusters
         acm_indexes = get_all_acm_indexes()
         for i in acm_indexes:
@@ -5447,13 +5756,37 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             # Enable MCO console plugin
             enable_mco_console_plugin()
         # Configure mirror peer
-        self.configure_mirror_peer()
+        if fusion_access:
+            logger.info(
+                "Fusion Access deployment, skipping MirrorPeer: mirroring is "
+                "handled by the SAN, not by Ceph RBD"
+            )
+            # No ODF on the managed clusters means no NooBaa and therefore no
+            # Multicluster Orchestrator provisioned metadata buckets, so the
+            # Ramen s3 store has to be set up before the DRPolicy is created.
+            config.switch_ctx(get_active_acm_index())
+            self.configure_ramen_s3_store_profiles()
+        else:
+            self.configure_mirror_peer()
         self.apply_custom_ramen_image()
         # Deploy dr policy
         self.deploy_dr_policy()
-        update_volsync_channel()
+        if fusion_access:
+            # Ramen sets volSyncDisabled itself once it sees both DRClusters in
+            # one region, and a SAN replicated deployment has nothing for
+            # VolSync to do anyway, so the operator is never installed and
+            # there is no volsync ManagedClusterAddOn to retune.
+            logger.info("Fusion Access deployment, skipping VolSync channel update")
+        else:
+            update_volsync_channel()
         # Configure DRClusters for fencing automation
-        configure_drcluster_for_fencing()
+        if fusion_access:
+            logger.info(
+                "Fusion Access deployment, skipping DRCluster fencing configuration: "
+                "there is no Ceph cluster to fence"
+            )
+        else:
+            configure_drcluster_for_fencing()
 
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
@@ -5492,15 +5825,23 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Only on the active hub enable managedserviceaccount-preview
         config.switch_acm_ctx()
         acm_version = get_acm_version()
-        logger.info("Getting S3 Secret name from Ramen Config")
-        secret_names = self.meta_obj.get_s3_secret_names()
-        for secret_name in secret_names:
-            logger.info(f"Validation Policy for resource v{secret_name}")
-            self.validate_policy_compliance_status(
-                resource_name=f"v{secret_name}",
-                resource_namespace=constants.OPENSHIFT_OPERATORS,
-                compliance_state=constants.ACM_POLICY_COMPLIANT,
+        if fusion_access:
+            # The s3 secrets were created directly by
+            # configure_ramen_s3_store_profiles(), there is no Multicluster
+            # Orchestrator policy distributing them to validate against.
+            logger.info(
+                "Fusion Access deployment, skipping S3 secret policy compliance check"
             )
+        else:
+            logger.info("Getting S3 Secret name from Ramen Config")
+            secret_names = self.meta_obj.get_s3_secret_names()
+            for secret_name in secret_names:
+                logger.info(f"Validation Policy for resource v{secret_name}")
+                self.validate_policy_compliance_status(
+                    resource_name=f"v{secret_name}",
+                    resource_namespace=constants.OPENSHIFT_OPERATORS,
+                    compliance_state=constants.ACM_POLICY_COMPLIANT,
+                )
         if version.compare_versions(f"{acm_version} >= 2.10"):
             logger.info("Skipping Enabling Managed ServiceAccount")
         else:
