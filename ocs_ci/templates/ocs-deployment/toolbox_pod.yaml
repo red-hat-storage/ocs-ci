@@ -31,12 +31,17 @@ spec:
         imagePullPolicy: IfNotPresent
         env:
           - name: ROOK_CEPH_USERNAME
-            value: client.admin
+            valueFrom:
+              secretKeyRef:
+                name: rook-ceph-operator-creds
+                key: userID
           - name: ROOK_CEPH_SECRET
             valueFrom:
               secretKeyRef:
-                name: rook-ceph-mon
-                key: ceph-secret
+                name: rook-ceph-operator-creds
+                key: userKey
+          - name: CEPH_ARGS
+            value: "--name $(ROOK_CEPH_USERNAME)"
         securityContext:
           privileged: true
         volumeMounts:
@@ -48,6 +53,9 @@ spec:
             name: libmodules
           - name: mon-endpoint-volume
             mountPath: /etc/rook
+          - mountPath: /var/lib/rook-ceph-mon
+            name: operator-creds
+            readOnly: true
       # if hostNetwork: false, the "rbd map" command hangs, see https://github.com/rook/rook/issues/2021
       hostNetwork: true
       volumes:
@@ -66,3 +74,9 @@ spec:
             items:
             - key: data
               path: mon-endpoints
+        - name: operator-creds
+          secret:
+            secretName: rook-ceph-operator-creds
+            items:
+            - key: userKey
+              path: secret.keyring
