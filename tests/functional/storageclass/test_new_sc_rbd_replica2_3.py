@@ -6,6 +6,7 @@ from ocs_ci.framework.testlib import ManageTest, tier1, tier2
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ocs_version,
+    skipif_stretch_cluster,
     green_squad,
     ec_allowed,
 )
@@ -23,6 +24,7 @@ log = logging.getLogger(__name__)
 @green_squad
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
+@skipif_stretch_cluster
 class TestCreateNewScWithNeWRbDPool(ManageTest):
     """
     Create a new  Storage Class on a new rbd pool with
