@@ -116,6 +116,7 @@ class PlatformNodesFactory:
             "baremetal_ai": IBMCloudBMNodes,
             "ibm_hci_ipi": IBMHCINode,
             "ibm_hci_agent": IBMHCIAgentNode,
+            "ibm_vpc_bm": IBMCloudVPCBMNodes,
         }
 
     def get_nodes_platform(self):
@@ -153,7 +154,13 @@ class PlatformNodesFactory:
 
         if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "ai":
-                platform += "_ai"
+                if (
+                    config.ENV_DATA.get("infra_type", constants.CLASSIC_INFRA_TYPE)
+                    == constants.VPC_INFRA_TYPE
+                ):
+                    platform = "ibm_vpc_bm"
+                else:
+                    platform += "_ai"
         if config.ENV_DATA[
             "platform"
         ] == constants.IBM_HCI_PLATFORM and get_client_type_by_name(
@@ -3430,6 +3437,187 @@ class IBMCloudBMNodes(NodesBase):
 
         """
         raise NotImplementedError("terminate nodes functionality is not implemented")
+
+
+class IBMCloudVPCBMNodes(NodesBase):
+    """
+    IBM Cloud VPC Bare Metal Nodes class
+    """
+
+    def __init__(self):
+        super(IBMCloudVPCBMNodes, self).__init__()
+        from ocs_ci.utility import ibmcloud_bm
+
+        # Get pool tag and region from config
+        pool_tag = config.ENV_DATA.get("baremetal", {}).get(
+            "pool_tag", "odf-qe-reserved-pool"
+        )
+        region = config.ENV_DATA.get("region", "us-south")
+
+        self.ibmcloud_vpc_bm = ibmcloud_bm.IBMCloudVPCBM(
+            region=region, pool_tag=pool_tag
+        )
+        self.cluster_name = config.ENV_DATA.get("cluster_name")
+
+    def get_server_ids_from_nodes(self, nodes):
+        """
+        Extract VPC BM server IDs from node objects
+
+        Args:
+            nodes (list): OCS node objects
+
+        Returns:
+            list: List of (node, server_id) tuples
+        """
+        server_mapping = []
+        srv_details = config.ENV_DATA.get("baremetal", {}).get("servers", {})
+
+        for node in nodes:
+            node_name = node.name
+
+            # Find matching server config by comparing hostnames (prevents master-1 matching master-10)
+            server_id = None
+            for srv_fqdn, details in srv_details.items():
+                # Extract hostname from both sides (handles hostname or FQDN on either side)
+                # e.g., "master-1.example.com" -> "master-1", "master-1" -> "master-1"
+                hostname_from_srv = srv_fqdn.split(".")[0]
+                hostname_from_node = node_name.split(".")[0]
+
+                if hostname_from_node == hostname_from_srv:
+                    server_id = details.get("server_id")
+                    break
+
+            if not server_id:
+                raise ValueError(f"No server_id found in config for node {node_name}")
+
+            server_mapping.append((node, server_id))
+
+        return server_mapping
+
+    def stop_nodes(self, nodes, wait=True, force=True):
+        """
+        Stop VPC BM nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for nodes to be NotReady
+            force (bool): If True, use hard stop. Otherwise soft stop.
+        """
+        server_mapping = self.get_server_ids_from_nodes(nodes)
+        stop_type = "hard" if force else "soft"
+
+        for node, server_id in server_mapping:
+            logger.info(
+                f"Stopping VPC BM server {server_id} for node {node.name} ({stop_type})"
+            )
+            self.ibmcloud_vpc_bm.stop_server(server_id, stop_type=stop_type)
+
+        if wait:
+            # Wait for cloud-side server stopped status
+            for node, server_id in server_mapping:
+                logger.info(
+                    f"Waiting for VPC BM server {server_id} ({node.name}) to reach stopped status"
+                )
+                self.ibmcloud_vpc_bm.wait_for_server_status(
+                    server_id, "stopped", timeout=600
+                )
+
+            node_names = [n.name for n in nodes]
+            try:
+                wait_for_nodes_status(
+                    node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
+                )
+            except CommandFailed as err:
+                if "Unable to connect to the server" in str(err):
+                    logger.info(
+                        "Unable to connect to server after stopping nodes. "
+                        "This is expected when all nodes are stopped."
+                    )
+                else:
+                    raise
+
+    def start_nodes(self, nodes, wait=True):
+        """
+        Start VPC BM nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for nodes to be Ready
+        """
+        server_mapping = self.get_server_ids_from_nodes(nodes)
+
+        for node, server_id in server_mapping:
+            logger.info(f"Starting VPC BM server {server_id} for node {node.name}")
+            self.ibmcloud_vpc_bm.start_server(server_id)
+
+        if wait:
+            node_names = [n.name for n in nodes]
+            wait_for_nodes_status(
+                node_names, constants.NODE_READY, timeout=720, sleep=20
+            )
+
+    def restart_nodes(self, nodes, wait=True, force=False):
+        """
+        Restart VPC BM nodes by stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for nodes to be ready
+            force (bool): If True, use hard stop. Otherwise soft stop.
+        """
+        self.stop_nodes(nodes, wait=True, force=force)
+        self.start_nodes(nodes, wait=wait)
+
+    def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=False):
+        """
+        Restart nodes by stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for nodes to be ready
+            force (bool): If True, use hard stop. Otherwise soft stop.
+        """
+        return self.restart_nodes(nodes, wait=wait, force=force)
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Start any nodes in NotReady state (recovery method).
+        Falls back to cloud-side status check if the cluster API is unreachable.
+        """
+        from ocs_ci.ocs.node import get_nodes_in_statuses
+
+        nodes_not_ready = None
+        try:
+            nodes_not_ready = get_nodes_in_statuses([constants.NODE_NOT_READY])
+        except Exception as e:
+            logger.warning(
+                f"Failed to query node status via cluster API: {e}. Falling back to cloud-side server check."
+            )
+
+        if nodes_not_ready:
+            logger.info(f"Starting {len(nodes_not_ready)} NotReady nodes")
+            self.start_nodes(nodes_not_ready, wait=True)
+        elif nodes_not_ready is None:
+            # Cloud-side recovery: check all configured servers and start any that are stopped
+            srv_details = config.ENV_DATA.get("baremetal", {}).get("servers", {})
+            for srv_name, srv_conf in srv_details.items():
+                server_id = srv_conf.get("server_id")
+                if server_id:
+                    try:
+                        status = self.ibmcloud_vpc_bm.get_server_status(server_id).get(
+                            "status"
+                        )
+                        if status != "running":
+                            logger.info(
+                                f"Teardown recovery: starting server {srv_name} ({server_id}) in status {status}"
+                            )
+                            self.ibmcloud_vpc_bm.start_server(server_id)
+                    except Exception as err:
+                        logger.warning(
+                            f"Failed to check/start server {srv_name} ({server_id}): {err}"
+                        )
+        else:
+            logger.info("All nodes are already ready")
 
 
 class KubevirtVMNodes(NodesBase):
