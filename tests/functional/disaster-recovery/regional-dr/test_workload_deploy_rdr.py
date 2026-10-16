@@ -476,7 +476,9 @@ class TestWorkloadDeployRDR:
                     lambda w=wl, idx=primary_cluster_index: (
                         config.switch_ctx(idx),
                         dr_helpers.wait_for_all_resources_deletion(
-                            w.workload_namespace
+                            w.workload_namespace,
+                            discovered_apps=True,
+                            vrg_name=w.discovered_apps_placement_name,
                         ),
                     ),
                     f"DA:{wl.workload_namespace}",
@@ -650,7 +652,9 @@ class TestWorkloadDeployRDR:
                     lambda w=wl, idx=secondary_cluster_index: (
                         config.switch_ctx(idx),
                         dr_helpers.wait_for_all_resources_deletion(
-                            w.workload_namespace
+                            w.workload_namespace,
+                            discovered_apps=True,
+                            vrg_name=w.discovered_apps_placement_name,
                         ),
                     ),
                     f"DA:{wl.workload_namespace}",
