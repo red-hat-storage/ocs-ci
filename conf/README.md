@@ -201,6 +201,11 @@ version.
 * `fusion_access_deployment` - Enable IBM Fusion Access for SAN operator deployment after OCP is deployed. When `true`, the `openshift-fusion-access-operator` is installed from the `certified-operators` CatalogSource. (Default: false). Use with `conf/ocsci/fusion_access_deployment.yaml`.
 * `fusion_access_channel` - Subscription channel for the Fusion Access operator. (Default: `"stable-v1"`)
 * `fusion_access_skip_cr` - When `true`, skip creation of the `FusionAccess` CR after the operator CSV reaches `Succeeded`. Useful when the CR is managed externally or created manually. (Default: false)
+* `csv_change_from` - Container image(s) to replace in the ClusterServiceVersion (CSV). Can be a string for single image or list for multiple images. Supports two modes:
+  - **Pattern-based** (recommended): Specify only the base image path without tag or SHA (e.g., `"registry.redhat.io/odf4/ocs-rhel9-operator"`). This will replace ALL occurrences of that image regardless of tag or SHA digest. Useful when testing custom builds without needing to look up exact SHAs.
+  - **Exact replacement**: Include the full image with `@sha256:...` or `:tag` for precise matching (backward compatible with old behavior).
+  Must be used together with `csv_change_to`. Lists are zipped together for multiple replacements.
+* `csv_change_to` - Replacement container image(s) for the CSV. Can be a string or list (must match the type of `csv_change_from`). Specify the complete image reference including tag or digest (e.g., `"quay.io/myrepo/ocs-operator:PR-12345"` or `"quay.io/myrepo/ocs-operator@sha256:abc123..."`). See `docs/csv_image_modification_examples.md` for detailed examples and use cases.
 
 #### REPORTING
 
