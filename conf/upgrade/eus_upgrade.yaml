@@ -1,3 +1,6 @@
+REPORTING:
+  polarion:
+    upgrade_id: 'OCS-8296'
 UPGRADE:
   eus_upgrade: true
   eus_max_ocp_version_override: "4.22"
