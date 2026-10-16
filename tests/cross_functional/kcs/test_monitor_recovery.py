@@ -40,6 +40,7 @@ from ocs_ci.ocs.resources.pod import (
     cal_md5sum,
     get_pods_having_label,
 )
+from ocs_ci.ocs.resources.events import filter_events_by_age
 from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
 from ocs_ci.helpers.helpers import wait_for_resource_state, get_secret_names
 from ocs_ci.utility.retry import retry
@@ -70,6 +71,7 @@ MULTI_ATTACH_PATTERNS = [
 
 _node_restart_tracker = {}
 NODE_RESTART_COOLDOWN = 300
+MULTI_ATTACH_RECOVERY_POLL_TIMEOUT = 60
 
 
 @magenta_squad
@@ -114,12 +116,12 @@ class TestMonitorRecovery(E2ETest):
                 namespace = dc_pod.namespace
 
                 try:
-                    logger.info(f"Deleting deployment: {pod_label}")
+                    logger.debug(f"Deleting deployment: {pod_label}")
                     deploy_ocp = ocp.OCP(kind="Deployment", namespace=namespace)
                     deploy_ocp.delete(resource_name=pod_label)
                     deploy_ocp.wait_for_delete(resource_name=pod_label)
-                except Exception as e:
-                    logger.warning(f"Failed to delete deployment {pod_label}: {e}")
+                except Exception:
+                    logger.exception(f"Failed to delete deployment {pod_label}")
 
                 try:
                     pod_ocp = ocp.OCP(kind="Pod", namespace=namespace)
@@ -139,22 +141,21 @@ class TestMonitorRecovery(E2ETest):
                             pod_names_to_wait.append(pod_name)
                         except Exception as pod_e:
                             if "NotFound" not in str(pod_e):
-                                logger.warning(
-                                    f"Could not force-delete pod {pod_name}: {pod_e}"
+                                logger.exception(
+                                    f"Could not force-delete pod {pod_name}"
                                 )
                     for pod_name in pod_names_to_wait:
-                        logger.info(f"Waiting for pod {pod_name} to terminate")
+                        logger.debug(f"Waiting for pod {pod_name} to terminate")
                         try:
                             pod_ocp.wait_for_delete(resource_name=pod_name, timeout=120)
-                            logger.info(f"Pod {pod_name} terminated")
-                        except Exception as wait_e:
-                            logger.warning(
-                                f"Pod {pod_name} did not terminate within 120s: "
-                                f"{wait_e} — continuing anyway"
+                            logger.debug(f"Pod {pod_name} terminated")
+                        except Exception:
+                            logger.exception(
+                                f"Pod {pod_name} did not terminate within 120s, continuing anyway"
                             )
-                except Exception as e:
-                    logger.warning(
-                        f"Error force-deleting pods for label name={pod_label}: {e}"
+                except Exception:
+                    logger.exception(
+                        f"Error force-deleting pods for label name={pod_label}"
                     )
 
                 # Clean up any stale VolumeAttachments for this pod's PVC.
@@ -163,20 +164,19 @@ class TestMonitorRecovery(E2ETest):
                     if pvc_obj:
                         pv_name = pvc_obj.backed_pv_obj.name
                         _delete_volume_attachments_for_pv(pv_name)
-                except Exception as e:
-                    logger.warning(
-                        f"Teardown: could not clean VolumeAttachments for "
-                        f"{dc_pod.name}: {e}"
+                except Exception:
+                    logger.exception(
+                        f"Teardown: could not clean VolumeAttachments for {dc_pod.name}"
                     )
 
             try:
-                logger.info("Teardown: archiving ceph crash warnings")
+                logger.debug("Teardown: archiving ceph crash warnings")
                 get_ceph_tools_pod().exec_ceph_cmd(
                     ceph_cmd="ceph crash archive-all", format=None
                 )
-                logger.info("Teardown: ceph crashes archived")
-            except Exception as e:
-                logger.warning(f"Teardown: failed to archive ceph crashes: {e}")
+                logger.debug("Teardown: ceph crashes archived")
+            except Exception:
+                logger.exception("Teardown: failed to archive ceph crashes")
 
         request.addfinalizer(finalizer)
 
@@ -200,7 +200,7 @@ class TestMonitorRecovery(E2ETest):
                 access_mode=constants.ACCESS_MODE_RWX,
             )
         )
-        logger.info(f"Created {len(self.dc_pods)} deployment pods")
+        logger.debug(f"Created {len(self.dc_pods)} deployment pods")
 
         logger.test_step("Write test data and calculate checksums")
         self.md5sum = []
@@ -208,12 +208,11 @@ class TestMonitorRecovery(E2ETest):
             pod_obj.exec_cmd_on_pod(command=self.dd_cmd)
             checksum = cal_md5sum(pod_obj, self.filename)
             self.md5sum.append(checksum)
-            logger.info(f"Pod {pod_obj.name}: checksum={checksum}")
-        logger.info(f"Checksums before recovery: {self.md5sum}")
+            logger.debug(f"Pod {pod_obj.name}: checksum={checksum}")
+        logger.info(f"Calculated checksums for {len(self.md5sum)} pods before recovery")
 
         logger.test_step("Create test bucket and upload object")
         self.bucket_name = bucket_factory(interface="OC")[0].name
-        logger.info(f"Created bucket: {self.bucket_name}")
         logger.assertion(
             f"S3 PutObject: bucket={self.bucket_name}, key={self.object_key}"
         )
@@ -325,13 +324,8 @@ class TestMonitorRecovery(E2ETest):
 
         logger.test_step("Recover CephFS filesystem")
         mon_recovery.scale_rook_ocs_operators(replica=0)
-        logger.info(
-            "Patching MDS deployments to remove LivenessProbe and sleep to infinity"
-        )
         mon_recovery.patch_sleep_on_mds()
-        logger.info("Resetting CephFS")
         ceph_fs_recovery()
-        logger.info("Scaling back rook and ocs operators after CephFS recovery")
         mon_recovery.scale_rook_ocs_operators(replica=1)
 
         logger.test_step("Recover MCG by re-spinning noobaa pods")
@@ -339,14 +333,14 @@ class TestMonitorRecovery(E2ETest):
 
         logger.test_step("Verify data integrity after recovery")
 
-        logger.info("Force deleting original dc pods to trigger re-spawn")
+        logger.debug("Force deleting original dc pods to trigger re-spawn")
         for pod_obj in self.dc_pods:
             logger.debug(f"Force deleting pod: {pod_obj.name}")
             try:
                 pod_obj.delete(force=True)
             except Exception as e:
                 if "NotFound" in str(e):
-                    logger.info(
+                    logger.debug(
                         f"Pod {pod_obj.name} already gone (replaced during recovery), "
                         "skipping delete"
                     )
@@ -362,17 +356,14 @@ class TestMonitorRecovery(E2ETest):
             )
             checksum = cal_md5sum(pod_obj, self.filename)
             new_md5_sum.append(checksum)
-            logger.info(f"Pod {pod_obj.name}: checksum={checksum}")
+            logger.debug(f"Pod {pod_obj.name}: checksum={checksum}")
 
-        logger.info(f"Checksums after recovery: {new_md5_sum}")
         logger.assertion(
             f"Data integrity check: original={self.md5sum}, "
             f"after_recovery={new_md5_sum}, "
             f"match={collections.Counter(new_md5_sum) == collections.Counter(self.md5sum)}"
         )
-        if collections.Counter(new_md5_sum) == collections.Counter(self.md5sum):
-            logger.info(f"Data integrity verified: checksums match for {self.filename}")
-        else:
+        if collections.Counter(new_md5_sum) != collections.Counter(self.md5sum):
             pytest.fail(
                 f"Data corruption detected: before={self.md5sum}, after={new_md5_sum}"
             )
@@ -386,10 +377,8 @@ class TestMonitorRecovery(E2ETest):
             bucketname=self.bucket_name,
             object_key=self.object_key,
         ), "Failed: GetObject"
-        logger.info("S3 object retrieved successfully after recovery")
 
         logger.test_step("Create new resources to verify cluster functionality")
-        logger.info("Creating new deployment pods with PVCs")
         new_dc_pods = [
             deployment_pod_factory(
                 interface=constants.CEPHBLOCKPOOL,
@@ -399,13 +388,9 @@ class TestMonitorRecovery(E2ETest):
             ),
         ]
         for pod_obj in new_dc_pods:
-            logger.debug(f"Writing test data to pod: {pod_obj.name}")
             pod_obj.exec_cmd_on_pod(command=self.dd_cmd)
-        logger.info(
-            f"Successfully created and wrote data to {len(new_dc_pods)} new pods"
-        )
+        logger.info(f"Created and wrote data to {len(new_dc_pods)} new pods")
 
-        logger.info("Creating new bucket and uploading object")
         new_bucket = bucket_factory(interface="OC")[0].name
         logger.assertion(
             f"S3 PutObject to new bucket: bucket={new_bucket}, key={self.object_key}"
@@ -416,21 +401,15 @@ class TestMonitorRecovery(E2ETest):
             object_key=self.object_key,
             data=self.object_data,
         ), "Failed: PutObject to new bucket"
-        logger.info(
-            f"Successfully created new bucket and uploaded object: {new_bucket}"
-        )
 
         logger.test_step("Verify all storage pods are running")
         wait_for_storage_pods()
 
         logger.test_step("Archive ceph crash warnings and run health check")
-        logger.info("Archiving ceph crash warnings")
         tool_pod = get_ceph_tools_pod()
         tool_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all", format=None)
 
-        logger.info("Running cluster health check")
         self.sanity_helpers.health_check(tries=10)
-        logger.info("Cluster health check passed")
 
 
 class MonitorRecovery(object):
@@ -459,12 +438,12 @@ class MonitorRecovery(object):
             replica (int): replica count
 
         """
-        logger.info(f"Scaling rook-ceph-operator to {replica} replica(s)")
+        logger.debug(f"Scaling rook-ceph-operator to {replica} replica(s)")
         self.dep_ocp.exec_oc_cmd(
             f"scale deployment {constants.ROOK_CEPH_OPERATOR} --replicas={replica}"
         )
 
-        logger.info(f"Scaling ocs-operator to {replica} replica(s)")
+        logger.debug(f"Scaling ocs-operator to {replica} replica(s)")
         self.dep_ocp.exec_oc_cmd(
             f"scale deployment {defaults.OCS_OPERATOR_NAME} --replicas={replica}"
         )
@@ -474,7 +453,7 @@ class MonitorRecovery(object):
                 "Waiting 150s for operators to stabilize and cluster to reconcile"
             )
             time.sleep(150)
-        logger.info(f"Operator scaling to {replica} replica(s) completed")
+        logger.info(f"Scaled operators to {replica} replica(s)")
 
     def patch_sleep_on_osds(self):
         """
@@ -1111,11 +1090,10 @@ def corrupt_ceph_monitors():
 
     for mon in mon_pods:
         mon_id = mon.get().get("metadata").get("labels").get("ceph_daemon_id")
-        logger.info(f"Corrupting monitor pod: {mon.name} (mon-{mon_id})")
+        logger.debug(f"Corrupting monitor pod: {mon.name} (mon-{mon_id})")
         _exec_cmd_on_pod(
             cmd=f"rm -rf /var/lib/ceph/mon/ceph-{mon_id}/store.db", pod_obj=mon
         )
-        logger.debug(f"Deleted store.db from monitor: {mon.name}")
 
         try:
             logger.debug(f"Waiting for {mon.name} to reach CrashLoopBackOff state")
@@ -1131,14 +1109,12 @@ def corrupt_ceph_monitors():
                 )
                 mon.delete()
 
-    logger.info("Validating all monitors are in CrashLoopBackOff state")
+    logger.debug("Validating all monitors are in CrashLoopBackOff state")
     corrupted_mons = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
     for mon in corrupted_mons:
         logger.debug(f"Verifying monitor {mon.name} is in CLBO state")
         wait_for_resource_state(resource=mon, state=constants.STATUS_CLBO)
-    logger.info(
-        f"All {len(corrupted_mons)} monitors successfully corrupted and in CLBO state"
-    )
+    logger.info(f"All {len(corrupted_mons)} monitors corrupted and in CLBO state")
 
 
 def _pod_name_prefix(pod_name):
@@ -1287,11 +1263,69 @@ def _wait_for_replacement_pod(pod_obj, timeout, namespace, max_attempts=3):
     return False, deleted_name
 
 
+def _wait_for_recovery_progress(pod_obj, timeout=60):
+    """
+    Wait for observable recovery progress after Multi-Attach cleanup.
+
+    Args:
+        pod_obj: Pod object to check
+        timeout (int): Maximum time to wait for progress (default: 60s)
+
+    Returns:
+        bool: True if pod shows progress (Running or events age out), False if stuck
+    """
+    logger.debug(
+        f"Polling pod {pod_obj.name} for recovery progress (timeout: {timeout}s)..."
+    )
+    start_time = time.time()
+    last_event_check = 0
+    check_interval = 10
+
+    while time.time() - start_time < timeout:
+        try:
+            pod_data = pod_obj.get()
+            phase = pod_data.get("status", {}).get("phase")
+
+            if phase == constants.STATUS_RUNNING:
+                logger.info(
+                    f"Pod {pod_obj.name} reached Running state during recovery poll"
+                )
+                return True
+
+            # Check if Multi-Attach events are still recent
+            elapsed = time.time() - start_time
+            if elapsed - last_event_check >= check_interval:
+                has_ma, _, _, _ = _classify_pod_errors(pod_obj)
+                if not has_ma:
+                    logger.info(
+                        f"Pod {pod_obj.name}: Multi-Attach error no longer detected "
+                        f"in recent events after {int(elapsed)}s"
+                    )
+                    return True
+                logger.debug(
+                    f"Pod {pod_obj.name} still has recent Multi-Attach events "
+                    f"after {int(elapsed)}s, continuing to poll..."
+                )
+                last_event_check = elapsed
+
+            time.sleep(5)
+        except Exception as e:
+            logger.debug(f"Error polling pod {pod_obj.name}: {e}")
+            time.sleep(5)
+
+    logger.warning(
+        f"Pod {pod_obj.name} did not show recovery progress within {timeout}s"
+    )
+    return False
+
+
 def _classify_pod_errors(pod_obj):
     """
     Run ``oc describe pod`` and classify which error types are present in the
-    Events section.  Returns a 4-tuple:
-    ``(has_multi_attach, has_sandbox, has_rwop, events_text)``.
+    Events section. Only considers recent events (last 3 minutes) to avoid
+    detecting stale errors that have already been resolved.
+
+    Returns a 4-tuple: ``(has_multi_attach, has_sandbox, has_rwop, events_text)``.
 
     """
     logger.debug(f"Classifying pod errors for: {pod_obj.name}")
@@ -1303,14 +1337,20 @@ def _classify_pod_errors(pod_obj):
         logger.exception(f"Failed to describe pod {pod_obj.name}")
         return False, False, False, ""
 
-    has_multi_attach = any(p in describe_out for p in MULTI_ATTACH_PATTERNS)
-    has_sandbox = any(p in describe_out for p in SANDBOX_ERROR_PATTERNS)
-    has_rwop = any(p in describe_out for p in RWOP_ERROR_PATTERNS)
-
+    # Extract events section
     events_idx = describe_out.find("\nEvents:")
     events_text = (
         describe_out[events_idx:].strip() if events_idx != -1 else describe_out[-2000:]
     )
+
+    # Filter to only recent events (last 3 minutes) to avoid stale error detection
+    recent_events = filter_events_by_age(events_text, max_age_seconds=180)
+
+    # Check for error patterns only in recent events
+    has_multi_attach = any(p in recent_events for p in MULTI_ATTACH_PATTERNS)
+    has_sandbox = any(p in recent_events for p in SANDBOX_ERROR_PATTERNS)
+    has_rwop = any(p in recent_events for p in RWOP_ERROR_PATTERNS)
+
     return has_multi_attach, has_sandbox, has_rwop, events_text
 
 
@@ -1377,15 +1417,30 @@ def check_and_recover_sandbox_errors(
         )
 
         if has_multi_attach:
+            if _attempt >= max_recovery_attempts:
+                logger.error(
+                    f"Pod {pod_name} still has Multi-Attach error after "
+                    f"{max_recovery_attempts} recovery attempts, giving up"
+                )
+                return False
             logger.warning(
                 f"Pod {pod_name} has Multi-Attach error — resolving via "
-                "VolumeAttachment cleanup (no node restart)"
+                f"VolumeAttachment cleanup (attempt {_attempt + 1}/{max_recovery_attempts})"
             )
             logger.warning(f"Pod {pod_name} events:\n{events_text}")
             handle_multi_attach_error(pod_obj, timeout=30)
-            return check_and_recover_sandbox_errors(
-                pod_obj, 600, max_recovery_attempts, _attempt, _session_start
+            progress_seen = _wait_for_recovery_progress(
+                pod_obj, timeout=MULTI_ATTACH_RECOVERY_POLL_TIMEOUT
             )
+            if progress_seen:
+                return check_and_recover_sandbox_errors(
+                    pod_obj, 600, max_recovery_attempts, _attempt + 1, _session_start
+                )
+            else:
+                logger.warning(
+                    f"Pod {pod_name}: No recovery progress observed after "
+                    f"{MULTI_ATTACH_RECOVERY_POLL_TIMEOUT}s, continuing to monitor..."
+                )
 
         if has_sandbox or has_rwop:
             error_type = (
@@ -1483,19 +1538,36 @@ def check_and_recover_sandbox_errors(
                     has_ma, has_sb, has_rw, events_text = _classify_pod_errors(pod_obj)
 
                     if has_ma:
+                        if _attempt >= max_recovery_attempts:
+                            logger.error(
+                                f"Pod {pod_name} still has Multi-Attach error after "
+                                f"{max_recovery_attempts} recovery attempts, giving up"
+                            )
+                            return False
                         logger.warning(
                             f"Multi-Attach error detected during monitoring for pod "
-                            f"{pod_name} — resolving via VolumeAttachment cleanup"
+                            f"{pod_name} — resolving via VolumeAttachment cleanup "
+                            f"(attempt {_attempt + 1}/{max_recovery_attempts})"
                         )
                         logger.warning(f"Pod {pod_name} events:\n{events_text}")
                         handle_multi_attach_error(pod_obj, timeout=30)
-                        return check_and_recover_sandbox_errors(
-                            pod_obj,
-                            600,
-                            max_recovery_attempts,
-                            _attempt,
-                            _session_start,
+                        progress_seen = _wait_for_recovery_progress(
+                            pod_obj, timeout=MULTI_ATTACH_RECOVERY_POLL_TIMEOUT
                         )
+                        if progress_seen:
+                            return check_and_recover_sandbox_errors(
+                                pod_obj,
+                                600,
+                                max_recovery_attempts,
+                                _attempt + 1,
+                                _session_start,
+                            )
+                        else:
+                            logger.warning(
+                                f"Pod {pod_name}: No recovery progress after "
+                                f"{MULTI_ATTACH_RECOVERY_POLL_TIMEOUT}s, continuing to monitor..."
+                            )
+                            last_check = elapsed
 
                     if has_sb or has_rw:
                         if _attempt >= max_recovery_attempts:
@@ -1652,8 +1724,8 @@ def _delete_volume_attachments_for_pv(pv_name):
                 try:
                     va_ocp.delete(resource_name=va_name)
                     deleted_count += 1
-                except Exception as e:
-                    logger.warning(f"Failed to delete VolumeAttachment {va_name}: {e}")
+                except Exception:
+                    logger.exception(f"Failed to delete VolumeAttachment {va_name}")
     except Exception:
         logger.exception(f"Failed to delete VolumeAttachments for PV {pv_name}")
     if deleted_count:
@@ -1685,12 +1757,36 @@ def handle_multi_attach_error(pod_obj, timeout=300):
             f"describe pod {pod_obj.name}", out_yaml_format=False
         )
 
-        if "Multi-Attach error" in pod_describe:
+        # Extract and filter events section to only recent events (< 3 minutes)
+        events_idx = pod_describe.find("\nEvents:")
+        events_text = (
+            pod_describe[events_idx:].strip()
+            if events_idx != -1
+            else pod_describe[-2000:]
+        )
+        recent_events = filter_events_by_age(events_text, max_age_seconds=180)
+
+        has_multi_attach = any(p in recent_events for p in MULTI_ATTACH_PATTERNS)
+
+        if has_multi_attach:
+            pv_name = None
+
+            # Pattern 1: "Multi-Attach error for volume "pvc-...""
             pv_match = re.search(
-                r'Multi-Attach error for volume "([^"]+)"', pod_describe
+                r'Multi-Attach error for volume "([^"]+)"', recent_events
             )
             if pv_match:
                 pv_name = pv_match.group(1)
+            else:
+                # Pattern 2: "for volume "pvc-..." Volume is already exclusively attached"
+                pv_match = re.search(
+                    r'for volume "([^"]+)" Volume is already exclusively attached',
+                    recent_events,
+                )
+                if pv_match:
+                    pv_name = pv_match.group(1)
+
+            if pv_name:
                 logger.info(f"Pod {pod_obj.name}: Multi-Attach error on PV {pv_name}")
                 deleted = _delete_volume_attachments_for_pv(pv_name)
                 if deleted:
@@ -1703,12 +1799,12 @@ def handle_multi_attach_error(pod_obj, timeout=300):
                     )
             else:
                 logger.warning(
-                    f"Pod {pod_obj.name}: Multi-Attach error in describe but "
+                    f"Pod {pod_obj.name}: Multi-Attach error in recent events but "
                     "could not extract PV name"
                 )
         else:
             logger.debug(
-                f"Pod {pod_obj.name}: no Multi-Attach error in describe output"
+                f"Pod {pod_obj.name}: no Multi-Attach error in recent events (< 3min)"
             )
     except Exception:
         logger.exception(f"Error resolving Multi-Attach error for pod {pod_obj.name}")
@@ -1774,20 +1870,15 @@ def recover_mcg():
     Raises:
         ResourceWrongStatusException: If any NooBaa or RGW pods fail to reach running state
     """
-    logger.info("Starting MCG recovery by re-spinning NooBaa pods")
-
     noobaa_pods_before = get_noobaa_pods()
     expected_pod_count = len(noobaa_pods_before)
-    logger.info(
-        f"Found {expected_pod_count} NooBaa pods to respawn: "
-        f"{[p.name for p in noobaa_pods_before]}"
-    )
+    logger.info(f"Re-spinning {expected_pod_count} NooBaa pods")
 
     for noobaa_pod in noobaa_pods_before:
-        logger.info(f"Force deleting NooBaa pod: {noobaa_pod.name}")
+        logger.debug(f"Force deleting NooBaa pod: {noobaa_pod.name}")
         noobaa_pod.delete(force=True)
 
-    logger.info(
+    logger.debug(
         "Waiting for noobaa-operator to appear and reach Running (timeout 600s)"
     )
     operator_pod = _wait_for_noobaa_pod_type(
@@ -1804,9 +1895,8 @@ def recover_mcg():
         raise ResourceWrongStatusException(
             f"noobaa-operator did not reach Running state within 600s: {failed_operator}"
         )
-    logger.info("noobaa-operator is in Running state")
 
-    logger.info(
+    logger.debug(
         "Waiting for cnpg-controller-manager to appear and reach Running (timeout 600s)"
     )
     cnpg_pod = _wait_for_noobaa_pod_type(
@@ -1825,9 +1915,8 @@ def recover_mcg():
         raise ResourceWrongStatusException(
             f"cnpg-controller-manager did not reach Running state within 600s: {failed_cnpg}"
         )
-    logger.info("cnpg-controller-manager is in Running state")
 
-    logger.info(
+    logger.debug(
         "Waiting for noobaa-db-pg-cluster-1 to appear and reach Running (timeout 600s)"
     )
     db_pg_1_pod = _wait_for_noobaa_pod_type(
@@ -1847,9 +1936,8 @@ def recover_mcg():
         raise ResourceWrongStatusException(
             f"noobaa-db-pg-cluster-1 did not reach Running state within 600s: {failed_db1}"
         )
-    logger.info("noobaa-db-pg-cluster-1 is in Running state")
 
-    logger.info(
+    logger.debug(
         f"Waiting for remaining NooBaa pods to appear "
         f"(expected ~{expected_pod_count}, timeout 300s)"
     )
@@ -1861,10 +1949,7 @@ def recover_mcg():
             func=get_noobaa_pods,
         ):
             if len(current_pods) >= expected_pod_count:
-                logger.info(
-                    f"All {len(current_pods)} expected NooBaa pods have appeared: "
-                    f"{[p.name for p in current_pods]}"
-                )
+                logger.debug(f"All {len(current_pods)} expected NooBaa pods appeared")
                 break
             logger.debug(
                 f"Waiting for NooBaa pods: {len(current_pods)}/{expected_pod_count} present"
@@ -1872,14 +1957,11 @@ def recover_mcg():
     except TimeoutExpiredError:
         current_pods = get_noobaa_pods()
         logger.warning(
-            f"Only {len(current_pods)}/{expected_pod_count} NooBaa pods appeared after 300s: "
-            f"{[p.name for p in current_pods]} — proceeding to verify what is present"
+            f"Only {len(current_pods)}/{expected_pod_count} NooBaa pods appeared after 300s, "
+            "proceeding to verify what is present"
         )
 
-    logger.info(
-        f"Verifying {len(current_pods)} NooBaa pods reach Running state: "
-        f"{[p.name for p in current_pods]}"
-    )
+    logger.info(f"Verifying {len(current_pods)} NooBaa pods reach Running state")
     failed_noobaa_pods = verify_pods_running(
         current_pods, pod_type="NooBaa", timeout=600, parallel=False
     )
@@ -1895,24 +1977,22 @@ def recover_mcg():
     logger.info("NooBaa pods recovery completed successfully")
 
     if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
-        logger.info("On-prem platform detected: recovering RGW pods")
+        logger.debug("On-prem platform detected: recovering RGW pods")
 
         rgw_pods_before = get_rgw_pods()
         if not rgw_pods_before:
             logger.debug("No RGW pods found, skipping RGW recovery")
         else:
-            logger.info(f"Found {len(rgw_pods_before)} RGW pods to respawn")
+            logger.info(f"Re-spinning {len(rgw_pods_before)} RGW pods")
 
             for rgw_pod in rgw_pods_before:
-                logger.info(f"Force deleting RGW pod: {rgw_pod.name}")
+                logger.debug(f"Force deleting RGW pod: {rgw_pod.name}")
                 rgw_pod.delete(force=True)
 
-            logger.info("Waiting 120s for RGW pods to fully respawn")
+            logger.debug("Waiting 120s for RGW pods to fully respawn")
             time.sleep(120)
 
             respawned_rgw_pods = get_rgw_pods()
-            logger.info(f"Verifying {len(respawned_rgw_pods)} RGW pods")
-
             failed_rgw_pods = verify_pods_running(
                 respawned_rgw_pods, pod_type="RGW", timeout=600
             )
@@ -1925,9 +2005,7 @@ def recover_mcg():
                 logger.error(error_msg)
                 raise ResourceWrongStatusException(error_msg)
 
-            logger.info(
-                f"RGW pods recovery completed - all {len(respawned_rgw_pods)} pods running"
-            )
+            logger.info(f"All {len(respawned_rgw_pods)} RGW pods running")
     else:
         logger.debug(
             f"Skipping RGW recovery on non-on-prem platform: {config.ENV_DATA['platform']}"
@@ -1949,30 +2027,24 @@ def replace_mds_deployments():
         namespace=defaults.ROOK_CLUSTER_NAMESPACE,
     )
     mds_deployment_names = [d["metadata"]["name"] for d in mds_deployments]
-    logger.info(
-        f"Found {len(mds_deployment_names)} MDS deployments to replace: {mds_deployment_names}"
-    )
+    logger.debug(f"Found {len(mds_deployment_names)} MDS deployments to replace")
 
     with tempfile.TemporaryDirectory() as backup_dir:
-        logger.info(
-            f"Backing up {len(mds_deployment_names)} MDS deployments to temporary directory"
+        logger.debug(
+            f"Backing up {len(mds_deployment_names)} MDS deployments to {backup_dir}"
         )
-        logger.debug(f"Backup directory: {backup_dir}")
 
         for deployment in mds_deployment_names:
-            logger.debug(f"Backing up deployment: {deployment}")
             deployment_get = dep_ocp.get(resource_name=deployment)
             deployment_yaml = join(backup_dir, deployment + ".yaml")
             templating.dump_data_to_temp_yaml(deployment_get, deployment_yaml)
 
-        logger.info(f"Successfully backed up {len(mds_deployment_names)} deployments")
-
-        logger.info(
+        logger.debug(
             f"Replacing {len(mds_deployment_names)} MDS deployments sequentially"
         )
         for idx, deployment in enumerate(mds_deployment_names):
             deployment_yaml = join(backup_dir, deployment + ".yaml")
-            logger.info(
+            logger.debug(
                 f"Replacing MDS deployment {idx + 1}/{len(mds_deployment_names)}: {deployment}"
             )
             exec_cmd(
@@ -1981,15 +2053,13 @@ def replace_mds_deployments():
 
             if idx < len(mds_deployment_names) - 1:
                 wait_time = 120
-                logger.info(
-                    f"Waiting {wait_time}s for {deployment} to complete "
-                    f"before replacing next deployment"
+                logger.debug(
+                    f"Waiting {wait_time}s for {deployment} to stabilize "
+                    "before replacing next deployment"
                 )
                 time.sleep(wait_time)
 
-        logger.info(
-            f"Successfully replaced {len(mds_deployment_names)} MDS deployments"
-        )
+        logger.info(f"Replaced {len(mds_deployment_names)} MDS deployments")
 
 
 def ceph_fs_recovery():
@@ -1997,31 +2067,25 @@ def ceph_fs_recovery():
     Resets the CephFS and replaces MDS deployments
 
     """
-    logger.info(
-        f"Starting CephFS recovery for filesystem: {defaults.CEPHFILESYSTEM_NAME}"
-    )
+    logger.info(f"Resetting CephFS: {defaults.CEPHFILESYSTEM_NAME}")
     toolbox = get_ceph_tools_pod()
     logger.debug(f"Using ceph tools pod: {toolbox.name}")
 
     try:
-        logger.info(f"Attempting to reset CephFS: {defaults.CEPHFILESYSTEM_NAME}")
         toolbox.exec_cmd_on_pod(
             f"ceph fs reset {defaults.CEPHFILESYSTEM_NAME} --yes-i-really-mean-it"
         )
-        logger.info("CephFS reset successful")
     except CommandFailed as e:
-        logger.warning(f"CephFS reset failed, creating new filesystem: {e}")
+        logger.warning(f"CephFS reset failed, attempting to create and reset: {e}")
         try:
-            logger.info(f"Creating new CephFS: {defaults.CEPHFILESYSTEM_NAME}")
+            logger.debug(f"Creating new CephFS: {defaults.CEPHFILESYSTEM_NAME}")
             toolbox.exec_cmd_on_pod(
                 f"ceph fs new {defaults.CEPHFILESYSTEM_NAME} ocs-storagecluster-cephfilesystem-metadata "
                 f"ocs-storagecluster-cephfilesystem-data0 --force"
             )
-            logger.info("New CephFS created, attempting reset again")
             toolbox.exec_cmd_on_pod(
                 f"ceph fs reset {defaults.CEPHFILESYSTEM_NAME} --yes-i-really-mean-it"
             )
-            logger.info("CephFS reset successful after recreation")
         except CommandFailed:
             logger.exception(
                 f"Failed to recover CephFS: {defaults.CEPHFILESYSTEM_NAME}"
