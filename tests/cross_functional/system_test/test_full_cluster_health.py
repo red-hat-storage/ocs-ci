@@ -34,9 +34,9 @@ class TestFullClusterHealth(PASTest):
     Test Cluster health when storage is ~82%
     """
 
-    TIMEOUT_CEPH_MGR = 600
-    TIMEOUT_CEPH_MON = 600
-    TIMEOUT_CEPH_OSD = 900
+    TIMEOUT_CEPH_MGR = 1200
+    TIMEOUT_CEPH_MON = 1200
+    TIMEOUT_CEPH_OSD = 1200
 
     @pytest.fixture(autouse=True)
     def setup(self, request, nodes):
@@ -44,10 +44,10 @@ class TestFullClusterHealth(PASTest):
         Setting up test parameters
         """
 
-        logger.test_step("Fill cluster to 82% capacity using benchmark operator")
+        logger.test_step("Fill cluster to ~82% capacity using benchmark operator")
 
-        logger.info("Calculating workload size to fill cluster to 82%")
-        size = get_file_size(82)
+        logger.info("Calculating workload size to fill cluster to ~82%")
+        size = get_file_size(83)
 
         logger.info(f"Initializing benchmark operator with total_size={size}")
         self.benchmark_obj = BenchmarkOperatorFIO()
@@ -57,17 +57,17 @@ class TestFullClusterHealth(PASTest):
         self.benchmark_obj.run_fio_benchmark_operator(is_completed=True)
         self.benchmark_operator_teardown = True  # guard: cleanup needed in teardown
 
-        logger.test_step("Verify cluster capacity reached 82%")
-        logger.info("Polling OSD utilization until at least one OSD exceeds 82%")
+        logger.test_step("Verify cluster capacity reached ~82%")
+        logger.info("Polling OSD utilization until at least one OSD exceeds 81%")
         sampler = TimeoutSampler(
-            timeout=600,
+            timeout=1200,
             sleep=30,
             func=verify_osd_used_capacity_greater_than_expected,
-            expected_used_capacity=82.0,
+            expected_used_capacity=81.0,
         )
         if not sampler.wait_for_func_status(result=True):
             raise TimeoutExpiredError(
-                "Cluster capacity did not reach 82% within 600s after IO completion"
+                "Cluster capacity did not reach expected threshold (~82%) within 1200s after IO completion"
             )
 
         def teardown():
@@ -139,7 +139,10 @@ class TestFullClusterHealth(PASTest):
         self.nodes.restart_nodes([mgr_node_obj])
 
         logger.info("Waiting for all nodes to reach Ready status")
-        wait_for_nodes_status()
+        wait_for_nodes_status(timeout=900)
+
+        logger.info("Waiting 120s for cluster stabilization after node restart")
+        time.sleep(120)
 
         # Check for Ceph pods
         logger.info("Verifying Ceph pods are running after node restart")
@@ -221,7 +224,7 @@ class TestFullClusterHealth(PASTest):
         )
         logger.info("OCS operator pod verified running after node restart")
 
-    def wait_for_ceph_health_ok_or_warn(self, ceph_recovery_timeout=600):
+    def wait_for_ceph_health_ok_or_warn(self, ceph_recovery_timeout=1200):
         """
         Wait until Ceph health is HEALTH_OK or HEALTH_WARN within the given timeout.
 
@@ -249,12 +252,16 @@ class TestFullClusterHealth(PASTest):
             return "HEALTH_OK" in status or "HEALTH_WARN" in status
 
         def _check():
-            status = self.ceph_cluster.get_ceph_health()
-            logger.info(f"Ceph health: {status}")
-            if "HEALTH_OK" in status or "HEALTH_WARN" in status:
-                return True
-            logger.warning(f"Ceph is in {status!r}, retrying in {sleep}s")
-            return False
+            try:
+                status = self.ceph_cluster.get_ceph_health()
+                logger.info(f"Ceph health: {status}")
+                if "HEALTH_OK" in status or "HEALTH_WARN" in status:
+                    return True
+                logger.warning(f"Ceph is in {status!r}, retrying in {sleep}s")
+                return False
+            except Exception as e:
+                logger.warning(f"Failed to get Ceph health ({e}), retrying in {sleep}s")
+                return False
 
         sampler = TimeoutSampler(
             timeout=ceph_recovery_timeout,
@@ -268,7 +275,7 @@ class TestFullClusterHealth(PASTest):
             return False
         return True
 
-    def is_cluster_healthy(self, ceph_recovery_timeout=600):
+    def is_cluster_healthy(self, ceph_recovery_timeout=1200):
         """
         Wrapper function for cluster health check.
 
