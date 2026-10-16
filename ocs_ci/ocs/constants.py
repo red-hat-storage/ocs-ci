@@ -3981,6 +3981,58 @@ LOGWRITER_CEPHFS_NAME = "logwriter-cephfs"
 LOGWRITER_RBD_NAME = "logwriter-rbd"
 LOGREADER_CEPHFS_NAME = "logreader-cephfs"
 
+# Fusion Access stretch cluster
+# Zone labels used by a Fusion Access stretch cluster. Unlike the ODF arbiter
+# stretch cluster the data zones are not named 'data-1'/'data-2', so the data
+# zones are discovered at runtime and only the arbiter label is fixed here.
+FUSION_ACCESS_ARBITER_ZONE_LABEL = "arbiter"
+
+# Default storage class backed by the IBM Storage Scale (CNSA) filesystem.
+# Overridable through ENV_DATA['fusion_access_storageclass'].
+FUSION_ACCESS_SC = "san-fs1"
+
+# Fusion Access workload templates
+FUSION_ACCESS_WORKLOAD_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fusion_access")
+BUSYBOX_FUSION_PATH = os.path.join(FUSION_ACCESS_WORKLOAD_DIR, "busybox.fusion.yaml")
+FILE_UPLOADER_FUSION_PATH = os.path.join(
+    FUSION_ACCESS_WORKLOAD_DIR, "file-uploader.fusion.yaml"
+)
+
+# Fusion Access workload labels and names
+BUSYBOX_FUSION_LABEL = "workload=busybox-fusion"
+FILE_UPLOADER_FUSION_LABEL = "workload=file-uploader-fusion"
+BUSYBOX_FUSION_NAME = "busybox-fusion"
+FILE_UPLOADER_FUSION_NAME = "file-uploader-fusion"
+
+# File written into every workload volume before a failure is induced, used to
+# assert data integrity once the workloads have moved to the surviving zone
+FUSION_ACCESS_BASELINE_FILE = "zonetest-baseline.txt"
+
+# IBM Storage Scale (CNSA) core pods. There is one per node of the Scale
+# cluster, each named after the node it runs on, and on a container native
+# deployment they are the only place the 'mm' admin commands can be run from
+SCALE_NAMESPACE = "ibm-spectrum-scale"
+SCALE_CORE_POD_LABEL = "app.kubernetes.io/name=core"
+SCALE_CORE_CONTAINER = "gpfs"
+SCALE_MM_BIN_PATH = "/usr/lpp/mmfs/bin"
+
+# GPFS daemon states reported by 'mmgetstate'. A node that is unreachable shows
+# up as 'unknown', one that is reachable but whose daemon has not joined the
+# cluster yet as 'down', and a recovering node passes through both on its way
+# back to 'active'
+SCALE_NODE_STATE_ACTIVE = "active"
+SCALE_NODE_STATE_DOWN = "down"
+SCALE_NODE_STATE_UNKNOWN = "unknown"
+
+# Daemon CR of the Scale cluster and the annotation its Quorum controller keeps
+# the current set of quorum nodes in. The operator moves the quorum role off a
+# node whose daemon goes down and moves it back once the node returns, so this
+# annotation, and not 'mmgetstate', is what tells a test whether a node has
+# really rejoined the quorum
+SCALE_DAEMON_KIND = "Daemon"
+SCALE_DAEMON_NAME = "ibm-spectrum-scale"
+SCALE_QUORUM_NODES_ANNOTATION = "scale.spectrum.ibm.com/quorum-nodes"
+
 # prometheus metrics queries
 PVC_NAMESPACES_BY_USED = (
     "sum by (namespace, persistentvolumeclaim) "
