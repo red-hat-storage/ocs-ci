@@ -219,6 +219,13 @@ ENV_DATA:
   # workload fixture will fail on a timeout)
   # the default value used here is based on observations on aws clusters
   fio_storageutilization_min_mbps: 30.0
+  # maximum amount of data (in GiB) the workload_fio_storageutilization
+  # fixtures are allowed to write when a target utilization percentage is
+  # requested, so that filling the cluster doesn't take too long
+  # the default value keeps the write phase under ~10 minutes assuming a
+  # sustained write speed of at least 85 MiB/s; when more data would have to be
+  # written to reach the target utilization, the test is skipped
+  fio_storageutilization_max_gib: 50
   # terraform environment variables
   TF_LOG_LEVEL: TRACE
   TF_LOG_FILE: "terraform.log"
