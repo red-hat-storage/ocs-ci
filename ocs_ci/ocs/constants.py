@@ -1420,6 +1420,31 @@ RHV_PLATFORM = "rhv"
 ROSA_PLATFORM = "rosa"
 FUSIONAAS_PLATFORM = "fusion_aas"
 ROSA_HCP_PLATFORM = "rosa_hcp"
+IBM_HCI_PLATFORM = "ibm_hci"
+IBM_VPC_BM_PLATFORM = "ibm_vpc_bm"
+IBM_CIS_INSTANCE = "odf-qe-cis"
+IBM_CIS_DOMAIN_ID = "a180c88cc263d58808a739e1fdfc268a"
+ROSA_PLATFORMS = [ROSA_PLATFORM, ROSA_HCP_PLATFORM]
+ROSA_HCP_DS_NAMESPACE = "kube-system"
+ROSA_HCP_DS_LABEL = "app=roks-icsp"
+ROSA_HCP_HOST_REGISTRIES_CONF_D = "/host/etc/containers/registries.conf.d"
+ROSA_HCP_HOST_AUTH_JSON = "/host/etc/containers/auth.json"
+ROSA_HCP_HOST_KUBELET_CONFIG = "/host/var/lib/kubelet/config.json"
+ROSA_HCP_CRIO_CONF_DROP_IN = "/host/etc/crio/crio.conf.d/00-default"
+ROSA_HCP_KONFLUX_MIRROR_CONF = "020-konflux-mirror.conf"
+ROSA_HCP_ROKS_ICSP_SA_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "rosa-hcp-roks-icsp-serviceaccount.yaml"
+)
+ROSA_HCP_ROKS_ICSP_DS_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "rosa-hcp-roks-icsp-daemonset.yaml"
+)
+ROSA_HCP_ROKS_ICSP_SVC_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "rosa-hcp-roks-icsp-service.yaml"
+)
+ROSA_HCP_ROKS_ICSP_MC_CRD_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "rosa-hcp-roks-icsp-machineconfig-crd.yaml"
+)
+>>>>>>> 0a48fd607 (Adding support to BM deployment on IBM Cloud VPC BM for this added new lb and dns creation/deletion capablility for AI deployment)
 HCI_BAREMETAL = "hci_baremetal"
 HCI_VSPHERE = "hci_vsphere"
 ACM_OCP_DEPLOYMENT = "acm_ocp_deployment"
@@ -1451,6 +1476,7 @@ BAREMETAL_PLATFORMS = [
     BAREMETALPSI_PLATFORM,
     HCI_BAREMETAL,
     IBM_POWER_PLATFORM,
+    IBM_VPC_BM_PLATFORM,
 ]
 
 IPI_DEPL_TYPE = "ipi"
