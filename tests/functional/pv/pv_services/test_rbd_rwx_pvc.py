@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants, node
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, skipif_no_nvmeof
 from ocs_ci.framework.testlib import ManageTest, tier2
 
 log = logging.getLogger(__name__)
@@ -17,15 +17,21 @@ class TestRbdBlockPvc(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory, pvc_factory, pod_factory):
+    def setup(self, project_factory, pvc_factory, pod_factory, block_storageclass):
         """
         Create PVC and pods
+
+        Args:
+            block_storageclass (OCS): Block-backed StorageClass to use for the
+                PVC. ``None`` selects the pvc_factory default (Ceph RBD); the
+                NVMe-oF StorageClass is passed for the NVMe-oF variant.
 
         """
         self.pvc_size = 10
 
         self.pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
+            storageclass=block_storageclass,
             size=self.pvc_size,
             access_mode=constants.ACCESS_MODE_RWX,
             status=constants.STATUS_BOUND,
@@ -47,9 +53,20 @@ class TestRbdBlockPvc(ManageTest):
             )
             self.pod_objs.append(pod_obj)
 
+    @pytest.mark.parametrize(
+        argnames=["block_storageclass"],
+        argvalues=[
+            pytest.param(None),
+            pytest.param(constants.CEPH_NVMEOF_SC, marks=skipif_no_nvmeof),
+        ],
+        indirect=True,
+    )
     def test_rbd_block_rwx_pvc(self, pod_factory):
         """
         Test RBD Block volume mode RWX PVC
+
+        Runs against both the default Ceph RBD StorageClass and, when NVMe-oF
+        is enabled on the cluster, the NVMe-oF (block-backed) StorageClass.
 
         """
         # Find initial md5sum value
