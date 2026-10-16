@@ -10,7 +10,8 @@ from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
-from ocs_ci.utility import version
+from ocs_ci.ocs.resources.drpc import DRPC
+from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -293,16 +294,6 @@ class TestWorkloadDeployRDR:
                 workload_placement_name=wl.discovered_apps_placement_name,
                 old_primary=primary_cluster_name,
             )
-            logger.info(
-                f"Cleaning up Discovered Apps workload {wl.workload_namespace} on {primary_cluster_name}"
-            )
-            dr_helpers.do_discovered_apps_cleanup(
-                drpc_name=wl.discovered_apps_placement_name,
-                old_primary=primary_cluster_name,
-                workload_namespace=wl.workload_namespace,
-                workload_dir=wl.workload_dir,
-                vrg_name=wl.discovered_apps_placement_name,
-            )
 
         def _failover_cnv(cnv_wl):
             dr_helpers.failover(
@@ -363,6 +354,74 @@ class TestWorkloadDeployRDR:
             for wl in cnv_workloads
             if f"CNV:{wl.workload_namespace}" in failed_over_ids
         ]
+
+        # ── 14b. Clean up Discovered Apps workloads on primary cluster ────────
+        # For Discovered Apps, failover requires deleting the workload on the old
+        # primary cluster once DRPC reaches WaitForUserToCleanUp status.
+        if failed_over_discovered:
+            config.switch_acm_ctx()
+            logger.info(
+                "Waiting for Discovered Apps DRPCs progression status to reach "
+                f"{constants.STATUS_WAITFORUSERTOCLEANUP}"
+            )
+            for wl in failed_over_discovered:
+                drpc_obj = DRPC(
+                    namespace=constants.DR_OPS_NAMESPACE,
+                    resource_name=wl.discovered_apps_placement_name,
+                )
+                drpc_obj.wait_for_progression_status(
+                    status=constants.STATUS_WAITFORUSERTOCLEANUP,
+                    timeout=300,
+                )
+            logger.info("Waiting 90 seconds before deleting Discovered Apps on primary")
+            time.sleep(90)
+
+            config.switch_to_cluster_by_name(primary_cluster_name)
+            logger.info(
+                f"Deleting Discovered Apps workloads on primary cluster {primary_cluster_name}"
+            )
+            for wl in failed_over_discovered:
+                workload_path = (
+                    f"{constants.DR_WORKLOAD_REPO_BASE_DIR}/{wl.workload_dir}"
+                )
+                exec_cmd(
+                    f"oc delete -k {workload_path} -n {wl.workload_namespace} "
+                    "--wait=false --ignore-not-found --force"
+                )
+
+            da_cleanup_verify_tasks = []
+            for wl in failed_over_discovered:
+                da_cleanup_verify_tasks.append(
+                    (
+                        lambda w=wl, idx=primary_cluster_index: (
+                            config.switch_ctx(idx),
+                            dr_helpers.wait_for_all_resources_deletion(
+                                namespace=w.workload_namespace,
+                                discovered_apps=True,
+                                vrg_name=w.discovered_apps_placement_name,
+                            ),
+                        ),
+                        f"DA:{wl.workload_namespace}",
+                    )
+                )
+            _run_parallel(
+                da_cleanup_verify_tasks, "Discovered Apps Primary Deletion", errors
+            )
+
+            config.switch_acm_ctx()
+            logger.info(
+                "Waiting for Discovered Apps DRPCs progression status to reach "
+                f"{constants.STATUS_COMPLETED}"
+            )
+            for wl in failed_over_discovered:
+                drpc_obj = DRPC(
+                    namespace=constants.DR_OPS_NAMESPACE,
+                    resource_name=wl.discovered_apps_placement_name,
+                )
+                drpc_obj.wait_for_progression_status(
+                    status=constants.STATUS_COMPLETED,
+                    timeout=300,
+                )
 
         # ── 15. Verify resources creation on secondary cluster (in parallel) ─
         config.switch_to_cluster_by_name(secondary_cluster_name)
@@ -537,11 +596,6 @@ class TestWorkloadDeployRDR:
                 workload_placement_name=wl.discovered_apps_placement_name,
                 discovered_apps=True,
                 old_primary=secondary_cluster_name,
-                workload_instance=wl,
-                vm_auto_cleanup=(
-                    version.get_semantic_ocs_version_from_config()
-                    >= version.VERSION_4_22
-                ),
             )
 
         def _relocate_cnv(cnv_wl):
@@ -626,6 +680,74 @@ class TestWorkloadDeployRDR:
             if wl in verified_secondary_cnv
             and f"CNV:{wl.workload_namespace}" in relocated_ids
         ]
+
+        # ── 18b. Clean up Discovered Apps workloads on secondary cluster ──────
+        if relocated_discovered:
+            config.switch_acm_ctx()
+            logger.info(
+                "Waiting for Discovered Apps DRPCs progression status to reach "
+                f"{constants.STATUS_WAITFORUSERTOCLEANUP} during relocate"
+            )
+            for wl in relocated_discovered:
+                drpc_obj = DRPC(
+                    namespace=constants.DR_OPS_NAMESPACE,
+                    resource_name=wl.discovered_apps_placement_name,
+                )
+                drpc_obj.wait_for_progression_status(
+                    status=constants.STATUS_WAITFORUSERTOCLEANUP,
+                    timeout=300,
+                )
+            logger.info(
+                "Waiting 90 seconds before deleting Discovered Apps on secondary"
+            )
+            time.sleep(90)
+
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            logger.info(
+                f"Deleting Discovered Apps workloads on secondary cluster {secondary_cluster_name}"
+            )
+            for wl in relocated_discovered:
+                workload_path = (
+                    f"{constants.DR_WORKLOAD_REPO_BASE_DIR}/{wl.workload_dir}"
+                )
+                exec_cmd(
+                    f"oc delete -k {workload_path} -n {wl.workload_namespace} "
+                    "--wait=false --ignore-not-found --force"
+                )
+
+            da_relocate_cleanup_tasks = []
+            for wl in relocated_discovered:
+                da_relocate_cleanup_tasks.append(
+                    (
+                        lambda w=wl, idx=secondary_cluster_index: (
+                            config.switch_ctx(idx),
+                            dr_helpers.wait_for_all_resources_deletion(
+                                namespace=w.workload_namespace,
+                                discovered_apps=True,
+                                vrg_name=w.discovered_apps_placement_name,
+                            ),
+                        ),
+                        f"DA:{wl.workload_namespace}",
+                    )
+                )
+            _run_parallel(
+                da_relocate_cleanup_tasks, "Discovered Apps Secondary Deletion", errors
+            )
+
+            config.switch_acm_ctx()
+            logger.info(
+                "Waiting for Discovered Apps DRPCs progression status to reach "
+                f"{constants.STATUS_COMPLETED} after relocate"
+            )
+            for wl in relocated_discovered:
+                drpc_obj = DRPC(
+                    namespace=constants.DR_OPS_NAMESPACE,
+                    resource_name=wl.discovered_apps_placement_name,
+                )
+                drpc_obj.wait_for_progression_status(
+                    status=constants.STATUS_COMPLETED,
+                    timeout=300,
+                )
 
         # ── 19. Verify resources deletion from secondary cluster (in parallel) ─
         config.switch_to_cluster_by_name(secondary_cluster_name)
