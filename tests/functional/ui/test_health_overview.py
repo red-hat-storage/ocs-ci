@@ -22,6 +22,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs.resources.storage_cluster import (
     get_default_storagecluster,
     trigger_storage_cluster_reconciliation,
+    StorageCluster,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_resource
@@ -862,10 +863,14 @@ class TestHealthOverview(ManageTest):
         logger.test_step("Triggering StorageCluster reconciliation")
         trigger_storage_cluster_reconciliation()
         sc_obj = get_default_storagecluster()
+        sc = StorageCluster(
+            resource_name=sc_obj.resource_name,
+            namespace=sc_obj.namespace,
+        )
         logger.test_step(
             "Waiting for StorageCluster to reach Ready phase after reconciliation"
         )
-        sc_obj.wait_for_phase(phase=constants.STATUS_READY, timeout=300, sleep=10)
+        sc.wait_for_phase(phase=constants.STATUS_READY, timeout=300, sleep=10)
 
         logger.info("Verifying excluded alerts are maintained after reconciliation")
         for alert in alerts_to_disable:
