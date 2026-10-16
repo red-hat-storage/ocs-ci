@@ -8322,6 +8322,7 @@ def cnv_dr_workload(request):
         num_of_vm_appset_push=0,
         num_of_vm_appset_pull=0,
         vm_type=constants.VM_VOLUME_PVC,
+        skip_mirroring_validation=False,
     ):
         """
         Args:
@@ -8329,6 +8330,8 @@ def cnv_dr_workload(request):
             num_of_vm_appset_push (int): Number of ApplicationSet Push type workload to be created
             num_of_vm_appset_pull (int): Number of ApplicationSet Pull type workload to be created
             vm_type (str): Vm type that needs to be created
+            skip_mirroring_validation (bool): If True, skip mirroring status validation after deployment.
+                Useful when deploying multiple workloads and validation will be done later.
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -8416,7 +8419,10 @@ def cnv_dr_workload(request):
                 total_pvc_count += workload_details["pvc_count"]
                 workload.deploy_workload()
 
-        if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+        if (
+            ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
+            and not skip_mirroring_validation
+        ):
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
 
         return instances
@@ -8465,6 +8471,7 @@ def discovered_apps_dr_workload(request):
             list: objects of workload class
 
         """
+        start = len(instances)
         total_pvc_count = 0
         workload_key = "dr_workload_discovered_apps_rbd"
         multi_ns_list = []
@@ -8509,6 +8516,7 @@ def discovered_apps_dr_workload(request):
                         if multi_ns
                         else workload_namespace
                     ),
+                    pvc_interface=pvc_interface,
                     discovered_apps_pvc_selector_key=workload_details[
                         "dr_workload_app_pvc_selector_key"
                     ],
@@ -8550,9 +8558,9 @@ def discovered_apps_dr_workload(request):
             )
             placement_name = drpc_name + "-plmnt-1"
             for index in range(kubeobject):
-                instances[index].discovered_apps_placement_name = drpc_name
-            instances[0].create_placement(placement_name=placement_name)
-            instances[0].create_drpc(
+                instances[start + index].discovered_apps_placement_name = drpc_name
+            instances[start].create_placement(placement_name=placement_name)
+            instances[start].create_drpc(
                 drpc_name=drpc_name,
                 placement_name=placement_name,
                 protected_namespaces=multi_ns_list,
@@ -8564,7 +8572,7 @@ def discovered_apps_dr_workload(request):
                 ],
             )
             for index in range(kubeobject):
-                instances[index].verify_workload_deployment(vrg_name=drpc_name)
+                instances[start + index].verify_workload_deployment(vrg_name=drpc_name)
             dr_helpers.validate_application_odf_cli(
                 drpc_name=drpc_name,
                 namespace=constants.DR_OPS_NAMESPACE,
@@ -8583,6 +8591,7 @@ def discovered_apps_dr_workload(request):
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
                     workload_namespace=workload_namespace + "-recipe-ns",
+                    pvc_interface=pvc_interface,
                     workload_placement_name=workload_details[
                         "dr_workload_app_placement_name"
                     ]
@@ -8624,7 +8633,7 @@ def discovered_apps_dr_workload(request):
                     namespace=constants.DR_OPS_NAMESPACE,
                 )
 
-        return instances
+        return instances[start:]
 
     def teardown():
         for index, instance in enumerate(instances):
