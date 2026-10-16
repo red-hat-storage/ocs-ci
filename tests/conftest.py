@@ -8081,12 +8081,12 @@ def create_workload_factory():
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyBox(
                 workload_details=workload_details,
-                workload_dir=workload_details["workload_dir"],
+                workload_dir=workload_details.get("workload_dir"),
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
                 pvc_interface=pvc_interface,
                 workload_path=workload_details.get(
-                    "workload_path", workload_details["workload_dir"]
+                    "workload_path", workload_details.get("workload_dir")
                 ),
             )
             instances.append(workload)
@@ -8110,7 +8110,7 @@ def create_workload_factory():
                 workload_key += f"_{interface}"
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyBox_AppSet(
-                workload_dir=workload_details["workload_dir"],
+                workload_dir=workload_details.get("workload_dir"),
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
                 workload_placement_name=workload_details[
@@ -8120,7 +8120,7 @@ def create_workload_factory():
                 appset_model=appset_model,
                 pvc_interface=pvc_interface,
                 workload_path=workload_details.get(
-                    "workload_path", workload_details["workload_dir"]
+                    "workload_path", workload_details.get("workload_dir")
                 ),
             )
             instances.append(workload)
@@ -8260,7 +8260,7 @@ def dr_workloads_on_managed_clusters(request):
 
                 workload = BusyBox(
                     workload_details=workload_details,
-                    workload_dir=workload_details["workload_dir"],
+                    workload_dir=workload_details.get("workload_dir"),
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
                 )
@@ -8276,7 +8276,7 @@ def dr_workloads_on_managed_clusters(request):
 
                 workload = BusyBox(
                     workload_details=workload_details,
-                    workload_dir=workload_details["workload_dir"],
+                    workload_dir=workload_details.get("workload_dir"),
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
                 )
@@ -8393,7 +8393,7 @@ def cnv_dr_workload(request):
                 workload_details = ocsci_config.ENV_DATA[data_key][index]
                 workload = CnvWorkload(
                     workload_type=workload_type,
-                    workload_dir=workload_details["workload_dir"],
+                    workload_dir=workload_details.get("workload_dir"),
                     vm_name=workload_details["vm_name"],
                     vm_secret=workload_details["vm_secret"],
                     vm_username=workload_details["vm_username"],
@@ -8501,7 +8501,7 @@ def discovered_apps_dr_workload(request):
                     + pvc_type
                 )
                 workload = BusyboxDiscoveredApps(
-                    workload_dir=workload_details["workload_dir"],
+                    workload_dir=workload_details.get("workload_dir"),
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
                     workload_namespace=(
@@ -8579,7 +8579,7 @@ def discovered_apps_dr_workload(request):
                     + pvc_type
                 )
                 workload = BusyboxDiscoveredApps(
-                    workload_dir=workload_details["workload_dir"],
+                    workload_dir=workload_details.get("workload_dir"),
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
                     workload_namespace=workload_namespace + "-recipe-ns",
@@ -8701,7 +8701,7 @@ def discovered_apps_dr_workload_cnv(request):
                 workload_details["workload_namespace"] = instances[0].workload_namespace
                 workload_namespace = instances[0].workload_namespace
             wl_kwargs = dict(
-                workload_dir=workload_details["workload_dir"],
+                workload_dir=workload_details.get("workload_dir"),
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
                 workload_namespace=workload_namespace,
