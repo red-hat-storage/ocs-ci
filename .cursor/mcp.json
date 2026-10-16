@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "ocs-ci-jira": {
+      "command": "python3",
+      "args": ["-m", "ocs_ci.agents.mcp.servers.jira"]
+    },
+    "ocs-ci-cluster": {
+      "command": "python3",
+      "args": ["-m", "ocs_ci.agents.mcp.servers.cluster"]
+    },
+    "ocs-ci-reportportal": {
+      "command": "python3",
+      "args": ["-m", "ocs_ci.agents.mcp.servers.reportportal"]
+    },
+    "ocs-ci-jenkins": {
+      "command": "python3",
+      "args": ["-m", "ocs_ci.agents.mcp.servers.jenkins"]
+    }
+  }
+}
