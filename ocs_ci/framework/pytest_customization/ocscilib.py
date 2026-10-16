@@ -1183,6 +1183,35 @@ def _check_disabled_components(item):
                 )
 
 
+def _check_hci_provider_and_client(item):
+    """
+    Check if test marked with 'hci_provider_and_client_required' should be
+    skipped because the run doesn't have both a Fusion HCI provider and a
+    client cluster configured.
+
+    This is done here instead of in a 'skipif' condition in marks.py, because
+    the cluster configs can be added to the MultiCluster config after marks.py
+    is imported.
+
+    Args:
+        item: pytest test item
+
+    Raises:
+        pytest.skip: If the provider or the client cluster is not configured
+
+    """
+    if not item.get_closest_marker("hci_provider_and_client_required"):
+        return
+
+    if not (
+        ocsci_config.default_cluster_ctx.ENV_DATA["platform"].lower()
+        in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        and ocsci_config.hci_provider_exist()
+        and ocsci_config.hci_client_exist()
+    ):
+        pytest.skip("Test runs ONLY on Fusion HCI provider and client clusters")
+
+
 global consumed_ram_start_test
 
 
@@ -1191,6 +1220,9 @@ def pytest_runtest_setup(item):
     try:
         # Check if test should be skipped due to disabled components
         _check_disabled_components(item)
+
+        # Check if test requires both HCI provider and client clusters
+        _check_hci_provider_and_client(item)
 
         # Check for stop files before starting the test
         stop_requested, graceful_stop, skip_message = check_stop_file()
