@@ -81,6 +81,13 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
             selector=["noobaa", "rook-ceph-osd-prepare", "rook-ceph-drain-canary"],
             exclude_selector=True,
         )
+        pod_objs = [
+            pod
+            for pod in pod_objs
+            if constants.STATUS_REPORTER not in pod.name
+            and constants.REPORT_STATUS_TO_PROVIDER_POD not in pod.name
+            and "debug" not in pod.name
+        ]
 
         # Create maxsize pvc, app pod and run ios
         self.sc = default_storage_class(interface_type=interface)
@@ -115,14 +122,20 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
         pod_objs = base_setup
 
         for pod in pod_objs:
-            pod_name = pod.get().get("metadata").get("name")
-            if "debug" in pod_name:
-                log.info(f"Skipping {pod_name} pod from validation")
+            if (
+                "debug" in pod.name
+                or constants.STATUS_REPORTER in pod.name
+                or constants.REPORT_STATUS_TO_PROVIDER_POD in pod.name
+            ):
+                log.info(f"Skipping {pod.name} pod from validation")
                 continue
+
+            pod_data = pod.get()
+            pod_name = pod_data.get("metadata").get("name")
             restart_count = (
-                pod.get().get("status").get("containerStatuses")[0].get("restartCount")
+                pod_data.get("status").get("containerStatuses")[0].get("restartCount")
             )
-            for item in pod.get().get("status").get("containerStatuses"):
+            for item in pod_data.get("status").get("containerStatuses"):
                 # Validate pod is oomkilled
                 container_name = item.get("name")
                 assert validate_pod_oomkilled(
