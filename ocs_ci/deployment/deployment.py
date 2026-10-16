@@ -95,6 +95,7 @@ from ocs_ci.ocs.exceptions import (
     ACMClusterConfigurationException,
     ACMObservabilityNotEnabled,
     WrongVersionExpression,
+    UnexpectedBehaviour,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -4013,6 +4014,20 @@ class MultiClusterDROperatorsDeploy(object):
                 primary.ENV_DATA["cluster_name"],
                 non_acm_clusters[0].ENV_DATA["cluster_name"],
             ]
+
+        storagecluster_name = None
+        provider_client_setup = config.is_provider_exist()
+        if (
+            config.MULTICLUSTER["multicluster_mode"] == "metro-dr"
+            and provider_client_setup
+        ):
+            storagecluster_name = constants.DEFAULT_CLUSTERNAME
+            # Remove keys if present
+            mirror_peer_data.get("metadata", {}).get("labels", {}).pop(
+                "control-plane", None
+            )
+            mirror_peer_data.get("spec", {}).pop("overlappingCIDR", None)
+            mirror_peer_data.get("spec", {}).pop("schedulingIntervals", None)
         index = -1
         # First entry should be the primary cluster
         # in the mirror peer
@@ -4021,6 +4036,11 @@ class MultiClusterDROperatorsDeploy(object):
                 cluster_entry["clusterName"] = current_dr_clusters_list[0]
             else:
                 cluster_entry["clusterName"] = current_dr_clusters_list[1]
+            if storagecluster_name:
+                cluster_entry["storageClusterRef"]["name"] = storagecluster_name
+            if provider_client_setup:
+                # Remove namespace if present
+                cluster_entry.get("storageClusterRef", {}).pop("namespace", None)
             index += 1
 
         # Use unique cluster name to easily identify the managed clusters.
@@ -4100,7 +4120,8 @@ class MultiClusterDROperatorsDeploy(object):
             if (
                 is_acm_cluster(cluster)
                 or is_recovery_cluster(cluster)
-                or cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
+                or cluster.ENV_DATA.get("cluster_type").lower()
+                in (constants.HCI_CLIENT, constants.EXT_CLIENT)
             ):
                 continue
             else:
@@ -4280,6 +4301,7 @@ class MultiClusterDROperatorsDeploy(object):
     def deploy_dr_policy(self):
         # Create DR policy on ACM hub cluster
         dr_policy_hub_data = templating.load_yaml(constants.DR_POLICY_ACM_HUB)
+        policy_name_from_yaml = dr_policy_hub_data["metadata"]["name"]
         # Update DR cluster name and s3profile name
         dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
         primary_cluster_name = get_primary_cluster_config().ENV_DATA["cluster_name"]
@@ -4344,7 +4366,8 @@ class MultiClusterDROperatorsDeploy(object):
             dr_policy_hub_data["spec"]["schedulingInterval"] = "10m"
 
         if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
-            dr_policy_hub_data["metadata"]["name"] = constants.MDR_DR_POLICY
+            if dr_policy_hub_data["metadata"]["name"] == policy_name_from_yaml:
+                dr_policy_hub_data["metadata"]["name"] = constants.MDR_DR_POLICY
             dr_policy_hub_data["spec"]["schedulingInterval"] = "0m"
 
         dr_policy_hub_yaml = tempfile.NamedTemporaryFile(
@@ -4919,6 +4942,94 @@ class MultiClusterDROperatorsDeploy(object):
         logger.info("Applying changes to Ramen Hub configmap")
         self.update_config_map_commit(dict(dr_ramen_hub_configmap_data_get))
 
+    def check_mco_presence_and_version(self):
+        """
+        Verify whether the multicluster orchestrator deployment exists and available. This might be already present if
+        the ACM hub cluster is already prepared for DR with another set of managed clusters. If present, ensure that the
+        version of MCO and DR Hub Operator is as required.
+
+        Returns:
+            bool: True if the MCO deployment exists and version is matching, False if MCO deployment is not present
+
+        Raises:
+            UnexpectedBehaviour: In case of version mismactch
+
+        """
+
+        orchestrator_controller = ocp.OCP(
+            kind=constants.DEPLOYMENT,
+            resource_name=constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER,
+            namespace=constants.OPENSHIFT_OPERATORS,
+        )
+        if orchestrator_controller.is_exist():
+            logger.info(
+                f"{constants.DEPLOYMENT} {constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER} "
+                f"already exists"
+            )
+            orchestrator_controller.wait_for_resource(
+                condition="1",
+                column="AVAILABLE",
+                resource_count=1,
+                timeout=300,
+            )
+
+            # Verify the installed orchestrator CSV matches the expected channel
+            # version, and that the DR hub operator CSV (deployed automatically
+            # by the orchestrator) has reached Succeeded phase.
+            # Both checks are opt-in — set ENV_DATA
+            # orchestrator_version_check: true to enable them.
+            # If the key is absent or false the checks are skipped silently.
+            if config.ENV_DATA.get("orchestrator_version_check", False):
+                orchestrator_sub = ocp.OCP(
+                    kind=constants.SUBSCRIPTION,
+                    resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
+                    namespace=constants.OPENSHIFT_OPERATORS,
+                )
+                installed_csv = orchestrator_sub.get()["status"]["currentCSV"]
+                expected_csv = packagemanifest.PackageManifest(
+                    resource_name=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
+                ).get_current_csv(
+                    channel=self.channel,
+                    csv_pattern=constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
+                )
+                logger.info(
+                    f"Orchestrator version check — installed CSV: {installed_csv} | "
+                    f"expected CSV for channel '{self.channel}': {expected_csv}"
+                )
+                if installed_csv != expected_csv:
+                    raise UnexpectedBehaviour(
+                        f"Installed orchestrator CSV '{installed_csv}' does not match "
+                        f"expected '{expected_csv}' for channel '{self.channel}'. "
+                        f"Re-deploy or upgrade the multicluster orchestrator."
+                    )
+
+                logger.info(
+                    "Verifying DR hub operator CSV is in Succeeded phase "
+                    f"(namespace: {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE})"
+                )
+                dr_hub_csvs = get_csvs_start_with_prefix(
+                    constants.ACM_ODR_HUB_OPERATOR_RESOURCE,
+                    constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+                )
+                if not dr_hub_csvs:
+                    raise UnexpectedBehaviour(
+                        f"No CSV starting with '{constants.ACM_ODR_HUB_OPERATOR_RESOURCE}' "
+                        f"found in {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE}. "
+                        f"The DR hub operator may not have been deployed yet."
+                    )
+                dr_hub_csv = CSV(
+                    resource_name=dr_hub_csvs[0]["metadata"]["name"],
+                    namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+                )
+                dr_hub_csv.wait_for_phase("Succeeded", timeout=300)
+                logger.info(
+                    f"DR hub operator CSV '{dr_hub_csvs[0]['metadata']['name']}' "
+                    f"is Succeeded"
+                )
+            return True
+        else:
+            return False
+
     class s3_meta_obj_store:
         """
         Internal class to handle aws s3 metadata obj store
@@ -5443,15 +5554,23 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         acm_indexes = get_all_acm_indexes()
         for i in acm_indexes:
             config.switch_ctx(i)
-            self.deploy_dr_multicluster_orchestrator()
+            if self.check_mco_presence_and_version():
+                continue
+            if config.ENV_DATA.get("setup_fdf_catsrc_for_hub"):
+                setup_fdf_catsrc_for_hub()
+            self.deploy_dr_multicluster_orchestrator(
+                use_fdf_catsrc=bool(config.ENV_DATA.get("setup_fdf_catsrc_for_hub"))
+            )
             # Enable MCO console plugin
             enable_mco_console_plugin()
         # Configure mirror peer
+        config.switch_acm_ctx()
         self.configure_mirror_peer()
         self.apply_custom_ramen_image()
         # Deploy dr policy
         self.deploy_dr_policy()
-        update_volsync_channel()
+        if not config.is_provider_exist():
+            update_volsync_channel()
         # Configure DRClusters for fencing automation
         configure_drcluster_for_fencing()
 
