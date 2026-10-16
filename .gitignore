@@ -21,3 +21,5 @@ external/
 apidoc/*
 _build/*
 bugzilla.cfg
+
+.serena/
