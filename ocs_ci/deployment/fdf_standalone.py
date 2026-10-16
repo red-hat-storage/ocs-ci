@@ -48,6 +48,7 @@ import tempfile
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.utility.deployment import get_and_apply_idms_from_catalog
 from ocs_ci.utility.utils import exec_cmd
@@ -275,6 +276,129 @@ def _validate_catalog_image():
     return catalog_image
 
 
+def _ensure_cnsa_namespace_and_operator_group():
+    """
+    Ensure the ``ibm-spectrum-scale`` namespace and its OperatorGroup exist.
+
+    OLM requires both to be present before a Subscription can be applied to
+    that namespace.  This function is idempotent — it skips creation when
+    the resources already exist.
+    """
+    namespace = constants.IBM_STORAGE_SCALE_NAMESPACE
+    kubeconfig = config.RUN["kubeconfig"]
+
+    ns_ocp = OCP(kind="Namespace")
+    if not ns_ocp.is_exist(resource_name=namespace):
+        logger.info("Creating namespace '%s'", namespace)
+        ns_data = {
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {"name": namespace},
+        }
+        with tempfile.NamedTemporaryFile(
+            mode="w+", suffix=".yaml", prefix="cnsa_ns_", delete=False
+        ) as ns_file:
+            templating.dump_data_to_temp_yaml(ns_data, ns_file.name)
+            exec_cmd(
+                f"oc --kubeconfig {kubeconfig} apply -f {ns_file.name}",
+                timeout=60,
+            )
+        logger.info("Namespace '%s' created", namespace)
+    else:
+        logger.info("Namespace '%s' already exists, skipping", namespace)
+
+    og_name = f"{namespace}-og"
+    og_ocp = OCP(kind=constants.OPERATOR_GROUP, namespace=namespace)
+    if not og_ocp.is_exist(resource_name=og_name):
+        logger.info("Creating OperatorGroup '%s' in namespace '%s'", og_name, namespace)
+        og_data = {
+            "apiVersion": "operators.coreos.com/v1",
+            "kind": "OperatorGroup",
+            "metadata": {"name": og_name, "namespace": namespace},
+            "spec": {"targetNamespaces": [namespace]},
+        }
+        with tempfile.NamedTemporaryFile(
+            mode="w+", suffix=".yaml", prefix="cnsa_og_", delete=False
+        ) as og_file:
+            templating.dump_data_to_temp_yaml(og_data, og_file.name)
+            exec_cmd(
+                f"oc --kubeconfig {kubeconfig} apply -f {og_file.name}",
+                timeout=60,
+            )
+        logger.info("OperatorGroup '%s' created", og_name)
+    else:
+        logger.info(
+            "OperatorGroup '%s' already exists in namespace '%s', skipping",
+            og_name,
+            namespace,
+        )
+
+
+def create_cnsa_operator_subscription():
+    """
+    Create the ``ibm-spectrum-scale-operator`` Subscription in the
+    ``ibm-spectrum-scale`` namespace.
+
+    The ``cnsa-dependencies`` bundle (channel ``stable-4.23``) declares a
+    bundle-level dependency on ``ibm-spectrum-scale-operator >= 60.1.100``.
+    OLM's namespace-scoped resolver requires an *explicit* Subscription for
+    every required package — it will not auto-create one even when a
+    compatible version is visible in the catalog.  Without this Subscription
+    the ``cnsa-dependencies`` Subscription stays in ``ResolutionFailed``
+    indefinitely and no CNSA pods ever start.
+
+    This function creates the ``ibm-spectrum-scale`` namespace and its
+    OperatorGroup if they do not yet exist, then applies the Subscription.
+    It is idempotent: calling it on a cluster that already has all three
+    resources is a no-op.
+    """
+    namespace = constants.IBM_STORAGE_SCALE_NAMESPACE
+    package = constants.IBM_STORAGE_SCALE_OPERATOR_PACKAGE
+    channel = constants.IBM_STORAGE_SCALE_OPERATOR_CHANNEL
+
+    _ensure_cnsa_namespace_and_operator_group()
+
+    sub_ocp = OCP(kind=constants.SUBSCRIPTION_COREOS, namespace=namespace)
+    if sub_ocp.is_exist(resource_name=package):
+        logger.info(
+            "Subscription '%s' already exists in namespace '%s', skipping",
+            package,
+            namespace,
+        )
+        return
+
+    logger.info(
+        "Creating Subscription '%s' (channel '%s') in namespace '%s'",
+        package,
+        channel,
+        namespace,
+    )
+    subscription_data = {
+        "apiVersion": "operators.coreos.com/v1alpha1",
+        "kind": "Subscription",
+        "metadata": {
+            "name": package,
+            "namespace": namespace,
+        },
+        "spec": {
+            "channel": channel,
+            "name": package,
+            "source": constants.FDF_STANDALONE_CATALOG_SOURCE_NAME,
+            "sourceNamespace": constants.MARKETPLACE_NAMESPACE,
+        },
+    }
+    kubeconfig = config.RUN["kubeconfig"]
+    with tempfile.NamedTemporaryFile(
+        mode="w+", suffix=".yaml", prefix="cnsa_sub_", delete=False
+    ) as sub_file:
+        templating.dump_data_to_temp_yaml(subscription_data, sub_file.name)
+        exec_cmd(
+            f"oc --kubeconfig {kubeconfig} apply -f {sub_file.name}",
+            timeout=60,
+        )
+    logger.info("Subscription '%s' created in namespace '%s'", package, namespace)
+
+
 def create_fdf_standalone_catalog_source():
     """
     Entry-point called from :func:`deploy_ocs_via_operator` when
@@ -291,10 +415,14 @@ def create_fdf_standalone_catalog_source():
     3. Create (or verify) the ``ibm-operators`` CatalogSource and wait
        for READY so that the standard ODF Subscription can resolve
        ``odf-operator`` from it.
+    4. Create the ``ibm-spectrum-scale-operator`` Subscription in the
+       ``ibm-spectrum-scale`` namespace so that OLM can resolve the
+       bundle dependency declared by ``cnsa-dependencies``.
     """
     catalog_image = _validate_catalog_image()
     _apply_fdf_mirror_sets(catalog_image)
     StandaloneFDFCatalogSource().create_catalog_source()
+    create_cnsa_operator_subscription()
 
 
 def is_fdf_standalone_deployment() -> bool:
