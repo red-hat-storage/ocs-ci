@@ -1073,7 +1073,7 @@ def ocs_install_verification(
 
     # RDR with globalnet submariner
     if (
-        config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+        config.MULTICLUSTER.get("multicluster_mode") in constants.RDR_MODES
         and get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
         and get_provider_service_type() != "NodePort"
         and config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
