@@ -6,12 +6,16 @@ from logging import getLogger
 from typing import Union
 
 from ocs_ci.ocs.exceptions import NotSupportedException
-from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_15
+from ocs_ci.utility.version import (
+    get_odf_image_namespace,
+    get_semantic_ocs_version_from_config,
+    VERSION_4_15,
+)
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.ocs.constants import (
-    ODF_CLI_DEV_IMAGE,
+    ODF_CLI_DEV_IMAGE_TEMPLATE,
     LOW_RECOVERY_OPS,
     BALANCED,
     HIGH_RECOVERY_OPS,
@@ -100,7 +104,10 @@ class ODFCLIRetriever:
             )
 
     def _get_odf_cli_image(self):
-        return f"{ODF_CLI_DEV_IMAGE}:v{self.semantic_version}"
+        odf_cli_dev_image = ODF_CLI_DEV_IMAGE_TEMPLATE.format(
+            namespace=get_odf_image_namespace(self.semantic_version)
+        )
+        return f"{odf_cli_dev_image}:v{self.semantic_version}"
 
     def _get_architecture_path(self):
         """Get architecture-specific path for ODF CLI binary in the container image."""

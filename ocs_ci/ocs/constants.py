@@ -2740,9 +2740,14 @@ STRESSCLI_SERVICE_CA_CM_NAME = "stress-cli-service-ca"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
 AWSCLI_TEST_OBJ_DIR = "/test_objects/"
 MCG_CLI_DEV_IMAGE = "quay.io/rhceph-dev/mcg-cli"
+# mcg-cli official image is used only for live deployments of ODF 4.13 and 4.14
+# (from 4.15 on, the odf-cli image is used instead), so the odf4 namespace is
+# permanently correct here.
 MCG_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/mcg-cli-rhel9"
-ODF_CLI_DEV_IMAGE = "quay.io/rhceph-dev/odf4-odf-cli-rhel9"
-ODF_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/odf-cli-rhel9"
+# The ODF image namespace follows the ODF major version (odf4 for ODF 4.y.z,
+# odf5 for ODF 5.y.z), see ocs_ci.utility.version.get_odf_image_namespace()
+ODF_CLI_DEV_IMAGE_TEMPLATE = "quay.io/rhceph-dev/{namespace}-odf-cli-rhel9"
+ODF_CLI_OFFICIAL_IMAGE_TEMPLATE = "registry.redhat.io/{namespace}/odf-cli-rhel9"
 ACM_CATSRC_IMAGE = "quay.io:443/acm-d/acm-dev-catalog"
 MCE_CATSRC_IMAGE = "quay.io:443/acm-d/mce-dev-catalog"
 

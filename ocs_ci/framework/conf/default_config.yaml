@@ -171,6 +171,10 @@ REPORTING:
   # but we still enable option to overwirte it if needed. Otherwise if
   # specified, the ARM architecture is not supported.
   ocp_must_gather_image: ""
+  # ODF images are published under a namespace derived from the ODF major
+  # version (odf4 for ODF 4.y.z, odf5 for ODF 5.y.z). The defaults below cover
+  # ODF 4.y.z, the ocs_version/fdf_version config files of ODF 5.y.z and newer
+  # override them with the matching namespace.
   default_ocs_must_gather_image: "quay.io/rhceph-dev/odf4-odf-must-gather-rhel9"
   odf_live_must_gather_image: "registry.redhat.io/odf4/odf-must-gather-rhel9"
   default_ocs_must_gather_latest_tag: "v5.0"
