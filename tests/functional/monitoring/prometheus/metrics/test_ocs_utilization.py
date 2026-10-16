@@ -43,17 +43,46 @@ def test_mcg_cpu_usage(workload_idle, threading_lock):
     Without any IO  workload, cpu utilization of MCG pods should be minimal.
     No pod should utilize more than 0.1 cpu units.
     """
+    logger.info("Starting test: Verify MCG CPU utilization during idle workload")
+
+    logger.test_step("Initialize Prometheus API and query MCG pod CPU usage")
     prometheus = PrometheusAPI(threading_lock=threading_lock)
-    cpu_result = prometheus.query_range(
-        query=CPU_USAGE_POD + '{namespace="openshift-storage",pod=~"^noobaa.*"}',
-        start=workload_idle["start"],
-        end=workload_idle["stop"],
-        step=15,
+
+    # Construct query for NooBaa pods in openshift-storage namespace
+    query = CPU_USAGE_POD + '{namespace="openshift-storage",pod=~"^noobaa.*"}'
+    start_time = workload_idle["start"]
+    end_time = workload_idle["stop"]
+    step = 15
+
+    logger.info(
+        f"Querying CPU usage for NooBaa pods (start={start_time}, end={end_time}, step={step}s)"
     )
+    logger.debug(f"Prometheus query: {query}")
+
+    cpu_result = prometheus.query_range(
+        query=query,
+        start=start_time,
+        end=end_time,
+        step=step,
+    )
+    logger.debug(f"Query returned {len(cpu_result) if cpu_result else 0} time series")
+
+    logger.test_step("Validate CPU usage is within acceptable limits")
+    min_cpu = 0.0
+    max_cpu = 0.25  # Conservative limit (actual requirement is 0.1)
+    logger.info(f"CPU usage limits: min={min_cpu}, max={max_cpu} cpu units")
+
     validation = check_query_range_result_limits(
         result=cpu_result,
-        good_min=0.0,
-        good_max=0.25,
+        good_min=min_cpu,
+        good_max=max_cpu,
     )
+
+    logger.assertion(
+        f"MCG CPU usage within limits: expected=True (all pods < {max_cpu} cpu), actual={validation}"
+    )
+
     msg = "No NooBaa pod should utilize over 0.1 cpu units while idle."
     assert validation, msg
+
+    logger.info("Test passed: MCG CPU utilization validated successfully during idle")

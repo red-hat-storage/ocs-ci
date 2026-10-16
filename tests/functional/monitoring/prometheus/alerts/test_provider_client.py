@@ -13,7 +13,7 @@ from ocs_ci.utility import prometheus
 from ocs_ci.ocs.ocp import OCP
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @blue_squad
@@ -33,9 +33,11 @@ def test_change_client_ocs_version_and_stop_heartbeat(
     version should contain previous version.
 
     """
+    logger.info("Starting test: Verify client version change and heartbeat stop alerts")
+
+    logger.test_step("Initialize Prometheus API and retrieve test metadata")
     api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
-    # get alerts from time when manager deployment was scaled down
     alerts = measure_change_client_ocs_version_and_stop_heartbeat.get(
         "prometheus_alerts"
     )
@@ -44,6 +46,13 @@ def test_change_client_ocs_version_and_stop_heartbeat(
     ).get("client_name")
     cluster_namespace = config.ENV_DATA["cluster_namespace"]
     cluster_name = config.ENV_DATA["storage_cluster_name"]
+
+    logger.info(f"Client name: {client_name}")
+    logger.info(f"Cluster namespace: {cluster_namespace}")
+    logger.info(f"Cluster name: {cluster_name}")
+    logger.info(f"Number of alerts retrieved: {len(alerts) if alerts else 0}")
+
+    logger.test_step("Define expected alerts for client version change and heartbeat")
     target_alerts = [
         {
             "label": constants.ALERT_STORAGECLIENTHEARTBEATMISSED,
@@ -71,29 +80,54 @@ def test_change_client_ocs_version_and_stop_heartbeat(
         },
     ]
     states = ["firing"]
+    logger.info(f"Checking {len(target_alerts)} expected alerts")
+    logger.debug(f"Expected alert states: {states}")
 
-    for target_alert in target_alerts:
+    logger.test_step("Validate and verify clearance for each expected alert")
+    for i, target_alert in enumerate(target_alerts, 1):
+        alert_label = target_alert["label"]
+        alert_severity = target_alert["severity"]
+        logger.info(
+            f"Processing alert {i}/{len(target_alerts)}: {alert_label} "
+            f"(severity: {alert_severity})"
+        )
+
+        logger.debug(f"Validating alert {alert_label} is present in firing state")
         prometheus.check_alert_list(
-            label=target_alert["label"],
+            label=alert_label,
             msg=target_alert["msg"],
             alerts=alerts,
             states=states,
-            severity=target_alert["severity"],
+            severity=alert_severity,
+        )
+        logger.info(f"Alert {alert_label} validated successfully")
+
+        logger.debug(
+            f"Verifying alert {alert_label} is cleared after heartbeat resumes"
         )
         api.check_alert_cleared(
-            label=target_alert["label"],
+            label=alert_label,
             measure_end_time=measure_change_client_ocs_version_and_stop_heartbeat.get(
                 "stop"
             ),
             time_min=300,
         )
+        logger.info(f"Alert {alert_label} cleared successfully")
+
+    logger.info(
+        "Test passed: All client version and heartbeat alerts triggered and cleared as expected"
+    )
 
 
 def setup_module(module):
+    logger.info("Setting up module: Storing original user for cleanup")
     ocs_obj = OCP()
     module.original_user = ocs_obj.get_user_name()
+    logger.info(f"Original user stored: {module.original_user}")
 
 
 def teardown_module(module):
+    logger.info("Tearing down module: Restoring original user")
     ocs_obj = OCP()
     ocs_obj.login_as_user(module.original_user)
+    logger.info(f"Restored user: {module.original_user}")

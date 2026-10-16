@@ -36,21 +36,32 @@ def test_start_fio_job(
     Start a fio job performing IO load, check that it's running, and keep
     it running even after the test finishes.
     """
+    logger.info(f"Starting test: Start continuous fio workload in {TEST_NS}")
+
+    logger.test_step("Create dedicated project for continuous workload")
     # creating project directly to set it's name and prevent it's deletion
     project = ocp.OCP(kind="Project", namespace=TEST_NS)
     project.new_project(TEST_NS)
+    logger.info(f"Created project: {TEST_NS}")
 
+    logger.test_step("Configure fio workload parameters")
     # size of the volume for fio
     pvc_size = 10  # GiB
-
     # test uses cephfs based volume, could be either parametrized or we can
     # try to start more jobs
     storage_class_name = "ocs-storagecluster-cephfs"
+    logger.info(
+        f"PVC configuration: size={pvc_size}Gi, storage_class={storage_class_name}"
+    )
 
     # fio config file: random mixed read and write IO will be running for one
     # day (we expect that the other test will stop it), only 1/2 of the volume
     # is used, we don't need to utilize the PV 100%
     fio_size = int(pvc_size / 2)  # GiB
+    logger.info(
+        f"Fio workload size: {fio_size}G (50% of PVC), runtime: 24h, pattern: randrw"
+    )
+
     fio_conf = textwrap.dedent(
         f"""
         [readwrite]
@@ -64,26 +75,39 @@ def test_start_fio_job(
         runtime=24h
         """
     )
+    logger.debug(f"Fio configuration:\n{fio_conf}")
 
+    logger.test_step("Create Job configuration file")
     # put the dicts together into yaml file of the Job
     fio_configmap_dict["data"]["workload.fio"] = fio_conf
     fio_pvc_dict["spec"]["storageClassName"] = storage_class_name
     fio_pvc_dict["spec"]["resources"]["requests"]["storage"] = f"{pvc_size}Gi"
     fio_objs = [fio_pvc_dict, fio_configmap_dict, fio_job_dict]
     job_file = ObjectConfFile("fio_continuous", fio_objs, project, tmp_path)
+    logger.info("Job configuration created with PVC, ConfigMap, and Job objects")
 
+    logger.test_step("Deploy and start fio Job")
     # deploy the Job to the cluster and start it
     job_file.create()
+    logger.info("Fio Job deployed to cluster")
 
+    logger.test_step("Wait for pod to be running")
     # wait for a pod for the job to be deployed and running
     ocp_pod = ocp.OCP(kind="Pod", namespace=project.namespace)
+    logger.info(f"Waiting for pod in namespace {project.namespace} (timeout: 300s)")
+
     try:
         ocp_pod.wait_for_resource(
             resource_count=1, condition=constants.STATUS_RUNNING, timeout=300, sleep=30
         )
+        logger.info("Pod is running successfully")
     except TimeoutExpiredError:
-        logger.error("pod for fio job wasn't deployed properly")
+        logger.error(
+            "Pod for fio job wasn't deployed properly - timeout waiting for Running state"
+        )
         raise
+
+    logger.info("Test passed: Continuous fio workload started and running")
 
 
 @blue_squad
@@ -93,18 +117,34 @@ def test_stop_fio_job():
     """
     Check that the job is still running.
     """
+    logger.info(f"Starting test: Verify and stop continuous fio workload in {TEST_NS}")
+
+    logger.test_step("Verify fio pod is still running")
     # check that the pod of the job is still running
     ocp_pod = ocp.OCP(kind="Pod", namespace=TEST_NS)
+    logger.info(f"Checking for running pod in namespace {TEST_NS} (timeout: 300s)")
+
     try:
         ocp_pod.wait_for_resource(
             resource_count=1, condition=constants.STATUS_RUNNING, timeout=300, sleep=30
         )
+        logger.info("Pod is still running as expected")
     except TimeoutExpiredError:
-        logger.error("pod for fio job wasn't deployed properly")
+        logger.error(
+            f"Pod for fio job in {TEST_NS} is not running - workload may have stopped prematurely"
+        )
         raise
 
     # TODO: check the activity of the job during it's whole run could via
     # prometheus query (make sure it was really running)
+    logger.debug(
+        "TODO: Add Prometheus query validation to verify job was actively running"
+    )
 
+    logger.test_step("Delete project to stop workload")
     # TODO: delete the project properly
+    logger.info(f"Deleting project {TEST_NS} (timeout: 600s)")
     run_cmd(cmd=f"oc delete project/{TEST_NS}", timeout=600)
+    logger.info(f"Project {TEST_NS} deleted successfully")
+
+    logger.info("Test passed: Continuous fio workload verified and stopped")
