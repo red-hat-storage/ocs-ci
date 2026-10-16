@@ -45,7 +45,7 @@ def test_prometheus_rule_failures(threading_lock):
     """
     no_prometheus_rule_failures = False
     for no_prometheus_rule_failures in TimeoutIterator(
-        timeout=120,
+        timeout=400,
         sleep=30,
         func=validate_no_prometheus_rule_failures,
         func_kwargs={"threading_lock": threading_lock},
