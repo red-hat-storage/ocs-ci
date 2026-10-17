@@ -265,7 +265,13 @@ class TestCnvDiscoveredAppsMDR:
         gracefully_reboot_ocp_nodes(
             drcluster_name=self.primary_cluster_name, disable_eviction=True
         )
-        wait_for_all_resources_deletion(self.wl_namespace)
+
+        wait_for_all_resources_deletion(
+            namespace=self.wl_namespace,
+            discovered_apps=True,
+            vrg_name=cnv_workloads[0].discovered_apps_placement_name,
+            skip_vrg_check=True,
+        )
 
         wait_for_vrg_state(
             vrg_state="secondary",
@@ -305,7 +311,12 @@ class TestCnvDiscoveredAppsMDR:
             discovered_apps=True,
             resource_name=self.resource_name,
         )
-        wait_for_all_resources_deletion(self.wl_namespace)
+        wait_for_all_resources_deletion(
+            namespace=self.wl_namespace,
+            discovered_apps=True,
+            vrg_name=cnv_workloads[0].discovered_apps_placement_name,
+            skip_vrg_check=True,
+        )
 
         set_current_primary_cluster_context(
             self.wl_namespace,
