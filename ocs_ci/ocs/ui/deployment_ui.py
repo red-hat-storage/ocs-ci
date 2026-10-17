@@ -208,6 +208,7 @@ class DeploymentUI(PageNavigator):
 
         """
 
+        mcg_only = config.ENV_DATA.get("mcg_only_deployment", False)
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_20:
             logger.info("Navigate to Storage Cluster page")
@@ -220,9 +221,20 @@ class DeploymentUI(PageNavigator):
             self.page_has_loaded(retries=15)
             logger.info("Click Configure ODF")
             self.do_click(locator=self.dep_loc["configure_odf"], enable_screenshot=True)
-            self.do_click(
-                locator=self.dep_loc["setup_storage_cluster"], enable_screenshot=True
-            )
+            if mcg_only:
+                logger.info(
+                    "MCG-only deployment: clicking 'Setup Multicloud Object Gateway' card"
+                )
+                self.do_click(
+                    locator=self.dep_loc["mcg_only_deployment_entry"],
+                    enable_screenshot=True,
+                    use_fallback=False,
+                )
+            else:
+                self.do_click(
+                    locator=self.dep_loc["setup_storage_cluster"],
+                    enable_screenshot=True,
+                )
         elif ocs_version >= version.VERSION_4_19:
             self.nav_storage_cluster_default_page()
             logger.info("Click on 'Storage Systems tab' under the dashboard")
@@ -291,19 +303,122 @@ class DeploymentUI(PageNavigator):
 
         """
         logger.info("Install MCG ONLY cluster via UI")
-        if self.ocp_version == "4.9":
-            self.do_click(self.dep_loc["advanced_deployment"])
-        self.do_click(self.dep_loc["expand_advanced_mode"], enable_screenshot=True)
-        if self.ocp_version == "4.9":
-            self.do_click(self.dep_loc["mcg_only_option"], enable_screenshot=True)
-        elif self.ocp_version in ("4.10", "4.11", "4.12"):
-            self.do_click(self.dep_loc["mcg_only_option_4_10"], enable_screenshot=True)
-        if config.DEPLOYMENT.get("local_storage"):
-            self.install_lso_cluster()
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version >= version.VERSION_4_20:
+            # ODF 5.0 path.
+            # Deployment type is already set to MCG (mode=object-storage) by the
+            # URL the card click in install_storage_cluster() causes the wizard to
+            # navigate to.  There is no in-wizard deployment dropdown on 5.0.
+            if config.DEPLOYMENT.get("local_storage"):
+                raise ConfigurationError(
+                    "MCG-only + LSO is not verified on ODF >= 5.0. "
+                    "The LOCAL_DEVICES step list differs from EXISTING and has "
+                    "not been exercised. Aborting to avoid silent mis-deployment."
+                )
+
+            # Defensive key check: convert axis-mismatch KeyError into something
+            # diagnosable (dep_loc is keyed by OCP version; this branch by ODF).
+            missing = {"mcg_only_deployment_entry", "next_button_element"} - set(
+                self.dep_loc
+            )
+            if missing:
+                raise ConfigurationError(
+                    f"ODF {ocs_version} MCG-only UI deploy needs {missing}, "
+                    f"absent for OCP {self.ocp_version}"
+                )
+
+            # Issue 4: wait for the wizard to finish SPA navigation before
+            # inspecting the DOM — without this the step-list may not be
+            # rendered yet, causing spurious assertion failures.
+            self.page_has_loaded(retries=10)
+
+            # Assert the wizard is in MCG mode using two independent signals:
+            # 1. "Capacity and nodes" is absent from the step list (DOM check).
+            # 2. "mode=object-storage" is present in the current URL (URL check).
+            # The earlier "Security" substring check was NOT independent because
+            # the full-cluster step "Security and network" also contains "Security".
+            if self.check_element_text("Capacity and nodes"):
+                self.take_screenshot()
+                self.copy_dom()
+                raise UnexpectedBehaviour(
+                    "Wizard is showing 'Capacity and nodes' step, which means MCG "
+                    "mode was NOT selected. Expected MCG wizard step list "
+                    "(Backing storage → Optional settings → Security → "
+                    "Review and create). Locator: mcg_only_deployment_entry"
+                )
+            if "mode=object-storage" not in self.driver.current_url:
+                self.take_screenshot()
+                self.copy_dom()
+                raise UnexpectedBehaviour(
+                    f"URL does not contain 'mode=object-storage' — MCG mode was NOT "
+                    f"selected. Current URL: {self.driver.current_url}. "
+                    f"Locator: mcg_only_deployment_entry"
+                )
+            logger.info(
+                "MCG mode confirmed: 'Capacity and nodes' absent from step list "
+                "and 'mode=object-storage' present in URL"
+            )
+
+            # Issue 5: assert a StorageClass is available before advancing —
+            # Backing storage's canGoToNextStep requires one; if absent, Next
+            # stays disabled and the loop fails silently three steps later.
+            if not self.check_element_text("Backing storage"):
+                self.take_screenshot()
+                self.copy_dom()
+                raise UnexpectedBehaviour(
+                    "Expected to be on 'Backing storage' step but step label not "
+                    "found. Wizard may not have loaded correctly."
+                )
+
+            # MCG step list: Backing storage → Optional settings → Security →
+            # Review and create.  Three Next presses reach the submit button.
+            # Issue 3: use the tight next_button_element locator (exact-match
+            # button text) and assert the expected step label before each press
+            # so a disabled/missing Next surfaces here, not at create_storage_system.
+            mcg_steps = (
+                ("Backing storage", "Optional settings"),
+                ("Optional settings", "Security"),
+                ("Security", "Review and create"),
+            )
+            for current_step, next_step in mcg_steps:
+                logger.info(
+                    f"On step '{current_step}', clicking Next to advance to '{next_step}'"
+                )
+                if not self.check_element_text(current_step):
+                    self.take_screenshot()
+                    self.copy_dom()
+                    raise UnexpectedBehaviour(
+                        f"Expected wizard to be on step '{current_step}' before "
+                        f"clicking Next, but step label not found in DOM."
+                    )
+                self.do_click(
+                    self.dep_loc["next_button_element"], enable_screenshot=True
+                )
+                self.page_has_loaded(retries=5)
+
+            # Submit — use create_storage_cluster() so the operator-name branch
+            # and the post-click stabilisation sleep are applied consistently
+            # (Issue 2: avoids hardcoding create_storage_system and dropping sleep).
+            self.create_storage_cluster()
         else:
+            # Legacy path (≤ ODF 4.19).  Kept verbatim — the OCP-version string
+            # comparisons are correct on the clusters that reach this branch and
+            # rewriting them is unverifiable scope creep.
+            if self.ocp_version == "4.9":
+                self.do_click(self.dep_loc["advanced_deployment"])
+            self.do_click(self.dep_loc["expand_advanced_mode"], enable_screenshot=True)
+            if self.ocp_version == "4.9":
+                self.do_click(self.dep_loc["mcg_only_option"], enable_screenshot=True)
+            elif self.ocp_version in ("4.10", "4.11", "4.12"):
+                self.do_click(
+                    self.dep_loc["mcg_only_option_4_10"], enable_screenshot=True
+                )
+            if config.DEPLOYMENT.get("local_storage"):
+                self.install_lso_cluster()
+            else:
+                self.do_click(self.dep_loc["next"], enable_screenshot=True)
             self.do_click(self.dep_loc["next"], enable_screenshot=True)
-        self.do_click(self.dep_loc["next"], enable_screenshot=True)
-        self.create_storage_cluster()
+            self.create_storage_cluster()
 
     def configure_in_transit_encryption(self):
         """
