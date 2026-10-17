@@ -24,10 +24,12 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_creation,
     wait_for_all_resources_deletion,
     wait_for_cnv_workload,
+    wait_for_vrg_state,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity_vm
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
+from ocs_ci.ocs.resources.drpc import DRPC
 
 logger = logging.getLogger(__name__)
 
@@ -148,14 +150,14 @@ class TestCnvDiscoveredAppsMDR:
         )
 
         wait_time = 120
-        logger.info(
+        logger.test_step(
             f"Wait for {wait_time} seconds before starting Failover of application"
         )
         time.sleep(wait_time)
 
         node_objs = get_node_objs()
         if primary_cluster_down:
-            logger.info("Stopping primary cluster nodes")
+            logger.test_step("Stopping primary cluster nodes")
             nodes_multicluster[primary_cluster_index].stop_nodes(node_objs)
 
         enable_fence(drcluster_name=self.primary_cluster_name)
@@ -196,19 +198,18 @@ class TestCnvDiscoveredAppsMDR:
             phase=constants.STATUS_RUNNING,
         )
 
-        if not primary_cluster_down:
-            set_current_secondary_cluster_context(
-                self.wl_namespace,
-                discovered_apps=True,
-                resource_name=self.resource_name,
-            )
-            mdr_post_failover_check(namespace=self.wl_namespace)
-
-        set_current_primary_cluster_context(
-            self.wl_namespace,
-            discovered_apps=True,
-            resource_name=self.resource_name,
+        wait_for_vrg_state(
+            vrg_state="primary",
+            vrg_namespace=constants.DR_OPS_NAMESPACE,
+            resource_name=cnv_workloads[0].discovered_apps_placement_name,
         )
+
+        logger.test_step("Validate data integrity after failover")
+        validate_data_integrity_vm(
+            cnv_workloads, vm_filepaths[0], md5sum_original, "Failover"
+        )
+
+        logger.test_step("Add data to VMs post-failover")
         for cnv_wl in cnv_workloads:
             md5sum_failover.append(
                 run_dd_io(
@@ -219,24 +220,37 @@ class TestCnvDiscoveredAppsMDR:
                 )
             )
 
-        validate_data_integrity_vm(
-            cnv_workloads, vm_filepaths[0], md5sum_original, "FailOver"
-        )
+        for cnv_wl, md5sum in zip(cnv_workloads, md5sum_failover):
+            logger.info(
+                "Post-failover checksum: file=%s, vm=%s, md5=%s",
+                vm_filepaths[1],
+                cnv_wl.workload_name,
+                md5sum,
+            )
 
         if primary_cluster_down:
-            nodes_multicluster[primary_cluster_index].start_nodes(node_objs)
-            logger.info(
-                f"Waiting for {wait_time} seconds after starting nodes of previous primary cluster"
-            )
-            time.sleep(wait_time)
-            wait_for_nodes_status([node.name for node in node_objs])
-
             set_current_secondary_cluster_context(
                 self.wl_namespace,
                 discovered_apps=True,
                 resource_name=self.resource_name,
             )
-            mdr_post_failover_check(namespace=self.wl_namespace)
+            nodes_multicluster[primary_cluster_index].start_nodes(node_objs)
+            logger.test_step(
+                f"Waiting for {wait_time} seconds after starting nodes of previous primary cluster"
+            )
+            time.sleep(wait_time)
+            wait_for_nodes_status([node.name for node in node_objs])
+
+        do_discovered_apps_cleanup(
+            drpc_name=cnv_workloads[0].discovered_apps_placement_name,
+            old_primary=self.primary_cluster_name,
+            workload_namespace=self.wl_namespace,
+            workload_dir=cnv_workloads[0].workload_dir,
+            vrg_name=self.resource_name,
+            skip_resource_deletion_verification=True,
+        )
+
+        mdr_post_failover_check(namespace=self.wl_namespace)
 
         enable_unfence(drcluster_name=self.primary_cluster_name)
         assert verify_fence_state(
@@ -247,13 +261,20 @@ class TestCnvDiscoveredAppsMDR:
             drcluster_name=self.primary_cluster_name, disable_eviction=True
         )
 
-        do_discovered_apps_cleanup(
-            drpc_name=cnv_workloads[0].discovered_apps_placement_name,
-            old_primary=self.primary_cluster_name,
-            workload_namespace=self.wl_namespace,
-            workload_dir=cnv_workloads[0].workload_dir,
-            vrg_name=self.resource_name,
+        wait_for_all_resources_deletion(self.wl_namespace)
+
+        wait_for_vrg_state(
+            vrg_state="secondary",
+            vrg_namespace=constants.DR_OPS_NAMESPACE,
+            resource_name=cnv_workloads[0].discovered_apps_placement_name,
         )
+
+        with config.RunWithAcmConfigContext():
+            drpc_obj = DRPC(
+                namespace=constants.DR_OPS_NAMESPACE,
+                resource_name=cnv_workloads[0].discovered_apps_placement_name,
+            )
+            drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
         secondary_cluster_name = get_current_secondary_cluster_name(
             self.wl_namespace,
@@ -307,6 +328,18 @@ class TestCnvDiscoveredAppsMDR:
             cnv_workloads, vm_filepaths[1], md5sum_failover, "Relocate"
         )
 
+        for cnv_wl in cnv_workloads:
+            run_dd_io(
+                vm_obj=cnv_wl.vm_obj,
+                file_path=vm_filepaths[2],
+                username=cnv_wl.vm_username,
+                verify=True,
+            )
+
+        with config.RunWithAcmConfigContext():
+            drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
+
+        logger.test_step("Add data to VMs post-relocate")
         for cnv_wl in cnv_workloads:
             run_dd_io(
                 vm_obj=cnv_wl.vm_obj,
