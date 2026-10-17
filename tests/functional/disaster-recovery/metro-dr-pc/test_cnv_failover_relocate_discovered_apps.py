@@ -233,12 +233,8 @@ class TestCnvDiscoveredAppsMDR:
                 md5sum,
             )
 
+        config.switch_to_cluster_by_name(self.primary_cluster_name)
         if primary_cluster_down:
-            set_current_secondary_cluster_context(
-                self.wl_namespace,
-                discovered_apps=True,
-                resource_name=self.resource_name,
-            )
             nodes_multicluster[primary_cluster_index].start_nodes(node_objs)
             logger.test_step(
                 f"Waiting for {wait_time} seconds after starting nodes of previous primary cluster"
