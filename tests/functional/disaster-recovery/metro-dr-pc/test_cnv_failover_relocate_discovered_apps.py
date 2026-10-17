@@ -155,6 +155,11 @@ class TestCnvDiscoveredAppsMDR:
         )
         time.sleep(wait_time)
 
+        set_current_primary_cluster_context(
+            self.wl_namespace,
+            discovered_apps=True,
+            resource_name=self.resource_name,
+        )
         node_objs = get_node_objs()
         if primary_cluster_down:
             logger.test_step("Stopping primary cluster nodes")
@@ -260,7 +265,6 @@ class TestCnvDiscoveredAppsMDR:
         gracefully_reboot_ocp_nodes(
             drcluster_name=self.primary_cluster_name, disable_eviction=True
         )
-
         wait_for_all_resources_deletion(self.wl_namespace)
 
         wait_for_vrg_state(
