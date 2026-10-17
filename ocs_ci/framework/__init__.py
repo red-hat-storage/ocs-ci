@@ -461,7 +461,10 @@ class MultiClusterConfig:
 
         """
         cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
-        return "hci_client" in cluster_types or "ext_client" in cluster_types
+        return (
+            constants.HCI_CLIENT in cluster_types
+            or constants.EXT_CLIENT in cluster_types
+        )
 
     def hci_provider_exist(self):
         """
