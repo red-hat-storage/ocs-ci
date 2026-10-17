@@ -234,6 +234,6 @@ class TestFailoverRelocateDiscoveredAppsMultiNs:
             with config.RunWithAcmConfigContext():
                 drpc_obj = DRPC(
                     namespace=constants.DR_OPS_NAMESPACE,
-                    resource_name=workloads.discovered_apps_placement_name,
+                    resource_name=workload.discovered_apps_placement_name,
                 )
                 drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
