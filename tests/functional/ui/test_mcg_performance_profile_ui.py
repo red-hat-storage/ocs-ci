@@ -55,7 +55,7 @@ class TestConfigurePerformancePageLayout:
         ):
             assert configure_perf_page.is_core_storage_select_button_present()
 
-        with test_step("Verify MCG 'Select a profile' button is present and clickable"):
+        with test_step("Verify MCG profile dropdown button is present and clickable"):
             assert configure_perf_page.is_mcg_select_button_present()
 
         with test_step("Verify page integrity with both sections"):
@@ -77,7 +77,24 @@ class TestMCGProfileSelection:
     @skipif_disconnected_cluster
     @skipif_ibm_cloud_managed
     def test_mcg_profile_selection(self, setup_ui_class):
-        """UI-3: Verify MCG profile selection updates CR and persists in UI."""
+        """
+        UI-3: Verify MCG profile selection updates CR and persists in UI.
+
+        The test works whether or not an MCG profile was ever selected before:
+        until the first selection the dropdown shows "Select a profile",
+        afterwards it always shows Default / Mixed workload / Small objects.
+
+        Steps:
+            1. Open the Configure Performance page and record the initial MCG
+               dropdown text ("Select a profile" or an existing profile).
+            2. Select the "default" profile and save (no-op if already default).
+            3. Verify the CR and the UI (after reopening if a change was saved)
+               show "default".
+            4. For each transition default -> mixed-workload -> default ->
+               small-objects -> default: select, save, verify the StorageCluster
+               CR, reopen the page and verify the UI shows the profile.
+            5. Finally restore the profile to "default".
+        """
         with test_step("Navigate to Configure Performance page"):
             navigator = PageNavigator()
             storage_cluster_page = navigator.nav_storage_cluster_default_page()
@@ -86,9 +103,42 @@ class TestMCGProfileSelection:
             )
 
         try:
+            with test_step("Record initial MCG profile state in UI"):
+                # Until a profile is selected for the first time the button shows
+                # "Select a profile" (None here); afterwards it always shows the
+                # selected profile name.
+                initial_ui_profile = configure_perf_page.get_mcg_profile_from_ui()
+                logger.info(
+                    "Initial MCG profile in UI: %s",
+                    initial_ui_profile or "not selected yet ('Select a profile')",
+                )
+                assert initial_ui_profile in (
+                    None,
+                    "default",
+                    "mixed-workload",
+                    "small-objects",
+                ), f"Unexpected initial MCG profile text in UI: '{initial_ui_profile}'"
+
             with test_step("Initialize MCG with default profile"):
                 configure_perf_page.select_mcg_profile("default")
                 configure_perf_page.save_configuration()
+
+            with test_step("Verify default profile is set in CR and UI"):
+                if initial_ui_profile != "default":
+                    # A change was saved: reopen the page to read the persisted state
+                    storage_cluster_page = navigator.nav_storage_cluster_default_page()
+                    configure_perf_page = (
+                        storage_cluster_page.click_configure_performance_button()
+                    )
+                cr_profile = configure_perf_page.get_mcg_profile_from_cr()
+                assert (
+                    cr_profile == "default"
+                ), f"MCG profile in CR should be 'default', got '{cr_profile}'"
+                ui_profile = configure_perf_page.get_mcg_profile_from_ui()
+                assert (
+                    ui_profile == "default"
+                ), f"MCG profile in UI should be 'default', got '{ui_profile}'"
+
             transitions = [
                 ("default", "mixed-workload"),
                 ("mixed-workload", "default"),
@@ -157,6 +207,12 @@ class TestCoreStorageRegression:
             with test_step("Initialize Core Storage with balanced profile"):
                 configure_perf_page.select_core_storage_profile("balanced")
                 configure_perf_page.save_configuration()
+                # save_configuration() navigates away; reopen the page so the
+                # transitions loop starts from the Configure Performance page.
+                storage_cluster_page = navigator.nav_storage_cluster_default_page()
+                configure_perf_page = (
+                    storage_cluster_page.click_configure_performance_button()
+                )
             initial_profile = "balanced"
         try:
             transitions = [
