@@ -28,6 +28,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     skipif_ocs_version,
     tier1,
+    tier2,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources.cbt_metadata import (
@@ -47,7 +48,6 @@ log = logging.getLogger(__name__)
 
 
 @green_squad
-@tier1
 @consumer_env_check
 @skipif_ocs_version("<4.23")
 class TestRbdCBTMetadata(ManageTest):
@@ -253,6 +253,7 @@ class TestRbdCBTMetadata(ManageTest):
 
     # -- Test 1 ----------------------------------------------------
 
+    @tier1
     @pytest.mark.parametrize(
         argnames=["volume_mode"],
         argvalues=[
@@ -299,6 +300,7 @@ class TestRbdCBTMetadata(ManageTest):
 
     # -- Test 2 ----------------------------------------------------
 
+    @tier1
     @pytest.mark.parametrize(
         argnames=["volume_mode"],
         argvalues=[
@@ -368,6 +370,7 @@ class TestRbdCBTMetadata(ManageTest):
 
     # -- Test 3 ----------------------------------------------------
 
+    @tier1
     @pytest.mark.parametrize(
         argnames=["volume_mode"],
         argvalues=[
@@ -473,6 +476,7 @@ class TestRbdCBTMetadata(ManageTest):
 
     # -- Test 4 ----------------------------------------------------
 
+    @tier2
     @pytest.mark.parametrize(
         argnames=["volume_mode"],
         argvalues=[
@@ -614,6 +618,7 @@ class TestRbdCBTMetadata(ManageTest):
 
     # -- Test 5 ----------------------------------------------------
 
+    @tier2
     @pytest.mark.parametrize(
         argnames=["volume_mode"],
         argvalues=[
@@ -719,6 +724,7 @@ class TestRbdCBTMetadata(ManageTest):
 
     # -- Test 6 ----------------------------------------------------
 
+    @tier2
     @pytest.mark.parametrize(
         argnames=["volume_mode"],
         argvalues=[
