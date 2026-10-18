@@ -8,7 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_client,
     skipif_ibm_cloud_managed,
     skipif_mcg_only,
-    black_squad,
+    red_squad,
     jira,
     polarion_id,
     tier2,
@@ -26,7 +26,7 @@ class TestConfigurePerformancePageLayout:
 
     @ui
     @tier2
-    @black_squad
+    @red_squad
     @jira("RHSTOR-8629")
     @polarion_id("OCS-8317")
     @skipif_mcg_only
@@ -69,7 +69,7 @@ class TestMCGProfileSelection:
 
     @ui
     @tier2
-    @black_squad
+    @red_squad
     @jira("RHSTOR-8629")
     @polarion_id("OCS-8318")
     @skipif_mcg_only
@@ -185,7 +185,7 @@ class TestCoreStorageRegression:
 
     @ui
     @tier2
-    @black_squad
+    @red_squad
     @jira("RHSTOR-8629")
     @polarion_id("OCS-8319")
     @skipif_mcg_only
