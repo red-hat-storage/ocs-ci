@@ -1,4 +1,6 @@
 import logging
+import time
+
 import pytest
 
 from ocs_ci.framework.testlib import (
@@ -19,11 +21,14 @@ from ocs_ci.helpers.ceph_mon_healthcheck import (
     verify_mon_healthcheck_timeout_value_in_logs,
     delete_storagecluster_mon_healthcheck,
     get_storagecluster_mon_healthcheck,
-    wait_for_mon_pod_restart,
+    wait_for_cephcluster_to_settle,
+    get_mon_ids,
+    delete_mon_pod,
+    wait_for_mon_failover,
     select_mon_id_and_node,
 )
 from ocs_ci.ocs.node import (
-    drain_nodes,
+    unschedule_nodes,
     schedule_nodes,
     get_node_objs,
     recover_node_to_ready_state,
@@ -111,12 +116,13 @@ class TestCephMonHealthCheck(ManageTest):
         Steps:
         1. Patch mon healthcheck values in StorageCluster
         2. Wait until the mon healthcheck in StorageCluster and CephCluster are consistent
-        3. Drain a mon node and wait for mon to go down
-        4. Verify mon healthcheck timeout value in logs
-        5. Wait for mon pod restart in the expected time
-        6. Schedule the mon node back
-        7. Wait for mons to be in quorum
-        8. Check cluster health
+        3. Cordon a mon node and wait for the cephcluster to settle
+        4. Delete the mon pod on that node and wait for the mon to go down
+        5. Verify mon healthcheck timeout value in logs
+        6. Wait for the mon failover and verify it took at least the mon timeout
+        7. Schedule the mon node back
+        8. Wait for mons to be in quorum
+        9. Check cluster health
 
         """
         mon_timeout_seconds = int(mon_timeout[:-1]) * 60
@@ -124,21 +130,48 @@ class TestCephMonHealthCheck(ManageTest):
         wait_for_mon_healthcheck_consistency()
 
         mon_id, node_name = select_mon_id_and_node()
-        drain_nodes([node_name], disable_eviction=True)
+        mon_ids_before = get_mon_ids()
+        # Cordon the node before taking the mon down, and let the resulting
+        # orchestration finish. The operator stops the mon health check while a
+        # cephcluster orchestration runs, and an orchestration that starts when
+        # a mon is already down cannot update the remaining mons ("not enough
+        # monitors would be available"), so the health check never resumes.
+        unschedule_nodes([node_name])
+        wait_for_cephcluster_to_settle()
+
+        delete_mon_pod(mon_id)
         wait_for_mon_status(
             mon_id=mon_id, status=constants.MON_STATUS_DOWN, timeout=180
         )
+        mon_down_time = time.time()
         res = verify_mon_healthcheck_timeout_value_in_logs(
             mon_id, mon_timeout_seconds, timeout=720
         )
         assert res, "Mon healthcheck timeout value not found in logs"
         # Add a small gap to the timeout to account for any delays
         timeout_gap = 180
-        # Calculate the expected mon pod restart timeout (in seconds). In the rook-ceph-operator,
-        # the mon pod restart may happen after 2 times the mon timeout value.
-        mon_pod_timeout = mon_timeout_seconds * 2 + timeout_gap
-        wait_for_mon_pod_restart(mon_id, mon_pod_timeout)
+        # Calculate the expected mon failover timeout (in seconds). In the rook-ceph-operator,
+        # the mon failover may happen after 2 times the mon timeout value.
+        mon_failover_timeout = mon_timeout_seconds * 2 + timeout_gap
+        new_mon_id = wait_for_mon_failover(mon_ids_before, timeout=mon_failover_timeout)
+        failover_seconds = time.time() - mon_down_time
+        log.info(
+            f"The mon '{mon_id}' failed over to the new mon '{new_mon_id}' "
+            f"after {failover_seconds:.0f} seconds"
+        )
 
+        # Schedule the node back as soon as the failover is seen, so the new mon
+        # can start and the cluster is not left degraded during the checks below
         schedule_nodes([node_name])
+
+        # The mon is detected as down by polling, so the measured time can be
+        # slightly shorter than the configured mon healthcheck timeout
+        min_failover_seconds = mon_timeout_seconds * 0.8
+        assert failover_seconds >= min_failover_seconds, (
+            f"The mon '{mon_id}' failed over after {failover_seconds:.0f} seconds, which is less "
+            f"than the minimum of {min_failover_seconds:.0f} seconds expected for the mon "
+            f"healthcheck timeout {mon_timeout}"
+        )
+
         wait_for_mons_in_quorum(expected_mon_count=self.mon_count)
         self.check_cluster_health()
