@@ -8,7 +8,15 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.pod import get_pods_having_label
 from ocs_ci.helpers.scc_helpers import (
+    REQUIRED_PREFIXES_BY_CSV,
+    SCC_BY_CATEGORY,
+    get_active_scc_pods,
+    get_expected_scc_for_label,
+    get_matching_scc_components,
     get_pod_scc_annotations,
+    get_required_scc_labels,
+    get_scc_pinning_errors,
+    pod_matches_scc_label,
     verify_pod_scc_pinning,
 )
 from ocs_ci.framework.pytest_customization.marks import (
@@ -24,188 +32,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import ManageTest
 
 logger = logging.getLogger(__name__)
-
-
-# Expected values from the RHSTOR-8757 operator changes. Optional components
-# are checked when present. Jobs and optional topologies need separate runs.
-SCC_BY_CATEGORY = {
-    "Rook-Ceph": {
-        constants.MON_APP_LABEL: constants.SCC_ROOK_CEPH,
-        constants.OSD_APP_LABEL: constants.SCC_ROOK_CEPH,
-        constants.MGR_APP_LABEL: constants.SCC_ROOK_CEPH,
-        constants.MDS_APP_LABEL: constants.SCC_ROOK_CEPH,
-        constants.RGW_APP_LABEL: constants.SCC_ROOK_CEPH,
-        constants.CRASHCOLLECTOR_APP_LABEL: constants.SCC_ROOK_CEPH,
-        constants.EXPORTER_APP_LABEL: constants.SCC_ROOK_CEPH,
-        constants.TOOL_APP_LABEL: constants.SCC_ROOK_CEPH,
-        constants.OPERATOR_LABEL: constants.SCC_ROOK_CEPH,
-        constants.OSD_PREPARE_APP_LABEL: constants.SCC_ROOK_CEPH,
-        f"app={constants.OSD_KEY_ROTATION_POD_NAME}": constants.SCC_ROOK_CEPH,
-        constants.RBD_MIRROR_APP_LABEL: constants.SCC_ROOK_CEPH,
-        "app=rook-ceph-nfs": constants.SCC_ROOK_CEPH,
-    },
-    "CSI": {
-        constants.CSI_CEPHFSPLUGIN_LABEL_419: constants.SCC_CEPH_CSI_OP,
-        constants.CSI_RBDPLUGIN_LABEL_419: constants.SCC_CEPH_CSI_OP,
-        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419: constants.SCC_CEPH_CSI_OP,
-        constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419: constants.SCC_CEPH_CSI_OP,
-        constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420: constants.SCC_CEPH_CSI_OP,
-        constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420: constants.SCC_CEPH_CSI_OP,
-        constants.NFS_CSI_NODEPLUGIN_LABEL_419: constants.SCC_CEPH_CSI_OP,
-        constants.NFS_CSI_CTRLPLUGIN_LABEL_419: constants.SCC_CEPH_CSI_OP,
-    },
-    "NooBaa": {
-        constants.NOOBAA_CORE_POD_LABEL: constants.SCC_NOOBAA_CORE,
-        constants.NOOBAA_DB_LABEL_419_AND_ABOVE: constants.SCC_RESTRICTED_V2,
-        constants.NOOBAA_ENDPOINT_POD_LABEL: constants.SCC_NOOBAA_ENDPOINT,
-        constants.NOOBAA_OPERATOR_POD_LABEL: constants.SCC_RESTRICTED_V2,
-        constants.NOOBAA_CNPG_POD_LABEL: constants.SCC_RESTRICTED_V2,
-        constants.NOOBAA_PROMETHEUS_ADAPTER_LABEL: constants.SCC_RESTRICTED_V2,
-    },
-    "ODF operators": {
-        constants.OCS_OPERATOR_LABEL: constants.SCC_RESTRICTED_V2,
-        constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: constants.SCC_RESTRICTED_V2,
-        constants.ODF_EXTERNAL_SNAPSHOTTER: constants.SCC_RESTRICTED_V2,
-        constants.CEPH_CSI_CONTROLLER_MANAGER_LABEL: constants.SCC_RESTRICTED_V2,
-        constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL: constants.SCC_RESTRICTED_V2,
-        constants.OCS_METRICS_EXPORTER: constants.SCC_RESTRICTED_V2,
-        constants.ODF_CONSOLE: constants.SCC_RESTRICTED_V2,
-        constants.UX_BACKEND_APP_LABEL: constants.SCC_RESTRICTED_V2,
-        constants.PROVIDER_SERVER_LABEL: constants.SCC_RESTRICTED_V2,
-        "app=vault-agent-rgw": constants.SCC_RESTRICTED_V2,
-        constants.PROMETHEUS_OPERATOR_LABEL: constants.SCC_RESTRICTED_V2,
-        constants.MANAGED_PROMETHEUS_LABEL: constants.SCC_NONROOT_V2,
-        constants.MANAGED_ALERTMANAGER_LABEL: constants.SCC_NONROOT_V2,
-        constants.MANAGED_FUSION_PROMETHEUS_LABEL: constants.SCC_NONROOT_V2,
-        constants.MANAGED_FUSION_ALERTMANAGER_LABEL: constants.SCC_NONROOT_V2,
-        constants.TOKEN_EXCHANGE_AGENT_LABEL: constants.SCC_RESTRICTED_V2,
-    },
-    "blackbox exporter": {
-        constants.BLACKBOX_POD_LABEL_422_AND_ABOVE: constants.SCC_ODF_BLACKBOX,
-    },
-}
-
-REQUIRED_CEPH_LABELS = {
-    constants.MON_APP_LABEL,
-    constants.OSD_APP_LABEL,
-    constants.MGR_APP_LABEL,
-    constants.OPERATOR_LABEL,
-    constants.CSI_CEPHFSPLUGIN_LABEL_419,
-    constants.CSI_RBDPLUGIN_LABEL_419,
-    constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419,
-    constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
-    constants.CEPH_CSI_CONTROLLER_MANAGER_LABEL,
-}
-REQUIRED_LABELS = REQUIRED_CEPH_LABELS | {
-    constants.NOOBAA_CORE_POD_LABEL,
-    constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
-    constants.NOOBAA_ENDPOINT_POD_LABEL,
-    constants.NOOBAA_OPERATOR_POD_LABEL,
-    constants.OCS_OPERATOR_LABEL,
-    constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL,
-    constants.ODF_CONSOLE,
-}
-HOST_NETWORK_LABELS = {constants.OPERATOR_LABEL, constants.OCS_METRICS_EXPORTER}
-
-# Some operator templates do not have a unique label in the current mapping.
-SCC_BY_POD_PREFIX = {
-    "devicefinder-discovery": constants.PRIVILEGED,
-    constants.OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX: constants.SCC_RESTRICTED_V2,
-    constants.OCS_CLIENT_OPERATOR_CONSOLE: constants.SCC_RESTRICTED_V2,
-    constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER: constants.SCC_RESTRICTED_V2,
-    "odf-multicluster-console": constants.SCC_RESTRICTED_V2,
-    "ocs-extend-cluster": constants.SCC_RESTRICTED_V2,
-    "ocs-osd-removal": constants.SCC_ROOK_CEPH,
-    "onboarding-validation-keys-generator": constants.SCC_RESTRICTED_V2,
-}
-SCC_BY_NAME_FRAGMENT = {
-    "status-reporter": constants.SCC_RESTRICTED_V2,
-    "analyze-resource": constants.SCC_RESTRICTED_V2,
-}
-REQUIRED_PREFIXES_BY_CSV = {
-    "ocs-client-operator": (
-        constants.OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX,
-        constants.OCS_CLIENT_OPERATOR_CONSOLE,
-    ),
-    "odf-multicluster-orchestrator": (
-        constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER,
-        "odf-multicluster-console",
-    ),
-}
-
-
-def _required_labels() -> set[str]:
-    required = REQUIRED_LABELS
-    if config.ENV_DATA.get("mcg_only_deployment"):
-        required = required - REQUIRED_CEPH_LABELS
-    if config.ENV_DATA.get("noobaa_external_pgsql"):
-        required = required - {constants.NOOBAA_DB_LABEL_419_AND_ABOVE}
-    return required
-
-
-def _active_pods(namespace: str) -> list[dict]:
-    pods = OCP(kind=constants.POD, namespace=namespace).get().get("items", [])
-    return [
-        pod
-        for pod in pods
-        if pod.get("status", {}).get("phase") in ("Running", "Pending")
-        and not pod.get("metadata", {}).get("deletionTimestamp")
-    ]
-
-
-def _matches_label(pod: dict, selector: str) -> bool:
-    key, _, value = selector.partition("=")
-    return (pod.get("metadata", {}).get("labels") or {}).get(key) == value
-
-
-def _expected_scc_for_label(pod: dict, selector: str, default_scc: str) -> str:
-    if selector in HOST_NETWORK_LABELS and pod.get("spec", {}).get("hostNetwork"):
-        return constants.SCC_HOSTNETWORK_V2
-    return default_scc
-
-
-def _matching_components(pod: dict) -> list[tuple[str, str]]:
-    name = pod.get("metadata", {}).get("name", "")
-    matches = []
-    for components in SCC_BY_CATEGORY.values():
-        for selector, expected_scc in components.items():
-            if _matches_label(pod, selector):
-                matches.append(
-                    (selector, _expected_scc_for_label(pod, selector, expected_scc))
-                )
-
-    matches.extend(
-        (prefix, expected_scc)
-        for prefix, expected_scc in SCC_BY_POD_PREFIX.items()
-        if name.startswith(prefix)
-    )
-    matches.extend(
-        (fragment, expected_scc)
-        for fragment, expected_scc in SCC_BY_NAME_FRAGMENT.items()
-        if fragment in name
-    )
-    if any(
-        container.get("name") == "noobaa-agent"
-        for container in pod.get("spec", {}).get("containers", [])
-    ):
-        matches.append(("noobaa-agent", constants.SCC_NOOBAA_AGENT))
-    return matches
-
-
-def _pinning_errors(pod: dict, component: str, expected_scc: str) -> list[str]:
-    result = verify_pod_scc_pinning(pod, expected_scc)
-    errors = []
-    if not result["required_match"]:
-        errors.append(
-            f"Pod '{result['pod_name']}' ({component}) requests "
-            f"'{result['required_scc']}', expected '{expected_scc}'"
-        )
-    if not result["admission_match"]:
-        errors.append(
-            f"Pod '{result['pod_name']}' ({component}) was admitted under "
-            f"'{result['admission_scc']}', expected '{expected_scc}'"
-        )
-    return errors
 
 
 @brown_squad
@@ -224,20 +50,22 @@ class TestSCCEnforcement(ManageTest):
     def _verify_components_scc(self, category_name: str) -> None:
         """Check SCCs on all active pods in one component category."""
         namespace = config.ENV_DATA["cluster_namespace"]
-        all_pods = _active_pods(namespace)
+        all_pods = get_active_scc_pods(namespace)
         checked_count = 0
         errors = []
-        required_labels = _required_labels()
+        required_labels = get_required_scc_labels()
 
         for selector, default_scc in SCC_BY_CATEGORY[category_name].items():
-            selected = [pod for pod in all_pods if _matches_label(pod, selector)]
+            # Reuse the namespace snapshot to check all active pods for this component.
+            selected = [pod for pod in all_pods if pod_matches_scc_label(pod, selector)]
             if not selected and selector in required_labels:
                 errors.append(
                     f"Required component with label '{selector}' has no active pod"
                 )
             for pod in selected:
-                expected_scc = _expected_scc_for_label(pod, selector, default_scc)
-                errors.extend(_pinning_errors(pod, selector, expected_scc))
+                expected_scc = get_expected_scc_for_label(pod, selector, default_scc)
+                errors.extend(get_scc_pinning_errors(pod, selector, expected_scc))
+            # Count each checked pod so the final assertion rejects an empty category.
             checked_count += len(selected)
 
         assert not errors, "SCC pinning failed:\n" + "\n".join(errors)
@@ -477,7 +305,7 @@ class TestSCCEnforcement(ManageTest):
 
         """
         namespace = config.ENV_DATA["cluster_namespace"]
-        all_pods = _active_pods(namespace)
+        all_pods = get_active_scc_pods(namespace)
 
         csv_names = {
             csv["metadata"]["name"]
@@ -494,7 +322,7 @@ class TestSCCEnforcement(ManageTest):
         matched_components = set()
         for pod in all_pods:
             pod_name = pod.get("metadata", {}).get("name", "unknown")
-            matches = _matching_components(pod)
+            matches = get_matching_scc_components(pod)
             if not matches:
                 errors.append(f"Pod '{pod_name}' has no SCC mapping")
                 continue
@@ -507,9 +335,9 @@ class TestSCCEnforcement(ManageTest):
 
             component, expected_scc = matches[0]
             matched_components.add(component)
-            errors.extend(_pinning_errors(pod, component, expected_scc))
+            errors.extend(get_scc_pinning_errors(pod, component, expected_scc))
 
-        for component in _required_labels() | required_prefixes:
+        for component in get_required_scc_labels() | required_prefixes:
             if component not in matched_components:
                 errors.append(f"Required component '{component}' has no active pod")
 
