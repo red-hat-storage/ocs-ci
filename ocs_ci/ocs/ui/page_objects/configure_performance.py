@@ -5,8 +5,9 @@ import time
 from typing import Optional
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.ui.base_ui import BaseUI
+from ocs_ci.ocs.ui.base_ui import BaseUI, SeleniumDriver
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 
 
 logger = logging.getLogger(__name__)
@@ -241,19 +242,13 @@ class ConfigurePerformancePage(BaseUI):
         profile_display = profile_name.replace("-", " ")
         expected_ui_profile = profile_name.strip().lower().replace(" ", "-")
 
-        # XPath for the clickable menuitem whose text matches the profile,
-        # scoped to a dropdown/menu container so we do not match unrelated page
-        # text. Targeting role="menuitem" / class item/option (like the Core
-        # Storage locator that UI-2 uses) ensures the click reaches React's
-        # selection handler instead of a non-interactive wrapper.
-        menuitem_xpath = (
-            "//*[contains(@class, 'dropdown') or contains(@class, 'menu') "
-            "or contains(@class, 'popover') or contains(@class, 'modal') "
-            "or contains(@role, 'listbox') or contains(@role, 'menu')]"
-            "//*[@role='menuitem' or contains(@class, 'item') or contains(@class, 'option')]"
-            "[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
-            "'abcdefghijklmnopqrstuvwxyz'), '{}')]".format(profile_display.lower())
+        # Resolve the dynamic menuitem locator from views.py using format_locator
+        # so no inline XPath lives in the POM file.
+        menuitem_loc = format_locator(
+            self.configure_performance_loc["mcg_profile_menuitem"],
+            profile_display.lower(),
         )
+        menuitem_xpath = menuitem_loc[0]
 
         last_button_text = ""
         for attempt in range(1, 4):
@@ -262,7 +257,7 @@ class ConfigurePerformancePage(BaseUI):
             )
             # Open the dropdown.
             try:
-                button = WebDriverWait(self.driver, 15).until(
+                button = WebDriverWait(SeleniumDriver(), 15).until(
                     EC.element_to_be_clickable((button_loc[1], button_loc[0]))
                 )
                 logger.info("Clicking MCG dropdown button")
@@ -275,7 +270,7 @@ class ConfigurePerformancePage(BaseUI):
                 )
                 fallback_xpath = "//button[contains(@class, 'menu-toggle') and contains(@class, 'toggle')]"
                 try:
-                    button = WebDriverWait(self.driver, 15).until(
+                    button = WebDriverWait(SeleniumDriver(), 15).until(
                         EC.element_to_be_clickable((By.XPATH, fallback_xpath))
                     )
                     logger.info("Found MCG button with fallback locator")
@@ -293,7 +288,7 @@ class ConfigurePerformancePage(BaseUI):
             registered = False
             for click_kind in ("native", "js"):
                 try:
-                    menuitem = WebDriverWait(self.driver, 15).until(
+                    menuitem = WebDriverWait(SeleniumDriver(), 15).until(
                         EC.element_to_be_clickable((By.XPATH, menuitem_xpath))
                     )
                     if click_kind == "native":
@@ -374,7 +369,7 @@ class ConfigurePerformancePage(BaseUI):
         ]
         logger.info("Waiting for Core Storage dropdown button to be clickable")
         try:
-            button = WebDriverWait(self.driver, 15).until(
+            button = WebDriverWait(SeleniumDriver(), 15).until(
                 EC.element_to_be_clickable((button_loc[1], button_loc[0]))
             )
             logger.info("Clicking Core Storage dropdown button")
@@ -383,7 +378,7 @@ class ConfigurePerformancePage(BaseUI):
             logger.warning("Primary locator failed, trying fallback")
             fallback_xpath = "//h2[contains(text(), 'Core storage')]/following::button[contains(@class, 'toggle')]"
             try:
-                button = WebDriverWait(self.driver, 10).until(
+                button = WebDriverWait(SeleniumDriver(), 10).until(
                     EC.element_to_be_clickable((By.XPATH, fallback_xpath))
                 )
                 logger.info("Found Core Storage button with fallback locator")
@@ -404,7 +399,7 @@ class ConfigurePerformancePage(BaseUI):
         )
 
         try:
-            option = WebDriverWait(self.driver, 15).until(
+            option = WebDriverWait(SeleniumDriver(), 15).until(
                 EC.element_to_be_clickable((profile_option_loc[1], profile_xpath))
             )
             logger.info("Clicking Core Storage profile option: %s", profile_name)
@@ -437,7 +432,7 @@ class ConfigurePerformancePage(BaseUI):
         save_btn = None
         for attempt in range(1, 4):
             try:
-                save_btn = WebDriverWait(self.driver, 10).until(
+                save_btn = WebDriverWait(SeleniumDriver(), 10).until(
                     EC.element_to_be_clickable((save_button[1], save_button[0]))
                 )
                 logger.info("Save button is enabled, clicking it")
@@ -459,12 +454,12 @@ class ConfigurePerformancePage(BaseUI):
                 logger.info("Save button is disabled, no changes to save")
                 return self
 
-        original_url = self.driver.current_url
+        original_url = SeleniumDriver().current_url
         save_btn.click()
         logger.info("Clicked Save button, waiting for page navigation")
 
         try:
-            WebDriverWait(self.driver, 15).until(EC.url_changes(original_url))
+            WebDriverWait(SeleniumDriver(), 15).until(EC.url_changes(original_url))
             logger.info("Page navigated away from Configure Performance page")
         except TimeoutException as e:
             logger.warning("Page did not navigate after save: %s", e)
