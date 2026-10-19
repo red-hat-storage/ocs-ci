@@ -144,7 +144,6 @@ class TestZoneFailureFailoverRelocate:
                 skip_mirroring_validation=True,
             )
             gitops_workloads.append(gitops_workload)
-            gitops_workload.pvc_interface = pvc_interface
         logger.info(
             f"Deployed {len(gitops_workloads)} GitOps/ApplicationSet workload(s): "
             f"{[w.workload_namespace for w in gitops_workloads]}"
@@ -164,7 +163,6 @@ class TestZoneFailureFailoverRelocate:
                 skip_mirroring_validation=True,
             )
             discovered_workloads.append(discovered_workload)
-            discovered_workload.pvc_interface = pvc_interface
         logger.info(
             f"Deployed {len(discovered_workloads)} Discovered workload(s): "
             f"{[w.workload_namespace for w in discovered_workloads]}"
@@ -186,8 +184,6 @@ class TestZoneFailureFailoverRelocate:
             f"Deployed {len(cnv_workloads)} CNV workload(s): "
             f"{[w.workload_namespace for w in cnv_workloads]}"
         )
-        for cnv_workload in cnv_workloads:
-            cnv_workload.pvc_interface = constants.CEPHBLOCKPOOL
 
         # Combine all workloads for iteration
         all_workloads = gitops_workloads + discovered_workloads + cnv_workloads
@@ -648,7 +644,7 @@ class TestZoneFailureFailoverRelocate:
             drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
         logger.info(
-            f"Failover and relocate complete for all {len(all_workloads)} workload(s): "
-            f"pvc_interface={pvc_interface}, power_off_zone='{power_off_zone}', "
+            f"Failover and relocate complete for all {len(all_workloads)} workload(s). "
+            f"power_off_zone is '{power_off_zone}', "
             f"failovers={len(completed_failovers)}, relocates={len(completed_relocates)}"
         )
