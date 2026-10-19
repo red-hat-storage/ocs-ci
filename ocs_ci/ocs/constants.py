@@ -2758,6 +2758,7 @@ MCE_CATSRC_IMAGE = "quay.io:443/acm-d/mce-dev-catalog"
 OCS_PROVISIONERS = [
     "openshift-storage.rbd.csi.ceph.com",
     "openshift-storage.cephfs.csi.ceph.com",
+    "openshift-storage.nfs.csi.ceph.com",
     "openshift-storage.noobaa.io/obc",
     "topolvm.cybozu.com",
     "topolvm.io",
