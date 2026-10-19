@@ -555,12 +555,23 @@ def get_clusters(
                 continue
             vpc_name = [tag["Value"] for tag in vpc_tags if tag["Key"] == "Name"][0]
             cluster_name = vpc_name.replace("-vpc", "")
-            vpc_instances = list(vpc_obj.instances.all())
+            all_vpc_instances = list(vpc_obj.instances.all())
+            # Filter out terminated/terminating instances for decision making
+            vpc_instances = [
+                inst
+                for inst in all_vpc_instances
+                if inst.state["Name"] not in ["terminated", "terminating"]
+            ]
 
             # Check if this is a HyperShift/CAPI cluster
             is_hypershift = is_hypershift_or_capi_cluster(vpc_obj)
 
             if not vpc_instances:
+                logger.info(
+                    "VPC %s (%s) has no active instances, marking for deletion",
+                    vpc_obj.id,
+                    cluster_name,
+                )
                 if is_hypershift:
                     hypershift_clusters_to_delete.append((cluster_name, vpc_obj.id))
                 else:
