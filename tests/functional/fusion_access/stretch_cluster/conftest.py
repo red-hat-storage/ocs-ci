@@ -5,14 +5,42 @@ import pytest
 from ocs_ci.helpers.fusion_access_helper import (
     create_baseline_file,
     create_workload_from_template,
+    discover_iscsi_luns,
     get_fusion_access_storageclass,
     get_workload_pod,
     wait_for_workload_pods,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 
 log = logging.getLogger(__name__)
+
+
+@pytest.fixture()
+def reconnect_san_teardown(request):
+    """
+    Log every node back into the iSCSI target once the test is over.
+
+    The tests that take the SAN away from a zone reconnect it themselves as
+    part of what they are verifying, but only if they get that far. Without
+    this the cluster would be left with a zone that has no storage whenever
+    one of them fails in between, and every test after it would fail too.
+    Reconnecting is idempotent, the login of a node that never lost its
+    session fails harmlessly with 'already exists'.
+
+    Every node is covered and not just the workers, a data zone of a stretch
+    cluster also holds a control plane node which is part of the Storage Scale
+    cluster and reaches the same SAN.
+
+    """
+
+    def finalizer():
+        node_names = [node_obj.name for node_obj in get_node_objs()]
+        log.info(f"Making sure the nodes {node_names} are logged back into the SAN")
+        discover_iscsi_luns(node_names=node_names)
+
+    request.addfinalizer(finalizer)
 
 
 @pytest.fixture()

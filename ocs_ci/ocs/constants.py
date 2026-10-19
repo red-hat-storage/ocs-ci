@@ -3986,6 +3986,14 @@ FUSION_ACCESS_ARBITER_ZONE_LABEL = "arbiter"
 # Overridable through ENV_DATA['fusion_access_storageclass'].
 FUSION_ACCESS_SC = "san-fs1"
 
+# Name of the IBM Storage Scale filesystem the storage class is backed by.
+# Overridable through ENV_DATA['fusion_access_filesystem'].
+FUSION_ACCESS_FILESYSTEM = "fs1"
+
+# Label of the IBM Storage Scale core pods, one per node of the Scale cluster.
+# They carry the GPFS daemon and are where the 'mm*' commands are run from
+IBM_STORAGE_SCALE_CORE_LABEL = "app.kubernetes.io/name=core"
+
 # Fusion Access workload templates
 FUSION_ACCESS_WORKLOAD_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fusion_access")
 BUSYBOX_FUSION_PATH = os.path.join(FUSION_ACCESS_WORKLOAD_DIR, "busybox.fusion.yaml")

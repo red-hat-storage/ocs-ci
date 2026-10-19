@@ -142,42 +142,154 @@ def wait_for_luns_visible(node_name, timeout=600, sleep_time=20):
         )
 
 
-def discover_iscsi_luns(timeout=600):
+def wait_for_luns_not_visible(node_name, timeout=600, sleep_time=20):
     """
-    Rediscover the shared SAN LUNs and log back into the iSCSI target on every
-    worker node, then verify the LUNs are actually visible on each of them.
+    Wait for the shared SAN LUNs to disappear as block devices from a node.
 
-    A node loses its iSCSI sessions when it is powered off and they are not
-    reliably re-established on their own once it boots back up. Without the
-    LUNs the node cannot bring its NSDs back and rejoin the IBM Storage Scale
-    cluster, so the discovery has to be run again after the nodes of a failed
-    zone are started.
-
-    The target address and IQN are read from ENV_DATA, they are environment
-    specific and are never hardcoded here.
+    The inverse of :py:func:`wait_for_luns_visible`, used to confirm a SAN
+    outage has actually taken effect on a node. An 'iscsiadm' logout returns
+    as soon as the session teardown is issued, the SCSI devices are removed
+    shortly after, so the disks going away is what gets waited on rather than
+    the exit code of the logout.
 
     Args:
-        timeout (int): Time in seconds to wait for the LUNs to become visible
-            on each worker node once the login has been issued
+        node_name (str): Name of the node to check
+        timeout (int): Time in seconds to wait for the LUNs to disappear
+        sleep_time (int): Time in seconds between two checks
+
+    Raises:
+        UnexpectedBehaviour: If the node still sees a LUN within the timeout
+
+    """
+    ocp_obj = OCP()
+    try:
+        for out in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep_time,
+            func=ocp_obj.exec_oc_cmd,
+            command=f"debug node/{node_name} -- chroot /host lsblk -S -o NAME,TRAN,SIZE",
+            out_yaml_format=False,
+            ignore_error=True,
+        ):
+            luns = [line for line in str(out).splitlines() if "iscsi" in line]
+            if not luns:
+                logger.info(f"Node {node_name} no longer sees any SAN LUN")
+                return
+            logger.warning(
+                f"Node {node_name} still sees {len(luns)} LUN(s):\n" + "\n".join(luns)
+            )
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"Node {node_name} still sees its SAN LUNs after {timeout} seconds, "
+            f"the storage outage did not take effect"
+        )
+
+
+def get_iscsi_target():
+    """
+    Read the iSCSI target details of the SAN from ENV_DATA and validate them.
+
+    The values are environment specific and are never hardcoded. They are
+    validated before being interpolated into a shell command.
+
+    Returns:
+        tuple: iSCSI target portal IP and IQN
 
     Raises:
         ValueError: If 'san_iscsi_ip' or 'san_iscsi_iqn' of ENV_DATA is missing
             or malformed
-        UnexpectedBehaviour: If a worker node does not see the LUNs
 
     """
     iscsi_ip = config.ENV_DATA.get("san_iscsi_ip")
     iscsi_iqn = config.ENV_DATA.get("san_iscsi_iqn")
 
-    # Validate values before interpolating into a shell command.
     # IP must be a dotted-decimal address; IQN must follow the iqn. format.
     if not re.fullmatch(r"[\d]{1,3}(\.[\d]{1,3}){3}", iscsi_ip or ""):
         raise ValueError(f"san_iscsi_ip '{iscsi_ip}' is not a valid IPv4 address")
     if not re.fullmatch(r"iqn\.\d{4}-\d{2}\.[a-zA-Z0-9.\-:]+", iscsi_iqn or ""):
         raise ValueError(f"san_iscsi_iqn '{iscsi_iqn}' is not a valid IQN")
 
-    worker_nodes = get_worker_nodes()
-    logger.info(f"Starting LUN discovery on the worker nodes {worker_nodes}")
+    return iscsi_ip, iscsi_iqn
+
+
+def disconnect_iscsi_luns(node_names, timeout=600):
+    """
+    Take the SAN storage away from the given nodes by logging them out of the
+    iSCSI target, then verify their LUNs are gone.
+
+    This simulates the storage arrays of a zone failing while the nodes
+    themselves stay up and keep reporting Ready, which is what separates a SAN
+    outage from a node outage. The IBM Storage Scale filesystem loses its NSDs
+    on these nodes and unmounts there, the rest of the cluster keeps serving
+    the filesystem over the nodes that still reach the SAN.
+
+    Logging out is deliberately done per node rather than against the target as
+    a whole, so that only the zone under test loses its storage. Every session
+    of the node is logged out, the SAN LUNs are the only iSCSI storage these
+    nodes have and the counterpart login in :py:func:`discover_iscsi_luns`
+    restores all of them.
+
+    Args:
+        node_names (list): Names of the nodes to disconnect from the SAN
+        timeout (int): Time in seconds to wait for the LUNs to disappear on
+            each node once the logout has been issued
+
+    Raises:
+        UnexpectedBehaviour: If a node still sees its LUNs
+
+    """
+    logger.info(f"Disconnecting the SAN LUNs from the nodes {node_names}")
+    ocp_obj = OCP()
+    for node_name in node_names:
+        # A non zero exit is not fatal here on purpose, the logout fails with
+        # 'No matching sessions found' on a node that already lost its session.
+        # The LUNs being gone is verified below instead of trusting the exit
+        # code. stderr is kept so a genuine logout failure stays visible
+        out = ocp_obj.exec_oc_cmd(
+            f"debug node/{node_name} -- chroot /host sh -c "
+            f"'iscsiadm -m node --logoutall=all'",
+            out_yaml_format=False,
+            ignore_error=True,
+        )
+        logger.info(f"iSCSI logout output of {node_name}:\n{out}")
+
+    logger.info("iSCSI logout issued, verifying the LUNs are gone")
+    for node_name in node_names:
+        wait_for_luns_not_visible(node_name, timeout=timeout)
+    logger.info(f"The SAN LUNs are gone from the nodes {node_names}")
+
+
+def discover_iscsi_luns(timeout=600, node_names=None):
+    """
+    Rediscover the shared SAN LUNs and log back into the iSCSI target on the
+    given nodes, then verify the LUNs are actually visible on each of them.
+
+    A node loses its iSCSI sessions when it is powered off and they are not
+    reliably re-established on their own once it boots back up. Without the
+    LUNs the node cannot bring its NSDs back and rejoin the IBM Storage Scale
+    cluster, so the discovery has to be run again after the nodes of a failed
+    zone are started. It is also what brings the storage back after a SAN
+    outage induced with :py:func:`disconnect_iscsi_luns`.
+
+    The target address and IQN are read from ENV_DATA, they are environment
+    specific and are never hardcoded here.
+
+    Args:
+        timeout (int): Time in seconds to wait for the LUNs to become visible
+            on each node once the login has been issued
+        node_names (list): Names of the nodes to run the discovery on. All the
+            worker nodes when not given
+
+    Raises:
+        ValueError: If 'san_iscsi_ip' or 'san_iscsi_iqn' of ENV_DATA is missing
+            or malformed
+        UnexpectedBehaviour: If a node does not see the LUNs
+
+    """
+    iscsi_ip, iscsi_iqn = get_iscsi_target()
+
+    worker_nodes = node_names if node_names is not None else get_worker_nodes()
+    logger.info(f"Starting LUN discovery on the nodes {worker_nodes}")
     ocp_obj = OCP()
     for node_name in worker_nodes:
         # stderr is deliberately not discarded so that a genuine discovery or
@@ -200,6 +312,177 @@ def discover_iscsi_luns(timeout=600):
     for node_name in worker_nodes:
         wait_for_luns_visible(node_name, timeout=timeout)
     logger.info("The SAN LUNs are visible on all the worker nodes")
+
+
+def get_fusion_access_filesystem():
+    """
+    Get the name of the IBM Storage Scale filesystem backing the storage class
+
+    Returns:
+        str: Name of the filesystem
+
+    """
+    return config.ENV_DATA.get(
+        "fusion_access_filesystem", constants.FUSION_ACCESS_FILESYSTEM
+    )
+
+
+def get_scale_core_pod(exclude_nodes=None):
+    """
+    Get a running IBM Storage Scale core pod to run the 'mm*' commands from.
+
+    There is one core pod per node of the Scale cluster and any of them can be
+    asked about the state of the cluster, so the first running one is good
+    enough. The nodes under test are excluded, their core pod is either gone or
+    is the one that lost its storage, and asking it would either fail outright
+    or block on the very IO path the test has just broken.
+
+    Args:
+        exclude_nodes (list): Names of the nodes whose core pod must not be
+            picked
+
+    Returns:
+        Pod: Pod object of a running Scale core pod
+
+    Raises:
+        UnexpectedBehaviour: If there is no usable core pod
+
+    """
+    exclude_nodes = exclude_nodes or []
+    for pod_data in get_pods_having_label(
+        label=constants.IBM_STORAGE_SCALE_CORE_LABEL,
+        namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
+    ):
+        pod_obj = Pod(**pod_data)
+        if (
+            pod_obj.status() == constants.STATUS_RUNNING
+            and pod_obj.get()["metadata"].get("deletionTimestamp") is None
+            and pod_obj.get()["spec"].get("nodeName") not in exclude_nodes
+        ):
+            return pod_obj
+
+    raise UnexpectedBehaviour(
+        f"No running IBM Storage Scale core pod found outside of the nodes "
+        f"{exclude_nodes}"
+    )
+
+
+def get_filesystem_mounted_nodes(exclude_nodes=None):
+    """
+    Get the nodes the IBM Storage Scale filesystem is currently mounted on.
+
+    'mmlsmount <fs> -L' lists one line per node holding the mount, with the
+    daemon node name in the second column. The node names of the Scale cluster
+    match the OCP node names, so the short name is what gets returned.
+
+    Args:
+        exclude_nodes (list): Names of the nodes whose core pod must not be
+            used to run the command
+
+    Returns:
+        set: Names of the nodes the filesystem is mounted on
+
+    """
+    filesystem = get_fusion_access_filesystem()
+    core_pod = get_scale_core_pod(exclude_nodes=exclude_nodes)
+    out = core_pod.exec_cmd_on_pod(
+        command=f"mmlsmount {filesystem} -L",
+        container_name="gpfs",
+        out_yaml_format=False,
+    )
+
+    # Lines look like '  10.1.160.212    compute-3  ', the header and the
+    # summary line above them have no leading IP address
+    mounted_nodes = set()
+    for line in str(out).splitlines():
+        fields = line.split()
+        if len(fields) >= 2 and re.fullmatch(r"[\d]{1,3}(\.[\d]{1,3}){3}", fields[0]):
+            mounted_nodes.add(fields[1].split(".")[0])
+
+    logger.info(f"Filesystem {filesystem} is mounted on {sorted(mounted_nodes)}")
+    return mounted_nodes
+
+
+def wait_for_filesystem_unmounted(node_names, timeout=900, sleep_time=30):
+    """
+    Wait for the IBM Storage Scale filesystem to be unmounted on the given
+    nodes.
+
+    When the SAN disappears from under a node the GPFS daemon loses its NSDs
+    and panics the filesystem on that node, which shows up as the node
+    dropping out of the 'mmlsmount' list. That unmount is not instant, the
+    daemon first retries the IO, so this polls.
+
+    Args:
+        node_names (list): Names of the nodes expected to lose the mount
+        timeout (int): Time in seconds to wait for the unmount
+        sleep_time (int): Time in seconds between two checks
+
+    Raises:
+        UnexpectedBehaviour: If the filesystem is still mounted on any of the
+            nodes within the timeout
+
+    """
+    logger.info(f"Waiting for the filesystem to be unmounted on {node_names}")
+    try:
+        for mounted_nodes in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep_time,
+            func=get_filesystem_mounted_nodes,
+            exclude_nodes=node_names,
+        ):
+            still_mounted = set(node_names) & mounted_nodes
+            if not still_mounted:
+                logger.info(f"The filesystem is unmounted on {node_names}")
+                return
+            logger.info(
+                f"The filesystem is still mounted on {sorted(still_mounted)}, waiting"
+            )
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"The filesystem is still mounted on some of the nodes {node_names} "
+            f"after {timeout} seconds, the storage outage did not reach the "
+            f"Storage Scale cluster"
+        )
+
+
+def wait_for_filesystem_mounted(node_names, timeout=900, sleep_time=30):
+    """
+    Wait for the IBM Storage Scale filesystem to be mounted again on the given
+    nodes.
+
+    A node reports Ready, and its LUNs come back, well before the GPFS daemon
+    has brought its NSDs back up and remounted the filesystem, so this is what
+    tells a zone is actually usable again rather than merely powered on.
+
+    Args:
+        node_names (list): Names of the nodes expected to regain the mount
+        timeout (int): Time in seconds to wait for the mount
+        sleep_time (int): Time in seconds between two checks
+
+    Raises:
+        UnexpectedBehaviour: If the filesystem is not mounted on all the nodes
+            within the timeout
+
+    """
+    logger.info(f"Waiting for the filesystem to be mounted again on {node_names}")
+    try:
+        for mounted_nodes in TimeoutSampler(
+            timeout=timeout, sleep=sleep_time, func=get_filesystem_mounted_nodes
+        ):
+            not_mounted = set(node_names) - mounted_nodes
+            if not not_mounted:
+                logger.info(f"The filesystem is mounted again on {node_names}")
+                return
+            logger.info(
+                f"The filesystem is not mounted yet on {sorted(not_mounted)}, waiting"
+            )
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"The filesystem is not mounted on some of the nodes {node_names} "
+            f"after {timeout} seconds, the recovered zone did not rejoin the "
+            f"Storage Scale cluster"
+        )
 
 
 def create_workload_from_template(
