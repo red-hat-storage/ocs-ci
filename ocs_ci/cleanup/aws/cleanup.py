@@ -443,16 +443,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                         requester,
                     )
 
-        # Step 9: Delete subnets
-        subnets = list(vpc.subnets.all())
-        for subnet in subnets:
-            logger.info("Deleting Subnet %s", subnet.id)
-            try:
-                subnet.delete()
-            except ClientError as e:
-                logger.warning("Failed to delete subnet %s: %s", subnet.id, e)
-
-        # Step 10: Delete route tables (except main)
+        # Step 9: Disassociate and delete route tables (except main)
         route_tables = list(vpc.route_tables.all())
         for rt in route_tables:
             # Skip main route table
@@ -460,11 +451,38 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                 assoc.get("Main", False) for assoc in rt.associations_attribute or []
             )
             if not is_main:
+                # First, disassociate from subnets
+                for association in rt.associations_attribute or []:
+                    if not association.get("Main", False):
+                        assoc_id = association.get("RouteTableAssociationId")
+                        if assoc_id:
+                            logger.info(
+                                "Disassociating route table %s from subnet", rt.id
+                            )
+                            try:
+                                aws.ec2_client.disassociate_route_table(
+                                    AssociationId=assoc_id
+                                )
+                            except ClientError as e:
+                                logger.warning(
+                                    "Failed to disassociate route table: %s", e
+                                )
+
+                # Now delete the route table
                 logger.info("Deleting Route Table %s", rt.id)
                 try:
                     rt.delete()
                 except ClientError as e:
                     logger.warning("Failed to delete route table: %s", e)
+
+        # Step 10: Delete subnets
+        subnets = list(vpc.subnets.all())
+        for subnet in subnets:
+            logger.info("Deleting Subnet %s", subnet.id)
+            try:
+                subnet.delete()
+            except ClientError as e:
+                logger.warning("Failed to delete subnet %s: %s", subnet.id, e)
 
         # Step 11: Delete security groups (except default)
         security_groups = list(vpc.security_groups.all())
