@@ -4325,7 +4325,7 @@ configure_performance = {
         By.XPATH,
     ),
     "mcg_select_profile_button": (
-        "//button[contains(@class, 'pf-v6-c-menu-toggle') and contains(@aria-label, 'Object Gateway profile')]",
+        "//button[contains(@class, 'c-menu-toggle') and contains(@aria-label, 'Object Gateway profile')]",
         By.XPATH,
     ),
     "mcg_profile_option": (
@@ -4337,8 +4337,17 @@ configure_performance = {
         "or contains(@role, 'listbox') or contains(@role, 'menu')]]",
         By.XPATH,
     ),
+    "mcg_profile_menuitem": (
+        "//*[contains(@class, 'dropdown') or contains(@class, 'menu') "
+        "or contains(@class, 'popover') or contains(@class, 'modal') "
+        "or contains(@role, 'listbox') or contains(@role, 'menu')]"
+        "//*[@role='menuitem' or contains(@class, 'item') or contains(@class, 'option')]"
+        "[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+        "'abcdefghijklmnopqrstuvwxyz'), '{}')]",
+        By.XPATH,
+    ),
     "core_storage_select_profile_button": (
-        "//button[contains(@class, 'pf-v6-c-menu-toggle') and contains(@aria-label, 'performance mode from the list')]",
+        "//button[contains(@class, 'c-menu-toggle') and contains(@aria-label, 'performance mode from the list')]",
         By.XPATH,
     ),
     "core_storage_profile_option": (
@@ -4367,7 +4376,7 @@ configure_performance = {
         By.XPATH,
     ),
     "node_selection_option": (
-        ".//input[@type='checkbox' or @type='radio'] | .//button[normalize-space()='Select']",
+        ".//input[@type='checkbox' or @type='radio']",
         By.XPATH,
     ),
 }
