@@ -4006,7 +4006,7 @@ FUSION_ACCESS_BASELINE_FILE = "zonetest-baseline.txt"
 # IBM Storage Scale (CNSA) core pods. There is one per node of the Scale
 # cluster, each named after the node it runs on, and on a container native
 # deployment they are the only place the 'mm' admin commands can be run from
-SCALE_NAMESPACE = "ibm-spectrum-scale"
+SCALE_NAMESPACE = IBM_STORAGE_SCALE_NAMESPACE
 SCALE_CORE_POD_LABEL = "app.kubernetes.io/name=core"
 SCALE_CORE_CONTAINER = "gpfs"
 SCALE_MM_BIN_PATH = "/usr/lpp/mmfs/bin"

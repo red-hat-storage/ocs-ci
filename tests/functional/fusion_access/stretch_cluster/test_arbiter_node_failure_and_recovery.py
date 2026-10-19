@@ -266,8 +266,25 @@ class TestFusionAccessArbiterNodeFailureAndRecovery:
         end_time = datetime.now(timezone.utc)
         log.info(f"Arbiter failure started at {start_time} and ended at {end_time}")
 
-        # Step 8: the cluster has to be back to exactly the state it started in
-        node_states_after = get_scale_node_states()
+        # Step 8: the cluster has to be back to exactly the state it started
+        # in. The states are polled rather than read once: the waits above
+        # only cover the arbiter daemon becoming active and the quorum role
+        # moving back, so another node can still be settling at this point and
+        # a single read would compare against a state that is still changing
+        node_states_after = None
+        try:
+            for node_states_after in TimeoutSampler(
+                timeout=900, sleep=30, func=get_scale_node_states
+            ):
+                if node_states_after == node_states_before:
+                    break
+                log.info(
+                    f"The GPFS node states are {node_states_after}, waiting "
+                    f"for them to match the pre failure {node_states_before}"
+                )
+        except TimeoutExpiredError:
+            log.error("The GPFS node states did not settle back, asserting below")
+
         assert node_states_after == node_states_before, (
             f"The GPFS node states are {node_states_after} after the recovery, "
             f"they were {node_states_before} before the failure"

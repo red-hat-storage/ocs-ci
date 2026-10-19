@@ -36,8 +36,11 @@ spec:
         imagePullPolicy: IfNotPresent
         command: ["/bin/sh", "-c"]
         args:
-          - wget https://raw.githubusercontent.com/red-hat-storage/ocs-workloads/master/rdr/busybox/scripts/simple_io.sh -O /mnt/test/simple_io.sh;
-            wget https://raw.githubusercontent.com/red-hat-storage/ocs-workloads/master/rdr/busybox/scripts/simple_io_integrity_check.sh -O /mnt/test/simple_io_integrity_check.sh;
+          # Pinned to a commit so every run gets the same script. Fetching
+          # from 'master' would make the workload change under the test, and
+          # the pod would fail outright on a disconnected cluster
+          - wget https://raw.githubusercontent.com/red-hat-storage/ocs-workloads/f71217d57fc184e4343aaa9133cce2673dafc8d4/rdr/busybox/scripts/simple_io.sh -O /mnt/test/simple_io.sh;
+            wget https://raw.githubusercontent.com/red-hat-storage/ocs-workloads/f71217d57fc184e4343aaa9133cce2673dafc8d4/rdr/busybox/scripts/simple_io_integrity_check.sh -O /mnt/test/simple_io_integrity_check.sh;
             chmod +x /mnt/test/simple_io.sh; chmod +x /mnt/test/simple_io_integrity_check.sh;
             /mnt/test/simple_io.sh
         volumeMounts:

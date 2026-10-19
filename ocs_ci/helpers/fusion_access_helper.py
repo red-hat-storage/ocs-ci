@@ -548,10 +548,15 @@ def get_scale_core_pod(exclude_nodes=None):
     Get a running IBM Storage Scale core pod to run the 'mm' admin commands
     from.
 
-    The core pods are named after the node they run on and there is one per
-    node of the Scale cluster. A test that takes a node down must not try to
-    exec into the core pod of that node, so the nodes that are expected to be
-    unreachable are excluded.
+    There is one core pod per node of the Scale cluster. A test that takes a
+    node down must not try to exec into the core pod of that node, so the
+    nodes that are expected to be unreachable are excluded.
+
+    The pod is matched to a node through its 'spec.nodeName' rather than
+    through its name. The core pods happen to be named after their node
+    today, but relying on that would silently stop excluding anything if the
+    naming ever changed, and the exec into the unreachable pod would then
+    hang instead of failing.
 
     Args:
         exclude_nodes (list): Names of the nodes whose core pod must not be
@@ -570,9 +575,10 @@ def get_scale_core_pod(exclude_nodes=None):
         namespace=constants.SCALE_NAMESPACE,
         statuses=[constants.STATUS_RUNNING],
     ):
-        pod_obj = Pod(**pod_data)
-        if pod_obj.name not in exclude_nodes:
-            return pod_obj
+        # Read the node off the data already fetched, calling Pod.get() here
+        # would be an extra API call per pod
+        if pod_data.get("spec", {}).get("nodeName") not in exclude_nodes:
+            return Pod(**pod_data)
 
     raise UnexpectedBehaviour(
         f"No running IBM Storage Scale core pod found outside of the nodes "
