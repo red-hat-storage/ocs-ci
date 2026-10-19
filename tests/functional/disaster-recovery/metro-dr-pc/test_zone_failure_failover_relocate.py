@@ -48,7 +48,7 @@ class TestZoneFailureFailoverRelocate:
         request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
-        argnames=["pvc_interface", "power_off_zone"],
+        argnames=["power_off_zone"],
         argvalues=[
             pytest.param(
                 "osd_zone",
