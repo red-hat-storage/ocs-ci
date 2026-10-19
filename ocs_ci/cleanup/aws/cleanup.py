@@ -801,7 +801,10 @@ def aws_cleanup():
         "--region",
         action="store",
         required=False,
-        help="The name of the AWS region to delete the resources from",
+        help=(
+            "AWS region(s) to delete resources from. "
+            "Can be a single region or comma-separated list (e.g., us-east-2,us-west-2)"
+        ),
     )
     parser.add_argument(
         "--prefix",
@@ -873,73 +876,98 @@ def aws_cleanup():
             prefixes_hours_to_spare = {**{prefix: hours}, **prefixes_hours_to_spare}
 
     time_to_delete = args.hours * 60 * 60 if args.hours else None
-    region = defaults.AWS_REGION if not args.region else args.region
-    (
-        clusters_to_delete,
-        cf_clusters_to_delete,
-        hypershift_clusters_to_delete,
-        remaining_clusters,
-    ) = get_clusters(
-        time_to_delete=time_to_delete,
-        region_name=region,
-        prefixes_hours_to_spare=prefixes_hours_to_spare,
-        cluster_pattern=args.cluster_name,
-    )
 
-    if not clusters_to_delete:
-        logger.info("No clusters to delete")
+    # Parse regions - support comma-separated list
+    if args.region:
+        regions = [r.strip() for r in args.region.split(",")]
     else:
-        logger.info("Deleting clusters: %s", clusters_to_delete)
-        get_openshift_installer()
-    procs = []
-    failed_deletions = []
-    for cluster in clusters_to_delete:
-        cluster_name = cluster.rsplit("-", 1)[0]
-        logger.info(f"Deleting cluster {cluster_name}")
-        proc = threading.Thread(
-            target=cleanup, args=(cluster_name, cluster, False, failed_deletions)
-        )
-        proc.start()
-        procs.append(proc)
-    for p in procs:
-        p.join()
-    for cluster in cf_clusters_to_delete:
-        cluster_name = cluster.rsplit("-", 1)[0]
-        logger.info(f"Deleting UPI cluster {cluster_name}")
-        proc = threading.Thread(
-            target=cleanup, args=(cluster_name, cluster, True, failed_deletions)
-        )
-        proc.start()
-        procs.append(proc)
-    for p in procs:
-        p.join()
+        regions = [defaults.AWS_REGION]
 
-    # Clean up HyperShift/CAPI clusters
-    if hypershift_clusters_to_delete:
-        logger.info(
-            "Deleting HyperShift/CAPI clusters: %s",
-            [name for name, _ in hypershift_clusters_to_delete],
-        )
-        for cluster_name, vpc_id in hypershift_clusters_to_delete:
-            logger.info(f"Deleting HyperShift/CAPI cluster {cluster_name}")
-            success = cleanup_vpc(cluster_name, vpc_id, region)
-            if not success:
-                failed_deletions.append(cluster_name)
-            # Also try to delete associated S3 buckets
-            try:
-                delete_cluster_buckets(cluster_name)
-            except Exception as e:
-                logger.error(
-                    "Failed to delete buckets for cluster %s: %s", cluster_name, e
-                )
+    logger.info("Running cleanup in regions: %s", regions)
 
-    logger.info("Remaining clusters: %s", remaining_clusters)
+    # Run cleanup for each region
+    all_failed_deletions = []
+    for region in regions:
+        logger.info("=" * 80)
+        logger.info("Processing region: %s", region)
+        logger.info("=" * 80)
+
+        (
+            clusters_to_delete,
+            cf_clusters_to_delete,
+            hypershift_clusters_to_delete,
+            remaining_clusters,
+        ) = get_clusters(
+            time_to_delete=time_to_delete,
+            region_name=region,
+            prefixes_hours_to_spare=prefixes_hours_to_spare,
+            cluster_pattern=args.cluster_name,
+        )
+
+        if not clusters_to_delete:
+            logger.info("No clusters to delete in %s", region)
+        else:
+            logger.info("Deleting clusters in %s: %s", region, clusters_to_delete)
+            get_openshift_installer()
+        procs = []
+        failed_deletions = []
+        for cluster in clusters_to_delete:
+            cluster_name = cluster.rsplit("-", 1)[0]
+            logger.info(f"Deleting cluster {cluster_name}")
+            proc = threading.Thread(
+                target=cleanup, args=(cluster_name, cluster, False, failed_deletions)
+            )
+            proc.start()
+            procs.append(proc)
+        for p in procs:
+            p.join()
+        for cluster in cf_clusters_to_delete:
+            cluster_name = cluster.rsplit("-", 1)[0]
+            logger.info(f"Deleting UPI cluster {cluster_name}")
+            proc = threading.Thread(
+                target=cleanup, args=(cluster_name, cluster, True, failed_deletions)
+            )
+            proc.start()
+            procs.append(proc)
+        for p in procs:
+            p.join()
+
+        # Clean up HyperShift/CAPI clusters
+        if hypershift_clusters_to_delete:
+            logger.info(
+                "Deleting HyperShift/CAPI clusters: %s",
+                [name for name, _ in hypershift_clusters_to_delete],
+            )
+            for cluster_name, vpc_id in hypershift_clusters_to_delete:
+                logger.info(f"Deleting HyperShift/CAPI cluster {cluster_name}")
+                success = cleanup_vpc(cluster_name, vpc_id, region)
+                if not success:
+                    failed_deletions.append(cluster_name)
+                # Also try to delete associated S3 buckets
+                try:
+                    delete_cluster_buckets(cluster_name)
+                except Exception as e:
+                    logger.error(
+                        "Failed to delete buckets for cluster %s: %s", cluster_name, e
+                    )
+
+        logger.info("Remaining clusters in %s: %s", region, remaining_clusters)
+
+        # Collect failures from this region
+        if failed_deletions:
+            logger.error("Failed cluster deletions in %s: %s", region, failed_deletions)
+            all_failed_deletions.extend(failed_deletions)
+
+    # Write all failed deletions across all regions
     filename = "failed_cluster_deletions.txt"
     content = "None\n"
-    if failed_deletions:
-        logger.error("Failed cluster deletions: %s", failed_deletions)
+    if all_failed_deletions:
+        logger.error(
+            "Total failed cluster deletions across all regions: %s",
+            all_failed_deletions,
+        )
         content = ""
-        for cluster in failed_deletions:
+        for cluster in all_failed_deletions:
             content += f"{cluster}\n"
     with open(filename, "w") as f:
         f.write(content)
