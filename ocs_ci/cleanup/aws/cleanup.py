@@ -641,7 +641,7 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None, region=N
             # Verify VPC was actually deleted (installer sometimes leaves it behind)
             logger.info("Verifying VPC cleanup for %s...", cluster_name)
             aws = AWS(region_name=region) if region else AWS()
-            vpc_name = f"{cluster_name}-vpc"
+            vpc_name = f"{cluster_id}-vpc"
             vpcs = aws.ec2_client.describe_vpcs(
                 Filters=[{"Name": "tag:Name", "Values": [vpc_name]}]
             )["Vpcs"]
@@ -673,7 +673,7 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None, region=N
             try:
                 aws = AWS(region_name=region) if region else AWS()
                 # Find VPC by name pattern
-                vpc_name = f"{cluster_name}-vpc"
+                vpc_name = f"{cluster_id}-vpc"
                 vpcs = aws.ec2_client.describe_vpcs(
                     Filters=[{"Name": "tag:Name", "Values": [vpc_name]}]
                 )["Vpcs"]
