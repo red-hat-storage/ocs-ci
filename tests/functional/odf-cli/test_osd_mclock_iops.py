@@ -1,66 +1,17 @@
 import logging
-from functools import partial
-
-import pytest
 
 from ocs_ci.framework.testlib import (
     tier1,
+    tier2,
     brown_squad,
     polarion_id,
     skipif_ocs_version,
     skipif_external_mode,
     runs_on_provider,
 )
-from ocs_ci.ocs.resources.pod import get_osd_pods, get_osd_pod_id
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
-
-MCLOCK_IOPS_KEYS = (
-    "osd_mclock_max_capacity_iops_ssd",
-    "osd_mclock_max_capacity_iops_hdd",
-)
-
-
-def get_osd_running_iops(odf_cli, osd_id, key):
-    """
-    Read the mClock max-capacity-IOPS value an OSD daemon is actually running
-    with, as opposed to what the mon config DB would resolve to.
-
-    Args:
-        odf_cli (ODFCliRunner): ODF CLI runner.
-        osd_id (str): OSD id.
-        key (str): mClock max-capacity-IOPS config key.
-
-    Returns:
-        float: The value reported by `ceph config show osd.<id>`.
-
-    """
-    return float(odf_cli.get_ceph_config_value(f"osd.{osd_id}", key, subcommand="show"))
-
-
-@retry(AssertionError, tries=6, delay=5, backoff=1)
-def get_settled_osd_iops(odf_cli, osd_ids, key):
-    """
-    Return the mClock max-capacity-IOPS value every OSD daemon is running with,
-    once they all agree on it.
-
-    Retried because the mon pushes config changes to the daemons
-    asynchronously, so the OSDs converge a moment after the overrides are
-    cleared rather than instantly.
-
-    Args:
-        odf_cli (ODFCliRunner): ODF CLI runner.
-        osd_ids (list): OSD ids to check.
-        key (str): mClock max-capacity-IOPS config key.
-
-    Returns:
-        float: The value shared by every OSD.
-
-    """
-    values = {get_osd_running_iops(odf_cli, osd_id, key) for osd_id in osd_ids}
-    assert len(values) == 1, f"OSDs have not settled on a single {key} value: {values}"
-    return values.pop()
 
 
 @retry(AssertionError, tries=6, delay=5, backoff=1)
@@ -80,85 +31,10 @@ def assert_osd_iops(odf_cli, osd_ids, key, expected, context):
 
     """
     for osd_id in osd_ids:
-        value = get_osd_running_iops(odf_cli, osd_id, key)
+        value = odf_cli.get_osd_running_iops(osd_id, key)
         assert (
             value == expected
         ), f"osd.{osd_id} {key} is {value}, expected {expected} ({context})"
-
-
-@pytest.fixture
-def mclock_iops_context(odf_cli_setup):
-    """
-    Resolve the OSDs and the mClock max-capacity-IOPS key they use.
-
-    Ceph mClock selects the `_ssd` or `_hdd` key by the OSD bluestore device
-    type, which can differ from the OSD's CRUSH device class.
-
-    Args:
-        odf_cli_setup: ODF CLI runner fixture.
-
-    Returns:
-        tuple: (ODFCliRunner, list of OSD ids, mClock IOPS config key).
-
-    """
-    odf_cli = odf_cli_setup
-    osd_ids = [get_osd_pod_id(pod) for pod in get_osd_pods()]
-    assert osd_ids, "No OSD pods found on the cluster"
-
-    bdev_types = {odf_cli.get_osd_bdev_type(osd_id) for osd_id in osd_ids}
-    if len(bdev_types) > 1:
-        pytest.skip(f"Mixed OSD bluestore device types {bdev_types} are not supported")
-
-    key = f"osd_mclock_max_capacity_iops_{bdev_types.pop()}"
-    logger.info(f"OSDs {osd_ids} report device type -> config key '{key}'")
-    return odf_cli, osd_ids, key
-
-
-@pytest.fixture
-def mclock_config_cleanup(mclock_iops_context, request):
-    """
-    Clear the mClock max-capacity-IOPS entries for the test and put the
-    pre-existing ones back afterwards.
-
-    Ceph stores each OSD's boot benchmark result in the mon config DB under
-    these same keys, so the entries are saved before being cleared and are
-    restored on teardown - dropping them would leave the cluster running on
-    the compiled-in mClock defaults until the OSDs restart.
-
-    Args:
-        mclock_iops_context: Fixture giving (ODFCliRunner, osd_ids, key).
-        request: Pytest request, used to register the teardown.
-
-    Returns:
-        tuple: (ODFCliRunner, list of OSD ids, mClock IOPS config key).
-
-    """
-    odf_cli, osd_ids, key = mclock_iops_context
-
-    original_entries = {
-        (who, iops_key): value
-        for iops_key in MCLOCK_IOPS_KEYS
-        for who, value in odf_cli.get_ceph_config_dump_entries(iops_key)
-    }
-    logger.info(f"Saved the original mClock IOPS entries: {original_entries}")
-
-    def clear_entries():
-        for iops_key in MCLOCK_IOPS_KEYS:
-            for who, _ in odf_cli.get_ceph_config_dump_entries(iops_key):
-                logger.info(f"Clearing {who} {iops_key}")
-                odf_cli.run_ceph_config(f"rm {who} {iops_key}")
-
-    def restore_entry(who, iops_key, value):
-        logger.info(f"Restoring {who} {iops_key} = {value}")
-        odf_cli.run_ceph_config(f"set {who} {iops_key} {value}")
-
-    for (who, iops_key), value in reversed(original_entries.items()):
-        request.addfinalizer(partial(restore_entry, who, iops_key, value))
-    # Finalizers run in reverse order, so clear entries before restoring them.
-    request.addfinalizer(clear_entries)
-
-    clear_entries()
-    return odf_cli, osd_ids, key
 
 
 @brown_squad
@@ -173,7 +49,7 @@ class TestOSDMclockMaxCapacityIOPS:
     CUSTOM_IOPS_VALUE = 80000
     GLOBAL_IOPS_VALUE = 60000
 
-    @tier1
+    @tier2
     @polarion_id("OCS-8256")
     def test_read_default_iops_value(self, mclock_iops_context):
         """
@@ -193,7 +69,7 @@ class TestOSDMclockMaxCapacityIOPS:
         logger.info(f"Cluster-wide {key} = {cluster_value}")
 
         for osd_id in osd_ids:
-            value = get_osd_running_iops(odf_cli, osd_id, key)
+            value = odf_cli.get_osd_running_iops(osd_id, key)
             assert (
                 value > 0
             ), f"osd.{osd_id} {key} is {value}, expected a positive value"
@@ -214,7 +90,7 @@ class TestOSDMclockMaxCapacityIOPS:
         odf_cli, osd_ids, key = mclock_config_cleanup
         target_osd, other_osds = osd_ids[0], osd_ids[1:]
 
-        baseline = get_settled_osd_iops(odf_cli, osd_ids, key)
+        baseline = odf_cli.get_settled_osd_iops(osd_ids, key)
         logger.info(f"Baseline {key} on every OSD = {baseline}")
         assert baseline != self.CUSTOM_IOPS_VALUE, (
             f"Baseline {key} already equals the test value "
@@ -246,7 +122,7 @@ class TestOSDMclockMaxCapacityIOPS:
         entries = odf_cli.get_ceph_config_dump_entries(key)
         assert not entries, f"{key} still present in `ceph config dump`: {entries}"
 
-    @tier1
+    @tier2
     @polarion_id("OCS-8258")
     def test_per_osd_override_precedence_over_global(self, mclock_config_cleanup):
         """
@@ -289,7 +165,7 @@ class TestOSDMclockMaxCapacityIOPS:
             f"`ceph config dump`, found {entries}"
         )
 
-    @tier1
+    @tier2
     @polarion_id("OCS-8259")
     def test_global_osd_mclock_iops_override(self, mclock_config_cleanup):
         """
@@ -303,7 +179,7 @@ class TestOSDMclockMaxCapacityIOPS:
         """
         odf_cli, osd_ids, key = mclock_config_cleanup
 
-        baseline = get_settled_osd_iops(odf_cli, osd_ids, key)
+        baseline = odf_cli.get_settled_osd_iops(osd_ids, key)
         logger.info(f"Baseline {key} on every OSD = {baseline}")
         assert baseline != self.CUSTOM_IOPS_VALUE, (
             f"Baseline {key} already equals the test value "

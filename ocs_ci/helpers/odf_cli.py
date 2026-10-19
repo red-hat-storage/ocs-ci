@@ -14,6 +14,7 @@ from ocs_ci.utility.version import (
     VERSION_4_15,
 )
 from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.ocs.constants import (
@@ -301,6 +302,52 @@ class ODFCliRunner:
             )
         return output.split()[-1]
 
+    def get_osd_running_iops(self, osd_id: Union[str, int], key: str) -> float:
+        """
+        Read the mClock max-capacity-IOPS value an OSD daemon is actually running
+        with, as opposed to what the mon config DB would resolve to.
+
+        Args:
+            osd_id (Union[str, int]): OSD id.
+            key (str): mClock max-capacity-IOPS config key.
+
+        Returns:
+            float: The value reported by `ceph config show osd.<id>`.
+
+        """
+        return float(
+            self.get_ceph_config_value(f"osd.{osd_id}", key, subcommand="show")
+        )
+
+    @retry(AssertionError, tries=6, delay=5, backoff=1)
+    def get_settled_osd_iops(self, osd_ids: list, key: str) -> float:
+        """
+        Return the mClock max-capacity-IOPS value every OSD daemon is running with,
+        once they all agree on it.
+
+        Retried because the mon pushes config changes to the daemons
+        asynchronously, so the OSDs converge a moment after the overrides are
+        cleared rather than instantly.
+
+        Args:
+            osd_ids (list): OSD ids to check.
+            key (str): mClock max-capacity-IOPS config key.
+
+        Returns:
+            float: The value shared by every OSD.
+
+        Raises:
+            ValueError: If no OSD ids are provided.
+
+        """
+        if not osd_ids:
+            raise ValueError("No OSD ids provided for mClock IOPS convergence")
+        values = {self.get_osd_running_iops(osd_id, key) for osd_id in osd_ids}
+        assert (
+            len(values) == 1
+        ), f"OSDs have not settled on a single {key} value: {values}"
+        return values.pop()
+
     def get_osd_bdev_type(self, osd_id: Union[str, int]) -> str:
         """
         Get the bluestore device type of an OSD via the ODF CLI.
@@ -314,9 +361,17 @@ class ODFCliRunner:
         Returns:
             str: The bluestore device type, "ssd" or "hdd".
 
+        Raises:
+            UnexpectedBehaviour: If the CLI returns invalid JSON.
+
         """
-        output = self.run_command(f" ceph osd metadata {osd_id}")
-        return json.loads(output.stdout.decode())["bluestore_bdev_type"]
+        output = self.run_command(f" ceph osd metadata {osd_id}").stdout.decode()
+        try:
+            return json.loads(output)["bluestore_bdev_type"]
+        except json.JSONDecodeError as ex:
+            raise UnexpectedBehaviour(
+                f"ODF CLI returned invalid JSON for `ceph osd metadata {osd_id}`: {output!r}"
+            ) from ex
 
     def get_ceph_config_dump_entries(self, option: str) -> list:
         """
@@ -331,8 +386,17 @@ class ODFCliRunner:
                 "osd/class:hdd", so it can be passed straight back to
                 `ceph config set`/`rm`. Empty when the option has no entry set.
 
+        Raises:
+            UnexpectedBehaviour: If the CLI returns invalid JSON.
+
         """
-        dump = json.loads(self.run_ceph_config("dump -f json").stdout.decode())
+        output = self.run_ceph_config("dump -f json").stdout.decode()
+        try:
+            dump = json.loads(output)
+        except json.JSONDecodeError as ex:
+            raise UnexpectedBehaviour(
+                f"ODF CLI returned invalid JSON for `ceph config dump -f json`: {output!r}"
+            ) from ex
         entries = []
         for entry in dump:
             if entry["name"] != option:
