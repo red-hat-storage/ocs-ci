@@ -280,55 +280,75 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                             e,
                         )
 
-                        # Before retry, aggressively try to release ALL EIPs
+                        # Before retry, try to release EIPs associated with this VPC
                         logger.info(
-                            "Attempting aggressive EIP cleanup before retry %d...",
+                            "Attempting VPC-specific EIP cleanup before retry %d...",
                             attempt + 2,
                         )
                         try:
+                            # Get all network interfaces in this VPC
+                            vpc_enis = aws.ec2_client.describe_network_interfaces(
+                                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+                            )["NetworkInterfaces"]
+                            vpc_eni_ids = {
+                                eni["NetworkInterfaceId"] for eni in vpc_enis
+                            }
+
+                            # Find EIPs associated with network interfaces in this VPC
                             all_eips = aws.ec2_client.describe_addresses()["Addresses"]
                             for eip in all_eips:
                                 alloc_id = eip.get("AllocationId")
                                 if not alloc_id:
                                     continue
 
-                                # Try to disassociate first if associated
-                                assoc_id = eip.get("AssociationId")
-                                if assoc_id:
-                                    try:
-                                        logger.info("Disassociating EIP %s", alloc_id)
-                                        aws.ec2_client.disassociate_address(
-                                            AssociationId=assoc_id
-                                        )
-                                        time.sleep(2)
-                                    except ClientError as disassoc_err:
-                                        logger.debug(
-                                            "Failed to disassociate %s: %s",
-                                            alloc_id,
-                                            disassoc_err,
-                                        )
-
-                                # Now try to release it
-                                try:
+                                # Check if this EIP is associated with an ENI in this VPC
+                                eni_id = eip.get("NetworkInterfaceId")
+                                if eni_id and eni_id in vpc_eni_ids:
+                                    assoc_id = eip.get("AssociationId")
                                     logger.info(
-                                        "Attempting to release EIP %s", alloc_id
-                                    )
-                                    aws.ec2_client.release_address(
-                                        AllocationId=alloc_id
-                                    )
-                                    logger.info(
-                                        "Successfully released EIP %s", alloc_id
-                                    )
-                                except ClientError as release_err:
-                                    # Only log at debug level - might be in use elsewhere
-                                    logger.debug(
-                                        "Could not release EIP %s: %s",
+                                        "Found EIP %s attached to ENI %s in this VPC",
                                         alloc_id,
-                                        release_err,
+                                        eni_id,
                                     )
+
+                                    # Try to disassociate first if associated
+                                    if assoc_id:
+                                        try:
+                                            logger.info(
+                                                "Disassociating EIP %s (AssociationId: %s)",
+                                                alloc_id,
+                                                assoc_id,
+                                            )
+                                            aws.ec2_client.disassociate_address(
+                                                AssociationId=assoc_id
+                                            )
+                                            time.sleep(5)
+                                        except ClientError as disassoc_err:
+                                            logger.warning(
+                                                "Failed to disassociate %s: %s",
+                                                alloc_id,
+                                                disassoc_err,
+                                            )
+                                            continue
+
+                                    # Now try to release it
+                                    try:
+                                        logger.info("Releasing EIP %s", alloc_id)
+                                        aws.ec2_client.release_address(
+                                            AllocationId=alloc_id
+                                        )
+                                        logger.info(
+                                            "Successfully released EIP %s", alloc_id
+                                        )
+                                    except ClientError as release_err:
+                                        logger.warning(
+                                            "Failed to release EIP %s: %s",
+                                            alloc_id,
+                                            release_err,
+                                        )
                         except Exception as eip_cleanup_err:
                             logger.warning(
-                                "Error during aggressive EIP cleanup: %s",
+                                "Error during VPC-specific EIP cleanup: %s",
                                 eip_cleanup_err,
                             )
 
