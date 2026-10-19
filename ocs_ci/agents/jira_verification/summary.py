@@ -13,10 +13,13 @@ _SUMMARY_INSTRUCTIONS = (
     '"expected_results":["<what must be true when the fix works>"]}\n'
     "issue is one sentence and states only the failure. Do not repeat versions, "
     "platform, environment, parent key, parent status, or the parent title. "
-    "reproduction_steps are the actions that produce the failure. Do not restate "
-    "the issue, the actual result, or 'run regression'. Name the test only when "
-    "it identifies the case. expected_results is one sentence for the pass "
-    "condition and must not repeat the issue. "
+    "reproduction_steps are the actions that produce the failure. Keep a setup "
+    "action that creates or enrolls an object, and place it before the action "
+    "that uses that object. Do not start at an unenroll or delete when the "
+    "issue first creates that object. Do not restate the issue, the actual "
+    "result, or 'run regression'. Name the test only when it identifies the "
+    "case. expected_results is one sentence for the pass condition and must "
+    "not repeat the issue. "
     "Use only the JSON input. Do not invent pull requests, commands, versions, "
     "or a status."
 )
@@ -27,19 +30,27 @@ _STEP_INSTRUCTIONS = (
     "Return one JSON object and no other text:\n"
     '{"verification_steps":[{"step":1,"action":"<what this checks>",'
     '"command":"oc ...","manifest":""}]}\n'
-    "Follow reproduction_steps, then check expected_results. Each command is "
-    "one oc invocation. No shell operators, pipes, or redirects. Do not write "
-    "pytest or tell the reader to run regression. A step passes only when oc "
-    "exits 0. To confirm a deleted object is gone, use "
+    "Order the steps like this. When a later step deletes, unenrolls, patches, "
+    "or otherwise uses an object that is not already present, the first steps "
+    "create that object. Then follow scenario_steps and reproduction_steps. "
+    "Then check expected_results. scenario_steps are the actions already chosen. "
+    "Keep a create, enroll, or apply action, and place it before any action "
+    "that uses that object. Do not start by deleting or unenrolling an object "
+    "that no earlier step created. "
+    "Each command is one oc invocation. No shell operators, pipes, or redirects. "
+    "Do not write pytest or tell the reader to run regression. A step passes "
+    "only when oc exits 0. To confirm a deleted object is gone, use "
     "oc delete <kind> <name> --ignore-not-found=true --wait=true --timeout=180s. "
     "Do not use oc get of a missing object as the pass check. "
     "When a step creates or deletes an object, that object name must be the "
-    "verify token in the user message. Do not delete, patch, or replace an "
-    "object that already belongs to the cluster. When a step needs a manifest, "
-    "put the YAML in manifest and set command to oc apply -f {{manifest}} or "
+    "verify token in the user message. Create it with oc apply -f {{manifest}} "
+    "or oc create. Do not delete, patch, or replace an object that already "
+    "belongs to the cluster. When a step needs a manifest, put the YAML in "
+    "manifest and set command to oc apply -f {{manifest}} or "
     "oc delete -f {{manifest}}. The manifest metadata.name must be the verify "
     "token. Use only kinds and behavior named in the issue."
 )
+_CREATE = re.compile(r"^oc\s+(create|apply)\b", re.IGNORECASE)
 _FENCE = re.compile(r"^```[a-zA-Z]*\n?|```$")
 _SHELL = re.compile(r"[;&|`$<>\n]|\$\(")
 _MUTATING = re.compile(
@@ -87,7 +98,8 @@ def verification_steps_for_report(issue, summary, steps, issue_key=""):
 
     Steps that already include a command are kept. A report that only says to
     run regression gets oc commands derived from issue, reproduction_steps,
-    and expected_results.
+    and expected_results. When a step uses an object that is not already
+    present, the first commands create that object.
 
     Args:
         issue (dict): Verification payload or report fields.
@@ -99,7 +111,8 @@ def verification_steps_for_report(issue, summary, steps, issue_key=""):
         list: step, action, command, and manifest when a step needs one.
 
     Raises:
-        ValueError: OpenAI did not return a usable command.
+        ValueError: OpenAI did not return a usable command, or a step uses
+            the verify object before a step creates it.
 
     """
     if _has_command(steps):
@@ -108,29 +121,142 @@ def verification_steps_for_report(issue, summary, steps, issue_key=""):
     key = str(issue_key or (issue or {}).get("key") or "").strip()
     token = f"verify-{key.lower()}" if key else "verify-bug"
     logger.info(f"Writing verification steps from the summary for {key or 'issue'}")
-    from langchain_core.messages import HumanMessage, SystemMessage
-
-    from ocs_ci.agents.runtime.llm import _openai_model
-
     payload = {
         "key": key,
         "verify_token": token,
         "summary": summary,
+        "scenario_steps": _scenario_actions(steps),
         "bug_description": (issue or {}).get("bug_description")
         or (issue or {}).get("description")
         or "",
     }
+    written = _request_steps(payload, token)
+    if written and _object_used_before_create(written, token):
+        logger.info(
+            f"Verification object {token} is used before it is created; asking again"
+        )
+        written = _request_steps(
+            payload,
+            token,
+            correction=(
+                "The previous steps used the verify token before creating it. "
+                "Start with oc apply or oc create for that object, then run "
+                "the scenario."
+            ),
+        )
+    if not written:
+        raise ValueError("OpenAI did not return a verification command")
+    if _object_used_before_create(written, token):
+        raise ValueError("Verification steps use an object before creating it")
+    return written
+
+
+def _request_steps(payload, token, correction=""):
+    """
+    Ask OpenAI for oc commands and keep the usable ones.
+
+    Args:
+        payload (dict): Issue key, verify token, summary, and scenario actions.
+        token (str): Temporary object name that mutating commands must use.
+        correction (str): Extra instruction when the previous steps used the
+            object before creating it.
+
+    Returns:
+        list: Steps with a command. Empty when none are usable.
+
+    """
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    from ocs_ci.agents.runtime.llm import _openai_model
+
+    message = dict(payload)
+    if correction:
+        message["correction"] = correction
     response = _openai_model().invoke(
         [
             SystemMessage(content=_STEP_INSTRUCTIONS),
-            HumanMessage(content=json.dumps(payload, ensure_ascii=False)),
+            HumanMessage(content=json.dumps(message, ensure_ascii=False)),
         ]
     )
     parsed = _json_object(_message_text(response))
-    written = _usable_steps(parsed.get("verification_steps"), token)
-    if not written:
-        raise ValueError("OpenAI did not return a verification command")
-    return written
+    return _usable_steps(parsed.get("verification_steps"), token)
+
+
+def _scenario_actions(steps):
+    """
+    Return the actions already chosen for this bug.
+
+    Args:
+        steps (list): Verification steps already on the report.
+
+    Returns:
+        list: Action text, in order.
+
+    """
+    actions = []
+    for step in steps or []:
+        if not isinstance(step, dict):
+            continue
+        action = str(step.get("action") or "").strip()
+        if action:
+            actions.append(action)
+    return actions
+
+
+def _object_used_before_create(steps, token):
+    """
+    Return whether a step uses the verify object before a step creates it.
+
+    Args:
+        steps (list): Usable verification steps.
+        token (str): Temporary object name.
+
+    Returns:
+        bool: True when the token appears before oc create or oc apply.
+
+    """
+    created = False
+    for step in steps or []:
+        if _creates_token(step, token):
+            created = True
+            continue
+        if _uses_token(step, token) and not created:
+            return True
+    return False
+
+
+def _creates_token(step, token):
+    """
+    Return whether a step creates the verify object.
+
+    Args:
+        step (dict): One verification step.
+        token (str): Temporary object name.
+
+    Returns:
+        bool: True when the command is oc create or oc apply and names the token.
+
+    """
+    if not _uses_token(step, token):
+        return False
+    return bool(_CREATE.search(str(step.get("command") or "")))
+
+
+def _uses_token(step, token):
+    """
+    Return whether a step names the verify object.
+
+    Args:
+        step (dict): One verification step.
+        token (str): Temporary object name.
+
+    Returns:
+        bool: True when the command or manifest contains the token.
+
+    """
+    command = str(step.get("command") or "")
+    manifest = str(step.get("manifest") or "")
+    return token in command or token in manifest
 
 
 def summary_text(summary):

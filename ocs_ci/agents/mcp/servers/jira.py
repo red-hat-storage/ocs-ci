@@ -83,8 +83,10 @@ def jira_save_verification_report(
     including each parent's status. OpenAI writes the summary stored on the
     report, with issue, reproduction_steps, and expected_results. When every
     verification step has an empty command, OpenAI replaces those steps with
-    oc commands taken from that summary. A step that already has a command is
-    kept. tests lists pytest tests under tests/ whose names, paths, or
+    oc commands taken from that summary. When a step uses an object that is
+    not already present, the first commands create that object. A step that
+    already has a command is kept. tests lists pytest tests under tests/ whose
+    names, paths, or
     Polarion ids appear exactly in the bug. The file is
     reports/<version>/<issue_key>.yaml.
     This writes a local file. It does not update Jira. During --dry-run the
