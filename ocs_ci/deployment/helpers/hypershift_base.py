@@ -34,8 +34,13 @@ from ocs_ci.utility.utils import (
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.ocs.utils import get_namespce_name_by_pattern
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
-from ocs_ci.deployment.mce import MCEInstaller
 from packaging.version import parse as parse_version
+
+# ponytail: MCEInstaller not available in release-4.17, stub it out
+try:
+    from ocs_ci.deployment.mce import MCEInstaller
+except ModuleNotFoundError:
+    MCEInstaller = None
 
 """
 This module contains the base class for HyperShift hosted cluster management.
@@ -464,6 +469,8 @@ def get_latest_supported_hypershift_version() -> str | None:
 
     hcp_version = None
     try:
+        if MCEInstaller is None:
+            return None
         mce_installer = MCEInstaller()
         if mce_installer.check_hypershift_namespace():
             versions = mce_installer.get_supported_versions() or []
