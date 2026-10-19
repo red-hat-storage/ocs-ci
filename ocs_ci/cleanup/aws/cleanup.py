@@ -95,7 +95,21 @@ def is_hypershift_or_capi_cluster(vpc_obj):
     Returns:
         bool: True if it's a HyperShift/CAPI cluster, False otherwise
     """
-    # Check instances in the VPC for HyperShift/CAPI tags
+    # First check VPC tags (more reliable than instance tags)
+    if vpc_obj.tags:
+        for tag in vpc_obj.tags:
+            # CAPI clusters tag VPCs with kubernetes.io/cluster/<name>
+            if tag["Key"].startswith("kubernetes.io/cluster/"):
+                # Check if it ends with -infra (CAPI pattern)
+                if "-infra" in tag["Key"]:
+                    logger.info("Detected CAPI cluster from VPC tag: %s", tag["Key"])
+                    return True
+            # HyperShift VPC tags
+            if tag["Key"].startswith("hypershift.openshift.io/"):
+                logger.info("Detected HyperShift cluster from VPC tag: %s", tag["Key"])
+                return True
+
+    # Also check instances in the VPC for HyperShift/CAPI tags
     for instance in vpc_obj.instances.all():
         if not instance.tags:
             continue
