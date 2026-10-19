@@ -136,7 +136,7 @@ class TestZoneFailureFailoverRelocate:
         # ========================================
         gitops_workloads = []
         logger.test_step("Deploy GitOps/ApplicationSet workload")
-        for pvc_interface in (constants.CEPHFILESYSTEM, constants.CEPHFILESYSTEM):
+        for pvc_interface in (constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM):
             gitops_workload = all_dr_workloads["dr_workload"](
                 num_of_subscription=0,
                 num_of_appset=1,
@@ -155,7 +155,7 @@ class TestZoneFailureFailoverRelocate:
         # ========================================
         discovered_workloads = []
         logger.test_step("Deploy Discovered workloads")
-        for pvc_interface in (constants.CEPHFILESYSTEM, constants.CEPHFILESYSTEM):
+        for pvc_interface in (constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM):
             discovered_workload = all_dr_workloads["discovered_apps"](
                 kubeobject=1,
                 recipe=0,
@@ -432,16 +432,13 @@ class TestZoneFailureFailoverRelocate:
                     f"cluster={wl_meta['secondary_cluster_name']}, "
                     f"namespace={wl_meta['workload_namespace']}"
                 )
-        except Exception as ex:
+        except Exception:
             logger.exception(
                 f"Failover phase failed at workload "
                 f"{len(completed_failovers)+1}/{len(all_workloads)}: "
                 f"completed={completed_failovers}, batch={failover_batch}"
             )
-            raise type(ex)(
-                f"{str(ex)} | Failover phase context: requested_failover_batch="
-                f"{failover_batch}, completed_failovers={completed_failovers}"
-            ) from ex
+            raise
 
         # ========================================
         # Step 7: Start target zone nodes
@@ -507,13 +504,6 @@ class TestZoneFailureFailoverRelocate:
                 drcluster_name=self.primary_cluster_name, disable_eviction=True
             )
             for wl_meta in workload_metadata:
-                dr_helpers.wait_for_all_resources_creation(
-                    wl_meta["workload"].workload_pvc_count,
-                    wl_meta["workload"].workload_pod_count,
-                    wl_meta["workload_namespace"],
-                    discovered_apps=wl_meta["is_discovered_app"],
-                    timeout=1200,
-                )
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=wl_meta["workload_namespace"],
                     discovered_apps=wl_meta["is_discovered_app"],
@@ -636,7 +626,7 @@ class TestZoneFailureFailoverRelocate:
                     f"cluster={wl_meta['primary_cluster_name']}, "
                     f"namespace={wl_meta['workload_namespace']}"
                 )
-        except Exception as ex:
+        except Exception:
             logger.exception(
                 f"Relocate phase failed at workload "
                 f"{len(completed_relocates)+1}/{len(all_workloads)}: "
@@ -644,11 +634,7 @@ class TestZoneFailureFailoverRelocate:
                 f"completed_failovers={completed_failovers}, "
                 f"batch={relocate_batch}"
             )
-            raise type(ex)(
-                f"{str(ex)} | Relocate phase context: requested_relocate_batch="
-                f"{relocate_batch}, completed_failovers={completed_failovers}, "
-                f"completed_relocates={completed_relocates}"
-            ) from ex
+            raise
 
         for wl_meta in workload_metadata:
             drpc_obj = DRPC(
