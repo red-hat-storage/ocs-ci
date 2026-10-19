@@ -30,7 +30,7 @@ class TestZoneFailureFailoverRelocate:
     """
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request, discovered_apps_dr_workload_cnv):
+    def teardown(self, request, node_restart_teardown):
         """
         Teardown function: If fenced, un-fence the cluster and reboot nodes
         """
@@ -87,8 +87,8 @@ class TestZoneFailureFailoverRelocate:
         # on this cluster (equivalent to: oc get nodes --show-labels | grep zone).
         # There are always 3 zones total: 1 arbiter + 2 data zones.
         with config.RunWithPrimaryConfigContext():
-            provider_cluster_index = config.get_provider_index()
-        with config.RunWithConfigContext(provider_cluster_index):
+            self.provider_cluster_index = config.get_provider_index()
+        with config.RunWithConfigContext(self.provider_cluster_index):
             arbiter_zone = config.DEPLOYMENT.get(
                 "arbiter_zone", constants.ARBITER_ZONE_LABEL[0]
             )
@@ -296,7 +296,7 @@ class TestZoneFailureFailoverRelocate:
         logger.info(f"Metadata collected for {len(workload_metadata)} workload(s)")
 
         self.primary_cluster_name = config.get_cluster_name_by_index(
-            provider_cluster_index
+            self.provider_cluster_index
         )
 
         # Ensure that the primary cluster in config is used and same for all workloads
@@ -315,7 +315,7 @@ class TestZoneFailureFailoverRelocate:
         # Step 5: Stop the nodes in the target zone
         # ========================================
         logger.test_step(f"Stop the zone {power_off_zone}")
-        with config.RunWithConfigContext(provider_cluster_index):
+        with config.RunWithConfigContext(self.provider_cluster_index):
             logger.info(
                 f"Simulating zone failure: stopping nodes in zone '{power_off_zone}' on base cluster"
             )
@@ -339,7 +339,7 @@ class TestZoneFailureFailoverRelocate:
             logger.info(
                 f"Stopping {len(zone_nodes)} node(s): {[node.name for node in zone_nodes]}"
             )
-            nodes_multicluster[provider_cluster_index].stop_nodes(zone_nodes)
+            nodes_multicluster[self.provider_cluster_index].stop_nodes(zone_nodes)
             logger.info(
                 f"Node(s) in zone '{power_off_zone}' stopped successfully. "
                 f"Waiting 10 min for OpenShift to detect the node failure."
@@ -449,8 +449,8 @@ class TestZoneFailureFailoverRelocate:
         logger.test_step(
             f"Start stopped node(s) {zone_nodes} on base cluster zone '{power_off_zone}'"
         )
-        with config.RunWithConfigContext(provider_cluster_index):
-            nodes_multicluster[provider_cluster_index].start_nodes(zone_nodes)
+        with config.RunWithConfigContext(self.provider_cluster_index):
+            nodes_multicluster[self.provider_cluster_index].start_nodes(zone_nodes)
             wait_for_nodes_status([node.name for node in zone_nodes], timeout=600)
         logger.info(
             f"All node(s) in zone '{power_off_zone}' are Ready. "
