@@ -551,7 +551,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
         return False
 
 
-def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
+def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None, region=None):
     """
     Cleanup existing cluster in AWS
 
@@ -561,6 +561,7 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
         upi (bool): True for UPI cluster, False otherwise
         failed_deletions (list): list of clusters we failed to delete, used
             for reporting purposes
+        region (str): AWS region name where the cluster exists
 
     """
     data = {"cluster_name": cluster_name, "cluster_id": cluster_id}
@@ -574,7 +575,7 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
     oc_bin = os.path.join(bin_dir, "openshift-install")
 
     if upi:
-        aws = AWS()
+        aws = AWS(region_name=region) if region else AWS()
         rhel_workers = get_rhel_worker_instances(cleanup_path)
         logger.info(f"{cluster_name}'s RHEL workers: {rhel_workers}")
         if rhel_workers:
@@ -639,7 +640,7 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
 
             # Verify VPC was actually deleted (installer sometimes leaves it behind)
             logger.info("Verifying VPC cleanup for %s...", cluster_name)
-            aws = AWS()
+            aws = AWS(region_name=region) if region else AWS()
             vpc_name = f"{cluster_name}-vpc"
             vpcs = aws.ec2_client.describe_vpcs(
                 Filters=[{"Name": "tag:Name", "Values": [vpc_name]}]
@@ -670,7 +671,7 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
             # Try manual VPC cleanup as fallback
             logger.info("Attempting manual VPC cleanup for %s", cluster_name)
             try:
-                aws = AWS()
+                aws = AWS(region_name=region) if region else AWS()
                 # Find VPC by name pattern
                 vpc_name = f"{cluster_name}-vpc"
                 vpcs = aws.ec2_client.describe_vpcs(
@@ -1120,7 +1121,8 @@ def aws_cleanup():
             cluster_name = cluster.rsplit("-", 1)[0]
             logger.info(f"Deleting cluster {cluster_name}")
             proc = threading.Thread(
-                target=cleanup, args=(cluster_name, cluster, False, failed_deletions)
+                target=cleanup,
+                args=(cluster_name, cluster, False, failed_deletions, region),
             )
             proc.start()
             procs.append(proc)
@@ -1130,7 +1132,8 @@ def aws_cleanup():
             cluster_name = cluster.rsplit("-", 1)[0]
             logger.info(f"Deleting UPI cluster {cluster_name}")
             proc = threading.Thread(
-                target=cleanup, args=(cluster_name, cluster, True, failed_deletions)
+                target=cleanup,
+                args=(cluster_name, cluster, True, failed_deletions, region),
             )
             proc.start()
             procs.append(proc)
