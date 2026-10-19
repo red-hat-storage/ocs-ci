@@ -276,7 +276,7 @@ def _validate_catalog_image():
     return catalog_image
 
 
-def _ensure_cnsa_namespace():
+def _ensure_cnsa_namespace() -> None:
     """
     Ensure the ``ibm-spectrum-scale`` namespace exists.
 
