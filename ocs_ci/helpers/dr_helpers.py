@@ -3044,6 +3044,9 @@ def generate_kubeobject_capture_interval():
     """
     capture_interval = int(get_all_drpolicy()[0]["spec"]["schedulingInterval"][:-1])
 
+    # For MDR, schedulingInterval is 0m. Use default 5m in that case.
+    if capture_interval == 0:
+        return 5
     if capture_interval <= 5 and capture_interval != 1:
         return capture_interval - 1
     elif capture_interval > 6:
