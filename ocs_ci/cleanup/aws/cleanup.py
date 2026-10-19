@@ -456,7 +456,9 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
         route_tables = list(vpc.route_tables.all())
         for rt in route_tables:
             # Skip main route table
-            is_main = any(assoc.main for assoc in rt.associations_attribute or [])
+            is_main = any(
+                assoc.get("Main", False) for assoc in rt.associations_attribute or []
+            )
             if not is_main:
                 logger.info("Deleting Route Table %s", rt.id)
                 try:
