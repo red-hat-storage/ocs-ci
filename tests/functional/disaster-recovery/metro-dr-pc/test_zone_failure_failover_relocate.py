@@ -143,7 +143,7 @@ class TestZoneFailureFailoverRelocate:
                 pvc_interface=pvc_interface,
                 skip_mirroring_validation=True,
             )
-            gitops_workloads.append(gitops_workload)
+            gitops_workloads.extend(gitops_workload)
         logger.info(
             f"Deployed {len(gitops_workloads)} GitOps/ApplicationSet workload(s): "
             f"{[w.workload_namespace for w in gitops_workloads]}"
@@ -162,7 +162,7 @@ class TestZoneFailureFailoverRelocate:
                 multi_ns=False,
                 skip_mirroring_validation=True,
             )
-            discovered_workloads.append(discovered_workload)
+            discovered_workloads.extend(discovered_workload)
         logger.info(
             f"Deployed {len(discovered_workloads)} Discovered workload(s): "
             f"{[w.workload_namespace for w in discovered_workloads]}"
