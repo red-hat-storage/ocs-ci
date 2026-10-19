@@ -219,6 +219,12 @@ class TestZoneFailureFailoverRelocate:
             else:
                 resource_name = workload.workload_name
 
+            drpc_name = (
+                resource_name
+                if is_discovered_app
+                else (f"{resource_name}-drpc" if is_appset else workload_namespace)
+            )
+
             # Get primary and secondary cluster names
             primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
                 workload_namespace,
@@ -238,7 +244,7 @@ class TestZoneFailureFailoverRelocate:
                     constants.APPLICATION_SET if is_appset else constants.SUBSCRIPTION
                 ),
                 discovered_apps=is_discovered_app,
-                resource_name=resource_name,
+                resource_name=drpc_name,
             )
 
             logger.debug(
@@ -257,11 +263,6 @@ class TestZoneFailureFailoverRelocate:
                 resource_name=resource_name,
             )
 
-            drpc_name = (
-                resource_name
-                if is_discovered_app
-                else (f"{resource_name}-drpc" if is_appset else workload_namespace)
-            )
             action_old_primary = primary_cluster_name if is_discovered_app else None
 
             workload_metadata.append(
