@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade,
     skipif_ocs_version,
     tier1,
+    tier2,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers import helpers
@@ -91,7 +92,7 @@ BURSTABLE_BLOCK_CONTAINERS = [
     }
 ]
 
-# Shared VolumeAttributesClass tiers. Consumed by both the @tier1 QoS matrix
+# Shared VolumeAttributesClass tiers. Consumed by both the QoS matrix
 # (TestVolumeAttributesClassQoS.setup_qos_classes) and the standalone upgrade
 # class so the tier names/limits are defined exactly once.
 SILVER_VAC_NAME = "silver-qos-tier"
@@ -277,7 +278,6 @@ def check_node_cgroup_limits(
 
 
 @green_squad
-@tier1
 @skipif_ocs_version("<4.21")
 class TestVolumeAttributesClassQoS(ManageTest):
 
@@ -356,7 +356,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 GUARANTEED_FS_CONTAINERS,
                 "Guaranteed",
                 False,
-                marks=polarion_id("OCS-8338"),
+                marks=[polarion_id("OCS-8338"), tier1],
             ),
             # Burstable pod + fresh filesystem RWOP validation
             pytest.param(
@@ -368,7 +368,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 BURSTABLE_FS_CONTAINERS,
                 "Burstable",
                 False,
-                marks=polarion_id("OCS-8339"),
+                marks=[polarion_id("OCS-8339"), tier2],
             ),
             # BestEffort pod + fresh block RWX multi-container isolation
             pytest.param(
@@ -380,7 +380,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 BESTEFFORT_BLOCK_CONTAINERS,
                 "BestEffort",
                 False,
-                marks=polarion_id("OCS-8340"),
+                marks=[polarion_id("OCS-8340"), tier2],
             ),
             # Guaranteed pod + fresh block RWO mapping
             pytest.param(
@@ -392,7 +392,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 GUARANTEED_BLOCK_CONTAINERS,
                 "Guaranteed",
                 False,
-                marks=polarion_id("OCS-8341"),
+                marks=[polarion_id("OCS-8341"), tier2],
             ),
             # Burstable pod + fresh block RWOP mapping
             pytest.param(
@@ -404,7 +404,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 BURSTABLE_BLOCK_CONTAINERS,
                 "Burstable",
                 False,
-                marks=polarion_id("OCS-8342"),
+                marks=[polarion_id("OCS-8342"), tier2],
             ),
             # Read-only (ROX) block mode on the Gold tier
             pytest.param(
@@ -416,7 +416,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 GUARANTEED_BLOCK_CONTAINERS,
                 "Guaranteed",
                 True,  # Read-Only Spec Flag
-                marks=polarion_id("OCS-8343"),
+                marks=[polarion_id("OCS-8343"), tier2],
             ),
         ],
         ids=[
@@ -581,6 +581,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
         """Thin wrapper around the module-level validate_filesystem_io."""
         validate_filesystem_io(pod_obj, test_id)
 
+    @tier2
     @polarion_id("OCS-8326")
     def test_qos_volume_cloning_vac_override(
         self, project_factory, test_resources_cleanup
@@ -667,6 +668,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
         logger.test_step(f"[{test_id}] Validate active I/O on the cloned volume")
         self._validate_filesystem_io(pod_obj, test_id)
 
+    @tier2
     @pytest.mark.parametrize(
         "test_id, pod_name",
         [
@@ -748,6 +750,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
         logger.test_step(f"[{test_id}] Validate active I/O after limits are cleared")
         self._validate_filesystem_io(new_pod_obj, test_id)
 
+    @tier2
     @polarion_id("OCS-8335")
     def test_qos_snapshot_restore_vac_pipeline(
         self,
@@ -882,7 +885,7 @@ class TestQoSPreExistingPVCAfterUpgrade(ManageTest):
     volume that was provisioned before the cluster was upgraded to the
     VAC-capable ODF version. It is split into an @pre_upgrade phase (create the
     legacy PVC/pod and seed data) and an @post_upgrade phase (bind Silver and
-    verify limits). This class is deliberately kept out of the @tier1
+    verify limits). This class is deliberately kept separate from the
     TestVolumeAttributesClassQoS class so it runs only under the upgrade flow.
     """
 
