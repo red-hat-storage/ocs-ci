@@ -18,6 +18,7 @@ from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.hyperconverged import HyperConverged
 from ocs_ci.deployment.mce import MCEInstaller, set_mirror_registry_configmap
 from ocs_ci.deployment.deployment import Deployment
+from ocs_ci.deployment.fdf_standalone import is_fdf_standalone_deployment
 from ocs_ci.deployment.helpers.hypershift_base import (
     HyperShiftBase,
     get_hosted_cluster_names,
@@ -469,6 +470,55 @@ def get_provider_address():
     return storage_provider_endpoint
 
 
+def _extract_version_from_channel_string(version_string, cluster_name):
+    """
+    Extract a numeric version from a channel-prefixed version string.
+
+    Strips known channel prefixes ("latest", "stable") and returns the
+    remaining numeric version. Falls back to the cluster's odf_version
+    config when the channel string has no numeric component.
+
+    Args:
+        version_string (str): Version string, possibly prefixed with channel
+            tags like "stable-4.23", "latest-stable-4.23", or bare "4.23.0-41".
+        cluster_name (str): Cluster name for fallback lookup.
+
+    Returns:
+        str: A version string suitable for semantic version parsing.
+
+    Raises:
+        ValueError: If no numeric version can be determined.
+
+    """
+    if any(tag in version_string for tag in ["latest", "stable"]):
+        parts = [
+            p for p in version_string.split("-") if p not in ("latest", "stable", "")
+        ]
+        if parts:
+            version_string = "-".join(parts)
+        else:
+            fallback = (
+                config.ENV_DATA.get("clusters", {})
+                .get(cluster_name, {})
+                .get("odf_version")
+            )
+            if fallback:
+                logger.warning(
+                    "hosted_odf_version '%s' has no numeric version, "
+                    "falling back to odf_version '%s'",
+                    version_string,
+                    fallback,
+                )
+                version_string = fallback
+            else:
+                raise ValueError(
+                    f"hosted_odf_version '{version_string}' for cluster "
+                    f"'{cluster_name}' contains no numeric version and no "
+                    f"odf_version fallback is available"
+                )
+    return version_string
+
+
 def config_has_hosted_odf_image(cluster_name):
     """
     Check if the config has hosted ODF image set for the cluster
@@ -577,8 +627,6 @@ def get_fdf_catalog_image():
     global _fdf_catalog_image_cache
     if _fdf_catalog_image_cache:
         return _fdf_catalog_image_cache
-
-    from ocs_ci.deployment.fdf_standalone import is_fdf_standalone_deployment
 
     catalog_name = (
         constants.FDF_STANDALONE_CATALOG_SOURCE_NAME
@@ -7705,8 +7753,9 @@ class SpokeODF(SpokeOCP, ABC):
         hosted_odf_version = (
             config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
         )
-        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
-            hosted_odf_version = hosted_odf_version.split("-")[-1]
+        hosted_odf_version = _extract_version_from_channel_string(
+            hosted_odf_version, self.name
+        )
 
         version_semantic = version.get_semantic_version(hosted_odf_version)
 
@@ -8012,8 +8061,6 @@ class HostedFDF(HypershiftHostedOCP, SpokeODF):
         # Resolve the catalog name at runtime: standalone FDF uses "ibm-operators",
         # standard FDF / Fusion uses "isf-data-foundation-catalog".  This drives
         # create_catalog_source, catalog_source_exists, and create_subscription.
-        from ocs_ci.deployment.fdf_standalone import is_fdf_standalone_deployment
-
         self.FDF_CATALOGSOURCE_NAME = (
             constants.FDF_STANDALONE_CATALOG_SOURCE_NAME
             if is_fdf_standalone_deployment()
@@ -8118,10 +8165,14 @@ class HostedFDF(HypershiftHostedOCP, SpokeODF):
         )
 
         if not hosted_odf_version:
-            # FDF standalone path: hosted_odf_version is not set in config.
-            # Derive the version from the catalog image tag, e.g.
-            # "cp.stg.icr.io/.../isf-data-foundation-catalog:4.23.0-41" -> "4.23.0-41"
-            tag = self.catsrc_image.split(":")[-1] if ":" in self.catsrc_image else ""
+            if "@" in self.catsrc_image:
+                raise ValueError(
+                    f"Cannot determine ODF channel: 'hosted_odf_version' is not set "
+                    f"and the catalog image '{self.catsrc_image}' is a digest reference."
+                )
+            tag = (
+                self.catsrc_image.rsplit(":", 1)[-1] if ":" in self.catsrc_image else ""
+            )
             if not tag:
                 raise ValueError(
                     f"Cannot determine ODF channel: 'hosted_odf_version' is not set "
@@ -8133,18 +8184,9 @@ class HostedFDF(HypershiftHostedOCP, SpokeODF):
             )
             hosted_odf_version = tag
 
-        for prefix in ["latest-", "stable-"]:
-            if hosted_odf_version.startswith(prefix):
-                hosted_odf_version = hosted_odf_version[len(prefix) :]
-                break
-
-        if not hosted_odf_version:
-            raise ValueError(
-                f"Cannot determine ODF channel for cluster '{self.name}': "
-                f"'hosted_odf_version' resolved to an empty string after stripping "
-                f"tag prefix. Raw value from config: "
-                f"{config.ENV_DATA.get('clusters').get(self.name).get('hosted_odf_version')!r}"
-            )
+        hosted_odf_version = _extract_version_from_channel_string(
+            hosted_odf_version, self.name
+        )
 
         version_semantic = version.get_semantic_version(hosted_odf_version)
         hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
