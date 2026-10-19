@@ -440,6 +440,7 @@ class TestNvmeofPvc(ManageTest):
         )
         verify_pv_reclaim(pv_obj, reclaim_policy)
 
+    @polarion_id("OCS-8347")
     def test_nvmeof_raw_block_pvc(self, nvmeof_storageclass, pvc_factory, pod_factory):
         """
         Verify that an NVMe-oF PVC can be consumed as a raw block device and
@@ -656,6 +657,7 @@ class TestNvmeofPvc(ManageTest):
         )
         verify_pv_reclaim(pv_obj, reclaim_policy)
 
+    @polarion_id("OCS-8348")
     def test_nvmeof_rwo_access_mode_enforcement(
         self, nvmeof_storageclass, pvc_factory, pod_factory
     ):
@@ -845,6 +847,7 @@ class TestNvmeofGatewayScaling(ManageTest):
         request.addfinalizer(finalizer)
         return original_instances
 
+    @polarion_id("OCS-8349")
     def test_nvmeof_gateway_scale_to_zero(
         self,
         nvmeof_gateway_instances,
@@ -1056,6 +1059,7 @@ class TestNvmeofGatewayScaling(ManageTest):
         )
 
     @jira("DFBUGS-11728")
+    @polarion_id("OCS-8350")
     def test_nvmeof_gateway_replica_scaling(
         self,
         nvmeof_gateway_instances,
@@ -1243,6 +1247,7 @@ class TestNvmeofGatewayUpdateStrategy(ManageTest):
         request.addfinalizer(finalizer)
         return original_resources
 
+    @polarion_id("OCS-8351")
     def test_nvmeof_gateway_update_strategy(
         self,
         nvmeof_gateway_resources,
