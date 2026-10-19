@@ -391,9 +391,28 @@ def get_clusters(
 
     def determine_cluster_deletion(ec2_instances, cluster_name):
         for instance in ec2_instances:
+            # Skip terminated instances
+            if instance.state["Name"] in ["terminated", "terminating"]:
+                continue
+
+            # Check if instance has do_not_delete tag
+            if instance.tags:
+                for tag in instance.tags:
+                    if tag["Key"] == defaults.DO_NOT_DELETE_TAG:
+                        tag_value = tag["Value"].lower()
+                        if tag_value in ["true", "1", "yes"]:
+                            logger.info(
+                                "Instance %s has %s tag, skipping cluster deletion",
+                                instance.id,
+                                defaults.DO_NOT_DELETE_TAG,
+                            )
+                            return False
+
             allowed_running_time = time_to_delete
             do_not_delete = False
-            if instance.state["Name"] == "running":
+
+            # Check both running and stopped instances
+            if instance.state["Name"] in ["running", "stopped"]:
                 for prefix, hours in prefixes_hours_to_spare.items():
                     # case insensitive 'startswith'
                     if bool(re.match(prefix, cluster_name, re.I)):
@@ -412,10 +431,14 @@ def get_clusters(
                     launch_time = instance.launch_time
                     current_time = datetime.datetime.now(launch_time.tzinfo)
                     running_time = current_time - launch_time
+                    instance_name = [
+                        tag["Value"] for tag in instance.tags if tag["Key"] == "Name"
+                    ][0]
                     logger.info(
-                        f"Instance {[tag['Value'] for tag in instance.tags if tag['Key'] == 'Name'][0]} "
-                        f"(id: {instance.id}) running time is {running_time} hours while the allowed"
-                        f" running time for it is {allowed_running_time / 3600} hours"
+                        f"Instance {instance_name} (id: {instance.id}, "
+                        f"state: {instance.state['Name']}) running time is "
+                        f"{running_time} hours while the allowed running time "
+                        f"for it is {allowed_running_time / 3600} hours"
                     )
                     if running_time.total_seconds() > allowed_running_time:
                         return True
