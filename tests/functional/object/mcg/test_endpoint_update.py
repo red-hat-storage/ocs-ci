@@ -1518,6 +1518,10 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         result = run_update_on_settled_stores(
             mcg_obj, old, new, [(constants.BACKINGSTORE, bs.name)], ns
         )
+        assert not result["conflict"], (
+            "The CLI gave up on a resource-version conflict instead of "
+            f"re-reading and retrying - DFBUGS-10937:\n{result['raw']}"
+        )
         assert not result["aborted"], result["raw"]
         assert result["stores_updated"] == 1, result["raw"]
         assert get_store_endpoint(constants.BACKINGSTORE, bs.name, ns) == new
@@ -2117,6 +2121,10 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
 
         # --- switch OLD -> NEW ---
         result = run_update_on_settled_stores(mcg_obj, old, new, stores, ns)
+        assert not result["conflict"], (
+            "The CLI gave up on a resource-version conflict instead of "
+            f"re-reading and retrying - DFBUGS-10937:\n{result['raw']}"
+        )
         assert not result["webhook_denied"], (
             f"The NamespaceStore endpoint change was denied by the admission "
             f"webhook (DFBUGS-10744):\n{result['raw']}"
@@ -2138,6 +2146,10 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
 
         # --- revert NEW -> OLD ---
         revert = run_update_on_settled_stores(mcg_obj, new, old, stores, ns)
+        assert not revert["conflict"], (
+            "The CLI gave up on a resource-version conflict instead of "
+            f"re-reading and retrying - DFBUGS-10937:\n{revert['raw']}"
+        )
         assert not revert["aborted"], f"Revert aborted:\n{revert['raw']}"
         assert revert["stores_updated"] == 1
         assert get_store_endpoint(constants.NAMESPACESTORE, nss.name, ns) == old
@@ -2168,6 +2180,10 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
                 (constants.NAMESPACESTORE, nss.name),
             ],
             ns,
+        )
+        assert not result["conflict"], (
+            "The CLI gave up on a resource-version conflict instead of "
+            f"re-reading and retrying - DFBUGS-10937:\n{result['raw']}"
         )
         assert not result["webhook_denied"], (
             f"The NamespaceStore half of the batch was denied by the admission "
