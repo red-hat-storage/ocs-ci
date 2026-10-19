@@ -4420,7 +4420,6 @@ locators = {
             **deployment_4_16,
             **deployment_4_17,
             **deployment_4_19,
-            **deployment_5_0,
             **deployment_4_21,
             **deployment_4_22,
         },
@@ -4501,7 +4500,6 @@ locators = {
             **deployment_4_16,
             **deployment_4_17,
             **deployment_4_19,
-            **deployment_5_0,
             **deployment_4_21,
         },
         "obc": {**obc, **obc_4_21},
@@ -4572,7 +4570,6 @@ locators = {
             **deployment_4_16,
             **deployment_4_17,
             **deployment_4_19,
-            **deployment_5_0,
         },
         "obc": obc,
         "pvc": {
@@ -5083,7 +5080,7 @@ locators = {
         "validation": validation,
     },
 }
-# 4.23 uses the same locators as 5.0 (includes deployment_5_0 keys)
+# 4.23 uses the same locators as 5.0
 locators["4.23"] = locators["5.0"]
 
 
