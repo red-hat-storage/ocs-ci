@@ -29,11 +29,11 @@ def verify_expected_failure_event(ocs_obj, failure_strs):
         UnexpectedBehaviour: If none of the failure messages is present
 
     """
-    log.info("Check expected failure event message in oc describe command")
+    logger.info("Check expected failure event message in oc describe command")
     describe_output = ocs_obj.describe()
     for failure_str in failure_strs:
         if failure_str in describe_output:
-            log.info(f"Failure string {failure_str} is present in oc describe command")
+            logger.info(f"Failure string {failure_str} is present in oc describe command")
             return True
     raise UnexpectedBehaviour(
         f"None of the failure strings {failure_strs} were found in oc describe command"
