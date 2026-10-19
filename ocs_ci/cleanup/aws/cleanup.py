@@ -127,9 +127,13 @@ def is_hypershift_or_capi_cluster(vpc_obj):
     return False
 
 
-def cleanup_hypershift_vpc(cluster_name, vpc_id, region_name):
+def cleanup_vpc(cluster_name, vpc_id, region_name):
     """
-    Clean up a HyperShift/CAPI VPC and all its dependencies in the correct order.
+    Clean up a VPC and all its dependencies in the correct order.
+
+    This is a generic VPC cleanup function that works for any cluster type
+    (IPI, UPI, HyperShift, CAPI, etc.). It deletes all AWS resources in
+    the proper order to avoid dependency violations.
 
     Args:
         cluster_name (str): Name of the cluster
@@ -140,7 +144,7 @@ def cleanup_hypershift_vpc(cluster_name, vpc_id, region_name):
         bool: True if cleanup was successful, False otherwise
     """
     aws = AWS(region_name=region_name)
-    logger.info("Starting HyperShift/CAPI cleanup for VPC %s", vpc_id)
+    logger.info("Starting VPC cleanup for %s (VPC: %s)", cluster_name, vpc_id)
 
     try:
         vpc = aws.ec2_resource.Vpc(vpc_id)
@@ -165,8 +169,15 @@ def cleanup_hypershift_vpc(cluster_name, vpc_id, region_name):
             Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
         )["NatGateways"]
         nat_gateway_ids = []
+        nat_gateway_eip_allocation_ids = []
         for nat_gw in nat_gateways:
             if nat_gw["State"] not in ["deleted", "deleting"]:
+                # Capture EIP allocation IDs before deleting NAT Gateway
+                for address in nat_gw.get("NatGatewayAddresses", []):
+                    alloc_id = address.get("AllocationId")
+                    if alloc_id:
+                        nat_gateway_eip_allocation_ids.append(alloc_id)
+
                 logger.info("Deleting NAT Gateway %s", nat_gw["NatGatewayId"])
                 aws.ec2_client.delete_nat_gateway(NatGatewayId=nat_gw["NatGatewayId"])
                 nat_gateway_ids.append(nat_gw["NatGatewayId"])
@@ -191,12 +202,33 @@ def cleanup_hypershift_vpc(cluster_name, vpc_id, region_name):
             else:
                 logger.warning("NAT Gateway deletion timed out, continuing anyway")
 
+            # Extra wait for EIPs to be released from NAT Gateways
+            logger.info("Waiting 10s for NAT Gateway EIPs to be released...")
+            time.sleep(10)
+
         # Step 3: Release Elastic IPs
-        # Get all addresses and filter by VPC
+        # First release NAT Gateway EIPs (we captured these earlier)
+        for allocation_id in nat_gateway_eip_allocation_ids:
+            logger.info("Releasing NAT Gateway Elastic IP %s", allocation_id)
+            try:
+                aws.ec2_client.release_address(AllocationId=allocation_id)
+            except ClientError as e:
+                logger.warning(
+                    "Failed to release NAT Gateway EIP %s: %s", allocation_id, e
+                )
+
+        # Then check for any other EIPs associated with this VPC
         all_addresses = aws.ec2_client.describe_addresses()["Addresses"]
-        vpc_addresses = []
         for address in all_addresses:
-            # Check if EIP is associated with this VPC
+            allocation_id = address.get("AllocationId")
+            if not allocation_id:
+                continue
+
+            # Skip EIPs we already tried to release
+            if allocation_id in nat_gateway_eip_allocation_ids:
+                continue
+
+            # Check if EIP is associated with an ENI in this VPC
             network_interface_id = address.get("NetworkInterfaceId")
             if network_interface_id:
                 try:
@@ -204,22 +236,15 @@ def cleanup_hypershift_vpc(cluster_name, vpc_id, region_name):
                         NetworkInterfaceIds=[network_interface_id]
                     )["NetworkInterfaces"][0]
                     if eni.get("VpcId") == vpc_id:
-                        vpc_addresses.append(address)
+                        logger.info("Releasing Elastic IP %s", allocation_id)
+                        try:
+                            aws.ec2_client.release_address(AllocationId=allocation_id)
+                        except ClientError as e:
+                            logger.warning(
+                                "Failed to release EIP %s: %s", allocation_id, e
+                            )
                 except ClientError:
                     pass
-            elif address.get("AssociationId"):
-                # EIP has an association but no ENI, might be NAT Gateway
-                vpc_addresses.append(address)
-
-        for address in vpc_addresses:
-            allocation_id = address.get("AllocationId")
-            if not allocation_id:
-                continue
-            logger.info("Releasing Elastic IP %s", allocation_id)
-            try:
-                aws.ec2_client.release_address(AllocationId=allocation_id)
-            except ClientError as e:
-                logger.warning("Failed to release EIP %s: %s", allocation_id, e)
 
         # Step 4: Delete Load Balancers (ELBv2)
         try:
@@ -336,11 +361,11 @@ def cleanup_hypershift_vpc(cluster_name, vpc_id, region_name):
         logger.info("Deleting VPC %s", vpc_id)
         vpc.delete()
 
-        logger.info("Successfully cleaned up HyperShift/CAPI VPC %s", vpc_id)
+        logger.info("Successfully cleaned up VPC %s", vpc_id)
         return True
 
     except Exception as e:
-        logger.error("Failed to clean up HyperShift/CAPI VPC %s: %s", vpc_id, e)
+        logger.error("Failed to clean up VPC %s: %s", vpc_id, e)
         logger.error(traceback.format_exc())
         return False
 
@@ -430,11 +455,53 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
         logger.info(f"cleaning up {cluster_id}")
         try:
             destroy_cluster(installer=oc_bin, cluster_path=cleanup_path)
-        except CommandFailed:
-            logger.error("Failed to fully destroy cluster %s", cluster_name)
-            if failed_deletions:
-                failed_deletions.append(cluster_name)
-            raise
+        except CommandFailed as e:
+            logger.error(
+                "Failed to destroy cluster %s with openshift-install: %s",
+                cluster_name,
+                e,
+            )
+
+            # Try manual VPC cleanup as fallback
+            logger.info("Attempting manual VPC cleanup for %s", cluster_name)
+            try:
+                aws = AWS()
+                # Find VPC by name pattern
+                vpc_name = f"{cluster_name}-vpc"
+                vpcs = aws.ec2_client.describe_vpcs(
+                    Filters=[{"Name": "tag:Name", "Values": [vpc_name]}]
+                )["Vpcs"]
+
+                if vpcs:
+                    vpc_id = vpcs[0]["VpcId"]
+                    logger.info(
+                        "Found VPC %s for cluster %s, attempting manual cleanup",
+                        vpc_id,
+                        cluster_name,
+                    )
+                    success = cleanup_vpc(cluster_name, vpc_id, aws.region_name)
+                    if not success:
+                        logger.error(
+                            "Manual VPC cleanup also failed for %s", cluster_name
+                        )
+                        if failed_deletions:
+                            failed_deletions.append(cluster_name)
+                        raise
+                else:
+                    logger.warning(
+                        "Could not find VPC for cluster %s, cannot attempt manual cleanup",
+                        cluster_name,
+                    )
+                    if failed_deletions:
+                        failed_deletions.append(cluster_name)
+                    raise
+            except Exception as cleanup_error:
+                logger.error(
+                    "Manual cleanup failed for %s: %s", cluster_name, cleanup_error
+                )
+                if failed_deletions:
+                    failed_deletions.append(cluster_name)
+                raise
 
     delete_cluster_buckets(cluster_name)
 
@@ -855,7 +922,7 @@ def aws_cleanup():
         )
         for cluster_name, vpc_id in hypershift_clusters_to_delete:
             logger.info(f"Deleting HyperShift/CAPI cluster {cluster_name}")
-            success = cleanup_hypershift_vpc(cluster_name, vpc_id, region)
+            success = cleanup_vpc(cluster_name, vpc_id, region)
             if not success:
                 failed_deletions.append(cluster_name)
             # Also try to delete associated S3 buckets
