@@ -264,7 +264,7 @@ class TestFusionAccessZoneFailureAndRecovery:
         )
         log.info("All the workloads recovered with data integrity preserved")
 
-    @pytest.mark.polarion_id("OCS-8326")
+    @pytest.mark.polarion_id("OCS-8345")
     def test_full_zone_failure_and_recovery(
         self,
         nodes,
@@ -385,7 +385,7 @@ class TestFusionAccessZoneFailureAndRecovery:
         # its own, and every volume must still hold its baseline file
         self._verify_recovery(sc_obj, namespace, md5sum_before, start_time, end_time)
 
-    @pytest.mark.polarion_id("OCS-8327")
+    @pytest.mark.polarion_id("OCS-8346")
     def test_san_storage_failure_and_recovery(
         self,
         reconnect_san_teardown,
