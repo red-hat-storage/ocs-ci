@@ -589,6 +589,30 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
         logger.info(f"cleaning up {cluster_id}")
         try:
             destroy_cluster(installer=oc_bin, cluster_path=cleanup_path)
+
+            # Verify VPC was actually deleted (installer sometimes leaves it behind)
+            logger.info("Verifying VPC cleanup for %s...", cluster_name)
+            aws = AWS()
+            vpc_name = f"{cluster_name}-vpc"
+            vpcs = aws.ec2_client.describe_vpcs(
+                Filters=[{"Name": "tag:Name", "Values": [vpc_name]}]
+            )["Vpcs"]
+
+            if vpcs:
+                vpc_id = vpcs[0]["VpcId"]
+                logger.warning(
+                    "openshift-install completed but VPC %s still exists! "
+                    "Attempting manual cleanup...",
+                    vpc_id,
+                )
+                success = cleanup_vpc(cluster_name, vpc_id, aws.region_name)
+                if not success:
+                    logger.error("Manual VPC cleanup failed for %s", cluster_name)
+                    if failed_deletions:
+                        failed_deletions.append(cluster_name)
+            else:
+                logger.info("VPC successfully deleted for %s", cluster_name)
+
         except CommandFailed as e:
             logger.error(
                 "Failed to destroy cluster %s with openshift-install: %s",
