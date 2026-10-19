@@ -501,13 +501,42 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
 
         # Step 12: Delete Network ACLs (except default)
         network_acls = list(vpc.network_acls.all())
+        default_acl = None
+        custom_acls = []
+
+        # Find default and custom ACLs
         for acl in network_acls:
-            if not acl.is_default:
-                logger.info("Deleting Network ACL %s", acl.id)
-                try:
-                    acl.delete()
-                except ClientError as e:
-                    logger.warning("Failed to delete network ACL: %s", e)
+            if acl.is_default:
+                default_acl = acl
+            else:
+                custom_acls.append(acl)
+
+        # Replace custom ACL associations with default ACL, then delete custom ACLs
+        for acl in custom_acls:
+            logger.info("Processing Network ACL %s", acl.id)
+            # Disassociate from subnets by replacing with default ACL
+            for association in acl.associations_attribute or []:
+                subnet_id = association.get("SubnetId")
+                assoc_id = association.get("NetworkAclAssociationId")
+                if subnet_id and assoc_id and default_acl:
+                    logger.info(
+                        "Replacing ACL %s with default ACL for subnet %s",
+                        acl.id,
+                        subnet_id,
+                    )
+                    try:
+                        aws.ec2_client.replace_network_acl_association(
+                            AssociationId=assoc_id, NetworkAclId=default_acl.id
+                        )
+                    except ClientError as e:
+                        logger.warning("Failed to replace ACL association: %s", e)
+
+            # Now delete the custom ACL
+            logger.info("Deleting Network ACL %s", acl.id)
+            try:
+                acl.delete()
+            except ClientError as e:
+                logger.warning("Failed to delete network ACL: %s", e)
 
         # Step 13: Delete VPC
         logger.info("Deleting VPC %s", vpc_id)
