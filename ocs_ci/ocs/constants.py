@@ -3005,6 +3005,15 @@ RHCOS = "RHCOS"
 # Scale constants
 IBM_STORAGE_SCALE_NAMESPACE = "ibm-spectrum-scale"
 IBM_STORAGE_SCALE_CLUSTER_NAME = "ibm-spectrum-scale"
+
+# Label of the IBM Storage Scale core pods, one per node of the Scale cluster.
+# They carry the GPFS daemon and are where the 'mm*' commands are run from
+IBM_STORAGE_SCALE_CORE_LABEL = "app.kubernetes.io/name=core"
+
+# Name of the IBM Storage Scale filesystem the Fusion Access storage class is
+# backed by. Overridable through ENV_DATA['fusion_access_filesystem'].
+FUSION_ACCESS_FILESYSTEM = "fs1"
+
 IBM_STORAGE_SCALE_CLUSTER_KIND = "Cluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_REMOTECLUSTER_KIND = "RemoteCluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_FILESYSTEM_KIND = "Filesystem.scale.spectrum.ibm.com"
