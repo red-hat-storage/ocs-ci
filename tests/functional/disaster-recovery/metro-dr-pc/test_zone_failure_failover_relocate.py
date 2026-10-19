@@ -232,7 +232,7 @@ class TestZoneFailureFailoverRelocate:
                     constants.APPLICATION_SET if is_appset else constants.SUBSCRIPTION
                 ),
                 discovered_apps=is_discovered_app,
-                resource_name=resource_name,
+                resource_name=drpc_name,
             )
             config.switch_to_cluster_by_name(primary_cluster_name)
             primary_cluster_index = config.cur_index
