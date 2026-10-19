@@ -6,6 +6,8 @@ import threading
 import os
 import re
 import boto3
+import time
+import traceback
 
 from botocore.exceptions import ClientError
 from ocs_ci.framework import config
@@ -35,6 +37,238 @@ from ocs_ci.cleanup.aws import defaults
 FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
 logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+
+def is_vpc_protected(vpc_obj):
+    """
+    Check if a VPC is protected from deletion.
+
+    Args:
+        vpc_obj: boto3 VPC resource object
+
+    Returns:
+        bool: True if VPC is protected, False otherwise
+    """
+    if not vpc_obj.tags:
+        return False
+
+    # Check for do_not_delete tag
+    for tag in vpc_obj.tags:
+        if tag["Key"] == defaults.DO_NOT_DELETE_TAG:
+            tag_value = tag["Value"].lower()
+            if tag_value in ["true", "1", "yes"]:
+                logger.info(
+                    "VPC %s is protected by %s tag",
+                    vpc_obj.id,
+                    defaults.DO_NOT_DELETE_TAG,
+                )
+                return True
+
+    # Check for protected VPC names
+    vpc_name = None
+    for tag in vpc_obj.tags:
+        if tag["Key"] == "Name":
+            vpc_name = tag["Value"]
+            break
+
+    if vpc_name:
+        for protected_name in defaults.PROTECTED_VPC_NAMES:
+            if protected_name in vpc_name:
+                logger.info(
+                    "VPC %s (name: %s) is protected by name pattern: %s",
+                    vpc_obj.id,
+                    vpc_name,
+                    protected_name,
+                )
+                return True
+
+    return False
+
+
+def is_hypershift_or_capi_cluster(vpc_obj):
+    """
+    Detect if a VPC belongs to a HyperShift or CAPI managed cluster.
+
+    Args:
+        vpc_obj: boto3 VPC resource object
+
+    Returns:
+        bool: True if it's a HyperShift/CAPI cluster, False otherwise
+    """
+    # Check instances in the VPC for HyperShift/CAPI tags
+    for instance in vpc_obj.instances.all():
+        if not instance.tags:
+            continue
+
+        for tag in instance.tags:
+            # Check for HyperShift tags
+            if tag["Key"].startswith("hypershift.openshift.io/"):
+                logger.info("Detected HyperShift cluster from tag: %s", tag["Key"])
+                return True
+            # Check for CAPI tags
+            if tag["Key"].startswith("sigs.k8s.io/cluster-api-provider-aws/"):
+                logger.info("Detected CAPI cluster from tag: %s", tag["Key"])
+                return True
+
+    return False
+
+
+def cleanup_hypershift_vpc(cluster_name, vpc_id, region_name):
+    """
+    Clean up a HyperShift/CAPI VPC and all its dependencies in the correct order.
+
+    Args:
+        cluster_name (str): Name of the cluster
+        vpc_id (str): VPC ID to clean up
+        region_name (str): AWS region name
+
+    Returns:
+        bool: True if cleanup was successful, False otherwise
+    """
+    aws = AWS(region_name=region_name)
+    logger.info("Starting HyperShift/CAPI cleanup for VPC %s", vpc_id)
+
+    try:
+        vpc = aws.ec2_resource.Vpc(vpc_id)
+
+        # Step 1: Terminate all EC2 instances
+        instances = list(vpc.instances.all())
+        if instances:
+            logger.info("Terminating %d EC2 instances", len(instances))
+            instance_ids = [instance.id for instance in instances]
+            aws.terminate_ec2_instances(instance_ids, wait=True)
+
+        # Step 2: Delete NAT Gateways
+        nat_gateways = aws.ec2_client.describe_nat_gateways(
+            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+        )["NatGateways"]
+        for nat_gw in nat_gateways:
+            if nat_gw["State"] not in ["deleted", "deleting"]:
+                logger.info("Deleting NAT Gateway %s", nat_gw["NatGatewayId"])
+                aws.ec2_client.delete_nat_gateway(NatGatewayId=nat_gw["NatGatewayId"])
+
+        # Wait for NAT Gateways to be deleted
+        if nat_gateways:
+            logger.info("Waiting for NAT Gateways to be deleted...")
+            time.sleep(60)
+
+        # Step 3: Release Elastic IPs
+        addresses = aws.ec2_client.describe_addresses(
+            Filters=[{"Name": "domain", "Values": ["vpc"]}]
+        )["Addresses"]
+        for address in addresses:
+            if address.get("NetworkInterfaceId"):
+                continue
+            logger.info("Releasing Elastic IP %s", address.get("AllocationId"))
+            try:
+                aws.ec2_client.release_address(AllocationId=address["AllocationId"])
+            except ClientError as e:
+                logger.warning("Failed to release EIP: %s", e)
+
+        # Step 4: Delete Load Balancers (ELBv2)
+        try:
+            elbv2_client = boto3.client("elbv2", region_name=region_name)
+            lbs = elbv2_client.describe_load_balancers()["LoadBalancers"]
+            for lb in lbs:
+                if lb["VpcId"] == vpc_id:
+                    logger.info("Deleting Load Balancer %s", lb["LoadBalancerArn"])
+                    elbv2_client.delete_load_balancer(
+                        LoadBalancerArn=lb["LoadBalancerArn"]
+                    )
+        except Exception as e:
+            logger.warning("Error deleting load balancers: %s", e)
+
+        # Step 5: Detach and delete Internet Gateways
+        igws = list(vpc.internet_gateways.all())
+        for igw in igws:
+            logger.info("Detaching and deleting Internet Gateway %s", igw.id)
+            igw.detach_from_vpc(VpcId=vpc_id)
+            igw.delete()
+
+        # Step 6: Delete VPC Endpoints
+        vpc_endpoints = aws.ec2_client.describe_vpc_endpoints(
+            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+        )["VpcEndpoints"]
+        for endpoint in vpc_endpoints:
+            logger.info("Deleting VPC Endpoint %s", endpoint["VpcEndpointId"])
+            aws.ec2_client.delete_vpc_endpoints(
+                VpcEndpointIds=[endpoint["VpcEndpointId"]]
+            )
+
+        # Step 7: Delete Network Interfaces
+        network_interfaces = list(vpc.network_interfaces.all())
+        for ni in network_interfaces:
+            if ni.attachment:
+                logger.info("Detaching Network Interface %s", ni.id)
+                try:
+                    ni.detach(Force=True)
+                    time.sleep(5)
+                except ClientError as e:
+                    logger.warning("Failed to detach network interface: %s", e)
+
+            logger.info("Deleting Network Interface %s", ni.id)
+            try:
+                ni.delete()
+            except ClientError as e:
+                logger.warning("Failed to delete network interface: %s", e)
+
+        # Step 8: Delete subnets
+        subnets = list(vpc.subnets.all())
+        for subnet in subnets:
+            logger.info("Deleting Subnet %s", subnet.id)
+            try:
+                subnet.delete()
+            except ClientError as e:
+                logger.warning("Failed to delete subnet %s: %s", subnet.id, e)
+
+        # Step 9: Delete route tables (except main)
+        route_tables = list(vpc.route_tables.all())
+        for rt in route_tables:
+            # Skip main route table
+            is_main = any(assoc.main for assoc in rt.associations_attribute or [])
+            if not is_main:
+                logger.info("Deleting Route Table %s", rt.id)
+                try:
+                    rt.delete()
+                except ClientError as e:
+                    logger.warning("Failed to delete route table: %s", e)
+
+        # Step 10: Delete security groups (except default)
+        security_groups = list(vpc.security_groups.all())
+        for sg in security_groups:
+            if sg.group_name != "default":
+                logger.info("Deleting Security Group %s", sg.id)
+                try:
+                    # Remove all rules first
+                    if sg.ip_permissions:
+                        sg.revoke_ingress(IpPermissions=sg.ip_permissions)
+                    if sg.ip_permissions_egress:
+                        sg.revoke_egress(IpPermissions=sg.ip_permissions_egress)
+                    sg.delete()
+                except ClientError as e:
+                    logger.warning("Failed to delete security group: %s", e)
+
+        # Step 11: Delete Network ACLs (except default)
+        network_acls = list(vpc.network_acls.all())
+        for acl in network_acls:
+            if not acl.is_default:
+                logger.info("Deleting Network ACL %s", acl.id)
+                try:
+                    acl.delete()
+                except ClientError as e:
+                    logger.warning("Failed to delete network ACL: %s", e)
+
+        # Step 12: Delete VPC
+        logger.info("Deleting VPC %s", vpc_id)
+        vpc.delete()
+
+        logger.info("Successfully cleaned up HyperShift/CAPI VPC %s", vpc_id)
+        return True
+
+    except Exception as e:
+        logger.error("Failed to clean up HyperShift/CAPI VPC %s: %s", vpc_id, e)
+        logger.error(traceback.format_exc())
+        return False
 
 
 def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
@@ -150,6 +384,7 @@ def get_clusters(
     Returns:
         tuple: List of the cluster names (e.g ebenahar-cluster-gqtd4) to be provided to the
             ci-cleanup script, a list of VPCs that are part of cloudformation,
+            a list of HyperShift/CAPI clusters with VPC IDs,
             and a list of remaining clusters
 
     """
@@ -208,6 +443,7 @@ def get_clusters(
 
     aws = AWS(region_name=region_name)
     clusters_to_delete = list()
+    hypershift_clusters_to_delete = list()  # List of (cluster_name, vpc_id) tuples
     remaining_clusters = list()
     cloudformation_vpc_names = list()
     vpcs = aws.ec2_client.describe_vpcs()["Vpcs"]
@@ -221,6 +457,11 @@ def get_clusters(
         ).get("Reservations")
 
     for vpc_obj in vpc_objs:
+        # Check if VPC is protected
+        if is_vpc_protected(vpc_obj):
+            logger.info("Skipping protected VPC %s", vpc_obj.id)
+            continue
+
         vpc_tags = vpc_obj.tags
         if vpc_tags:
             cloudformation_vpc_name = [
@@ -231,22 +472,35 @@ def get_clusters(
                 continue
             vpc_name = [tag["Value"] for tag in vpc_tags if tag["Key"] == "Name"][0]
             cluster_name = vpc_name.replace("-vpc", "")
-            vpc_instances = vpc_obj.instances.all()
+            vpc_instances = list(vpc_obj.instances.all())
+
+            # Check if this is a HyperShift/CAPI cluster
+            is_hypershift = is_hypershift_or_capi_cluster(vpc_obj)
+
             if not vpc_instances:
-                clusters_to_delete.append(cluster_name)
+                if is_hypershift:
+                    hypershift_clusters_to_delete.append((cluster_name, vpc_obj.id))
+                else:
+                    clusters_to_delete.append(cluster_name)
                 continue
 
-            # Append to clusters_to_delete if cluster should be deleted
+            # Determine if cluster should be deleted
+            should_delete = False
             if cluster_pattern is not None:
-                if determine_cluster_deletion_base_name(ec2_instance_objs, vpc_obj.id):
-                    clusters_to_delete.append(cluster_name)
-                else:
-                    remaining_clusters.append(cluster_name)
+                should_delete = determine_cluster_deletion_base_name(
+                    ec2_instance_objs, vpc_obj.id
+                )
             else:
-                if determine_cluster_deletion(vpc_instances, cluster_name):
-                    clusters_to_delete.append(cluster_name)
+                should_delete = determine_cluster_deletion(vpc_instances, cluster_name)
+
+            # Append to appropriate list based on cluster type
+            if should_delete:
+                if is_hypershift:
+                    hypershift_clusters_to_delete.append((cluster_name, vpc_obj.id))
                 else:
-                    remaining_clusters.append(cluster_name)
+                    clusters_to_delete.append(cluster_name)
+            else:
+                remaining_clusters.append(cluster_name)
         else:
             logger.info("No tags found for VPC")
 
@@ -290,7 +544,12 @@ def get_clusters(
                 cf_clusters_to_delete.append(cluster_name)
             else:
                 remaining_clusters.append(cluster_name)
-    return clusters_to_delete, cf_clusters_to_delete, remaining_clusters
+    return (
+        clusters_to_delete,
+        cf_clusters_to_delete,
+        hypershift_clusters_to_delete,
+        remaining_clusters,
+    )
 
 
 def cluster_cleanup():
@@ -440,7 +699,12 @@ def aws_cleanup():
 
     time_to_delete = args.hours * 60 * 60 if args.hours else None
     region = defaults.AWS_REGION if not args.region else args.region
-    clusters_to_delete, cf_clusters_to_delete, remaining_clusters = get_clusters(
+    (
+        clusters_to_delete,
+        cf_clusters_to_delete,
+        hypershift_clusters_to_delete,
+        remaining_clusters,
+    ) = get_clusters(
         time_to_delete=time_to_delete,
         region_name=region,
         prefixes_hours_to_spare=prefixes_hours_to_spare,
@@ -474,6 +738,26 @@ def aws_cleanup():
         procs.append(proc)
     for p in procs:
         p.join()
+
+    # Clean up HyperShift/CAPI clusters
+    if hypershift_clusters_to_delete:
+        logger.info(
+            "Deleting HyperShift/CAPI clusters: %s",
+            [name for name, _ in hypershift_clusters_to_delete],
+        )
+        for cluster_name, vpc_id in hypershift_clusters_to_delete:
+            logger.info(f"Deleting HyperShift/CAPI cluster {cluster_name}")
+            success = cleanup_hypershift_vpc(cluster_name, vpc_id, region)
+            if not success:
+                failed_deletions.append(cluster_name)
+            # Also try to delete associated S3 buckets
+            try:
+                delete_cluster_buckets(cluster_name)
+            except Exception as e:
+                logger.error(
+                    "Failed to delete buckets for cluster %s: %s", cluster_name, e
+                )
+
     logger.info("Remaining clusters: %s", remaining_clusters)
     filename = "failed_cluster_deletions.txt"
     content = "None\n"
