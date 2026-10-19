@@ -8,10 +8,12 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     ignore_resource_not_found_error_label,
+    tier2,
     tier3,
     green_squad,
     skipif_ibm_cloud_managed,
     runs_on_provider,
+    hci_provider_and_client_required,
     ec_allowed,
 )
 from ocs_ci.framework.testlib import ManageTest
@@ -20,8 +22,10 @@ from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
     CephCluster,
     is_ec_pool_supported,
+    validate_compression,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import delete_pods
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 logger = logging.getLogger(__name__)
@@ -294,3 +298,77 @@ class TestDeleteRbdPool(ManageTest):
             f"UI: {block_pool_present_ui}, "
             f"CLI: {block_pool_present_cli}"
         )
+
+
+@green_squad
+@runs_on_provider
+@hci_provider_and_client_required
+class TestCompressionDistributedToClient(ManageTest):
+    @tier2
+    @skipif_external_mode
+    @pytest.mark.polarion_id("OCS-8354")
+    def test_compression_sc_distributed_to_client(
+        self,
+        storageclass_factory_class,
+        pvc_factory,
+        pod_factory,
+        distribute_storage_classes_to_all_consumers_factory,
+    ):
+        """
+        1. Create an RBD storageclass backed by a new pool with compression
+           enabled, on the provider cluster (same as console UI behavior).
+        2. Distribute the storageclass to all storage consumers.
+        3. Switch to a client cluster, create a PVC + pod using that
+           storageclass there, and run IO that produces compressible data.
+        4. Delete the client-side pod/PVC.
+        5. Switch back to the provider and verify the pool actually
+           compressed the written data.
+        """
+        interface_type = constants.CEPHBLOCKPOOL
+        replica = 3
+        compression = "aggressive"
+
+        sc_obj = storageclass_factory_class(
+            interface=interface_type,
+            new_rbd_pool=True,
+            replica=replica,
+            compression=compression,
+            pool_name="test-compression-pool",
+        )
+        cbp_name = sc_obj.get().get("parameters").get("pool")
+
+        distr_res = distribute_storage_classes_to_all_consumers_factory()
+        if isinstance(distr_res, bool):
+            assert distr_res, (
+                "After distribution storage classes in clients inventories "
+                "and on provider are not matching"
+            )
+
+        client_index = config.get_consumer_indexes_list()[0]
+        with config.RunWithConfigContext(client_index):
+            pvc_obj = pvc_factory(
+                interface=interface_type,
+                storageclass=sc_obj,
+                size=20,
+                status=constants.STATUS_BOUND,
+            )
+            pod_obj = pod_factory(interface=interface_type, pvc=pvc_obj)
+            pod_obj.run_io(
+                "fs",
+                size="1G",
+                rate="1500m",
+                runtime=60,
+                buffer_compress_percentage=60,
+                buffer_pattern="0xdeadface",
+                bs="8K",
+                jobs=5,
+                readwrite="readwrite",
+            )
+            pod_obj.get_fio_results()
+            delete_pods([pod_obj], wait=True)
+            pvc_obj.delete()
+
+        with config.RunWithProviderConfigContextIfAvailable():
+            assert validate_compression(
+                cbp_name
+            ), f"Compression not effective on pool {cbp_name}"
