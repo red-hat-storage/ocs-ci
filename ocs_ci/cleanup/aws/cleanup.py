@@ -135,35 +135,77 @@ def cleanup_hypershift_vpc(cluster_name, vpc_id, region_name):
         instances = list(vpc.instances.all())
         if instances:
             logger.info("Terminating %d EC2 instances", len(instances))
-            instance_ids = [instance.id for instance in instances]
-            aws.terminate_ec2_instances(instance_ids, wait=True)
+            instances_dict = {}
+            for instance in instances:
+                instance_name = instance.id
+                if instance.tags:
+                    for tag in instance.tags:
+                        if tag["Key"] == "Name":
+                            instance_name = tag["Value"]
+                            break
+                instances_dict[instance.id] = instance_name
+            aws.terminate_ec2_instances(instances_dict, wait=True)
 
         # Step 2: Delete NAT Gateways
         nat_gateways = aws.ec2_client.describe_nat_gateways(
             Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
         )["NatGateways"]
+        nat_gateway_ids = []
         for nat_gw in nat_gateways:
             if nat_gw["State"] not in ["deleted", "deleting"]:
                 logger.info("Deleting NAT Gateway %s", nat_gw["NatGatewayId"])
                 aws.ec2_client.delete_nat_gateway(NatGatewayId=nat_gw["NatGatewayId"])
+                nat_gateway_ids.append(nat_gw["NatGatewayId"])
 
-        # Wait for NAT Gateways to be deleted
-        if nat_gateways:
+        # Wait for NAT Gateways to be fully deleted
+        if nat_gateway_ids:
             logger.info("Waiting for NAT Gateways to be deleted...")
-            time.sleep(60)
+            max_wait = 300  # 5 minutes
+            wait_interval = 15
+            for _ in range(max_wait // wait_interval):
+                time.sleep(wait_interval)
+                remaining = aws.ec2_client.describe_nat_gateways(
+                    NatGatewayIds=nat_gateway_ids
+                )["NatGateways"]
+                if all(ngw["State"] == "deleted" for ngw in remaining):
+                    logger.info("All NAT Gateways deleted")
+                    break
+                logger.info(
+                    "Still waiting for %d NAT Gateways to delete...",
+                    sum(1 for ngw in remaining if ngw["State"] != "deleted"),
+                )
+            else:
+                logger.warning("NAT Gateway deletion timed out, continuing anyway")
 
         # Step 3: Release Elastic IPs
-        addresses = aws.ec2_client.describe_addresses(
-            Filters=[{"Name": "domain", "Values": ["vpc"]}]
-        )["Addresses"]
-        for address in addresses:
-            if address.get("NetworkInterfaceId"):
+        # Get all addresses and filter by VPC
+        all_addresses = aws.ec2_client.describe_addresses()["Addresses"]
+        vpc_addresses = []
+        for address in all_addresses:
+            # Check if EIP is associated with this VPC
+            network_interface_id = address.get("NetworkInterfaceId")
+            if network_interface_id:
+                try:
+                    eni = aws.ec2_client.describe_network_interfaces(
+                        NetworkInterfaceIds=[network_interface_id]
+                    )["NetworkInterfaces"][0]
+                    if eni.get("VpcId") == vpc_id:
+                        vpc_addresses.append(address)
+                except ClientError:
+                    pass
+            elif address.get("AssociationId"):
+                # EIP has an association but no ENI, might be NAT Gateway
+                vpc_addresses.append(address)
+
+        for address in vpc_addresses:
+            allocation_id = address.get("AllocationId")
+            if not allocation_id:
                 continue
-            logger.info("Releasing Elastic IP %s", address.get("AllocationId"))
+            logger.info("Releasing Elastic IP %s", allocation_id)
             try:
-                aws.ec2_client.release_address(AllocationId=address["AllocationId"])
+                aws.ec2_client.release_address(AllocationId=allocation_id)
             except ClientError as e:
-                logger.warning("Failed to release EIP: %s", e)
+                logger.warning("Failed to release EIP %s: %s", allocation_id, e)
 
         # Step 4: Delete Load Balancers (ELBv2)
         try:
@@ -182,7 +224,25 @@ def cleanup_hypershift_vpc(cluster_name, vpc_id, region_name):
         igws = list(vpc.internet_gateways.all())
         for igw in igws:
             logger.info("Detaching and deleting Internet Gateway %s", igw.id)
-            igw.detach_from_vpc(VpcId=vpc_id)
+            # Retry detachment in case some IPs are still being released
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    igw.detach_from_vpc(VpcId=vpc_id)
+                    logger.info("Successfully detached Internet Gateway %s", igw.id)
+                    break
+                except ClientError as e:
+                    if "DependencyViolation" in str(e) and attempt < max_retries - 1:
+                        logger.warning(
+                            "IGW detach failed (attempt %d/%d), "
+                            "waiting for dependencies: %s",
+                            attempt + 1,
+                            max_retries,
+                            e,
+                        )
+                        time.sleep(30)
+                    else:
+                        raise
             igw.delete()
 
         # Step 6: Delete VPC Endpoints
