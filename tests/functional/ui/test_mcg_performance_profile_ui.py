@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ibm_cloud_managed,
     skipif_mcg_only,
     red_squad,
+    mcg,
     polarion_id,
     tier2,
     ui,
@@ -26,6 +27,7 @@ class TestConfigurePerformancePageLayout:
     @ui
     @tier2
     @red_squad
+    @mcg
     @polarion_id("OCS-8317")
     @skipif_mcg_only
     @skipif_hci_client
@@ -68,6 +70,7 @@ class TestMCGProfileSelection:
     @ui
     @tier2
     @red_squad
+    @mcg
     @polarion_id("OCS-8318")
     @skipif_mcg_only
     @skipif_hci_client
@@ -183,6 +186,7 @@ class TestCoreStorageRegression:
     @ui
     @tier2
     @red_squad
+    @mcg
     @polarion_id("OCS-8319")
     @skipif_mcg_only
     @skipif_hci_client
