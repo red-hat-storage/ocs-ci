@@ -160,7 +160,6 @@ class TestZoneFailureFailoverRelocate:
                 recipe=0,
                 pvc_interface=pvc_interface,
                 multi_ns=False,
-                skip_mirroring_validation=True,
             )
             discovered_workloads.extend(discovered_workload)
         logger.info(
@@ -178,7 +177,6 @@ class TestZoneFailureFailoverRelocate:
             dr_protect=True,
             shared_drpc_protection=False,
             vm_type=constants.VM_VOLUME_PVC,
-            skip_mirroring_validation=True,
         )
         logger.info(
             f"Deployed {len(cnv_workloads)} CNV workload(s): "
