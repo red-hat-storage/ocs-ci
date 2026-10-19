@@ -17,6 +17,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.resources.drpc import DRPC
+from ocs_ci.ocs.utils import get_primary_cluster_index
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,10 @@ class TestZoneFailureFailoverRelocate:
         """
         failover_batch = []
         relocate_batch = []
+
+        self.primary_cluster_name = config.get_cluster_name_by_index(
+            get_primary_cluster_index()
+        )
 
         # Resolve power_off_zone to the real topology.kubernetes.io/zone label
         # on this cluster (equivalent to: oc get nodes --show-labels | grep zone).
@@ -289,10 +294,6 @@ class TestZoneFailureFailoverRelocate:
             )
 
         logger.info(f"Metadata collected for {len(workload_metadata)} workload(s)")
-
-        self.primary_cluster_name = config.get_cluster_name_by_index(
-            self.provider_cluster_index
-        )
 
         # Ensure that the primary cluster in config is used and same for all workloads
         assert all(
