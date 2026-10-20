@@ -1373,7 +1373,7 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None, region=N
             aws.delete_cloudformation_stacks(stack_names)
         except StackStatusError:
             logger.error("Failed to fully destroy cluster %s", cluster_name)
-            if failed_deletions:
+            if failed_deletions is not None:
                 failed_deletions.append(cluster_name)
             raise
     else:
@@ -1399,7 +1399,7 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None, region=N
                 success = cleanup_vpc(cluster_name, vpc_id, aws.region_name)
                 if not success:
                     logger.error("Manual VPC cleanup failed for %s", cluster_name)
-                    if failed_deletions:
+                    if failed_deletions is not None:
                         failed_deletions.append(cluster_name)
             else:
                 logger.info("VPC successfully deleted for %s", cluster_name)
@@ -1413,6 +1413,7 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None, region=N
 
             # Try manual VPC cleanup as fallback
             logger.info("Attempting manual VPC cleanup for %s", cluster_name)
+            success = False
             try:
                 aws = AWS(region_name=region) if region else AWS()
                 # Find VPC by name pattern
@@ -1429,26 +1430,16 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None, region=N
                         cluster_name,
                     )
                     success = cleanup_vpc(cluster_name, vpc_id, aws.region_name)
-                    if not success:
-                        logger.error(
-                            "Manual VPC cleanup also failed for %s", cluster_name
-                        )
-                        if failed_deletions:
-                            failed_deletions.append(cluster_name)
-                        raise
                 else:
                     logger.warning(
                         "Could not find VPC for cluster %s, cannot attempt manual cleanup",
                         cluster_name,
                     )
-                    if failed_deletions:
-                        failed_deletions.append(cluster_name)
-                    raise
-            except Exception as cleanup_error:
-                logger.error(
-                    "Manual cleanup failed for %s: %s", cluster_name, cleanup_error
-                )
-                if failed_deletions:
+            except Exception:
+                logger.exception("Manual cleanup failed for %s", cluster_name)
+
+            if not success:
+                if failed_deletions is not None:
                     failed_deletions.append(cluster_name)
                 raise
 
@@ -2120,7 +2111,7 @@ def aws_cleanup():
             logger.warning("Error cleaning up CloudFormation stacks: %s", e)
 
         # Collect failures from this region
-        if failed_deletions:
+        if failed_deletions is not None:
             logger.error("Failed cluster deletions in %s: %s", region, failed_deletions)
             all_failed_deletions.extend(failed_deletions)
 
