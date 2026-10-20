@@ -1764,6 +1764,7 @@ def pod_factory_fixture(request, pvc_factory):
         node_name=None,
         pod_dict_path=None,
         raw_block_pv=False,
+        raw_block_device=constants.RAW_BLOCK_DEVICE,
         deployment=False,
         service_account=None,
         security_context=None,
@@ -1791,6 +1792,8 @@ def pod_factory_fixture(request, pvc_factory):
             pod_dict_path (str): YAML path for the pod.
             raw_block_pv (bool): True for creating raw block pv based pod,
                 False otherwise.
+            raw_block_device (str): The devicePath to use for the raw block pod.
+                Relevant only when raw_block_pv is True.
             service_account (OCS): Service account object, in case DeploymentConfig
                 is to be created
             security_context (dict): security context in the form of dictionary
@@ -1819,6 +1822,7 @@ def pod_factory_fixture(request, pvc_factory):
                 node_name=node_name,
                 pod_dict_path=pod_dict_path,
                 raw_block_pv=raw_block_pv,
+                raw_block_device=raw_block_device,
                 deployment=deployment,
                 sa_name=sa_name,
                 replica_count=replica_count,

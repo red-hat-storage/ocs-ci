@@ -32,6 +32,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     InvalidPodPresent,
     ResourceNotFoundError,
+    TimeoutExpiredError,
     UnsupportedFeatureError,
     PVNotSufficientException,
     ResourceWrongStatusException,
@@ -53,6 +54,8 @@ from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
     get_osd_pod_id,
     get_deviceclass_osd_pods,
+    wait_for_pods_by_label_count,
+    wait_for_pods_to_be_running,
 )
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
@@ -2390,6 +2393,325 @@ def get_storage_cluster(namespace=None):
             namespace = config.ENV_DATA["cluster_namespace"]
         sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
     return sc_obj
+
+
+def get_nvmeof_gateway_resources(namespace=None):
+    """
+    Get the resource requirements configured for the NVMe-oF gateway.
+
+    Args:
+        namespace (str): Namespace of the StorageCluster
+
+    Returns:
+        dict: Value of spec.resources.nvmeof on the StorageCluster, None if no
+            resource requirements are configured for the gateway
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    storage_cluster = sc_obj.get()["items"][0]
+    return storage_cluster["spec"].get("resources", {}).get("nvmeof")
+
+
+def get_nvmeof_gateway_cr_resources(namespace=None):
+    """
+    Get the resource requirements the gateway CR actually runs with.
+
+    Args:
+        namespace (str): Namespace of the gateway CR
+
+    Returns:
+        dict: Value of spec.resources on the CephNVMeOFGateway CR, an empty
+            dict if no resource requirements reached the gateway
+
+    """
+    gateway_cr = get_nvmeof_gateway_cr(namespace=namespace) or {}
+    return gateway_cr.get("spec", {}).get("resources") or {}
+
+
+def set_nvmeof_gateway_resources(resources, namespace=None, verify=True, timeout=180):
+    """
+    Set the resource requirements of the NVMe-oF gateway, which makes the
+    ocs-operator roll out new gateway pods.
+
+    spec.resources of the StorageCluster is a free form map, so an entry the
+    running ocs-operator does not know about is accepted and stored without
+    ever reaching the gateway. The propagation to the gateway CR is therefore
+    verified instead of assumed, otherwise the caller only finds out by waiting
+    for a rollout that is never triggered.
+
+    Args:
+        resources (dict): The resource requirements to set, for example
+            {"requests": {"cpu": "1", "memory": "4Gi"}}. None removes the
+            nvmeof entry, which is how a merge patch expresses a deletion.
+        namespace (str): Namespace of the StorageCluster
+        verify (bool): True to wait for the resource requirements to reach the
+            gateway CR, False to only patch the StorageCluster
+        timeout (int): Time in seconds to wait for the propagation
+
+    Raises:
+        TimeoutExpiredError: If the resource requirements did not reach the
+            gateway CR within the timeout
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    sc_name = sc_obj.get()["items"][0]["metadata"]["name"]
+    log.info(
+        f"Setting the NVMe-oF gateway resources of StorageCluster {sc_name} "
+        f"to {resources}"
+    )
+    patch_body = json.dumps({"spec": {"resources": {"nvmeof": resources}}})
+    assert sc_obj.patch(
+        resource_name=sc_name, params=patch_body, format_type="merge"
+    ), f"Failed to set the NVMe-oF gateway resources to {resources}"
+
+    if not verify:
+        return
+
+    expected_resources = resources or {}
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=get_nvmeof_gateway_cr_resources,
+        namespace=namespace,
+    )
+    if not sampler.wait_for_func_status(expected_resources):
+        raise TimeoutExpiredError(
+            f"spec.resources.nvmeof of StorageCluster {sc_name} was set to "
+            f"{resources} but {constants.CEPHNVMEOFGATEWAY} still runs with "
+            f"{get_nvmeof_gateway_cr_resources(namespace=namespace)} after "
+            f"{timeout}s. The running ocs-operator does not propagate the "
+            "NVMe-oF gateway resource requirements from the StorageCluster, "
+            "so no gateway rollout is triggered by changing them."
+        )
+    log.info(f"The NVMe-oF gateway CR runs with resources {resources}")
+
+
+def get_nvmeof_gateway_instances(namespace=None):
+    """
+    Get the configured number of NVMe-oF gateway instances.
+
+    Args:
+        namespace (str): Namespace of the StorageCluster
+
+    Returns:
+        int: Value of spec.nvmeof.gatewayInstances on the StorageCluster. If
+            NVMe-oF is enabled without an explicit gatewayInstances, the
+            operator default is returned. 0 if NVMe-oF is not configured or is
+            disabled.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    storage_cluster = sc_obj.get()["items"][0]
+    nvmeof_spec = storage_cluster["spec"].get("nvmeof", {})
+    if not nvmeof_spec.get("enable"):
+        return 0
+    # An enabled gateway without an explicit instance count runs the operator
+    # default, reporting 0 for it would mean "no gateway" to the callers.
+    return nvmeof_spec.get(
+        "gatewayInstances", constants.NVMEOF_DEFAULT_GATEWAY_INSTANCES
+    )
+
+
+def scale_nvmeof_gateway(instances, namespace=None, wait=True, timeout=600):
+    """
+    Scale the NVMe-oF gateway to the given number of instances.
+
+    The CephNVMeOFGateway CR is reconciled by the ocs-operator from
+    spec.nvmeof.gatewayInstances on the StorageCluster, so the StorageCluster
+    is patched instead of the gateway CR itself, which would be reverted.
+
+    Scaling below constants.NVMEOF_MIN_GATEWAY_INSTANCES is admitted by the
+    StorageCluster schema but is rejected by the CephNVMeOFGateway CRD, so the
+    gateway pods never follow such a request. Waiting for them would only block
+    until the timeout, hence it has to be requested with wait=False and the
+    resulting reconcile failure verified on the StorageCluster instead.
+
+    Args:
+        instances (int): The number of gateway instances to scale to
+        namespace (str): Namespace of the StorageCluster
+        wait (bool): True to wait for the gateway pods to match the requested
+            number of instances, False otherwise
+        timeout (int): Time in seconds to wait for the gateway pods
+
+    Raises:
+        ValueError: If waiting is requested for a number of instances the
+            gateway CR cannot be scaled to
+
+    """
+    if wait and instances < constants.NVMEOF_MIN_GATEWAY_INSTANCES:
+        raise ValueError(
+            f"The CephNVMeOFGateway CRD accepts at least "
+            f"{constants.NVMEOF_MIN_GATEWAY_INSTANCES} instance, the gateway "
+            f"pods never reach {instances} instances. Request it with "
+            "wait=False and verify the reconcile failure reported by the "
+            "StorageCluster."
+        )
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    sc_name = sc_obj.get()["items"][0]["metadata"]["name"]
+    log.info(
+        f"Scaling NVMe-oF gateway of StorageCluster {sc_name} to "
+        f"{instances} instances"
+    )
+    patch_body = json.dumps({"spec": {"nvmeof": {"gatewayInstances": instances}}})
+    assert sc_obj.patch(
+        resource_name=sc_name, params=patch_body, format_type="merge"
+    ), f"Failed to scale the NVMe-oF gateway to {instances} instances"
+
+    if not wait:
+        return
+
+    assert wait_for_pods_by_label_count(
+        label=constants.NVMEOF_APP_LABEL,
+        expected_count=instances,
+        namespace=namespace,
+        timeout=timeout,
+    ), f"Number of NVMe-oF gateway pods did not reach {instances}"
+    gateway_pod_names = [
+        gateway_pod["metadata"]["name"]
+        for gateway_pod in get_pods_having_label(
+            label=constants.NVMEOF_APP_LABEL, namespace=namespace
+        )
+    ]
+    assert wait_for_pods_to_be_running(
+        namespace=namespace, pod_names=gateway_pod_names, timeout=timeout
+    ), f"NVMe-oF gateway pods {gateway_pod_names} are not in Running state"
+    log.info(f"NVMe-oF gateway pods {gateway_pod_names} are Running")
+
+
+def get_nvmeof_gateway_cr(namespace=None):
+    """
+    Get the CephNVMeOFGateway CR the ocs-operator reconciles from the NVMe-oF
+    section of the StorageCluster.
+
+    Args:
+        namespace (str): Namespace of the gateway CR
+
+    Returns:
+        dict: The CephNVMeOFGateway CR, None if no gateway CR is deployed
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    gateway_obj = OCP(kind=constants.CEPHNVMEOFGATEWAY, namespace=namespace)
+    gateway_crs = gateway_obj.get(dont_raise=True) or {}
+    gateway_crs = gateway_crs.get("items", [])
+    return gateway_crs[0] if gateway_crs else None
+
+
+def get_storage_cluster_condition(condition_type, namespace=None):
+    """
+    Get a condition of the StorageCluster by its type.
+
+    Args:
+        condition_type (str): Type of the condition, for example
+            "ReconcileComplete"
+        namespace (str): Namespace of the StorageCluster
+
+    Returns:
+        dict: The condition of the given type, None if the StorageCluster does
+            not report it
+
+    Raises:
+        ResourceNotFoundError: If the StorageCluster the conditions are read
+            from is not deployed in the namespace
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    storage_clusters = sc_obj.get().get("items") or []
+    if not storage_clusters:
+        raise ResourceNotFoundError(
+            f"No {constants.STORAGECLUSTER} found in namespace {namespace}, "
+            f"the {condition_type} condition cannot be read"
+        )
+    # A namespace can hold more than one StorageCluster, the conditions of the
+    # one under test are the ones the caller asks for
+    sc_name = config.ENV_DATA.get("storage_cluster_name")
+    if sc_name:
+        storage_cluster = next(
+            (
+                sc
+                for sc in storage_clusters
+                if sc.get("metadata", {}).get("name") == sc_name
+            ),
+            None,
+        )
+        if storage_cluster is None:
+            raise ResourceNotFoundError(
+                f"{constants.STORAGECLUSTER} {sc_name} not found in namespace "
+                f"{namespace}, found "
+                f"{[sc.get('metadata', {}).get('name') for sc in storage_clusters]}"
+            )
+    else:
+        storage_cluster = storage_clusters[0]
+    conditions = storage_cluster.get("status", {}).get("conditions", [])
+    return next(
+        (
+            condition
+            for condition in conditions
+            if condition.get("type") == condition_type
+        ),
+        None,
+    )
+
+
+def wait_for_storage_cluster_condition(
+    condition_type, status, message_substrs=None, timeout=300, sleep=10, namespace=None
+):
+    """
+    Wait until a condition of the StorageCluster reports the given status and,
+    optionally, a message containing all the given substrings.
+
+    Args:
+        condition_type (str): Type of the condition, for example
+            "ReconcileComplete"
+        status (str): The status the condition is expected to report, "True" or
+            "False"
+        message_substrs (list): If given, the condition is only considered
+            matching once its message contains all of these substrings. The
+            comparison is case insensitive.
+        timeout (int): Time in seconds to wait for the condition
+        sleep (int): Time in seconds between two checks of the condition
+        namespace (str): Namespace of the StorageCluster
+
+    Returns:
+        dict: The matching condition
+
+    Raises:
+        TimeoutExpiredError: If the condition did not match within the timeout
+
+    """
+    message_substrs = message_substrs or []
+    last_condition = None
+
+    def _condition_matches():
+        nonlocal last_condition
+        last_condition = get_storage_cluster_condition(
+            condition_type, namespace=namespace
+        )
+        if not last_condition or last_condition.get("status") != status:
+            return False
+        # The message is optional, an absent or null one is matched as empty
+        message = (last_condition.get("message") or "").lower()
+        return all(substr.lower() in message for substr in message_substrs)
+
+    log.info(
+        f"Waiting for the StorageCluster condition {condition_type} to be "
+        f"{status} with a message containing {message_substrs}"
+    )
+    sampler = TimeoutSampler(timeout=timeout, sleep=sleep, func=_condition_matches)
+    if not sampler.wait_for_func_status(True):
+        raise TimeoutExpiredError(
+            f"The StorageCluster condition {condition_type} did not report "
+            f"status {status} with a message containing {message_substrs} "
+            f"within {timeout}s. Last seen condition: {last_condition}"
+        )
+    log.info(f"StorageCluster reports condition {last_condition}")
+    return last_condition
 
 
 def get_noobaa_external_pgsql_secret_name():
