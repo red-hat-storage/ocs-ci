@@ -1016,10 +1016,13 @@ def get_clusters(
         cluster_pattern (str): The name of the ec2 instances
 
     Returns:
-        tuple: List of the cluster names (e.g ebenahar-cluster-gqtd4) to be provided to the
-            ci-cleanup script, a list of VPCs that are part of cloudformation,
-            a list of HyperShift/CAPI clusters with VPC IDs,
-            and a list of remaining clusters
+        tuple: (clusters_to_delete, cf_clusters_to_delete, hypershift_clusters_to_delete,
+            remaining_clusters, orphaned_cf_vpcs)
+            - clusters_to_delete: Regular cluster names to delete
+            - cf_clusters_to_delete: CloudFormation cluster names to delete via stack deletion
+            - hypershift_clusters_to_delete: List of (cluster_name, vpc_id) tuples for HyperShift/CAPI
+            - remaining_clusters: Clusters that should not be deleted
+            - orphaned_cf_vpcs: List of (cluster_name, vpc_id) for CloudFormation VPCs with no instances
 
     """
 
@@ -1103,6 +1106,7 @@ def get_clusters(
     hypershift_clusters_to_delete = list()  # List of (cluster_name, vpc_id) tuples
     remaining_clusters = list()
     cloudformation_vpc_names = list()
+    cloudformation_vpcs_with_ids = []  # List of (vpc_name, vpc_id) tuples
     vpcs = aws.ec2_client.describe_vpcs()["Vpcs"]
     vpc_ids = [vpc["VpcId"] for vpc in vpcs]
     vpc_objs = [aws.ec2_resource.Vpc(vpc_id) for vpc_id in vpc_ids]
@@ -1126,6 +1130,9 @@ def get_clusters(
             ]
             if cloudformation_vpc_name:
                 cloudformation_vpc_names.append(cloudformation_vpc_name[0])
+                cloudformation_vpcs_with_ids.append(
+                    (cloudformation_vpc_name[0], vpc_obj.id)
+                )
                 continue
             vpc_name = [tag["Value"] for tag in vpc_tags if tag["Key"] == "Name"][0]
             cluster_name = vpc_name.replace("-vpc", "")
@@ -1174,7 +1181,8 @@ def get_clusters(
 
     # Get all cloudformation based clusters to delete
     cf_clusters_to_delete = list()
-    for vpc_name in cloudformation_vpc_names:
+    orphaned_cf_vpcs = []  # CloudFormation VPCs with no instances
+    for vpc_name, vpc_id in cloudformation_vpcs_with_ids:
         instance_dicts = aws.get_instances_by_name_pattern(
             f"{vpc_name.replace('-vpc', '')}*"
         )
@@ -1183,6 +1191,15 @@ def get_clusters(
             for instance_dict in instance_dicts
         ]
         if not ec2_instances:
+            logger.warning(
+                "CloudFormation VPC %s (%s) has no instances - "
+                "will attempt direct VPC cleanup as fallback",
+                vpc_name,
+                vpc_id,
+            )
+            # Extract cluster name from VPC name (remove -vpc suffix if present)
+            cluster_name = vpc_name.replace("-vpc", "").replace("-vpc-cf", "")
+            orphaned_cf_vpcs.append((cluster_name, vpc_id))
             continue
         cluster_io_tag = None
         for instance in ec2_instances:
@@ -1217,6 +1234,7 @@ def get_clusters(
         cf_clusters_to_delete,
         hypershift_clusters_to_delete,
         remaining_clusters,
+        orphaned_cf_vpcs,
     )
 
 
@@ -1390,6 +1408,7 @@ def aws_cleanup():
             cf_clusters_to_delete,
             hypershift_clusters_to_delete,
             remaining_clusters,
+            orphaned_cf_vpcs,
         ) = get_clusters(
             time_to_delete=time_to_delete,
             region_name=region,
@@ -1439,6 +1458,96 @@ def aws_cleanup():
                 if not success:
                     failed_deletions.append(cluster_name)
                 # Also try to delete associated S3 buckets
+                try:
+                    delete_cluster_buckets(cluster_name)
+                except Exception as e:
+                    logger.error(
+                        "Failed to delete buckets for cluster %s: %s", cluster_name, e
+                    )
+
+        # Clean up orphaned CloudFormation VPCs (CloudFormation VPCs with no instances)
+        if orphaned_cf_vpcs:
+            logger.info(
+                "Deleting orphaned CloudFormation VPCs: %s",
+                [name for name, _ in orphaned_cf_vpcs],
+            )
+            aws = AWS(region_name=region)
+            for cluster_name, vpc_id in orphaned_cf_vpcs:
+                logger.info(
+                    "Attempting to delete orphaned CloudFormation VPC %s (VPC: %s)",
+                    cluster_name,
+                    vpc_id,
+                )
+
+                # First, try to find and delete the CloudFormation stack
+                stack_deleted = False
+                try:
+                    # Try to find stacks matching the cluster name pattern
+                    stack_patterns = [
+                        f"{cluster_name}*vpc*",
+                        f"{cluster_name}*",
+                        cluster_name,
+                    ]
+                    cf_stack_name = None
+                    for pattern in stack_patterns:
+                        try:
+                            stacks = aws.get_cloudformation_stacks(pattern=pattern)
+                            if stacks:
+                                cf_stack_name = stacks[0]["StackName"]
+                                logger.info(
+                                    "Found CloudFormation stack %s for cluster %s",
+                                    cf_stack_name,
+                                    cluster_name,
+                                )
+                                break
+                        except ClientError:
+                            continue
+
+                    if cf_stack_name:
+                        logger.info(
+                            "Attempting to delete CloudFormation stack %s",
+                            cf_stack_name,
+                        )
+                        try:
+                            aws.delete_cloudformation_stacks([cf_stack_name])
+                            logger.info(
+                                "Successfully deleted CloudFormation stack %s",
+                                cf_stack_name,
+                            )
+                            stack_deleted = True
+                        except Exception as stack_error:
+                            logger.warning(
+                                "Failed to delete CloudFormation stack %s: %s. "
+                                "Will attempt direct VPC cleanup.",
+                                cf_stack_name,
+                                stack_error,
+                            )
+                    else:
+                        logger.warning(
+                            "No CloudFormation stack found for %s. "
+                            "Will attempt direct VPC cleanup.",
+                            cluster_name,
+                        )
+                except Exception as e:
+                    logger.warning(
+                        "Error checking CloudFormation stacks for %s: %s. "
+                        "Will attempt direct VPC cleanup.",
+                        cluster_name,
+                        e,
+                    )
+
+                # If stack deletion failed or stack not found, try direct VPC cleanup
+                if not stack_deleted:
+                    logger.info(
+                        "Attempting direct VPC cleanup for %s (VPC: %s)",
+                        cluster_name,
+                        vpc_id,
+                    )
+                    success = cleanup_vpc(cluster_name, vpc_id, region)
+                    if not success:
+                        failed_deletions.append(cluster_name)
+
+                # Always try to delete associated S3 buckets
                 try:
                     delete_cluster_buckets(cluster_name)
                 except Exception as e:
