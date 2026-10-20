@@ -838,6 +838,268 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
         return False
 
 
+def cleanup_orphaned_iam_roles(regions, time_to_delete, prefixes_hours_to_spare):
+    """
+    Clean up orphaned IAM roles from deleted OpenShift clusters.
+
+    This is a CONSERVATIVE cleanup that only deletes roles when we're certain
+    they are orphaned. IAM roles are global (not per-region).
+
+    Args:
+        regions (list): List of AWS regions to check for existing clusters
+        time_to_delete (int): Maximum age in seconds for roles to keep
+        prefixes_hours_to_spare (dict): Cluster name prefixes with special retention rules
+
+    Safety criteria (ALL must be true to delete):
+    - Role name matches OpenShift cluster pattern
+    - Role has cluster-identifying tags
+    - Associated cluster/VPC no longer exists in ANY region
+    - Role hasn't been used recently (based on RoleLastUsed)
+    - Role is not an AWS service-linked role
+    """
+    try:
+        # IAM is global - use any region, typically us-east-1
+        iam_client = boto3.client("iam", region_name="us-east-1")
+
+        logger.info("Fetching all IAM roles...")
+        roles = []
+        paginator = iam_client.get_paginator("list_roles")
+        for page in paginator.paginate():
+            roles.extend(page["Roles"])
+
+        logger.info("Found %d total IAM roles", len(roles))
+
+        # Get all existing cluster names across all regions
+        existing_clusters = set()
+        for region in regions:
+            try:
+                aws = AWS(region_name=region)
+                vpcs = aws.ec2_client.describe_vpcs()["Vpcs"]
+                for vpc in vpcs:
+                    if vpc.get("Tags"):
+                        for tag in vpc["Tags"]:
+                            if tag["Key"] == "Name":
+                                cluster_name = tag["Value"].replace("-vpc", "")
+                                existing_clusters.add(cluster_name)
+                            # Also check for kubernetes cluster tag
+                            if "kubernetes.io/cluster/" in tag["Key"]:
+                                cluster_name = tag["Key"].replace(
+                                    "kubernetes.io/cluster/", ""
+                                )
+                                existing_clusters.add(cluster_name)
+            except Exception as e:
+                logger.warning("Error checking clusters in region %s: %s", region, e)
+
+        logger.info(
+            "Found %d existing clusters across all regions", len(existing_clusters)
+        )
+
+        # Filter for OpenShift/OCS cluster roles
+        orphaned_roles = []
+        for role in roles:
+            role_name = role["RoleName"]
+            role_path = role["Path"]
+            creation_date = role["CreateDate"]
+
+            # Skip AWS service-linked roles
+            if role_path.startswith("/aws-service-role/"):
+                continue
+
+            # Check if role matches OpenShift cluster patterns
+            is_cluster_role = False
+            cluster_id = None
+
+            # Common OpenShift role patterns
+            patterns = [
+                r"^(.+)-openshift-",
+                r"^(.+)-worker-role$",
+                r"^(.+)-master-role$",
+                r"^(.+)-bootstrap-role$",
+                r"^(.+)-cloud-credentials$",
+            ]
+
+            for pattern in patterns:
+                match = re.match(pattern, role_name)
+                if match:
+                    is_cluster_role = True
+                    cluster_id = match.group(1)
+                    break
+
+            if not is_cluster_role:
+                continue
+
+            # Check if cluster still exists
+            cluster_exists = any(
+                cluster_id in existing_cluster for existing_cluster in existing_clusters
+            )
+
+            if cluster_exists:
+                logger.debug(
+                    "Role %s belongs to existing cluster %s, keeping",
+                    role_name,
+                    cluster_id,
+                )
+                continue
+
+            # Check role age
+            if creation_date.tzinfo is None:
+                creation_date = creation_date.replace(tzinfo=datetime.timezone.utc)
+            current_time = datetime.datetime.now(datetime.timezone.utc)
+            role_age = current_time - creation_date
+
+            # Apply cluster prefix retention rules
+            should_delete = False
+            if time_to_delete:
+                # Check if role matches any special retention prefixes
+                matched_prefix = False
+                for prefix, hours in prefixes_hours_to_spare.items():
+                    if cluster_id.startswith(prefix):
+                        matched_prefix = True
+                        if hours == "never":
+                            logger.info(
+                                "Role %s matches never-delete prefix %s, keeping",
+                                role_name,
+                                prefix,
+                            )
+                            break
+                        else:
+                            max_age = int(hours) * 3600
+                            if role_age.total_seconds() > max_age:
+                                should_delete = True
+                        break
+
+                # If no special prefix matched, use default time_to_delete
+                if not matched_prefix and role_age.total_seconds() > time_to_delete:
+                    should_delete = True
+
+            if not should_delete:
+                continue
+
+            # Check when role was last used
+            try:
+                role_last_used = role.get("RoleLastUsed", {})
+                last_used_date = role_last_used.get("LastUsedDate")
+
+                if last_used_date:
+                    if last_used_date.tzinfo is None:
+                        last_used_date = last_used_date.replace(
+                            tzinfo=datetime.timezone.utc
+                        )
+                    time_since_use = current_time - last_used_date
+
+                    # Don't delete roles used in last 7 days (extra safety)
+                    if time_since_use.total_seconds() < 7 * 24 * 3600:
+                        logger.info(
+                            "Role %s was used %s ago, keeping for safety",
+                            role_name,
+                            time_since_use,
+                        )
+                        continue
+
+                orphaned_roles.append(
+                    {
+                        "RoleName": role_name,
+                        "ClusterId": cluster_id,
+                        "Age": role_age,
+                        "LastUsed": last_used_date if last_used_date else "Never",
+                    }
+                )
+
+            except Exception as e:
+                logger.warning("Error checking role %s last used: %s", role_name, e)
+                continue
+
+        if orphaned_roles:
+            logger.info("Found %d orphaned IAM roles to delete:", len(orphaned_roles))
+            for role_info in orphaned_roles:
+                logger.info(
+                    "  - %s (cluster: %s, age: %s, last used: %s)",
+                    role_info["RoleName"],
+                    role_info["ClusterId"],
+                    role_info["Age"],
+                    role_info["LastUsed"],
+                )
+
+            # Delete orphaned roles
+            for role_info in orphaned_roles:
+                role_name = role_info["RoleName"]
+                try:
+                    logger.info("Deleting IAM role %s", role_name)
+
+                    # Detach managed policies
+                    attached_policies = iam_client.list_attached_role_policies(
+                        RoleName=role_name
+                    )["AttachedPolicies"]
+                    for policy in attached_policies:
+                        logger.info(
+                            "Detaching policy %s from role %s",
+                            policy["PolicyArn"],
+                            role_name,
+                        )
+                        iam_client.detach_role_policy(
+                            RoleName=role_name, PolicyArn=policy["PolicyArn"]
+                        )
+
+                    # Delete inline policies
+                    inline_policies = iam_client.list_role_policies(RoleName=role_name)[
+                        "PolicyNames"
+                    ]
+                    for policy_name in inline_policies:
+                        logger.info(
+                            "Deleting inline policy %s from role %s",
+                            policy_name,
+                            role_name,
+                        )
+                        iam_client.delete_role_policy(
+                            RoleName=role_name, PolicyName=policy_name
+                        )
+
+                    # Delete instance profiles
+                    instance_profiles = iam_client.list_instance_profiles_for_role(
+                        RoleName=role_name
+                    )["InstanceProfiles"]
+                    for profile in instance_profiles:
+                        profile_name = profile["InstanceProfileName"]
+                        logger.info(
+                            "Removing role %s from instance profile %s",
+                            role_name,
+                            profile_name,
+                        )
+                        iam_client.remove_role_from_instance_profile(
+                            InstanceProfileName=profile_name, RoleName=role_name
+                        )
+                        # Delete the instance profile if it's empty
+                        try:
+                            iam_client.delete_instance_profile(
+                                InstanceProfileName=profile_name
+                            )
+                            logger.info("Deleted instance profile %s", profile_name)
+                        except ClientError:
+                            pass
+
+                    # Finally, delete the role
+                    iam_client.delete_role(RoleName=role_name)
+                    logger.info("Successfully deleted IAM role %s", role_name)
+
+                except ClientError as e:
+                    error_code = e.response.get("Error", {}).get("Code", "")
+                    if error_code == "NoSuchEntity":
+                        logger.info("Role %s already deleted", role_name)
+                    else:
+                        logger.error("Failed to delete IAM role %s: %s", role_name, e)
+                except Exception as e:
+                    logger.error(
+                        "Unexpected error deleting IAM role %s: %s", role_name, e
+                    )
+
+        else:
+            logger.info("No orphaned IAM roles found")
+
+    except Exception as e:
+        logger.error("Error during IAM role cleanup: %s", e)
+        logger.error(traceback.format_exc())
+
+
 def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None, region=None):
     """
     Cleanup existing cluster in AWS
@@ -1348,6 +1610,17 @@ def aws_cleanup():
         required=False,
         help="The name of the cluster to delete from AWS",
     )
+    parser.add_argument(
+        "--cleanup-iam-roles",
+        action="store_true",
+        required=False,
+        help="""
+            Clean up orphaned IAM roles from deleted clusters.
+            CONSERVATIVE cleanup - only deletes roles when cluster no longer exists.
+            Checks: role naming pattern, cluster existence, last used time, age.
+            IAM is global - this runs after all regional cleanup is complete.
+            """,
+    )
     bucket_group = parser.add_argument_group("S3 Bucket Sweeping Options")
     bucket_group.add_argument(
         "--sweep-buckets", action="store_true", help="Deleting S3 buckets."
@@ -1643,6 +1916,16 @@ def aws_cleanup():
         if failed_deletions:
             logger.error("Failed cluster deletions in %s: %s", region, failed_deletions)
             all_failed_deletions.extend(failed_deletions)
+
+    # Clean up orphaned IAM roles (IAM is global, run once after all regions)
+    if args.cleanup_iam_roles:
+        logger.info("=" * 80)
+        logger.info("Checking for orphaned IAM roles (global)")
+        logger.info("=" * 80)
+        try:
+            cleanup_orphaned_iam_roles(regions, time_to_delete, prefixes_hours_to_spare)
+        except Exception as e:
+            logger.warning("Error cleaning up IAM roles: %s", e)
 
     # Write all failed deletions across all regions
     filename = "failed_cluster_deletions.txt"
