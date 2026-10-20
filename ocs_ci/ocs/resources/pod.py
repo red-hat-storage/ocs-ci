@@ -4267,12 +4267,14 @@ def search_pattern_in_pod_logs(
     return matched_lines
 
 
-def get_containers_names_by_pod(pod: OCP) -> set:
+def get_containers_names_by_pod(pod) -> set:
     """
     Gets the names of all containers in given pod or pods
 
     Args:
-        pod (ocp.OCP): instance of OCP object that represents a pod (kind=POD)
+        pod (ocp.OCP or Pod): instance of OCP object that represents a pod
+            (kind=POD), or a single pod object such as
+            ocs_ci.ocs.resources.pod.Pod
 
     Returns:
         set: hash set of names of all containers in given pod or pods
@@ -4280,7 +4282,8 @@ def get_containers_names_by_pod(pod: OCP) -> set:
     """
     items = pod.data.get("items")
     if not isinstance(items, list):
-        items = [items]
+        # The data holds a single pod rather than a pod list
+        items = [pod.data]
 
     container_names = list()
     for item in items:

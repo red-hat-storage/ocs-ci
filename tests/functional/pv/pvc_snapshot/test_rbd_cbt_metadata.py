@@ -25,18 +25,33 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework.pytest_customization.marks import consumer_env_check, green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
+    ignore_leftovers,
     polarion_id,
     skipif_ocs_version,
     tier1,
     tier2,
+    tier3,
+    tier4b,
 )
 from ocs_ci.helpers import helpers
+from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.ocs.resources.cbt_metadata import (
     VerifierTool,
+    generate_untrusted_ca_cert,
+    get_cbt_service_endpoint_ips,
     get_merged_lister_entries_byte_ranges,
     get_total_covered_bytes,
     get_uncovered_byte_ranges,
     validate_snapshot_metadata_sidecar,
+    verify_lister_authentication_error_markers,
+    verify_lister_tls_error_markers,
+    wait_for_cbt_service_endpoints,
+    wait_for_ready_cbt_sidecar_on_node,
+)
+from ocs_ci.ocs.resources.pod import (
+    get_pod_node,
+    get_pod_obj,
+    get_rbdfsplugin_provisioner_pods,
 )
 from ocs_ci.ocs.resources.snapshots import (
     get_snapshot_handle,
@@ -47,16 +62,16 @@ from ocs_ci.ocs.resources.snapshots import (
 log = logging.getLogger(__name__)
 
 
-@green_squad
-@consumer_env_check
-@skipif_ocs_version("<4.23")
-class TestRbdCBTMetadata(ManageTest):
+class CBTMetadataTestBase(ManageTest):
     """
-    Test CBT snapshot metadata operations on RBD PVCs.
+    Shared setup and helpers for the CBT metadata test classes.
 
     Each test creates its own PVCs and snapshots inside a dedicated
     project namespace. The CBT metadata runner sets up the RBAC,
     CA certificate, and tools pod required to call the gRPC API.
+
+    The name does not start with Test, so pytest does not collect
+    this class.
     """
 
     @pytest.fixture(autouse=True)
@@ -250,6 +265,19 @@ class TestRbdCBTMetadata(ManageTest):
             self.cbt_runner.delete_pod(self.cbt_runner.verifier_pod_name)
         restored_pvc.delete()
         restored_pvc.ocp.wait_for_delete(restored_pvc.name, timeout=120)
+
+
+@green_squad
+@consumer_env_check
+@skipif_ocs_version("<4.23")
+class TestRbdCBTMetadata(CBTMetadataTestBase):
+    """
+    Test CBT snapshot metadata operations on RBD PVCs.
+
+    Covers the happy paths of the GetMetadataAllocated and
+    GetMetadataDelta gRPC operations, and the resiliency of the
+    metadata service to the loss of a controller node.
+    """
 
     # -- Test 1 ----------------------------------------------------
 
@@ -842,6 +870,337 @@ class TestRbdCBTMetadata(ManageTest):
             previous_snapshot_id=snap_1_handle,
         )
 
+    # -- Test 7 ----------------------------------------------------
+
+    @tier4b
+    @ignore_leftovers
+    def test_cbt_service_survives_controller_node_shutdown(
+        self, nodes, node_restart_teardown
+    ):
+        """
+        Verify that the CBT service keeps serving while one of the
+        RBD CSI controller nodes is down, and recovers once the node
+        is powered on again.
+
+        Shuts down the node of one controller pod, checks that the
+        Service drops its endpoint while the surviving replica still
+        answers allocated and delta requests, then powers the node
+        back on and checks that the recovered pod rejoins the
+        Service and the metadata is unchanged.
+
+        Steps:
+        1. Create a Block application PVC, a Block-mode copy PVC,
+           and a writer pod, and write 10 MiB of data.
+        2. Take snap-1, write 5 MiB more and take snap-2.
+        3. Run an allocated-mode verification of snap-1.
+        4. Get the RBD CSI controller pods and verify at least two
+           of them run on different nodes with a ready CBT sidecar.
+        5. Shut down the node of one controller pod that does not
+           host the CBT lister pod.
+        6. Verify the Service drops the endpoint of the stopped pod
+           and keeps at least one endpoint.
+        7. Run the CBT lister in allocated mode on snap-1 while the
+           node is down.
+        8. Run a delta-mode verification of snap-2 against snap-1
+           while the node is down.
+        9. Power the node on and wait for it to become Ready.
+        10. Wait for a controller pod with a ready CBT sidecar on
+            the recovered node and verify its endpoint is back.
+        11. Run the CBT lister in delta mode and in allocated mode,
+            and verify the allocated metadata is unchanged.
+        12. Run an allocated-mode verification of snap-2.
+        """
+        volume_mode = constants.VOLUME_MODE_BLOCK
+
+        log.test_step(
+            "Create a Block application PVC, a Block-mode copy PVC, and a "
+            "writer pod, and write 10 MiB of data"
+        )
+        app_pvc = self._create_app_pvc(volume_mode)
+        copy_pvc = self._create_block_pvc()
+        writer_pod = self._create_writer_pod(app_pvc, volume_mode)
+        write_data_to_pvc(writer_pod, volume_mode, size_mb=10)
+
+        log.test_step("Take snap-1, write 5 MiB more and take snap-2")
+        snap_1 = self._take_snapshot(app_pvc, "cbt-node-1")
+        write_data_to_pvc(writer_pod, volume_mode, size_mb=5, offset_mb=100)
+        snap_2 = self._take_snapshot(app_pvc, "cbt-node-2")
+
+        log.test_step("Run an allocated-mode verification of snap-1")
+        restored_pvc_1 = self._restore_and_verify(snap_1, copy_pvc, volume_mode)
+        self._delete_verifier_pod_and_restored_pvc(restored_pvc_1)
+
+        log.test_step(
+            "Get the RBD CSI controller pods and verify at least two of them "
+            "run on different nodes with a ready CBT sidecar"
+        )
+        pod_ip_by_node = {}
+        for controller_pod in get_rbdfsplugin_provisioner_pods():
+            _, pod_ip = validate_snapshot_metadata_sidecar(controller_pod)
+            pod_ip_by_node[get_pod_node(controller_pod).name] = pod_ip
+        log.info(
+            "RBD CSI controller pod IPs by node: %s",
+            pod_ip_by_node,
+        )
+        if len(pod_ip_by_node) < 2:
+            pytest.skip(
+                f"The CBT service needs at least 2 RBD CSI controller pods on "
+                f"different nodes to survive a node shutdown, found "
+                f"{len(pod_ip_by_node)}: {pod_ip_by_node}"
+            )
+
+        log.test_step(
+            "Shut down the node of one controller pod that does not host the "
+            "CBT lister pod"
+        )
+        lister_pod_node = get_pod_node(
+            get_pod_obj(self.cbt_runner.lister_pod_name, self.namespace)
+        ).name
+        selected_node_name = next(
+            node_name for node_name in pod_ip_by_node if node_name != lister_pod_node
+        )
+        selected_pod_ip = pod_ip_by_node[selected_node_name]
+        remaining_pod_ips = [
+            pod_ip
+            for node_name, pod_ip in pod_ip_by_node.items()
+            if node_name != selected_node_name
+        ]
+        log.info(
+            "Shutting down node %s hosting controller pod IP %s. The CBT "
+            "lister pod runs on node %s",
+            selected_node_name,
+            selected_pod_ip,
+            lister_pod_node,
+        )
+        selected_node = get_node_objs([selected_node_name])[0]
+        nodes.stop_nodes([selected_node])
+        wait_for_nodes_status(
+            node_names=[selected_node_name],
+            status=constants.NODE_NOT_READY,
+        )
+
+        log.test_step(
+            "Verify the Service drops the endpoint of the stopped pod and "
+            "keeps at least one endpoint"
+        )
+        endpoint_ips = wait_for_cbt_service_endpoints(absent_ips=[selected_pod_ip])
+        assert endpoint_ips, (
+            f"The CBT service has no ready endpoint left after node "
+            f"{selected_node_name} was shut down"
+        )
+        log.info("CBT service endpoints after the shutdown: %s", endpoint_ips)
+
+        log.test_step(
+            "Run the CBT lister in allocated mode on snap-1 while the node is down"
+        )
+        entries_down = self.cbt_runner.run_lister_allocated(snap_1.name)
+        assert entries_down, (
+            f"The CBT lister returned no allocated blocks for {snap_1.name} "
+            f"while node {selected_node_name} was down"
+        )
+        coverage_down = get_merged_lister_entries_byte_ranges(entries_down)
+        log.info(
+            "Allocated metadata of snap-1 while the node is down: %d block(s), "
+            "%d byte(s)",
+            len(entries_down),
+            get_total_covered_bytes(coverage_down),
+        )
+
+        log.test_step(
+            "Run a delta-mode verification of snap-2 against snap-1 while the "
+            "node is down"
+        )
+        restored_pvc_2 = self._restore_and_verify(
+            snap_2,
+            copy_pvc,
+            volume_mode,
+            previous_snapshot=snap_1.name,
+        )
+        self._delete_verifier_pod_and_restored_pvc(restored_pvc_2)
+
+        log.test_step("Power the node on and wait for it to become Ready")
+        nodes.start_nodes(nodes=[selected_node])
+        wait_for_nodes_status(node_names=[selected_node_name], timeout=600)
+
+        log.test_step(
+            "Wait for a controller pod with a ready CBT sidecar on the "
+            "recovered node and verify its endpoint is back"
+        )
+        recovered_pod = wait_for_ready_cbt_sidecar_on_node(selected_node_name)
+        recovered_pod_name, recovered_pod_ip = validate_snapshot_metadata_sidecar(
+            recovered_pod
+        )
+        log.info(
+            "Controller pod %s on the recovered node %s has a ready CBT "
+            "sidecar (IP: %s)",
+            recovered_pod_name,
+            selected_node_name,
+            recovered_pod_ip,
+        )
+        wait_for_cbt_service_endpoints(
+            present_ips=remaining_pod_ips + [recovered_pod_ip]
+        )
+        log.info(
+            "CBT service endpoints after the recovery: %s",
+            get_cbt_service_endpoint_ips(),
+        )
+
+        log.test_step(
+            "Run the CBT lister in delta mode and in allocated mode, and "
+            "verify the allocated metadata is unchanged"
+        )
+        entries_delta = self.cbt_runner.run_lister_delta(
+            target_snap=snap_2.name,
+            base_snap_name=snap_1.name,
+        )
+        assert entries_delta, (
+            f"The CBT lister returned no changed blocks between "
+            f"{snap_1.name} and {snap_2.name} after the node recovery"
+        )
+        log.info(
+            "Delta snap-1 to snap-2 after the recovery: %d block(s)",
+            len(entries_delta),
+        )
+
+        coverage_up = get_merged_lister_entries_byte_ranges(
+            self.cbt_runner.run_lister_allocated(snap_1.name)
+        )
+        missing = get_uncovered_byte_ranges(coverage_down, coverage_up)
+        extra = get_uncovered_byte_ranges(coverage_up, coverage_down)
+        assert not missing and not extra, (
+            f"The allocated metadata of {snap_1.name} changed across the node "
+            f"shutdown. Reported only before: {missing}, only after: {extra}"
+        )
+        log.info(
+            "The allocated metadata of snap-1 is unchanged across the node "
+            "shutdown (%d byte(s))",
+            get_total_covered_bytes(coverage_up),
+        )
+
+        log.test_step("Run an allocated-mode verification of snap-2")
+        self._restore_and_verify(snap_2, copy_pvc, volume_mode)
+
+
+@green_squad
+@tier3
+@consumer_env_check
+@skipif_ocs_version("<4.23")
+class TestRbdCBTMetadataNegative(CBTMetadataTestBase):
+    """
+    Test that the CBT metadata service rejects invalid callers.
+
+    Each test calls the gRPC API with one credential broken on
+    purpose, a token minted for the wrong audience or an unrelated
+    CA certificate, and expects the call to be refused before any
+    block metadata is returned.
+
+    These tests use the lister rather than the verifier, because the
+    rejection happens during the gRPC handshake, before any block
+    range is read, so mounting source and destination PVCs would add
+    nothing to the check.
+    """
+
+    # -- Test 1 ----------------------------------------------------
+
+    def test_cbt_wrong_audience_rejected(self):
+        """
+        Verify that a token issued for the wrong audience is
+        rejected by the CBT metadata service.
+
+        The sidecar validates the caller token with a TokenReview
+        bound to its own audience, so a token minted for a different
+        audience must not be accepted. The CBT lister is run with a
+        bogus --audience value and is expected to fail before any
+        block metadata is returned.
+
+        Steps:
+        1. Create an application PVC and a writer pod, and write
+           10 MiB of data.
+        2. Take a VolumeSnapshot of the PVC.
+        3. Run the CBT lister with a wrong audience and assert it
+           fails with an authentication error.
+        """
+        log.test_step(
+            "Create a Block application PVC and a writer pod, and write 10 MiB"
+        )
+        volume_mode = constants.VOLUME_MODE_BLOCK
+        app_pvc = self._create_app_pvc(volume_mode)
+        writer_pod = self._create_writer_pod(app_pvc, volume_mode)
+        write_data_to_pvc(writer_pod, volume_mode, size_mb=10)
+
+        log.test_step("Take a VolumeSnapshot of the PVC")
+        snap_obj = self._take_snapshot(app_pvc, "cbt-wrong-aud")
+
+        log.test_step(
+            "Run the CBT lister with a wrong audience and assert it fails "
+            "with an authentication error"
+        )
+        exit_code, output = self.cbt_runner.run_lister_expecting_failure(
+            snap_obj.name,
+            audience="wrong-audience",
+        )
+        assert exit_code != 0, (
+            f"The CBT lister succeeded with a wrong audience. It should have "
+            f"been rejected by the metadata service. Output:\n{output}"
+        )
+        verify_lister_authentication_error_markers(output)
+
+    # -- Test 2 ----------------------------------------------------
+
+    def test_cbt_wrong_ca_cert_rejected(self):
+        """
+        Verify that the TLS handshake fails when the client trusts
+        the wrong CA certificate.
+
+        The CBT metadata service is served over TLS with a
+        certificate issued by the OpenShift service CA. A client
+        that trusts an unrelated self-signed CA must not be able to
+        complete the handshake, so no block metadata can be read.
+
+        Steps:
+        1. Create an application PVC and a writer pod, and write
+           10 MiB of data.
+        2. Take a VolumeSnapshot of the PVC.
+        3. Generate an untrusted CA certificate and write it into
+           the CBT lister pod.
+        4. Run the CBT lister with the wrong CA certificate and
+           assert it fails with a TLS error.
+        """
+        log.test_step(
+            "Create a Block application PVC and a writer pod, and write 10 MiB"
+        )
+        volume_mode = constants.VOLUME_MODE_BLOCK
+        app_pvc = self._create_app_pvc(volume_mode)
+        writer_pod = self._create_writer_pod(app_pvc, volume_mode)
+        write_data_to_pvc(writer_pod, volume_mode, size_mb=10)
+
+        log.test_step("Take a VolumeSnapshot of the PVC")
+        snap_obj = self._take_snapshot(app_pvc, "cbt-wrong-ca")
+
+        log.test_step(
+            "Generate an untrusted CA certificate and write it into the "
+            "CBT lister pod"
+        )
+        untrusted_ca_path = self.cbt_runner.write_file_in_lister_pod(
+            "/tmp/untrusted-ca.crt",
+            generate_untrusted_ca_cert(),
+        )
+
+        log.test_step(
+            "Run the CBT lister with the wrong CA certificate and assert it "
+            "fails with a TLS error"
+        )
+        exit_code, output = self.cbt_runner.run_lister_expecting_failure(
+            snap_obj.name,
+            ca_cert_file=untrusted_ca_path,
+        )
+        assert exit_code != 0, (
+            f"The CBT lister succeeded with an unrelated self-signed CA "
+            f"certificate. The TLS handshake should have failed. "
+            f"Output:\n{output}"
+        )
+        verify_lister_tls_error_markers(output)
+
 
 @green_squad
 @tier1
@@ -881,13 +1240,7 @@ class TestRbdCBTInfrastructure(ManageTest):
         5. Compare the endpoint IPs with the RBD controller pod IPs.
         """
         log.test_step("Get the RBD CSI controller pods by label")
-        pod_ocp = OCP(
-            kind=constants.POD,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-        )
-        controller_pods = pod_ocp.get(
-            selector=constants.RBD_CTRLPLUGIN_LABEL,
-        )["items"]
+        controller_pods = get_rbdfsplugin_provisioner_pods()
 
         assert len(controller_pods) > 0, (
             f"No RBD CSI controller pods found with label "
@@ -900,8 +1253,8 @@ class TestRbdCBTInfrastructure(ManageTest):
 
         log.test_step("Check each pod for a container named csi-snapshot-metadata")
         pod_ips = []
-        for pod in controller_pods:
-            pod_name, pod_ip = validate_snapshot_metadata_sidecar(pod)
+        for controller_pod in controller_pods:
+            _, pod_ip = validate_snapshot_metadata_sidecar(controller_pod)
             pod_ips.append(pod_ip)
 
         log.test_step("Get the Service openshift-storage-rbd-snapshot-metadata")
@@ -933,7 +1286,7 @@ class TestRbdCBTInfrastructure(ManageTest):
 
         log.test_step("Get the Endpoints for the Service")
         ep_ocp = OCP(
-            kind="Endpoints",
+            kind=constants.ENDPOINTS,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
         endpoints = ep_ocp.get(resource_name=svc_name)
