@@ -68,6 +68,7 @@ class TestZoneFailureFailoverRelocate:
         power_off_zone,
         all_dr_workloads,
         nodes_multicluster,
+        cnv_hyperconverged_present_on_dr_clusters,
     ):
         """
         Test to verify application failover and relocate with multiple workloads when one zone in down:
@@ -139,6 +140,7 @@ class TestZoneFailureFailoverRelocate:
         # ========================================
         # Step 1: Deploy GitOps/ApplicationSet App
         # ========================================
+        config.switch_acm_ctx()
         gitops_workloads = []
         logger.test_step("Deploy GitOps/ApplicationSet workload")
         for pvc_interface in (constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM):
@@ -175,18 +177,25 @@ class TestZoneFailureFailoverRelocate:
         # ========================================
         # Step 3: Deploy CNV Apps (RBD only)
         # ========================================
-        logger.test_step("Deploy CNV discovered apps workload ")
-        cnv_workloads = all_dr_workloads["discovered_apps_cnv"](
-            pvc_vm=1,
-            custom_sc=False,
-            dr_protect=True,
-            shared_drpc_protection=False,
-            vm_type=constants.VM_VOLUME_PVC,
-        )
-        logger.info(
-            f"Deployed {len(cnv_workloads)} CNV workload(s): "
-            f"{[w.workload_namespace for w in cnv_workloads]}"
-        )
+        if cnv_hyperconverged_present_on_dr_clusters():
+            logger.test_step("Deploy CNV discovered apps workload ")
+            cnv_workloads = all_dr_workloads["discovered_apps_cnv"](
+                pvc_vm=1,
+                custom_sc=False,
+                dr_protect=True,
+                shared_drpc_protection=False,
+                vm_type=constants.VM_VOLUME_PVC,
+            )
+            logger.info(
+                f"Deployed {len(cnv_workloads)} CNV workload(s): "
+                f"{[w.workload_namespace for w in cnv_workloads]}"
+            )
+        else:
+            cnv_workloads = []
+            logger.info(
+                "Skipping CNV workload deployment because hyperconverged is not present in one or both "
+                "of the target DR cluster pair"
+            )
 
         # Combine all workloads for iteration
         all_workloads = gitops_workloads + discovered_workloads + cnv_workloads
@@ -294,6 +303,24 @@ class TestZoneFailureFailoverRelocate:
             )
 
         logger.info(f"Metadata collected for {len(workload_metadata)} workload(s)")
+
+        for workload_item in workload_metadata:
+            workload_type = (
+                constants.APPLICATION_SET
+                if workload_item["is_appset"]
+                else constants.DISCOVERED_APPS
+            )
+            drpc_namespace = (
+                constants.DR_OPS_NAMESPACE
+                if workload_item["is_discovered_app"]
+                else constants.GITOPS_CLUSTER_NAMESPACE
+            )
+            dr_helpers.verify_cluster_data_protected_status(
+                workload_type=workload_type,
+                namespace=drpc_namespace,
+                workload_placement_name=workload_item["resource_name"],
+                drpc_name=workload_item["drpc_name"],
+            )
 
         # Ensure that the primary cluster in config is used and same for all workloads
         assert all(
