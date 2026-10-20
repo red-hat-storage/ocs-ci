@@ -407,8 +407,6 @@ aws ec2 create-tags \
 
 ## Recent Enhancements
 
-### October 2024
-
 - ✅ Multi-region support
 - ✅ VPC peering connection cleanup
 - ✅ VPC endpoint verification and retry logic
@@ -444,6 +442,6 @@ For issues or questions:
 
 ## Version History
 
-- **v3.0 (Oct 2024)** - Multi-region, IAM roles, CF stacks, ENI retry logic
+- **v3.0** - Multi-region, IAM roles, CF stacks, ENI retry logic
 - **v2.0** - HyperShift/CAPI support, VPC protection
 - **v1.0** - Initial implementation for IPI/UPI clusters
