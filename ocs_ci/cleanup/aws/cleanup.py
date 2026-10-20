@@ -278,8 +278,8 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                     lb_arns.append(lb["LoadBalancerArn"])
             # Wait for load balancers to be deleted
             if lb_arns:
-                logger.info("Waiting 60s for Load Balancers to be deleted...")
-                time.sleep(60)
+                logger.info("Waiting 90s for Load Balancers to be deleted...")
+                time.sleep(90)
         except Exception as e:
             logger.warning("Error deleting load balancers: %s", e)
 
@@ -406,42 +406,104 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
         # AWS-managed ENIs (from VPC endpoints, NAT gateways, LBs) are automatically
         # deleted when their parent resources are deleted. We cannot manually delete them.
         logger.info(
-            "Waiting 20s for AWS-managed network interfaces to be auto-deleted..."
+            "Waiting 60s for AWS-managed network interfaces to be auto-deleted..."
         )
-        time.sleep(20)
+        time.sleep(60)
 
-        # Step 8: Delete remaining Network Interfaces (only user-created ones)
+        # Step 8: Delete remaining Network Interfaces (only truly user-created ones)
         network_interfaces = list(vpc.network_interfaces.all())
         if network_interfaces:
             logger.info("Checking for remaining network interfaces...")
             for ni in network_interfaces:
-                # Check if it's a user-created ENI (requester-managed)
+                # Skip if it's an AWS-managed ENI
                 requester = ni.requester_id
-                if requester and requester != "amazon-":
-                    logger.info(
-                        "Found user-created Network Interface %s (requester: %s)",
-                        ni.id,
-                        requester,
-                    )
-                    if ni.attachment:
-                        logger.info("Detaching Network Interface %s", ni.id)
-                        try:
-                            ni.detach(Force=True)
-                            time.sleep(5)
-                        except ClientError as e:
-                            logger.warning("Failed to detach network interface: %s", e)
+                interface_type = (
+                    ni.interface_type if hasattr(ni, "interface_type") else None
+                )
 
-                    try:
-                        logger.info("Deleting Network Interface %s", ni.id)
-                        ni.delete()
-                    except ClientError as e:
-                        logger.warning("Failed to delete network interface: %s", e)
-                else:
+                # Check if this is AWS-managed by interface type
+                aws_managed_types = [
+                    "nat_gateway",
+                    "vpc_endpoint",
+                    "network_load_balancer",
+                    "gateway_load_balancer",
+                    "gateway_load_balancer_endpoint",
+                    "efa",
+                    "trunk",
+                    "lambda",
+                ]
+                if interface_type and interface_type in aws_managed_types:
+                    logger.info(
+                        "Skipping AWS-managed ENI %s (type: %s)",
+                        ni.id,
+                        interface_type,
+                    )
+                    continue
+
+                # Check if this is AWS-managed by requester ID
+                if requester and (
+                    requester.startswith("amazon-")
+                    or requester == "amazon-elb"
+                    or requester == "amazon-aws"
+                ):
                     logger.info(
                         "Skipping AWS-managed ENI %s (requester: %s)",
                         ni.id,
                         requester,
                     )
+                    continue
+
+                # Check if this ENI has an AWS-managed attachment (like ELA)
+                if ni.attachment:
+                    attachment_id = ni.attachment.get("AttachmentId", "")
+                    # Skip ELA (Elastic Load Balancer) attachments - they can't be manually detached
+                    if attachment_id.startswith("ela-attach-"):
+                        logger.info(
+                            "Skipping ENI %s with ELA attachment %s (managed by AWS Load Balancer)",
+                            ni.id,
+                            attachment_id,
+                        )
+                        continue
+
+                # This appears to be a user-created ENI - try to delete it
+                logger.info(
+                    "Found user-created Network Interface %s (requester: %s)",
+                    ni.id,
+                    requester,
+                )
+
+                # Try to detach if attached
+                if ni.attachment:
+                    attachment_id = ni.attachment.get("AttachmentId", "")
+                    logger.info(
+                        "Detaching Network Interface %s (attachment: %s)",
+                        ni.id,
+                        attachment_id,
+                    )
+                    try:
+                        ni.detach(Force=True)
+                        time.sleep(5)
+                    except ClientError as e:
+                        if "OperationNotPermitted" in str(e):
+                            logger.warning(
+                                "Cannot detach ENI %s - AWS-managed attachment, skipping",
+                                ni.id,
+                            )
+                            continue
+                        logger.warning("Failed to detach network interface: %s", e)
+
+                # Try to delete the ENI
+                try:
+                    logger.info("Deleting Network Interface %s", ni.id)
+                    ni.delete()
+                except ClientError as e:
+                    if "currently in use" in str(e):
+                        logger.info(
+                            "ENI %s still in use, will be auto-deleted by AWS",
+                            ni.id,
+                        )
+                    else:
+                        logger.warning("Failed to delete network interface: %s", e)
 
         # Step 9: Disassociate and delete route tables (except main)
         route_tables = list(vpc.route_tables.all())
