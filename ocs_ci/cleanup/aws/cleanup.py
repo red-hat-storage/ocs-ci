@@ -164,7 +164,58 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                 instances_dict[instance.id] = instance_name
             aws.terminate_ec2_instances(instances_dict, wait=True)
 
-        # Step 2: Delete NAT Gateways
+        # Step 2: Delete VPC Peering Connections
+        try:
+            # Find peering connections where this VPC is either requester or accepter
+            peering_connections = aws.ec2_client.describe_vpc_peering_connections(
+                Filters=[
+                    {
+                        "Name": "status-code",
+                        "Values": ["active", "pending-acceptance"],
+                    }
+                ]
+            )["VpcPeeringConnections"]
+
+            # Filter for connections involving our VPC
+            vpc_peering_connections = [
+                pc
+                for pc in peering_connections
+                if pc.get("RequesterVpcInfo", {}).get("VpcId") == vpc_id
+                or pc.get("AccepterVpcInfo", {}).get("VpcId") == vpc_id
+            ]
+
+            if vpc_peering_connections:
+                logger.info(
+                    "Deleting %d VPC peering connections", len(vpc_peering_connections)
+                )
+                for pc in vpc_peering_connections:
+                    pc_id = pc["VpcPeeringConnectionId"]
+                    requester_vpc = pc.get("RequesterVpcInfo", {}).get("VpcId")
+                    accepter_vpc = pc.get("AccepterVpcInfo", {}).get("VpcId")
+                    logger.info(
+                        "Deleting VPC peering connection %s "
+                        "(requester: %s, accepter: %s)",
+                        pc_id,
+                        requester_vpc,
+                        accepter_vpc,
+                    )
+                    try:
+                        aws.ec2_client.delete_vpc_peering_connection(
+                            VpcPeeringConnectionId=pc_id
+                        )
+                        logger.info(
+                            "Successfully deleted VPC peering connection %s", pc_id
+                        )
+                    except ClientError as e:
+                        logger.warning(
+                            "Failed to delete VPC peering connection %s: %s", pc_id, e
+                        )
+                # Wait a moment for peering connections to be deleted
+                time.sleep(10)
+        except ClientError as e:
+            logger.warning("Error checking VPC peering connections: %s", e)
+
+        # Step 3: Delete NAT Gateways
         nat_gateways = aws.ec2_client.describe_nat_gateways(
             Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
         )["NatGateways"]
@@ -206,7 +257,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
             logger.info("Waiting 30s for NAT Gateway EIPs to be released...")
             time.sleep(30)
 
-        # Step 3: Release Elastic IPs
+        # Step 4: Release Elastic IPs
         # First release NAT Gateway EIPs (we captured these earlier)
         for allocation_id in nat_gateway_eip_allocation_ids:
             logger.info("Releasing NAT Gateway Elastic IP %s", allocation_id)
@@ -246,7 +297,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                 except ClientError:
                     pass
 
-        # Step 4: Delete VPC Endpoints (these have ENIs with EIPs!)
+        # Step 5: Delete VPC Endpoints (these have ENIs with EIPs!)
         vpc_endpoints = aws.ec2_client.describe_vpc_endpoints(
             Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
         )["VpcEndpoints"]
@@ -297,7 +348,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                 logger.info("Waiting 30s for VPC endpoint ENIs to be released...")
                 time.sleep(30)
 
-        # Step 5: Delete Load Balancers (ELBv2)
+        # Step 6: Delete Load Balancers (ELBv2)
         lb_arns = []
         try:
             elbv2_client = boto3.client("elbv2", region_name=region_name)
@@ -316,7 +367,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
         except Exception as e:
             logger.warning("Error deleting load balancers: %s", e)
 
-        # Step 5a: Delete Classic Load Balancers (ELB)
+        # Step 6a: Delete Classic Load Balancers (ELB)
         try:
             elb_client = boto3.client("elb", region_name=region_name)
             classic_lbs = elb_client.describe_load_balancers()[
@@ -337,7 +388,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
         except Exception as e:
             logger.warning("Error deleting classic load balancers: %s", e)
 
-        # Step 6: Detach and delete Internet Gateways
+        # Step 7: Detach and delete Internet Gateways
         igws = list(vpc.internet_gateways.all())
         for igw in igws:
             logger.info("Detaching and deleting Internet Gateway %s", igw.id)
@@ -435,7 +486,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                         raise
             igw.delete()
 
-        # Step 7: Wait for ENIs to be auto-deleted
+        # Step 8: Wait for ENIs to be auto-deleted
         # AWS-managed ENIs (from VPC endpoints, NAT gateways, LBs) are automatically
         # deleted when their parent resources are deleted. We cannot manually delete them.
         logger.info(
@@ -443,7 +494,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
         )
         time.sleep(60)
 
-        # Step 8: Delete remaining Network Interfaces with retry logic
+        # Step 9: Delete remaining Network Interfaces with retry logic
         network_interfaces = list(vpc.network_interfaces.all())
         enis_to_retry = []
 
@@ -624,7 +675,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                     "Check if they are attached to resources outside this VPC."
                 )
 
-        # Step 9: Disassociate and delete route tables (except main)
+        # Step 10: Disassociate and delete route tables (except main)
         route_tables = list(vpc.route_tables.all())
         for rt in route_tables:
             # Skip main route table
@@ -656,7 +707,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                 except ClientError as e:
                     logger.warning("Failed to delete route table: %s", e)
 
-        # Step 10: Delete subnets
+        # Step 11: Delete subnets
         subnets = list(vpc.subnets.all())
         for subnet in subnets:
             logger.info("Deleting Subnet %s", subnet.id)
@@ -665,7 +716,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
             except ClientError as e:
                 logger.warning("Failed to delete subnet %s: %s", subnet.id, e)
 
-        # Step 11: Delete security groups (except default)
+        # Step 12: Delete security groups (except default)
         security_groups = list(vpc.security_groups.all())
         for sg in security_groups:
             if sg.group_name != "default":
@@ -680,7 +731,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                 except ClientError as e:
                     logger.warning("Failed to delete security group: %s", e)
 
-        # Step 12: Delete Network ACLs (except default)
+        # Step 13: Delete Network ACLs (except default)
         network_acls = list(vpc.network_acls.all())
         default_acl = None
         custom_acls = []
@@ -719,7 +770,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
             except ClientError as e:
                 logger.warning("Failed to delete network ACL: %s", e)
 
-        # Step 13: Final cleanup pass before VPC deletion
+        # Step 14: Final cleanup pass before VPC deletion
         logger.info("Performing final cleanup pass before VPC deletion...")
 
         # Re-check for VPC endpoints that might still exist
@@ -774,7 +825,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                     attachment,
                 )
 
-        # Step 14: Delete VPC
+        # Step 15: Delete VPC
         logger.info("Deleting VPC %s", vpc_id)
         vpc.delete()
 
