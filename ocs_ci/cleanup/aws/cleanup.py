@@ -1026,35 +1026,7 @@ def cleanup_orphaned_iam_roles(regions, time_to_delete, prefixes_hours_to_spare)
                 try:
                     logger.info("Deleting IAM role %s", role_name)
 
-                    # Detach managed policies
-                    attached_policies = iam_client.list_attached_role_policies(
-                        RoleName=role_name
-                    )["AttachedPolicies"]
-                    for policy in attached_policies:
-                        logger.info(
-                            "Detaching policy %s from role %s",
-                            policy["PolicyArn"],
-                            role_name,
-                        )
-                        iam_client.detach_role_policy(
-                            RoleName=role_name, PolicyArn=policy["PolicyArn"]
-                        )
-
-                    # Delete inline policies
-                    inline_policies = iam_client.list_role_policies(RoleName=role_name)[
-                        "PolicyNames"
-                    ]
-                    for policy_name in inline_policies:
-                        logger.info(
-                            "Deleting inline policy %s from role %s",
-                            policy_name,
-                            role_name,
-                        )
-                        iam_client.delete_role_policy(
-                            RoleName=role_name, PolicyName=policy_name
-                        )
-
-                    # Delete instance profiles
+                    # Step 1: Remove role from instance profiles (AWS recommended order)
                     instance_profiles = iam_client.list_instance_profiles_for_role(
                         RoleName=role_name
                     )["InstanceProfiles"]
@@ -1068,18 +1040,54 @@ def cleanup_orphaned_iam_roles(regions, time_to_delete, prefixes_hours_to_spare)
                         iam_client.remove_role_from_instance_profile(
                             InstanceProfileName=profile_name, RoleName=role_name
                         )
-                        # Delete the instance profile if it's empty
+
+                    # Step 2: Delete inline policies
+                    inline_policies = iam_client.list_role_policies(RoleName=role_name)[
+                        "PolicyNames"
+                    ]
+                    for policy_name in inline_policies:
+                        logger.info(
+                            "Deleting inline policy %s from role %s",
+                            policy_name,
+                            role_name,
+                        )
+                        iam_client.delete_role_policy(
+                            RoleName=role_name, PolicyName=policy_name
+                        )
+
+                    # Step 3: Detach managed policies
+                    attached_policies = iam_client.list_attached_role_policies(
+                        RoleName=role_name
+                    )["AttachedPolicies"]
+                    for policy in attached_policies:
+                        logger.info(
+                            "Detaching policy %s from role %s",
+                            policy["PolicyArn"],
+                            role_name,
+                        )
+                        iam_client.detach_role_policy(
+                            RoleName=role_name, PolicyArn=policy["PolicyArn"]
+                        )
+
+                    # Step 4: Delete the role
+                    iam_client.delete_role(RoleName=role_name)
+                    logger.info("Successfully deleted IAM role %s", role_name)
+
+                    # Step 5: Delete empty instance profiles (after role is deleted)
+                    for profile in instance_profiles:
+                        profile_name = profile["InstanceProfileName"]
                         try:
                             iam_client.delete_instance_profile(
                                 InstanceProfileName=profile_name
                             )
                             logger.info("Deleted instance profile %s", profile_name)
-                        except ClientError:
-                            pass
-
-                    # Finally, delete the role
-                    iam_client.delete_role(RoleName=role_name)
-                    logger.info("Successfully deleted IAM role %s", role_name)
+                        except ClientError as e:
+                            # Instance profile might be in use by another role or already deleted
+                            logger.debug(
+                                "Could not delete instance profile %s: %s",
+                                profile_name,
+                                e,
+                            )
 
                 except ClientError as e:
                     error_code = e.response.get("Error", {}).get("Code", "")
