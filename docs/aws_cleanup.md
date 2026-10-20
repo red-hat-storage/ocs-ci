@@ -1,176 +1,449 @@
-# AWS Cleanup Script Enhancements
+# AWS Cleanup Script Documentation
 
-## Summary
+## Overview
 
-Enhanced the AWS cleanup script (`ocs_ci/cleanup/aws/cleanup.py`) to handle HyperShift and Cluster API (CAPI) managed clusters, and added VPC protection mechanisms.
+Enhanced AWS cleanup script (`ocs_ci/cleanup/aws/cleanup.py`) for comprehensive cleanup of OpenShift clusters and their AWS resources. Handles IPI, UPI, HyperShift, and CAPI clusters with robust dependency resolution and multi-region support.
 
-## Key Changes
+## Quick Start
 
-### 1. VPC Protection Mechanisms
+```bash
+# Basic cleanup - clusters older than 12 hours in default region
+aws-cleanup --hours 12 --force
+
+# Multi-region cleanup
+aws-cleanup --hours 12 --region us-east-2,us-west-2 --force
+
+# Cleanup with IAM role cleanup
+aws-cleanup --hours 12 --region us-east-2 --force --cleanup-iam-roles
+
+# Specific cluster
+aws-cleanup --cluster-name my-cluster-abc123 --force
+```
+
+## Command Line Options
+
+### Required Options
+
+- `--force` - Skip confirmation prompt (REQUIRED for automation)
+- `--hours HOURS` - Maximum cluster age in hours (minimum: 10)
+
+### Optional Options
+
+- `--region REGION[,REGION...]` - AWS region(s) to clean (comma-separated)
+- `--cluster-name NAME` - Delete specific cluster by name
+- `--cleanup-iam-roles` - Enable orphaned IAM role cleanup (disabled by default)
+- `--prefix PREFIX:HOURS` - Special retention rules for cluster name prefixes
+- `--sweep-buckets` - Delete S3 buckets instead of clusters
+
+### Prefix Retention Examples
+
+```bash
+# Never delete clusters starting with "production"
+aws-cleanup --hours 12 --prefix production:never --force
+
+# Keep "staging" clusters for 48 hours
+aws-cleanup --hours 12 --prefix staging:48 --force
+
+# Multiple prefixes
+aws-cleanup --hours 12 \
+  --prefix prod:never \
+  --prefix staging:48 \
+  --prefix dev:24 \
+  --force
+```
+
+## Key Features
+
+### 1. Multi-Region Support
+
+Clean up resources across multiple AWS regions in a single run:
+
+```bash
+aws-cleanup --hours 12 --region us-east-2,us-west-2,us-east-1 --force
+```
+
+Each region is processed sequentially with full resource cleanup.
+
+### 2. VPC Protection Mechanisms
 
 #### Protected VPC Names
-Added a list of VPC names that should never be deleted:
-- `rosa-hcp-vpc` (vpc-01d80ccb49f22d798)
+
+VPCs matching protected names are never deleted:
 
 **Location:** `ocs_ci/cleanup/aws/defaults.py`
 ```python
 PROTECTED_VPC_NAMES = [
     "rosa-hcp-vpc",
+    "production-vpc",
 ]
 ```
 
-To add more protected VPCs, simply add them to this list.
-
 #### Tag-Based Protection
-**VPCs** tagged with `do_not_delete: true` (or `yes`/`1`) will be completely skipped during cleanup, **including all resources within them** (EC2 instances, subnets, security groups, etc.).
 
-**Example:**
+**VPCs or EC2 instances** tagged with `do_not_delete: true` are completely skipped:
+
 ```bash
-# Protect entire VPC and everything inside it
+# Protect entire VPC and all resources within it
 aws ec2 create-tags --resources vpc-xxxxx --tags Key=do_not_delete,Value=true
+
+# Protect specific instance
+aws ec2 create-tags --resources i-xxxxx --tags Key=do_not_delete,Value=true
 ```
 
-**Important:** The protection applies at the **VPC level**. If a VPC is protected, the cleanup script:
-1. Skips the VPC entirely
-2. Does NOT process any instances within the VPC
-3. Does NOT delete any resources (subnets, route tables, etc.) within the VPC
+**Important:** VPC-level protection applies to ALL resources within the VPC.
 
-This means you only need to tag the VPC itself, not individual resources.
+### 3. Comprehensive VPC Cleanup
 
-### 2. HyperShift/CAPI Cluster Detection
+The script performs cleanup in the correct dependency order to avoid errors:
 
-The script now automatically detects HyperShift and CAPI clusters by looking for these tags:
-- `hypershift.openshift.io/*` - HyperShift clusters
-- `sigs.k8s.io/cluster-api-provider-aws/*` - Cluster API managed resources
+**15-Step Cleanup Process:**
 
-### 3. Proper VPC Deletion Order
+1. **Terminate EC2 Instances** - All instances terminated and waited for
+2. **Delete VPC Peering Connections** - Both requester and accepter roles
+3. **Delete NAT Gateways** - Wait up to 5 minutes for deletion
+4. **Release Elastic IPs** - NAT Gateway EIPs and other VPC-attached EIPs
+5. **Delete VPC Endpoints** - Wait up to 5 minutes, skip AWS-managed (GuardDuty, etc.)
+6. **Delete Load Balancers** - ELBv2 and Classic ELBs, wait 90s
+7. **Detach Internet Gateways** - Retry with aggressive EIP cleanup
+8. **Wait for AWS-Managed ENIs** - 60s for automatic cleanup
+9. **Delete Network Interfaces** - Retry 3 times with 30s waits, skip AWS-managed ENIs
+10. **Delete Route Tables** - Disassociate before deleting (except main)
+11. **Delete Subnets** - All subnets in VPC
+12. **Delete Security Groups** - Remove all rules first (except default)
+13. **Delete Network ACLs** - Replace with default before deleting
+14. **Final Cleanup Pass** - Re-check for leftover VPC endpoints and ENIs
+15. **Delete VPC** - Finally delete the VPC itself
 
-For HyperShift/CAPI clusters, the script deletes resources in the correct order to avoid dependency errors:
+### 4. Network Interface (ENI) Handling
 
-1. **EC2 Instances** - Terminate all instances and wait
-2. **NAT Gateways** - Delete and wait (60s)
-3. **Elastic IPs** - Release unattached IPs
-4. **Load Balancers** - Delete ELBv2 load balancers
-5. **Internet Gateways** - Detach and delete
-6. **VPC Endpoints** - Delete all endpoints
-7. **Network Interfaces** - Detach and delete
-8. **Subnets** - Delete all subnets
-9. **Route Tables** - Delete (except main)
-10. **Security Groups** - Delete (except default)
-11. **Network ACLs** - Delete (except default)
-12. **VPC** - Finally delete the VPC itself
+**Robust ENI cleanup with intelligent detection:**
 
-This order ensures that dependencies are properly handled.
+- **Skip AWS-managed ENIs:**
+  - NAT gateway ENIs
+  - VPC endpoint ENIs
+  - Load balancer ENIs (ELA attachments)
+  - AWS service ENIs (GuardDuty, Macie, etc.)
 
-## Usage
+- **Retry logic for "in use" ENIs:**
+  - 3 retry attempts with 30s waits
+  - Handles ENIs being released by parent resources
+  - Detailed logging of failures
 
-### Running the Cleanup Script
+- **Orphaned VPC endpoint ENIs:**
+  - Detects when VPC endpoint is deleted but ENIs remain
+  - Attempts deletion of orphaned ENIs
+  - Warns about ENIs blocking VPC deletion
 
-The script works the same way as before:
+### 5. CloudFormation Stack Cleanup
+
+**Orphaned CloudFormation stacks are automatically cleaned up:**
+
+- Lists all stacks in non-deleted states
+- Checks stack age against threshold
+- Deletes stacks in failed states (DELETE_FAILED, CREATE_FAILED, etc.)
+- Handles stacks without EC2 instances
+- Attempts stack deletion before falling back to direct VPC cleanup
+
+**Stack states cleaned:**
+- CREATE_COMPLETE
+- ROLLBACK_COMPLETE
+- UPDATE_COMPLETE / UPDATE_ROLLBACK_COMPLETE
+- DELETE_FAILED
+- CREATE_FAILED / ROLLBACK_FAILED
+
+### 6. IAM Role Cleanup (Optional)
+
+**Conservative cleanup with `--cleanup-iam-roles` flag:**
 
 ```bash
-# Cleanup clusters older than 12 hours in us-west-2
-aws-cleanup --hours 12 --region us-west-2 --force
+aws-cleanup --hours 12 --region us-east-2 --force --cleanup-iam-roles
 ```
 
-### What Happens Now
+**Safety criteria (ALL must be true to delete a role):**
 
-1. **Protected VPCs**: VPCs matching protected names or tagged with `do_not_delete: true` are skipped
-2. **HyperShift Clusters**: Detected automatically and cleaned up using direct AWS API calls
-3. **Regular IPI Clusters**: Continue to use `openshift-install destroy cluster`
-4. **UPI Clusters**: Continue to use CloudFormation cleanup
+1. ✅ Role name matches OpenShift cluster pattern
+2. ✅ Associated cluster/VPC does not exist in ANY region
+3. ✅ Role has not been used in last 7 days
+4. ✅ Role age exceeds time threshold
+5. ✅ Role is not an AWS service-linked role
+6. ✅ Respects cluster prefix retention rules
 
-### Log Output
+**Detected role patterns:**
+- `<cluster-id>-openshift-*`
+- `<cluster-id>-worker-role`
+- `<cluster-id>-master-role`
+- `<cluster-id>-bootstrap-role`
+- `<cluster-id>-cloud-credentials`
 
-You'll see messages like:
+**Deletion process (follows AWS documentation):**
+1. Remove role from instance profiles
+2. Delete inline policies
+3. Detach managed policies
+4. Delete role
+5. Delete empty instance profiles
+
+**Important:** IAM cleanup is **disabled by default** for safety. Always review logs before enabling in automation.
+
+## Cluster Type Detection
+
+The script automatically detects and handles different cluster types:
+
+### IPI Clusters
+- Uses `openshift-install destroy cluster`
+- Verifies VPC deletion after installer completes
+- Falls back to manual cleanup if installer fails
+
+### UPI Clusters
+- Deletes CloudFormation stacks in correct order
+- Handles worker, master, bootstrap, security group stacks
+- Cleans up infrastructure and VPC stacks
+
+### HyperShift/CAPI Clusters
+- Auto-detected by tags: `hypershift.openshift.io/*` or `sigs.k8s.io/cluster-api-provider-aws/*`
+- Uses direct VPC cleanup (no installer)
+- Handles guest clusters in shared VPCs
+
+### Orphaned CloudFormation VPCs
+- VPCs with CloudFormation tags but no instances
+- Attempts CloudFormation stack deletion first
+- Falls back to direct VPC cleanup if stack not found
+
+## Usage Examples
+
+### Daily Cleanup Job
+
+```bash
+#!/bin/bash
+# Cleanup clusters older than 12 hours in production regions
+aws-cleanup \
+  --hours 12 \
+  --region us-east-2,us-west-2 \
+  --prefix production:never \
+  --prefix staging:48 \
+  --force
 ```
-INFO - VPC vpc-xxxxx (name: rosa-hcp-vpc) is protected by name pattern: rosa-hcp-vpc
-INFO - Skipping protected VPC vpc-xxxxx
-INFO - Detected HyperShift cluster from tag: hypershift.openshift.io/cluster-name
-INFO - Detected CAPI cluster from tag: sigs.k8s.io/cluster-api-provider-aws/cluster/cl-1-infra
-INFO - Starting HyperShift/CAPI cleanup for VPC vpc-xxxxx
-INFO - Terminating 3 EC2 instances
-INFO - Deleting NAT Gateway nat-xxxxx
-INFO - Successfully cleaned up HyperShift/CAPI VPC vpc-xxxxx
+
+### Cleanup with IAM Roles
+
+```bash
+# Weekly cleanup including IAM roles
+aws-cleanup \
+  --hours 168 \
+  --region us-east-2,us-west-2 \
+  --cleanup-iam-roles \
+  --force
 ```
 
-## Adding More Protected VPCs
+### Specific Cluster Cleanup
 
-### By Name Pattern
+```bash
+# Delete a specific cluster by name
+aws-cleanup \
+  --cluster-name mytest-cluster-abc123 \
+  --force
+```
+
+### S3 Bucket Cleanup
+
+```bash
+# Clean up S3 buckets older than 24 hours
+aws-cleanup \
+  --hours 24 \
+  --sweep-buckets
+```
+
+## Log Output
+
+The script provides detailed logging at each step:
+
+```
+INFO - Running cleanup in regions: ['us-east-2', 'us-west-2']
+INFO - Processing region: us-east-2
+INFO - Deleting clusters in us-east-2: ['cluster1-abc123', 'cluster2-def456']
+INFO - Skipping protected VPC vpc-xxxxx (name: rosa-hcp-vpc)
+INFO - Detected HyperShift cluster from VPC tag: hypershift.openshift.io/cluster-name
+INFO - Starting VPC cleanup for cluster-name (VPC: vpc-xxxxx)
+INFO - Deleting 2 VPC peering connections
+INFO - Deleting VPC Endpoint vpce-xxxxx
+INFO - Waiting for VPC endpoints to be deleted...
+INFO - Skipping AWS-managed VPC endpoint vpce-xxxxx (service: com.amazonaws.us-east-2.guardduty-data)
+INFO - Found user-created Network Interface eni-xxxxx (requester: 123456789012)
+INFO - Retrying deletion of 3 ENIs that were in use...
+INFO - Successfully deleted ENI eni-xxxxx on retry
+WARNING - Failed to delete 1 network interfaces after retries: ['eni-yyyyy']
+INFO - Checking for orphaned CloudFormation stacks in us-east-2
+INFO - Found 5 orphaned CloudFormation stacks to delete
+INFO - Attempting to delete CloudFormation stack mystack-vpc
+```
+
+## Troubleshooting
+
+### VPC Deletion Fails
+
+**Symptom:** "Failed to clean up VPC vpc-xxxxx"
+
+**Common causes:**
+1. VPC peering connections not deleted
+2. VPC endpoints still deleting
+3. ENIs attached to resources outside VPC
+4. NAT Gateways not fully deleted
+
+**Solutions:**
+```bash
+# Check for remaining dependencies
+aws ec2 describe-vpc-peering-connections --filters Name=vpc-id,Values=vpc-xxxxx
+aws ec2 describe-vpc-endpoints --filters Name=vpc-id,Values=vpc-xxxxx
+aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=vpc-xxxxx
+aws ec2 describe-nat-gateways --filter Name=vpc-id,Values=vpc-xxxxx
+
+# Re-run cleanup - it will retry failed resources
+aws-cleanup --hours 1 --region us-east-2 --force
+```
+
+### ENI Deletion Errors
+
+**Symptom:** "Network interface is currently in use"
+
+**Common causes:**
+- ENI attached to load balancer (ELA attachment)
+- VPC endpoint ENI not yet released
+- NAT Gateway ENI still deleting
+
+**The script handles these automatically:**
+- Skips ELA attachments
+- Retries "in use" ENIs 3 times
+- Waits for parent resources to complete deletion
+
+### CloudFormation Stack Stuck
+
+**Symptom:** Stack in DELETE_FAILED state
+
+**Solution:**
+```bash
+# Force delete from AWS console with "Retain resources" option
+# Then re-run cleanup to delete the VPC
+aws-cleanup --hours 1 --region us-east-2 --force
+```
+
+### IAM Role Deletion Error
+
+**Symptom:** "Cannot delete entity, must remove roles from instance profile first"
+
+**This is now fixed** - the script follows AWS recommended deletion order:
+1. Remove from instance profiles first
+2. Delete policies
+3. Delete role
+
+If you still see this error, it may indicate a race condition. Re-run the cleanup.
+
+## Protected Resources
+
+### What Gets Protected
+
+- VPCs in `PROTECTED_VPC_NAMES` list
+- VPCs tagged with `do_not_delete: true`
+- EC2 instances tagged with `do_not_delete: true`
+- Clusters matching `never` retention prefixes
+- AWS service-linked IAM roles (`/aws-service-role/`)
+- AWS-managed VPC endpoints (GuardDuty, Macie, etc.)
+
+### Adding Protected VPCs
+
+**By name (permanent):**
+
 Edit `ocs_ci/cleanup/aws/defaults.py`:
 ```python
 PROTECTED_VPC_NAMES = [
     "rosa-hcp-vpc",
-    "production-vpc",  # Add your VPC name here
-    "do-not-delete-vpc",
+    "production-shared-vpc",
+    "do-not-delete-ever",
 ]
 ```
 
-### By Tag (Runtime)
-Tag any VPC or resource you want to protect:
+**By tag (runtime):**
 ```bash
 aws ec2 create-tags \
   --resources vpc-xxxxx \
   --tags Key=do_not_delete,Value=true
 ```
 
-## Testing
-
-### Test Protection Mechanisms
-
-1. **Tag a test VPC**:
-```bash
-aws ec2 create-tags \
-  --resources vpc-test123 \
-  --tags Key=do_not_delete,Value=true
-```
-
-2. **Run cleanup**:
-```bash
-aws-cleanup --hours 1 --region us-west-2 --force
-```
-
-3. **Verify**: The tagged VPC should be skipped with a log message.
-
-### Test HyperShift Cleanup
-
-1. **Identify HyperShift cluster**: Look for instances with `hypershift.openshift.io/*` tags
-2. **Run cleanup**: The script will automatically detect and use the new cleanup method
-3. **Monitor logs**: Watch for "Starting HyperShift/CAPI cleanup" messages
-
 ## Known Limitations
 
-1. **NAT Gateway deletion**: Takes ~60 seconds to complete, adding to cleanup time
-2. **Nested dependencies**: Some resources may fail to delete if unexpected dependencies exist
-3. **Parallel cleanup**: HyperShift cleanup runs serially (not in threads) to avoid AWS rate limits
+1. **Sequential processing** - Regions are processed one at a time
+2. **NAT Gateway delays** - Can take 5+ minutes to delete
+3. **VPC Endpoint delays** - Can take 5+ minutes to delete
+4. **AWS rate limits** - Rapid cleanup may hit API throttling
+5. **IAM is global** - Role cleanup runs once after all regional cleanup
+6. **No dry-run mode** - Use `--hours` threshold to limit scope
 
-## Troubleshooting
+## Best Practices
 
-### VPC Deletion Fails
-
-**Symptom**: "Failed to clean up HyperShift/CAPI VPC"
-
-**Solutions**:
-1. Check logs for which resource failed to delete
-2. Manually inspect dependencies:
+1. **Start conservatively:**
    ```bash
-   aws ec2 describe-vpc-attribute --vpc-id vpc-xxxxx --attribute enableDnsHostnames
-   aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=vpc-xxxxx
-   aws ec2 describe-nat-gateways --filter Name=vpc-id,Values=vpc-xxxxx
+   # First run with high threshold to test
+   aws-cleanup --hours 72 --region us-east-2 --force
    ```
-3. Re-run cleanup - it will skip already-deleted resources
 
-### Protected VPC Not Being Skipped
+2. **Use prefix retention for production:**
+   ```bash
+   aws-cleanup --hours 12 --prefix prod:never --force
+   ```
 
-**Check**:
-1. VPC name exactly matches pattern in `PROTECTED_VPC_NAMES`
-2. Tag is correctly set: `do_not_delete: true` (case-sensitive)
-3. Check logs for "Skipping protected VPC" message
+3. **Review logs** before enabling IAM cleanup
+
+4. **Protect shared resources:**
+   - Tag shared VPCs with `do_not_delete`
+   - Add to `PROTECTED_VPC_NAMES` for permanent protection
+
+5. **Monitor failed deletions:**
+   - Check `failed_cluster_deletions.txt` after each run
+   - Investigate failures before re-running
+
+6. **Test in dev environment first:**
+   ```bash
+   # Test with specific cluster
+   aws-cleanup --cluster-name test-cluster-123 --force
+   ```
+
+## Recent Enhancements
+
+### October 2024
+
+- ✅ Multi-region support
+- ✅ VPC peering connection cleanup
+- ✅ VPC endpoint verification and retry logic
+- ✅ ENI retry logic (3 attempts)
+- ✅ Skip AWS-managed ENIs and VPC endpoints
+- ✅ Orphaned CloudFormation VPC cleanup
+- ✅ CloudFormation stack cleanup
+- ✅ Conservative IAM role cleanup
+- ✅ Network ACL association fixes
+- ✅ Route table deletion order fixes
+- ✅ VPC verification after openshift-install destroy
 
 ## Future Enhancements
 
 Potential improvements:
-1. Add support for other cluster types (ROSA STS, ARO, etc.)
-2. Parallel HyperShift cleanup with semaphore for AWS rate limiting
-3. Dry-run mode to preview what would be deleted
-4. Export list of deleted resources to a report file
+
+1. **Parallel region processing** - Clean multiple regions simultaneously
+2. **Dry-run mode** - Preview what would be deleted without actually deleting
+3. **Detailed reports** - Export JSON report of deleted resources
+4. **Resource age tracking** - Show age of each resource before deletion
+5. **Slack/email notifications** - Alert on cleanup completion or failures
+6. **Cost estimation** - Estimate cost savings from cleanup
+7. **Automated tagging** - Auto-tag resources created by cleanup script
+
+## Support
+
+For issues or questions:
+- Check logs first - they contain detailed error messages
+- Review this documentation for common scenarios
+- Check `failed_cluster_deletions.txt` for failed clusters
+- Manually inspect AWS console for dependency issues
+- Re-run cleanup - it's safe to run multiple times
+
+## Version History
+
+- **v3.0 (Oct 2024)** - Multi-region, IAM roles, CF stacks, ENI retry logic
+- **v2.0** - HyperShift/CAPI support, VPC protection
+- **v1.0** - Initial implementation for IPI/UPI clusters
