@@ -250,6 +250,7 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
         vpc_endpoints = aws.ec2_client.describe_vpc_endpoints(
             Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
         )["VpcEndpoints"]
+        vpc_endpoint_ids = []
         if vpc_endpoints:
             logger.info("Deleting %d VPC Endpoints", len(vpc_endpoints))
             for endpoint in vpc_endpoints:
@@ -258,11 +259,43 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                     aws.ec2_client.delete_vpc_endpoints(
                         VpcEndpointIds=[endpoint["VpcEndpointId"]]
                     )
+                    vpc_endpoint_ids.append(endpoint["VpcEndpointId"])
                 except ClientError as e:
                     logger.warning("Failed to delete VPC endpoint: %s", e)
-            # Wait for VPC endpoints to be deleted
-            logger.info("Waiting 30s for VPC endpoints to be deleted...")
-            time.sleep(30)
+
+            # Wait for VPC endpoints to be fully deleted
+            if vpc_endpoint_ids:
+                logger.info("Waiting for VPC endpoints to be deleted...")
+                max_wait = 180  # 3 minutes
+                wait_interval = 15
+                for _ in range(max_wait // wait_interval):
+                    time.sleep(wait_interval)
+                    try:
+                        remaining = aws.ec2_client.describe_vpc_endpoints(
+                            VpcEndpointIds=vpc_endpoint_ids
+                        )["VpcEndpoints"]
+                        remaining = [
+                            ep
+                            for ep in remaining
+                            if ep["State"] not in ["deleted", "deleting"]
+                        ]
+                        if not remaining:
+                            logger.info("All VPC endpoints deleted")
+                            break
+                        logger.info(
+                            "Still waiting for %d VPC endpoints to delete...",
+                            len(remaining),
+                        )
+                    except ClientError:
+                        # All endpoints deleted
+                        logger.info("All VPC endpoints deleted")
+                        break
+                else:
+                    logger.warning("VPC endpoint deletion timed out, continuing anyway")
+
+                # Extra wait for ENIs to be released
+                logger.info("Waiting 30s for VPC endpoint ENIs to be released...")
+                time.sleep(30)
 
         # Step 5: Delete Load Balancers (ELBv2)
         lb_arns = []
@@ -410,10 +443,30 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
         )
         time.sleep(60)
 
-        # Step 8: Delete remaining Network Interfaces (only truly user-created ones)
+        # Step 8: Delete remaining Network Interfaces with retry logic
         network_interfaces = list(vpc.network_interfaces.all())
+        enis_to_retry = []
+
         if network_interfaces:
             logger.info("Checking for remaining network interfaces...")
+
+            # Get list of remaining VPC endpoints (to check for orphaned ENIs)
+            try:
+                remaining_vpc_endpoints = aws.ec2_client.describe_vpc_endpoints(
+                    Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+                )["VpcEndpoints"]
+                remaining_endpoint_ids = {
+                    ep["VpcEndpointId"] for ep in remaining_vpc_endpoints
+                }
+                if remaining_endpoint_ids:
+                    logger.warning(
+                        "Found %d VPC endpoints still exist: %s",
+                        len(remaining_endpoint_ids),
+                        remaining_endpoint_ids,
+                    )
+            except ClientError:
+                remaining_endpoint_ids = set()
+
             for ni in network_interfaces:
                 # Skip if it's an AWS-managed ENI
                 requester = ni.requester_id
@@ -421,10 +474,9 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                     ni.interface_type if hasattr(ni, "interface_type") else None
                 )
 
-                # Check if this is AWS-managed by interface type
+                # Check if this is AWS-managed by interface type (excluding vpc_endpoint for now)
                 aws_managed_types = [
                     "nat_gateway",
-                    "vpc_endpoint",
                     "network_load_balancer",
                     "gateway_load_balancer",
                     "gateway_load_balancer_endpoint",
@@ -439,6 +491,23 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                         interface_type,
                     )
                     continue
+
+                # Special handling for vpc_endpoint ENIs - check if endpoint still exists
+                if interface_type == "vpc_endpoint":
+                    # Check if any remaining VPC endpoints could own this ENI
+                    if remaining_endpoint_ids:
+                        logger.warning(
+                            "ENI %s is type vpc_endpoint and VPC endpoints still exist - "
+                            "VPC endpoint deletion may have failed. Trying to delete ENI anyway.",
+                            ni.id,
+                        )
+                        # Don't skip - try to delete it anyway
+                    else:
+                        logger.info(
+                            "ENI %s is type vpc_endpoint but all VPC endpoints deleted - "
+                            "this is an orphaned ENI, will try to delete",
+                            ni.id,
+                        )
 
                 # Check if this is AWS-managed by requester ID
                 if requester and (
@@ -499,11 +568,61 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
                 except ClientError as e:
                     if "currently in use" in str(e):
                         logger.info(
-                            "ENI %s still in use, will be auto-deleted by AWS",
+                            "ENI %s currently in use, will retry after waiting",
                             ni.id,
                         )
+                        enis_to_retry.append(ni.id)
                     else:
                         logger.warning("Failed to delete network interface: %s", e)
+
+        # Retry deletion of ENIs that were "in use"
+        if enis_to_retry:
+            logger.info(
+                "Retrying deletion of %d ENIs that were in use...", len(enis_to_retry)
+            )
+            max_retries = 3
+            for retry in range(max_retries):
+                if not enis_to_retry:
+                    break
+
+                logger.info(
+                    "Retry attempt %d/%d: waiting 30s before retrying %d ENIs...",
+                    retry + 1,
+                    max_retries,
+                    len(enis_to_retry),
+                )
+                time.sleep(30)
+
+                still_in_use = []
+                for eni_id in enis_to_retry:
+                    try:
+                        eni = aws.ec2_resource.NetworkInterface(eni_id)
+                        logger.info("Retrying deletion of ENI %s", eni_id)
+                        eni.delete()
+                        logger.info("Successfully deleted ENI %s on retry", eni_id)
+                    except ClientError as e:
+                        if "currently in use" in str(e):
+                            logger.info("ENI %s still in use", eni_id)
+                            still_in_use.append(eni_id)
+                        elif "InvalidNetworkInterfaceID.NotFound" in str(e):
+                            logger.info("ENI %s already deleted", eni_id)
+                        else:
+                            logger.warning("Failed to delete ENI %s: %s", eni_id, e)
+                            still_in_use.append(eni_id)
+
+                enis_to_retry = still_in_use
+
+            # Final check - report any ENIs that couldn't be deleted
+            if enis_to_retry:
+                logger.warning(
+                    "Failed to delete %d network interfaces after retries: %s",
+                    len(enis_to_retry),
+                    enis_to_retry,
+                )
+                logger.warning(
+                    "These ENIs may block VPC deletion. "
+                    "Check if they are attached to resources outside this VPC."
+                )
 
         # Step 9: Disassociate and delete route tables (except main)
         route_tables = list(vpc.route_tables.all())
@@ -600,7 +719,62 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
             except ClientError as e:
                 logger.warning("Failed to delete network ACL: %s", e)
 
-        # Step 13: Delete VPC
+        # Step 13: Final cleanup pass before VPC deletion
+        logger.info("Performing final cleanup pass before VPC deletion...")
+
+        # Re-check for VPC endpoints that might still exist
+        try:
+            final_vpc_endpoints = aws.ec2_client.describe_vpc_endpoints(
+                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+            )["VpcEndpoints"]
+            if final_vpc_endpoints:
+                logger.warning(
+                    "Found %d VPC endpoints still exist, attempting final deletion...",
+                    len(final_vpc_endpoints),
+                )
+                for endpoint in final_vpc_endpoints:
+                    logger.warning(
+                        "Deleting remaining VPC Endpoint %s (state: %s)",
+                        endpoint["VpcEndpointId"],
+                        endpoint.get("State"),
+                    )
+                    try:
+                        aws.ec2_client.delete_vpc_endpoints(
+                            VpcEndpointIds=[endpoint["VpcEndpointId"]]
+                        )
+                    except ClientError as e:
+                        logger.error("Failed to delete VPC endpoint: %s", e)
+                logger.info("Waiting 60s for final VPC endpoint deletions...")
+                time.sleep(60)
+        except ClientError:
+            logger.info("No VPC endpoints found in final check")
+
+        # Re-check for ENIs that might still exist
+        final_enis = list(vpc.network_interfaces.all())
+        if final_enis:
+            logger.warning(
+                "Found %d network interfaces still exist after cleanup!",
+                len(final_enis),
+            )
+            for eni in final_enis:
+                interface_type = (
+                    eni.interface_type if hasattr(eni, "interface_type") else "unknown"
+                )
+                requester = eni.requester_id or "unknown"
+                attachment = (
+                    eni.attachment.get("AttachmentId", "none")
+                    if eni.attachment
+                    else "none"
+                )
+                logger.warning(
+                    "ENI %s still exists - type: %s, requester: %s, attachment: %s",
+                    eni.id,
+                    interface_type,
+                    requester,
+                    attachment,
+                )
+
+        # Step 14: Delete VPC
         logger.info("Deleting VPC %s", vpc_id)
         vpc.delete()
 
