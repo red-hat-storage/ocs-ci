@@ -1562,9 +1562,10 @@ def aws_cleanup():
         logger.info("Checking for orphaned CloudFormation stacks in %s", region)
         logger.info("=" * 80)
         try:
-            aws = AWS(region_name=region)
+            # Create CloudFormation client directly
+            cf_client = boto3.client("cloudformation", region_name=region)
             # Get all CloudFormation stacks
-            all_stacks = aws.cloudformation_client.list_stacks(
+            all_stacks = cf_client.list_stacks(
                 StackStatusFilter=[
                     "CREATE_COMPLETE",
                     "ROLLBACK_COMPLETE",
@@ -1620,7 +1621,7 @@ def aws_cleanup():
                         stack_status,
                     )
                     try:
-                        aws.cloudformation_client.delete_stack(StackName=stack_name)
+                        cf_client.delete_stack(StackName=stack_name)
                         logger.info("Initiated deletion of stack %s", stack_name)
                     except ClientError as e:
                         error_code = e.response.get("Error", {}).get("Code", "")
