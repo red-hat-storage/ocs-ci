@@ -33,11 +33,9 @@ from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
 
-# Profile the immutability test starts from, and the profiles it then walks
-# through. The walk mixes profiles that want three volumes with profiles that
-# want one, so an implementation that re-evaluated the count on every reconcile
-# would be caught in either direction.
-IMMUTABILITY_BASE_PROFILE = "default"
+# Profiles the immutability test walks through. The walk mixes profiles that
+# want three volumes with profiles that want one, so an implementation that
+# re-evaluated the count on every reconcile would be caught in either direction.
 IMMUTABILITY_PROFILE_WALK = ("mixed-workload", "dev-env", "mini-env", "default")
 
 
@@ -120,14 +118,19 @@ class TestDefaultBackingStoreNumVolumes:
 
         On the MCG-only pipeline the profile is stamped into the backingstore
         at deployment time; this test reads the backingstore that already
-        exists and confirms its numVolumes matches the expected count for
-        whatever profile is currently active.
+        exists and confirms its numVolumes matches the expected count for the
+        profile it was created under.
+
+        The count is frozen at creation, so the currently active profile is
+        only a valid reference if it has not been changed since deployment.
+        If it has, set ENV_DATA["mcg_creation_profile"] to the profile the
+        backingstore was created with.
         """
-        active_profile = (
-            profiles.get_noobaa_ocp().get().get("spec", {}).get("performanceProfile")
-        )
+        active_profile = config.ENV_DATA.get(
+            "mcg_creation_profile"
+        ) or profiles.get_noobaa_ocp().get().get("spec", {}).get("performanceProfile")
         assert active_profile in profiles.PV_POOL_NUM_VOLUMES, (
-            f"Active profile '{active_profile}' is not a known MCG profile; "
+            f"Creation-time profile '{active_profile}' is not a known MCG profile; "
             f"known profiles: {list(profiles.PV_POOL_NUM_VOLUMES)}"
         )
         expected_num_volumes = profiles.PV_POOL_NUM_VOLUMES[active_profile]
@@ -157,7 +160,8 @@ class TestDefaultBackingStoreNumVolumes:
         """
         Walk the system through profiles that ask for both three volumes and
         one, and verify that the default backingstore keeps the volumes it was
-        created with - the same PVCs, neither grown nor shrunk.
+        created with - the same PVCs, neither grown nor shrunk. The baseline is
+        whatever the backingstore has before the first profile switch.
 
         Each step also waits for the core resources to match the new profile,
         so that a numVolumes that merely has not been reconciled yet cannot be
@@ -171,16 +175,20 @@ class TestDefaultBackingStoreNumVolumes:
             "This test requires an MCG-only deployment with a pv-pool backingstore."
         )
 
-        profiles.apply_profile(IMMUTABILITY_BASE_PROFILE)
-        expected_num_volumes = profiles.PV_POOL_NUM_VOLUMES[IMMUTABILITY_BASE_PROFILE]
-
-        num_volumes = self._get_num_volumes()
-        assert num_volumes == expected_num_volumes, (
-            f"After setting '{IMMUTABILITY_BASE_PROFILE}', numVolumes is "
-            f"{num_volumes}, expected {expected_num_volumes}"
+        expected_num_volumes = self._get_num_volumes()
+        assert expected_num_volumes, (
+            "Default backingstore has no spec.pvPool.numVolumes to use as "
+            f"the immutability baseline (got {expected_num_volumes})"
         )
         original_pvcs = self._get_agent_pvc_names()
-        logger.info("Backingstore has PVCs %s", original_pvcs)
+        assert original_pvcs, (
+            "No PV pool agent PVCs with prefix "
+            f"'{constants.DEFAULT_NOOBAA_BACKINGSTORE}' found before the "
+            "profile walk; cannot verify that they are preserved"
+        )
+        logger.info(
+            "Baseline: numVolumes=%d, PVCs %s", expected_num_volumes, original_pvcs
+        )
 
         for profile in IMMUTABILITY_PROFILE_WALK:
             profiles.apply_profile(profile)
