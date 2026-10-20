@@ -1557,6 +1557,87 @@ def aws_cleanup():
 
         logger.info("Remaining clusters in %s: %s", region, remaining_clusters)
 
+        # Clean up orphaned CloudFormation stacks
+        logger.info("=" * 80)
+        logger.info("Checking for orphaned CloudFormation stacks in %s", region)
+        logger.info("=" * 80)
+        try:
+            aws = AWS(region_name=region)
+            # Get all CloudFormation stacks
+            all_stacks = aws.cloudformation_client.list_stacks(
+                StackStatusFilter=[
+                    "CREATE_COMPLETE",
+                    "ROLLBACK_COMPLETE",
+                    "UPDATE_COMPLETE",
+                    "UPDATE_ROLLBACK_COMPLETE",
+                    "DELETE_FAILED",
+                    "CREATE_FAILED",
+                    "ROLLBACK_FAILED",
+                    "UPDATE_ROLLBACK_FAILED",
+                ]
+            )["StackSummaries"]
+
+            logger.info("Found %d CloudFormation stacks to check", len(all_stacks))
+
+            orphaned_stacks = []
+            for stack in all_stacks:
+                stack_name = stack["StackName"]
+                creation_time = stack["CreationTime"]
+                stack_status = stack["StackStatus"]
+
+                # Calculate age
+                if creation_time.tzinfo is None:
+                    creation_time = creation_time.replace(tzinfo=datetime.timezone.utc)
+                current_time = datetime.datetime.now(datetime.timezone.utc)
+                stack_age = current_time - creation_time
+
+                # Check if stack is old enough to delete
+                if time_to_delete and stack_age.total_seconds() > time_to_delete:
+                    logger.info(
+                        "Stack %s is %s old (status: %s), marking for deletion",
+                        stack_name,
+                        stack_age,
+                        stack_status,
+                    )
+                    orphaned_stacks.append((stack_name, stack_status))
+                else:
+                    logger.debug(
+                        "Stack %s is only %s old, keeping (threshold: %s hours)",
+                        stack_name,
+                        stack_age,
+                        time_to_delete / 3600 if time_to_delete else "N/A",
+                    )
+
+            if orphaned_stacks:
+                logger.info(
+                    "Found %d orphaned CloudFormation stacks to delete",
+                    len(orphaned_stacks),
+                )
+                for stack_name, stack_status in orphaned_stacks:
+                    logger.info(
+                        "Attempting to delete CloudFormation stack %s (status: %s)",
+                        stack_name,
+                        stack_status,
+                    )
+                    try:
+                        aws.cloudformation_client.delete_stack(StackName=stack_name)
+                        logger.info("Initiated deletion of stack %s", stack_name)
+                    except ClientError as e:
+                        error_code = e.response.get("Error", {}).get("Code", "")
+                        if error_code == "ValidationError":
+                            logger.info(
+                                "Stack %s already deleted or does not exist", stack_name
+                            )
+                        else:
+                            logger.warning(
+                                "Failed to delete stack %s: %s", stack_name, e
+                            )
+            else:
+                logger.info("No orphaned CloudFormation stacks found in %s", region)
+
+        except Exception as e:
+            logger.warning("Error cleaning up CloudFormation stacks: %s", e)
+
         # Collect failures from this region
         if failed_deletions:
             logger.error("Failed cluster deletions in %s: %s", region, failed_deletions)
