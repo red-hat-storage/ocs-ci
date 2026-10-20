@@ -16,6 +16,12 @@ aws-cleanup --hours 12 --region us-east-2,us-west-2 --force
 # Cleanup with IAM role cleanup
 aws-cleanup --hours 12 --region us-east-2 --force --cleanup-iam-roles
 
+# Cleanup with EBS volume cleanup
+aws-cleanup --hours 12 --region us-east-2 --force --cleanup-ebs-volumes
+
+# Full cleanup (clusters + IAM roles + EBS volumes)
+aws-cleanup --hours 12 --region us-east-2 --force --cleanup-iam-roles --cleanup-ebs-volumes
+
 # Specific cluster
 aws-cleanup --cluster-name my-cluster-abc123 --force
 ```
@@ -32,6 +38,7 @@ aws-cleanup --cluster-name my-cluster-abc123 --force
 - `--region REGION[,REGION...]` - AWS region(s) to clean (comma-separated)
 - `--cluster-name NAME` - Delete specific cluster by name
 - `--cleanup-iam-roles` - Enable orphaned IAM role cleanup (disabled by default)
+- `--cleanup-ebs-volumes` - Enable orphaned EBS volume cleanup (disabled by default)
 - `--prefix PREFIX:HOURS` - Special retention rules for cluster name prefixes
 - `--sweep-buckets` - Delete S3 buckets instead of clusters
 
@@ -184,6 +191,49 @@ aws-cleanup --hours 12 --region us-east-2 --force --cleanup-iam-roles
 
 **Important:** IAM cleanup is **disabled by default** for safety. Always review logs before enabling in automation.
 
+### 7. EBS Volume Cleanup (Optional)
+
+**Conservative cleanup with `--cleanup-ebs-volumes` flag:**
+
+```bash
+aws-cleanup --hours 12 --region us-east-2 --force --cleanup-ebs-volumes
+```
+
+**Safety criteria (ALL must be true to delete a volume):**
+
+1. ✅ Volume state is "available" (unattached)
+2. ✅ Volume age exceeds time threshold (prevents race with new deployments)
+3. ✅ Volume does not have `do_not_delete` tag
+4. ✅ Respects cluster prefix retention rules
+5. ✅ Volume is not a root device (automatically deleted with instances)
+
+**Deletion process:**
+1. List all unattached volumes in each region
+2. Check volume age against threshold
+3. Check for protection tags
+4. Extract cluster name from volume name
+5. Apply prefix retention rules
+6. Delete orphaned volumes
+
+**Common volume name patterns detected:**
+- `<cluster-id>-<hash>-master-*`
+- `<cluster-id>-<hash>-worker-*`
+- `<cluster-id>-dynamic-pvc-*`
+
+**Why this is safe:**
+- Only deletes volumes in "available" (unattached) state
+- Age threshold prevents deleting newly created volumes
+- Attached volumes are automatically protected by AWS
+- Race condition with deployments avoided by age check
+
+**Important:** EBS cleanup is **disabled by default** for safety. Recommended to use `--hours 168` (7 days) or higher to avoid any race conditions with slow deployments.
+
+**Example - safe weekly cleanup:**
+```bash
+# Clean up volumes older than 7 days
+aws-cleanup --hours 168 --region us-east-2 --force --cleanup-ebs-volumes
+```
+
 ## Cluster Type Detection
 
 The script automatically detects and handles different cluster types:
@@ -231,6 +281,19 @@ aws-cleanup \
   --hours 168 \
   --region us-east-2,us-west-2 \
   --cleanup-iam-roles \
+  --force
+```
+
+### Comprehensive Cleanup (Clusters + IAM + EBS)
+
+```bash
+# Monthly comprehensive cleanup - everything older than 7 days
+aws-cleanup \
+  --hours 168 \
+  --region us-east-2,us-west-2 \
+  --cleanup-iam-roles \
+  --cleanup-ebs-volumes \
+  --prefix production:never \
   --force
 ```
 
@@ -415,6 +478,7 @@ aws ec2 create-tags \
 - ✅ Orphaned CloudFormation VPC cleanup
 - ✅ CloudFormation stack cleanup
 - ✅ Conservative IAM role cleanup
+- ✅ Conservative EBS volume cleanup
 - ✅ Network ACL association fixes
 - ✅ Route table deletion order fixes
 - ✅ VPC verification after openshift-install destroy

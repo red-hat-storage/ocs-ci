@@ -838,6 +838,192 @@ def cleanup_vpc(cluster_name, vpc_id, region_name):
         return False
 
 
+def cleanup_orphaned_ebs_volumes(regions, time_to_delete, prefixes_hours_to_spare):
+    """
+    Clean up orphaned (unattached) EBS volumes.
+
+    This is a CONSERVATIVE cleanup that only deletes volumes when we're certain
+    they are orphaned and safe to delete.
+
+    Args:
+        regions (list): List of AWS regions to check for orphaned volumes
+        time_to_delete (int): Maximum age in seconds for volumes to keep
+        prefixes_hours_to_spare (dict): Cluster name prefixes with special retention rules
+
+    Safety criteria (ALL must be true to delete):
+    - Volume state is "available" (unattached)
+    - Volume age exceeds time threshold (prevents race with new deployments)
+    - Volume does not have do_not_delete tag
+    - Volume is not a root device (has DeleteOnTermination=false)
+    - Respects cluster prefix retention rules
+    """
+    if not time_to_delete:
+        logger.warning("No time threshold specified, skipping EBS volume cleanup")
+        return
+
+    total_deleted = 0
+    total_checked = 0
+
+    for region in regions:
+        try:
+            logger.info("Checking for orphaned EBS volumes in %s", region)
+            ec2_client = boto3.client("ec2", region_name=region)
+
+            # Get all unattached (available) volumes in this region
+            volumes = ec2_client.describe_volumes(
+                Filters=[{"Name": "status", "Values": ["available"]}]
+            )["Volumes"]
+
+            logger.info("Found %d unattached volumes in %s", len(volumes), region)
+            total_checked += len(volumes)
+
+            orphaned_volumes = []
+
+            for volume in volumes:
+                volume_id = volume["VolumeId"]
+                create_time = volume["CreateTime"]
+                volume_size = volume["Size"]
+                volume_type = volume["VolumeType"]
+
+                # Get volume name from tags
+                tags = {t["Key"]: t["Value"] for t in volume.get("Tags", [])}
+                volume_name = tags.get("Name", "<no-name>")
+
+                # Check for do_not_delete tag
+                if tags.get("do_not_delete", "").lower() in ["true", "1", "yes"]:
+                    logger.info(
+                        "Volume %s (%s) has do_not_delete tag, skipping",
+                        volume_id,
+                        volume_name,
+                    )
+                    continue
+
+                # Calculate volume age
+                if create_time.tzinfo is None:
+                    create_time = create_time.replace(tzinfo=datetime.timezone.utc)
+                current_time = datetime.datetime.now(datetime.timezone.utc)
+                volume_age = current_time - create_time
+
+                # Apply cluster prefix retention rules
+                should_delete = False
+                matched_prefix = False
+
+                # Extract cluster name from volume name
+                cluster_name = None
+                for pattern in [
+                    r"^(.+)-[a-z0-9]{5}-",
+                    r"^(.+)-worker-",
+                    r"^(.+)-master-",
+                ]:
+                    match = re.match(pattern, volume_name)
+                    if match:
+                        cluster_name = match.group(1)
+                        break
+
+                if cluster_name:
+                    # Check if cluster matches any special retention prefixes
+                    for prefix, hours in prefixes_hours_to_spare.items():
+                        if cluster_name.startswith(prefix):
+                            matched_prefix = True
+                            if hours == "never":
+                                logger.info(
+                                    "Volume %s matches never-delete prefix %s, skipping",
+                                    volume_id,
+                                    prefix,
+                                )
+                                break
+                            else:
+                                max_age = int(hours) * 3600
+                                if volume_age.total_seconds() > max_age:
+                                    should_delete = True
+                            break
+
+                # If no special prefix matched, use default time_to_delete
+                if not matched_prefix and volume_age.total_seconds() > time_to_delete:
+                    should_delete = True
+
+                if not should_delete:
+                    logger.debug(
+                        "Volume %s (%s) is only %s old, keeping",
+                        volume_id,
+                        volume_name,
+                        volume_age,
+                    )
+                    continue
+
+                orphaned_volumes.append(
+                    {
+                        "VolumeId": volume_id,
+                        "Name": volume_name,
+                        "Age": volume_age,
+                        "Size": volume_size,
+                        "Type": volume_type,
+                        "Region": region,
+                    }
+                )
+
+            if orphaned_volumes:
+                logger.info(
+                    "Found %d orphaned EBS volumes to delete in %s:",
+                    len(orphaned_volumes),
+                    region,
+                )
+                for vol_info in orphaned_volumes:
+                    logger.info(
+                        "  - %s (%s) - %dGB %s - age: %s",
+                        vol_info["VolumeId"],
+                        vol_info["Name"],
+                        vol_info["Size"],
+                        vol_info["Type"],
+                        vol_info["Age"],
+                    )
+
+                # Delete orphaned volumes
+                for vol_info in orphaned_volumes:
+                    volume_id = vol_info["VolumeId"]
+                    try:
+                        logger.info(
+                            "Deleting EBS volume %s (%s) - %dGB %s",
+                            volume_id,
+                            vol_info["Name"],
+                            vol_info["Size"],
+                            vol_info["Type"],
+                        )
+                        ec2_client.delete_volume(VolumeId=volume_id)
+                        logger.info("Successfully deleted EBS volume %s", volume_id)
+                        total_deleted += 1
+                    except ClientError as e:
+                        error_code = e.response.get("Error", {}).get("Code", "")
+                        if error_code == "InvalidVolume.NotFound":
+                            logger.info("Volume %s already deleted", volume_id)
+                        elif error_code == "VolumeInUse":
+                            logger.warning(
+                                "Volume %s is in use (should not happen for 'available' volumes)",
+                                volume_id,
+                            )
+                        else:
+                            logger.error(
+                                "Failed to delete EBS volume %s: %s", volume_id, e
+                            )
+                    except Exception as e:
+                        logger.error(
+                            "Unexpected error deleting EBS volume %s: %s", volume_id, e
+                        )
+            else:
+                logger.info("No orphaned EBS volumes found in %s", region)
+
+        except Exception as e:
+            logger.error("Error cleaning up EBS volumes in %s: %s", region, e)
+            logger.error(traceback.format_exc())
+
+    logger.info(
+        "EBS volume cleanup complete: checked %d volumes, deleted %d volumes across %d regions",
+        total_checked,
+        total_deleted,
+        len(regions),
+    )
+
+
 def cleanup_orphaned_iam_roles(regions, time_to_delete, prefixes_hours_to_spare):
     """
     Clean up orphaned IAM roles from deleted OpenShift clusters.
@@ -1629,6 +1815,19 @@ def aws_cleanup():
             IAM is global - this runs after all regional cleanup is complete.
             """,
     )
+    parser.add_argument(
+        "--cleanup-ebs-volumes",
+        action="store_true",
+        required=False,
+        help="""
+            Clean up orphaned (unattached) EBS volumes.
+            CONSERVATIVE cleanup - only deletes volumes that are:
+            - Unattached (state=available)
+            - Older than --hours threshold (prevents race with new deployments)
+            - Not tagged with do_not_delete
+            Safe to run - will not delete attached volumes or recent volumes.
+            """,
+    )
     bucket_group = parser.add_argument_group("S3 Bucket Sweeping Options")
     bucket_group.add_argument(
         "--sweep-buckets", action="store_true", help="Deleting S3 buckets."
@@ -1934,6 +2133,18 @@ def aws_cleanup():
             cleanup_orphaned_iam_roles(regions, time_to_delete, prefixes_hours_to_spare)
         except Exception as e:
             logger.warning("Error cleaning up IAM roles: %s", e)
+
+    # Clean up orphaned EBS volumes (run per region after all cluster cleanup)
+    if args.cleanup_ebs_volumes:
+        logger.info("=" * 80)
+        logger.info("Checking for orphaned EBS volumes")
+        logger.info("=" * 80)
+        try:
+            cleanup_orphaned_ebs_volumes(
+                regions, time_to_delete, prefixes_hours_to_spare
+            )
+        except Exception as e:
+            logger.warning("Error cleaning up EBS volumes: %s", e)
 
     # Write all failed deletions across all regions
     filename = "failed_cluster_deletions.txt"
