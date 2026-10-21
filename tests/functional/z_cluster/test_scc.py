@@ -3,7 +3,7 @@ import pytest
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.utility import templating, utils
+from ocs_ci.utility import templating, utils, version
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from datetime import datetime
 from ocs_ci.ocs import constants
@@ -25,6 +25,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.scc_helpers import get_scc_pinning_errors
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,10 @@ class TestSCC:
     @skipif_hci_provider_and_client
     def test_custom_scc_with_pod_respin(self, scc_factory):
         """
-        Test if OCS deployments/pods get affected if custom scc is created
+        Verify pod recovery when another SCC becomes available.
+
+        On ODF 4.23 and later, also verify that replacement pods request
+        and use their expected SCC. Older versions retain the health check.
         """
         scc_dict = {
             "allowPrivilegedContainer": True,
@@ -57,30 +61,82 @@ class TestSCC:
             ],
         }
 
-        # Add new scc to system:authenticated
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        check_pinning = ocs_version >= version.VERSION_4_23
+        db_label = (
+            constants.NOOBAA_DB_LABEL_419_AND_ABOVE
+            if ocs_version >= version.VERSION_4_19
+            else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+        )
+        labels = (
+            []
+            if config.ENV_DATA.get("mcg_only_deployment")
+            else [
+                helpers.get_provisioner_label(constants.CEPHBLOCKPOOL),
+                helpers.get_provisioner_label(constants.CEPHFILESYSTEM),
+            ]
+        )
+        if not config.ENV_DATA.get("noobaa_external_pgsql"):
+            labels.insert(0, db_label)
+        if not labels:
+            pytest.skip("No internal NooBaa DB or CSI provisioners in this deployment")
+
+        namespace = config.ENV_DATA["cluster_namespace"]
+        pods_by_label = {}
+        for label in labels:
+            pods = get_pods_having_label(label=label, namespace=namespace)
+            if check_pinning:
+                assert pods, f"No pods found for required component '{label}'"
+                expected_scc = (
+                    constants.SCC_RESTRICTED_V2
+                    if label == db_label
+                    else constants.SCC_CEPH_CSI_OP
+                )
+                for pod_data in pods:
+                    errors = get_scc_pinning_errors(pod_data, label, expected_scc)
+                    assert not errors, "\n".join(errors)
+            if pods:
+                pods_by_label[label] = pods
+
+        # Add new scc to system:authenticated after checking the baseline.
         OCP().exec_oc_cmd(
             command=f"adm policy add-scc-to-group {scc_factory(scc_dict=scc_dict).name} system:authenticated"
         )
+        for pods in pods_by_label.values():
+            for pod_data in pods:
+                Pod(**pod_data).delete()
 
-        # Delete csi-provisioner and noobaa db pods
-        labels = [
-            constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-            helpers.get_provisioner_label(constants.CEPHBLOCKPOOL),
-            helpers.get_provisioner_label(constants.CEPHFILESYSTEM),
-        ]
-        pods = list()
-        for label in labels:
-            pods.extend(
-                get_pods_having_label(
-                    label=label, namespace=config.ENV_DATA["cluster_namespace"]
-                )
-            )
-        pods = [Pod(**pod) for pod in pods]
-        for pod in pods:
-            pod.delete()
-
-        # wait for the pods to reconcile
-        wait_for_pods_to_be_running(pod_names=[pod.name for pod in pods])
+        for label, original_pods in pods_by_label.items():
+            original_uids = {pod["metadata"]["uid"] for pod in original_pods}
+            for pods in utils.TimeoutSampler(
+                timeout=600,
+                sleep=10,
+                func=get_pods_having_label,
+                label=label,
+                namespace=namespace,
+            ):
+                pods = [
+                    pod for pod in pods if not pod["metadata"].get("deletionTimestamp")
+                ]
+                if len(pods) < len(original_pods) or any(
+                    pod["metadata"]["uid"] in original_uids for pod in pods
+                ):
+                    continue
+                assert wait_for_pods_to_be_running(
+                    namespace=namespace,
+                    pod_names=[pod["metadata"]["name"] for pod in pods],
+                    raise_pod_not_found_error=True,
+                ), f"Replacement pods for '{label}' did not reach Running"
+                if check_pinning:
+                    expected_scc = (
+                        constants.SCC_RESTRICTED_V2
+                        if label == db_label
+                        else constants.SCC_CEPH_CSI_OP
+                    )
+                    for pod_data in pods:
+                        errors = get_scc_pinning_errors(pod_data, label, expected_scc)
+                        assert not errors, "\n".join(errors)
+                break
         logger.info("Pods reconciled successfully without any issues!!")
 
         # cluster sanity health check
