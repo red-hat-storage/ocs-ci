@@ -39,3 +39,11 @@ BUCKET_PREFIXES_SPECIAL_RULES = {
     "lr5-": 300,
 }
 DEFAULT_BUCKET_RUNNING_TIME = 100
+
+# VPC names that should never be deleted
+PROTECTED_VPC_NAMES = [
+    "rosa-hcp-vpc",
+]
+
+# Tag key that marks resources as protected from deletion
+DO_NOT_DELETE_TAG = "do_not_delete"
