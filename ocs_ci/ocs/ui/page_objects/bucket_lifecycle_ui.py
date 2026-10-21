@@ -125,9 +125,9 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
         self.do_click((f"//tr//a[contains(text(), '{bucket_name}')]", By.XPATH))
 
-        self.page_has_loaded()
-
-        self.do_click(self.bucket_tab["management_tab"])
+        self.do_click(
+            self.bucket_tab["management_tab"], timeout=60, wait_for_page_load=True
+        )
 
         logger.info("Navigated to lifecycle rules page")
 
@@ -214,11 +214,13 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
         # Click Create on the Review step
         self.scroll_into_view(self.bucket_tab["lifecycle_create_button"])
-        self.do_click(self.bucket_tab["lifecycle_create_button"])
-        time.sleep(3)
+        self.do_click(
+            self.bucket_tab["lifecycle_create_button"], wait_for_page_load=True
+        )
 
-        self.do_click(self.bucket_tab["management_tab"])
-        time.sleep(2)
+        self.do_click(
+            self.bucket_tab["management_tab"], timeout=60, wait_for_page_load=True
+        )
 
         logger.info(f"Successfully created lifecycle rule: {rule_name}")
 
@@ -305,11 +307,13 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                     logger.warning(f"Unknown rule type: {rule_type}")
 
             self.scroll_into_view(self.bucket_tab["lifecycle_save_button"])
-            self.do_click(self.bucket_tab["lifecycle_save_button"])
-            time.sleep(3)
+            self.do_click(
+                self.bucket_tab["lifecycle_save_button"], wait_for_page_load=True
+            )
 
-            self.do_click(self.bucket_tab["management_tab"])
-            time.sleep(2)
+            self.do_click(
+                self.bucket_tab["management_tab"], timeout=60, wait_for_page_load=True
+            )
 
             logger.info(f"Successfully edited lifecycle rule: {rule_name}")
 
@@ -341,7 +345,6 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             list: List of rule names
         """
         try:
-            time.sleep(3)
             self.page_has_loaded()
             rule_elements = self.get_elements(self.bucket_tab["lifecycle_rules_list"])
 
