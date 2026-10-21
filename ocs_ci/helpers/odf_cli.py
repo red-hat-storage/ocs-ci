@@ -6,12 +6,16 @@ from logging import getLogger
 from typing import Union
 
 from ocs_ci.ocs.exceptions import NotSupportedException
-from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_15
+from ocs_ci.utility.version import (
+    get_odf_image_namespace,
+    get_semantic_ocs_version_from_config,
+    VERSION_4_15,
+)
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.ocs.constants import (
-    ODF_CLI_DEV_IMAGE,
+    ODF_CLI_DEV_IMAGE_TEMPLATE,
     LOW_RECOVERY_OPS,
     BALANCED,
     HIGH_RECOVERY_OPS,
@@ -100,7 +104,10 @@ class ODFCLIRetriever:
             )
 
     def _get_odf_cli_image(self):
-        return f"{ODF_CLI_DEV_IMAGE}:v{self.semantic_version}"
+        odf_cli_dev_image = ODF_CLI_DEV_IMAGE_TEMPLATE.format(
+            namespace=get_odf_image_namespace(self.semantic_version)
+        )
+        return f"{odf_cli_dev_image}:v{self.semantic_version}"
 
     def _get_architecture_path(self):
         """Get architecture-specific path for ODF CLI binary in the container image."""
@@ -139,6 +146,7 @@ class ODFCLIRetriever:
 
         exec_cmd(
             f"oc image extract --registry-config {pull_secret_path} "
+            f"--filter-by-os=linux/amd64 "
             f"{image} --confirm "
             f"--path {remote_path}:{local_cli_dir}"
         )
@@ -185,24 +193,35 @@ class ODFCLIRetriever:
 
 class ODFCliRunner:
     def __init__(self) -> None:
-        self.binary_name = "odf"
+        self.binary_name = os.path.join(config.RUN["bin_dir"], "odf")
 
-    def run_command(self, command_args: Union[str, list]) -> str:
+    def run_command(self, command_args: Union[str, list], timeout=600) -> str:
         # by default Operator namespace is set to 'openshift-storage' in ODF CLI,
         # when -n <storage_ns> is not passed the command will fail if the namespace is not 'openshift-storage'
-        if isinstance(command_args, str):
-            full_command = str(
-                self.binary_name
-                + f' -n {config.ENV_DATA["cluster_namespace"]} '
-                + command_args
-            )
-        elif isinstance(command_args, list):
-            full_command = " ".join(
-                [self.binary_name, "-n", config.ENV_DATA["cluster_namespace"]]
-                + command_args
-            )
+        args_str = (
+            command_args if isinstance(command_args, str) else " ".join(command_args)
+        )
+        skip_namespace = args_str.lstrip().startswith("dr ")
 
-        output = exec_cmd(full_command)
+        if isinstance(command_args, str):
+            if skip_namespace:
+                full_command = f"{self.binary_name} {command_args}"
+            else:
+                full_command = str(
+                    self.binary_name
+                    + f' -n {config.ENV_DATA["cluster_namespace"]} '
+                    + command_args
+                )
+        elif isinstance(command_args, list):
+            if skip_namespace:
+                full_command = " ".join([self.binary_name] + command_args)
+            else:
+                full_command = " ".join(
+                    [self.binary_name, "-n", config.ENV_DATA["cluster_namespace"]]
+                    + command_args
+                )
+
+        output = exec_cmd(full_command, timeout=timeout)
         return output
 
     def run_help(self):
@@ -324,14 +343,11 @@ class ODFCliRunner:
         else:
             noobaa_cmd = " ".join(["noobaa"] + command_args)
 
-        # Add namespace if provided (will override the default one in run_command)
-        if namespace:
-            noobaa_cmd += f" -n {namespace}"
-            # Don't let run_command add its default namespace
-            full_command = f"{self.binary_name} {noobaa_cmd}"
-        else:
-            # Let run_command add the default namespace
-            full_command = f"{self.binary_name} -n {config.ENV_DATA['cluster_namespace']} {noobaa_cmd}"
+        ns = namespace or config.ENV_DATA["cluster_namespace"]
+        # -n is required on both the odf binary (to avoid defaulting to
+        # openshift-storage) and the noobaa subcommand itself.
+        noobaa_cmd += f" -n {ns}"
+        full_command = f"{self.binary_name} -n {ns} {noobaa_cmd}"
 
         # Execute with appropriate method based on use_yes
         if use_yes:
@@ -372,23 +388,159 @@ class ODFCliRunner:
         """
         return self.run_command(f" maintenance stop {deployment_name}")
 
-    def list_stale_cephfs_subvolumes(self) -> str:
+    def run_object_enable_remote_obc(self):
         """
-        List stale CephFS subvolumes.
-        """
-        return self.run_command("subvolume ls --stale")
+        Enable remote OBC on client cluster.
 
-    def delete_cephfs_subvolume(self, filesystem, subvol, group) -> str:
+        This command is used in Provider/Client (HCI) deployments to enable
+        Object Bucket Claims (OBC) on the client cluster.
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+
         """
-        Delete a CephFS subvolume.
+        return self.run_command(" object enable remote-obc")
+
+    def run_object_disable_remote_obc(self):
         """
-        return self.run_command(f"subvolume delete {filesystem} {subvol} {group}")
+        Disable remote OBC on client cluster.
+
+        This command is used in Provider/Client (HCI) deployments to disable
+        Object Bucket Claims (OBC) on the client cluster.
+
+        Raises:
+            CommandFailed: If the CLI command fails.
+
+        """
+        return self.run_command(" object disable remote-obc")
 
 
-def odf_cli_setup_helper():
+class ODFCLICephfsSnapRunner(ODFCliRunner):
     """
     Initializes and returns an instance of ODFCliRunner.
+    ODFCliRunner subclass for `odf cephfs-snap` subcommands.
+
+    Holds instance-level defaults for the global optional flags shared by all
+    cephfs-snap subcommands (--storage-client, --rados-namespace, --svg,
+    --filesystem).  None means "omit the flag and let the CLI use its own
+    default".  The namespace flag is intentionally excluded here because
+    ODFCliRunner.run_command already prepends -n {cluster_namespace}.
+
+    Args:
+        storage_client (str): StorageClient CR name. Defaults to
+            config.ENV_DATA["storage_client_name"] when None.
+        rados_namespace (str): Rados namespace for omap operations.
+        svg (str): Subvolume group name.
+        filesystem (str): CephFS filesystem name.
+    """
+
+    def __init__(
+        self,
+        storage_client=None,
+        rados_namespace=None,
+        svg=None,
+        filesystem=None,
+    ):
+        super().__init__()
+        from ocs_ci.ocs.constants import STORAGE_CLIENT_NAME
+
+        self.storage_client = storage_client or config.ENV_DATA.get(
+            "storage_client_name", STORAGE_CLIENT_NAME
+        )
+        self.rados_namespace = rados_namespace
+        self.svg = svg
+        self.filesystem = filesystem
+
+    def run_command(
+        self,
+        command,
+        storage_client=None,
+        rados_namespace=None,
+        svg=None,
+        filesystem=None,
+        orphaned=False,
+    ):
+        storage_client = storage_client or self.storage_client
+        rados_namespace = rados_namespace or self.rados_namespace
+        svg = svg or self.svg
+        filesystem = filesystem or self.filesystem
+
+        if storage_client:
+            command += f" --storage-client {storage_client}"
+        if rados_namespace:
+            command += f" --rados-namespace {rados_namespace}"
+        if svg:
+            command += f" --svg {svg}"
+        if filesystem:
+            command += f" --filesystem {filesystem}"
+        if orphaned:
+            command += " --orphaned"
+
+        return super().run_command(command)
+
+    def ls(
+        self,
+        storage_client=None,
+        rados_namespace=None,
+        svg=None,
+        filesystem=None,
+        orphaned=False,
+    ):
+        """
+        Run `odf cephfs-snap ls` and return the raw command result.
+
+        Args:
+            orphaned (bool): If True, pass --orphaned to list only orphaned
+                snapshots.
+
+        Returns:
+            CompletedProcess: result from exec_cmd.
+        """
+        return self.run_command(
+            command="cephfs-snap ls",
+            storage_client=storage_client,
+            rados_namespace=rados_namespace,
+            svg=svg,
+            filesystem=filesystem,
+            orphaned=orphaned,
+        )
+
+    def delete(
+        self,
+        subvolume,
+        snapshot,
+        storage_client=None,
+        rados_namespace=None,
+        svg=None,
+        filesystem=None,
+    ):
+        """
+        Run `odf cephfs-snap delete <subvolume> <snapshot>`.
+
+        Args:
+            subvolume (str): Subvolume name.
+            snapshot (str): Snapshot name.
+
+        Returns:
+            CompletedProcess: result from exec_cmd.
+        """
+        return self.run_command(
+            command=f"cephfs-snap delete {subvolume} {snapshot}",
+            storage_client=storage_client,
+            rados_namespace=rados_namespace,
+            svg=svg,
+            filesystem=filesystem,
+        )
+
+
+def odf_cli_setup_helper(odf_cli_class=ODFCliRunner, **kwargs):
+    """
+    Initializes and returns an instance of ODFCliRunner (or a subclass).
     Downloads the ODF CLI binary if it does not exist.
+
+    Args:
+        odf_cli_class: Runner class to instantiate (default: ODFCliRunner).
+        **kwargs: Extra keyword arguments forwarded to the runner constructor.
 
     Returns:
         ODFCliRunner: The initialized runner.
@@ -408,12 +560,38 @@ def odf_cli_setup_helper():
             raise RuntimeError("Failed to download ODF CLI binary")
 
     # Check and initialize ODFCliRunner
-    odf_cli_runner = ODFCliRunner()
+    odf_cli_runner = odf_cli_class(**kwargs)
     if not odf_cli_runner:
         log.warning("ODFCliRunner not initialized. Attempting to initialize again...")
-        odf_cli_runner = ODFCliRunner()
+        odf_cli_runner = odf_cli_class(**kwargs)
         if not odf_cli_runner:
             raise RuntimeError("Failed to initialize ODFCliRunner after retry")
 
     log.info("ODF CLI binary downloaded and ODFCliRunner initialized successfully")
     return odf_cli_runner
+
+
+def odf_cli_cephfs_snap_setup_helper(**kwargs):
+    """
+    Initialize and return an ODFCLICephfsSnapRunner with the ODF CLI binary set up.
+
+    Args:
+        **kwargs: Optional constructor arguments forwarded to ODFCLICephfsSnapRunner
+            (storage_client, rados_namespace, svg, filesystem).
+
+    Returns:
+        ODFCLICephfsSnapRunner: The initialized runner.
+    """
+    return odf_cli_setup_helper(odf_cli_class=ODFCLICephfsSnapRunner, **kwargs)
+
+def list_stale_cephfs_subvolumes(self) -> str:
+    """
+    List stale CephFS subvolumes.
+    """
+    return self.run_command("subvolume ls --stale")
+
+def delete_cephfs_subvolume(self, filesystem, subvol, group) -> str:
+    """
+    Delete a CephFS subvolume.
+    """
+    return self.run_command(f"subvolume delete {filesystem} {subvol} {group}")
