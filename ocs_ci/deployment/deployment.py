@@ -986,10 +986,10 @@ class Deployment(object):
         Create the Fusion Access for SAN storage cluster via the OpenShift Console UI.
 
         Runs only when ``DEPLOYMENT.fusion_access_deployment`` is ``True`` in the
-        active config and UI deployment conditions are met.  The UI automation is
-        performed by
-        :class:`~ocs_ci.ocs.ui.page_objects.premigration_fusion_access_ui.PreMigrationFusionAccessUI`
-        which drives the storage cluster wizard:
+        active config and UI deployment conditions are met.  Navigation starts from
+        :class:`~ocs_ci.ocs.ui.page_objects.page_navigator.PageNavigator`; the
+        storage cluster wizard is driven by
+        :class:`~ocs_ci.ocs.ui.page_objects.premigration_fusion_access_ui.PreMigrationFusionAccessUI`:
 
         1. Navigate to Storage → Fusion Access for SAN.
         2. Click "Create storage cluster" and select all worker nodes.
@@ -1010,13 +1010,15 @@ class Deployment(object):
             "cluster creation via UI"
         )
         from ocs_ci.ocs.ui.helpers_ui import login_ui, close_browser
-        from ocs_ci.ocs.ui.page_objects.premigration_fusion_access_ui import (
-            PreMigrationFusionAccessUI,
-        )
+        from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
         login_ui()
         try:
-            PreMigrationFusionAccessUI().create_fusion_access_storage_cluster()
+            (
+                PageNavigator()
+                .nav_fusion_access_for_san_page()
+                .create_fusion_access_storage_cluster()
+            )
         finally:
             close_browser()
 
