@@ -1,0 +1,18 @@
+# Gitleaks configuration for OCS-CI
+# Using 'gitleaks protect' mode - only scans staged changes, no baseline needed!
+
+[extend]
+# Use default gitleaks detection rules
+useDefault = true
+
+[allowlist]
+description = "Allowlist for gitleaks in OCS-CI"
+
+# Exclude gitleaks own reports and old detect-secrets baseline
+paths = [
+    '''\.secrets\.baseline.*''',
+    '''\.gitleaks.*''',
+]
+
+# Use inline # gitleaks:allow comments to suppress specific findings
+# Add them only when you encounter a false positive during commit

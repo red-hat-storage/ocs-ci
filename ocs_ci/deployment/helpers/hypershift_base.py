@@ -18,6 +18,7 @@ from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
+    ClusterNotFoundException,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
@@ -28,6 +29,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_latest_release_version,
     get_random_letters,
+    get_registry_svc,
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.ocs.utils import get_namespce_name_by_pattern
@@ -59,12 +61,58 @@ def get_hosted_cluster_names():
     """
 
     logger.info("Getting HyperShift hosted cluster names")
-    hosted_clusters_obj = OCP(
-        kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
-    ).get()
+    hosted_clusters_obj = OCP(kind=constants.HOSTED_CLUSTERS).get(all_namespaces=True)
     return [
         cluster.get("metadata").get("name") for cluster in hosted_clusters_obj["items"]
     ]
+
+
+def get_hosted_cluster_namespace(cluster_name=None):
+    """
+    Resolve the namespace that contains the HostedCluster CR. Default value is constants.CLUSTERS_NAMESPACE
+
+    Args:
+        cluster_name (str): Name of the hosted cluster.
+
+    Returns:
+        str: Namespace on the management cluster that owns the HostedCluster CR.
+    """
+    cluster_name = cluster_name or config.ENV_DATA.get("cluster_name")
+
+    # Get the hostedcluster namespace if available in config
+    hc_namespace = config.ENV_DATA.get("hostedcluster_namespace")
+    with config.RunWithProviderConfigContextIfAvailable():
+        # Explicit per-cluster config override
+        hc_namespace = (
+            config.ENV_DATA.get("clusters", {})
+            .get(cluster_name, {})
+            .get("hostedcluster_namespace", hc_namespace)
+        )
+        if hc_namespace:
+            logger.debug(
+                f"Using configured hostedcluster_namespace '{hc_namespace}' for '{cluster_name}'"
+            )
+            return hc_namespace
+
+        # Dynamic discovery — find from the list of HostedClusters across all namespaces
+        # If not available, return the default value constants.CLUSTERS_NAMESPACE because there are usages to identify
+        # if a cluster is hostedcluster or not.
+        try:
+            all_hc = OCP(kind=constants.HOSTED_CLUSTERS).get(all_namespaces=True)
+            for item in all_hc.get("items", []):
+                if item.get("metadata", {}).get("name") == cluster_name:
+                    hc_namespace = item["metadata"]["namespace"]
+                    logger.debug(
+                        f"Discovered hostedcluster_namespace '{hc_namespace}' for '{cluster_name}'"
+                    )
+                    break
+        except CommandFailed as exc:
+            logger.warning(
+                f"Could not list HostedClusters to resolve namespace for '{cluster_name}': {exc}. "
+                f"Use the default value {constants.CLUSTERS_NAMESPACE}"
+            )
+
+    return hc_namespace or constants.CLUSTERS_NAMESPACE
 
 
 @catch_exceptions((CommandFailed, TimeoutExpiredError))
@@ -242,9 +290,13 @@ def is_hosted_cluster(cluster_name=None):
 
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
     config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
-    config.switch_to_provider()
+    try:
+        config.switch_to_provider()
+    except ClusterNotFoundException:
+        return False
     ocp_obj = OCP(
-        kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
+        kind=constants.HOSTED_CLUSTERS,
+        namespace=get_hosted_cluster_namespace(cluster_name),
     )
     return ocp_obj.is_exist(resource_name=cluster_name)
 
@@ -267,7 +319,7 @@ def get_hosted_cluster_type(cluster_name=None):
     config.switch_to_provider()
     ocp_hosted_cluster_obj = OCP(
         kind=constants.HOSTED_CLUSTERS,
-        namespace=constants.CLUSTERS_NAMESPACE,
+        namespace=get_hosted_cluster_namespace(cluster_name),
         resource_name=cluster_name,
     )
     return ocp_hosted_cluster_obj.get()["spec"]["platform"]["type"].lower()
@@ -282,22 +334,19 @@ def get_current_nodepool_size(name):
         name (str): name of the cluster
 
     Returns:
-         str: number of nodes in the nodepool
+         str: total number of current nodes across all nodepools for the cluster
 
     """
 
     logger.info(f"Getting existing nodepool of HyperShift hosted cluster {name}")
-    cmd = f"get --namespace {constants.CLUSTERS_NAMESPACE} nodepools | awk '$1==\"{name}\" {{print $4}}'"
     with config.RunWithProviderConfigContextIfAvailable():
-        out = OCP().exec_oc_cmd(
-            command=cmd,
-            cluster_config=config,
-            shell=True,
-            out_yaml_format=False,
-            silent=True,
-        )
-
-    return out.strip() if out else ""
+        nodepools = OCP(kind="nodepools").get(all_namespaces=True)
+    total = sum(
+        item.get("status", {}).get("replicas", 0)
+        for item in nodepools.get("items", [])
+        if item.get("spec", {}).get("clusterName") == name
+    )
+    return str(total)
 
 
 def get_desired_nodepool_size(name: str):
@@ -308,23 +357,19 @@ def get_desired_nodepool_size(name: str):
         name (str): of the cluster
 
     Returns:
-        int: number of nodes in the nodepool
+        str: total number of desired nodes across all nodepools for the cluster
 
     """
 
     logger.info(f"Getting desired nodepool of HyperShift hosted cluster {name}")
     with config.RunWithProviderConfigContextIfAvailable():
-        out = OCP().exec_oc_cmd(
-            command=f"get --namespace {constants.CLUSTERS_NAMESPACE} nodepools | awk '$1==\"{name}\" {{print $3}}'",
-            cluster_config=config,
-            shell=True,
-            out_yaml_format=False,
-            silent=True,
-        )
-    if not out:
-        return ""
-
-    return out.strip() if out else ""
+        nodepools = OCP(kind="nodepools").get(all_namespaces=True)
+    total = sum(
+        item.get("spec", {}).get("replicas", 0)
+        for item in nodepools.get("items", [])
+        if item.get("spec", {}).get("clusterName") == name
+    )
+    return str(total)
 
 
 def worker_nodes_deployed(name: str):
@@ -383,17 +428,13 @@ def get_hosted_cluster_kubeconfig_name(name: str):
     """
 
     logger.info(f"Getting kubeconfig for HyperShift hosted cluster {name}")
-    cmd = f"get --namespace {constants.CLUSTERS_NAMESPACE} hostedclusters | awk '$1==\"{name}\" {{print $3}}'"
-
     with config.RunWithProviderConfigContextIfAvailable():
-        out = OCP().exec_oc_cmd(
-            command=cmd,
-            cluster_config=config,
-            shell=True,
-            out_yaml_format=False,
-            silent=True,
-        )
-    return out.strip() if out else ""
+        data = OCP(
+            kind=constants.HOSTED_CLUSTERS,
+            namespace=get_hosted_cluster_namespace(name),
+            resource_name=name,
+        ).get()
+    return data.get("status", {}).get("kubeconfig", {}).get("name", "")
 
 
 def delete_hcp_podman_container():
@@ -460,12 +501,12 @@ def resolve_ocp_image(ocp_version: str) -> str:
         with config.RunWithProviderConfigContextIfAvailable():
             provider_version = get_ocp_version()
         if "nightly" in provider_version:
-            index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
+            index_image = f"{get_registry_svc(provider_version)}:{provider_version}"
         else:
             index_image = f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
     else:
         if "nightly" in ocp_version:
-            index_image = f"{constants.REGISTRY_SVC}:{ocp_version}"
+            index_image = f"{get_registry_svc(ocp_version)}:{ocp_version}"
         else:
             index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
     return index_image
@@ -512,6 +553,27 @@ class HyperShiftBase:
 
         return os.path.isfile(self.hypershift_binary_path)
 
+    def ensure_hcp_binaries(self, download_hcp_binary=False):
+        """
+        Ensure hcp and hypershift binaries are available.
+
+        Downloads them if explicitly requested or if they are missing (self-heal
+        for partial dependency setups that failed before completing the download).
+
+        Args:
+            download_hcp_binary (bool): If True, always download/update the binaries.
+
+        """
+        if download_hcp_binary:
+            self.update_hcp_binary()
+        elif not (self.hcp_binary_exists() and self.hypershift_binary_exists()):
+            logger.warning(
+                "HCP/hypershift binary not found but download_hcp_binary=False. "
+                "This may happen when a previous cluster's dependency setup failed "
+                "before completing the download. Downloading now."
+            )
+            self.update_hcp_binary()
+
     def install_hcp_and_hypershift_from_git(self, install_latest=False):
         """
         Install hcp binary from git
@@ -537,17 +599,26 @@ class HyperShiftBase:
                 logger.error("Falling back to configured hcp_version.")
                 return self.install_hcp_and_hypershift_from_git(install_latest=False)
         else:
-            hcp_version = config.ENV_DATA.get("hcp_version")
+            raw_version = config.ENV_DATA.get("hcp_version")
+            match = re.match(r"^(\d+\.\d+)", str(raw_version))
+            hcp_version = match.group(1) if match else str(raw_version)
+            if hcp_version != str(raw_version):
+                logger.warning(
+                    f"Configured hcp_version '{raw_version}' contains extra qualifiers; "
+                    f"normalized to '{hcp_version}' for git branch name."
+                )
             logger.info(
-                f"Using configured hcp_version: {hcp_version} (branch release-{hcp_version})."
+                f"Using configured hcp_version: {raw_version} (branch release-{hcp_version})."
             )
+
+        hcp_branch_version = hcp_version.split("-")[0] if hcp_version else hcp_version
 
         logger.info("Downloading hcp binary from git")
 
         temp_dir = tempfile.mkdtemp()
 
         exec_cmd(
-            f"git clone --single-branch --branch release-{hcp_version} "
+            f"git clone --single-branch --branch release-{hcp_branch_version} "
             f"--depth 1 {constants.HCP_REPOSITORY} {temp_dir}"
         )
 
@@ -713,6 +784,7 @@ class HyperShiftBase:
         disable_default_sources=None,
         data_replication_separation=False,
         auto_repair=True,
+        hcp_image=None,
     ):
         """
         Create HyperShift hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -735,6 +807,7 @@ class HyperShiftBase:
             data_replication_separation (bool): If the deployment uses data replication separation
                 then add additional network
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
+            hcp_image (str): OCP image url for HCP cluster
 
         Returns:
             str: Name of the hosted cluster
@@ -751,14 +824,21 @@ class HyperShiftBase:
         pull_secret_path = download_pull_secret()
 
         # If ocp_version is not provided, get the version from Hosting Platform
-        if not ocp_version:
-            provider_version = get_ocp_version()
-            if "nightly" in provider_version:
-                index_image = f"{constants.REGISTRY_SVC}:{provider_version}"
-            else:
-                index_image = f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
+        if hcp_image:
+            index_image = hcp_image
         else:
-            index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
+            if not ocp_version:
+                provider_version = get_ocp_version()
+                if "nightly" in provider_version:
+                    index_image = (
+                        f"{get_registry_svc(provider_version)}:{provider_version}"
+                    )
+                else:
+                    index_image = (
+                        f"{constants.QUAY_REGISTRY_SVC}:{provider_version}-x86_64"
+                    )
+            else:
+                index_image = f"{constants.QUAY_REGISTRY_SVC}:{ocp_version}-x86_64"
 
         if not name:
             name = "hcp-" + datetime.utcnow().strftime("%f")
@@ -847,6 +927,7 @@ class HyperShiftBase:
         infra_availability_policy=None,
         disable_default_sources=None,
         auto_repair=True,
+        hcp_image=None,
     ):
         """
         Create agent hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -864,6 +945,7 @@ class HyperShiftBase:
                 available quorum 1 in pdb.
             disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
+            hcp_image (str): OCP image url for HCP cluster
 
         Returns:
             str: Name of the hosted cluster
@@ -874,7 +956,10 @@ class HyperShiftBase:
         pull_secret_path = download_pull_secret()
 
         # If ocp_version is not provided, get the version from Hosting Platform
-        index_image = resolve_ocp_image(ocp_version)
+        if hcp_image:
+            index_image = hcp_image
+        else:
+            index_image = resolve_ocp_image(ocp_version)
 
         if not name:
             name = "hcp-" + datetime.now().strftime("%f")
@@ -946,21 +1031,26 @@ class HyperShiftBase:
 
         return name
 
-    def verify_hosted_ocp_cluster_from_provider(self, name):
+    def verify_hosted_ocp_cluster_from_provider(
+        self,
+        name,
+        timeout_pods_wait_min=30,
+        timeout_hosted_cluster_completed_min=20,
+        timeout_worker_nodes_ready_min=30,
+    ):
         """
         Verify HyperShift hosted cluster from provider
 
         Args:
             name (str): hosted OCP cluster name
+            timeout_pods_wait_min (int): timeout in minutes for pods to be ready (default: 30)
+            timeout_hosted_cluster_completed_min (int): timeout in minutes for hosted cluster completion (default: 20)
+            timeout_worker_nodes_ready_min (int): timeout in minutes for worker nodes to be ready (default: 30)
 
         Returns:
             bool: True if hosted OCP cluster is verified, False otherwise
 
         """
-
-        timeout_pods_wait_min = 40
-        timeout_hosted_cluster_completed_min = 40
-        timeout_worker_nodes_ready_min = 60
 
         namespace = f"clusters-{name}"
         logger.info(
@@ -1092,6 +1182,59 @@ class HyperShiftBase:
             return
         return kubeconfig_path
 
+    @staticmethod
+    def download_hosted_cluster_kubeadmin_password(name: str, cluster_path: str):
+        """
+        Download HyperShift hosted cluster kubeadmin password
+
+        Args:
+            name (str): name of the cluster
+            cluster_path (str): path to create auth directory and download
+                kubeadmin-password there
+
+        Returns:
+            str: path to the downloaded kubeadmin-password file, None if failed
+
+        """
+        path_abs = os.path.expanduser(cluster_path)
+        auth_path = os.path.join(path_abs, "auth")
+        os.makedirs(auth_path, exist_ok=True)
+        password_path = os.path.join(auth_path, "kubeadmin-password")
+
+        logger.info(
+            f"Downloading kubeadmin-password for HyperShift hosted cluster "
+            f"{name} to {password_path}"
+        )
+
+        try:
+            with config.RunWithProviderConfigContextIfAvailable():
+                OCP().exec_oc_cmd(
+                    f"extract secret/kubeadmin-password -n clusters-{name} "
+                    f"--to {auth_path} --confirm"
+                )
+        except CommandFailed:
+            logger.exception(
+                "Failed to download kubeadmin-password for HyperShift "
+                "hosted cluster %s",
+                name,
+            )
+            return None
+
+        # oc extract names the file after the secret key ("password"),
+        # rename it to the expected "kubeadmin-password" filename
+        extracted_path = os.path.join(auth_path, "password")
+        if os.path.isfile(extracted_path):
+            os.rename(extracted_path, password_path)
+
+        if not os.path.isfile(password_path) or not os.stat(password_path).st_size > 0:
+            logger.error(
+                "Failed to download kubeadmin-password for HyperShift "
+                "hosted cluster %s",
+                name,
+            )
+            return None
+        return password_path
+
     def get_hosted_cluster_progress(self, name: str):
         """
         Get HyperShift hosted cluster creation progress
@@ -1100,12 +1243,21 @@ class HyperShiftBase:
             name (str): name of the cluster
 
         Returns:
-            str: progress status; 'Completed' is expected in most cases
+            str: progress status; 'Completed' is expected in most cases, '' if cluster not found
 
         """
 
-        cmd = f"oc get --namespace {constants.CLUSTERS_NAMESPACE} hostedclusters | awk '$1==\"{name}\" {{print $4}}'"
-        return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
+        try:
+            with config.RunWithProviderConfigContextIfAvailable():
+                data = OCP(
+                    kind=constants.HOSTED_CLUSTERS,
+                    namespace=get_hosted_cluster_namespace(name),
+                    resource_name=name,
+                ).get()
+            history = data.get("status", {}).get("version", {}).get("history", [])
+            return history[0].get("state", "") if history else ""
+        except CommandFailed:
+            return ""
 
     def save_mirrors_list_to_file(self):
         """
@@ -1143,8 +1295,9 @@ class HyperShiftBase:
 
         Args:
             name (str): HostedCluster name (namespace is clusters-<name> but resource lives in clusters namespace)
-            idms_json_dict (dict|None): If provided, use this pre-fetched dict
-                (output of 'oc get imagedigestmirrorsets -o json').
+            idms_json_dict (dict|None): If provided, use this pre-fetched dict. Can be either:
+                - Output of 'oc get imagedigestmirrorsets -o json' (list with "items")
+                - A single ImageDigestMirrorSet resource dict (without "items" wrapper)
                 If None, it will be fetched automatically.
             replace (bool): If True, replace any existing spec.imageContentSources with the new list.
                             If False, merge (append new unique entries after existing ones).
@@ -1173,7 +1326,7 @@ class HyperShiftBase:
                     return True
                 ocp_hc = OCP(
                     kind=constants.HOSTED_CLUSTERS,
-                    namespace=constants.CLUSTERS_NAMESPACE,
+                    namespace=get_hosted_cluster_namespace(name),
                 )
                 hosted = ocp_hc.get(name)
                 existing = hosted.get("spec", {}).get("imageContentSources") or []
@@ -1323,51 +1476,58 @@ def fix_hypershift_webhook_ca_bundle():
     causing 'x509: certificate signed by unknown authority' errors during hosted cluster
     creation.
 
-    Patches both MutatingWebhookConfiguration and ValidatingWebhookConfiguration named
-    'hypershift.openshift.io' with the CA bundle from the 'webhook-serving-ca' secret
-    in the 'hypershift' namespace.
+    Patches all HyperShift-related MutatingWebhookConfiguration and ValidatingWebhookConfiguration
+    resources (including 'hypershift.openshift.io' and 'nodepools.hypershift.openshift.io')
+    with the CA bundle from the 'webhook-serving-ca' secret in the 'hypershift' namespace.
 
     This workaround addresses a known race condition where the HyperShift operator
     creates or rotates its webhook-serving-ca after the webhook configurations are
     registered, leaving the caBundle field stale or empty.
     """
     logger.info(
-        "Fixing HyperShift webhook CA bundle mismatch — patching MutatingWebhookConfiguration "
-        "and ValidatingWebhookConfiguration with CA from 'webhook-serving-ca' secret"
+        "Fixing HyperShift webhook CA bundle mismatch — patching all HyperShift "
+        "MutatingWebhookConfiguration and ValidatingWebhookConfiguration resources"
     )
     secret_obj = OCP(kind="Secret", namespace=constants.HYPERSHIFT_NAMESPACE)
     secret_data = secret_obj.get(resource_name="webhook-serving-ca")
     ca_bundle = secret_data["data"]["ca.crt"]
+
+    # List of HyperShift webhook configurations to patch
+    webhook_names = [
+        "hypershift.openshift.io",
+        "nodepools.hypershift.openshift.io",
+    ]
 
     for webhook_kind in (
         "mutatingwebhookconfiguration",
         "validatingwebhookconfiguration",
     ):
         webhook_obj = OCP(kind=webhook_kind)
-        try:
-            wh_data = webhook_obj.get(resource_name="hypershift.openshift.io")
-        except Exception:
-            logger.warning(
-                f"No {webhook_kind} named 'hypershift.openshift.io' found, skipping"
+        for webhook_name in webhook_names:
+            try:
+                wh_data = webhook_obj.get(resource_name=webhook_name)
+            except Exception as e:
+                logger.warning(
+                    f"No {webhook_kind} named '{webhook_name}' found, skipping. Error: {e}"
+                )
+                continue
+            num_webhooks = len(wh_data.get("webhooks", []))
+            patch = [
+                {
+                    "op": "replace",
+                    "path": f"/webhooks/{i}/clientConfig/caBundle",
+                    "value": ca_bundle,
+                }
+                for i in range(num_webhooks)
+            ]
+            webhook_obj.patch(
+                resource_name=webhook_name,
+                params=patch,
+                format_type="json",
             )
-            continue
-        num_webhooks = len(wh_data.get("webhooks", []))
-        patch = [
-            {
-                "op": "replace",
-                "path": f"/webhooks/{i}/clientConfig/caBundle",
-                "value": ca_bundle,
-            }
-            for i in range(num_webhooks)
-        ]
-        webhook_obj.patch(
-            resource_name="hypershift.openshift.io",
-            params=patch,
-            format_type="json",
-        )
-        logger.info(
-            f"Patched {num_webhooks} webhook(s) in {webhook_kind}/hypershift.openshift.io"
-        )
+            logger.info(
+                f"Patched {num_webhooks} webhook(s) in {webhook_kind}/{webhook_name}"
+            )
     logger.info("HyperShift webhook CA bundle fix applied successfully")
 
 
@@ -1451,6 +1611,32 @@ def create_kubeconfig_file_hosted_cluster():
 
     config.RUN["kubeconfig"] = kubeconfig_path
     logger.info("Created kubeconfig file")
+
+
+@retry(CommandFailed, tries=3, delay=20, backoff=1)
+def create_kubeadmin_password_file_hosted_cluster():
+    """
+    Export kubeadmin-password to auth directory in cluster path.
+
+    This function is wrapped with retry decorator to handle CommandFailed
+    errors. It will retry up to 3 times with 20 sec delay between attempts.
+
+    Raises:
+        CommandFailed: if the kubeadmin-password file could not be downloaded
+
+    """
+    cluster_path = config.ENV_DATA["cluster_path"]
+    cluster_name = config.ENV_DATA["cluster_name"]
+
+    password_path = HyperShiftBase.download_hosted_cluster_kubeadmin_password(
+        cluster_name, cluster_path=cluster_path
+    )
+    if not password_path:
+        raise CommandFailed(
+            f"Failed to create kubeadmin-password file for hosted cluster "
+            f"{cluster_name}"
+        )
+    logger.info("Created kubeadmin-password file")
 
 
 def wait_for_worker_nodes_ready(timeout=600, sleep=10, expected_nodes=None):
@@ -1543,7 +1729,8 @@ def get_hosted_cluster_condition_status(cluster_name, condition_type="Available"
 
     try:
         ocp_hc = OCP(
-            kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
+            kind=constants.HOSTED_CLUSTERS,
+            namespace=get_hosted_cluster_namespace(cluster_name),
         )
         jsonpath = f'{{.status.conditions[?(@.type=="{condition_type}")].status}}'
 

@@ -6,7 +6,7 @@ scenarios:
     namespace: "{{ scenario.namespace }}"
     label_selector: "{{ scenario.label_selector }}"
     container_name: "{{ scenario.container_name }}"
-    kill_signal: "{{ scenario.kill_signal }}"
+    kill_signal: {{ scenario.kill_signal }}
     count: {{ scenario.count }}
     expected_recovery_time: {{ scenario.expected_recovery_time }}
 {%- endfor %}

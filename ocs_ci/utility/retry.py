@@ -53,6 +53,8 @@ def retry(
         backoff: Backoff multiplier e.g., value of 2 will double the delay each retry. If the delay
             is greater than max_delay after multiplier, than max_delay is used as delay
         text_in_exception: Retry only when text_in_exception is in the text of exception.
+            Can be a single string or a tuple/list of strings. If a list/tuple is provided,
+            retry will happen if ANY of the strings are found in the exception.
         func: Function for garbage collector.
         max_timeout: Maximum total time for retries in seconds (default: 4 hours).
         max_delay: Maximum delay between retries in seconds (default: 600 seconds or 10 minutes).
@@ -79,9 +81,22 @@ def retry(
                     return f(*args, **kwargs)
                 except exception_to_check as e:
                     if text_in_exception:
-                        if text_in_exception in str(e):
+                        # Convert single string to list for uniform handling
+                        texts_to_check = (
+                            [text_in_exception]
+                            if isinstance(text_in_exception, str)
+                            else text_in_exception
+                        )
+                        exception_str = str(e)
+                        matching_text = None
+                        for text in texts_to_check:
+                            if text in exception_str:
+                                matching_text = text
+                                break
+
+                        if matching_text:
                             logger.debug(
-                                f"Text: {text_in_exception} found in exception: {e}"
+                                f"Text: {matching_text} found in exception: {e}"
                             )
                         else:
                             raise
@@ -138,7 +153,9 @@ def retry_until_exception(
         delay: initial delay between retries in seconds
         backoff: Backoff multiplier e.g., value of 2 will double the delay each retry. If the delay
             is greater than max_delay after multiplier, than max_delay is used as delay
-        text_in_exception: Retry only when text_in_exception is in the text of exception
+        text_in_exception: Retry only when text_in_exception is in the text of exception.
+            Can be a single string or a tuple/list of strings. If a list/tuple is provided,
+            retry will happen if ANY of the strings are found in the exception.
         func: function for garbage collector
     """
 
@@ -153,9 +170,22 @@ def retry_until_exception(
                     f(*args, **kwargs)
                 except exception_to_check as e:
                     if text_in_exception:
-                        if text_in_exception in str(e):
+                        # Convert single string to list for uniform handling
+                        texts_to_check = (
+                            [text_in_exception]
+                            if isinstance(text_in_exception, str)
+                            else text_in_exception
+                        )
+                        exception_str = str(e)
+                        matching_text = None
+                        for text in texts_to_check:
+                            if text in exception_str:
+                                matching_text = text
+                                break
+
+                        if matching_text:
                             logger.debug(
-                                f"Text: {text_in_exception} found in exception: {e}"
+                                f"Text: {matching_text} found in exception: {e}"
                             )
                             return True
                         else:

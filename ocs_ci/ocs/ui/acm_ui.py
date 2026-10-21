@@ -23,6 +23,7 @@ from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.views import acm_ui_specific
 from ocs_ci.utility.utils import (
     expose_ocp_version,
+    get_registry_svc,
     run_cmd,
     get_running_acm_version,
 )
@@ -32,7 +33,6 @@ from ocs_ci.ocs.constants import (
     ACM_PLATOFRM_VSPHERE_CRED_PREFIX,
     VSPHERE_CA_FILE_PATH,
     DATA_DIR,
-    ACM_OCP_RELEASE_IMG_URL_PREFIX,
     ACM_VSPHERE_NETWORK,
     ACM_CLUSTER_DEPLOY_TIMEOUT,
     ACM_CLUSTER_DEPLOYMENT_LABEL_KEY,
@@ -250,14 +250,18 @@ class AcmPageNavigator(BaseUI):
             log.info("Select Fleet Management view")
             self.do_click(self.acm_page_nav["fleet-management-view"])
 
-        # There is a modal dialog box which appears as soon as we login
-        # we need to click on close on that dialog box
+        # There is a modal dialog box which appears as soon as we login;
+        # we need to click Close on it if present.  This modal is optional —
+        # it does not always appear — so use_fallback=False to prevent the AI
+        # locator fallback from running (and wasting 3+ minutes) when the
+        # modal is simply not there.
         if self.check_element_presence(
             (
                 self.acm_page_nav["modal_dialog_close_button"][1],
                 self.acm_page_nav["modal_dialog_close_button"][0],
             ),
             timeout=15,
+            use_fallback=False,
         ):
             self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=15)
         log.info("Successfully navigated to ACM console")
@@ -898,7 +902,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
 
     def get_ocp_release_img(self):
         vers = expose_ocp_version(self.cluster_conf.DEPLOYMENT["installer_version"])
-        return f"{ACM_OCP_RELEASE_IMG_URL_PREFIX}:{vers}"
+        return f"{get_registry_svc(vers)}:{vers}"
 
     def post_destroy_ops(self):
         """

@@ -4,7 +4,7 @@ import random
 import time
 
 from ocs_ci.framework.pytest_customization.marks import (
-    data_replication_separation_required,
+    data_replication_separation_public_required,
     runs_on_provider,
     yellow_squad,
 )
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 @tier4a
 @runs_on_provider
-@data_replication_separation_required
+@data_replication_separation_public_required
 @pytest.mark.polarion_id("OCS-7363")
 @yellow_squad
 def test_worker_node_drain():
@@ -72,7 +72,7 @@ def test_worker_node_drain():
 @tier4c
 @runs_on_provider
 @pytest.mark.polarion_id("OCS-7364")
-@data_replication_separation_required
+@data_replication_separation_public_required
 @yellow_squad
 def test_mon_respin():
     """

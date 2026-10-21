@@ -1,0 +1,276 @@
+"""
+Helpers for interacting with the csi-addons-config ConfigMap.
+
+Provides generic get/set operations for any key in the ConfigMap.
+Used by set_schedule_precedence() in helpers.py and by stagger tests.
+"""
+
+import json
+import logging
+import os
+import tempfile
+
+import yaml
+
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.utils import TimeoutSampler
+
+logger = logging.getLogger(__name__)
+
+
+def restart_csi_addons_controller(namespace: str = "") -> None:
+    """
+    Restart the CSI Addons controller manager and wait for it to be Ready.
+
+    Args:
+        namespace (str): The namespace where the controller runs.
+            Defaults to the cluster namespace from config.
+
+    """
+    if not namespace:
+        namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+    logger.info("Restarting CSI Addons controller manager pods...")
+    pod.restart_pods_having_label(
+        label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
+        namespace=namespace,
+    )
+
+    logger.info("Waiting for CSI Addons controller manager pod to be Ready...")
+    for pods_data in TimeoutSampler(
+        timeout=120,
+        sleep=10,
+        func=pod.get_pods_having_label,
+        label=constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL,
+        namespace=namespace,
+        statuses=[constants.STATUS_RUNNING],
+    ):
+        if pods_data:
+            logger.info("CSI Addons controller manager pod is Ready.")
+            break
+
+
+def update_csi_addons_config(key: str, value: str, *, restart: bool = True) -> None:
+    """
+    Create or update a key in the 'csi-addons-config' ConfigMap.
+
+    Optionally restarts the CSI Addons controller manager so the change
+    is picked up immediately.
+
+    Handles both cases: ConfigMap exists / does not exist.
+    Uses JSON merge patch to preserve existing keys.
+
+    Args:
+        key (str): The ConfigMap data key to set (e.g. 'cronjob-stagger-window').
+        value (str): The value to assign to the key.
+        restart (bool): Whether to restart the controller after updating.
+            Defaults to True.
+
+    Raises:
+        CommandFailed: If the ConfigMap patch or create operation fails.
+
+    """
+    configmap_name = constants.CSI_ADDONS_CONFIGMAP_NAME
+    namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+
+    cm_ocp = OCP(kind=constants.CONFIGMAP, namespace=namespace)
+
+    if cm_ocp.is_exist(configmap_name):
+        patch_payload = json.dumps({"data": {key: value}})
+        logger.info(
+            "Patching ConfigMap '%s' in ns '%s': %s=%s",
+            configmap_name,
+            namespace,
+            key,
+            value,
+        )
+        cm_ocp.exec_oc_cmd(
+            f"patch configmap {configmap_name} -p '{patch_payload}' --type=merge",
+            out_yaml_format=False,
+        )
+    else:
+        logger.info(
+            "Creating ConfigMap '%s' in ns '%s' with %s=%s",
+            configmap_name,
+            namespace,
+            key,
+            value,
+        )
+        cm_manifest = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": configmap_name, "namespace": namespace},
+            "data": {key: value},
+        }
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".yaml") as fp:
+            yaml.safe_dump(cm_manifest, fp, sort_keys=False)
+            tmp_path = fp.name
+        try:
+            cm_ocp.exec_oc_cmd(f"apply -f {tmp_path}", out_yaml_format=False)
+        finally:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+    logger.info("ConfigMap '%s' updated: %s=%s", configmap_name, key, value)
+    if restart:
+        restart_csi_addons_controller(namespace)
+    else:
+        logger.info("Skipping controller restart (restart=False)")
+
+
+def remove_csi_addons_config_key(key: str) -> None:
+    """
+    Remove a key from the 'csi-addons-config' ConfigMap and restart
+    the CSI Addons controller manager so the change is picked up.
+
+    No-op if the ConfigMap does not exist or the key is already absent.
+
+    Args:
+        key (str): The ConfigMap data key to remove.
+
+    Raises:
+        CommandFailed: If the patch operation fails for a reason other
+            than the key already being absent.
+
+    """
+    configmap_name = constants.CSI_ADDONS_CONFIGMAP_NAME
+    namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+
+    cm_ocp = OCP(kind=constants.CONFIGMAP, namespace=namespace)
+
+    if not cm_ocp.is_exist(configmap_name):
+        logger.info(
+            "ConfigMap '%s' not found in ns '%s'; nothing to remove.",
+            configmap_name,
+            namespace,
+        )
+        return
+
+    cm = cm_ocp.get(resource_name=configmap_name)
+    if key not in cm.get("data", {}):
+        logger.info(
+            "Key '%s' not present in ConfigMap '%s'; nothing to remove.",
+            key,
+            configmap_name,
+        )
+        return
+
+    patch_payload = json.dumps([{"op": "remove", "path": f"/data/{key}"}])
+    logger.info(
+        "Removing key '%s' from ConfigMap '%s' in ns '%s'",
+        key,
+        configmap_name,
+        namespace,
+    )
+    cm_ocp.exec_oc_cmd(
+        f"patch configmap {configmap_name} -p '{patch_payload}' --type=json",
+        out_yaml_format=False,
+    )
+
+    logger.info("Key '%s' removed from ConfigMap '%s'", key, configmap_name)
+    restart_csi_addons_controller(namespace)
+
+
+def get_csi_addons_config_value(key: str, default: str = "") -> str:
+    """
+    Read a value from the 'csi-addons-config' ConfigMap.
+
+    Returns the default if the ConfigMap does not exist, the key is missing,
+    or the read operation fails.
+
+    Args:
+        key (str): The ConfigMap data key to read (e.g. 'cronjob-stagger-window').
+        default (str): Fallback value when the key is absent. Defaults to "".
+
+    Returns:
+        str: The value from the ConfigMap, or *default* if unavailable.
+
+    """
+    configmap_name = constants.CSI_ADDONS_CONFIGMAP_NAME
+    namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+
+    cm_ocp = OCP(kind=constants.CONFIGMAP, namespace=namespace)
+
+    try:
+        if not cm_ocp.is_exist(configmap_name):
+            logger.info(
+                "ConfigMap '%s' not found in ns '%s'; returning default '%s' for key '%s'.",
+                configmap_name,
+                namespace,
+                default,
+                key,
+            )
+            return default
+
+        cm = cm_ocp.get(resource_name=configmap_name)
+        value = cm.get("data", {}).get(key, "").strip()
+
+        if not value:
+            logger.info(
+                "Key '%s' missing or empty in ConfigMap '%s'; returning default '%s'.",
+                key,
+                configmap_name,
+                default,
+            )
+            return default
+
+        logger.info("ConfigMap '%s' key '%s' = '%s'", configmap_name, key, value)
+        return value
+
+    except CommandFailed as e:
+        logger.warning(
+            "Failed to read ConfigMap '%s' in ns '%s' (%s); returning default '%s'.",
+            configmap_name,
+            namespace,
+            e,
+            default,
+        )
+        return default
+
+
+def get_csi_addon_pod_on_node(node_name, driver):
+    """
+    Find the csi-addons sidecar pod running on a specific node.
+
+    Args:
+        node_name (str): Name of the worker node.
+        driver (str): CSI driver type — 'cephfs' or 'rbd'.
+
+    Returns:
+        str: Pod name of the csi-addons sidecar on that node.
+
+    Raises:
+        AssertionError: If no matching pod is found.
+        ValueError: If `driver` is not "cephfs" or "rbd".
+    """
+    _DRIVER_LABELS = {
+        "cephfs": constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
+        "rbd": constants.CSI_RBD_ADDON_NODEPLUGIN_LABEL_420,
+    }
+    try:
+        label = _DRIVER_LABELS[driver]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported CSI driver: {driver!r}") from exc
+
+    namespace = config.ENV_DATA.get("cluster_namespace", "openshift-storage")
+    pod_ocp = OCP(kind="pod", namespace=namespace)
+    pods = pod_ocp.get(
+        selector=label,
+        field_selector=f"spec.nodeName={node_name},status.phase=Running",
+    )["items"]
+    pods = [p for p in pods if not p.get("metadata", {}).get("deletionTimestamp")]
+    logger.assertion(f"csi-addons pod with label {label} exists on node {node_name}")
+    assert pods, f"No csi-addons pod with label {label} found on node {node_name}"
+    pod_name = pods[0]["metadata"]["name"]
+    logger.info(
+        "Found csi-addons pod '%s' on node '%s' (driver=%s)",
+        pod_name,
+        node_name,
+        driver,
+    )
+    return pod_name

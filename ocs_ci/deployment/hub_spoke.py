@@ -21,10 +21,12 @@ from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.helpers.hypershift_base import (
     HyperShiftBase,
     get_hosted_cluster_names,
+    get_hosted_cluster_namespace,
     kubeconfig_exists_decorator,
     get_current_nodepool_size,
     get_available_hosted_clusters_to_ocp_ver_dict,
     create_cluster_dir,
+    fix_hypershift_webhook_ca_bundle,
 )
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework.logger_helper import log_step, reset_current_module_log_steps
@@ -50,6 +52,7 @@ from ocs_ci.ocs.rados_utils import (
     fetch_pool_names,
     fetch_rados_namespaces,
     fetch_filesystem_names,
+    get_ec_pool_names,
 )
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -73,7 +76,7 @@ from ocs_ci.ocs.resources.storageconsumer import (
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating, version
-from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.utility.version import get_ocp_ga_version
 from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.networking import create_drs_machine_config, create_drs_nad
@@ -83,7 +86,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     wait_for_machineconfigpool_status,
     get_server_version,
-    get_client_type_by_name,
+    get_registry_svc,
 )
 from ocs_ci.utility.aws import AWS, get_unused_vpc_cidr, get_cluster_region
 from botocore.exceptions import ClientError
@@ -636,6 +639,8 @@ def check_ceph_resources(cluster_names):
         f"from all consumers: {consumer_names}"
     )
     pool_names = fetch_pool_names()
+    ec_pool_names = set(get_ec_pool_names())
+    pool_names = [p for p in pool_names if p not in ec_pool_names]
     rados_namespaces = fetch_rados_namespaces()
     svg_names = get_cephfs_subvolumegroup_names()
     filesystems = fetch_filesystem_names()
@@ -696,10 +701,12 @@ def destroy_aws_hcp_clusters(cluster_names_list=None):
     """
     if not cluster_names_list:
         cluster_names_list = get_hosted_cluster_names()
+    clusters_config = config.ENV_DATA.get("clusters", {})
     aws_hcp_names = [
         name
         for name in cluster_names_list
-        if get_client_type_by_name(name) == constants.AWS_PLATFORM
+        if clusters_config.get(name, {}).get("hosted_cluster_platform")
+        == constants.AWS_PLATFORM
     ]
 
     if not aws_hcp_names:
@@ -831,20 +838,26 @@ def deploy_hosted_ocp_clusters(cluster_names_list=None):
             deploy_hypershift_oidc = False
             create_deployer_iam_role = False
 
-        hosted_ocp_cluster.deploy_dependencies(
-            deploy_acm_hub=deploy_acm_hub,
-            deploy_cnv=deploy_cnv,
-            deploy_metallb=first_ocp_deployment,
-            download_hcp_binary=first_ocp_deployment,
-            deploy_hyperconverged=deploy_hyperconverged,
-            deploy_mce=deploy_mce,
-            deploy_hypershift_oidc=deploy_hypershift_oidc,
-            create_deployer_iam_role=create_deployer_iam_role,
-        )
+        try:
+            hosted_ocp_cluster.deploy_dependencies(
+                deploy_acm_hub=deploy_acm_hub,
+                deploy_cnv=deploy_cnv,
+                deploy_metallb=first_ocp_deployment,
+                download_hcp_binary=first_ocp_deployment,
+                deploy_hyperconverged=deploy_hyperconverged,
+                deploy_mce=deploy_mce,
+                deploy_hypershift_oidc=deploy_hypershift_oidc,
+                create_deployer_iam_role=create_deployer_iam_role,
+            )
 
-        cluster_name = hosted_ocp_cluster.deploy_ocp()
-        if cluster_name:
-            cluster_names.append(cluster_name)
+            cluster_name = hosted_ocp_cluster.deploy_ocp()
+            if cluster_name:
+                cluster_names.append(cluster_name)
+        except (RuntimeError, CommandFailed, ClientError) as e:
+            logger.error(
+                f"Failed to deploy hosted OCP cluster '{cluster_name}': {e}. "
+                "Skipping and continuing with remaining clusters."
+            )
 
     cluster_names_existing = get_hosted_cluster_names()
     cluster_names_desired_left = [
@@ -1161,11 +1174,17 @@ class HostedClients(HyperShiftBase):
             )
 
         # stage 2 download all available kubeconfig files
-        log_step("Download kubeconfig for all clusters")
+        logger.test_step("Download kubeconfig for all clusters")
         kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
+        password_paths = self.download_hosted_clusters_kubeadmin_password_files()
+        if not password_paths or not all(password_paths):
+            logger.warning(
+                "kubeadmin-password could not be downloaded for one or more "
+                "hosted clusters"
+            )
 
         # stage 3 verify OCP clusters are ready
-        log_step(
+        logger.test_step(
             "Ensure clusters were deployed successfully, wait for them to be ready"
         )
         hosted_ocp_verification_passed = self.verify_hosted_ocp_clusters_from_provider()
@@ -1177,6 +1196,13 @@ class HostedClients(HyperShiftBase):
             logger.warning("Going through the verification process again")
             hosted_ocp_verification_passed = (
                 self.verify_hosted_ocp_clusters_from_provider()
+            )
+
+        if not hosted_ocp_verification_passed:
+            logger.warning(
+                "OCP verification did not pass for all hosted clusters. "
+                "Continuing with storage deployment stages since API server "
+                "may still be available."
             )
 
         # configure proxy object with trusted ca bundle for custom ingress ssl certificate
@@ -1191,23 +1217,83 @@ class HostedClients(HyperShiftBase):
                         f"oc patch -n clusters {constants.HOSTED_CLUSTERS}/{cluster_name} --type=merge "
                         f"--patch='{patch}'"
                     )
-                    exec_cmd(cmd)
+                    try:
+                        exec_cmd(cmd)
+                    except CommandFailed as e:
+                        logger.error(
+                            f"Failed to patch proxy trusted CA for cluster '{cluster_name}': {e}. "
+                            "Skipping and continuing with remaining clusters."
+                        )
+
+        any_cluster_needs_storage = any(
+            config_has_hosted_odf_image(n) for n in cluster_names
+        )
 
         # Need to create networkpolicy as mentioned in bug 2281536,
         # https://bugzilla.redhat.com/show_bug.cgi?id=2281536#c21
+        if any_cluster_needs_storage:
+            storage_client = StorageClient()
+            failed_network_policy = []
+            for cluster_name in [
+                n for n in cluster_names if config_has_hosted_odf_image(n)
+            ]:
+                try:
+                    storage_client.create_network_policy(
+                        namespace_to_create_storage_client=f"clusters-{cluster_name}"
+                    )
+                except (CommandFailed, AssertionError) as e:
+                    logger.error(
+                        f"Failed to create network policy for cluster '{cluster_name}': {e}. "
+                        "Dropping cluster from storage deployment stages."
+                    )
+                    failed_network_policy.append(cluster_name)
 
-        # Create Network Policy
-        storage_client = StorageClient()
-        for cluster_name in cluster_names:
-            storage_client.create_network_policy(
-                namespace_to_create_storage_client=f"clusters-{cluster_name}"
+            if failed_network_policy:
+                cluster_names = [
+                    name for name in cluster_names if name not in failed_network_policy
+                ]
+                logger.warning(
+                    f"Clusters dropped due to network policy failure: {failed_network_policy}. "
+                    f"Remaining clusters: {cluster_names}"
+                )
+
+        if any_cluster_needs_storage:
+            any_cluster_needs_storage = any(
+                config_has_hosted_odf_image(n) for n in cluster_names
             )
 
-        check_odf_prerequisites()
+        # stage 3.5: Setup data replication separation network configuration
+        # This must be done before ODF deployment to avoid node reboots after ODF is deployed
+        if config.DEPLOYMENT.get("enable_data_replication_separation_public"):
+            logger.test_step(
+                "Setup data replication separation (MachineConfig and NetworkAttachmentDefinition)"
+            )
+            create_drs_machine_config()
+            for cluster_name in cluster_names:
+                create_drs_nad(cluster_name)
 
-        # stage 3.5: Setup VPC peering, routing, and security groups for AWS HCP clusters
+            # Re-verify only this job's hosted clusters after MachineConfig-induced node reboots
+            # to avoid race conditions with parallel jobs
+            logger.test_step(
+                "Re-verify hosted OCP clusters after data replication separation setup"
+            )
+            logger.info(
+                "Waiting for hosted clusters to recover after networking changes"
+            )
+            drs_verification_results = []
+            for cluster_name in cluster_names:
+                drs_verification_results.append(
+                    self.verify_hosted_ocp_cluster_from_provider(
+                        cluster_name, timeout_hosted_cluster_completed_min=45
+                    )
+                )
+            # Update hosted_ocp_verification_passed only if all clusters verified
+            if all(drs_verification_results):
+                hosted_ocp_verification_passed = True
+
+        # stage 3.6: Setup VPC peering, routing, and security groups for AWS HCP clusters
         # This must be done before ODF deployment to ensure network connectivity
-        log_step(
+        logger.test_step(
             "Setup network for AWS HCP clusters (VPC peering, routing, security groups)"
         )
         for cluster_name in cluster_names:
@@ -1231,31 +1317,40 @@ class HostedClients(HyperShiftBase):
                     )
 
         # stage 4 deploy ODF/FDF client on all hosted clusters if not already deployed
-        fdf_on_provider = is_fdf_on_provider()
-        if fdf_on_provider:
-            logger.info(
-                "FDF detected on provider, will deploy FDF Client on spoke clusters"
-            )
-        log_step("Deploy storage client on hosted OCP clusters")
-        for cluster_name in cluster_names:
-
-            if not config_has_hosted_odf_image(cluster_name):
-                logger.info(
-                    f"Hosted ODF image not set for cluster '{cluster_name}', skipping deployment"
-                )
-                continue
-
+        fdf_on_provider = False
+        logger.test_step("Deploy storage client on hosted OCP clusters")
+        if any_cluster_needs_storage:
+            check_odf_prerequisites()
+            fdf_on_provider = is_fdf_on_provider()
             if fdf_on_provider:
-                logger.info(f"Setup FDF client on hosted OCP cluster '{cluster_name}'")
-                hosted_odf = HostedFDF(cluster_name)
-            else:
-                logger.info(f"Setup ODF client on hosted OCP cluster '{cluster_name}'")
-                hosted_odf = HostedODF(cluster_name)
-            hosted_odf.do_deploy()
+                logger.info(
+                    "FDF detected on provider, will deploy FDF Client on spoke clusters"
+                )
+            for cluster_name in cluster_names:
+
+                if not config_has_hosted_odf_image(cluster_name):
+                    logger.info(
+                        f"Hosted ODF image not set for cluster '{cluster_name}', skipping deployment"
+                    )
+                    continue
+
+                if fdf_on_provider:
+                    logger.info(
+                        f"Setup FDF client on hosted OCP cluster '{cluster_name}'"
+                    )
+                    hosted_odf = HostedFDF(cluster_name)
+                else:
+                    logger.info(
+                        f"Setup ODF client on hosted OCP cluster '{cluster_name}'"
+                    )
+                    hosted_odf = HostedODF(cluster_name)
+                hosted_odf.do_deploy()
 
         # stage 5 verify ODF/FDF client is installed on all hosted clusters
         odf_installed = []
-        log_step("Verify storage client is installed on all hosted OCP clusters")
+        logger.test_step(
+            "Verify storage client is installed on all hosted OCP clusters"
+        )
         for cluster_name in cluster_names:
             if config_has_hosted_odf_image(cluster_name):
                 logger.info(
@@ -1276,11 +1371,13 @@ class HostedClients(HyperShiftBase):
                 odf_installed.append(hosted_odf.odf_client_installed())
 
         # stage 6 setup storage client on all requested hosted clusters
-        log_step("Setup storage client on hosted OCP clusters")
+        logger.test_step("Setup storage client on hosted OCP clusters")
         client_setup_res = []
         hosted_odf_clusters_installed = []
         for cluster_name in cluster_names:
-            if storage_installation_requested(cluster_name):
+            if storage_installation_requested(
+                cluster_name
+            ) and config_has_hosted_odf_image(cluster_name):
                 logger.info(
                     f"Setting up Storage client on hosted OCP cluster '{cluster_name}'"
                 )
@@ -1317,22 +1414,19 @@ class HostedClients(HyperShiftBase):
             )
         )
 
-        if config.DEPLOYMENT.get("enable_data_replication_separation"):
-            create_drs_machine_config()
-            for cluster_name in cluster_names:
-                create_drs_nad(cluster_name)
-
-        log_step("Verify storage is available on all hosted ODF clusters")
+        logger.test_step("Verify storage is available on all hosted ODF clusters")
         hosted_odf_storage_verified = []
 
         for name in cluster_names:
-            hosted_odf = HostedODF(name)
+            hosted_odf = HostedFDF(name) if fdf_on_provider else HostedODF(name)
             if storage_installation_requested(name):
                 hosted_odf_storage_verified.append(
                     hosted_odf.verify_storage_classes_on_client()
                 )
 
-        log_step("Verify storage consumers and configmaps for newly deployed clients")
+        logger.test_step(
+            "Verify storage consumers and configmaps for newly deployed clients"
+        )
         storage_consumers_verified = []
         for hosted_odf_obj in hosted_odf_clusters_installed:
             cluster_name = hosted_odf_obj.name
@@ -1352,42 +1446,46 @@ class HostedClients(HyperShiftBase):
                 )
                 storage_consumers_verified.append(False)
 
-        log_step("verify backing Ceph storage for newly deployed clients")
-
-        rns_for_consumer_verified, svg_for_consumer_verified = check_ceph_resources(
-            cluster_names
-        )
-
+        rns_for_consumer_verified = []
+        svg_for_consumer_verified = []
         heartbeat_stable = []
-        for cluster_name in cluster_names:
-            if storage_installation_requested(cluster_name):
-                heartbeat_stable.append(verify_last_heartbeat_timestamp(cluster_name))
+        if any_cluster_needs_storage:
+            logger.test_step("verify backing Ceph storage for newly deployed clients")
+            rns_for_consumer_verified, svg_for_consumer_verified = check_ceph_resources(
+                cluster_names
+            )
+            for cluster_name in cluster_names:
+                if storage_installation_requested(cluster_name):
+                    heartbeat_stable.append(
+                        verify_last_heartbeat_timestamp(cluster_name)
+                    )
 
         assert (
             hosted_ocp_verification_passed
         ), "Some of the hosted OCP clusters are not ready"
-        assert all(
-            odf_installed
-        ), "ODF client was not deployed on all hosted OCP clusters"
-        assert all(
-            client_setup_res
-        ), "Storage client was not set up on all hosted ODF clusters"
-        assert all(
-            hosted_odf_storage_verified
-        ), "Storage is not available on all hosted ODF clusters"
-        assert all(
-            rns_for_consumer_verified
-        ), "RNS for consumers of deployed clusters failed verification"
-        assert all(
-            svg_for_consumer_verified
-        ), "SVG for consumers of deployed clusters failed verification"
-        assert all(
-            storage_consumers_verified
-        ), "Storage consumer resources verification failed for some of the clusters"
 
-        assert all(
-            heartbeat_stable
-        ), "Last heartbeat timestamp verification failed on some of the consumer clusters"
+        if any_cluster_needs_storage:
+            assert all(
+                odf_installed
+            ), "ODF client was not deployed on all hosted OCP clusters"
+            assert all(
+                client_setup_res
+            ), "Storage client was not set up on all hosted ODF clusters"
+            assert all(
+                hosted_odf_storage_verified
+            ), "Storage is not available on all hosted ODF clusters"
+            assert all(
+                rns_for_consumer_verified
+            ), "RNS for consumers of deployed clusters failed verification"
+            assert all(
+                svg_for_consumer_verified
+            ), "SVG for consumers of deployed clusters failed verification"
+            assert all(
+                storage_consumers_verified
+            ), "Storage consumer resources verification failed for some of the clusters"
+            assert all(
+                heartbeat_stable
+            ), "Last heartbeat timestamp verification failed on some of the consumer clusters"
 
         return hosted_odf_clusters_installed
 
@@ -1475,6 +1573,49 @@ class HostedClients(HyperShiftBase):
             )
 
         return self.kubeconfig_paths
+
+    def download_hosted_clusters_kubeadmin_password_files(
+        self, cluster_names_paths_dict=None
+    ):
+        """
+        Download kubeadmin-password for multiple HyperShift hosted clusters.
+
+        Args:
+            cluster_names_paths_dict (dict): Optional mapping of cluster name
+                to cluster path. If omitted, uses clusters from config.
+
+        Returns:
+            list: paths to downloaded kubeadmin-password files
+
+        """
+        if cluster_names_paths_dict is None:
+            cluster_names_paths_dict = dict()
+
+        cluster_names = (
+            list(cluster_names_paths_dict.keys())
+            if cluster_names_paths_dict
+            else list(config.ENV_DATA.get("clusters", {}).keys())
+        )
+        cluster_names = [
+            name
+            for name in cluster_names
+            if (
+                config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
+                is None
+                or config.ENV_DATA.get("clusters", {}).get(name, {}).get("cluster_type")
+                == "hci_client"
+            )
+        ]
+
+        password_paths = []
+        for name in cluster_names:
+            path = cluster_names_paths_dict.get(name) or config.ENV_DATA.setdefault(
+                "clusters", {}
+            ).setdefault(name, {}).get("hosted_cluster_path")
+            password_paths.append(
+                self.download_hosted_cluster_kubeadmin_password(name, path)
+            )
+        return password_paths
 
     def get_kubeconfig_path(self, cluster_name):
         """
@@ -1815,7 +1956,7 @@ class SpokeOCP(ABC):
 
         target_version = ocp_version or provider_version
         if "nightly" in target_version:
-            return f"{constants.REGISTRY_SVC}:{target_version}"
+            return f"{get_registry_svc(target_version)}:{target_version}"
         return f"{constants.QUAY_REGISTRY_SVC}:{target_version}-x86_64"
 
     @abstractmethod
@@ -1972,7 +2113,7 @@ def get_hosted_cluster_version_history(cluster_name: str):
     with config.RunWithProviderConfigContextIfAvailable():
         ocp_hc = OCP(
             kind=constants.HOSTED_CLUSTERS,
-            namespace=constants.CLUSTERS_NAMESPACE,
+            namespace=get_hosted_cluster_namespace(cluster_name),
         )
         hosted = ocp_hc.get(cluster_name)
         history = hosted.get("status", {}).get("version", {}).get("history") or []
@@ -2051,10 +2192,16 @@ class HypershiftHostedOCP(
         Returns:
             str: Name of the hosted cluster
         """
-        ocp_version = str(config.ENV_DATA["clusters"][self.name].get("ocp_version"))
-        if ocp_version and len(ocp_version.split(".")) == 2:
-            # if ocp_version is provided in form x.y, we need to get the full form x.y.z
-            ocp_version = get_ocp_ga_version(ocp_version)
+        hcp_image = config.ENV_DATA["clusters"].get(self.name).get("hcp_image")
+        ocp_version = None
+
+        # Find image using OCP version if an image is not provided
+        if not hcp_image:
+            ocp_version = str(config.ENV_DATA["clusters"][self.name].get("ocp_version"))
+            if ocp_version and len(ocp_version.split(".")) == 2:
+                # if ocp_version is provided in form x.y, we need to get the full form x.y.z
+                ocp_version = get_ocp_ga_version(ocp_version)
+
         # use default value 6 for cpu_cores_per_hosted_cluster as used in create_kubevirt_ocp_cluster()
         cpu_cores_per_hosted_cluster = (
             config.ENV_DATA["clusters"]
@@ -2088,8 +2235,8 @@ class HypershiftHostedOCP(
             .get(self.name)
             .get("disable_default_sources", True)
         )
-        data_replication_separation = config.DEPLOYMENT.get(
-            "enable_data_replication_separation"
+        data_replication_separation_public = config.DEPLOYMENT.get(
+            "enable_data_replication_separation_public"
         )
         auto_repair = config.ENV_DATA.get("auto_repair", True)
         auto_repair = (
@@ -2146,6 +2293,7 @@ class HypershiftHostedOCP(
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
                 auto_repair=auto_repair,
+                hcp_image=hcp_image,
             )
         else:
             return self.create_kubevirt_ocp_cluster(
@@ -2157,8 +2305,9 @@ class HypershiftHostedOCP(
                 cp_availability_policy=cp_availability_policy,
                 infra_availability_policy=infra_availability_policy,
                 disable_default_sources=disable_default_sources,
-                data_replication_separation=data_replication_separation,
+                data_replication_separation=data_replication_separation_public,
                 auto_repair=auto_repair,
+                hcp_image=hcp_image,
             )
 
     def deploy_dependencies(
@@ -2200,6 +2349,12 @@ class HypershiftHostedOCP(
             f"deploy_metallb={deploy_metallb}, download_hcp_binary={download_hcp_binary}, "
             f"deploy_mce={deploy_mce}, deploy_hyperconverged={deploy_hyperconverged}"
         )
+
+        # local import to avoid circular import issues
+        from ocs_ci.deployment.deployment import enable_wildcard_routes
+
+        enable_wildcard_routes()
+
         initial_default_sc = helpers.get_default_storage_class()
         logger.info(f"Initial default StorageClass: {initial_default_sc}")
         if not initial_default_sc == constants.CEPHBLOCKPOOL_SC:
@@ -2239,8 +2394,7 @@ class HypershiftHostedOCP(
 
         if deploy_metallb:
             self.deploy_lb()
-        if download_hcp_binary:
-            self.update_hcp_binary()
+        self.ensure_hcp_binaries(download_hcp_binary=download_hcp_binary)
 
         # Enable central infrastructure management service for agent
         if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
@@ -2274,7 +2428,7 @@ class HypershiftHostedOCP(
             with config.RunWithProviderConfigContextIfAvailable():
                 ocp_hc = OCP(
                     kind=constants.HOSTED_CLUSTERS,
-                    namespace=constants.CLUSTERS_NAMESPACE,
+                    namespace=get_hosted_cluster_namespace(self.name),
                 )
                 patch_body = json.dumps({"spec": {"release": {"image": image}}})
                 logger.info(
@@ -2309,7 +2463,7 @@ class HypershiftHostedOCP(
             with config.RunWithProviderConfigContextIfAvailable():
                 ocp_np = OCP(
                     kind="nodepools",
-                    namespace=constants.CLUSTERS_NAMESPACE,
+                    namespace=get_hosted_cluster_namespace(self.name),
                 )
                 patch_body = json.dumps({"spec": {"release": {"image": image}}})
                 logger.info(
@@ -2346,7 +2500,10 @@ class HypershiftHostedOCP(
 
         try:
             with config.RunWithProviderConfigContextIfAvailable():
-                ocp_np = OCP(kind="nodepools", namespace=constants.CLUSTERS_NAMESPACE)
+                ocp_np = OCP(
+                    kind="nodepools",
+                    namespace=get_hosted_cluster_namespace(self.name),
+                )
                 jsonpath = '{.status.conditions[?(@.type=="UpdatingVersion")].status}'
 
                 def _sample():
@@ -2823,8 +2980,9 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 else:
                     logger.warning(
                         f"Infrastructure exists but output file not found: {self.output_infra_file}. "
-                        "Infrastructure may have been created outside this tool."
+                        "Reconstructing output file from existing AWS resources."
                     )
+                    self._reconstruct_infra_output(existing_vpcs)
                     return self.output_infra_file
         except ClientError as e:
             logger.error(
@@ -2899,6 +3057,90 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             logger.warning(f"Could not read/parse infra output file: {e}")
 
         return self.output_infra_file
+
+    def _reconstruct_infra_output(self, existing_vpcs):
+        """
+        Reconstruct the infrastructure output JSON file from existing AWS resources.
+
+        Queries Route53 for public/private/local hosted zones by cluster name and
+        base domain, and reads the VPC CIDR from the existing VPC. Writes the
+        reconstructed data to self.output_infra_file and populates instance attributes.
+
+        If Route53 zones are missing the infrastructure is considered incomplete
+        (partial creation from a prior failed run) and a RuntimeError is raised
+        with instructions to clean up before retrying.
+
+        Args:
+            existing_vpcs (list): List of VPC dicts returned by describe_vpcs.
+
+        Raises:
+            RuntimeError: If Route53 zones are missing (partial infra state).
+        """
+        zone_name = f"{self.name}.{self.base_domain}."
+        logger.info(f"Querying Route53 for hosted zones with name '{zone_name}'")
+
+        r53 = self.route53_client
+        paginator = r53.get_paginator("list_hosted_zones")
+        public_zone_id = None
+        private_zone_id = None
+        local_zone_id = None
+
+        for page in paginator.paginate():
+            for zone in page["HostedZones"]:
+                if zone["Name"] != zone_name:
+                    continue
+                zone_id = zone["Id"].split("/")[-1]
+                if zone["Config"]["PrivateZone"]:
+                    tags_resp = r53.list_tags_for_resource(
+                        ResourceType="hostedzone", ResourceId=zone_id
+                    )
+                    tags = {
+                        t["Key"]: t["Value"]
+                        for t in tags_resp["ResourceTagSet"]["Tags"]
+                    }
+                    if tags.get("Name", "").endswith("-local"):
+                        local_zone_id = zone_id
+                    else:
+                        private_zone_id = zone_id
+                else:
+                    public_zone_id = zone_id
+
+        if not public_zone_id or not private_zone_id:
+            vpc_id = (
+                existing_vpcs[0].get("VpcId", "unknown") if existing_vpcs else "unknown"
+            )
+            raise RuntimeError(
+                f"Partial infrastructure detected for cluster '{self.name}': "
+                f"VPC '{vpc_id}' (tag: kubernetes.io/cluster/{self.infra_id}=owned) exists "
+                f"but Route53 hosted zones for '{zone_name}' are missing. "
+                f"This is a leftover from a previous failed run. "
+                f"Delete the VPC and its associated resources, then retry."
+            )
+
+        vpc_cidr = existing_vpcs[0].get("CidrBlock") if existing_vpcs else None
+
+        logger.info(
+            f"Reconstructed infra data: infraID={self.infra_id}, "
+            f"publicZoneID={public_zone_id}, privateZoneID={private_zone_id}, "
+            f"localZoneID={local_zone_id}, machineCIDR={vpc_cidr}"
+        )
+
+        infra_data = {
+            "infraID": self.infra_id,
+            "publicZoneID": public_zone_id,
+            "privateZoneID": private_zone_id,
+            "localZoneID": local_zone_id,
+            "machineCIDR": vpc_cidr,
+        }
+
+        os.makedirs(os.path.dirname(self.output_infra_file), exist_ok=True)
+        with open(self.output_infra_file, "w") as f:
+            json.dump(infra_data, f, indent=2)
+        logger.info(
+            f"Reconstructed infrastructure output written to {self.output_infra_file}"
+        )
+
+        self.read_infra_output()
 
     def get_vpc_from_existing_infra(self, infra_id=None):
         """
@@ -3408,8 +3650,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             self.deploy_mce()
             self.enable_hypershift_preview()
 
-        if download_hcp_binary:
-            self.update_hcp_binary()
+        self.ensure_hcp_binaries(download_hcp_binary=download_hcp_binary)
 
         log_step("Saving IDMS mirrors list to file for image-content-sources")
         self.save_mirrors_list_to_file()
@@ -3587,6 +3828,8 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         Returns:
             str: Cluster name if successful, empty string if failed
         """
+        # timeout is stretched due to AWS EC2 capacity/provisioning delays
+        nodes_creation_timeout = 100 * 60
 
         logger.info(
             f"Creating AWS HCP cluster '{self.name}' with release image: {release_image}"
@@ -3717,7 +3960,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
             logger.info(f"Verifying HostedCluster '{self.name}' was created...")
             for sample in TimeoutSampler(
-                timeout=300, sleep=10, func=get_hosted_cluster_names
+                timeout=nodes_creation_timeout, sleep=30, func=get_hosted_cluster_names
             ):
                 if self.name in sample:
                     logger.info(f"HostedCluster '{self.name}' created successfully")
@@ -3729,6 +3972,18 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             return ""
 
         except CommandFailed as e:
+            if "x509: certificate signed by unknown authority" in str(
+                e
+            ) and "hostedclusters.hypershift.openshift.io" in str(e):
+                logger.warning(
+                    "HyperShift webhook TLS error detected — applying CA bundle fix and retrying"
+                )
+                fix_hypershift_webhook_ca_bundle()
+                exec_cmd(cmd, timeout=2700)
+            else:
+                logger.error(f"Failed to create AWS HCP cluster '{self.name}'")
+                self._log_cmd_output(e)
+                raise
             logger.error(f"Failed to create AWS HCP cluster '{self.name}'")
             self._log_cmd_output(e)
             raise
@@ -3857,7 +4112,21 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         try:
             existing_buckets = self.list_buckets()
             if any(bucket["Name"] == bucket_name for bucket in existing_buckets):
-                logger.info(f"Bucket '{bucket_name}' already exists, skipping creation")
+                # Verify actual bucket region — it may differ from the
+                # requested region if a previous deployment in another
+                # region created it (S3 bucket names are globally unique).
+                location_resp = self.s3_client.get_bucket_location(Bucket=bucket_name)
+                actual_region = location_resp.get("LocationConstraint") or "us-east-1"
+                if actual_region != region:
+                    logger.warning(
+                        f"Bucket '{bucket_name}' exists in '{actual_region}', "
+                        f"not in requested '{region}'. Using actual region."
+                    )
+                    region = actual_region
+                logger.info(
+                    f"Bucket '{bucket_name}' already exists in region "
+                    f"'{region}', reusing it"
+                )
                 bucket_location = f"http://{bucket_name}.s3.amazonaws.com/"
                 bucket_arn = f"arn:aws:s3:::{bucket_name}"
             else:
@@ -4043,6 +4312,8 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         """
         all_clean = True
 
+        self._discover_oidc_config()
+
         hypershift_cli_available = self._ensure_sts_credentials()
 
         if not self.role_arn:
@@ -4055,6 +4326,12 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             except ClientError as e:
                 logger.warning(f"Could not discover deployer IAM role: {e}")
                 hypershift_cli_available = False
+
+        # Remove VPC peering and cross-VPC security group rules early.
+        # These create dependencies that cause hypershift destroy to loop
+        # on DependencyViolation errors when deleting security groups.
+        if not self._cleanup_vpc_peering():
+            all_clean = False
 
         if hypershift_cli_available:
             if not self._destroy_cluster_via_hypershift(timeout=timeout):
@@ -4093,9 +4370,6 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         if not self._cleanup_stale_oidc_providers():
             all_clean = False
 
-        if not self._cleanup_vpc_peering():
-            all_clean = False
-
         if not self._cleanup_hosted_cluster_secrets():
             all_clean = False
 
@@ -4124,6 +4398,72 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 )
 
         return verified
+
+    def _discover_oidc_config(self):
+        """
+        Discover OIDC bucket configuration for cleanup.
+
+        During destroy, ``deploy_dependencies()`` is not called, so
+        ``oidc_bucket_name`` and ``oidc_bucket_region`` remain ``None``.
+        This method discovers the OIDC bucket configuration using
+        multiple strategies (in order):
+
+        1. Cluster config (``ENV_DATA["clusters"][name]["oidc_bucket_name"]``)
+        2. Kubernetes secret on management cluster
+        3. Naming convention fallback: ``{name}-oidc-bucket``
+
+        Sets ``self.oidc_bucket_name`` and ``self.oidc_bucket_region``.
+        """
+        if self.oidc_bucket_name and self.oidc_bucket_region:
+            logger.info(
+                f"OIDC config already set: bucket={self.oidc_bucket_name}, "
+                f"region={self.oidc_bucket_region}"
+            )
+            return
+
+        cluster_config = config.ENV_DATA.get("clusters", {}).get(self.name, {})
+        self.oidc_bucket_name = cluster_config.get("oidc_bucket_name")
+        self.oidc_bucket_region = cluster_config.get(
+            "oidc_bucket_region", self.aws_region
+        )
+
+        if self.oidc_bucket_name:
+            logger.info(
+                f"OIDC bucket from cluster config: {self.oidc_bucket_name} "
+                f"in region {self.oidc_bucket_region}"
+            )
+            return
+
+        try:
+            secret_name = constants.HCP_OIDC_S3_SECRET
+            secret_ns = cluster_config.get("oidc_secret_namespace", "local-cluster")
+            secret_obj = OCP(
+                kind="secret",
+                namespace=secret_ns,
+                resource_name=secret_name,
+            )
+            if secret_obj.is_exist():
+                secret_data = secret_obj.get()
+                encoded = secret_data.get("data", {})
+                bucket = base64.b64decode(encoded.get("bucket", "")).decode()
+                region = base64.b64decode(encoded.get("region", "")).decode()
+                if bucket:
+                    self.oidc_bucket_name = bucket
+                    self.oidc_bucket_region = region or self.aws_region
+                    logger.info(
+                        f"OIDC bucket from K8s secret '{secret_name}': "
+                        f"{self.oidc_bucket_name} in region {self.oidc_bucket_region}"
+                    )
+                    return
+        except (CommandFailed, Exception) as e:
+            logger.debug(f"Could not discover OIDC bucket from K8s secret: {e}")
+
+        self.oidc_bucket_name = f"{self.name}-oidc-bucket"
+        self.oidc_bucket_region = self.aws_region
+        logger.info(
+            f"Using OIDC bucket naming convention fallback: "
+            f"{self.oidc_bucket_name} in region {self.oidc_bucket_region}"
+        )
 
     def _ensure_sts_credentials(self):
         """
@@ -4965,13 +5305,14 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
     def _cleanup_s3_oidc_objects(self):
         """
-        Clean up S3 OIDC documents for this infra_id.
+        Clean up S3 OIDC bucket/objects for this cluster.
 
-        Deletes all objects under the ``{infra_id}/`` prefix from the shared
-        OIDC S3 bucket. Does not delete the bucket itself.
+        For per-cluster OIDC buckets (named ``{name}-oidc-bucket``), deletes
+        the entire bucket including all objects. For shared OIDC buckets,
+        deletes only objects under the ``{infra_id}/`` prefix.
 
         Returns:
-            bool: True if all objects deleted, False otherwise
+            bool: True if cleanup succeeded, False otherwise
         """
         logger.info(f"Cleaning up S3 OIDC objects for infra_id '{self.infra_id}'")
 
@@ -4979,45 +5320,82 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             logger.warning("OIDC bucket name not set, skipping S3 OIDC object cleanup")
             return True
 
-        success = True
-        prefix = f"{self.infra_id}/"
-
         try:
-            paginator = self.s3_client.get_paginator("list_objects_v2")
-            objects_to_delete = []
-
-            for page in paginator.paginate(Bucket=self.oidc_bucket_name, Prefix=prefix):
-                for obj in page.get("Contents", []):
-                    objects_to_delete.append({"Key": obj["Key"]})
-
-            if not objects_to_delete:
-                logger.info(
-                    f"No S3 objects found under prefix '{prefix}' "
-                    f"in bucket '{self.oidc_bucket_name}'"
-                )
-                return True
-
+            self.s3_client.head_bucket(Bucket=self.oidc_bucket_name)
+        except ClientError:
             logger.info(
-                f"Deleting {len(objects_to_delete)} S3 objects from "
-                f"'{self.oidc_bucket_name}' with prefix '{prefix}'"
+                f"OIDC bucket '{self.oidc_bucket_name}' does not exist, "
+                "nothing to clean up"
             )
+            return True
 
-            batch_size = 1000
-            for i in range(0, len(objects_to_delete), batch_size):
-                batch = objects_to_delete[i : i + batch_size]
-                self.s3_client.delete_objects(
-                    Bucket=self.oidc_bucket_name,
-                    Delete={"Objects": batch},
+        success = True
+        is_per_cluster_bucket = self.oidc_bucket_name == f"{self.name}-oidc-bucket"
+
+        if is_per_cluster_bucket:
+            try:
+                logger.info(
+                    f"Deleting per-cluster OIDC bucket '{self.oidc_bucket_name}' "
+                    "and all its contents"
+                )
+                paginator = self.s3_client.get_paginator("list_objects_v2")
+                for page in paginator.paginate(Bucket=self.oidc_bucket_name):
+                    objects = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+                    if objects:
+                        self.s3_client.delete_objects(
+                            Bucket=self.oidc_bucket_name,
+                            Delete={"Objects": objects},
+                        )
+                self.s3_client.delete_bucket(Bucket=self.oidc_bucket_name)
+                logger.info(
+                    f"Deleted per-cluster OIDC bucket '{self.oidc_bucket_name}'"
+                )
+            except ClientError as e:
+                logger.error(
+                    f"Failed to delete per-cluster OIDC bucket "
+                    f"'{self.oidc_bucket_name}': {e}"
+                )
+                success = False
+        else:
+            prefix = f"{self.infra_id}/"
+            try:
+                paginator = self.s3_client.get_paginator("list_objects_v2")
+                objects_to_delete = []
+
+                for page in paginator.paginate(
+                    Bucket=self.oidc_bucket_name, Prefix=prefix
+                ):
+                    for obj in page.get("Contents", []):
+                        objects_to_delete.append({"Key": obj["Key"]})
+
+                if not objects_to_delete:
+                    logger.info(
+                        f"No S3 objects found under prefix '{prefix}' "
+                        f"in bucket '{self.oidc_bucket_name}'"
+                    )
+                    return True
+
+                logger.info(
+                    f"Deleting {len(objects_to_delete)} S3 objects from "
+                    f"'{self.oidc_bucket_name}' with prefix '{prefix}'"
                 )
 
-            logger.info("S3 OIDC objects deleted successfully")
+                batch_size = 1000
+                for i in range(0, len(objects_to_delete), batch_size):
+                    batch = objects_to_delete[i : i + batch_size]
+                    self.s3_client.delete_objects(
+                        Bucket=self.oidc_bucket_name,
+                        Delete={"Objects": batch},
+                    )
 
-        except ClientError as e:
-            logger.error(f"Failed to clean up S3 OIDC objects: {e}")
-            success = False
-        except (KeyError, ValueError) as e:
-            logger.error(f"Unexpected error cleaning up S3 OIDC objects: {e}")
-            success = False
+                logger.info("S3 OIDC objects deleted successfully")
+
+            except ClientError as e:
+                logger.error(f"Failed to clean up S3 OIDC objects: {e}")
+                success = False
+            except (KeyError, ValueError) as e:
+                logger.error(f"Unexpected error cleaning up S3 OIDC objects: {e}")
+                success = False
 
         return success
 
@@ -5322,7 +5700,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         hc_ocp = OCP(
             kind=constants.HOSTED_CLUSTERS,
-            namespace=constants.CLUSTERS_NAMESPACE,
+            namespace=get_hosted_cluster_namespace(self.name),
         )
         if hc_ocp.is_exist(resource_name=self.name):
             logger.warning(
@@ -5354,7 +5732,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         np_ocp = OCP(
             kind="nodepools",
-            namespace=constants.CLUSTERS_NAMESPACE,
+            namespace=get_hosted_cluster_namespace(self.name),
         )
         try:
             nodepools = np_ocp.get()
@@ -5995,6 +6373,40 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         logger.info(f"Instance {instance_id} has security group {sg_id}")
         return sg_id
 
+    def _get_worker_node_sg(self, vpc_id):
+        """
+        Find the worker node security group in a VPC by name pattern.
+
+        OCP IPI clusters create security groups with a ``*-node`` suffix for
+        worker nodes and ``*-controlplane`` for masters. This method finds the
+        worker node SG so that Ceph port rules are applied to the correct group.
+
+        Args:
+            vpc_id (str): VPC ID to search in.
+
+        Returns:
+            str: Security group ID for worker nodes.
+
+        Raises:
+            ValueError: If no matching security group is found.
+        """
+        sgs = self.ec2_client.describe_security_groups(
+            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+        ).get("SecurityGroups", [])
+
+        for sg in sgs:
+            if sg["GroupName"].endswith("-node"):
+                logger.info(
+                    f"Found worker node SG '{sg['GroupId']}' "
+                    f"({sg['GroupName']}) in VPC '{vpc_id}'"
+                )
+                return sg["GroupId"]
+
+        raise ValueError(
+            f"No worker node security group (*-node) found in VPC '{vpc_id}'. "
+            f"Available SGs: {[s['GroupName'] for s in sgs]}"
+        )
+
     def create_vpc_peering_connection(self, client_vpc_id, mgmt_vpc_id):
         """
         Create a VPC peering connection between two VPCs.
@@ -6442,6 +6854,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         client_cluster_name,
         mgmt_cluster_name,
         mgmt_instance_id,
+        client_instance_id=None,
         nodeport=None,
     ):
         """
@@ -6457,6 +6870,9 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             client_cluster_name (str): Name of the client cluster
             mgmt_cluster_name (str): Name of the management cluster
             mgmt_instance_id (str): EC2 instance ID in management cluster (used for SG and routing)
+            client_instance_id (str): Optional EC2 instance ID in client cluster.
+                Used to find the correct (private) subnet route table for routing.
+                If not provided, falls back to the main VPC route table.
             nodeport (int): Optional NodePort to add to security group rules
 
         Returns:
@@ -6472,10 +6888,14 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             client_cluster_name=client_cluster_name,
             mgmt_cluster_name=mgmt_cluster_name,
             mgmt_instance_id=mgmt_instance_id,
+            client_instance_id=client_instance_id,
         )
 
-        # Get security group for management instance
-        mgmt_sg_id = self.get_security_group_id_by_instance_id(mgmt_instance_id)
+        # Get the worker node security group from the management VPC.
+        # Ceph port rules must be on the worker (*-node) SG, not the master
+        # (*-controlplane) SG, because NodePort services are reached via workers.
+        mgmt_vpc_id = peering_result["mgmt_vpc_id"]
+        mgmt_sg_id = self._get_worker_node_sg(mgmt_vpc_id)
 
         # Add Ceph ports to security group
         client_vpc_cidr = peering_result["client_vpc_cidr"]
@@ -6633,10 +7053,35 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
 
         mgmt_instance_id = instances["Reservations"][0]["Instances"][0]["InstanceId"]
 
+        # Get a client worker node instance ID so the route is added to the
+        # correct (private) subnet route table, not the main/public one.
+        client_instance_id = None
+        if self.cluster_kubeconfig:
+            try:
+                ocp_nodes = OCP(kind="node", cluster_kubeconfig=self.cluster_kubeconfig)
+                nodes = ocp_nodes.get(selector="node-role.kubernetes.io/worker")
+                if nodes.get("items"):
+                    provider_id = (
+                        nodes["items"][0].get("spec", {}).get("providerID", "")
+                    )
+                    # providerID format: aws:///us-west-2a/i-0123456789abcdef0
+                    if "/" in provider_id:
+                        client_instance_id = provider_id.rsplit("/", 1)[-1]
+                        logger.info(
+                            f"Client worker instance ID for routing: "
+                            f"{client_instance_id}"
+                        )
+            except (CommandFailed, IndexError, KeyError) as e:
+                logger.warning(
+                    f"Could not get client instance ID, will use main route "
+                    f"table as fallback: {e}"
+                )
+
         network_result = self.setup_network_for_client_cluster(
             client_cluster_name=self.name,
             mgmt_cluster_name=mgmt_cluster_name,
             mgmt_instance_id=mgmt_instance_id,
+            client_instance_id=client_instance_id,
             nodeport=nodeport,
         )
 
@@ -7311,6 +7756,13 @@ class SpokeODF(SpokeOCP, ABC):
         logger.info("Creating ODF client operator group")
         self.create_operator_group()
 
+        if self.is_external:
+            self.exec_oc_cmd(
+                constants.PATCH_SPECIFIC_SOURCES_CMD.format(
+                    disable="true", source_name=constants.OPERATOR_CATALOG_SOURCE_NAME
+                ).removeprefix("oc ")
+            )
+
         logger.info("Creating ODF client catalog source")
         self.create_catalog_source()
 
@@ -7763,6 +8215,15 @@ def hypershift_cluster_factory(
                         {cluster_name: cluster_path}, from_hcp=False
                     )
                 )
+                pw_paths = hosted_clients_obj.download_hosted_clusters_kubeadmin_password_files(
+                    {cluster_name: cluster_path}
+                )
+                if not pw_paths or not all(pw_paths):
+                    logger.warning(
+                        "kubeadmin-password could not be downloaded for "
+                        "hosted cluster %s",
+                        cluster_name,
+                    )
                 if not kubeconf_paths:
                     logger.warning(
                         "kubeconfig was not found after download attempt; "

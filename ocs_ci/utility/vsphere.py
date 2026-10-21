@@ -6,6 +6,7 @@ import logging
 import os
 import ssl
 import time
+import shutil
 
 import atexit
 
@@ -34,7 +35,7 @@ from ocs_ci.ocs.constants import (
     NODE_READY,
 )
 from ocs_ci.framework import config
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -437,7 +438,9 @@ class VSPHERE(object):
             self.start_vms(vms=[vm])
         # Importing here to avoid circular dependencies
         from ocs_ci.ocs.node import get_compute_node_names, wait_for_nodes_status
+        from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 
+        wait_for_cluster_connectivity(tries=120, delay=5)
         compute_nodes = get_compute_node_names()
         try:
             wait_for_nodes_status(compute_nodes, NODE_READY)
@@ -622,7 +625,7 @@ class VSPHERE(object):
         WaitForTasks(tasks, self._si)
 
         if wait:
-            wait_time = config.DEPLOYMENT.get("vsphere_vm_start_timeout", 240)
+            wait_time = config.DEPLOYMENT.get("vsphere_vm_start_timeout", 900)
             for ips in TimeoutSampler(wait_time, 3, self.get_vms_ips, vms):
                 logger.info(
                     f"Waiting for VMs {[vm.name for vm in vms]} to power on "
@@ -1972,3 +1975,161 @@ class VSPHERE(object):
             f"VM {vm.name} did not reach the desired status {desired_status} within the timeout period."
         )
         return False
+
+    def delete_storage_policy_by_exact_name(self, policy_name):
+        """
+        Delete a storage policy by its exact name using govc.
+
+        Args:
+            policy_name (str): Exact name of the storage policy to delete
+
+        Returns:
+            bool: True if policy was deleted, False otherwise
+
+        """
+        govc_env = self._get_govc_env()
+        if not govc_env:
+            return False
+
+        try:
+            # List all storage policies to verify the policy exists
+            logger.info(f"Checking if storage policy exists: {policy_name}")
+            list_cmd = "govc storage.policy.ls"
+            result = exec_cmd(list_cmd, env=govc_env, timeout=60)
+            policies_output = result.stdout.decode("utf-8").strip().split("\n")
+
+            # govc output format: "UUID  policy-name"
+            # Check if the policy name exists in any line
+            policy_found = False
+            for policy_line in policies_output:
+                if policy_name in policy_line:
+                    policy_found = True
+                    logger.info(f"Found storage policy in line: {policy_line}")
+                    break
+
+            if not policy_found:
+                logger.info(f"Storage policy not found: {policy_name}")
+                return False
+
+            # Delete the storage policy
+            logger.info(f"Deleting storage policy: {policy_name}")
+            delete_cmd = f"govc storage.policy.rm '{policy_name}'"
+            exec_cmd(delete_cmd, env=govc_env)
+            logger.info(f"Successfully deleted storage policy: {policy_name}")
+            return True
+
+        except Exception as err:
+            logger.warning(f"Failed to delete storage policy {policy_name}: {err}")
+            return False
+
+    def _get_govc_env(self):
+        """
+        Get the govc environment variables.
+
+        Returns:
+            dict: Environment variables for govc, or None if govc is not available
+
+        """
+        govc_path = shutil.which("govc")
+        if not govc_path:
+            logger.warning(
+                "govc command not found. "
+                "Please install govc (https://github.com/vmware/govmomi/releases) "
+            )
+            return None
+
+        govc_env = os.environ.copy()
+        govc_env.update(
+            {
+                "GOVC_URL": self._host,
+                "GOVC_USERNAME": self._user,
+                "GOVC_PASSWORD": self._password,
+                "GOVC_INSECURE": "true",
+            }
+        )
+        return govc_env
+
+    def delete_tag(self, tag_name, category_name):
+        """
+        Delete a tag by its name using govc.
+
+        Args:
+            tag_name (str): Name of the tag to delete
+            category_name (str): Name of the tag category the tag belongs to
+
+        Returns:
+            bool: True if tag was deleted, False otherwise
+
+        """
+        govc_env = self._get_govc_env()
+        if not govc_env:
+            return False
+
+        try:
+            logger.info(f"Checking if tag exists: {category_name}/{tag_name}")
+            list_cmd = f"govc tags.ls -c '{category_name}'"
+            result = exec_cmd(list_cmd, env=govc_env, timeout=60)
+            tags_output = result.stdout.decode("utf-8").strip().split("\n")
+
+            tag_found = False
+            for tag_line in tags_output:
+                if tag_name in tag_line:
+                    tag_found = True
+                    logger.info(f"Found tag: {tag_line}")
+                    break
+
+            if not tag_found:
+                logger.info(f"Tag {tag_name} not found in category {category_name}")
+                return False
+
+            logger.info(f"Deleting tag: {category_name}/{tag_name}")
+            delete_cmd = f"govc tags.rm -f -c '{category_name}' '{tag_name}'"
+            exec_cmd(delete_cmd, env=govc_env)
+            logger.info(f"Successfully deleted tag: {category_name}/{tag_name}")
+            return True
+
+        except Exception as err:
+            logger.warning(f"Failed to delete tag {category_name}/{tag_name}: {err}")
+            return False
+
+    def delete_tag_category(self, category_name):
+        """
+        Delete a tag category by its name using govc.
+
+        Args:
+            category_name (str): Name of the tag category to delete
+
+        Returns:
+            bool: True if category was deleted, False otherwise
+
+        """
+        govc_env = self._get_govc_env()
+        if not govc_env:
+            return False
+
+        try:
+            logger.info(f"Checking if tag category exists: {category_name}")
+            list_cmd = "govc tags.category.ls"
+            result = exec_cmd(list_cmd, env=govc_env, timeout=60)
+            categories_output = result.stdout.decode("utf-8").strip().split("\n")
+
+            category_found = False
+            for category_line in categories_output:
+                if category_name in category_line:
+                    category_found = True
+                    logger.info(f"Found tag category: {category_line}")
+                    break
+
+            if not category_found:
+                logger.info(f"Tag category not found: {category_name}")
+                return False
+
+            logger.info(f"Deleting tag category: {category_name}")
+            delete_cmd = f"govc tags.category.rm -f '{category_name}'"
+            exec_cmd(delete_cmd, env=govc_env)
+            logger.info(f"Successfully deleted tag category: {category_name}")
+            return True
+
+        except Exception as err:
+            logger.warning(f"Failed to delete tag category {category_name}: {err}")
+            return False

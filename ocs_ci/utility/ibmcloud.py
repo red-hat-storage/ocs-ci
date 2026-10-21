@@ -36,7 +36,6 @@ from ocs_ci.utility import version as util_version
 from ocs_ci.utility.utils import get_infra_id, get_ocp_version, run_cmd, TimeoutSampler
 from ocs_ci.ocs.node import get_nodes
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -100,14 +99,16 @@ def set_region(region=None):
     logger.info(f"cluster region is {region}")
     logger.info(f"updating region {region} to ENV_DATA ")
     config.ENV_DATA["region"] = region
-    other_region = list(IBM_CLOUD_REGIONS - {region})[0]
     for node_type in ["master", "worker"]:
         for idx, zone in enumerate(
             copy(config.ENV_DATA.get(f"{node_type}_availability_zones", []))
         ):
-            config.ENV_DATA[f"{node_type}_availability_zones"][idx] = zone.replace(
-                other_region, region
-            )
+            for old_region in IBM_CLOUD_REGIONS - {region}:
+                if old_region in zone:
+                    config.ENV_DATA[f"{node_type}_availability_zones"][idx] = (
+                        zone.replace(old_region, region)
+                    )
+                    break
     # Make sure we are logged in proper region from config, once region changed!
     login()
 
@@ -1072,6 +1073,10 @@ def get_cluster_service_ids(cluster_name, get_infra_id_from_metadata=True):
     """
     Get cluster service IDs
 
+    Matches by infra ID prefix, falling back to a reconstructed infra ID
+    pattern if the infra ID is unavailable. Also matches known exact names
+    that are based on the cluster name rather than the infra ID.
+
     Args:
         cluster_name (str): cluster name
         get_infra_id_from_metadata (bool): if set to true it will try to get
@@ -1083,19 +1088,29 @@ def get_cluster_service_ids(cluster_name, get_infra_id_from_metadata=True):
     """
     cmd = "ibmcloud iam service-ids --output json"
     out = run_ibmcloud_cmd(cmd)
-    infra_id = ""
-    pattern = rf"{cluster_name}-[a-z0-9]{{5}}-.*"
-    service_ids = []
+    infra_id = None
     if get_infra_id_from_metadata:
         try:
             cluster_path = config.ENV_DATA["cluster_path"]
             infra_id = get_infra_id(cluster_path)
-            pattern = rf"{infra_id}-.*"
-
         except (FileNotFoundError, JSONDecodeError, KeyError):
             logger.warning("Could not get infra ID")
+    if infra_id:
+        prefix_pattern = re.compile(rf"^{re.escape(infra_id)}-")
+    else:
+        logger.warning(
+            "No infra ID available, falling back to a best-effort name match "
+            "for this cluster's service IDs"
+        )
+        prefix_pattern = re.compile(rf"^{re.escape(cluster_name)}-[a-z0-9]{{5}}-")
+    # Service IDs named directly off the cluster name rather than the infra ID,
+    # e.g. the COS-backed image-registry credential.
+    cluster_name_suffixes = ["image-registry"]
+    exact_names = {f"{cluster_name}-{suffix}" for suffix in cluster_name_suffixes}
+    service_ids = []
     for service_id in json.loads(out):
-        if re.match(pattern, service_id["name"]):
+        name = service_id.get("name", "")
+        if prefix_pattern.match(name) or name in exact_names:
             service_ids.append(service_id)
     return service_ids
 
@@ -1121,7 +1136,6 @@ def get_cluster_account_policies(cluster_name, cluster_service_ids):
             "No service ID provided, we cannot match any account policy without it!"
         )
         return matched_account_policies
-        cluster_service_ids = get_cluster_service_ids(cluster_name)
     for account_policy in account_policies:
         for subject in account_policy.get("subjects", []):
             for attr in subject.get("attributes", []):
@@ -1135,14 +1149,33 @@ def get_cluster_account_policies(cluster_name, cluster_service_ids):
 
 def delete_service_id(service_id):
     """
-    Delete service ID
+    Delete service ID.
+
+    A "not found" error is retried once before being treated as success, since
+    IBM Cloud's IAM API occasionally reports one spuriously for a service ID
+    that still exists and deletes fine moments later.
 
     Args:
         service_id (str): ID of service ID to delete
     """
-    logger.info(f"Deleting service ID: {service_id}")
     cmd = f"ibmcloud iam service-id-delete -f {service_id}"
-    run_ibmcloud_cmd(cmd)
+    logger.info(f"Deleting service ID: {service_id}")
+    try:
+        run_ibmcloud_cmd(cmd)
+    except CommandFailed as ex:
+        if "not found" not in str(ex).lower():
+            raise
+        logger.warning(
+            f"Service ID {service_id} reported as not found, retrying once "
+            "after a short delay before treating it as already deleted"
+        )
+        time.sleep(10)
+        try:
+            run_ibmcloud_cmd(cmd)
+        except CommandFailed as retry_ex:
+            if "not found" not in str(retry_ex).lower():
+                raise
+            logger.info(f"Service ID {service_id} confirmed gone after retry")
 
 
 def get_api_token():
@@ -1195,6 +1228,9 @@ def cleanup_policies_and_service_ids(cluster_name, get_infra_id_from_metadata=Tr
     """
     Cleanup Account Policies and Service IDs for cluster.
 
+    A failure deleting one policy or service ID is logged and doesn't stop
+    cleanup of the rest.
+
     Args:
         cluster_name (str): cluster name
         get_infra_id_from_metadata (bool): if set to true it will try to get
@@ -1208,9 +1244,18 @@ def cleanup_policies_and_service_ids(cluster_name, get_infra_id_from_metadata=Tr
     account_policies = get_cluster_account_policies(cluster_name, service_ids)
     api_token = get_api_token()
     for policy in account_policies:
-        delete_account_policy(policy["id"], api_token)
+        try:
+            delete_account_policy(policy["id"], api_token)
+        except Exception as ex:
+            logger.error(f"Failed to delete account policy {policy['id']}: {ex}")
     for service_id in service_ids:
-        delete_service_id(service_id["id"])
+        try:
+            delete_service_id(service_id["id"])
+        except Exception as ex:
+            logger.error(
+                f"Failed to delete service ID {service_id['id']} "
+                f"({service_id.get('name')}): {ex}"
+            )
 
 
 def create_resource_group(resource_group):
@@ -1373,6 +1418,250 @@ def open_ports_on_ibmcloud_hub_cluster():
         add_security_group_rule(sg_name, "inbound", "tcp", 6800, 7300)
         add_security_group_rule(sg_name, "inbound", "tcp", 31659, 31659)
     logger.info("Inbound rules added successfully")
+
+
+def configure_ingress_load_balancer_security_group():
+    """
+    Add inbound rules for ports 80 and 443 to the default ingress load balancer security group.
+    This is required for IBM Cloud IPI deployments to ensure ingress availability.
+
+    The function:
+    1. Gets the router-default service from openshift-ingress namespace
+    2. Extracts the load balancer hostname
+    3. Finds the IBM Cloud load balancer by hostname (filtered by resource group)
+    4. Gets the security group(s) attached to that load balancer
+    5. Adds inbound TCP rules for HTTP (80) and HTTPS (443) ports
+    """
+    try:
+        logger.info("Configuring ingress load balancer security group")
+
+        # Get resource group name for the cluster
+        rg_name = get_resource_group_name(config.ENV_DATA["cluster_path"])
+        logger.debug(f"Using resource group: {rg_name}")
+
+        # Get the router-default service to find the load balancer hostname
+        ocp_obj = OCP(
+            kind="Service",
+            namespace="openshift-ingress",
+            resource_name="router-default",
+        )
+
+        # Retry getting service data as it may not be immediately available
+        logger.debug(
+            "Attempting to retrieve router-default service data with retry logic"
+        )
+        service_data = None
+        try:
+            for sample in TimeoutSampler(timeout=900, sleep=30, func=ocp_obj.get):
+                if sample:
+                    service_data = sample
+                    logger.debug("Successfully retrieved router-default service data")
+                    break
+        except Exception as e:
+            logger.warning(f"Failed to retrieve router-default service data: {e}")
+            return
+
+        # Extract load balancer hostname
+        lb_ingress = (
+            service_data.get("status", {}).get("loadBalancer", {}).get("ingress", [])
+        )
+        if not lb_ingress:
+            logger.warning(
+                "No load balancer found in router-default service status. Ingress may not be ready yet."
+            )
+            return
+
+        lb_hostname = lb_ingress[0].get("hostname")
+        if not lb_hostname:
+            logger.warning(
+                "No hostname found in load balancer ingress. Ingress may not be ready yet."
+            )
+            return
+
+        logger.debug(f"Found ingress load balancer hostname: {lb_hostname}")
+
+        # Get load balancers filtered by resource group
+        cmd = f"ibmcloud is lbs --resource-group-name {rg_name} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        load_balancers = json.loads(out)
+
+        # Find the load balancer matching the hostname
+        matching_lb = None
+        for lb in load_balancers:
+            if lb.get("hostname") == lb_hostname:
+                matching_lb = lb
+                break
+
+        if not matching_lb:
+            logger.error(
+                f"Could not find IBM Cloud load balancer with hostname: {lb_hostname}"
+            )
+            return
+
+        lb_name = matching_lb.get("name")
+        logger.debug(f"Found matching load balancer: {lb_name}")
+
+        # Get security groups attached to the load balancer
+        security_groups = matching_lb.get("security_groups", [])
+        if not security_groups:
+            logger.warning(f"No security groups attached to load balancer {lb_name}")
+            return
+
+        logger.debug(
+            f"Found {len(security_groups)} security group(s) attached to the load balancer"
+        )
+
+        # Add inbound rules for ports 80 and 443 to each security group
+        for sg in security_groups:
+            sg_id = sg.get("id")
+            sg_name = sg.get("name")
+            logger.debug(f"Configuring security group: {sg_name} ({sg_id})")
+
+            for port in (80, 443):
+                try:
+                    logger.info(f"Adding inbound rule for port {port} to {sg_name}")
+                    add_security_group_rule(sg_name, "inbound", "tcp", port, port)
+                    logger.debug(f"Successfully added inbound rule for port {port}")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to add inbound rule for port 80 (may already exist): {e}"
+                    )
+
+        logger.info(
+            "Ingress load balancer security group configuration completed successfully"
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to configure ingress load balancer security group: {e}")
+        raise
+
+
+def _get_lb_security_groups(svc_name, namespace):
+    """
+    Look up the IBM Cloud VPC load balancer backing a Kubernetes
+    LoadBalancer Service and return its security groups.
+
+    Args:
+        svc_name (str): Kubernetes Service name
+        namespace (str): Kubernetes namespace
+
+    Returns:
+        list: security group dicts from the VPC LB, empty list on
+            failure
+
+    """
+    rg_name = get_resource_group_name(config.ENV_DATA["cluster_path"])
+
+    svc_ocp = OCP(
+        kind="Service",
+        namespace=namespace,
+        resource_name=svc_name,
+    )
+    svc_data = svc_ocp.get()
+
+    lb_ingress = svc_data.get("status", {}).get("loadBalancer", {}).get("ingress", [])
+    if not lb_ingress:
+        logger.warning(
+            f"No LB ingress on service {svc_name}, cannot configure " f"security group"
+        )
+        return []
+
+    lb_hostname = lb_ingress[0].get("hostname") or lb_ingress[0].get("ip")
+    if not lb_hostname:
+        logger.warning(f"No hostname/IP in LB ingress for service {svc_name}")
+        return []
+
+    logger.debug(f"LB endpoint for {svc_name}: {lb_hostname}")
+
+    cmd = f"ibmcloud is lbs --resource-group-name {rg_name} " f"--output json"
+    out = run_ibmcloud_cmd(cmd)
+    load_balancers = json.loads(out)
+
+    matching_lb = None
+    for lb in load_balancers:
+        if lb.get("hostname") == lb_hostname:
+            matching_lb = lb
+            break
+
+    if not matching_lb:
+        logger.error(f"Could not find IBM Cloud VPC LB with hostname {lb_hostname}")
+        return []
+
+    security_groups = matching_lb.get("security_groups", [])
+    if not security_groups:
+        logger.warning(f"No security groups on LB {matching_lb.get('name')}")
+    return security_groups
+
+
+def configure_nfs_lb_security_group():
+    """
+    Add an inbound TCP rule for port 2049 (NFS) to the security
+    groups attached to the NFS LoadBalancer on IBM Cloud VPC.
+
+    Must be called after the ``rook-ceph-nfs-my-nfs-load-balancer``
+    Service has an ingress address assigned.
+    """
+    svc_name = "rook-ceph-nfs-my-nfs-load-balancer"
+    namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    logger.info("Configuring NFS LB security group for port 2049")
+
+    security_groups = _get_lb_security_groups(svc_name, namespace)
+    for sg in security_groups:
+        sg_name = sg.get("name")
+        try:
+            logger.info(f"Adding inbound TCP 2049 to {sg_name}")
+            add_security_group_rule(sg_name, "inbound", "tcp", 2049, 2049)
+        except Exception as e:
+            logger.warning(
+                f"Failed to add port 2049 rule to {sg_name} "
+                f"(may already exist): {e}"
+            )
+
+    logger.info("NFS LB security group configuration done")
+
+
+def remove_nfs_lb_security_group_rules():
+    """
+    Remove inbound TCP 2049 rules from the security groups attached
+    to the NFS LoadBalancer on IBM Cloud VPC.
+
+    Should be called before deleting the NFS LoadBalancer Service so
+    the VPC LB is still present for look-up.
+    """
+    svc_name = "rook-ceph-nfs-my-nfs-load-balancer"
+    namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+    logger.info("Removing NFS LB security group rules for port 2049")
+
+    security_groups = _get_lb_security_groups(svc_name, namespace)
+    for sg in security_groups:
+        sg_id = sg.get("id")
+        sg_name = sg.get("name")
+        try:
+            cmd = f"ibmcloud is security-group {sg_id} " f"--output json"
+            out = run_ibmcloud_cmd(cmd)
+            sg_detail = json.loads(out)
+        except Exception as e:
+            logger.warning(f"Could not fetch rules for {sg_name}: {e}")
+            continue
+
+        for rule in sg_detail.get("rules", []):
+            if (
+                rule.get("direction") == "inbound"
+                and rule.get("protocol") == "tcp"
+                and rule.get("port_min") == 2049
+                and rule.get("port_max") == 2049
+            ):
+                rule_id = rule.get("id")
+                logger.info(f"Deleting rule {rule_id} from {sg_name}")
+                try:
+                    run_ibmcloud_cmd(
+                        f"ibmcloud is security-group-rule-delete "
+                        f"{sg_id} {rule_id} --force"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to delete rule {rule_id}: {e}")
+
+    logger.info("NFS LB security group cleanup done")
 
 
 def create_address_prefix(prefix_name, vpc, zone, cidr):

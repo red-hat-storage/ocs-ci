@@ -53,7 +53,10 @@ ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
 CERT_MANAGER_OPERATOR_NAME = "cert-manager-operator"
 FUSION_OPERATOR_NAME = "isf-operator"
+FUSION_SUBSCRIPTION_NAME = "isf-subscription"
 FUSION_CATALOG_NAME = "isf-data-foundation-catalog"
+FUSION_ACCESS_OPERATOR_NAME = "openshift-fusion-access-operator"
+FUSION_ACCESS_NAMESPACE = "ibm-fusion-access"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 OCS_CLIENT_OPERATOR_NAME = "ocs-client-operator"
 CEPHCSI_OPERATOR = "cephcsi-operator"
@@ -179,7 +182,7 @@ CRUSH_DEVICE_CLASS = "ssd"
 
 # IBM Cloud
 IBM_CLOUD_LOAD_BALANCER_QUOTA = 100
-IBM_CLOUD_REGIONS = {"us-south", "us-east"}
+IBM_CLOUD_REGIONS = {"us-south", "us-east", "ca-tor"}
 
 # HyperShift defaults
 HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT = 3
@@ -194,6 +197,32 @@ INGRESS_SSL_CA_CERT = os.path.join(constants.DATA_DIR, "ca.crt")
 API_SSL_CERT = os.path.join(constants.DATA_DIR, "api-cert.crt")
 API_SSL_KEY = os.path.join(constants.DATA_DIR, "api-cert.key")
 API_SSL_CA_CERT = os.path.join(constants.DATA_DIR, "ca.crt")
+
+ocp_to_acm_unreleased_mapping = {
+    "4.14": False,
+    "4.15": False,
+    "4.16": False,
+    "4.17": False,
+    "4.18": False,
+    "4.19": False,
+    "4.20": False,
+    "4.21": False,
+    "4.22": False,
+    "4.23": True,
+}
+
+ocp_to_submariner_unreleased_mapping = {
+    "4.14": False,
+    "4.15": False,
+    "4.16": False,
+    "4.17": False,
+    "4.18": False,
+    "4.19": False,
+    "4.20": False,
+    "4.21": False,
+    "4.22": False,
+    "4.23": True,
+}
 
 # Storage cluster related defaults
 DEVICE_TYPE = "SSD"

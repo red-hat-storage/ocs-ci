@@ -10,6 +10,8 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import fcntl
 
+from ocs_ci.helpers import helpers
+
 logging.basicConfig(
     filename="metadata_operations.log",
     level=logging.INFO,
@@ -54,6 +56,35 @@ def set_extended_attribute(file_path, attr_name, attr_value):
         os.setxattr(file_path, attr_name, attr_value.encode("utf-8"))
     except (OSError, IOError) as e:
         logger.error(f"Error setting extended attribute: {str(e)}")
+
+
+def perform_xattr_only_operations(file, pod_obj):
+    logger.info("Copying check_xattr.py to fedora pod")
+    cmd = f"oc cp {file} {pod_obj.namespace}/{pod_obj.name}:/mnt/"
+    helpers.run_cmd(cmd=cmd)
+    logger.info("check_xattr.py copied successfully")
+    logger.info("Setting extended attributes from fedora pod")
+    cmd = (
+        "bash -c 'cd /mnt; "
+        "for i in {1..6}; do "
+        'dir="my_test_dir${i}"; '
+        'python3 check_xattr.py "$dir" 10000 100 > "${dir}.log" 2>&1 & '
+        "sleep 5; "
+        "done'"
+    )
+    pod_obj.exec_sh_cmd_on_pod(cmd)
+    time.sleep(10)
+
+    ls_output = pod_obj.exec_sh_cmd_on_pod("ls /mnt")
+    for i in range(1, 7):
+        dir_name = f"my_test_dir{i}"
+        log_name = f"{dir_name}.log"
+        assert (
+            dir_name in ls_output
+        ), f"Expected directory {dir_name} was not created under /mnt"
+        assert (
+            log_name in ls_output
+        ), f"Expected log file {log_name} was not created under /mnt"
 
 
 def perform_metadata_operations(file_path):

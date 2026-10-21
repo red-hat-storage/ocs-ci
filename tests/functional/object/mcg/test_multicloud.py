@@ -11,6 +11,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     mcg,
     skipif_fips_enabled,
+    sts_deployment_required,
+    azure_platform_required,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,6 +45,10 @@ class TestMultiCloud(MCGTest):
                 ("oc", {"ibmcos": [(1, None)]}),
                 marks=[skipif_fips_enabled],
             ),
+            pytest.param(
+                ("oc", {"azure-sts": [(1, None)]}),
+                marks=[sts_deployment_required, azure_platform_required],
+            ),
         ],
         # A test ID list for describing the parametrized tests
         # <CLOUD_PROVIDER>-<METHOD>-<AMOUNT-OF-BACKINGSTORES>
@@ -55,6 +61,7 @@ class TestMultiCloud(MCGTest):
             "GCP-OC-1",
             "IBMCOS-CLI-1",
             "IBMCOS-OC-1",
+            "AZURE-STS-OC-1",
         ],
     )
     def test_multicloud_backingstore_creation(
@@ -81,6 +88,10 @@ class TestMultiCloud(MCGTest):
             pytest.param(("oc", {"gcp": [(1, None)]})),
             pytest.param(("cli", {"ibmcos": [(1, None)]})),
             pytest.param(("oc", {"ibmcos": [(1, None)]})),
+            pytest.param(
+                ("oc", {"azure-sts": [(1, None)]}),
+                marks=[sts_deployment_required, azure_platform_required],
+            ),
         ],
         # A test ID list for describing the parametrized tests
         # <CLOUD_PROVIDER>-<METHOD>-<AMOUNT-OF-BACKINGSTORES>
@@ -93,6 +104,7 @@ class TestMultiCloud(MCGTest):
             "GCP-OC-1",
             "IBMCOS-CLI-1",
             "IBMCOS-OC-1",
+            "AZURE-STS-OC-1",
         ],
     )
     def deprecated_test_multicloud_backingstore_deletion(

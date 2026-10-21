@@ -2,12 +2,16 @@
 StorageCluster related functionalities
 """
 
+import base64
 import copy
+import hashlib
 import ipaddress
 import logging
 import re
 import tempfile
 import json
+import time
+from typing import Optional
 
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
@@ -28,6 +32,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     InvalidPodPresent,
     ResourceNotFoundError,
+    TimeoutExpiredError,
     UnsupportedFeatureError,
     PVNotSufficientException,
     ResourceWrongStatusException,
@@ -49,6 +54,8 @@ from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
     get_osd_pod_id,
     get_deviceclass_osd_pods,
+    wait_for_pods_by_label_count,
+    wait_for_pods_to_be_running,
 )
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
@@ -70,6 +77,7 @@ from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import (
     get_ocs_version_from_csv,
     get_semantic_version,
+    get_semantic_running_odf_version,
     VERSION_4_11,
     get_semantic_ocp_running_version,
 )
@@ -154,12 +162,170 @@ def verify_osd_tree_schema(ct_pod, deviceset_pvcs):
     )
 
 
+def remove_storageclass_from_storageconsumer(
+    sc_name, consumer_name=constants.INTERNAL_STORAGE_CONSUMER_NAME
+):
+    """
+    Remove a StorageClass entry from StorageConsumer.spec.storageClasses[].
+
+    This prevents the ocs-client-operator from recreating the SC on its
+    next reconcile cycle via the gRPC GetDesiredClientState() call.
+    Must be called BEFORE deleting the StorageClass.
+
+    Args:
+        sc_name (str): Name of the StorageClass to deregister.
+        consumer_name (str): Name of the StorageConsumer CR; default
+            ``ocs_ci.ocs.constants.INTERNAL_STORAGE_CONSUMER_NAME`` (``"internal"``).
+    """
+    consumer_ocp = OCP(
+        kind="StorageConsumer",
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    if not consumer_ocp.is_exist(resource_name=consumer_name):
+        log.debug(
+            f"StorageConsumer {consumer_name} not found; "
+            f"skipping deregistration of {sc_name}"
+        )
+        return
+
+    consumer = consumer_ocp.get(resource_name=consumer_name)
+    current_classes = consumer.get("spec", {}).get("storageClasses", [])
+    updated_classes = [sc for sc in current_classes if sc.get("name") != sc_name]
+
+    if len(updated_classes) == len(current_classes):
+        log.debug(
+            f"StorageClass {sc_name} not found in "
+            f"StorageConsumer {consumer_name}.spec.storageClasses; nothing to remove"
+        )
+        return
+
+    patch_body = json.dumps({"spec": {"storageClasses": updated_classes}})
+    consumer_ocp.patch(
+        resource_name=consumer_name,
+        params=patch_body,
+        format_type="merge",
+    )
+    log.info(
+        f"Removed {sc_name} from StorageConsumer "
+        f"{consumer_name}.spec.storageClasses"
+    )
+
+
+def _storageclass_ocs_external_label_patch():
+    """Merge-patch body for ``storageclass.ocs.openshift.io/is-external``."""
+    return {
+        "metadata": {
+            "labels": {
+                constants.OCS_EXTERNAL_STORAGECLASS_LABEL: (
+                    constants.OCS_EXTERNAL_STORAGECLASS_LABEL_VALUE
+                ),
+            }
+        }
+    }
+
+
+def patch_storageclass_ocs_external_label(resource_name):
+    """
+    Merge-patch ``storageclass.ocs.openshift.io/is-external: "true"`` on a
+    StorageClass if it exists.
+
+    Used before deleting StorageClasses so the provider-side gRPC server
+    excludes the SC from the GetDesiredClientState() response. Applies to
+    all deployment types since ODF 4.22 uses the provider/consumer model
+    even for internal deployments.
+    """
+    sc_ocp = OCP(kind=constants.STORAGECLASS)
+    if not sc_ocp.is_exist(resource_name=resource_name):
+        log.warning(
+            f"StorageClass {resource_name} not found; skipping pre-delete external OCS label patch"
+        )
+        return
+    log.info(
+        f"Patching StorageClass {resource_name} before delete: "
+        f"{constants.OCS_EXTERNAL_STORAGECLASS_LABEL}="
+        f"{constants.OCS_EXTERNAL_STORAGECLASS_LABEL_VALUE}"
+    )
+    try:
+        sc_ocp.patch(
+            resource_name=resource_name,
+            params=json.dumps(_storageclass_ocs_external_label_patch()),
+            format_type="merge",
+        )
+    except CommandFailed as ex:
+        if "NotFound" in str(ex):
+            log.warning(
+                f"StorageClass {resource_name} disappeared before patch; skipping"
+            )
+        else:
+            raise
+
+
+def _delete_storageclass_ignore_not_found(sc_ocp, sc_name):
+    """
+    Cluster-scoped delete; succeeds if the StorageClass is already gone (TOCTOU-safe).
+    """
+    sc_ocp.exec_oc_cmd(
+        f"delete {constants.STORAGECLASS} {sc_name} --ignore-not-found",
+        timeout=600,
+    )
+
+
+def delete_storageclass_and_deregister(sc_name, sc_ocp=None, timeout=180):
+    """
+    Fully clean up a test-created StorageClass:
+        1. Deregister from StorageConsumer (prevents reconciler recreation)
+        2. Label with is-external (prevents gRPC serving)
+        3. Delete the SC
+        4. Verify it stays deleted (not recreated by operator)
+
+    Args:
+        sc_name (str): Name of the StorageClass.
+        sc_ocp (:obj:`~ocs_ci.ocs.ocp.OCP`, optional): OCP instance for StorageClass. Created if None.
+        timeout (int): Seconds to wait for deletion confirmation.
+
+    Raises:
+        TimeoutExpiredError: If the SC keeps getting recreated.
+    """
+    if sc_ocp is None:
+        sc_ocp = OCP(kind=constants.STORAGECLASS)
+
+    remove_storageclass_from_storageconsumer(sc_name)
+    patch_storageclass_ocs_external_label(sc_name)
+
+    if sc_ocp.is_exist(resource_name=sc_name):
+        log.info(f"Deleting StorageClass {sc_name}")
+        _delete_storageclass_ignore_not_found(sc_ocp, sc_name)
+
+    def _wait_storageclass_stays_deleted():
+        if not sc_ocp.is_exist(resource_name=sc_name):
+            return True
+        log.warning(
+            f"StorageClass {sc_name} was recreated; re-deregistering and deleting"
+        )
+        remove_storageclass_from_storageconsumer(sc_name)
+        patch_storageclass_ocs_external_label(sc_name)
+        log.info(f"Deleting StorageClass {sc_name}")
+        _delete_storageclass_ignore_not_found(sc_ocp, sc_name)
+        return False
+
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=15,
+        func=_wait_storageclass_stays_deleted,
+    )
+    sampler.timeout_exc_args = [
+        timeout,
+        f"StorageClass {sc_name} keeps getting recreated after {timeout}s",
+    ]
+    sampler.wait_for_func_value(True)
+    log.info(f"StorageClass {sc_name} confirmed deleted")
+
+
 def ocs_install_verification(
     timeout=600,
     skip_osd_distribution_check=False,
     ocs_registry_image=None,
     post_upgrade_verification=False,
-    version_before_upgrade=None,
 ):
     """
     Perform steps necessary to verify a successful OCS installation
@@ -173,7 +339,6 @@ def ocs_install_verification(
             properly.
         post_upgrade_verification (bool): Set to True if this function is
             called after upgrade.
-        version_before_upgrade (float): Set to OCS version before upgrade
 
     """
     from ocs_ci.ocs.node import get_nodes
@@ -240,9 +405,7 @@ def ocs_install_verification(
     rgw_count = None
     if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
         if not disable_rgw:
-            rgw_count = get_rgw_count(
-                f"{ocs_version}", post_upgrade_verification, version_before_upgrade
-            )
+            rgw_count = get_rgw_count()
 
     min_eps = constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
 
@@ -267,15 +430,23 @@ def ocs_install_verification(
 
     # From 4.21, new resource blackbox-exporter added as part of feature odf
     # health overview
+    # Skip blackbox check after upgrade due to DFBUGS-7007
     odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
     if (
         not external
         and not config.DEPLOYMENT.get("mcg_only_deployment", False)
         and (odf_running_version >= version.VERSION_4_21)
+        and not post_upgrade_verification
     ):
+        odf_semantic_version = get_semantic_running_odf_version()
+        blackbox_label = (
+            constants.BLACKBOX_POD_LABEL_422_AND_ABOVE
+            if odf_semantic_version >= get_semantic_version("4.21.7-1")
+            else constants.BLACKBOX_POD_LABEL
+        )
         resources_dict.update(
             {
-                constants.BLACKBOX_POD_LABEL: 1,
+                blackbox_label: 1,
             }
         )
     # From 4.19.0-69, we have noobaa-db-pg-cluster-1 and noobaa-db-pg-cluster-2 pods
@@ -290,6 +461,13 @@ def ocs_install_verification(
         resources_dict.update(
             {
                 constants.NOOBAA_CNPG_POD_LABEL: 1,
+            }
+        )
+
+    if odf_running_version >= version.VERSION_4_23:
+        resources_dict.update(
+            {
+                constants.NOOBAA_CORE_POD_LABEL: 2,
             }
         )
 
@@ -386,9 +564,11 @@ def ocs_install_verification(
                 or disable_rgw
             ):
                 continue
-        if "noobaa" in label and (disable_noobaa or managed_service or client_cluster):
+        if ("noobaa" in label or label is constants.NOOBAA_CNPG_POD_LABEL) and (
+            disable_noobaa or managed_service or client_cluster
+        ):
             continue
-        if "mds" in label and disable_cephfs:
+        if ("mds" in label or "cephfs" in label) and disable_cephfs:
             continue
         if label == constants.MANAGED_CONTROLLER_LABEL:
             if fusion_aas_provider:
@@ -502,7 +682,12 @@ def ocs_install_verification(
                 f"{namespace}.rbd.csi.ceph.com",
             }.issubset(csi_drivers)
         else:
-            assert defaults.CSI_PROVISIONERS.issubset(csi_drivers)
+            csi_provisioners = set(defaults.CSI_PROVISIONERS)
+            if disable_cephfs:
+                csi_provisioners.discard(defaults.CEPHFS_PROVISIONER)
+            if disable_blockpools:
+                csi_provisioners.discard(defaults.RBD_PROVISIONER)
+            assert csi_provisioners.issubset(csi_drivers)
 
     # Verify node and provisioner secret names in storage class
     log.info("Verifying node and provisioner secret names in storage class.")
@@ -905,24 +1090,36 @@ def ocs_install_verification(
         else constants.ROOK_CEPH_OPERATOR
     )
     if odf_running_version >= version.VERSION_4_19 or hci_cluster:
-        provisioner_deployment_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
-        }
-        nodeplugin_daemonset_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-nodeplugin": constants.RBD_PROVISIONER,
-        }
+        provisioner_deployment_and_owner_names = {}
+        nodeplugin_daemonset_and_owner_names = {}
+        if not disable_cephfs:
+            provisioner_deployment_and_owner_names[
+                f"{constants.CEPHFS_PROVISIONER}-ctrlplugin"
+            ] = constants.CEPHFS_PROVISIONER
+            nodeplugin_daemonset_and_owner_names[
+                f"{constants.CEPHFS_PROVISIONER}-nodeplugin"
+            ] = constants.CEPHFS_PROVISIONER
+        if not disable_blockpools:
+            provisioner_deployment_and_owner_names[
+                f"{constants.RBD_PROVISIONER}-ctrlplugin"
+            ] = constants.RBD_PROVISIONER
+            nodeplugin_daemonset_and_owner_names[
+                f"{constants.RBD_PROVISIONER}-nodeplugin"
+            ] = constants.RBD_PROVISIONER
         csi_owner_kind = constants.DRIVER
     else:
-        provisioner_deployment_and_owner_names = {
-            "csi-cephfsplugin-provisioner": csi_owner_name,
-            "csi-rbdplugin-provisioner": csi_owner_name,
-        }
-        nodeplugin_daemonset_and_owner_names = {
-            "csi-cephfsplugin": csi_owner_name,
-            "csi-rbdplugin": csi_owner_name,
-        }
+        provisioner_deployment_and_owner_names = {}
+        nodeplugin_daemonset_and_owner_names = {}
+        if not disable_cephfs:
+            provisioner_deployment_and_owner_names["csi-cephfsplugin-provisioner"] = (
+                csi_owner_name
+            )
+            nodeplugin_daemonset_and_owner_names["csi-cephfsplugin"] = csi_owner_name
+        if not disable_blockpools:
+            provisioner_deployment_and_owner_names["csi-rbdplugin-provisioner"] = (
+                csi_owner_name
+            )
+            nodeplugin_daemonset_and_owner_names["csi-rbdplugin"] = csi_owner_name
         csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
 
     deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
@@ -973,7 +1170,11 @@ def ocs_install_verification(
         ), "Host network is not set to False for cephObjectStores when spec.hostNetwork is True"
     log.info("Verified the providerAPIServerServiceType setting in StorageCluster")
     log.info("Verifying the csi driver ownership")
-    csi_driver_list = [constants.RBD_PROVISIONER, constants.CEPHFS_PROVISIONER]
+    csi_driver_list = []
+    if not disable_blockpools:
+        csi_driver_list.append(constants.RBD_PROVISIONER)
+    if not disable_cephfs:
+        csi_driver_list.append(constants.CEPHFS_PROVISIONER)
     if odf_running_version >= version.VERSION_4_19 or hci_cluster:
         csi_driver_obj = OCP(kind=constants.DRIVER, namespace=namespace)
         for driver in csi_driver_list:
@@ -1134,6 +1335,55 @@ def verify_storage_system():
         )
 
 
+def get_noobaa_phase(namespace: str) -> Optional[str]:
+    """
+    Get the current phase of the NooBaa CR via a single lightweight API call.
+
+    Args:
+        namespace (str): Kubernetes namespace where NooBaa is deployed.
+
+    Returns:
+        Optional[str]: NooBaa phase string (e.g. "Ready", "Configuring"),
+            or None if the CR cannot be retrieved.
+
+    """
+    try:
+        noobaa = OCP(kind="noobaa", namespace=namespace).get(
+            resource_name=constants.NOOBAA_RESOURCE_NAME
+        )
+        return noobaa.get("status", {}).get("phase", "")
+    except CommandFailed as ex:
+        log.warning("Failed to get NooBaa CR (%s) — skipping NooBaa health check", ex)
+        return None
+
+
+def get_storage_cluster_phase(namespace: str) -> Optional[str]:
+    """
+    Get the current phase of the StorageCluster CR via a single lightweight
+    API call.
+
+    Args:
+        namespace (str): Kubernetes namespace where the StorageCluster is
+            deployed.
+
+    Returns:
+        Optional[str]: StorageCluster phase string (e.g. "Ready",
+            "Progressing"), or None if the CR cannot be retrieved.
+
+    """
+    try:
+        sc_name = config.ENV_DATA["storage_cluster_name"]
+        sc = OCP(kind=constants.STORAGECLUSTER, namespace=namespace).get(
+            resource_name=sc_name
+        )
+        return sc.get("status", {}).get("phase", "")
+    except CommandFailed as ex:
+        log.warning(
+            "Failed to get StorageCluster CR (%s) — skipping SC phase check", ex
+        )
+        return None
+
+
 def verify_storage_cluster():
     """
     Verify storage cluster status
@@ -1156,7 +1406,51 @@ def verify_storage_cluster():
             timeout = 1800
         else:
             timeout = 600
-        storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+
+        try:
+            storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+        except ResourceWrongStatusException:
+            noobaa_issue = config.RUN.get("noobaa_not_ready_at_setup")
+            if not noobaa_issue:
+                raise
+
+            fresh_sc = storage_cluster.get()
+            conditions = fresh_sc.get("status", {}).get("conditions", [])
+
+            noobaa_is_cause = any(
+                c.get("reason") == constants.NOOBAA_INITIALIZING_REASON
+                and c.get("type") == "Progressing"
+                for c in conditions
+            )
+            ceph_has_issues = any(
+                c.get("reason") in constants.CEPH_CONDITION_REASONS for c in conditions
+            )
+
+            if not noobaa_is_cause or ceph_has_issues:
+                raise
+
+            namespace = config.ENV_DATA["cluster_namespace"]
+            current_nb_phase = get_noobaa_phase(namespace)
+
+            if current_nb_phase == constants.STATUS_READY:
+                config.RUN.pop("noobaa_not_ready_at_setup", None)
+                raise
+
+            if current_nb_phase != noobaa_issue.get("phase"):
+                log.warning(
+                    "NooBaa phase changed from '%s' to '%s'"
+                    " — running full verification",
+                    noobaa_issue["phase"],
+                    current_nb_phase,
+                )
+                raise
+
+            log.warning(
+                "StorageCluster not Ready due to NooBaa (phase: %s),"
+                " which was already unhealthy at test setup."
+                " Waiving SC phase check — version check still runs.",
+                current_nb_phase,
+            )
 
     # verify storage cluster version
     if not config.ENV_DATA.get("disable_storage_cluster_version_check"):
@@ -1221,6 +1515,23 @@ def verify_storage_cluster_version(storage_cluster):
                     raise e
 
 
+def get_cephcluster_storage_spec() -> Optional[dict]:
+    """
+    Fetch the CephCluster CR and return its spec.storage section.
+
+    Returns:
+        dict: The spec.storage section, or None if the key path is missing.
+
+    """
+    cephcluster = OCP(
+        kind="CephCluster",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.CEPH_CLUSTER_NAME,
+    )
+    resource = cephcluster.get()
+    return resource.get("spec", {}).get("storage")
+
+
 def verify_storage_device_class(
     device_class,
     check_multiple_deviceclasses=False,
@@ -1228,13 +1539,17 @@ def verify_storage_device_class(
     """
     Verifies the parameters of storageClassDeviceSets in CephCluster.
 
-    For internal deployments, if user is not specified any DeviceClass in the StorageDeviceSet, then
-    tunefastDeviceClass will be true and
-    crushDeviceClass will set to "ssd"
+    For internal deployments, if user is not specified any DeviceClass in the
+    StorageDeviceSet, then tunefastDeviceClass will be true and
+    crushDeviceClass will set to "ssd".
+
+    Operator-generated device sets (arbiter zone sets, non-resilient pool
+    rack sets, etc.) are filtered out before verification.
 
     Args:
         device_class (str): Name of the device class
-        check_multiple_deviceclasses (bool): If true, then check multiple deviceclasses. False, otherwise.
+        check_multiple_deviceclasses (bool): If true, then check multiple
+            deviceclasses. False, otherwise.
 
     """
     if check_multiple_deviceclasses:
@@ -1243,79 +1558,180 @@ def verify_storage_device_class(
         deviceset_name_per_deviceclass = {}
     log.info(f"deviceset name per deviceclass = {deviceset_name_per_deviceclass}")
 
-    # If the user has not provided any specific DeviceClass in the StorageDeviceSet for internal deployment then
-    # tunefastDeviceClass will be true and crushDeviceClass will set to "ssd"
     log.info("Verifying crushDeviceClass for storageClassDeviceSets")
     cephcluster = OCP(
         kind="CephCluster", namespace=config.ENV_DATA["cluster_namespace"]
     )
     cephcluster_data = cephcluster.get()
-    storage_class_device_sets = cephcluster_data["items"][0]["spec"]["storage"][
+    all_device_sets = cephcluster_data["items"][0]["spec"]["storage"][
         "storageClassDeviceSets"
     ]
+    storage_class_device_sets = filter_user_defined_device_sets(all_device_sets)
+    log.info(
+        "storage class device sets: %s",
+        storage_class_device_sets,
+    )
 
-    log.info(f"storage class device sets: {storage_class_device_sets}")
-
+    expected_device_classes = set()
     for each_devise_set in storage_class_device_sets:
         if deviceset_name_per_deviceclass:
             device_set_name = each_devise_set["name"]
-            # Remove the -<number> suffix from device set name to get the original device set name
-            orig_device_set_name = re.sub(r"-[0-9]$", "", device_set_name)
-            log.info(f"original device set name = {orig_device_set_name}")
-            # Get the deviceclass per the storagecluster deviceset name if exist or get the provided deviceclass
+            orig_device_set_name = re.sub(r"-[0-9]+$", "", device_set_name)
+            log.info(
+                "original device set name = %s",
+                orig_device_set_name,
+            )
             device_class = deviceset_name_per_deviceclass.get(
                 orig_device_set_name, device_class
             )
+
+        expected_device_classes.add(device_class)
 
         # check tuneFastDeviceClass
         device_set_name = each_devise_set["name"]
         log.info(f"device set name = {device_set_name}")
         if config.ENV_DATA.get("tune_fast_device_class"):
             tune_fast_device_class = each_devise_set["tuneFastDeviceClass"]
-            msg = f"tuneFastDeviceClass for {device_set_name} is set to {tune_fast_device_class}"
+            msg = (
+                f"tuneFastDeviceClass for {device_set_name}"
+                f" is set to {tune_fast_device_class}"
+            )
             log.debug(msg)
-            assert (
-                tune_fast_device_class
-            ), f"{msg} when {constants.DEVICECLASS} is not selected explicitly"
+            assert tune_fast_device_class, (
+                f"{msg} when {constants.DEVICECLASS}" " is not selected explicitly"
+            )
 
         # check crushDeviceClass
         crush_device_class = each_devise_set["volumeClaimTemplates"][0]["metadata"][
             "annotations"
         ]["crushDeviceClass"]
         crush_device_class_msg = (
-            f"crushDeviceClass for {device_set_name} is set to {crush_device_class}"
+            f"crushDeviceClass for {device_set_name}" f" is set to {crush_device_class}"
         )
         log.debug(crush_device_class_msg)
-        assert (
-            crush_device_class == device_class
-        ), f"{crush_device_class_msg} but it should be set to {device_class}"
+        assert crush_device_class == device_class, (
+            f"{crush_device_class_msg} but it should be" f" set to {device_class}"
+        )
 
+    operator_device_classes = get_operator_generated_device_classes(all_device_sets)
     sc_device_classes = deviceset_name_per_deviceclass.values()
-    # get deviceClasses for overall storage
     device_classes = cephcluster_data["items"][0]["status"]["storage"]["deviceClasses"]
     log.debug(f"deviceClasses are {device_classes}")
     for each_device_class in device_classes:
         device_class_name = each_device_class["name"]
+        # Only skip classes owned by filtered-out CephCluster device sets.
+        # An unexpected class (e.g. hdd when SC only defines ssd) must still fail.
+        if (
+            device_class_name in operator_device_classes
+            and device_class_name not in expected_device_classes
+        ):
+            log.info(
+                "Skipping operator-generated device class '%s'",
+                device_class_name,
+            )
+            continue
         if sc_device_classes:
-            assert (
-                device_class_name in sc_device_classes
-            ), f"deviceClass {device_class_name} is not in the expected device classes {sc_device_classes}"
+            assert device_class_name in sc_device_classes, (
+                f"deviceClass {device_class_name} is not in"
+                " the expected device classes"
+                f" {sc_device_classes}"
+            )
         else:
-            assert (
-                device_class_name == device_class
-            ), f"deviceClass is set to {device_class_name} but it should be set to {device_class}"
+            assert device_class_name == device_class, (
+                f"deviceClass is set to {device_class_name}"
+                f" but it should be set to {device_class}"
+            )
+
+
+def _get_crush_device_class(device_set):
+    """
+    Read crushDeviceClass from a CephCluster storageClassDeviceSet.
+
+    Args:
+        device_set (dict): A storageClassDeviceSets entry
+
+    Returns:
+        str or None: crushDeviceClass value, or None if missing
+
+    """
+    try:
+        return device_set["volumeClaimTemplates"][0]["metadata"]["annotations"][
+            "crushDeviceClass"
+        ]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
+def get_operator_generated_device_classes(cephcluster_device_sets=None):
+    """
+    Get crushDeviceClass values owned only by operator-generated
+    CephCluster device sets (sets not present in the StorageCluster).
+
+    Examples include arbiter/zone-based classes (e.g. europe-west1-b)
+    and non-resilient pool rack classes (e.g. rack0, rack1).
+
+    Classes that also appear on user-defined device sets are not
+    returned, so a shared class like ``ssd`` is still verified.
+
+    Args:
+        cephcluster_device_sets (list): Optional storageClassDeviceSets
+            from the CephCluster spec. Fetched from the cluster when
+            omitted.
+
+    Returns:
+        set: Device class names owned exclusively by excluded
+            (operator-generated) CephCluster device sets.
+
+    """
+    if cephcluster_device_sets is None:
+        cephcluster = OCP(
+            kind="CephCluster",
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        cephcluster_data = cephcluster.get()
+        cephcluster_device_sets = cephcluster_data["items"][0]["spec"]["storage"][
+            "storageClassDeviceSets"
+        ]
+
+    user_defined_sets = filter_user_defined_device_sets(cephcluster_device_sets)
+    user_defined_names = {d["name"] for d in user_defined_sets}
+    user_classes = set()
+    operator_classes = set()
+    for device_set in cephcluster_device_sets:
+        crush_device_class = _get_crush_device_class(device_set)
+        if not crush_device_class:
+            continue
+        if device_set["name"] in user_defined_names:
+            user_classes.add(crush_device_class)
+        else:
+            operator_classes.add(crush_device_class)
+
+    # Only classes exclusive to excluded sets are ignorable
+    operator_only_classes = operator_classes - user_classes
+    if operator_only_classes:
+        log.info(
+            "Operator-generated device classes: %s",
+            operator_only_classes,
+        )
+    return operator_only_classes
 
 
 def verify_device_class_in_osd_tree(
     ct_pod, device_class, check_multiple_deviceclasses=False
 ):
     """
-    Verifies device class in ceph osd tree output
+    Verifies device class in ceph osd tree output.
+
+    Skips OSDs whose device class is owned exclusively by
+    operator-generated CephCluster device sets (arbiter/zone classes
+    like europe-west1-b, or non-resilient pool classes like rack0).
+    Unexpected classes (e.g. hdd when only ssd is defined) still fail.
 
     Args:
-        ct_pod (:obj:`OCP`):  Object of the Ceph tools pod
+        ct_pod (:obj:`OCP`): Object of the Ceph tools pod
         device_class (str): Name of the device class
-        check_multiple_deviceclasses (bool): If true, then check multiple deviceclasses. False, otherwise.
+        check_multiple_deviceclasses (bool): If true, then check multiple
+            deviceclasses. False, otherwise.
 
     """
     if check_multiple_deviceclasses:
@@ -1324,15 +1740,26 @@ def verify_device_class_in_osd_tree(
         osd_id_per_deviceclass = {}
     log.info(f"osd id per deviceclass = {osd_id_per_deviceclass}")
 
+    operator_device_classes = get_operator_generated_device_classes()
+
     log.info("Verifying DeviceClass in ceph osd tree")
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
     for each in osd_tree["nodes"]:
         if each["type"] == "osd":
             osd_id = each.get("id")
-            current_device_class = osd_id_per_deviceclass.get(osd_id, device_class)
             osd_name = each["name"]
             device_class_in_osd_tree = each["device_class"]
             log.debug(f"DeviceClass for {osd_name} is {device_class_in_osd_tree}")
+
+            if device_class_in_osd_tree in operator_device_classes:
+                log.debug(
+                    "Skipping operator-generated device class '%s' for %s",
+                    device_class_in_osd_tree,
+                    osd_name,
+                )
+                continue
+
+            current_device_class = osd_id_per_deviceclass.get(osd_id, device_class)
             assert (
                 device_class_in_osd_tree == current_device_class
             ), f"DeviceClass for {osd_name} is {device_class_in_osd_tree} but expected value is {current_device_class}"
@@ -1474,6 +1901,8 @@ def verify_mcg_only_pods():
     # DFBUGS-5211 ocs-metrics-exporter disabled from ODF 4.21
     if odf_running_version >= version.VERSION_4_21:
         del resources_dict[constants.OCS_METRICS_EXPORTER]
+    if odf_running_version >= version.VERSION_4_23:
+        resources_dict[constants.NOOBAA_CORE_POD_LABEL] = 2
     if odf_running_version >= version.VERSION_4_19:
         del resources_dict[constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL]
         del resources_dict[constants.NOOBAA_DB_LABEL_47_AND_ABOVE]
@@ -1964,6 +2393,434 @@ def get_storage_cluster(namespace=None):
             namespace = config.ENV_DATA["cluster_namespace"]
         sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
     return sc_obj
+
+
+def get_nvmeof_gateway_resources(namespace=None):
+    """
+    Get the resource requirements configured for the NVMe-oF gateway.
+
+    Args:
+        namespace (str): Namespace of the StorageCluster
+
+    Returns:
+        dict: Value of spec.resources.nvmeof on the StorageCluster, None if no
+            resource requirements are configured for the gateway
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    storage_cluster = sc_obj.get()["items"][0]
+    return storage_cluster["spec"].get("resources", {}).get("nvmeof")
+
+
+def get_nvmeof_gateway_cr_resources(namespace=None):
+    """
+    Get the resource requirements the gateway CR actually runs with.
+
+    Args:
+        namespace (str): Namespace of the gateway CR
+
+    Returns:
+        dict: Value of spec.resources on the CephNVMeOFGateway CR, an empty
+            dict if no resource requirements reached the gateway
+
+    """
+    gateway_cr = get_nvmeof_gateway_cr(namespace=namespace) or {}
+    return gateway_cr.get("spec", {}).get("resources") or {}
+
+
+def set_nvmeof_gateway_resources(resources, namespace=None, verify=True, timeout=180):
+    """
+    Set the resource requirements of the NVMe-oF gateway, which makes the
+    ocs-operator roll out new gateway pods.
+
+    spec.resources of the StorageCluster is a free form map, so an entry the
+    running ocs-operator does not know about is accepted and stored without
+    ever reaching the gateway. The propagation to the gateway CR is therefore
+    verified instead of assumed, otherwise the caller only finds out by waiting
+    for a rollout that is never triggered.
+
+    Args:
+        resources (dict): The resource requirements to set, for example
+            {"requests": {"cpu": "1", "memory": "4Gi"}}. None removes the
+            nvmeof entry, which is how a merge patch expresses a deletion.
+        namespace (str): Namespace of the StorageCluster
+        verify (bool): True to wait for the resource requirements to reach the
+            gateway CR, False to only patch the StorageCluster
+        timeout (int): Time in seconds to wait for the propagation
+
+    Raises:
+        TimeoutExpiredError: If the resource requirements did not reach the
+            gateway CR within the timeout
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    sc_name = sc_obj.get()["items"][0]["metadata"]["name"]
+    log.info(
+        f"Setting the NVMe-oF gateway resources of StorageCluster {sc_name} "
+        f"to {resources}"
+    )
+    patch_body = json.dumps({"spec": {"resources": {"nvmeof": resources}}})
+    assert sc_obj.patch(
+        resource_name=sc_name, params=patch_body, format_type="merge"
+    ), f"Failed to set the NVMe-oF gateway resources to {resources}"
+
+    if not verify:
+        return
+
+    expected_resources = resources or {}
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=get_nvmeof_gateway_cr_resources,
+        namespace=namespace,
+    )
+    if not sampler.wait_for_func_status(expected_resources):
+        raise TimeoutExpiredError(
+            f"spec.resources.nvmeof of StorageCluster {sc_name} was set to "
+            f"{resources} but {constants.CEPHNVMEOFGATEWAY} still runs with "
+            f"{get_nvmeof_gateway_cr_resources(namespace=namespace)} after "
+            f"{timeout}s. The running ocs-operator does not propagate the "
+            "NVMe-oF gateway resource requirements from the StorageCluster, "
+            "so no gateway rollout is triggered by changing them."
+        )
+    log.info(f"The NVMe-oF gateway CR runs with resources {resources}")
+
+
+def get_nvmeof_gateway_instances(namespace=None):
+    """
+    Get the configured number of NVMe-oF gateway instances.
+
+    Args:
+        namespace (str): Namespace of the StorageCluster
+
+    Returns:
+        int: Value of spec.nvmeof.gatewayInstances on the StorageCluster. If
+            NVMe-oF is enabled without an explicit gatewayInstances, the
+            operator default is returned. 0 if NVMe-oF is not configured or is
+            disabled.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    storage_cluster = sc_obj.get()["items"][0]
+    nvmeof_spec = storage_cluster["spec"].get("nvmeof", {})
+    if not nvmeof_spec.get("enable"):
+        return 0
+    # An enabled gateway without an explicit instance count runs the operator
+    # default, reporting 0 for it would mean "no gateway" to the callers.
+    return nvmeof_spec.get(
+        "gatewayInstances", constants.NVMEOF_DEFAULT_GATEWAY_INSTANCES
+    )
+
+
+def scale_nvmeof_gateway(instances, namespace=None, wait=True, timeout=600):
+    """
+    Scale the NVMe-oF gateway to the given number of instances.
+
+    The CephNVMeOFGateway CR is reconciled by the ocs-operator from
+    spec.nvmeof.gatewayInstances on the StorageCluster, so the StorageCluster
+    is patched instead of the gateway CR itself, which would be reverted.
+
+    Scaling below constants.NVMEOF_MIN_GATEWAY_INSTANCES is admitted by the
+    StorageCluster schema but is rejected by the CephNVMeOFGateway CRD, so the
+    gateway pods never follow such a request. Waiting for them would only block
+    until the timeout, hence it has to be requested with wait=False and the
+    resulting reconcile failure verified on the StorageCluster instead.
+
+    Args:
+        instances (int): The number of gateway instances to scale to
+        namespace (str): Namespace of the StorageCluster
+        wait (bool): True to wait for the gateway pods to match the requested
+            number of instances, False otherwise
+        timeout (int): Time in seconds to wait for the gateway pods
+
+    Raises:
+        ValueError: If waiting is requested for a number of instances the
+            gateway CR cannot be scaled to
+
+    """
+    if wait and instances < constants.NVMEOF_MIN_GATEWAY_INSTANCES:
+        raise ValueError(
+            f"The CephNVMeOFGateway CRD accepts at least "
+            f"{constants.NVMEOF_MIN_GATEWAY_INSTANCES} instance, the gateway "
+            f"pods never reach {instances} instances. Request it with "
+            "wait=False and verify the reconcile failure reported by the "
+            "StorageCluster."
+        )
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    sc_name = sc_obj.get()["items"][0]["metadata"]["name"]
+    log.info(
+        f"Scaling NVMe-oF gateway of StorageCluster {sc_name} to "
+        f"{instances} instances"
+    )
+    patch_body = json.dumps({"spec": {"nvmeof": {"gatewayInstances": instances}}})
+    assert sc_obj.patch(
+        resource_name=sc_name, params=patch_body, format_type="merge"
+    ), f"Failed to scale the NVMe-oF gateway to {instances} instances"
+
+    if not wait:
+        return
+
+    assert wait_for_pods_by_label_count(
+        label=constants.NVMEOF_APP_LABEL,
+        expected_count=instances,
+        namespace=namespace,
+        timeout=timeout,
+    ), f"Number of NVMe-oF gateway pods did not reach {instances}"
+    gateway_pod_names = [
+        gateway_pod["metadata"]["name"]
+        for gateway_pod in get_pods_having_label(
+            label=constants.NVMEOF_APP_LABEL, namespace=namespace
+        )
+    ]
+    assert wait_for_pods_to_be_running(
+        namespace=namespace, pod_names=gateway_pod_names, timeout=timeout
+    ), f"NVMe-oF gateway pods {gateway_pod_names} are not in Running state"
+    log.info(f"NVMe-oF gateway pods {gateway_pod_names} are Running")
+
+
+def get_nvmeof_gateway_cr(namespace=None):
+    """
+    Get the CephNVMeOFGateway CR the ocs-operator reconciles from the NVMe-oF
+    section of the StorageCluster.
+
+    Args:
+        namespace (str): Namespace of the gateway CR
+
+    Returns:
+        dict: The CephNVMeOFGateway CR, None if no gateway CR is deployed
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    gateway_obj = OCP(kind=constants.CEPHNVMEOFGATEWAY, namespace=namespace)
+    gateway_crs = gateway_obj.get(dont_raise=True) or {}
+    gateway_crs = gateway_crs.get("items", [])
+    return gateway_crs[0] if gateway_crs else None
+
+
+def get_storage_cluster_condition(condition_type, namespace=None):
+    """
+    Get a condition of the StorageCluster by its type.
+
+    Args:
+        condition_type (str): Type of the condition, for example
+            "ReconcileComplete"
+        namespace (str): Namespace of the StorageCluster
+
+    Returns:
+        dict: The condition of the given type, None if the StorageCluster does
+            not report it
+
+    Raises:
+        ResourceNotFoundError: If the StorageCluster the conditions are read
+            from is not deployed in the namespace
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_obj = get_storage_cluster(namespace=namespace)
+    storage_clusters = sc_obj.get().get("items") or []
+    if not storage_clusters:
+        raise ResourceNotFoundError(
+            f"No {constants.STORAGECLUSTER} found in namespace {namespace}, "
+            f"the {condition_type} condition cannot be read"
+        )
+    # A namespace can hold more than one StorageCluster, the conditions of the
+    # one under test are the ones the caller asks for
+    sc_name = config.ENV_DATA.get("storage_cluster_name")
+    if sc_name:
+        storage_cluster = next(
+            (
+                sc
+                for sc in storage_clusters
+                if sc.get("metadata", {}).get("name") == sc_name
+            ),
+            None,
+        )
+        if storage_cluster is None:
+            raise ResourceNotFoundError(
+                f"{constants.STORAGECLUSTER} {sc_name} not found in namespace "
+                f"{namespace}, found "
+                f"{[sc.get('metadata', {}).get('name') for sc in storage_clusters]}"
+            )
+    else:
+        storage_cluster = storage_clusters[0]
+    conditions = storage_cluster.get("status", {}).get("conditions", [])
+    return next(
+        (
+            condition
+            for condition in conditions
+            if condition.get("type") == condition_type
+        ),
+        None,
+    )
+
+
+def wait_for_storage_cluster_condition(
+    condition_type, status, message_substrs=None, timeout=300, sleep=10, namespace=None
+):
+    """
+    Wait until a condition of the StorageCluster reports the given status and,
+    optionally, a message containing all the given substrings.
+
+    Args:
+        condition_type (str): Type of the condition, for example
+            "ReconcileComplete"
+        status (str): The status the condition is expected to report, "True" or
+            "False"
+        message_substrs (list): If given, the condition is only considered
+            matching once its message contains all of these substrings. The
+            comparison is case insensitive.
+        timeout (int): Time in seconds to wait for the condition
+        sleep (int): Time in seconds between two checks of the condition
+        namespace (str): Namespace of the StorageCluster
+
+    Returns:
+        dict: The matching condition
+
+    Raises:
+        TimeoutExpiredError: If the condition did not match within the timeout
+
+    """
+    message_substrs = message_substrs or []
+    last_condition = None
+
+    def _condition_matches():
+        nonlocal last_condition
+        last_condition = get_storage_cluster_condition(
+            condition_type, namespace=namespace
+        )
+        if not last_condition or last_condition.get("status") != status:
+            return False
+        # The message is optional, an absent or null one is matched as empty
+        message = (last_condition.get("message") or "").lower()
+        return all(substr.lower() in message for substr in message_substrs)
+
+    log.info(
+        f"Waiting for the StorageCluster condition {condition_type} to be "
+        f"{status} with a message containing {message_substrs}"
+    )
+    sampler = TimeoutSampler(timeout=timeout, sleep=sleep, func=_condition_matches)
+    if not sampler.wait_for_func_status(True):
+        raise TimeoutExpiredError(
+            f"The StorageCluster condition {condition_type} did not report "
+            f"status {status} with a message containing {message_substrs} "
+            f"within {timeout}s. Last seen condition: {last_condition}"
+        )
+    log.info(f"StorageCluster reports condition {last_condition}")
+    return last_condition
+
+
+def get_noobaa_external_pgsql_secret_name():
+    """
+    Get the external PostgreSQL secret name configured on the StorageCluster for NooBaa.
+
+    Returns:
+        str: The pgSecretName from spec.multiCloudGateway.externalPgConfig,
+            or None if not configured
+
+    """
+    sc = get_storage_cluster()
+    sc_data = sc.get().get("items")[0]
+    return (
+        sc_data["spec"]
+        .get("multiCloudGateway", {})
+        .get("externalPgConfig", {})
+        .get("pgSecretName")
+    )
+
+
+def get_noobaa_external_pgsql_config():
+    """
+    Get the full external PostgreSQL config block configured on the StorageCluster.
+
+    Returns:
+        dict: spec.multiCloudGateway.externalPgConfig (empty dict if not set)
+
+    """
+    sc = get_storage_cluster()
+    sc_data = sc.get().get("items")[0]
+    return (
+        sc_data["spec"].get("multiCloudGateway", {}).get("externalPgConfig", {}) or {}
+    )
+
+
+def get_noobaa_external_pgsql_db_url_digest():
+    """
+    Return a SHA-256 digest of the decoded external PostgreSQL ``db_url``.
+
+    The digest lets callers detect whether the connection string / credential
+    changed (for example across an upgrade) without ever handling or logging the
+    secret value itself.
+
+    Returns:
+        str: Hex SHA-256 digest of the decoded db_url, or None if it is not
+            available
+
+    """
+    pg_secret_name = get_noobaa_external_pgsql_secret_name()
+    if not pg_secret_name:
+        return None
+    secret_obj = OCP(
+        kind=constants.SECRET,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=pg_secret_name,
+    )
+    db_url_b64 = secret_obj.get().get("data", {}).get("db_url")
+    if not db_url_b64:
+        return None
+    db_url = base64.b64decode(db_url_b64).decode("utf-8")
+    return hashlib.sha256(db_url.encode("utf-8")).hexdigest()
+
+
+def verify_noobaa_external_pgsql_config():
+    """
+    Verify that NooBaa is configured to use an external PostgreSQL database.
+
+    Checks that:
+        - StorageCluster spec.multiCloudGateway.externalPgConfig.pgSecretName is set
+          to the expected external PostgreSQL secret
+        - The referenced secret exists and contains a db_url
+        - No internal noobaa-db pod is running (the external DB replaces it)
+
+    Raises:
+        AssertionError: If any of the external PostgreSQL configuration checks fail
+
+    """
+    # Imported here to avoid a circular import at module load time
+    from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+    pg_secret_name = get_noobaa_external_pgsql_secret_name()
+    assert pg_secret_name == constants.NOOBAA_POSTGRES_SECRET, (
+        f"StorageCluster externalPgConfig.pgSecretName is '{pg_secret_name}', "
+        f"expected '{constants.NOOBAA_POSTGRES_SECRET}'"
+    )
+
+    secret_obj = OCP(
+        kind=constants.SECRET,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=pg_secret_name,
+    )
+    secret_data = secret_obj.get()
+    assert secret_data.get("data", {}).get(
+        "db_url"
+    ), f"External PostgreSQL secret '{pg_secret_name}' is missing 'db_url'"
+
+    internal_db_pods = get_pods_having_label(
+        constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    assert not internal_db_pods, (
+        "Found internal noobaa-db pod(s) while external PostgreSQL is configured: "
+        f"{[pod['metadata']['name'] for pod in internal_db_pods]}"
+    )
+    log.info(
+        "Verified NooBaa is configured with external PostgreSQL "
+        f"(secret: {pg_secret_name}, no internal noobaa-db pod running)"
+    )
 
 
 def get_osd_count():
@@ -3596,6 +4453,36 @@ def get_deviceset_name_per_deviceclass():
     return {d.get("name"): get_deviceclass_name(d) for d in device_sets}
 
 
+def filter_user_defined_device_sets(cephcluster_device_sets):
+    """
+    Filter CephCluster storageClassDeviceSets to only include
+    device sets that correspond to StorageCluster entries,
+    excluding operator-generated ones (e.g. arbiter zone device
+    sets, non-resilient pool rack device sets).
+
+    Args:
+        cephcluster_device_sets (list): The storageClassDeviceSets
+            from the CephCluster spec
+
+    Returns:
+        list: Filtered list of device sets
+
+    """
+    sc_device_set_names = {d.get("name") for d in get_all_device_sets()}
+    result = []
+    for device_set in cephcluster_device_sets:
+        name = device_set["name"]
+        orig_name = re.sub(r"-[0-9]+$", "", name)
+        if orig_name in sc_device_set_names:
+            result.append(device_set)
+        else:
+            log.info(
+                "Skipping operator-generated device set '%s'",
+                name,
+            )
+    return result
+
+
 def get_deviceset_name_per_count():
     """
     Get the deviceset name per count dict
@@ -3606,3 +4493,71 @@ def get_deviceset_name_per_count():
     """
     device_sets = get_all_device_sets()
     return {d.get("name"): d["count"] for d in device_sets}
+
+
+def get_storage_client():
+    """
+    Get the StorageClient OCP object for the configured storage client.
+
+    Returns:
+        ocs_ci.ocs.ocp.OCP: StorageClient OCP object with resource_name set
+            to the storage client name from config.
+    """
+    return ocp.OCP(
+        kind=constants.STORAGECLIENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=(
+            config.cluster_ctx.ENV_DATA.get("storage_client_name")
+            or config.ENV_DATA.get("storage_client_name")
+            or constants.STORAGE_CLIENT_NAME
+        ),
+    )
+
+
+def trigger_storage_cluster_reconciliation(storage_cluster_name=None, namespace=None):
+    """
+    Trigger StorageCluster operator reconciliation by adding a timestamp annotation.
+    This forces the operator to reconcile the StorageCluster resource.
+
+    Args:
+        storage_cluster_name (str): Name of the StorageCluster resource.
+            If None, uses the default from config.
+        namespace (str): Namespace of the StorageCluster resource.
+            If None, uses the default from config.
+
+    Returns:
+        bool: True if annotation was successfully applied
+
+    """
+    if storage_cluster_name is None:
+        storage_cluster_name = config.ENV_DATA.get(
+            "storage_cluster_name", constants.DEFAULT_CLUSTERNAME
+        )
+    if namespace is None:
+        namespace = config.ENV_DATA.get(
+            "cluster_namespace", constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+    log.info(
+        f"Triggering reconciliation for StorageCluster '{storage_cluster_name}' "
+        f"in namespace '{namespace}'"
+    )
+    sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+    timestamp = str(time.time_ns())
+    annotation_cmd = (
+        f"annotate storagecluster {storage_cluster_name} "
+        f"-n {namespace} "
+        f'reconcile-trigger="{timestamp}" --overwrite'
+    )
+    try:
+        sc_obj.exec_oc_cmd(annotation_cmd)
+        log.info(
+            f"Successfully triggered reconciliation for StorageCluster "
+            f"'{storage_cluster_name}' with timestamp {timestamp}"
+        )
+        return True
+    except CommandFailed as e:
+        log.error(
+            f"Failed to trigger reconciliation for StorageCluster "
+            f"'{storage_cluster_name}': {e}"
+        )
+        raise

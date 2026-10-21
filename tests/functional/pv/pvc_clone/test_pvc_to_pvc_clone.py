@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     jira,
     provider_mode,
     run_on_all_clients_push_missing_configs,
+    skipif_cephfs_disabled,
 )
 from ocs_ci.framework.pytest_customization.marks import skipif_hci_provider_and_client
 from ocs_ci.framework.testlib import (
@@ -74,7 +75,7 @@ class TestClone(ManageTest):
                 constants.CEPHFILESYSTEM,
                 None,
                 constants.ACCESS_MODE_RWO,
-                marks=pytest.mark.polarion_id("OCS-256"),
+                marks=[pytest.mark.polarion_id("OCS-256"), skipif_cephfs_disabled],
             ),
         ],
     )

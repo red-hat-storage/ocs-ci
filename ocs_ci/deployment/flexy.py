@@ -27,6 +27,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     expose_ocp_version,
     get_ocp_version,
+    get_registry_svc,
     get_terraform,
     get_terraform_ignition_provider,
     login_to_mirror_registry,
@@ -267,7 +268,7 @@ class FlexyBase(object):
         vers = version or config.DEPLOYMENT["installer_version"]
         installer_version = expose_ocp_version(vers)
         payload_img["installer_payload_image"] = ":".join(
-            [constants.REGISTRY_SVC, installer_version]
+            [get_registry_svc(installer_version), installer_version]
         )
         return payload_img
 

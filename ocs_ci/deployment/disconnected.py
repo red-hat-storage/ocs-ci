@@ -5,6 +5,7 @@ This module contains functionality required for disconnected installation.
 import glob
 import logging
 import os
+from pathlib import Path
 import tempfile
 
 import yaml
@@ -23,6 +24,7 @@ from ocs_ci.utility.utils import (
     create_directory_path,
     exec_cmd,
     get_latest_ds_olm_tag,
+    get_ocp_release_mirror_path,
     get_ocp_version,
     login_to_mirror_registry,
     prepare_customized_pull_secret,
@@ -35,6 +37,136 @@ from ocs_ci.utility.version import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def mirror_fdf_catalog_via_oc_mirror(
+    catalog_image,
+    mirror_registry=None,
+    configure_registries=False,
+):
+    """
+    Mirror FDF catalog and related images using oc-mirror tool.
+
+    This is a convenience wrapper around mirror_index_image_via_oc_mirror()
+    specifically for FDF catalogs with FDF-specific defaults.
+
+    Args:
+        catalog_image (str): FDF catalog image URL
+            Example: cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20
+        mirror_registry (str): Target mirror registry. If None, uses config.DEPLOYMENT['mirror_registry'].
+        configure_registries (bool): Whether to configure /etc/containers/registries.conf for internal images
+
+    Returns:
+        str: mirrored catalog image URL
+
+    Note:
+        Mirror registry credentials (mirror_registry_user, mirror_registry_password) should be set in
+        config.DEPLOYMENT before calling this function, or they will be read from the pull secret.
+
+    """
+    logger.info(f"Mirroring FDF catalog: {catalog_image}")
+
+    # Call the generic function with FDF-specific parameters
+    # mirror_registry is passed directly - no need to modify global config
+    return mirror_index_image_via_oc_mirror(
+        index_image=catalog_image,
+        packages=None,  # Mirror entire FDF catalog (no package filtering)
+        idms=None,
+        idms_name_prefix="fdf",  # Use 'fdf' prefix for IDMS naming
+        configure_registries=configure_registries,  # FDF-specific feature
+        mirror_registry=mirror_registry,
+        registries_template=constants.FDF_REGISTRIES_CONF_TEMPLATE,
+    )
+
+
+def tag_fdf_catalog_adjacent_versions(
+    catalog_image,
+    mirror_registry=None,
+):
+    """
+    Create adjacent (N-1, N, N+1) major.minor version tag aliases on the mirror registry
+    for the mirrored FDF catalog image.
+
+    This ensures that regardless of whether Fusion requests the current OCP version tag,
+    a previous version tag, or a next version tag, the image can be pulled from the mirror registry.
+
+    Args:
+        catalog_image (str): Source FDF catalog image URL
+        (e.g., cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20.3-2)
+        mirror_registry (str): Target mirror registry. If None, uses config.DEPLOYMENT['mirror_registry'].
+
+    """
+    if not mirror_registry:
+        mirror_registry = config.DEPLOYMENT.get("mirror_registry")
+
+    if not mirror_registry:
+        logger.warning("Mirror registry not specified, skipping adjacent tag creation.")
+        return
+
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+
+    # Extract source tag
+    tag = ""
+    if ":" in catalog_image:
+        tag = catalog_image.split(":")[-1]
+    elif config.DEPLOYMENT.get("fdf_image_tag"):
+        tag = config.DEPLOYMENT.get("fdf_image_tag")
+    elif config.ENV_DATA.get("fdf_version"):
+        tag = config.ENV_DATA.get("fdf_version")
+
+    if not tag:
+        logger.warning(
+            "Could not determine catalog image tag, skipping adjacent tag creation."
+        )
+        return
+
+    # Derive version subpath matching the mirroring destination (e.g., v4.20.3-2 -> 4-20-3-2)
+    version_subpath = tag.lstrip("v").replace(".", "-")
+    clean_mirror_registry = mirror_registry.rstrip("/")
+    # If the user-provided mirror_registry already contains the version subpath, avoid duplicating it
+    if clean_mirror_registry.endswith(version_subpath):
+        target_mirror_url = clean_mirror_registry
+    else:
+        target_mirror_url = f"{clean_mirror_registry}/{version_subpath}"
+
+    catalog_repo = f"{target_mirror_url}/cpopen/isf-data-foundation-catalog"
+    source_image = f"{catalog_repo}:{tag}"
+
+    # Compute adjacent tags (N-1, N, N+1)
+    clean_tag = tag.lstrip("v")
+    parts = clean_tag.split(".")
+    adjacent_tags = set()
+    try:
+        major = int(parts[0])
+        minor = int(parts[1].split("-")[0])
+        for m in [minor - 1, minor, minor + 1]:
+            if m >= 0:
+                ver_str = f"{major}.{m}"
+                adjacent_tags.add(f"v{ver_str}")
+                adjacent_tags.add(ver_str)
+    except (ValueError, IndexError):
+        adjacent_tags.add(tag)
+        adjacent_tags.add(f"v{clean_tag}")
+        adjacent_tags.add(clean_tag)
+
+    logger.info(
+        f"Creating adjacent version tags for FDF catalog on mirror registry: {adjacent_tags}"
+    )
+
+    for extra_tag in adjacent_tags:
+        if extra_tag == tag:
+            continue
+        dest_image = f"{catalog_repo}:{extra_tag}"
+        logger.info(f"Tagging {source_image} -> {dest_image}")
+        cmd = (
+            f"skopeo copy --all --authfile {pull_secret_path} "
+            f"--dest-tls-verify=false --src-tls-verify=false "
+            f"docker://{source_image} docker://{dest_image}"
+        )
+        try:
+            exec_cmd(cmd)
+        except Exception as e:
+            logger.warning(f"Failed to create tag {dest_image}: {e}")
 
 
 def get_csv_from_image(bundle_image):
@@ -225,7 +357,15 @@ def prune_and_mirror_index_image(
 
 
 @retry((CommandFailed, NotFoundError), tries=3, delay=10, backoff=2)
-def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
+def mirror_index_image_via_oc_mirror(
+    index_image,
+    packages=None,
+    idms=None,
+    idms_name_prefix="odf",
+    configure_registries=False,
+    mirror_registry=None,
+    registries_template=None,
+):
     """
     Mirror all images required for ODF deployment and testing to mirror
     registry via `oc-mirror` tool and create relevant
@@ -234,10 +374,13 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
 
     Args:
         index_image (str): index image which will be pruned and mirrored
-        packages (list): list of packages to keep
+        packages (list): list of packages to keep. If None or empty, mirrors entire catalog
         idms (dict): ImageDigestMirrorSet used for mirroring (workaround for
             stage images, which are pointing to different registry than they
             really are)
+        idms_name_prefix (str): Prefix for IDMS name (default: "odf")
+        configure_registries (bool): Whether to configure /etc/containers/registries.conf
+        mirror_registry (str): Target mirror registry. If None, uses config.DEPLOYMENT['mirror_registry']
 
     Returns:
         str: mirrored index image
@@ -245,6 +388,10 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
     """
     get_oc_mirror_tool()
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+
+    # Use provided mirror_registry or fall back to config
+    if not mirror_registry:
+        mirror_registry = config.DEPLOYMENT.get("mirror_registry")
 
     # login to mirror registry
     login_to_mirror_registry(pull_secret_path)
@@ -256,31 +403,94 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
         os.makedirs(os.path.expanduser("~/.docker/"), exist_ok=True)
         os.symlink(pull_secret_path, os.path.expanduser(docker_config_file))
 
+    # Configure registries.conf if requested (for FDF internal images)
+    if configure_registries:
+        logger.info(
+            "Configuring registry mirrors for internal images using registries.conf.d/"
+        )
+        if registries_template and os.path.exists(registries_template):
+            try:
+                with open(registries_template, "r") as f:
+                    registries_content = f.read()
+
+                # Use registries.conf.d/ directory
+                # Define the path cleanly using the / operator
+                registries_dir = (
+                    Path.home() / ".config" / "containers" / "registries.conf.d"
+                )
+                # to ensure the directory exists before using it
+                registries_dir.mkdir(parents=True, exist_ok=True)
+
+                ocs_ci_conf_file = registries_dir / "ocs-ci-fdf-mirrors.conf"
+
+                # Create temporary file with registry configuration
+                temp_file_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", delete=False, suffix=".conf"
+                    ) as temp_file:
+                        temp_file.write(registries_content)
+                        temp_file_path = temp_file.name
+
+                    # Copy to registries.conf.d/ directory and set readable permissions
+                    exec_cmd(f"cp {temp_file_path} {ocs_ci_conf_file}")
+                    exec_cmd(f"chmod 644 {ocs_ci_conf_file}")
+
+                    logger.info(
+                        f"Successfully configured registry mirrors at {ocs_ci_conf_file}"
+                    )
+                finally:
+                    if temp_file_path and os.path.exists(temp_file_path):
+                        os.unlink(temp_file_path)
+            except Exception as e:
+                logger.warning(f"Failed to configure registry mirrors: {e}")
+
     # prepare imageset-config.yaml file
     imageset_config_data = templating.load_yaml(constants.OC_MIRROR_IMAGESET_CONFIG_V2)
 
-    _packages = [{"name": package} for package in packages]
-    imageset_config_data["mirror"]["operators"].append(
-        {
-            "catalog": index_image,
-            "packages": _packages,
-        }
-    )
+    # Build catalog entry - only add packages if specified
+    catalog_entry = {"catalog": index_image}
+    if packages:
+        _packages = [{"name": package} for package in packages]
+        catalog_entry["packages"] = _packages
+
+    imageset_config_data["mirror"]["operators"].append(catalog_entry)
     imageset_config_file = os.path.join(
         config.ENV_DATA["cluster_path"],
         f"imageset-config-{config.RUN['run_id']}.yaml",
     )
     templating.dump_data_to_temp_yaml(imageset_config_data, imageset_config_file)
 
+    # Determine target mirror path for oc mirror
+    target_mirror_url = mirror_registry.rstrip("/")
+    version_subpath = None
+    if idms_name_prefix == "fdf":
+        # Extract tag from index_image or config (e.g. v4.20.3-2 -> 4-20-3-2)
+        tag = ""
+        if ":" in index_image:
+            tag = index_image.split(":")[-1]
+        elif config.DEPLOYMENT.get("fdf_image_tag"):
+            tag = config.DEPLOYMENT.get("fdf_image_tag")
+        elif config.ENV_DATA.get("fdf_version"):
+            tag = config.ENV_DATA.get("fdf_version")
+
+        if tag:
+            # Format tag to sanitized version subpath (e.g., v4.20.3-2 -> 4-20-3-2)
+            version_subpath = tag.lstrip("v").replace(".", "-")
+            if not target_mirror_url.endswith(version_subpath):
+                target_mirror_url = f"{target_mirror_url}/{version_subpath}"
+            logger.info(
+                f"Using versioned target subpath for FDF mirroring: {target_mirror_url}"
+            )
+
     # mirror required images
-    logger.info(
-        f"Mirror required images to mirror registry {config.DEPLOYMENT['mirror_registry']}"
-    )
+    logger.info(f"Mirror required images to mirror registry {target_mirror_url}")
 
     cmd = (
         f"oc mirror --config {imageset_config_file} "
-        f"docker://{config.DEPLOYMENT['mirror_registry']} "
-        "--workspace file://oc-mirror-workspace/results-files --v2"
+        f"docker://{target_mirror_url} "
+        "--workspace file://oc-mirror-workspace/results-files --v2 "
+        "--dest-tls-verify=false --image-timeout 30m "
     )
     try:
         exec_cmd(cmd, timeout=18000)
@@ -329,13 +539,46 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
         "working-dir/cluster-resources/idms-oc-mirror.yaml",
     )
 
-    # make idms name unique - append run_id
+    # make idms name unique - append run_id with configurable prefix
     with open(idms_file) as f:
         idms_content = yaml.safe_load(f)
-    idms_content["metadata"]["name"] = f"odf-{config.RUN['run_id']}"
+    idms_content["metadata"]["name"] = f"{idms_name_prefix}-{config.RUN['run_id']}"
     with open(idms_file, "w") as f:
         yaml.dump(idms_content, f)
     exec_cmd(f"oc apply -f {idms_file}")
+
+    # create and apply ITMS for FDF catalog image tag resolution
+    if idms_name_prefix == "fdf":
+        itms_file = os.path.join(
+            f"{mirroring_manifests_dir}",
+            "working-dir/cluster-resources/itms-oc-mirror.yaml",
+        )
+        itms_name = (
+            f"isf-fdf-itms-{version_subpath}" if version_subpath else "isf-fdf-itms"
+        )
+        itms_content = {
+            "apiVersion": "config.openshift.io/v1",
+            "kind": "ImageTagMirrorSet",
+            "metadata": {
+                "name": itms_name,
+            },
+            "spec": {
+                "imageTagMirrors": [
+                    {
+                        "mirrors": [
+                            f"{target_mirror_url}/cpopen/isf-data-foundation-catalog"
+                        ],
+                        "source": "icr.io/cpopen/isf-data-foundation-catalog",
+                        "mirrorSourcePolicy": "AllowContactingSource",
+                    }
+                ]
+            },
+        }
+        with open(itms_file, "w") as f:
+            yaml.dump(itms_content, f)
+        logger.info(f"ImageTagMirrorSet written to {itms_file}")
+        exec_cmd(f"oc apply -f {itms_file}")
+
     wait_for_machineconfigpool_status("all")
 
     # get mirrored index image url from prepared catalogSource file
@@ -383,7 +626,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
     logger.info(
         f"Prepare for disconnected OCS {'upgrade' if upgrade else 'installation'}"
     )
-    # Disable the default OperatorSources
+    # Disable the default sources
     disable_default_sources()
 
     pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
@@ -460,6 +703,12 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         # create redhat-operators CatalogSource
         catalog_source_data = templating.load_yaml(constants.CATALOG_SOURCE_YAML)
 
+        # workaround for https://github.com/red-hat-storage/ocs-ci/issues/15085
+        # Remove extractContent for disconnected deployments to avoid init container issues
+        # in air-gapped environments while keeping memoryTarget to prevent OOM
+        if "grpcPodConfig" in catalog_source_data.get("spec", {}):
+            catalog_source_data["spec"]["grpcPodConfig"].pop("extractContent", None)
+
         catalog_source_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="catalog_source_manifest", delete=False
         )
@@ -508,10 +757,15 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
             - imageContentSources (for install-config.yaml)
             - ImageDigestMirrorSet (for running cluster)
     """
-    dest_image_repo = (
-        f"{config.DEPLOYMENT['mirror_registry']}/"
-        f"{constants.OCP_RELEASE_IMAGE_MIRROR_PATH}"
-    )
+    if ocp_version.startswith("sha256"):
+        mirror_path = (
+            constants.OCP_RELEASE_IMAGE_MIRROR_PATH_V5
+            if "release-5" in ocp_image_path
+            else constants.OCP_RELEASE_IMAGE_MIRROR_PATH
+        )
+    else:
+        mirror_path = get_ocp_release_mirror_path(ocp_version)
+    dest_image_repo = f"{config.DEPLOYMENT['mirror_registry']}/{mirror_path}"
     if ocp_version.startswith("sha256"):
         ocp_image = f"{ocp_image_path}@{ocp_version}"
         dest_ocp_image = f"{dest_image_repo}@{ocp_version}"
@@ -564,8 +818,33 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
     config.DEPLOYMENT["haproxy_router_image"] = haproxy_router_line.split()[1]
 
     return (
-        f"{config.DEPLOYMENT['mirror_registry']}/{constants.OCP_RELEASE_IMAGE_MIRROR_PATH}",
+        f"{config.DEPLOYMENT['mirror_registry']}/{mirror_path}",
         ocp_version,
         ics,
         idms,
     )
+
+
+def apply_idms(idms_content, name_suffix):
+    """
+    Apply ImageDigestMirrorSet from the provided YAML content.
+
+    Args:
+        idms_content (str): ImageDigestMirrorSet YAML content, e.g. as
+            returned by mirror_ocp_release_images()
+        name_suffix (str): suffix used to build a unique and descriptive
+            name for the applied ImageDigestMirrorSet (e.g. OCP major.minor
+            version, with dots replaced by dashes)
+
+    """
+    idms_data = yaml.safe_load(idms_content)
+    # the name generated by `oc adm release mirror` is a generic placeholder,
+    # replace it with something unique and descriptive
+    idms_data["metadata"]["name"] = f"ocp-release-mirror-{name_suffix}"
+    idms_file = tempfile.NamedTemporaryFile(
+        mode="w", prefix="idms-ocp-release-", suffix=".yaml", delete=False
+    )
+    templating.dump_data_to_temp_yaml(idms_data, idms_file.name)
+    logger.info(f"Applying ImageDigestMirrorSet from {idms_file.name}")
+    exec_cmd(f"oc apply -f {idms_file.name}")
+    wait_for_machineconfigpool_status("all")

@@ -313,6 +313,12 @@ class CephCluster(object):
         expected_mon_count = self.mon_count
         expected_mds_count = self.mds_count
 
+        # If the monCount is updated to five, then change expected_mon_count value to five
+        cephcluster_data = self.CEPHCLUSTER.get()
+        monCount_val = cephcluster_data["items"][0]["spec"]["mon"]["count"]
+        if monCount_val == 5:
+            expected_mon_count = 5
+
         if config.ENV_DATA[
             "platform"
         ] in constants.HCI_PC_OR_MS_PLATFORM and config.ENV_DATA["cluster_type"] in [
@@ -1277,13 +1283,19 @@ def _collect_bound_ocs_pvcs(namespace, timeout=300, sleep=10):
 
     def _get_matching_bound_pvcs():
         ocs_pvc_obj = get_all_pvc_objs(namespace=namespace)
-        matching_pvcs = [
-            pvc_obj
-            for pvc_obj in ocs_pvc_obj
-            if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME)
-            or pvc_obj.name.startswith(constants.DEFAULT_MON_PVC_NAME)
-            or any(pvc_obj.name.startswith(name) for name in storage_device_set_names)
-        ]
+        matching_pvcs = []
+        for pvc_obj in ocs_pvc_obj:
+            if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
+                matching_pvcs.append(pvc_obj)
+            elif pvc_obj.name.startswith(constants.DEFAULT_MON_PVC_NAME):
+                matching_pvcs.append(pvc_obj)
+            elif pvc_obj.name.startswith(constants.NB_DB_CNPG_CLUSTER_NAME):
+                matching_pvcs.append(pvc_obj)
+            else:
+                for name in storage_device_set_names:
+                    if pvc_obj.name.startswith(name):
+                        matching_pvcs.append(pvc_obj)
+                        break
         not_bound = [
             pvc_obj.name
             for pvc_obj in matching_pvcs
@@ -1422,17 +1434,27 @@ def validate_pdb_creation():
             pdb_count = constants.PDB_COUNT_ARBITER_VSPHERE
             pdb_required.append(constants.RGW_PDB)
 
-    if odf_running_version >= version.VERSION_4_19:
+    if odf_running_version >= version.VERSION_4_19 and not config.COMPONENTS.get(
+        "disable_noobaa", False
+    ):
         pdb_count += 1
         pdb_required.append(constants.NOOBAA_DB_PG_PDB)
     else:
         logger.info(f"Required PDB count is {pdb_count}")
 
-    if len(item_list) != pdb_count:
-        raise PDBNotCreatedException(
-            f"Not All PDB's created. Expected {pdb_count} PDB's but found {len(item_list)}"
-        )
+    if config.COMPONENTS.get("disable_cephfs", False):
+        pdb_required.remove(constants.MDS_PDB)
+        pdb_count -= 1
+
     pdb_list = [item["metadata"]["name"] for item in item_list]
+
+    if len(item_list) != pdb_count:
+        missing_pdb = [item for item in pdb_required if item not in pdb_list]
+        raise PDBNotCreatedException(
+            f"Not All PDB's created. Expected {pdb_count} PDB's but found {len(item_list)}.\n"
+            f"Expected: {pdb_required} but found {pdb_list} on the cluster.\n"
+            f"Missing PDB: {missing_pdb}"
+        )
 
     pdb_list.sort()
     pdb_required.sort()
@@ -1759,6 +1781,93 @@ def validate_compression(pool_name):
                 )
                 return False
     raise PoolNotFound(f"Pool {pool_name} not found on cluster")
+
+
+def get_ec_pool_ec_optimizations():
+    """
+    Retrieve the ec_optimizations and ec_overwrites flag states for every EC
+    pool in the cluster and the cluster-wide default
+    osd_pool_default_flag_ec_optimizations.
+
+    Returns:
+        tuple:
+            - dict: Mapping of EC pool name to a dict containing:
+                * "ec_optimizations" (bool): True if ec_optimizations flag is set on the pool.
+                * "ec_overwrites" (bool): True if ec_overwrites flag is set on the pool.
+            - str: The cluster-wide default value for ec_optimizations (e.g. "true" or "false").
+
+        If no EC pools exist, returns (None, None).
+    """
+    EC_POOL_TYPE = 3
+
+    ct_pod = pod.get_ceph_tools_pod()
+    pool_details = ct_pod.exec_ceph_cmd(
+        ceph_cmd="ceph osd pool ls detail", format="json"
+    )
+    ec_pools = {}
+    for pool_info in pool_details:
+        if pool_info.get("type") != EC_POOL_TYPE:
+            continue
+        pool_name = pool_info["pool_name"]
+        flags = pool_info.get("flags_names", "")
+        ec_pools[pool_name] = {
+            "ec_optimizations": "ec_optimizations" in flags,
+            "ec_overwrites": "ec_overwrites" in flags,
+        }
+
+    if not ec_pools:
+        return None, None
+
+    cluster_default = ct_pod.exec_ceph_cmd(
+        ceph_cmd="ceph config get mon osd_pool_default_flag_ec_optimizations",
+        format="",
+        out_yaml_format=False,
+    ).strip()
+
+    return ec_pools, cluster_default
+
+
+def verify_ec_optimizations_unchanged(baseline_pools, baseline_default, context=""):
+    """
+    Verify that EC pool ec_optimizations and ec_overwrites flags and the
+    cluster-wide default have not changed compared to the provided baseline.
+
+    Args:
+        baseline_pools (dict): Mapping of pool name to a dict with keys
+            "ec_optimizations" (bool) and "ec_overwrites" (bool), from a
+            previous call to get_ec_pool_ec_optimizations().
+        baseline_default (str): Cluster-wide default from a previous call.
+        context (str): Description of what happened between snapshots
+            (e.g. "OSD restart") for log messages.
+
+    Raises:
+        AssertionError: If any flag or the default has changed.
+    """
+    current_pools, current_default = get_ec_pool_ec_optimizations()
+
+    suffix = f" after {context}" if context else ""
+
+    for pool_name, expected_flags in baseline_pools.items():
+        actual_flags = current_pools.get(pool_name)
+        assert actual_flags is not None, f"EC pool '{pool_name}' disappeared{suffix}"
+        for flag in ("ec_optimizations", "ec_overwrites"):
+            assert actual_flags[flag] == expected_flags[flag], (
+                f"{flag} flag changed for pool '{pool_name}'{suffix}: "
+                f"expected {expected_flags[flag]}, got {actual_flags[flag]}"
+            )
+        logger.info(
+            f"Pool '{pool_name}': ec_optimizations={actual_flags['ec_optimizations']}"
+            f", ec_overwrites={actual_flags['ec_overwrites']} (unchanged{suffix})"
+        )
+
+    assert current_default == baseline_default, (
+        f"Cluster default osd_pool_default_flag_ec_optimizations changed"
+        f"{suffix}: expected {baseline_default}, got {current_default}"
+    )
+    logger.info(
+        f"Cluster default osd_pool_default_flag_ec_optimizations="
+        f"{current_default} (unchanged{suffix})"
+    )
 
 
 def validate_osd_utilization(osd_used=80):
@@ -2383,6 +2492,151 @@ def is_lso_cluster():
 
     """
     return config.DEPLOYMENT.get("local_storage", False)
+
+
+def is_ec_pool_supported():
+    """
+    Check if erasure coded RBD pools are supported on this cluster.
+
+    All conditions must be met:
+    - Platform is on-prem or HCI (vSphere, baremetal, ibm_hci, etc.)
+    - Cluster uses local storage (LSO / no-provisioner / localblock)
+    - Failure domain is 'host'
+    - At least 3 OSDs are running
+
+    Returns:
+        bool: True if EC pools are supported, False otherwise
+    """
+    from ocs_ci.helpers.helpers import get_failure_domin
+    from ocs_ci.ocs.resources import pod
+
+    cluster_type = config.ENV_DATA.get("cluster_type", "").lower()
+    if cluster_type in ["hci_client", "consumer"]:
+        return False
+
+    platform = config.ENV_DATA["platform"].lower()
+    if (
+        platform not in constants.ON_PREM_PLATFORMS
+        and platform not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+    ):
+        return False
+    if not is_lso_cluster():
+        return False
+    try:
+        if get_failure_domin() != "host":
+            return False
+        if len(pod.get_osd_pods()) < 3:
+            return False
+    except Exception:
+        logger.debug("is_ec_pool_supported: cluster not ready, returning False")
+        return False
+    return True
+
+
+def get_ec_metadata_pool_name():
+    """
+    Return the name of the replicated metadata pool for EC RBD StorageClasses
+    as configured in the StorageCluster spec.
+
+    Returns:
+        str: pool name, or empty string if not configured
+    """
+    sc_obj = storage_cluster.get_storage_cluster()
+    sc_data = sc_obj.get()["items"][0]
+    return (
+        sc_data.get("spec", {})
+        .get("managedResources", {})
+        .get("cephBlockPools", {})
+        .get("erasureCodedMetadataPool", "")
+    )
+
+
+def ensure_ec_metadata_pool_exists(
+    metadata_pool_name="replicated-metadata-pool", timeout=300
+):
+    """
+    Ensure the replicated metadata pool for EC RBD exists and is Ready.
+
+    If the StorageCluster does not yet have erasureCodedMetadataPool set,
+    patches it and waits for the pool to be created and reach Ready phase.
+
+    If the StorageCluster already has the field set but the pool does NOT exist
+    or is NOT Ready, this is a critical failure — raises an exception.
+
+    Args:
+        metadata_pool_name (str): Name of the metadata pool
+        timeout (int): Seconds to wait for pool to become Ready after patch
+
+    Raises:
+        AssertionError: If pool is expected to exist but is not Ready (critical failure path)
+        TimeoutExpiredError: If pool does not become Ready within timeout after patching
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    configured_name = get_ec_metadata_pool_name()
+    pool_ocp = OCP(
+        kind=constants.CEPHBLOCKPOOL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+
+    def pool_is_ready():
+        try:
+            pool = pool_ocp.get(resource_name=metadata_pool_name)
+            return pool.get("status", {}).get("phase") == "Ready"
+        except Exception:
+            return False
+
+    if configured_name:
+        assert pool_is_ready(), (
+            f"StorageCluster has erasureCodedMetadataPool='{configured_name}' "
+            f"but CephBlockPool '{metadata_pool_name}' is not Ready. "
+            "This is a critical failure — inspect the cluster."
+        )
+        return
+
+    logger.info(
+        f"Patching StorageCluster to add erasureCodedMetadataPool: {metadata_pool_name}"
+    )
+    sc_obj = storage_cluster.get_storage_cluster()
+    sc_data = sc_obj.get()["items"][0]
+    sc_name = sc_data["metadata"]["name"]
+    patch = {
+        "spec": {
+            "managedResources": {
+                "cephBlockPools": {"erasureCodedMetadataPool": metadata_pool_name}
+            }
+        }
+    }
+    sc_obj.patch(
+        resource_name=sc_name,
+        params=json.dumps(patch),
+        format_type="merge",
+    )
+
+    logger.info(f"Waiting up to {timeout}s for {metadata_pool_name} to become Ready")
+    for sample in TimeoutSampler(timeout=timeout, sleep=10, func=pool_is_ready):
+        if sample:
+            logger.info(f"Pool {metadata_pool_name} is Ready")
+            return
+
+
+def get_ec_profile():
+    """
+    Return the EC profile (data_chunks, coding_chunks) appropriate for this cluster.
+
+    Selection:
+    - 6+ storage nodes → k=2, m=2
+    - 3-5 storage nodes → k=2, m=1
+
+    Returns:
+        tuple[int, int]: (data_chunks, coding_chunks)
+    """
+    from ocs_ci.ocs.node import get_osd_running_nodes
+
+    osd_node_count = len(get_osd_running_nodes())
+    if osd_node_count >= 6:
+        return 2, 2
+    return 2, 1
 
 
 def is_flexible_scaling_enabled():
@@ -3340,6 +3594,16 @@ def check_clusters():
             config.RUN["lvm"] = True
         else:
             config.RUN["lvm"] = False
+
+    # Fusion Access clusters have no CephCluster / StorageCluster
+    if config.DEPLOYMENT.get("fusion_access"):
+        config.RUN["cephcluster"] = False
+        logger.info(
+            "Fusion Access cluster detected — skipping CephCluster check, "
+            "setting cephcluster=False"
+        )
+        return
+
     try:
         cephcluster_obj = OCP(
             kind="cephcluster",
@@ -3809,7 +4073,7 @@ def parse_ceph_table_output(raw_output: str) -> pd.DataFrame:
 
     """
     # Known units for sizes (e.g., GiB, TiB, MiB)
-    known_units = ["GiB", "MiB", "KiB", "TiB"]
+    known_units = ["GiB", "MiB", "KiB", "TiB", "B"]
 
     # Step 1: Join size values with their units (e.g., '894 GiB' -> '894GiB')
     for unit in known_units:
@@ -3893,11 +4157,21 @@ def check_ceph_osd_df_tree():
 
     for line in ceph_output_lines:
         osd_id = line["ID"]
+        if osd_id.startswith("-") or osd_id == "TOTAL":
+            continue
+
         weight = float(line["WEIGHT"])
-        # Regular expression to match the numeric part and the unit
         match = re.match(r"([0-9.]+)([a-zA-Z]+)", line["SIZE"])
+        if not match:
+            logger.warning(f"Unable to parse SIZE {line['SIZE']} for OSD ID {osd_id}")
+            return False
+
         size = float(match.group(1))
         units = match.group(2)
+        if units == "B" and size == 0:
+            logger.warning(f"OSD ID {osd_id} reports 0 B — Ceph stats not ready yet")
+            return False
+
         if units.startswith("Ti"):
             storage_size = convert_device_size(storage_size_param, "TB", 1024)
         elif units.startswith("Gi"):
@@ -3914,19 +4188,21 @@ def check_ceph_osd_df_tree():
         diff = size * 0.04
         if not (size - diff <= weight <= size + diff):
             logger.warning(
-                f"OSD weight {weight} (converted) does not match the OSD size {size} "
-                f"for OSD ID {osd_id}. Expected OSD weight within [{size - diff}, {size + diff}]"
+                f"OSD weight {weight} (converted) does not match "
+                f"the OSD size {size} for OSD ID {osd_id}. "
+                f"Expected OSD weight within "
+                f"[{size - diff}, {size + diff}]"
             )
             return False
-        # If it's a regular OSD entry, check if the expected osd size
-        # and the current size are equal ignoring a small diff
+        # Check if the expected osd size and the current size are
+        # equal ignoring a small diff
         diff = size * 0.04
-        if not osd_id.startswith("-") and not (
-            size - diff <= storage_size <= size + diff
-        ):
+        if not (size - diff <= storage_size <= size + diff):
             logger.warning(
-                f"The storage size {storage_size} does not match the OSD size {size} "
-                f"for OSD ID {osd_id}. Expected storage size within [{size - diff}, {size + diff}]"
+                f"The storage size {storage_size} does not match "
+                f"the OSD size {size} for OSD ID {osd_id}. "
+                f"Expected storage size within "
+                f"[{size - diff}, {size + diff}]"
             )
             return False
 

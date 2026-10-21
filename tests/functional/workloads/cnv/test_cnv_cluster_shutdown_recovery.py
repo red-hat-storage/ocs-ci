@@ -75,7 +75,7 @@ class TestVmShutdownStart(E2ETest):
 
         file_paths = ["/source_file.txt", "/new_file.txt"]
 
-        # Create a project
+        logger.test_step("Create project and deploy CNV workload VMs")
         proj_obj = project_factory()
         (
             self.vm_objs_def,
@@ -83,9 +83,11 @@ class TestVmShutdownStart(E2ETest):
             self.sc_obj_def_compr,
             self.sc_obj_aggressive,
         ) = multi_cnv_workload(namespace=proj_obj.namespace)
-        logger.info("All vms created successfully")
 
         all_vms = self.vm_objs_def + self.vm_objs_aggr
+        logger.info(f"Created {len(all_vms)} VMs successfully")
+
+        logger.test_step("Write initial test data and prepare clone/snapshot VMs")
         source_csums = {}
         for vm_obj in all_vms:
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
@@ -104,18 +106,18 @@ class TestVmShutdownStart(E2ETest):
         if vm_for_stop is None:
             vm_for_stop = random.choice(all_vms)
 
-        # Create Clone of VM
+        logger.info(f"Cloning VM '{vm_for_clone.name}'")
         cloned_vm = vm_clone_fixture(vm_for_clone, admin_client)
         csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
         source_csums[cloned_vm.name] = csum
         all_vms.append(cloned_vm)
 
-        # Create a snapshot
+        logger.info(f"Creating snapshot and restoring VM '{vm_for_snap.name}'")
         restored_vm = vm_snapshot_restore_fixture(vm_for_snap, admin_client)
         csum = cal_md5sum_vm(vm_obj=restored_vm, file_path=file_paths[0])
         source_csums[vm_for_snap.name] = csum
 
-        # Initiate abrupt shutdown the cluster nodes as per OCP official documentation
+        logger.test_step("Shut down cluster nodes")
         worker_nodes = get_nodes(node_type="worker")
         master_nodes = get_nodes(node_type="master")
 
@@ -123,7 +125,7 @@ class TestVmShutdownStart(E2ETest):
         master_nodes_names = [node.name for node in master_nodes]
 
         if not force:
-            logger.info("Stopping all the vms before graceful shutdown")
+            logger.info("Stopping all VMs before graceful shutdown")
             run_oc_command(
                 cmd="annotate cluster noobaa-db-pg-cluster --overwrite cnpg.io/hibernation=on"
             )
@@ -146,23 +148,21 @@ class TestVmShutdownStart(E2ETest):
             nodes.stop_nodes(nodes=master_nodes, force=force)
 
         else:
-            # Keep vms in different states (power on, paused, stoped)
+            logger.info(
+                f"Stopping VM '{vm_for_stop.name}' and pausing VM '{vm_for_snap.name}'"
+            )
             vm_for_stop.stop()
             vm_for_snap.pause()
 
-            shutdown_type = "abruptly" if force else "gracefully"
-            logger.info(
-                f"{shutdown_type.capitalize()} shutting down worker & master nodes"
-            )
-
+            logger.info("Abruptly shutting down worker and master nodes")
             nodes.stop_nodes(nodes=worker_nodes, force=force)
             nodes.stop_nodes(nodes=master_nodes, force=force)
 
-        logger.info("waiting for 5 min before starting nodes")
+        logger.info("Waiting 5 minutes before starting nodes")
         time.sleep(300)
 
-        # Initate ordered start of cluster after 10 min by following OCP official documentation.
-        logger.info("Starting worker & master nodes")
+        logger.test_step("Start cluster nodes and wait for recovery")
+        logger.info("Starting master and worker nodes")
         nodes.start_nodes(nodes=master_nodes)
         nodes.start_nodes(nodes=worker_nodes)
         all_nodes = master_nodes + worker_nodes
@@ -187,41 +187,52 @@ class TestVmShutdownStart(E2ETest):
         schedule_nodes(worker_node_names)
         schedule_nodes(master_nodes_names)
 
-        logger.info("Waiting for pods to come in running state.")
+        logger.info("Waiting for pods to reach running state")
         wait_for_pods_to_be_running(timeout=500)
 
-        # Check cluster health
+        logger.test_step("Verify cluster and CNV health")
         try:
-            logger.info("Making sure ceph health is OK")
+            logger.info("Running Ceph health check")
             Sanity().health_check(tries=50, cluster_check=False)
         except Exception as ex:
-            logger.error("Failed at cluster health check!!")
+            logger.exception(f"Cluster health check failed: {ex}")
             raise ex
 
-        # CNV health check
+        logger.info("Running CNV post-install verification")
         cnv_obj = CNVInstaller()
         cnv_obj.post_install_verification()
 
+        logger.test_step("Restore VM states after recovery")
         if not force:
-            logger.info("Start all the vms after graceful shutdown")
+            logger.info("Starting all VMs after graceful shutdown")
             for vm_obj in all_vms:
                 if vm_obj.printableStatus() != constants.VM_RUNNING:
                     vm_obj.start()
         else:
-            # Verify that VMs status post start
+            logger.info(f"Starting stopped VM '{vm_for_stop.name}'")
             vm_for_stop.start()
             for vm in all_vms:
+                vm_status = vm.printableStatus()
+                logger.assertion(
+                    f"VM running state: vm='{vm.name}', "
+                    f"expected='{constants.VM_RUNNING}', actual='{vm_status}', "
+                    f"match={vm_status == constants.VM_RUNNING}"
+                )
                 assert (
-                    vm.printableStatus() == constants.VM_RUNNING
-                ), f"{vm.name} did not reach the running state."
+                    vm_status == constants.VM_RUNNING
+                ), f"VM '{vm.name}' did not reach running state, current status: '{vm_status}'"
 
-        # Perform post restart data integrity check
+        logger.test_step("Verify data integrity and run I/O on all VMs")
         for vm_obj in all_vms:
             new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
-            assert source_csums[vm_obj.name] == new_csum, (
-                f"ERROR: Failed data integrity before stopping the cluster and after starting the cluster "
-                f"for VM '{vm_obj.name}'."
+            logger.assertion(
+                f"Data integrity: vm='{vm_obj.name}', "
+                f"expected='{source_csums[vm_obj.name]}', actual='{new_csum}', "
+                f"match={source_csums[vm_obj.name] == new_csum}"
             )
+            assert (
+                source_csums[vm_obj.name] == new_csum
+            ), f"MD5 mismatch for VM '{vm_obj.name}' after cluster shutdown and recovery"
 
-            # Perform some I/O operations on the VMs to ensure it is functioning as expected.
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
+        logger.info("Data integrity verified and I/O completed on all VMs")

@@ -1,0 +1,59 @@
+clusterSet: ''
+clusters:
+  c1:
+    kubeconfig: ''
+  c2:
+    kubeconfig: ''
+  hub:
+    kubeconfig: ''
+  passive-hub:
+    kubeconfig: ''
+deployers:
+- description: ApplicationSet deployer for ArgoCD
+  name: appset
+  type: appset
+- description: Subscription deployer for OCM subscriptions
+  name: subscr
+  type: subscr
+- description: Discovered Application deployer
+  name: disapp
+  type: disapp
+- description: Discovered Application deployer with recipe
+  name: disapp-recipe
+  recipe:
+    type: generate
+  type: disapp
+- description: Discovered Application deployer with recipe using check hook
+  name: disapp-recipe-check
+  recipe:
+    checkHook: true
+    type: generate
+  type: disapp
+- description: Discovered Application deployer with recipe using exec hook
+  name: disapp-recipe-exec
+  recipe:
+    execHook: true
+    type: generate
+  type: disapp
+- description: Discovered Application deployer with recipe using check and exec hooks
+  name: disapp-recipe-check-exec
+  recipe:
+    checkHook: true
+    execHook: true
+    type: generate
+  type: disapp
+drPolicy: odr-policy-5m
+pvcSpecs:
+- accessModes: ReadWriteOnce
+  name: rbd
+  storageClassName: ocs-storagecluster-ceph-rbd
+- accessModes: ReadWriteMany
+  name: cephfs
+  storageClassName: ocs-storagecluster-cephfs
+repo:
+  branch: main
+  url: https://github.com/RamenDR/ocm-ramen-samples.git
+tests:
+- deployer: appset
+  pvcSpec: rbd
+  workload: deploy

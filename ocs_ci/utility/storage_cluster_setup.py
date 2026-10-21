@@ -21,6 +21,26 @@ from ocs_ci.utility.utils import get_az_count, run_cmd
 logger = logging.getLogger(__name__)
 
 
+def apply_ceph_cluster_mon_count(cluster_data, mon_count):
+    """
+    Set managedResources.cephCluster.monCount when mon_count is 5.
+
+    Args:
+        cluster_data (dict): StorageCluster CR data
+        mon_count (int | None): Desired mon count from DEPLOYMENT.mon_count
+
+    Returns:
+        dict: Updated cluster_data
+
+    """
+    if mon_count == 5:
+        cluster_data["spec"].setdefault("managedResources", {}).setdefault(
+            "cephCluster", {}
+        )["monCount"] = 5
+        logger.info("Setting StorageCluster managedResources.cephCluster.monCount=5")
+    return cluster_data
+
+
 class StorageClusterSetup(object):
     """
     Performs the setup of the StorageCluster for Data Foundation deployments
@@ -141,12 +161,18 @@ class StorageClusterSetup(object):
             and zone_num < 3
             and not config.DEPLOYMENT.get("arbiter_deployment")
             and self.platform not in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            and self.platform != constants.FYRE_PLATFORM
         ):
             cluster_data["spec"]["flexibleScaling"] = True
             # https://bugzilla.redhat.com/show_bug.cgi?id=1921023
-            cluster_data["spec"]["storageDeviceSets"][0]["count"] = 3
+            cluster_data["spec"]["storageDeviceSets"][0]["count"] = (
+                config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 3)
+            )
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
-        elif self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+        elif (
+            self.platform.lower() == constants.FYRE_PLATFORM
+            or self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
             from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 
             nodes_obj = OCP(
@@ -168,7 +194,6 @@ class StorageClusterSetup(object):
             number_of_disks_available = int(
                 number_of_disks_available_total / no_of_worker_nodes
             )
-
             # with this approach of datermining the number of nodes we assume worker nodes number of disks is equal
             # to master nodes number of disks, in case when config.ENV_DATA.get("mark_masters_schedulable") == True,
             # and we labeled master nodes to serve as a storage nodes
@@ -437,6 +462,68 @@ class StorageClusterSetup(object):
         # Enable data replication separation
         cluster_data = add_data_replication_separation_to_cluster_data(cluster_data)
 
+        # Enable NVMe-oF (NVMe over Fabrics) gateway
+        if config.DEPLOYMENT.get("nvmeof_enable"):
+            gateway_instances = config.DEPLOYMENT.get("nvmeof_gateway_instances")
+            logger.info(
+                "Enabling NVMe-oF on StorageCluster with %s gateway instances",
+                gateway_instances,
+            )
+            cluster_data["spec"]["nvmeof"] = {
+                "enable": config.DEPLOYMENT.get("nvmeof_enable"),
+                "gatewayInstances": gateway_instances,
+            }
+
+        # Erasure Coding: configure EC as default pool type
+        if config.DEPLOYMENT.get("ec_default_pools"):
+            k = config.DEPLOYMENT.get("ec_data_chunks", 2)
+            m = config.DEPLOYMENT.get("ec_coding_chunks", 1)
+            fd = config.DEPLOYMENT.get("ec_failure_domain", "host")
+            logger.info(
+                f"Configuring EC default pools: k={k}, m={m}, " f"failureDomain={fd}"
+            )
+
+            # Re-capture managed_resources from the current cluster_data — the two
+            # calls above (add_in_transit_encryption_to_cluster_data,
+            # add_data_replication_separation_to_cluster_data) may have returned a
+            # new dict, making the managed_resources reference captured at line 381
+            # point to the old one.
+            ec_managed_resources = cluster_data["spec"].setdefault(
+                "managedResources", {}
+            )
+
+            ec_managed_resources.setdefault("cephBlockPools", {}).update(
+                {
+                    "poolSpec": {
+                        "failureDomain": fd,
+                        "erasureCoded": {"dataChunks": k, "codingChunks": m},
+                    },
+                    "erasureCodedMetadataPool": "replicated-metadata-pool",
+                }
+            )
+
+            ec_fs_pool_name = "fserasurecoded"
+            ec_managed_resources.setdefault("cephFilesystems", {}).update(
+                {
+                    "additionalDataPools": [
+                        {
+                            "name": ec_fs_pool_name,
+                            "erasureCoded": {"dataChunks": k, "codingChunks": m},
+                        }
+                    ],
+                    "defaultStorageClassDataPoolName": ec_fs_pool_name,
+                }
+            )
+
+            ec_managed_resources.setdefault("cephObjectStores", {}).update(
+                {
+                    "dataPoolSpec": {
+                        "failureDomain": fd,
+                        "erasureCoded": {"dataChunks": k, "codingChunks": m},
+                    },
+                }
+            )
+
         # Use Custom Storageclass Names
         if config.ENV_DATA.get("custom_default_storageclass_names"):
             storageclassnames = config.ENV_DATA.get("storageclassnames")
@@ -519,7 +606,7 @@ class StorageClusterSetup(object):
                     }
                 },
             )
-            config.ENV_DATA.set("noobaa_db_backup_enabled", False)
+            config.ENV_DATA["noobaa_db_backup_enabled"] = False
         # Add NooBaa DB backup configuration if enabled
         if config.ENV_DATA.get("noobaa_db_backup_enabled"):
             log_step("Adding NooBaa DB backup configuration to StorageCluster")
@@ -645,6 +732,12 @@ class StorageClusterSetup(object):
                 cp = managed_resources_ceph_cluster.setdefault("cleanupPolicy", {})
                 cp["wipeDevicesFromOtherClusters"] = True
 
+        # Lazy import avoids circular import with deployment.Deployment
+        from ocs_ci.deployment.deployment import get_expected_mon_count
+
+        cluster_data = apply_ceph_cluster_mon_count(
+            cluster_data, get_expected_mon_count()
+        )
         storage_cluster_override = config.DEPLOYMENT.get("storage_cluster_override", {})
         if storage_cluster_override:
             logger.info(

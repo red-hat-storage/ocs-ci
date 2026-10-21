@@ -1,13 +1,13 @@
 import logging
-import time
 
 import pytest
 
-from ocs_ci.ocs import constants, ocp
-from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+from ocs_ci.helpers.helpers import (
+    configure_cephcluster_params_in_storagecluster_cr,
+    run_cmd_verify_cli_output,
+)
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.helpers.helpers import configure_cephcluster_params_in_storagecluster_cr
+from ocs_ci.ocs.resources.storage_cluster import get_cephcluster_storage_spec
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -65,31 +65,48 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
 
     """
 
+    CEPHCLUSTER_RECONCILE_TIMEOUT = 60
+    CEPH_OSD_DUMP_TIMEOUT = 600
+
     def setup_thresholds_params(self):
         configure_cephcluster_params_in_storagecluster_cr(
             params=THRESHOLDS, default_values=False
         )
 
-        logger.info("Wait 2 sec the cephcluster will updated")
-        time.sleep(2)
-
     def verify_thresholds_params(self):
         logger.info(
-            "Verify upgrade parameters on cephcluster CR and storagecluster CR are same"
+            "Verify threshold parameters propagated from StorageCluster to CephCluster CR"
         )
-        cephcluster_obj = ocp.OCP(
-            kind=constants.CEPH_CLUSTER,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=constants.CEPH_CLUSTER_NAME,
-        )
-        for parameter in THRESHOLDS:
-            actual_value = cephcluster_obj.data["spec"]["storage"][parameter["sc_key"]]
-            assert (
-                str(actual_value).lower() == str(parameter["value"]).lower()
-            ), f"The value of {parameter['sc_key']} is {actual_value}, the expected value is {parameter['value']}"
+        for storage_spec in TimeoutSampler(
+            timeout=self.CEPHCLUSTER_RECONCILE_TIMEOUT,
+            sleep=5,
+            func=get_cephcluster_storage_spec,
+        ):
+            if storage_spec is None:
+                continue
+            mismatches = {}
+            for parameter in THRESHOLDS:
+                key = parameter["sc_key"]
+                actual = storage_spec.get(key)
+                if actual is None or str(actual).lower() != parameter["value"]:
+                    mismatches[key] = actual
+            if not mismatches:
+                logger.info("All threshold parameters reconciled to CephCluster CR")
+                break
+            logger.info(
+                "Waiting for CephCluster reconciliation, pending: %s", mismatches
+            )
 
+        for parameter in THRESHOLDS:
+            actual_value = storage_spec.get(parameter["sc_key"])
+            assert str(actual_value).lower() == str(parameter["value"]).lower(), (
+                f"The value of {parameter['sc_key']} is {actual_value}, "
+                f"the expected value is {parameter['value']}"
+            )
+
+        logger.info("Verify threshold parameters with ceph CLI 'ceph osd dump'")
         sample = TimeoutSampler(
-            timeout=600,
+            timeout=self.CEPH_OSD_DUMP_TIMEOUT,
             sleep=10,
             func=run_cmd_verify_cli_output,
             cmd="ceph osd dump",
@@ -112,10 +129,9 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
         """
         Procedure:
         1.Configure storagecluster CR
-        2.Wait 2 seconds
-        3.Verify ceph full thresholds parameters on cephcluster CR and storagecluster CR are same
-        4.Verify parameters with ceph CLI 'ceph osd dump'
-        5.Configure the default params on storagecluster [treardown]
+        2.Verify ceph full thresholds parameters on cephcluster CR and storagecluster CR are same
+        3.Verify parameters with ceph CLI 'ceph osd dump'
+        4.Configure the default params on storagecluster [teardown]
 
         """
         self.setup_thresholds_params()
@@ -126,9 +142,8 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
         """
         Procedure:
         1.Configure storagecluster CR
-        2.Wait 2 seconds
-        3.Verify ceph full thresholds parameters on cephcluster CR and storagecluster CR are same
-        4.Verify parameters with ceph CLI 'ceph osd dump'
+        2.Verify ceph full thresholds parameters on cephcluster CR and storagecluster CR are same
+        3.Verify parameters with ceph CLI 'ceph osd dump'
 
         """
         self.setup_thresholds_params()

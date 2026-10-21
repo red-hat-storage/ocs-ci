@@ -1,0 +1,12 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+  host_network: true
+ENV_DATA:
+  platform: 'ibm_hci'
+  deployment_type: 'ipi'
+  cluster_type: 'provider'
+  odf_provider_mode_deployment: true
+  worker_replicas: 3
+  master_replicas: 3

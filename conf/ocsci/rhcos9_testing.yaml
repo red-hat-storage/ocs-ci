@@ -1,0 +1,10 @@
+---
+# Config for testing with RHCOS 9 template
+# Usage: Include this config file to use RHCOS 9 instead of RHCOS 10
+# in OCP 5.0
+# Example: --ocsci-conf conf/ocsci/rhcos9_testing.yaml
+#
+# This automatically configures:
+# - VM template from vm_templates["9"] in OCP version config
+ENV_DATA:
+  rhcos_version: "9"

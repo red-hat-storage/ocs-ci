@@ -20,10 +20,19 @@ from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
-from ocs_ci.utility.aws import AWS as AWSUtil, delete_sts_iam_roles, delete_subnet_tags
-from ocs_ci.utility.deployment import create_openshift_install_log_file
+from ocs_ci.utility.aws import (
+    AWS as AWSUtil,
+    delete_sts_iam_roles,
+    delete_subnet_tags,
+    terminate_rosa_hcp_worker_instances,
+)
+from ocs_ci.utility.deployment import (
+    create_openshift_install_log_file,
+    deploy_roks_icsp_daemonset,
+)
 from ocs_ci.utility.rosa import (
     get_associated_oidc_config_id,
+    get_rosa_hcp_infra_id,
     delete_account_roles,
     wait_console_url,
     destroy_rosa_cluster,
@@ -163,7 +172,26 @@ class ROSAOCP(BaseOCPDeployment):
                     )
                     return
                 raise
-            subnet_ids = aws.get_cluster_subnet_ids(cluster_name=self.cluster_name)
+            if rosa_hcp:
+                subnet_ids = rosa.get_rosa_hcp_subnet_ids()
+                infra_id = get_rosa_hcp_infra_id(self.cluster_name)
+            else:
+                subnet_ids = aws.get_cluster_subnet_ids(cluster_name=self.cluster_name)
+                infra_id = ""
+            oidc_endpoint_url = None
+            if rosa_hcp:
+                try:
+                    auth = ocp.OCP().exec_oc_cmd(
+                        "get authentication cluster "
+                        "-o jsonpath='{.spec.serviceAccountIssuer}'"
+                    )
+                    oidc_endpoint_url = str(auth).strip()
+                    logger.info(f"Pre-fetched OIDC endpoint URL: {oidc_endpoint_url}")
+                except Exception as e:
+                    logger.warning(
+                        f"Could not pre-fetch OIDC endpoint URL, will retry during "
+                        f"cleanup if cluster is still reachable: {e}"
+                    )
             log_step(f"Destroying ROSA cluster. Hosted CP: {rosa_hcp}")
             delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
             if not delete_status:
@@ -181,6 +209,8 @@ class ROSAOCP(BaseOCPDeployment):
                 err_msg = f"Failed to delete {self.cluster_name}"
                 logger.error(err_msg)
                 raise TimeoutExpiredError(err_msg)
+            if rosa_hcp and infra_id:
+                terminate_rosa_hcp_worker_instances(infra_id)
             log_step("Deleting ROSA/aws associated resources")
             oproles_prefix = (
                 f"{constants.OPERATOR_ROLE_PREFIX_ROSA_HCP}-{self.cluster_name}"
@@ -190,13 +220,21 @@ class ROSAOCP(BaseOCPDeployment):
                 if oidc_config_id:
                     rosa.delete_oidc_config(oidc_config_id)
                 # use sts IAM roles for ROSA HCP is mandatory
-                delete_sts_iam_roles()
-                delete_subnet_tags(f"kubernetes.io/cluster/{cluster_id}", subnet_ids)
+                delete_sts_iam_roles(oidc_endpoint_url=oidc_endpoint_url)
+                if subnet_ids:
+                    delete_subnet_tags(
+                        f"kubernetes.io/cluster/{cluster_id}", *subnet_ids
+                    )
             rosa.delete_oidc_provider(self.cluster_name)
             account_roles_prefix = (
                 f"{constants.ACCOUNT_ROLE_PREFIX_ROSA_HCP}-{self.cluster_name}"
             )
             delete_account_roles(account_roles_prefix)
+            if rosa_hcp and subnet_ids:
+                try:
+                    rosa.clean_stale_subnet_tags(subnet_ids)
+                except Exception as e:
+                    logger.warning(f"Stale subnet tag cleanup failed: {e}")
             logger.info(
                 f"Cluster {self.cluster_name} and associated resources deleted successfully"
             )
@@ -221,7 +259,7 @@ class ROSAOCP(BaseOCPDeployment):
         cluster_list = ocm.list_cluster()
         for cluster in cluster_list:
             if cluster[0] == self.cluster_name:
-                logger.info(f"Cluster found: {cluster[0]}")
+                logger.info(f"Cluster found: {cluster[0]}, state: {cluster[1]}")
                 return True
         return False
 
@@ -291,11 +329,21 @@ class ROSA(CloudDeploymentBase):
 
         # rosa hcp is self-managed and doesn't support ODF addon
         if rosa_hcp:
+            if config.DEPLOYMENT.get("konflux_build"):
+                log_step(
+                    "ROSA HCP + Konflux: deploying roks-icsp DaemonSet "
+                    "for worker filesystem-based mirror configuration"
+                )
+                deploy_roks_icsp_daemonset()
             super(ROSA, self).deploy_ocs()
         else:
             rosa.install_odf_addon(self.cluster_name)
 
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
+
+        # ROSA HCP ODF deployment is slower due to worker filesystem mirror
+        # configuration and image pull via registries.conf.d mirrors — double timeouts
+        timeout_multiplier = 2 if rosa_hcp else 1
 
         if config.ENV_DATA.get("cluster_type") != "consumer":
             # Check for Ceph pods
@@ -303,16 +351,18 @@ class ROSA(CloudDeploymentBase):
                 condition="Running",
                 selector=constants.MON_APP_LABEL,
                 resource_count=3,
-                timeout=600,
+                timeout=600 * timeout_multiplier,
             )
             assert pod.wait_for_resource(
-                condition="Running", selector=constants.MGR_APP_LABEL, timeout=600
+                condition="Running",
+                selector=constants.MGR_APP_LABEL,
+                timeout=600 * timeout_multiplier,
             )
             assert pod.wait_for_resource(
                 condition="Running",
                 selector=constants.OSD_APP_LABEL,
                 resource_count=3,
-                timeout=600,
+                timeout=600 * timeout_multiplier,
             )
 
         if config.DEPLOYMENT.get("pullsecret_workaround") or config.DEPLOYMENT.get(
@@ -327,7 +377,9 @@ class ROSA(CloudDeploymentBase):
             )()
 
         # Verify health of ceph cluster
-        ceph_health_check(namespace=self.namespace, tries=60, delay=10)
+        ceph_health_check(
+            namespace=self.namespace, tries=60 * timeout_multiplier, delay=10
+        )
 
         # Workaround for the bug 2166900
         if config.ENV_DATA.get("cluster_type") == "consumer":
@@ -353,6 +405,12 @@ class ROSA(CloudDeploymentBase):
                         namespace=config.ENV_DATA["cluster_namespace"],
                     )
                     rook_operator_pod[0].delete(wait=False)
+
+        # HCP defers this inside Deployment.deploy_ocs so the profile is applied
+        # once, after the ROSA health check. The addon path never calls that method.
+        from ocs_ci.helpers.tlsprofile_helper import apply_tls_profile_after_deployment
+
+        apply_tls_profile_after_deployment()
 
     def destroy_ocs(self):
         """

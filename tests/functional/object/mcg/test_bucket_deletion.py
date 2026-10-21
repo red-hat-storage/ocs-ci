@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     mcg,
     sts_deployment_required,
+    aws_platform_required,
     skipif_fips_enabled,
 )
 from ocs_ci.framework.testlib import MCGTest
@@ -27,6 +28,7 @@ from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.objectbucket import MCGS3Bucket
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 ERRATIC_TIMEOUTS_SKIP_REASON = "Skipped because of erratic timeouts"
@@ -101,7 +103,7 @@ class TestBucketDeletion(MCGTest):
                         "backingstore_dict": {"aws-sts": [(1, "eu-central-1")]},
                     },
                 ],
-                marks=[tier1, sts_deployment_required],
+                marks=[tier1, sts_deployment_required, aws_platform_required],
             ),
         ],
         ids=[
@@ -123,11 +125,29 @@ class TestBucketDeletion(MCGTest):
         Negative test with deletion of bucket has objects stored in.
 
         """
-        bucketname = bucket_factory(bucketclass=bucketclass_dict)[0].name
+        logger.info(
+            f"Creating bucket with interface={interface}, "
+            f"bucketclass_dict={bucketclass_dict}"
+        )
+        bucket = bucket_factory(bucketclass=bucketclass_dict)[0]
+        bucketname = bucket.name
+        logger.info(f"Bucket {bucketname} created successfully")
 
         data_dir = AWSCLI_TEST_OBJ_DIR
         full_object_path = f"s3://{bucketname}"
-        sync_object_directory(awscli_pod_session, data_dir, full_object_path, mcg_obj)
+        logger.info(
+            f"Syncing objects from {data_dir} to {full_object_path} "
+            f"(endpoint: {mcg_obj.s3_internal_endpoint})"
+        )
+        retry(
+            (CommandFailed, botocore.exceptions.ClientError),
+            tries=3,
+            delay=30,
+            backoff=2,
+        )(sync_object_directory)(
+            awscli_pod_session, data_dir, full_object_path, mcg_obj
+        )
+        logger.info(f"Objects synced successfully to {bucketname}")
 
         logger.info(f"Deleting bucket: {bucketname}")
         if interface == "S3":

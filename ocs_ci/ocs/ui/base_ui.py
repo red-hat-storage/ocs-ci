@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from pathlib import Path
 import datetime
 import logging
@@ -37,7 +38,7 @@ from ocs_ci.ocs.exceptions import (
     NotSupportedProxyConfiguration,
 )
 from ocs_ci.ocs.ocp import get_ocp_url
-from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
+from ocs_ci.ocs.ui.views import locators_for_current_ocp_version, login as login_view
 from ocs_ci.ocs.ui.llm_tools.locator_fallback import LocatorFallback
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
@@ -177,11 +178,17 @@ class BaseUI:
         self.bucket_tab = self.deep_get(
             locators_for_current_ocp_version(), "bucket_tab"
         )
+        self.s3_vector_loc = self.deep_get(
+            locators_for_current_ocp_version(), "s3_vector_tab"
+        )
         self.data_foundation_overview = self.deep_get(
             locators_for_current_ocp_version(), "data_foundation_overview"
         )
         self.attach_storage_loc = self.deep_get(
             locators_for_current_ocp_version(), "attach_storage"
+        )
+        self.vm_loc = self.deep_get(
+            locators_for_current_ocp_version(), "virtualmachine"
         )
         self._locator_fallback = None
 
@@ -206,6 +213,7 @@ class BaseUI:
         enable_screenshot=False,
         copy_dom=False,
         avoid_stale=False,
+        use_fallback=True,
     ):
         """
         Click on Button/link on OpenShift Console
@@ -217,6 +225,7 @@ class BaseUI:
         avoid_stale (bool): if got StaleElementReferenceException, caused by reference to stale, cached element,
         refresh the page once and try click again
         * don't use when refreshed page expected to be different from initial page, or loose input values
+        use_fallback (bool): if True, attempt AI locator fallback on TimeoutException
         """
 
         def _do_click(_locator, _timeout=30, _enable_screenshot=False, _copy_dom=False):
@@ -244,15 +253,16 @@ class BaseUI:
                 self.take_screenshot(f"{type(self).__name__}-{date_time}")
                 self.copy_dom(f"{type(self).__name__}-{date_time}")
                 logger.error(e)
-                new_locator = self.locator_fallback.attempt_fallback(
-                    locator, "click", stack_trace=traceback.format_exc()
-                )
-                if new_locator:
-                    element = WebDriverWait(self.driver, timeout).until(
-                        ec.element_to_be_clickable((new_locator[1], new_locator[0]))
+                if use_fallback:
+                    new_locator = self.locator_fallback.attempt_fallback(
+                        locator, "click", stack_trace=traceback.format_exc()
                     )
-                    element.click()
-                    return
+                    if new_locator:
+                        element = WebDriverWait(self.driver, timeout).until(
+                            ec.element_to_be_clickable((new_locator[1], new_locator[0]))
+                        )
+                        element.click()
+                        return
                 raise TimeoutException(
                     f"Failed to find the element ({locator[1]},{locator[0]})"
                 )
@@ -273,6 +283,24 @@ class BaseUI:
             self.copy_dom()
             time.sleep(5)
             _do_click(locator, timeout, enable_screenshot, copy_dom)
+
+    def click_with_script(self, locator):
+        """
+        Click a web element using JavaScript dispatchEvent instead of Selenium's
+        native coordinate-based click. Use as a fallback when ElementClickInterceptedException
+        occurs because an overlay covers the element's click coordinates (e.g. SVG nodes
+        in the ODF Topology view that are positioned outside the scrollable content area).
+
+        Args:
+            locator (tuple): (selector string, By type) identifying the element to click.
+        """
+        element = self.driver.find_element(locator[1], locator[0])
+        self.driver.execute_script(
+            "arguments[0].dispatchEvent("
+            "new MouseEvent('click', {bubbles: true, cancelable: true, view: window})"
+            ")",
+            element,
+        )
 
     def do_click_by_id(self, id, timeout=30):
         return self.do_click((id, By.ID), timeout)
@@ -656,6 +684,53 @@ class BaseUI:
         """
         self.driver.refresh()
 
+    @contextmanager
+    def run_in_new_tab(self, locator, timeout=15):
+        """
+        Click a locator that opens a new browser tab, switch to it, and
+        guarantee cleanup on exit.
+
+        Usage::
+
+            with self.run_in_new_tab(some_locator):
+                content = self.driver.find_element(By.TAG_NAME, "pre").text
+
+        Args:
+            locator: Selenium locator tuple that triggers a new tab on click.
+            timeout (int): Seconds to wait for the new tab to appear.
+
+        Yields:
+            The WebDriver instance, now focused on the new tab.
+
+        Raises:
+            TimeoutException: If no new tab opens within ``timeout`` seconds.
+
+        """
+        driver = SeleniumDriver()
+        parent_handle = driver.current_window_handle
+        original_handles = set(driver.window_handles)
+
+        self.do_click(locator, enable_screenshot=True)
+
+        try:
+            WebDriverWait(driver, timeout).until(
+                lambda d: len(d.window_handles) > len(original_handles)
+            )
+        except TimeoutException as err:
+            raise TimeoutException(
+                f"No new tab opened within {timeout}s after clicking {locator}"
+            ) from err
+
+        new_handle = (set(driver.window_handles) - original_handles).pop()
+        driver.switch_to.window(new_handle)
+        try:
+            yield driver
+        finally:
+            if new_handle in driver.window_handles:
+                driver.switch_to.window(new_handle)
+                driver.close()
+            driver.switch_to.window(parent_handle)
+
     def navigate_backward(self):
         """
         Navigate to a previous Web Page
@@ -680,6 +755,51 @@ class BaseUI:
         take_screenshot(
             screenshots_folder=self.screenshots_folder, name_suffix=name_suffix
         )
+
+    def take_screenshot_for_llm(self, name_suffix="", region=None):
+        """
+        Takes a screenshot for LLM-based UI analysis and returns the file path.
+
+        This base implementation captures a single viewport screenshot. Subclasses
+        that operate on scrollable panels (e.g. TopologySidebar) should override
+        this method to capture additional screenshots after scrolling, so the LLM
+        receives the full content of the panel.
+
+        The window is temporarily resized to the resolution configured in
+        ``UI_SELENIUM.llm_screenshot_resolution`` (default ``"1920,1400"``)
+        before the screenshot and restored afterwards so that the LLM always
+        receives a consistent, high-resolution image regardless of the current
+        browser window size.
+
+        Args:
+            name_suffix (str): Optional suffix for the screenshot filename.
+            region (str): Optional region to crop. ``"right_side"`` keeps the
+                right half, ``"left_side"`` keeps the left half. ``None`` keeps
+                the full viewport.
+
+        Returns:
+            list: List of absolute paths to the saved screenshot files.
+        """
+        driver = SeleniumDriver()
+        original_size = driver.get_window_size()
+        llm_res = ocsci_config.UI_SELENIUM.get("llm_screenshot_resolution", "1920,1400")
+        llm_w, llm_h = (int(v) for v in llm_res.split(","))
+        driver.set_window_size(llm_w, llm_h)
+        time.sleep(0.5)
+
+        try:
+            suffix = f"{name_suffix}_llm" if name_suffix else "llm"
+            take_screenshot(
+                screenshots_folder=self.screenshots_folder, name_suffix=suffix
+            )
+            screenshots = sorted(Path(self.screenshots_folder).glob("*.png"))
+            path = str(screenshots[-1])
+            if region:
+                _crop_screenshot(path, region)
+            return [path]
+        finally:
+            driver.set_window_size(original_size["width"], original_size["height"])
+            time.sleep(0.3)
 
     def copy_dom(self, name_suffix: str = ""):
         """
@@ -725,7 +845,9 @@ class BaseUI:
         element.send_keys(Keys.CONTROL, "a")
         element.send_keys(Keys.DELETE)
 
-    def wait_until_expected_text_is_found(self, locator, expected_text, timeout=60):
+    def wait_until_expected_text_is_found(
+        self, locator, expected_text, timeout=60, use_fallback=True
+    ):
         """
         Method to wait for a expected text to appear on the UI (use of explicit wait type),
         this method is helpful in working with elements which appear on completion of certain action and
@@ -735,6 +857,10 @@ class BaseUI:
             locator (tuple): (GUI element needs to operate on (str), type (By))
             expected_text (str): Text which needs to be searched on UI
             timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
+            use_fallback (bool): If True, attempt AI locator fallback on TimeoutException.
+                Set to False when this method is used as a probe/detection call where a
+                timeout is the expected "not found" outcome — avoids spurious fallback
+                activation noise in the logs.
 
         Returns:
             bool: Returns True if the expected element text is found, False otherwise
@@ -757,31 +883,36 @@ class BaseUI:
             logger.warning(
                 f"Locator {locator[1]} {locator[0]} did not find text {expected_text}"
             )
-            new_locator = self.locator_fallback.attempt_fallback(
-                locator, "wait_text", stack_trace=traceback.format_exc()
-            )
-            if new_locator:
-                try:
-                    WebDriverWait(self.driver, min(timeout, 10)).until(
-                        ec.text_to_be_present_in_element(
-                            (new_locator[1], new_locator[0]), expected_text
+            if use_fallback:
+                new_locator = self.locator_fallback.attempt_fallback(
+                    locator, "wait_text", stack_trace=traceback.format_exc()
+                )
+                if new_locator:
+                    try:
+                        WebDriverWait(self.driver, min(timeout, 10)).until(
+                            ec.text_to_be_present_in_element(
+                                (new_locator[1], new_locator[0]), expected_text
+                            )
                         )
-                    )
-                    return True
-                except TimeoutException:
-                    pass
+                        return True
+                    except TimeoutException:
+                        pass
             return False
 
-    def check_element_presence(self, locator, timeout=5):
+    def check_element_presence(self, locator, timeout=5, use_fallback=True):
         """
         Check if an web element is present on the web console or not.
-
 
         Args:
              locator (tuple): (GUI element needs to operate on (str), type (By))
              timeout (int): Looks for a web element repeatedly until timeout (sec) occurs
+             use_fallback (bool): When False, skip the AI locator fallback entirely.
+                 Set to False when this method is used as an optional probe (e.g. checking
+                 whether an optional modal is present) — the element is not expected to
+                 always exist and firing the AI fallback on every miss wastes minutes.
+
         Returns:
-            bool: True if the element is found, returns False otherwise and raises NoSuchElementException
+            bool: True if the element is found, returns False otherwise
 
         """
         try:
@@ -800,6 +931,8 @@ class BaseUI:
         except (NoSuchElementException, StaleElementReferenceException):
             logger.error("Expected element not found on UI")
             self.take_screenshot()
+            if not use_fallback:
+                return False
             # locator here is (By, value) — reverse for fallback which expects (value, By)
             new_locator = self.locator_fallback.attempt_fallback(
                 (locator[1], locator[0]),
@@ -818,6 +951,8 @@ class BaseUI:
         except TimeoutException:
             logger.error(f"Timedout while waiting for element with {locator}")
             self.take_screenshot()
+            if not use_fallback:
+                return False
             # locator here is (By, value) — reverse for fallback which expects (value, By)
             new_locator = self.locator_fallback.attempt_fallback(
                 (locator[1], locator[0]),
@@ -953,6 +1088,48 @@ def take_screenshot(name_suffix: str = "", screenshots_folder=None):
     time.sleep(0.5)
 
 
+def _crop_screenshot(path, region):
+    """
+    Crops a screenshot in-place to the specified region using the browser
+    Canvas API so no external image library is required.
+
+    Args:
+        path (str): Absolute path to the PNG file.
+        region (str): ``"right_side"`` or ``"left_side"``.
+    """
+    import base64
+
+    if region not in ("right_side", "left_side"):
+        logger.warning(f"Unknown region '{region}', keeping full screenshot")
+        return
+
+    with open(path, "rb") as fh:
+        img_b64 = base64.b64encode(fh.read()).decode()
+
+    js = """
+    var region = arguments[0];
+    var imgData = arguments[1];
+    var callback = arguments[arguments.length - 1];
+    var img = new Image();
+    img.onload = function() {
+        var canvas = document.createElement('canvas');
+        var w = img.width, h = img.height;
+        var sx = 0, sw = w;
+        if (region === 'right_side') { sx = Math.floor(w / 2); sw = w - sx; }
+        else if (region === 'left_side') { sw = Math.floor(w / 2); }
+        canvas.width = sw;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, sx, 0, sw, h, 0, 0, sw, h);
+        callback(canvas.toDataURL('image/png').split(',')[1]);
+    };
+    img.src = 'data:image/png;base64,' + imgData;
+    """
+    cropped_b64 = SeleniumDriver().execute_async_script(js, region, img_b64)
+    with open(path, "wb") as fh:
+        fh.write(base64.b64decode(cropped_b64))
+    logger.info(f"Cropped screenshot to '{region}': {path}")
+
+
 def garbage_collector_webdriver():
     """
     Garbage Collector for webdriver objs
@@ -1010,6 +1187,11 @@ class SeleniumDriver(WebDriver):
                 chrome_options.add_argument("--headless=new")
                 chrome_options.add_argument("--window-size=1920,1400")
                 chrome_options.add_argument("--force-device-scale-factor=1")
+                # Required for Chrome 137+ stability in CI/containerized environments
+                chrome_options.add_argument("--disable-dev-shm-usage")
+                chrome_options.add_argument("--no-sandbox")
+                chrome_options.add_argument("--disable-gpu")
+                chrome_options.add_argument("--disable-software-rasterizer")
 
             # use proxy server, if required
             if (
@@ -1065,9 +1247,38 @@ class SeleniumDriver(WebDriver):
                         "Unable to configure authenticated proxy in headless browser mode!"
                     )
             else:
-                logger.info("No proxy configuration for browser")
-                # to bypass http_proxy / https_proxy env variables and connect directly to internal WebDriver endpoint
-                chrome_options.add_argument("--no-proxy-server")
+                # Check for proxy configuration from config or environment variables
+                # Config settings have higher precedence than environment variables
+                http_proxy = (
+                    config.ENV_DATA.get("http_proxy")
+                    or os.getenv("HTTP_PROXY")
+                    or os.getenv("http_proxy")
+                )
+                https_proxy = (
+                    config.ENV_DATA.get("https_proxy")
+                    or os.getenv("HTTPS_PROXY")
+                    or os.getenv("https_proxy")
+                )
+                no_proxy = (
+                    config.ENV_DATA.get("no_proxy")
+                    or os.getenv("NO_PROXY")
+                    or os.getenv("no_proxy")
+                )
+
+                if http_proxy or https_proxy:
+                    # Use HTTPS proxy if available, otherwise HTTP proxy
+                    proxy_server = https_proxy if https_proxy else http_proxy
+                    logger.info(f"Configuring proxy ({proxy_server}) for browser")
+                    chrome_options.add_argument(f"--proxy-server={proxy_server}")
+
+                    # Configure proxy bypass list for local/cluster addresses
+                    if no_proxy:
+                        logger.info(f"Configuring proxy bypass list: {no_proxy}")
+                        chrome_options.add_argument(f"--proxy-bypass-list={no_proxy}")
+                else:
+                    logger.info("No proxy configuration for browser")
+                    # Bypass http_proxy/https_proxy env vars and connect directly to WebDriver
+                    chrome_options.add_argument("--no-proxy-server")
 
             chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
             chrome_service = Service(
@@ -1077,6 +1288,21 @@ class SeleniumDriver(WebDriver):
                 service=chrome_service,
                 options=chrome_options,
             )
+
+            # Chrome 137+ workaround: --window-size argument is ignored in headless mode
+            # Set window size explicitly via Selenium API after driver creation
+            if headless:
+                initial_size = driver.get_window_size()
+                logger.info(
+                    f"Initial window size: {initial_size['width']}x{initial_size['height']}"
+                )
+                driver.set_window_size(1920, 1400)
+                time.sleep(0.5)  # Give Chrome time to resize
+                actual_size = driver.get_window_size()
+                logger.info(
+                    f"Window size after set_window_size: {actual_size['width']}x{actual_size['height']}"
+                )
+
         else:
             raise ValueError(f"No Support on {browser}")
         return driver
@@ -1145,7 +1371,9 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
     login_loc = locators_for_current_ocp_version()["login"]
     page_nav_loc = locators_for_current_ocp_version()["page"]
     driver = SeleniumDriver()
-    driver.maximize_window()
+    # Skip maximize_window in headless mode - it resets window size and doesn't work properly
+    if not ocsci_config.UI_SELENIUM.get("headless"):
+        driver.maximize_window()
     driver.implicitly_wait(10)
     driver.get(console_url)
     # Validate proceeding to the login console before taking any action:
@@ -1262,8 +1490,27 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
     password_el.send_keys(password)
 
     logger.info("Username and password filled in, clicking Log in")
-    confirm_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
-    confirm_login_el.click()
+    # ROSA HCP uses the standard login button, not the 4.19+ co-login-button
+    if config.ENV_DATA.get("platform", "").lower() == constants.ROSA_HCP_PLATFORM:
+        click_login_locator = login_view["click_login"]
+    else:
+        click_login_locator = login_loc["click_login"]
+    # Client clusters have OAuth-based login with different button structure
+    is_client_cluster = (
+        config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT
+    )
+    if is_client_cluster:
+        logger.info("Client cluster detected, using OAuth login button locator")
+        login_client_oauth_loc = locators_for_current_ocp_version()[
+            "login_client_oauth"
+        ]
+        confirm_login_el = wait_for_element_to_be_clickable(
+            login_client_oauth_loc["click_login"], 60
+        )
+        confirm_login_el.click()
+    else:
+        confirm_login_el = wait_for_element_to_be_clickable(click_login_locator, 60)
+        confirm_login_el.click()
 
     hci_platform_conf = (
         config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
@@ -1281,7 +1528,8 @@ def login_ui(console_url=None, username=None, password=None, otp_secret=None, **
         else:
             logger.info("Skip tour element not found. Continuing without clicking.")
 
-    if hci_platform_conf:
+    # Navigate to local cluster page only for provider clusters, not client clusters
+    if hci_platform_conf and not is_client_cluster:
         dashboard_url = console_url + "/dashboards"
         # proceed to local-cluster page if not already there. The rule is always to start from the local-cluster page
         # when the hci platform is confirmed and proceed to the client if needed from within the test
@@ -1319,16 +1567,21 @@ def close_browser():
 
     """
     logger.info("Close browser")
-    session_cost = ocsci_config.UI_SELENIUM.get("ai_fallback_session_cost", 0.0)
-    session_requests = ocsci_config.UI_SELENIUM.get("ai_fallback_session_requests", 0)
-    if session_requests > 0:
+    total_cost = ocsci_config.UI_SELENIUM.get("llm_session_cost", 0.0)
+    total_requests = ocsci_config.UI_SELENIUM.get("llm_session_requests", 0)
+    fallback_cost = ocsci_config.UI_SELENIUM.get("ai_fallback_session_cost", 0.0)
+    fallback_requests = ocsci_config.UI_SELENIUM.get("ai_fallback_session_requests", 0)
+    other_cost = total_cost - fallback_cost
+    other_requests = total_requests - fallback_requests
+    if total_requests > 0:
         logger.info(
             "\n"
             "╔══════════════════════════════════════════════════════════════╗\n"
-            "║           AI FALLBACK: SESSION COST SUMMARY                  ║\n"
+            "║                 LLM SESSION COST SUMMARY                     ║\n"
             "╚══════════════════════════════════════════════════════════════╝\n"
-            f"  Total cost    : ${session_cost:.4f}\n"
-            f"  Total requests: {session_requests}"
+            f"  Total           : ${total_cost:.4f}  ({total_requests} requests)\n"
+            f"  ├─ AI fallback  : ${fallback_cost:.4f}  ({fallback_requests} requests)\n"
+            f"  └─ Other LLM    : ${other_cost:.4f}  ({other_requests} requests)"
         )
     try:
         take_screenshot("close_browser")
@@ -1380,12 +1633,16 @@ def proceed_to_login_console():
     """
     driver = SeleniumDriver()
     login_loc = locators_for_current_ocp_version()["login"]
-    if login_loc["pre_login_page_title"].lower() in driver.title.lower():
-        proceed_btn = driver.find_element(
-            by=login_loc["proceed_to_login_btn"][1],
-            value=login_loc["proceed_to_login_btn"][0],
-        )
-        proceed_btn.click()
+    if driver.title == login_loc["pre_login_page_title"]:
+        try:
+            proceed_btn = wait_for_element_to_be_clickable(
+                login_loc["proceed_to_login_btn"], 60
+            )
+            proceed_btn.click()
+        except WebDriverException:
+            take_screenshot("proceed_to_login_console_click")
+            copy_dom("proceed_to_login_console_click")
+            raise
         try:
             WebDriverWait(driver, 60).until(ec.title_is(login_loc["login_page_title"]))
         except TimeoutException:
@@ -1396,10 +1653,18 @@ def proceed_to_login_console():
 
 def navigate_to_local_cluster(**kwargs):
     """
-    Navigate to Local Cluster page, if not already there
+    Navigate to Local Cluster page, if not already there.
+
+    On multicluster-hub (MCE/ACM) consoles the perspective switcher is a real
+    dropdown, while on single-cluster consoles it is a static title. In both cases
+    its title reflects the currently selected perspective, so the current
+    perspective is read from that title to decide whether navigation is needed.
+    This avoids probing for absent elements, which would otherwise emit failure
+    screenshots and DOM dumps for the common "already local" case.
+
     :param kwargs: acm_page locators dict, timeout
 
-    :raises TimeoutException: if timeout occurs, and local clusters page is not loaded
+    :raises TimeoutException: if the perspective switcher is not found
     """
     if "acm_page" in kwargs:
         acm_page_loc = kwargs["acm_page"]
@@ -1410,26 +1675,43 @@ def navigate_to_local_cluster(**kwargs):
     else:
         timeout = 30
 
-    all_clusters_dropdown = acm_page_loc["all-clusters_dropdown"]
-    try:
-        logger.info("Navigate to Local Cluster page. Click all clusters dropdown")
-        acm_dropdown = wait_for_element_to_be_visible(all_clusters_dropdown, timeout)
-        acm_dropdown.click()
-        local_cluster_item = wait_for_element_to_be_visible(
-            acm_page_loc["local-cluster_dropdown_item"]
-        )
-        logger.info("Navigate to Local Cluster page. Click local cluster item")
-        local_cluster_item.click()
-    except TimeoutException:
-        wait_for_element_to_be_visible(acm_page_loc["local-cluster_dropdown"])
+    switcher = wait_for_element_to_be_visible(
+        acm_page_loc["perspective-switcher-toggle"], timeout
+    )
+    current_perspective = switcher.text.strip()
+    logger.info(f"Current perspective switcher title: '{current_perspective}'")
+
+    if any(
+        title in current_perspective
+        for title in ("Core platform", "local-cluster", "Administrator")
+    ):
+        logger.info("Already on local cluster — skipping cluster navigation.")
+        return
+
+    logger.info(
+        f"Perspective '{current_perspective}' is not the local cluster. "
+        "Opening the perspective switcher to select the local cluster."
+    )
+    switcher.click()
+    local_cluster_item = wait_for_element_to_be_visible(
+        acm_page_loc["local-cluster_dropdown_item"], timeout
+    )
+    logger.info("Selecting the local cluster from the perspective switcher")
+    local_cluster_item.click()
 
 
 def navigate_to_all_clusters(**kwargs):
     """
-    Navigate to All Clusters page, if not already there
+    Navigate to All Clusters (Fleet management) page, if not already there.
+
+    Mirrors navigate_to_local_cluster: the currently selected perspective is read
+    from the perspective switcher title before deciding whether to switch, so no
+    absent elements are searched (and no failure screenshots emitted) when the
+    page is already on the all-clusters view.
+
     :param kwargs: acm_page locators dict, timeout
 
-    :raises TimeoutException: if timeout occurs, and All clusters acm page is not loaded
+    :raises TimeoutException: if the perspective switcher is not found
     """
     if "acm_page" in kwargs:
         acm_page = kwargs["acm_page"]
@@ -1440,13 +1722,25 @@ def navigate_to_all_clusters(**kwargs):
     else:
         timeout = 30
 
-    local_clusters_dropdown = acm_page["local-cluster_dropdown"]
-    try:
-        acm_dropdown = wait_for_element_to_be_visible(local_clusters_dropdown, timeout)
-        acm_dropdown.click()
-        all_clusters_item = wait_for_element_to_be_visible(
-            acm_page["all-clusters_dropdown_item"]
-        )
-        all_clusters_item.click()
-    except TimeoutException:
-        wait_for_element_to_be_visible(acm_page["all-clusters_dropdown"])
+    switcher = wait_for_element_to_be_visible(
+        acm_page["perspective-switcher-toggle"], timeout
+    )
+    current_perspective = switcher.text.strip()
+    logger.info(f"Current perspective switcher title: '{current_perspective}'")
+
+    if any(
+        title in current_perspective for title in ("Fleet management", "All Clusters")
+    ):
+        logger.info("Already on all clusters — skipping cluster navigation.")
+        return
+
+    logger.info(
+        f"Perspective '{current_perspective}' is not all clusters. "
+        "Opening the perspective switcher to select all clusters."
+    )
+    switcher.click()
+    all_clusters_item = wait_for_element_to_be_visible(
+        acm_page["all-clusters_dropdown_item"], timeout
+    )
+    logger.info("Selecting all clusters from the perspective switcher")
+    all_clusters_item.click()

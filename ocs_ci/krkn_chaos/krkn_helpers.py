@@ -3,6 +3,8 @@ import os
 import re
 import pytest
 from ocs_ci.ocs.constants import (
+    CEPH_HEALTH_ERROR,
+    CEPH_HEALTH_WARN,
     KRKN_CHAOS_DIR,
     OPENSHIFT_STORAGE_NAMESPACE,
     # Component label constants
@@ -18,6 +20,8 @@ from ocs_ci.ocs.constants import (
     CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
     # Container chaos specific labels
     NOOBAA_APP_LABEL,
+    NOOBAA_CORE_POD_LABEL,
+    NOOBAA_ENDPOINT_POD_LABEL,
     # Platform constants
     AWS_PLATFORM,
     ROSA_PLATFORM,
@@ -39,20 +43,38 @@ from ocs_ci.ocs.constants import (
     KRKN_CLOUD_IBM,
     KRKN_CLOUD_VMWARE,
     KRKN_CLOUD_BAREMETAL,
+    FUSIONAAS_PLATFORM,
+    MANAGED_SERVICE_PLATFORMS,
 )
 from ocs_ci.ocs import ocp
+from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.exceptions import NoobaaHealthException
 from ocs_ci.ocs.node import get_worker_nodes, get_master_nodes
 from ocs_ci.krkn_chaos.krkn_scenario_generator import (
     ApplicationOutageScenarios,
+    ContainerScenarios,
     NetworkOutageScenarios,
     HogScenarios,
     PodScenarios,
     NodeScenarios,
+    convert_signal_to_number,
 )
-from ocs_ci.resiliency.resiliency_tools import CephStatusTool
+from ocs_ci.resiliency.resiliency_tools import (
+    CephStatusTool,
+    CEPH_CRASH_POLL_INTERVAL,
+    is_ceph_health_acceptable,
+)
 from ocs_ci.framework import config
+from ocs_ci.utility.utils import format_ceph_crash_summary_lines
 
 log = logging.getLogger(__name__)
+
+# Krkn output.log [ERROR] lines that must not fail the test (known benign messages).
+# Also treated as non-fatal Krkn process exits in KrKnRunner (same as exit code 2).
+KRKN_OUTPUT_IGNORED_ERROR_MESSAGES = (
+    "Post scenarios are still failing at the end of all iterations",
+    "Trying to kill more containers than were found",
+)
 
 # ============================================================================
 # PLATFORM DETECTION HELPER CLASS
@@ -88,7 +110,7 @@ def get_krkn_cloud_type():
     Get the Krkn cloud type based on the current platform.
 
     Returns:
-        str: Krkn cloud type (aws, azure, ibm, vmware, bm)
+        str: Krkn cloud type (aws, azure, ibmcloud, vmware, bm)
 
     Raises:
         pytest.skip: If platform is not supported for node chaos testing
@@ -107,6 +129,41 @@ def get_krkn_cloud_type():
         )
 
     return cloud_type
+
+
+def vsphere_creds_for_krkn_from_ocs_config():
+    """
+    vSphere server, user, and password from ``AUTH`` (``vmware`` / ``vsphere``) and
+    ``ENV_DATA`` (e.g. ``vsphere_server``), aligned with ``platform_nodes.VMWare``.
+
+    Returns:
+        tuple: (server or None, user or None, password or None)
+    """
+    vm_auth = {}
+    for key in ("vmware", "vsphere"):
+        block = config.AUTH.get(key)
+        if isinstance(block, dict):
+            vm_auth.update(block)
+
+    env_data = config.ENV_DATA or {}
+
+    server = (
+        vm_auth.get("vsphere_server")
+        or vm_auth.get("vsphere_ip")
+        or vm_auth.get("server")
+        or env_data.get("vsphere_server")
+    )
+    user = (
+        vm_auth.get("vsphere_user")
+        or vm_auth.get("username")
+        or env_data.get("vsphere_user")
+    )
+    password = (
+        vm_auth.get("vsphere_password")
+        or vm_auth.get("password")
+        or env_data.get("vsphere_password")
+    )
+    return server, user, password
 
 
 def get_node_scenario_generator():
@@ -165,8 +222,25 @@ class BaseScenarioHelper:
         "rbd-ctrlplugin": CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
         # Rook Operator
         "rook-operator": OPERATOR_LABEL,
-        # NooBaa
+        # NooBaa (avoid broad app=noobaa for chaos; legacy key retained for callers)
         "noobaa": NOOBAA_APP_LABEL,
+        "noobaa-core": NOOBAA_CORE_POD_LABEL,
+        "noobaa-endpoint": NOOBAA_ENDPOINT_POD_LABEL,
+    }
+
+    # Primary workload container per component (avoids killing random sidecars).
+    COMPONENT_PRIMARY_CONTAINERS = {
+        "cephfs-nodeplugin": "csi-cephfsplugin",
+        "mgr": "mgr",
+        "rbd-nodeplugin": "csi-rbdplugin",
+        "rgw": "rgw",
+        "noobaa-core": "noobaa-core",
+        "noobaa-endpoint": "noobaa-endpoint",
+        "cephfs-ctrlplugin": "csi-cephfsplugin",
+        "rbd-ctrlplugin": "csi-rbdplugin",
+        "mon": "mon",
+        "mds": "mds",
+        "osd": "osd",
     }
 
     # Component criticality mapping - for chaos testing approach, not exclusion
@@ -256,6 +330,10 @@ class BaseScenarioHelper:
             )
         elif "rook-operator" in label_selector:
             return "rook-operator"
+        elif "noobaa-core" in label_selector:
+            return "noobaa-core"
+        elif "noobaa-s3" in label_selector:
+            return "noobaa-endpoint"
         else:
             return "unknown"
 
@@ -303,8 +381,12 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             "description": "RGW (RADOS Gateway)",
         },
         {
-            "name": "noobaa",
-            "description": "NooBaa",
+            "name": "noobaa-core",
+            "description": "NooBaa Core",
+        },
+        {
+            "name": "noobaa-endpoint",
+            "description": "NooBaa Endpoint",
         },
         {
             "name": "cephfs-ctrlplugin",
@@ -315,14 +397,41 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             "description": "RBD Control Plugin",
         },
         {
+            "name": "mon",
+            "description": "MON",
+            "count": 1,
+        },
+        {
+            "name": "mds",
+            "description": "MDS",
+        },
+        {
             "name": "osd",
             "description": "OSD",
+            "expected_recovery_time": 300,
         },
     ]
 
     def __init__(self, scenario_dir=None, namespace=None):
         """Initialize container scenario helper."""
         super().__init__(scenario_dir, namespace)
+
+    def _matching_pod_count(self, label_selector, namespace):
+        """Return the number of pods matching label, or None if listing failed."""
+        from ocs_ci.ocs.resources.pod import get_pods_having_label
+
+        try:
+            pods = get_pods_having_label(label=label_selector, namespace=namespace)
+            return len(pods)
+        except Exception as ex:
+            self.log.warning(
+                "Could not list pods for label %s in namespace %s: %s; "
+                "keeping the container-kill scenario",
+                label_selector,
+                namespace,
+                ex,
+            )
+            return None
 
     def build_unified_scenarios(
         self,
@@ -332,6 +441,7 @@ class ContainerScenarioHelper(BaseScenarioHelper):
         expected_recovery_time=120,
         container_name="",
         components=None,
+        skip_if_no_pods=True,
     ):
         """Build unified container chaos scenarios with configurable parameters.
 
@@ -340,14 +450,20 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             kill_signal (str): Kill signal to use (default: "SIGKILL")
             count (int): Number of containers to kill (default: 1)
             expected_recovery_time (int): Expected recovery time in seconds (default: 120)
-            container_name (str): Specific container name (default: "" for all containers)
+            container_name (str): Override container name for all scenarios when non-empty;
+                otherwise each component uses COMPONENT_PRIMARY_CONTAINERS (recommended).
             components (list): List of component configs to use (default: all components)
+            skip_if_no_pods (bool): Skip components with no matching pods so Krkn
+                does not raise "Trying to kill more containers than were found".
 
         Returns:
             list: List of scenario dictionaries ready for use in chaos testing
         """
         if components is None:
             components = self.DEFAULT_COMPONENTS
+
+        # Convert signal name to number
+        kill_signal_number = convert_signal_to_number(kill_signal)
 
         scenarios = []
         for component in components:
@@ -358,19 +474,92 @@ class ContainerScenarioHelper(BaseScenarioHelper):
                     f"No label selector found for component: {component['name']}"
                 )
                 continue
+            requested_count = component.get("count", count)
+            if skip_if_no_pods:
+                available = self._matching_pod_count(label_selector, namespace)
+                if available == 0:
+                    self.log.warning(
+                        "Skipping container-kill for %s: no pods match %s in %s",
+                        component["name"],
+                        label_selector,
+                        namespace,
+                    )
+                    continue
+                if available is not None and requested_count > available:
+                    self.log.warning(
+                        "Capping %s kill count from %s to %s (matching pods)",
+                        component["name"],
+                        requested_count,
+                        available,
+                    )
+                    requested_count = available
+            resolved_container = component.get("container_name") or container_name
+            if not resolved_container:
+                resolved_container = self.COMPONENT_PRIMARY_CONTAINERS.get(
+                    component["name"], ""
+                )
             scenario = {
                 "name": f"{component['name'].replace('-', '_')}_{kill_signal.lower()}_kill",
                 "namespace": namespace,
                 "label_selector": label_selector,
-                "container_name": container_name,
-                "kill_signal": kill_signal,
-                "count": count,
-                "expected_recovery_time": expected_recovery_time,
+                "container_name": resolved_container,
+                "kill_signal": kill_signal_number,
+                "count": requested_count,
+                "expected_recovery_time": component.get(
+                    "expected_recovery_time", expected_recovery_time
+                ),
                 "description": component["description"],
             }
             scenarios.append(scenario)
 
+        if not scenarios:
+            self.log.warning(
+                "No container-kill scenarios built for namespace %s "
+                "(all components skipped or unlabeled)",
+                namespace,
+            )
+
         return scenarios
+
+    def register_isolated_container_kill_scenarios(
+        self, config_generator, scenario_dir, scenarios
+    ):
+        """Write one YAML per component and register each as a separate plugin run.
+
+        Krkn's ContainerScenarioPlugin aborts remaining scenarios in the same YAML
+        when it raises (for example kill count exceeds found pods after a watch
+        reconnect). Isolated plugin entries keep later components running.
+
+        Args:
+            config_generator (KrknConfigGenerator): Config to register scenarios on
+            scenario_dir (str): Directory for generated YAML files
+            scenarios (list): Scenario dicts from build_unified_scenarios
+
+        Returns:
+            list: Paths of generated scenario files
+
+        Raises:
+            pytest.skip: If scenarios is empty
+        """
+        if not scenarios:
+            pytest.skip("No matching pods for container-kill components")
+
+        scenario_files = []
+        for scenario in scenarios:
+            filename = f"container_kill_{scenario['name']}.yaml"
+            path = ContainerScenarios.container_kill(
+                scenario_dir=scenario_dir,
+                scenarios=[scenario],
+                filename=filename,
+            )
+            config_generator.add_scenario("container_scenarios", path, isolated=True)
+            scenario_files.append(path)
+            self.log.info(
+                "Registered isolated container-kill scenario %s -> %s",
+                scenario["name"],
+                path,
+            )
+        return scenario_files
 
     def get_component_descriptions(self, scenarios):
         """Get a list of component descriptions from scenarios.
@@ -439,6 +628,7 @@ class ContainerScenarioHelper(BaseScenarioHelper):
             for scenario in scenarios:
                 self.log.info(
                     f"   • {scenario['name']}: {scenario['label_selector']}\n"
+                    f"     - Container: {scenario['container_name']}\n"
                     f"     - Kill signal: {scenario['kill_signal']}\n"
                     f"     - Target count: {scenario['count']}\n"
                     f"     - Recovery time: {scenario['expected_recovery_time']}s"
@@ -991,34 +1181,166 @@ class NetworkScenarioHelper(BaseScenarioHelper):
         # For other patterns, return the app value or a simplified version
         return app_value.lower()
 
-    def is_critical_component(self, component_name):
-        """
-        Determine if a Ceph component should receive conservative chaos testing.
-
-        In chaos engineering, ALL components should be tested under chaotic conditions
-        to discover weaknesses and improve system resilience. This method always returns
-        False to ensure all components receive the same level of chaos testing intensity.
-
-        Args:
-            component_name (str): Component name (e.g., "mon", "mgr", "osd")
-
-        Returns:
-            bool: Always False - all components should experience full chaos testing
-        """
-        # In true chaos engineering spirit, no component is exempt from chaos!
-        # All components (mon, mgr, mds, osd, rgw, tools, etc.) should be tested
-        # under chaotic conditions to validate system resilience and discover
-        # potential failure modes.
-
-        self.log.debug(
-            f"Component '{component_name}' will receive full chaos testing intensity"
-        )
-        return False
-
 
 # ============================================================================
 # HOG SCENARIO HELPER CLASS
 # ============================================================================
+
+# Krkn hog_scenarios and krknctl node-*-hog create pods with these name prefixes.
+# They are supposed to be deleted after chaos duration; OOMKilled / Completed /
+# ContainerStatusUnknown hog pods are often left behind.
+KRKN_HOG_POD_NAME_PREFIXES = (
+    "cpu-hog",
+    "memory-hog",
+    "io-hog",
+    "node-cpu-hog",
+    "node-memory-hog",
+    "node-io-hog",
+    "krkn-hog",
+)
+# Krkn node-network-chaos Jobs (tc netem latency/loss). Kubernetes keeps
+# Completed Job pods unless ttlSecondsAfterFinished is set; Krkn does not set it.
+KRKN_NETWORK_CHAOS_NAME_PREFIXES = (
+    "chaos-latency",
+    "chaos-loss",
+)
+KRKN_HOG_POD_NAMESPACES = ("default", OPENSHIFT_STORAGE_NAMESPACE)
+_DEBUG_POD_TERMINAL_PHASES = frozenset({"Succeeded", "Failed", "Unknown"})
+
+
+def _name_matches_prefixes(name, prefixes):
+    """Return True if name equals a prefix or is ``{prefix}-...``."""
+    if not name:
+        return False
+    return any(name == prefix or name.startswith(f"{prefix}-") for prefix in prefixes)
+
+
+def _is_krkn_hog_pod_name(name):
+    """Return True if the pod name was created by Krkn/krknctl hog scenarios."""
+    return _name_matches_prefixes(name, KRKN_HOG_POD_NAME_PREFIXES)
+
+
+def _is_krkn_network_chaos_name(name):
+    """Return True if name is a Krkn node-network-chaos Job or pod."""
+    return _name_matches_prefixes(name, KRKN_NETWORK_CHAOS_NAME_PREFIXES)
+
+
+def _is_oc_debug_pod_name(name):
+    """Return True if name looks like an ``oc debug node/...`` pod."""
+    return bool(name) and ("-debug-" in name or name.endswith("-debug"))
+
+
+def _list_kind_items(kind, scan_namespaces):
+    """List resources only in ``scan_namespaces``."""
+    from ocs_ci.ocs.ocp import OCP
+
+    items = []
+    for ns in scan_namespaces:
+        try:
+            data = OCP(kind=kind, namespace=ns).get()
+            items.extend(data.get("items") or [])
+        except Exception as ns_ex:
+            log.warning(
+                "Could not list %s in namespace %s: %s",
+                kind,
+                ns,
+                ns_ex,
+            )
+    return items
+
+
+def _delete_named_item(kind, item, force, label):
+    """Delete one resource; return ``ns/name`` or None on failure."""
+    from ocs_ci.ocs.exceptions import CommandFailed
+    from ocs_ci.ocs.ocp import OCP
+
+    name = item.get("metadata", {}).get("name", "")
+    ns = item.get("metadata", {}).get("namespace") or "default"
+    phase = item.get("status", {}).get("phase", "")
+    try:
+        log.info(
+            "Deleting leftover %s %s/%s (phase=%s)",
+            label,
+            ns,
+            name,
+            phase or "n/a",
+        )
+        OCP(kind=kind, namespace=ns).delete(
+            resource_name=name, wait=False, force=force, timeout=60
+        )
+        return f"{ns}/{name}"
+    except CommandFailed as ex:
+        log.warning("Failed to delete %s %s/%s: %s", label, ns, name, ex)
+    except Exception as ex:
+        log.warning("Unexpected error deleting %s %s/%s: %s", label, ns, name, ex)
+    return None
+
+
+def _is_leftover_chaos_pod(item):
+    """Match hog, network-chaos, or terminal-phase oc debug pods."""
+    name = item.get("metadata", {}).get("name", "")
+    if _is_krkn_hog_pod_name(name) or _is_krkn_network_chaos_name(name):
+        return True
+    if not _is_oc_debug_pod_name(name):
+        return False
+    phase = item.get("status", {}).get("phase", "")
+    return phase in _DEBUG_POD_TERMINAL_PHASES
+
+
+def cleanup_krkn_hog_pods(namespaces=None, force=True):
+    """Delete leftover Krkn chaos Jobs/pods and completed oc debug pods.
+
+    Covers:
+    - hog pods (cpu/memory/io hog) left after OOMKill / Unknown kubelet
+    - ``chaos-latency-*`` / ``chaos-loss-*`` Jobs (Completed pods stay unless
+      the Job is deleted; Krkn does not set ttlSecondsAfterFinished)
+    - Succeeded/Failed/Unknown ``oc debug`` pods in default (timeouts skip
+      the client-side debug-pod delete)
+
+    Args:
+        namespaces (list): Namespaces to scan. None scans default plus
+            openshift-storage. Resources outside these namespaces are not listed.
+        force (bool): Force-delete with grace-period 0 so Unknown/Completed
+            leftovers are removed.
+
+    Returns:
+        list: Names of resources that were deleted (best-effort).
+    """
+    from ocs_ci.ocs import constants
+
+    scan_namespaces = list(namespaces) if namespaces else list(KRKN_HOG_POD_NAMESPACES)
+    deleted = []
+
+    for item in _list_kind_items(constants.JOB, scan_namespaces):
+        name = item.get("metadata", {}).get("name", "")
+        if _is_krkn_network_chaos_name(name) or _is_krkn_hog_pod_name(name):
+            result = _delete_named_item(constants.JOB, item, force, "chaos job")
+            if result:
+                deleted.append(result)
+
+    leftover_pods = [
+        item
+        for item in _list_kind_items(constants.POD, scan_namespaces)
+        if _is_leftover_chaos_pod(item)
+    ]
+    if not leftover_pods and not deleted:
+        log.info("No leftover Krkn hog, network-chaos, or debug pods found")
+        return []
+
+    for item in leftover_pods:
+        name = item.get("metadata", {}).get("name", "")
+        if _is_oc_debug_pod_name(name):
+            label = "debug pod"
+        elif _is_krkn_network_chaos_name(name):
+            label = "network-chaos pod"
+        else:
+            label = "hog pod"
+        result = _delete_named_item(constants.POD, item, force, label)
+        if result:
+            deleted.append(result)
+
+    log.info("Deleted %s leftover chaos resource(s): %s", len(deleted), deleted)
+    return deleted
 
 
 class HogScenarioHelper(BaseScenarioHelper):
@@ -1027,6 +1349,10 @@ class HogScenarioHelper(BaseScenarioHelper):
     def __init__(self, scenario_dir=None, namespace=None):
         """Initialize hog scenario helper."""
         super().__init__(scenario_dir, namespace)
+
+    def cleanup_hog_pods(self, namespaces=None, force=True):
+        """Delete leftover hog pods created by this helper's scenarios."""
+        return cleanup_krkn_hog_pods(namespaces=namespaces, force=force)
 
     def create_cpu_hog_scenario(
         self, duration=None, namespace=None, node_selector=None, output_name=None
@@ -1181,8 +1507,6 @@ class NetworkPortHelper(BaseScenarioHelper):
 
             # Filter out ephemeral virtual interfaces that may disappear
             # These typically have patterns like: xxxxx@ifX, xxxxx@ens3, etc.
-            import re
-
             stable_interfaces = []
             for iface in all_interfaces:
                 # Skip interfaces with @ symbol (virtual/ephemeral interfaces)
@@ -1714,6 +2038,7 @@ class KrknResultAnalyzer(BaseScenarioHelper):
 
         filtered_errors = []
         cleanup_errors = []
+        ignored_errors = []
 
         # Network cleanup error patterns (tracked separately for informational purposes)
         cleanup_error_patterns = [
@@ -1726,23 +2051,45 @@ class KrknResultAnalyzer(BaseScenarioHelper):
         for error in detected_errors:
             is_false_positive = False
             is_cleanup_error = False
+            is_ignored = False
 
-            # Check if this is a cleanup-related error
-            for cleanup_pattern in cleanup_error_patterns:
-                if re.search(cleanup_pattern, error["context"], re.IGNORECASE):
-                    is_cleanup_error = True
-                    cleanup_errors.append(error)
+            # Known benign Krkn messages (e.g. post-scenario checks after iterations)
+            for ignored_msg in KRKN_OUTPUT_IGNORED_ERROR_MESSAGES:
+                if ignored_msg.lower() in error["match"].lower():
+                    is_ignored = True
+                    ignored_errors.append(error)
                     break
 
+            # Check if this is a cleanup-related error
+            if not is_ignored:
+                for cleanup_pattern in cleanup_error_patterns:
+                    if re.search(cleanup_pattern, error["context"], re.IGNORECASE):
+                        is_cleanup_error = True
+                        cleanup_errors.append(error)
+                        break
+
             # Check if this is a false positive
-            if not is_cleanup_error:
+            if not is_cleanup_error and not is_ignored:
                 for fp_pattern in false_positive_patterns:
                     if re.search(fp_pattern, error["context"], re.IGNORECASE):
                         is_false_positive = True
                         break
 
-            if not is_false_positive and not is_cleanup_error:
+            if not is_false_positive and not is_cleanup_error and not is_ignored:
                 filtered_errors.append(error)
+
+        if ignored_errors:
+            self.log.info(
+                "Ignoring %s known non-fatal Krkn output error(s) for %s %s",
+                len(ignored_errors),
+                component_name,
+                test_type,
+            )
+            for error in ignored_errors:
+                self.log.info(
+                    "   Ignored Krkn output: %s",
+                    error["match"].strip(),
+                )
 
         # Log cleanup errors as warnings (non-critical)
         if cleanup_errors:
@@ -1785,13 +2132,21 @@ class KrknResultAnalyzer(BaseScenarioHelper):
 
             raise AssertionError(error_summary)
         else:
+            ignored_note = (
+                f", {len(ignored_errors)} ignored known message(s)"
+                if ignored_errors
+                else ""
+            )
             if cleanup_errors:
                 success_msg = (
                     f"No critical errors detected in Krkn output for {component_name} {test_type} "
-                    f"({len(cleanup_errors)} non-critical cleanup errors filtered)"
+                    f"({len(cleanup_errors)} non-critical cleanup errors filtered{ignored_note})"
                 )
             else:
-                success_msg = f"No error messages detected in Krkn output for {component_name} {test_type}"
+                success_msg = (
+                    f"No error messages detected in Krkn output for {component_name} "
+                    f"{test_type}{ignored_note}"
+                )
             self.log.info(success_msg)
 
     def validate_krkn_execution_with_error_check(
@@ -2055,16 +2410,16 @@ class CephHealthHelper(BaseScenarioHelper):
             # Use CephStatusTool to check health
             ceph_status = CephStatusTool()
             health_status = ceph_status.get_ceph_health()
-
-            if health_status == "HEALTH_OK":
-                self.log.info("✅ Ceph cluster health: HEALTHY")
+            if is_ceph_health_acceptable(health_status):
+                if health_status == CEPH_HEALTH_WARN:
+                    self.log.warning(
+                        "⚠️ Ceph cluster health: WARNING (acceptable during/after chaos)"
+                    )
+                else:
+                    self.log.info("✅ Ceph cluster health: HEALTHY")
                 return True
-            elif health_status == "HEALTH_WARN":
-                self.log.warning("⚠️ Ceph cluster health: WARNING (may be acceptable)")
-                return True  # Warnings are often acceptable during/after chaos
-            else:
-                self.log.error(f"❌ Ceph cluster health: {health_status}")
-                return False
+            self.log.error(f"❌ Ceph cluster health: {health_status}")
+            return False
 
         except Exception as e:
             self.log.error(f"Failed to check Ceph health: {e}")
@@ -2095,32 +2450,19 @@ class CephHealthHelper(BaseScenarioHelper):
                 return True, ""
             else:
                 self.log.error("❌ Ceph crashes detected")
-                # Get detailed crash information for logging and error message
+                # check_ceph_crashes() already logged ceph crash info for every crash.
                 error_msg = (
                     f"Ceph crashes detected after {component_label} {chaos_type}. "
                 )
                 try:
                     crashes = ceph_status.get_ceph_crashes()
                     if crashes:
-                        self.log.error(f"Found {len(crashes)} Ceph crashes:")
                         error_msg += f"Found {len(crashes)} crash(es):\n"
-                        for i, crash in enumerate(
-                            crashes[:5], 1
-                        ):  # Show first 5 crashes
-                            crash_id = crash.get("crash_id", "unknown")
-                            timestamp = crash.get("timestamp", "unknown")
-                            entity = crash.get("entity_name", "unknown")
-                            self.log.error(
-                                f"   {i}. Crash ID: {crash_id}, Entity: {entity}, Time: {timestamp}"
-                            )
-                            error_msg += f"  {i}. Crash ID: {crash_id}, Entity: {entity}, Time: {timestamp}\n"
-
-                        if len(crashes) > 5:
-                            remaining = len(crashes) - 5
-                            self.log.error(f"   ... and {remaining} more crashes")
-                            error_msg += f"  ... and {remaining} more crash(es)\n"
-
-                        error_msg += "\nRun 'ceph crash ls' and 'ceph crash info <crash_id>' for more details."
+                        error_msg += "\n".join(format_ceph_crash_summary_lines(crashes))
+                        error_msg += (
+                            "\n\nFull ``ceph crash info <crash_id>`` output was logged "
+                            "above for every crash."
+                        )
                     else:
                         error_msg += "Unable to retrieve crash details."
                 except Exception as detail_ex:
@@ -2131,8 +2473,156 @@ class CephHealthHelper(BaseScenarioHelper):
 
         except Exception as e:
             self.log.error(f"Failed to check Ceph crashes: {e}")
-            # In case of check failure, assume no crashes (conservative approach)
-            return True, ""
+            return False, f"Failed to check Ceph crashes: {e}"
+
+
+def raise_if_ceph_crashes_detected(
+    health_helper,
+    component_label,
+    chaos_type,
+    poll_interval=CEPH_CRASH_POLL_INTERVAL,
+):
+    """
+    Run a Ceph crash check and raise AssertionError when any crash is found.
+
+    Used by krkn/krknctl wait loops so tests fail promptly and collect evidence
+    (must-gather) instead of continuing until chaos finishes.
+
+    Args:
+        health_helper (CephHealthHelper): Helper bound to the storage namespace.
+        component_label: Component label for log context (may be None).
+        chaos_type (str): Chaos context for log messages.
+        poll_interval (int): Interval in seconds (for error message only).
+
+    Raises:
+        AssertionError: If Ceph crash(es) are detected or the check itself fails.
+    """
+    no_crashes, crash_details = health_helper.check_ceph_crashes(
+        component_label, chaos_type
+    )
+    if no_crashes:
+        return
+    details = crash_details or "Ceph crash detected (details unavailable)"
+    raise AssertionError(
+        f"Periodic Ceph crash check failed (every {poll_interval} s). "
+        f"Ceph crash detected during {chaos_type}; failing test to generate evidence.\n"
+        f"{details}"
+    )
+
+
+def _krkn_should_run_noobaa_health_check():
+    """
+    Whether to assert Noobaa health, aligned with
+    :meth:`ocs_ci.ocs.cluster.CephCluster.cluster_health_check` (Noobaa block).
+
+    Krkn chaos jobs run on OCP > 4.10 only, so the BZ 2075422 live-deployment
+    Noobaa skip from ``cluster_health_check`` is not replicated here.
+
+    Skips when ``CephCluster`` is not fully applicable (mcg-only / Fusion
+    consumer), on managed-service platforms, or when Noobaa is disabled in
+    config.
+    """
+    if config.ENV_DATA.get("mcg_only_deployment"):
+        return False
+    if (
+        config.ENV_DATA.get("platform") == FUSIONAAS_PLATFORM
+        and str(config.ENV_DATA.get("cluster_type", "")).lower() == "consumer"
+    ):
+        return False
+    if config.ENV_DATA["platform"] in MANAGED_SERVICE_PLATFORMS:
+        return False
+    if config.COMPONENTS["disable_noobaa"]:
+        return False
+    return True
+
+
+def krkn_exit_criteria(chaos_context="krkn chaos", namespace=None):
+    """
+    Generic exit criteria: assert no Ceph crash, cluster not in HEALTH_ERR,
+    StorageCluster not in Error, and Noobaa healthy when applicable.
+
+    Call at the end of any krkn/krknctl chaos test to fail if the cluster has
+    crashes, is in HEALTH_ERR, or StorageCluster phase is Error after chaos.
+    Noobaa health uses
+    :meth:`ocs_ci.ocs.cluster.CephCluster.wait_for_noobaa_health_ok` when
+    :func:`_krkn_should_run_noobaa_health_check` returns true (same gating as
+    ``cluster_health_check`` except the BZ 2075422 skip, omitted for OCP > 4.10
+    Krkn jobs).
+
+    Args:
+        chaos_context (str): Short description for log/assert messages
+            (e.g. "krknctl random chaos", "krknctl service disruption").
+        namespace (str): OpenShift namespace for the cluster. Defaults to
+            OPENSHIFT_STORAGE_NAMESPACE.
+
+    Raises:
+        AssertionError: If Ceph crash(es) were generated, cluster is in
+            HEALTH_ERR, StorageCluster is Error, or Noobaa is not healthy.
+    """
+    if namespace is None:
+        namespace = OPENSHIFT_STORAGE_NAMESPACE
+    health_helper = CephHealthHelper(namespace=namespace)
+    no_crashes, crash_details = health_helper.check_ceph_crashes(None, chaos_context)
+    assert no_crashes, f"Ceph crash(es) generated during test: {crash_details}"
+
+    ceph_status = CephStatusTool()
+    health_status = ceph_status.get_ceph_health()
+    assert is_ceph_health_acceptable(health_status), (
+        f"Ceph cluster is in {CEPH_HEALTH_ERROR} state after test "
+        f"(status: {health_status})"
+    )
+
+    from ocs_ci.krkn_chaos.cluster_health_gate import (
+        STORAGECLUSTER_ERROR_PHASES,
+        get_storagecluster_phase,
+    )
+
+    try:
+        sc_phase = get_storagecluster_phase(namespace=namespace)
+    except Exception as ex:
+        log.warning(
+            "Could not get StorageCluster phase after %s: %s", chaos_context, ex
+        )
+        sc_phase = None
+    assert sc_phase is None or str(sc_phase).lower() not in (
+        STORAGECLUSTER_ERROR_PHASES
+    ), (
+        f"StorageCluster phase is {sc_phase} after {chaos_context} "
+        f"(ceph health {health_status} is not sufficient)"
+    )
+    if sc_phase:
+        log.info("StorageCluster phase after %s: %s", chaos_context, sc_phase)
+
+    if _krkn_should_run_noobaa_health_check():
+        log.info("Checking Noobaa health after %s", chaos_context)
+        try:
+            CephCluster().wait_for_noobaa_health_ok()
+        except NoobaaHealthException as exc:
+            raise AssertionError(
+                f"Noobaa is not healthy after {chaos_context}: {exc}"
+            ) from exc
+
+
+def krknctl_random_test_exit_criteria(
+    chaos_context="krknctl random chaos", namespace=None
+):
+    """
+    Exit criteria for krknctl random chaos tests.
+
+    Calls krkn_exit_criteria() with the given context. Use at the end of
+    krknctl random / service disruption tests to assert no Ceph crash and
+    cluster not in HEALTH_ERR.
+
+    Args:
+        chaos_context (str): Short description for log/assert messages
+            (e.g. "krknctl random chaos", "krknctl service disruption").
+        namespace (str): OpenShift namespace for the cluster. Defaults to
+            OPENSHIFT_STORAGE_NAMESPACE.
+
+    Raises:
+        AssertionError: If Ceph crash(es) were generated or cluster is in HEALTH_ERR.
+    """
+    krkn_exit_criteria(chaos_context=chaos_context, namespace=namespace)
 
 
 # ============================================================================
@@ -2327,7 +2817,7 @@ class ValidationHelper(BaseScenarioHelper):
             no_crashes, ceph_crash_details = health_helper.check_ceph_crashes(
                 component_name, test_type
             )
-            if not no_crashes and ceph_crash_details:
+            if not no_crashes:
                 self.log.error(
                     f"Ceph crash check (before reporting failure): {ceph_crash_details}"
                 )

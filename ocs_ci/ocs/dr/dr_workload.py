@@ -3,6 +3,7 @@ This module will have all DR related workload classes
 
 """
 
+import base64
 import logging
 import os
 import tempfile
@@ -16,6 +17,8 @@ from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers, helpers
 from ocs_ci.helpers.cnv_helpers import create_vm_secret, cal_md5sum_vm
 from ocs_ci.helpers.dr_helpers import (
+    create_cdi_cert_configmap,
+    create_cdi_pull_secret,
     generate_kubeobject_capture_interval,
     get_cluster_set_name,
 )
@@ -33,14 +36,20 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
 )
 from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.ocs.resources.drpc import DRPC
 
 from ocs_ci.ocs.utils import (
     get_primary_cluster_config,
+    get_active_acm_index,
     get_non_acm_cluster_config,
     get_non_acm_cluster_and_non_provider_cluster_config,
 )
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import clone_repo, run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import (
+    clone_repo,
+    run_cmd,
+    TimeoutSampler,
+)  # IgnoreDeprecation
 
 log = logging.getLogger(__name__)
 
@@ -52,11 +61,16 @@ class DRWorkload(object):
     """
 
     def __init__(
-        self, workload_name=None, workload_repo_url=None, workload_repo_branch=None
+        self,
+        workload_name=None,
+        workload_repo_url=None,
+        workload_repo_branch=None,
+        workload_repo_login=None,
     ):
         self.workload_name = workload_name
         self.workload_repo_url = workload_repo_url
         self.workload_repo_branch = workload_repo_branch
+        self.workload_repo_login = workload_repo_login
 
     def deploy_workload(self):
         raise NotImplementedError("Method not implemented")
@@ -78,8 +92,14 @@ class BusyBox(DRWorkload):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         log.info(f"Repo used: {workload_repo_url}")
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("busybox", workload_repo_url, workload_repo_branch)
-
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.clusters[get_active_acm_index()].AUTH[
+                "ibm_hci"
+            ]["github_token"]
+        super().__init__(
+            "busybox", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
         self.workload_type = kwargs.get("workload_type", constants.SUBSCRIPTION)
         self.workload_namespace = kwargs.get("workload_namespace", None)
         self.pvc_interface = kwargs.get("pvc_interface", None)
@@ -282,8 +302,35 @@ class BusyBox(DRWorkload):
         channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
         if config.ENV_DATA.get("deploy_via_cli"):
             channel_yaml_data["metadata"]["namespace"] = self.workload_namespace
-
+            if config.ENV_DATA.get("dr_workload_repo_login"):
+                channel_yaml_data["spec"].setdefault("secretRef", {})
+                channel_yaml_data["spec"]["secretRef"][
+                    "name"
+                ] = constants.PRIVATE_REPO_SUB_SECRET
         if config.ENV_DATA.get("deploy_via_cli"):
+            if config.ENV_DATA.get("dr_workload_repo_login"):
+                sub_app_private_repo_secret = templating.load_yaml(
+                    constants.PRIVATE_REPO_SUB_SECRET_YAML
+                )
+                sub_app_private_repo_secret["metadata"][
+                    "name"
+                ] = constants.PRIVATE_REPO_SUB_SECRET
+                sub_app_private_repo_secret["metadata"].setdefault("annotations", {})
+                sub_app_private_repo_secret["metadata"].setdefault("labels", {})
+                sub_app_private_repo_secret["metadata"]["annotations"][
+                    "apps.open-cluster-management.io/serving-channel"
+                ] = f"{self.workload_namespace}/ramen-gitops"
+                sub_app_private_repo_secret["metadata"][
+                    "namespace"
+                ] = self.workload_namespace
+                sub_app_private_repo_secret["metadata"]["labels"][
+                    "apps.open-cluster-management.io/serving-channel"
+                ] = "true"
+                sub_app_private_repo_secret["data"]["accessToken"] = base64.b64encode(
+                    config.clusters[get_active_acm_index()]
+                    .AUTH["ibm_hci"]["github_token"]
+                    .encode()
+                ).decode()
             subscription_app_yaml_data = templating.load_yaml(
                 self.subscription_app_file
             )
@@ -337,6 +384,11 @@ class BusyBox(DRWorkload):
                     placement_yaml_data,
                     managed_clusterset_binding_yaml_data,
                 ]
+                + (
+                    [sub_app_private_repo_secret]
+                    if config.ENV_DATA.get("dr_workload_repo_login")
+                    else []
+                )
             )
 
             self.deploy_subscription_workload_yaml_file = tempfile.NamedTemporaryFile(
@@ -556,6 +608,7 @@ class BusyBox(DRWorkload):
             url=self.workload_repo_url,
             location=self.target_clone_dir,
             branch=self.workload_repo_branch,
+            clone_token=self.workload_repo_login,
         )
 
     def _get_workload_namespace(self):
@@ -610,6 +663,14 @@ class BusyBox(DRWorkload):
         dr_helpers.wait_for_all_resources_creation(
             self.workload_pvc_count, self.workload_pod_count, self.workload_namespace
         )
+        dr_helpers.wait_for_drpc_progression_completed(
+            namespace=self.workload_namespace,
+            resource_name=(
+                f"{self.sub_placement_name}-drpc"
+                if self.is_placement
+                else templating.load_yaml(self.drpc_yaml_file)["metadata"]["name"]
+            ),
+        )
 
     def delete_workload(self, switch_ctx=None):
         """
@@ -658,13 +719,17 @@ class BusyBox(DRWorkload):
                     self.managed_clusterset_binding_file,
                 )
             if not config.ENV_DATA.get("deploy_via_cli"):
-                run_cmd(
-                    f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}"
+                run_cmd(  # IgnoreDeprecation
+                    f"oc delete --wait=false -k {self.workload_subscription_dir}/{self.workload_name}"
                 )
             else:
-                run_cmd(
-                    f"oc delete -f {self.deploy_subscription_workload_yaml_file.name}"
+                run_cmd(  # IgnoreDeprecation
+                    f"oc delete --wait=false -f {self.deploy_subscription_workload_yaml_file.name}"
                 )
+
+            DRPC(namespace=self.workload_namespace).wait_for_progression_status(
+                constants.STATUS_DELETING, success_if_deleted=True
+            )
 
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
@@ -682,6 +747,7 @@ class BusyBox(DRWorkload):
             TimeoutExpired,
             TimeoutExpiredError,
             TimeoutError,
+            AssertionError,
         ) as ex:
             err_msg = (
                 f"Failed to delete the workload: {self.workload_name}, namespace: {self.workload_namespace}, "
@@ -705,7 +771,14 @@ class BusyBox_AppSet(DRWorkload):
     def __init__(self, **kwargs):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("busybox", workload_repo_url, workload_repo_branch)
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.clusters[get_active_acm_index()].AUTH[
+                "ibm_hci"
+            ]["github_token"]
+        super().__init__(
+            "busybox", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
 
         self.workload_type = kwargs.get("workload_type", constants.APPLICATION_SET)
         self.workload_namespace = kwargs.get("workload_namespace", None)
@@ -877,10 +950,12 @@ class BusyBox_AppSet(DRWorkload):
 
         """
         # Clone workload repo
+
         clone_repo(
             url=self.workload_repo_url,
             location=self.target_clone_dir,
             branch=self.workload_repo_branch,
+            clone_token=self.workload_repo_login,
         )
 
     def add_annotation_to_placement(self):
@@ -913,7 +988,7 @@ class BusyBox_AppSet(DRWorkload):
             if _app_set["kind"] == constants.APPLICATION_SET:
                 return _app_set["spec"]["template"]["spec"]["destination"]["namespace"]
 
-    def _get_applicaionset_name(self):
+    def _get_applicationset_name(self):
         """
         Get ApplicationSet name
 
@@ -933,12 +1008,12 @@ class BusyBox_AppSet(DRWorkload):
         """
 
         self.check_pod_pvc_status(skip_replication_resources=False)
-        config.switch_acm_ctx()
-        appset_resource_name = (
-            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
-        )
 
         if self.appset_model == "pull":
+            config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+            appset_resource_name = (
+                self._get_applicationset_name() + "-" + self.preferred_primary_cluster
+            )
             sampler = TimeoutSampler(
                 120, sleep=5, func=self.check_workload_health_status
             )
@@ -946,17 +1021,21 @@ class BusyBox_AppSet(DRWorkload):
                 raise ResourceWrongStatusException(
                     f"{appset_resource_name} health status is not Healthy"
                 )
+        dr_helpers.wait_for_drpc_progression_completed(
+            namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+            resource_name=f"{self.appset_placement_name}-drpc",
+        )
 
     def check_workload_health_status(self):
         """
-        Checks the health status of the workload and returns whether it is healthy.
+        Checks workload health on the primary managed cluster.
 
         Returns:
             bool: True if the health status is "Healthy", False otherwise
 
         """
         appset_resource_name = (
-            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
+            self._get_applicationset_name() + "-" + self.preferred_primary_cluster
         )
         appset_obj = ocp.OCP(
             kind=constants.APPLICATION_ARGOCD,
@@ -964,7 +1043,10 @@ class BusyBox_AppSet(DRWorkload):
             namespace=constants.GITOPS_CLUSTER_NAMESPACE,
         )
         health_status = appset_obj.get().get("status").get("health").get("status")
-        log.info(f"{appset_resource_name} health status: {health_status}")
+        log.info(
+            f"{appset_resource_name} health status on cluster "
+            f"{self.preferred_primary_cluster}: {health_status}"
+        )
         return health_status == "Healthy"
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
@@ -999,7 +1081,16 @@ class BusyBox_AppSet(DRWorkload):
         )
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
-            run_cmd(cmd=f"oc delete -f {self.appset_yaml_file}", timeout=900)
+            run_cmd(  # IgnoreDeprecation
+                f"oc delete --wait=false -f {self.appset_yaml_file}"
+            )
+
+            DRPC(
+                namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+                resource_name=f"{self.appset_placement_name}-drpc",
+            ).wait_for_progression_status(
+                constants.STATUS_DELETING, success_if_deleted=True
+            )
 
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
@@ -1017,6 +1108,7 @@ class BusyBox_AppSet(DRWorkload):
             TimeoutExpired,
             TimeoutExpiredError,
             TimeoutError,
+            AssertionError,
         ) as ex:
             err_msg = (
                 f"Failed to delete the workload: {self.workload_name}, namespace: {self.workload_namespace}, "
@@ -1041,7 +1133,14 @@ class CnvWorkload(DRWorkload):
         """
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("cnv", workload_repo_url, workload_repo_branch)
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.clusters[get_active_acm_index()].AUTH[
+                "ibm_hci"
+            ]["github_token"]
+        super().__init__(
+            "cnv", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
 
         self.workload_name = kwargs.get("workload_name")
         self.vm_name = kwargs.get("vm_name")
@@ -1059,6 +1158,27 @@ class CnvWorkload(DRWorkload):
         self.preferred_primary_cluster = config.ENV_DATA.get(
             "preferred_primary_cluster"
         ) or (get_primary_cluster_config().ENV_DATA["cluster_name"])
+        dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+        if dr_cluster_relations:
+            # dr_cluster_relations is a list containing cluster pairs list
+            dr_cluster_names = dr_cluster_relations[0]
+            self.preferred_secondary_cluster = [
+                cluster_name
+                for cluster_name in dr_cluster_names
+                if cluster_name != self.preferred_primary_cluster
+            ][0]
+            if is_hosted_cluster(self.preferred_primary_cluster):
+                self.preferred_primary_cluster = (
+                    constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                    + "-"
+                    + self.preferred_primary_cluster
+                )
+            if is_hosted_cluster(self.preferred_secondary_cluster):
+                self.preferred_secondary_cluster = (
+                    constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX
+                    + "-"
+                    + self.preferred_secondary_cluster
+                )
         self.target_clone_dir = config.ENV_DATA.get(
             "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
         )
@@ -1128,9 +1248,38 @@ class CnvWorkload(DRWorkload):
                     self.channel_name = channel_yaml_data["metadata"]["name"]
                     channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
                     channel_yaml_data["metadata"]["namespace"] = self.channel_namespace
-                templating.dump_data_to_temp_yaml(
-                    channel_yaml_data_load, self.channel_yaml_file
+                    if config.ENV_DATA.get("dr_workload_repo_login"):
+                        channel_yaml_data["spec"].setdefault("secretRef", {})
+                        channel_yaml_data["spec"]["secretRef"][
+                            "name"
+                        ] = constants.PRIVATE_REPO_SUB_SECRET
+            if config.ENV_DATA.get("dr_workload_repo_login"):
+                cnv_sub_private_repo_secret = templating.load_yaml(
+                    constants.PRIVATE_REPO_SUB_SECRET_YAML
                 )
+                cnv_sub_private_repo_secret["metadata"][
+                    "name"
+                ] = constants.PRIVATE_REPO_SUB_SECRET
+                cnv_sub_private_repo_secret["metadata"].setdefault("annotations", {})
+                cnv_sub_private_repo_secret["metadata"].setdefault("labels", {})
+                cnv_sub_private_repo_secret["metadata"]["annotations"][
+                    "apps.open-cluster-management.io/serving-channel"
+                ] = f"{self.channel_namespace}/{self.channel_name}"
+                cnv_sub_private_repo_secret["metadata"][
+                    "namespace"
+                ] = self.channel_namespace
+                cnv_sub_private_repo_secret["metadata"]["labels"][
+                    "apps.open-cluster-management.io/serving-channel"
+                ] = "true"
+                cnv_sub_private_repo_secret["data"]["accessToken"] = base64.b64encode(
+                    config.clusters[get_active_acm_index()]
+                    .AUTH["ibm_hci"]["github_token"]
+                    .encode()
+                ).decode()
+                channel_yaml_data_load.append(cnv_sub_private_repo_secret)
+            templating.dump_data_to_temp_yaml(
+                channel_yaml_data_load, self.channel_yaml_file
+            )
         for cnv_workload_yaml_data in cnv_workload_yaml_data_load:
             if self.workload_type == constants.SUBSCRIPTION:
                 if cnv_workload_yaml_data["kind"] == "Namespace":
@@ -1156,6 +1305,19 @@ class CnvWorkload(DRWorkload):
                 cnv_workload_yaml_data["spec"]["template"]["spec"]["destination"][
                     "namespace"
                 ] = self.workload_namespace
+
+                # Update repoURL and targetRevision to use the configured repo
+                # (internal mirror in disconnected environments).
+                template_spec = cnv_workload_yaml_data["spec"]["template"]["spec"]
+                if "source" in template_spec:
+                    template_spec["source"]["repoURL"] = self.workload_repo_url
+                    template_spec["source"][
+                        "targetRevision"
+                    ] = self.workload_repo_branch
+                if "sources" in template_spec:
+                    for src in template_spec["sources"]:
+                        src["repoURL"] = self.workload_repo_url
+                        src["targetRevision"] = self.workload_repo_branch
 
                 # Change the AppSet placement label
                 for generator in cnv_workload_yaml_data["spec"]["generators"]:
@@ -1232,6 +1394,7 @@ class CnvWorkload(DRWorkload):
                 url=self.workload_repo_url,
                 location=self.target_clone_dir,
                 branch=self.workload_repo_branch,
+                clone_token=self.workload_repo_login,
             )
 
     def add_annotation_to_placement(self):
@@ -1282,6 +1445,14 @@ class CnvWorkload(DRWorkload):
 
         """
         self.check_pod_pvc_status(skip_replication_resources=False)
+        dr_helpers.wait_for_drpc_progression_completed(
+            namespace=(
+                constants.GITOPS_CLUSTER_NAMESPACE
+                if self.workload_type == constants.APPLICATION_SET
+                else self.workload_namespace
+            ),
+            resource_name=f"{self.cnv_workload_placement_name}-drpc",
+        )
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
@@ -1314,9 +1485,22 @@ class CnvWorkload(DRWorkload):
         """
         try:
             config.switch_acm_ctx()
-            run_cmd(cmd=f"oc delete -f {self.cnv_workload_yaml_file}", timeout=900)
-            if self.workload_type == constants.SUBSCRIPTION:
-                run_cmd(f"oc delete -f {self.channel_yaml_file}")
+            run_cmd(  # IgnoreDeprecation
+                f"oc delete --wait=false -f {self.cnv_workload_yaml_file}"
+            )
+
+            if self.workload_type == constants.APPLICATION_SET:
+                DRPC(
+                    namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+                    resource_name=f"{self.cnv_workload_placement_name}-drpc",
+                ).wait_for_progression_status(
+                    constants.STATUS_DELETING, success_if_deleted=True
+                )
+            else:
+                DRPC(namespace=self.workload_namespace).wait_for_progression_status(
+                    constants.STATUS_DELETING, success_if_deleted=True
+                )
+
             for cluster, secret_obj in zip(
                 get_non_acm_cluster_config(), self.vm_secret_obj
             ):
@@ -1334,10 +1518,15 @@ class CnvWorkload(DRWorkload):
                 )
                 vm_obj.wait_for_delete(timeout=300)
 
+            if self.workload_type == constants.SUBSCRIPTION:
+                config.switch_acm_ctx()
+                run_cmd(f"oc delete -f {self.channel_yaml_file}")  # IgnoreDeprecation
+
         except (
             TimeoutExpired,
             TimeoutExpiredError,
             TimeoutError,
+            AssertionError,
             UnexpectedBehaviour,
         ) as ex:
             err_msg = f"Failed to delete the workload: {ex}"
@@ -1357,6 +1546,14 @@ class CnvWorkload(DRWorkload):
             except CommandFailed as ex:
                 if "(AlreadyExists)" in str(ex):
                     log.warning("The namespace already exists!")
+
+            # In disconnected environments the workload YAML files reference
+            # an internal Quay registry via ``secretRef: quayadmin`` and
+            # ``certConfigMap: user-ca-bundle``.  Both resources must exist in
+            # the workload namespace before the subscription deploys the workload.
+            if config.DEPLOYMENT.get("disconnected"):
+                create_cdi_pull_secret(namespace=self.workload_namespace)
+                create_cdi_cert_configmap(namespace=self.workload_namespace)
 
             # Create or recreate the secret for ssh access
             try:
@@ -1423,7 +1620,14 @@ class BusyboxDiscoveredApps(DRWorkload):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         log.info(f"Repo used: {workload_repo_url}")
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("busybox", workload_repo_url, workload_repo_branch)
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.clusters[get_active_acm_index()].AUTH[
+                "ibm_hci"
+            ]["github_token"]
+        super().__init__(
+            "busybox", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
         self.workload_type = kwargs.get("workload_type", constants.DISCOVERED_APPS)
         self.workload_namespace = kwargs.get("workload_namespace", None)
         self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
@@ -1554,6 +1758,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             url=self.workload_repo_url,
             location=self.target_clone_dir,
             branch=self.workload_repo_branch,
+            clone_token=self.workload_repo_login,
         )
 
     def verify_workload_deployment(self, vrg_name=None):
@@ -1565,12 +1770,17 @@ class BusyboxDiscoveredApps(DRWorkload):
 
         """
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        drpc_name = vrg_name or self.discovered_apps_placement_name
         dr_helpers.wait_for_all_resources_creation(
             self.workload_pvc_count,
             self.workload_pod_count,
             self.workload_namespace,
             discovered_apps=True,
-            vrg_name=vrg_name or self.discovered_apps_placement_name,
+            vrg_name=drpc_name,
+        )
+        dr_helpers.wait_for_drpc_progression_completed(
+            namespace=constants.DR_OPS_NAMESPACE,
+            resource_name=drpc_name,
         )
 
     def create_recipe_with_checkhooks(self):
@@ -1885,7 +2095,14 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         """
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
-        super().__init__("cnv", workload_repo_url, workload_repo_branch)
+        workload_repo_login = config.ENV_DATA.get("dr_workload_repo_login")
+        if workload_repo_login:
+            workload_repo_login = config.clusters[get_active_acm_index()].AUTH[
+                "ibm_hci"
+            ]["github_token"]
+        super().__init__(
+            "cnv", workload_repo_url, workload_repo_branch, workload_repo_login
+        )
         self.workload_name = kwargs.get("workload_name")
         self.vm_name = kwargs.get("vm_name")
         self.vm_secret_name = kwargs.get("vm_secret")
@@ -1976,6 +2193,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             url=self.workload_repo_url,
             location=self.target_clone_dir,
             branch=self.workload_repo_branch,
+            clone_token=self.workload_repo_login,
         )
 
     def create_namespace(self):
@@ -1988,6 +2206,11 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
     def manage_dr_vm_secrets(self, shared_drpc_protection=False):
         """
         Create secrets to access the VMs via SSH. If a secret already exists, delete and recreate it.
+        When AUTH contains ``ibm_hci.quay_pull_secret``, also creates a
+        ``kubernetes.io/dockerconfigjson`` Secret named ``quayadmin`` in the
+        workload namespace so CDI can pull VM disk images from the internal
+        Quay registry referenced by ``secretRef: quayadmin`` in the workload
+        YAML files.
 
         Args:
             shared_drpc_protection (bool): False by default, True when Shared Protection type is used to DR Protect
@@ -2037,6 +2260,14 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                             namespace=self.workload_namespace,
                         )
                     )
+
+            # In disconnected environments the workload YAML files reference
+            # an internal Quay registry via ``secretRef: quayadmin`` and
+            # ``certConfigMap: user-ca-bundle``.  Both resources must exist in
+            # the workload namespace before ``oc create -k`` runs.
+            if config.DEPLOYMENT.get("disconnected"):
+                create_cdi_pull_secret(namespace=self.workload_namespace)
+                create_cdi_cert_configmap(namespace=self.workload_namespace)
 
     def create_placement(self):
         """
@@ -2120,6 +2351,10 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
         """
         self.check_pod_pvc_status(skip_replication_resources=False)
+        dr_helpers.wait_for_drpc_progression_completed(
+            namespace=constants.DR_OPS_NAMESPACE,
+            resource_name=self.discovered_apps_placement_name,
+        )
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
@@ -2136,6 +2371,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             self.workload_namespace,
             skip_replication_resources=skip_replication_resources,
             discovered_apps=True,
+            vrg_name=self.discovered_apps_placement_name,
         )
         dr_helpers.wait_for_cnv_workload(
             vm_name=self.vm_name,
@@ -2198,6 +2434,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                     namespace=self.workload_namespace,
                     discovered_apps=True,
                     workload_cleanup=True,
+                    vrg_name=self.discovered_apps_placement_name,
                 )
                 ocp_obj = ocp.OCP()
                 ocp_obj.delete_project(project_name=self.workload_namespace)

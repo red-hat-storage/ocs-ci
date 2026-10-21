@@ -2,7 +2,8 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, ec_allowed
+from ocs_ci.ocs.cluster import is_ec_pool_supported
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -26,7 +27,6 @@ log = logging.getLogger(__name__)
 @skipif_hci_provider_and_client
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
-@pytest.mark.polarion_id("OCS-2424")
 class TestRestoreSnapshotUsingDifferentSc(ManageTest):
     """
     Tests to verify snapshot restore using an SC different than that of parent
@@ -53,9 +53,27 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
             access_modes_cephfs=[constants.ACCESS_MODE_RWO],
         )
 
+    @pytest.mark.parametrize(
+        "erasure_coded",
+        [
+            pytest.param(False, marks=[pytest.mark.polarion_id("OCS-2424")]),
+            pytest.param(
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7978"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+        ],
+    )
     @tier2
     def test_snapshot_restore_using_different_sc(
         self,
+        erasure_coded,
         storageclass_factory,
         snapshot_factory,
         snapshot_restore_factory,
@@ -125,7 +143,9 @@ class TestRestoreSnapshotUsingDifferentSc(ManageTest):
         ):
             sc_objs[constants.CEPHBLOCKPOOL].append(
                 storageclass_factory(
-                    interface=constants.CEPHBLOCKPOOL, new_rbd_pool=True
+                    interface=constants.CEPHBLOCKPOOL,
+                    new_rbd_pool=True,
+                    erasure_coded=erasure_coded,
                 ).name
             )
 

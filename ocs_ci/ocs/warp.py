@@ -2,9 +2,11 @@ import concurrent.futures as futures
 from io import StringIO
 import logging
 import os
+import shlex
 from tempfile import mkdtemp
 import threading
 import time
+from urllib.parse import urlparse
 
 import pandas as pd
 
@@ -22,6 +24,47 @@ from ocs_ci.ocs.ui.workload_ui import wait_for_container_status_ready
 log = logging.getLogger(__name__)
 
 
+def warp_host_and_tls_from_noobaa_endpoint(endpoint_url, storage_namespace=None):
+    """
+    Map a NooBaa S3 base URL to warp ``--host`` (``host:port``) and the ``--tls`` flag.
+
+    Accepts ``MCG.s3_endpoint`` (external / Route) or ``MCG.s3_internal_endpoint``
+    (CR internalDNS). Explicit ports and scheme matter for SigV4 and TLS.
+
+    Args:
+        endpoint_url: HTTPS or HTTP URL, or host:port without scheme
+        storage_namespace: OpenShift namespace where NooBaa runs (default: openshift-storage)
+
+    Returns:
+        tuple: (host_colon_port, use_tls)
+    """
+    ns = storage_namespace or constants.OPENSHIFT_STORAGE_NAMESPACE
+    default_host = f"s3.{ns}.svc:443"
+    if not endpoint_url or not str(endpoint_url).strip():
+        log.warning("No S3 endpoint; defaulting Warp --host to %s", default_host)
+        return default_host, True
+    raw = str(endpoint_url).strip()
+    if "://" not in raw:
+        raw = "https://" + raw
+    parsed = urlparse(raw)
+    hostport = parsed.netloc
+    if not hostport:
+        hostport = parsed.path.strip("/")
+    if not hostport:
+        log.warning(
+            "Could not parse S3 endpoint %r; defaulting Warp --host to %s",
+            endpoint_url,
+            default_host,
+        )
+        return default_host, True
+    use_tls = parsed.scheme == "https"
+    if use_tls and ":" not in hostport:
+        hostport = f"{hostport}:443"
+    elif not use_tls and ":" not in hostport:
+        hostport = f"{hostport}:80"
+    return hostport, use_tls
+
+
 class Warp(object):
     """
     Warp - S3 benchmarking tool: https://github.com/minio/warp
@@ -31,24 +74,41 @@ class Warp(object):
 
     """
 
-    def __init__(self):
+    def __init__(self, pod_name_suffix=None, namespace=None, s3_host=None):
         """
         Initializer to create warp pod to running warp benchmark
 
+        Args:
+            pod_name_suffix (str): Optional suffix for pod name to make it unique
+            namespace (str): Namespace to deploy Warp pods (default: cluster_namespace from config)
+            s3_host (str): S3 endpoint host (default: s3.{cluster_namespace}.svc)
         """
         self.pod_dic_path = constants.WARP_YAML
-        self.namespace = config.ENV_DATA["cluster_namespace"]
+        # Use provided namespace or fall back to cluster_namespace
+        self.namespace = namespace or config.ENV_DATA.get(
+            "cluster_namespace", "openshift-storage"
+        )
         self.ocp_obj = OCP(namespace=self.namespace)
         self.bucket_name = None
         self.warp_cr = templating.load_yaml(constants.WARP_OBJ_YAML)
-        # avoid failing DNS server to resolve hostname, when running on cluster with custom storage namespace
-        self.host = f"s3.{config.ENV_DATA['cluster_namespace']}.svc"
+        # Use provided S3 host or construct from cluster namespace
+        if s3_host:
+            self.host = s3_host
+        else:
+            # For default namespace, use openshift-storage for S3 endpoint
+            storage_namespace = config.ENV_DATA.get(
+                "cluster_namespace", "openshift-storage"
+            )
+            self.host = f"s3.{storage_namespace}.svc"
         self.duration = self.warp_cr["duration"]
         self.concurrent = self.warp_cr["concurrent"]
         self.obj_size = self.warp_cr["obj.size"]
         self.warp_bin_dir = self.warp_cr["warp_bin_dir"]
         self.output_file = "output.csv"
         self.warp_dir = mkdtemp(prefix="warp-")
+        self.pod_name_suffix = pod_name_suffix
+
+        log.info(f"Warp initialized: namespace={self.namespace}, s3_host={self.host}")
 
     def create_resource_warp(self, multi_client=False, replicas=1):
         """
@@ -75,7 +135,11 @@ class Warp(object):
         # Create test pvc+pod
         log.info(f"Create Warp pod to generate S3 workload in {self.namespace}")
         pvc_size = "50Gi"
-        self.pod_name = "warppod"
+        # Use unique pod name if suffix provided
+        if self.pod_name_suffix:
+            self.pod_name = f"warppod-{self.pod_name_suffix}"
+        else:
+            self.pod_name = "warppod"
         self.pvc_obj = helpers.create_pvc(
             sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
             namespace=self.namespace,
@@ -117,6 +181,71 @@ class Warp(object):
                 ip = p.exec_cmd_on_pod(command="hostname -i")
                 self.client_ips[p.name] = ip
 
+    def _exec_warp_resilient(self, command, exec_timeout):
+        """
+        Run a warp-related shell command via oc exec; retry on transient container/exec errors.
+
+        After OOM/restart, kubelet may not have the ``warp`` container attached yet,
+        which surfaces as ``container not found`` or ``unable to upgrade connection``.
+
+        Concurrent cluster load (e.g. volume snapshots, node I/O) can keep the pod or
+        container unready longer than a short sleep; we wait for Ready before retrying.
+
+        Args:
+            command: Full command string passed to exec (e.g. blocking ``sh -c`` or
+                ``nohup ... &`` for background).
+            exec_timeout: ``oc exec`` timeout in seconds. Use the full benchmark
+                timeout when running warp synchronously; use a short value when the
+                command returns immediately (background start).
+        """
+        transient_markers = (
+            "container not found",
+            "unable to upgrade connection",
+        )
+        max_attempts = 24
+        delay_seconds = 15
+        wait_ready_timeout = 120
+        wait_ready_interval = 5
+        need_container_wait = False
+        for attempt in range(1, max_attempts + 1):
+            if need_container_wait:
+                log.info(
+                    "Waiting up to %ss for warp pod %s containers to be ready before retry",
+                    wait_ready_timeout,
+                    self.pod_obj.name,
+                )
+                wait_for_container_status_ready(
+                    self.pod_obj,
+                    timeout=wait_ready_timeout,
+                    interval=wait_ready_interval,
+                )
+                time.sleep(delay_seconds)
+            try:
+                self.pod_obj.exec_cmd_on_pod(
+                    command,
+                    out_yaml_format=False,
+                    timeout=exec_timeout,
+                    container_name="warp",
+                )
+                if attempt > 1:
+                    log.info("Warp exec succeeded after %s attempts", attempt)
+                return
+            except CommandFailed as exc:
+                msg = str(exc).lower()
+                retryable = any(marker in msg for marker in transient_markers)
+                if retryable and attempt < max_attempts:
+                    log.warning(
+                        "Warp exec not ready (attempt %s/%s): %s; "
+                        "next attempt will wait for container Ready (up to %ss) then retry",
+                        attempt,
+                        max_attempts,
+                        exc,
+                        wait_ready_timeout,
+                    )
+                    need_container_wait = True
+                else:
+                    raise
+
     def run_benchmark(
         self,
         bucket_name=None,
@@ -133,6 +262,7 @@ class Warp(object):
         insecure=False,
         debug=False,
         workload_type="put",
+        s3_region=None,
         kwargs=None,
     ):
         """
@@ -148,12 +278,16 @@ class Warp(object):
             objects (int): number of objects
             obj_size (int): size of object
             timeout (int): timeout in seconds
-            validate (Boolean): Validates whether running workload is completed.
+            validate (Boolean): If True, run warp synchronously until completion then
+                check ``output.csv``; if False, start warp in the background (returns
+                quickly; no CSV validation in this method).
             multi_client (Boolean): If True, then run multi client benchmarking
             tls (Boolean): Use TLS (HTTPS) for transport
             insecure (Boolean): disable TLS certification verification
             debug (Boolean): Enable debug output
             workload_type (str): Type of workload to run (put, get, stat, mixed, etc.)
+            s3_region (str): AWS SigV4 signing region. NooBaa expects ``us-east-1`` in
+                most deployments; do not pass cloud ENV_DATA region (e.g. IBM) here.
             kwargs (dict): Additional keyword arguments to pass to the warp command
         """
 
@@ -166,15 +300,23 @@ class Warp(object):
         self.duration = duration if duration else self.duration["duration"]
         self.concurrent = concurrent if concurrent else self.concurrent["concurrent"]
         self.obj_size = obj_size if obj_size else self.obj_size["obj.size"]
+        # Note: upstream minio/warp newer releases add --lookup; quay.io/ocsci/warp:latest
+        # may be older and does not support that flag.
+        warp_region = s3_region if s3_region is not None else "us-east-1"
+        objects_opt = ""
+        if objects is not None:
+            objects_opt = f"--objects={int(objects)} "
         base_options = "".join(
             f"--duration={self.duration} "
             f"--host={self.host} "
+            f"--region={warp_region} "
             f"--insecure={insecure} "
             f"--tls={tls} "
             f"--debug={debug} "
             f"--access-key={self.access_key} "
             f"--secret-key={self.secret_key} "
             f"--noclear --noprefix --concurrent={self.concurrent} "
+            f"{objects_opt}"
             f"--obj.size={self.obj_size} "
             f"--bucket={self.bucket_name} "
             f"--analyze.out={self.output_file} "
@@ -202,7 +344,27 @@ class Warp(object):
             + base_options
             + multi_client_options
         )
-        self.pod_obj.exec_cmd_on_pod(cmd, out_yaml_format=False, timeout=timeout)
+        # Background: avoid bash -c '...' (extra fork + brittle quoting for secrets).
+        # nohup + sh -c with shlex.quote handles special characters in keys; stdin
+        # detached from /dev/null. Under Krkn chaos, "can't fork" is mitigated
+        # slightly by one fewer shell layer than bash -c.
+        inner = f"{cmd} > /tmp/warp.log 2>&1"
+        if validate:
+            # Synchronous run: block until warp finishes so output.csv exists for validation.
+            cmd_blocking = f"sh -c {shlex.quote(inner)}"
+            self._exec_warp_resilient(cmd_blocking, exec_timeout=timeout)
+            log.info(
+                "Warp benchmark finished (synchronous run; validation will follow)"
+            )
+        else:
+            cmd_with_logging = f"nohup sh -c {shlex.quote(inner)} </dev/null &"
+            self._exec_warp_resilient(cmd_with_logging, exec_timeout=10)
+            log.info(
+                "Warp benchmark started in background. Check logs with: "
+                "oc exec %s -n %s -c warp -- tail -f /tmp/warp.log",
+                self.pod_obj.name,
+                self.namespace,
+            )
 
         if validate:
             self.validate_warp_workload()
@@ -230,6 +392,43 @@ class Warp(object):
                 f"Output file {self.output_file} is empty, "
                 "Warp workload doesn't run as expected..."
             )
+
+    def get_warp_logs(self, lines=50):
+        """
+        Get Warp workload logs from the pod.
+
+        Args:
+            lines (int): Number of log lines to retrieve
+
+        Returns:
+            str: Warp log output
+        """
+        try:
+            cmd = f"tail -n {lines} /tmp/warp.log 2>/dev/null || echo 'Warp log not available yet'"
+            result = self.pod_obj.exec_cmd_on_pod(
+                cmd, out_yaml_format=False, container_name="warp"
+            )
+            return result
+        except Exception as e:
+            log.warning(f"Could not retrieve Warp logs: {e}")
+            return None
+
+    def is_warp_running(self):
+        """
+        Check if Warp process is currently running in the pod.
+
+        Returns:
+            bool: True if Warp is running, False otherwise
+        """
+        try:
+            cmd = "ps aux | grep '[w]arp mixed\\|[w]arp get\\|[w]arp put\\|[w]arp delete\\|[w]arp stat'"
+            result = self.pod_obj.exec_cmd_on_pod(
+                cmd, out_yaml_format=False, container_name="warp"
+            )
+            return bool(result and "warp" in result)
+        except Exception as e:
+            log.warning(f"Could not check Warp status: {e}")
+            return False
 
     def cleanup(self, multi_client=False):
         """

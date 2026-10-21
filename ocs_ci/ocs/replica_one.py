@@ -30,12 +30,13 @@ from ocs_ci.utility.utils import TimeoutSampler
 log = getLogger(__name__)
 
 
-def _get_failure_domains_from_storagecluster() -> list[str]:
+def get_failure_domains_from_storagecluster() -> dict:
     """
-    Get failure domains from StorageCluster status.failureDomainValues.
+    Get failure domain info from StorageCluster status.
 
     Returns:
-        list[str]: Failure domain names, or empty list if not available.
+        dict: {"values": list[str], "type": str} where type is
+              "host", "rack", or "zone". Empty dict if unavailable.
     """
     try:
         storage_cluster = OCP(
@@ -46,22 +47,23 @@ def _get_failure_domains_from_storagecluster() -> list[str]:
         items = sc_data.get("items", [])
         if not items:
             log.debug("No StorageCluster items found")
-            return []
+            return {}
 
-        failure_domain_values = (
-            items[0].get("status", {}).get("failureDomainValues", [])
-        )
+        status = items[0].get("status", {})
+        failure_domain_values = status.get("failureDomainValues", [])
+        failure_domain_type = status.get("failureDomain")
+
         if failure_domain_values:
             log.info(
                 f"Got failure domains from StorageCluster status: {failure_domain_values}"
             )
-            return failure_domain_values
-
-        log.debug("failureDomainValues not found in StorageCluster status")
-        return []
+        return {
+            "values": failure_domain_values,
+            "type": failure_domain_type,
+        }
     except (CommandFailed, KeyError, IndexError) as e:
         log.debug(f"Failed to get failure domains from StorageCluster: {e}")
-        return []
+        return {}
 
 
 def get_failure_domains() -> list[str]:
@@ -83,7 +85,7 @@ def get_failure_domains() -> list[str]:
         return config_zones
 
     # Priority 2: StorageCluster status (source of truth, available immediately)
-    sc_domains = _get_failure_domains_from_storagecluster()
+    sc_domains = get_failure_domains_from_storagecluster().get("values", [])
     if sc_domains:
         return sc_domains
 

@@ -17,10 +17,9 @@ from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
-from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.utility.version import get_ocp_ga_version, get_semantic_version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import clone_repo, get_ocp_version, run_cmd
-from ocs_ci.utility.version import get_semantic_version
 
 logger = logging.getLogger(__name__)
 

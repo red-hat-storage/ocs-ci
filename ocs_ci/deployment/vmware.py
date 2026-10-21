@@ -49,6 +49,7 @@ from ocs_ci.ocs.node import (
     get_typed_worker_nodes,
     remove_nodes,
     wait_for_nodes_status,
+    get_nodes,
 )
 from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.proxy import update_kubeconfig_with_proxy_url_for_client
@@ -103,6 +104,7 @@ from ocs_ci.deployment import assisted_installer
 from ocs_ci.framework.logger_helper import log_step
 from .helpers.hypershift_base import (
     HyperShiftBase,
+    create_kubeadmin_password_file_hosted_cluster,
     create_kubeconfig_file_hosted_cluster,
     prepare_vsphere_agent_host_cluster_config,
     wait_for_hosted_cluster_available,
@@ -111,7 +113,7 @@ from .helpers.hypershift_base import (
 from .hub_spoke import create_agent_service_config, create_patch_provisioning
 from .mce import set_mirror_registry_configmap
 from ..helpers.helpers import change_default_storageclass
-from ..utility.deployment import get_ocp_ga_version
+from ..utility.version import get_ocp_ga_version
 
 logger = logging.getLogger(__name__)
 
@@ -160,22 +162,29 @@ class VSPHEREBASE(Deployment):
         config.ENV_DATA["version_4_9_object"] = version.VERSION_4_9
 
         self.wait_time = 90
+        self.infra_id = None
 
-    def attach_disk(self, size=100, disk_type=constants.VM_DISK_TYPE, ssd=False):
+    def attach_disk(
+        self,
+        size=100,
+        disk_type=constants.VM_DISK_TYPE,
+        ssd=False,
+        include_masters=False,
+    ):
         """
-        Add a new disk to all the workers nodes
+        Add a new disk to worker nodes (and optionally master nodes).
 
         Args:
             size (int): Size of disk in GB (default: 100)
             ssd (bool): if True, mark disk as SSD
+            include_masters (bool): if True, also add disks to control-plane VMs
 
         """
         vms = self.vsphere.get_all_vms_in_pool(
             config.ENV_DATA.get("cluster_name"), self.datacenter, self.cluster
         )
-        # Add disks to all worker nodes
         for vm in vms:
-            if "compute" in vm.name:
+            if "compute" in vm.name or (include_masters and "control-plane" in vm.name):
                 self.vsphere.add_disks_with_same_size(
                     config.ENV_DATA.get("extra_disks", 1), vm, size, disk_type, ssd
                 )
@@ -270,12 +279,24 @@ class VSPHEREBASE(Deployment):
 
     def delete_disks(self):
         """
-        Delete the extra disks from all the worker nodes and is sno delete it from sno nodes which is compute also
+        Delete the extra disks from all targeted cluster VMs.
+        Includes master VMs when ec_default_pools + mark_masters_schedulable.
         """
-        if config.ENV_DATA["sno"]:
+        if config.ENV_DATA.get("sno"):
             vms = self.get_vms_by_string(self.datacenter, self.cluster, "sno")
         else:
-            vms = self.get_compute_vms(self.datacenter, self.cluster)
+            include_masters = config.DEPLOYMENT.get(
+                "ec_default_pools"
+            ) and config.ENV_DATA.get("mark_masters_schedulable", True)
+            all_vms = self.vsphere.get_all_vms_in_pool(
+                config.ENV_DATA.get("cluster_name"), self.datacenter, self.cluster
+            )
+            vms = [
+                vm
+                for vm in all_vms
+                if "compute" in vm.name
+                or (include_masters and "control-plane" in vm.name)
+            ]
         if vms:
             for vm in vms:
                 self.vsphere.remove_disks(vm)
@@ -365,6 +386,79 @@ class VSPHEREBASE(Deployment):
         """
         self.vsphere.add_rdm_disk(vm, device_name)
 
+    def add_vmdk_disks(self):
+        """
+        Attach VMDK disks to all worker nodes (and master nodes when EC with
+        schedulable masters is configured), skipping if sufficient disks
+        already exist (idempotent).
+
+        Reads device_size, provision_type, extra_disks, hdd_disks, and
+        deploy_multiple_device_classes from config. Checks existing non-boot
+        disks via disks_available_to_cleanup before attaching to avoid
+        duplicates on re-runs.
+        """
+        ssd_disk = True
+        if config.ENV_DATA.get("hdd_disks"):
+            ssd_disk = False
+        device_size = config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE)
+        provision_type = config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE)
+        multiple_device_classes = config.DEPLOYMENT.get(
+            "deploy_multiple_device_classes"
+        )
+        include_masters = config.DEPLOYMENT.get(
+            "ec_default_pools"
+        ) and config.ENV_DATA.get("mark_masters_schedulable", True)
+
+        # Importing here to avoid circular dependency (baremetal imports lso_helpers)
+        from ocs_ci.deployment.baremetal import disks_available_to_cleanup
+
+        target_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
+        if include_masters:
+            target_nodes += get_nodes(node_type=constants.MASTER_MACHINE)
+        extra_disks = config.ENV_DATA.get("extra_disks", 1)
+        total_available_disks = sum(
+            len(disks_available_to_cleanup(n)) for n in target_nodes
+        )
+        logger.info(
+            "Total available (non-boot) disks across %s nodes: %s",
+            "all" if include_masters else constants.WORKER_MACHINE,
+            total_available_disks,
+        )
+
+        expected_disks = len(target_nodes) * extra_disks
+        if total_available_disks < expected_disks:
+            self.attach_disk(
+                device_size,
+                provision_type,
+                ssd=ssd_disk,
+                include_masters=include_masters,
+            )
+        else:
+            logger.info(
+                "Nodes already have %s available disks, skipping first "
+                "disk attachment",
+                total_available_disks,
+            )
+
+        if multiple_device_classes:
+            if total_available_disks < expected_disks * 2:
+                logger.info("Attaching additional disks for the second device class")
+                second_device_size = config.ENV_DATA.get(
+                    "second_device_size", device_size
+                )
+                self.attach_disk(
+                    second_device_size,
+                    provision_type,
+                    ssd=ssd_disk,
+                    include_masters=include_masters,
+                )
+            else:
+                logger.info(
+                    "Workers already have %s available disks, skipping "
+                    "second device class disk attachment",
+                    total_available_disks,
+                )
+
     def add_pci_devices(self):
         """
         Attach PCI devices to compute nodes
@@ -416,6 +510,41 @@ class VSPHEREBASE(Deployment):
         # destroy the folder in templates
         template_folder = get_infra_id(self.cluster_path)
         self.vsphere.destroy_folder(template_folder, self.cluster, self.datacenter)
+        # Use infra_id captured before destroy operation
+        if self.infra_id:
+            template_folder = self.infra_id
+            self.vsphere.destroy_folder(template_folder, self.cluster, self.datacenter)
+
+            # delete storage policy created by OCP installer
+            # Storage policy name format: openshift-storage-policy-<infraID>
+            storage_policy_name = f"openshift-storage-policy-{self.infra_id}"
+            logger.info(f"Deleting storage policy: {storage_policy_name}")
+            deleted = self.vsphere.delete_storage_policy_by_exact_name(
+                storage_policy_name
+            )
+            if deleted:
+                logger.info(
+                    f"Successfully deleted storage policy: {storage_policy_name}"
+                )
+            else:
+                logger.info(
+                    f"Storage policy not found or failed to delete: {storage_policy_name}"
+                )
+
+            # delete tag and tag category created by OCP installer
+            tag_name = self.infra_id
+            tag_category_name = f"openshift-{self.infra_id}"
+            logger.info(
+                f"Deleting tag '{tag_name}' from category '{tag_category_name}'"
+            )
+            self.vsphere.delete_tag(tag_name, tag_category_name)
+            logger.info(f"Deleting tag category '{tag_category_name}'")
+            self.vsphere.delete_tag_category(tag_category_name)
+        else:
+            logger.warning(
+                "infra_id not available, skipping folder, storage policy,"
+                " tag, and tag category deletion"
+            )
 
         # remove .terraform directory ( this is only to reclaim space )
         terraform_plugins_dir = os.path.join(
@@ -461,6 +590,11 @@ class VSPHEREUPI(VSPHEREBASE):
         self.token = config.ENV_DATA.get("ipam_token")
         self.cidr = config.ENV_DATA.get("machine_cidr")
         self.vm_network = config.ENV_DATA.get("vm_network")
+        if (
+            config.DEPLOYMENT.get("dual_stack")
+            and config.DEPLOYMENT.get("primary_stack") == "ipv6"
+        ):
+            self.cidr = config.ENV_DATA.get("machine_cidr_ipv6", self.cidr)
 
     class OCPDeployment(BaseOCPDeployment):
         def __init__(self):
@@ -544,6 +678,10 @@ class VSPHEREUPI(VSPHEREBASE):
             # enable hardware virtualization
             if config.ENV_DATA.get("enable_hw_virtualization"):
                 enable_hardware_virtualization()
+
+            # enable efi secure boot
+            if config.ENV_DATA.get("enable_efi_secure_boot"):
+                enable_efi_secure_boot()
 
             # sync guest time with host
             vm_file = (
@@ -881,6 +1019,22 @@ class VSPHEREUPI(VSPHEREBASE):
             ocp_install_template_path = os.path.join(
                 "ocp-deployment", ocp_install_template
             )
+
+            # Inject dual-stack flag into ENV_DATA so Jinja2 template can use it
+            config.ENV_DATA["dual_stack"] = config.DEPLOYMENT.get("dual_stack", False)
+
+            if config.DEPLOYMENT.get("dual_stack"):
+                if config.DEPLOYMENT.get("ipv6"):
+                    raise UnexpectedDeploymentConfiguration(
+                        "Cannot set both 'dual_stack' and 'ipv6'. "
+                        "Use 'dual_stack: true' with 'primary_stack: ipv6' "
+                        "for IPv6-primary dual-stack."
+                    )
+                if not config.ENV_DATA.get("machine_cidr_ipv6"):
+                    raise UnexpectedDeploymentConfiguration(
+                        "Dual-stack deployment requires ENV_DATA.machine_cidr_ipv6"
+                    )
+
             install_config_str = _templating.render_template(
                 ocp_install_template_path, config.ENV_DATA
             )
@@ -894,8 +1048,37 @@ class VSPHEREUPI(VSPHEREBASE):
                 install_config_obj["platform"]["vsphere"]["network"] = config.ENV_DATA[
                     "vm_network"
                 ]
+
+            # Reorder network lists for IPv6-primary dual-stack
+            if (
+                config.DEPLOYMENT.get("dual_stack")
+                and config.DEPLOYMENT.get("primary_stack") == "ipv6"
+            ):
+                networking = install_config_obj["networking"]
+                networking["clusterNetwork"].reverse()
+                networking["machineNetwork"].reverse()
+                networking["serviceNetwork"].reverse()
+
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
+
+            # Configure RHCOS 10 specific settings
+            rhcos_version = config.ENV_DATA.get("rhcos_version")
+            if rhcos_version and str(rhcos_version) == "10":
+                ocp_version = version.get_semantic_ocp_version_from_config()
+                if ocp_version < version.VERSION_5_0:
+                    install_config_obj["featureSet"] = "TechPreviewNoUpgrade"
+                    install_config_obj["osImageStream"] = "rhel-10"
+                    logger.info(
+                        "Configured install-config for RHEL 10 deployment with "
+                        "TechPreviewNoUpgrade feature set"
+                    )
+                else:
+                    logger.info(
+                        "OCP 5.0+ detected - RHEL 10 is the default, skipping "
+                        "TechPreviewNoUpgrade and osImageStream configuration"
+                    )
+
             # prepare configuration for disconnected deployment (including deployment behind proxy)
             if config.DEPLOYMENT.get("disconnected") or config.DEPLOYMENT.get("proxy"):
                 # set non-existing gateway, to make the cluster disconnected
@@ -1002,9 +1185,9 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"{self.installer} create ignition-configs "
                     f"--dir {self.cluster_path} "
                 )
-                # Because ignition file for bootstrap in ipv6 is too big to be passed by terraform changing
-                # encoding to gzip+base64 instead of pain text.
-                if config.DEPLOYMENT.get("ipv6"):
+                # Because ignition file for bootstrap in ipv6/dual-stack is too big to be passed by terraform
+                # changing encoding to gzip+base64 instead of plain text.
+                if config.DEPLOYMENT.get("ipv6") or config.DEPLOYMENT.get("dual_stack"):
                     bootstrap_ignition_path = os.path.join(
                         config.ENV_DATA["cluster_path"], constants.BOOTSTRAP_IGN
                     )
@@ -1019,6 +1202,7 @@ class VSPHEREUPI(VSPHEREBASE):
                         control_plane_ignition_path,
                         compute_ignition_path,
                     ]
+
                     for ignition_path in ignition_paths:
                         # Read the file and compress it + base64
                         with open(ignition_path, "rb") as f_in:
@@ -1117,11 +1301,16 @@ class VSPHEREUPI(VSPHEREBASE):
                 time.sleep(600)
                 logger.info("waiting for bootstrap to complete")
                 try:
+                    bootstrap_timeout = (
+                        7200
+                        if config.DEPLOYMENT.get("dual_stack")
+                        else config.DEPLOYMENT.get("bootstrap_complete_timeout", 5400)
+                    )
                     run_cmd(
                         f"{self.installer} wait-for bootstrap-complete "
                         f"--dir {self.cluster_path} "
                         f"--log-level {log_cli_level}",
-                        timeout=3600,
+                        timeout=bootstrap_timeout,
                     )
                 except (CommandFailed, TimeoutExpired) as e:
                     err = str(e)
@@ -1195,11 +1384,12 @@ class VSPHEREUPI(VSPHEREBASE):
 
                 # wait for install to complete
                 logger.info("waiting for install to complete")
+                install_timeout = 7200 if config.DEPLOYMENT.get("dual_stack") else 3600
                 run_cmd(
                     f"{self.installer} wait-for install-complete "
                     f"--dir {self.cluster_path} "
                     f"--log-level {log_cli_level}",
-                    timeout=3600,
+                    timeout=install_timeout,
                 )
 
                 # Approving CSRs here in-case if any exists
@@ -1285,6 +1475,17 @@ class VSPHEREUPI(VSPHEREBASE):
 
         """
         previous_dir = os.getcwd()
+
+        # Get infra_id before destroy operations (metadata.json will be deleted)
+        try:
+            self.infra_id = get_infra_id(self.cluster_path)
+            logger.info(f"Captured infra_id for cleanup: {self.infra_id}")
+        except (FileNotFoundError, KeyError) as err:
+            logger.warning(
+                f"Failed to get infra_id from metadata.json: {err}. "
+                f"Storage policy cleanup may not work."
+            )
+            self.infra_id = None
 
         # Download terraform binary based on terraform version
         # in terraform.log
@@ -1433,6 +1634,7 @@ class VSPHEREUPI(VSPHEREBASE):
                         location=upi_repo_path,
                         branch=installer_release_branch,
                         force_checkout=True,
+                        sparse_checkout_dirs=["upi/vsphere"],
                     )
 
                     # comment sensitive variable as current terraform version doesn't support
@@ -1585,6 +1787,24 @@ class VSPHEREIPI(VSPHEREBASE):
             install_config_obj = yaml.safe_load(install_config_str)
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
+
+            # Configure RHCOS 10 specific settings
+            rhcos_version = config.ENV_DATA.get("rhcos_version")
+            if rhcos_version and str(rhcos_version) == "10":
+                ocp_version = version.get_semantic_ocp_version_from_config()
+                if ocp_version < version.VERSION_5_0:
+                    install_config_obj["featureSet"] = "TechPreviewNoUpgrade"
+                    install_config_obj["osImageStream"] = "rhel-10"
+                    logger.info(
+                        "Configured install-config for RHEL 10 deployment with "
+                        "TechPreviewNoUpgrade feature set"
+                    )
+                else:
+                    logger.info(
+                        "OCP 5.0+ detected - RHEL 10 is the default, skipping "
+                        "TechPreviewNoUpgrade and osImageStream configuration"
+                    )
+
             install_config_obj["platform"]["vsphere"]["apiVIP"] = config.ENV_DATA[
                 "vips"
             ][0]
@@ -1725,6 +1945,25 @@ class VSPHEREIPI(VSPHEREBASE):
         logger.debug("post destroy checks for vSphere IPI ")
         # destroy the folder in templates
         self.vsphere.destroy_folder(template_folder, self.cluster, self.datacenter)
+
+        # delete storage policy created by OCP installer
+        storage_policy_name = f"openshift-storage-policy-{template_folder}"
+        logger.info(f"Deleting storage policy: {storage_policy_name}")
+        deleted = self.vsphere.delete_storage_policy_by_exact_name(storage_policy_name)
+        if deleted:
+            logger.info(f"Successfully deleted storage policy: {storage_policy_name}")
+        else:
+            logger.info(
+                f"Storage policy not found or failed to delete: {storage_policy_name}"
+            )
+
+        # delete tag and tag category created by OCP installer
+        tag_name = template_folder
+        tag_category_name = f"openshift-{template_folder}"
+        logger.info(f"Deleting tag '{tag_name}' from category '{tag_category_name}'")
+        self.vsphere.delete_tag(tag_name, tag_category_name)
+        logger.info(f"Deleting tag category '{tag_category_name}'")
+        self.vsphere.delete_tag_category(tag_category_name)
 
 
 class VSPHEREAI(VSPHEREBASE):
@@ -2261,6 +2500,7 @@ class VSPHEREAgentAI(VSPHEREBASE):
             wait_for_hosted_cluster_available(self.cluster_name, timeout=1200, sleep=30)
 
             create_kubeconfig_file_hosted_cluster()
+            create_kubeadmin_password_file_hosted_cluster()
 
             log_step(
                 "Waiting for worker nodes to appear and become ready in inventory of the Agent cluster"
@@ -2559,6 +2799,7 @@ def clone_openshift_installer():
                 location=upi_repo_path,
                 branch="master",
                 clone_type="normal",
+                sparse_checkout_dirs=["upi/vsphere"],
             )
         else:
             # due to failure domain changes in 4.13, use 4.12 branch till
@@ -2572,31 +2813,38 @@ def clone_openshift_installer():
                     url=constants.VSPHERE_INSTALLER_REPO,
                     location=upi_repo_path,
                     branch="release-4.12",
+                    sparse_checkout_dirs=["upi/vsphere"],
                 )
             else:
-                if config.DEPLOYMENT.get("ipv6"):
+                if config.DEPLOYMENT.get("dual_stack") or config.DEPLOYMENT.get("ipv6"):
                     constants.VSPHERE_INSTALLER_REPO = (
                         "https://gitlab.cee.redhat.com/srozen/installer_ipv6.git"
                     )
-                    branch = "master"
+                    if config.DEPLOYMENT.get("dual_stack"):
+                        branch = "dual-stack"
+                    else:
+                        branch = "master"
                 else:
                     branch = f"release-{ocp_version}"
                 clone_repo(
                     url=constants.VSPHERE_INSTALLER_REPO,
                     location=upi_repo_path,
                     branch=branch,
+                    sparse_checkout_dirs=["upi/vsphere"],
                 )
     elif Version.coerce(ocp_version) == Version.coerce("4.4"):
         clone_repo(
             url=constants.VSPHERE_INSTALLER_REPO,
             location=upi_repo_path,
             branch=constants.VSPHERE_INSTALLER_BRANCH,
+            sparse_checkout_dirs=["upi/vsphere"],
         )
     else:
         clone_repo(
             url=constants.VSPHERE_INSTALLER_REPO,
             location=upi_repo_path,
             branch=f"release-{ocp_version}",
+            sparse_checkout_dirs=["upi/vsphere"],
         )
 
 
@@ -2636,9 +2884,11 @@ def update_gw(str_to_replace, config_file):
     """
     # update gateway
     if config.ENV_DATA.get("gateway"):
-        replace_content_in_file(
-            config_file, str_to_replace, f"{config.ENV_DATA.get('gateway')}"
-        )
+        if config.DEPLOYMENT.get("dual_stack"):
+            gw = config.ENV_DATA.get("gateway_ipv6", config.ENV_DATA.get("gateway"))
+        else:
+            gw = config.ENV_DATA.get("gateway")
+        replace_content_in_file(config_file, str_to_replace, f"{gw}")
 
 
 def add_shutdown_wait_timeout():
@@ -2650,13 +2900,44 @@ def add_shutdown_wait_timeout():
     force powered-off after this timeout, otherwise an error is returned. Default: 3 minutes.
 
     """
-    with open(constants.VM_MAIN, "r") as fd:
-        obj = hcl2.load(fd)
-        obj["resource"][0]["vsphere_virtual_machine"]["vm"][
-            "shutdown_wait_timeout"
-        ] = 10
+    if config.DEPLOYMENT.get("dual_stack"):
+        with open(constants.VM_MAIN, "r") as fd:
+            content = fd.read()
+        content = content.replace(
+            '"stealclock.enable"',
+            '"shutdown_wait_timeout" = 10\n' '    "stealclock.enable"',
+        )
+        with open(constants.VM_MAIN, "w") as fd:
+            fd.write(content)
+    else:
+        with open(constants.VM_MAIN, "r") as fd:
+            obj = hcl2.load(fd)
+            obj["resource"][0]["vsphere_virtual_machine"]["vm"][
+                "shutdown_wait_timeout"
+            ] = 10
+        dump_data_to_json(obj, f"{constants.VM_MAIN}.json")
+        os.rename(constants.VM_MAIN, f"{constants.VM_MAIN}.backup")
+
+
+def enable_efi_secure_boot():
+    """
+    Enable EFI secure boot mode in VMs.
+    """
+    used_tf_file = False
+    if os.path.isfile(constants.VM_MAIN):
+        used_tf_file = True
+        with open(constants.VM_MAIN, "r") as fd:
+            obj = hcl2.load(fd)
+    else:
+        with open(f"{constants.VM_MAIN}.json", "r") as fd:
+            obj = json.load(fd)
+    obj["resource"][0]["vsphere_virtual_machine"]["vm"]["firmware"] = "efi"
+    obj["resource"][0]["vsphere_virtual_machine"]["vm"][
+        "efi_secure_boot_enabled"
+    ] = "true"
     dump_data_to_json(obj, f"{constants.VM_MAIN}.json")
-    os.rename(constants.VM_MAIN, f"{constants.VM_MAIN}.backup")
+    if used_tf_file:
+        os.rename(constants.VM_MAIN, f"{constants.VM_MAIN}.backup")
 
 
 def update_dns():
@@ -2721,8 +3002,10 @@ def update_machine_conf(folder_structure=True):
             Currently True for OCP release greater than 4.4 versions
 
     """
+    cidr_var = "var.machine_cidr"
+
     if not folder_structure:
-        gw_string = "${cidrhost(var.machine_cidr,1)}"
+        gw_string = "${cidrhost(%s,1)}" % cidr_var
         gw_conf_file = constants.INSTALLER_IGNITION
         disk_size_conf_file = constants.INSTALLER_MACHINE_CONF
         # update dns
@@ -2736,10 +3019,11 @@ def update_machine_conf(folder_structure=True):
 
     else:
         if Version.coerce(get_ocp_version()) >= Version.coerce("4.6"):
-            gw_string = "${cidrhost(var.machine_cidr, 1)}"
+            gw_string = "${cidrhost(%s, 1)}" % cidr_var
             gw_conf_file = constants.VM_MAIN
         else:
-            gw_string = "${cidrhost(machine_cidr, 1)}"
+            cidr_ref = cidr_var.replace("var.", "")
+            gw_string = "${cidrhost(%s, 1)}" % cidr_ref
             gw_conf_file = constants.VM_IFCFG
 
         disk_size_conf_file = constants.VM_MAIN
@@ -2788,6 +3072,53 @@ def generate_terraform_vars_and_update_machine_conf():
         update_machine_conf(folder_structure)
 
 
+def resolve_vm_template():
+    """
+    Resolve the VM template to use based on configuration.
+
+    Priority:
+    1. vm_template_overwrite (for early testing)
+    2. vm_templates[rhcos_version] (new multi-version support)
+    3. vm_template (legacy fallback)
+
+    Returns:
+        str: The VM template name to use
+    """
+    # Check for override first (early testing)
+    if config.ENV_DATA.get("vm_template_overwrite"):
+        template = config.ENV_DATA["vm_template_overwrite"]
+        logger.info(f"Using overridden VM template: {template}")
+        return template
+
+    # Check for multi-version templates
+    vm_templates = config.ENV_DATA.get("vm_templates")
+    rhcos_version = config.ENV_DATA.get("rhcos_version")
+
+    if vm_templates:
+        # Default to RHCOS 9 if no version specified
+        if not rhcos_version:
+            rhcos_version = "9"
+            logger.info("No rhcos_version specified, defaulting to RHCOS 9")
+
+        # Ensure rhcos_version is a string for dictionary lookup
+        rhcos_version = str(rhcos_version)
+
+        template = vm_templates.get(rhcos_version)
+        if template:
+            logger.info(f"Using RHCOS {rhcos_version} template: {template}")
+            return template
+        else:
+            logger.warning(
+                f"RHCOS version {rhcos_version} not found in vm_templates, "
+                "falling back to vm_template"
+            )
+
+    # Fallback to legacy single template
+    template = config.ENV_DATA.get("vm_template")
+    logger.info(f"Using legacy vm_template: {template}")
+    return template
+
+
 def generate_terraform_vars_with_folder():
     """
     Generates the terraform.tfvars file which includes folder structure
@@ -2830,16 +3161,14 @@ def generate_terraform_vars_with_folder():
     ssh_public_key_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
     config.ENV_DATA["ssh_public_key_path"] = ssh_public_key_path
 
-    # overwrite RHCOS template
-    # This use-case is mainly used for early RHCOS testing
-    if config.ENV_DATA.get("vm_template_overwrite"):
-        config.ENV_DATA["vm_template"] = config.ENV_DATA["vm_template_overwrite"]
+    # Resolve RHCOS template to use
+    # Supports: vm_template_overwrite (early testing), vm_templates (multi-version), vm_template (legacy)
     if config.ENV_DATA["sno"]:
         config.ENV_DATA["iso_file"] = f"ISO/{config.ENV_DATA['cluster_name']}.iso"
         config.ENV_DATA["vm_template"] = "sno_template1"
-
         create_terraform_var_file("terraform_4_5_sno.tfvars.j2")
     else:
+        config.ENV_DATA["vm_template"] = resolve_vm_template()
         create_terraform_var_file("terraform_4_5.tfvars.j2")
 
 

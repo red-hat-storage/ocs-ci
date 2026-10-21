@@ -183,6 +183,54 @@ def enable_specific_source(source_name):
     sleep(20)
 
 
+def is_catalog_source_ready(cs_name=None, expected_image=None):
+    """
+    Check if a CatalogSource exists, is in READY state, and optionally
+    points to the expected image.
+
+    Args:
+        cs_name (str): CatalogSource name. Defaults to
+            constants.OPERATOR_CATALOG_SOURCE_NAME.
+        expected_image (str): If provided, verify spec.image contains
+            this string. If None, skips image check.
+
+    Returns:
+        bool: True if the CatalogSource is present, READY, and has a
+            matching image (or no image check requested).
+    """
+    from ocs_ci.framework import config
+
+    if cs_name is None:
+        cs_name = constants.OPERATOR_CATALOG_SOURCE_NAME
+    if expected_image is None:
+        expected_image = config.DEPLOYMENT.get("ocs_registry_image")
+
+    cs = CatalogSource(
+        resource_name=cs_name,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    if not cs.check_resource_existence(
+        should_exist=True, timeout=10, resource_name=cs_name
+    ):
+        return False
+
+    if not cs.check_state("READY"):
+        return False
+
+    if expected_image:
+        actual_image = cs.get_image_url() or ""
+        if expected_image not in actual_image:
+            logger.info(
+                "CatalogSource %s image mismatch: expected %s, got %s",
+                cs_name,
+                expected_image,
+                actual_image,
+            )
+            return False
+
+    return True
+
+
 def get_odf_tag_from_redhat_catsrc():
     """
     Get the ODF tag from the default redhat-operators Catalog Source

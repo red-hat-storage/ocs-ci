@@ -11,6 +11,7 @@ import yaml
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.constants import FUSION_SUBSCRIPTION_YAML, ISF_CATALOG_SOURCE_NAME
+from ocs_ci.ocs.exceptions import ChannelNotFound, CommandFailed
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csv import CSV
@@ -31,6 +32,7 @@ class FusionDeployment:
         self.sds_version = config.DEPLOYMENT.get("fusion_pre_release_sds_version")
         self.image_tag = config.DEPLOYMENT.get("fusion_pre_release_image")
         self.operator_name = defaults.FUSION_OPERATOR_NAME
+        self.subscription_name = defaults.FUSION_SUBSCRIPTION_NAME
         self.namespace = defaults.FUSION_NAMESPACE
         self.kubeconfig = config.RUN["kubeconfig"]
 
@@ -51,6 +53,21 @@ class FusionDeployment:
         """
 
         if self.pre_release:
+            catalog_source_name = constants.ISF_CATALOG_SOURCE_NAME
+        else:
+            catalog_source_name = constants.IBM_OPERATOR_CATALOG_SOURCE_NAME
+
+        ibm_catalog_source = CatalogSource(
+            resource_name=catalog_source_name,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+        if ibm_catalog_source.check_state("READY"):
+            logger.info(
+                f"CatalogSource '{catalog_source_name}' already exists and is READY, skipping creation"
+            )
+            return
+
+        if self.pre_release:
             if get_semantic_version(self.sds_version, True) >= VERSION_2_12:
                 self.create_image_digest_mirror_set()
             logger.info("Adding pre-release CatalogSource")
@@ -58,7 +75,6 @@ class FusionDeployment:
                 "sds_version": self.sds_version,
                 "image_tag": self.image_tag,
             }
-            catalog_source_name = constants.ISF_CATALOG_SOURCE_NAME
             _templating = templating.Templating(
                 base_path=constants.TEMPLATE_DEPLOYMENT_DIR_FUSION
             )
@@ -68,7 +84,6 @@ class FusionDeployment:
             fusion_catalog_source_data = yaml.load(template, Loader=yaml.Loader)
         else:
             logger.info("Adding GA CatalogSource")
-            catalog_source_name = constants.IBM_OPERATOR_CATALOG_SOURCE_NAME
             fusion_catalog_source_data = templating.load_yaml(
                 constants.FUSION_CATALOG_SOURCE_YAML
             )
@@ -85,13 +100,9 @@ class FusionDeployment:
         run_cmd(
             f"oc --kubeconfig {self.kubeconfig} apply -f {fusion_catalog_source_manifest.name}"
         )
-        ibm_catalog_source = CatalogSource(
-            resource_name=catalog_source_name,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
 
         logger.info("Waiting for CatalogSource to be READY")
-        ibm_catalog_source.wait_for_state("READY")
+        ibm_catalog_source.wait_for_state("READY", timeout=960)
 
     def create_image_digest_mirror_set(self):
         """
@@ -122,6 +133,12 @@ class FusionDeployment:
         """
         Create Fusion Subscription
         """
+        sub_ocp = OCP(kind=constants.SUBSCRIPTION_COREOS, namespace=self.namespace)
+        if sub_ocp.is_exist(resource_name=self.operator_name):
+            logger.info(
+                f"Subscription '{self.operator_name}' already exists, skipping creation"
+            )
+            return
         logger.info("Creating Subscription")
         subscription_fusion_yaml_data = templating.load_yaml(FUSION_SUBSCRIPTION_YAML)
         subscription_fusion_yaml_data["spec"]["channel"] = config.DEPLOYMENT[
@@ -143,6 +160,12 @@ class FusionDeployment:
         """
         Create Fusion Namespace and OperatorGroup
         """
+        ns_ocp = OCP(kind="Namespace")
+        if ns_ocp.is_exist(resource_name=self.namespace):
+            logger.info(
+                f"Namespace '{self.namespace}' already exists, skipping creation"
+            )
+            return
         logger.info("Creating Namespace and OperatorGroup.")
         run_cmd(
             f"oc --kubeconfig {self.kubeconfig} create -f {constants.FUSION_NS_YAML}"
@@ -156,6 +179,19 @@ class FusionDeployment:
             sleep (int, optional): Seconds to wait before checking status. Defaults to 30.
 
         """
+        package_manifest = PackageManifest(resource_name=self.operator_name)
+        try:
+            csv_name = package_manifest.get_current_csv()
+            csv = CSV(resource_name=csv_name, namespace=self.namespace)
+            if csv.check_phase("Succeeded"):
+                logger.info(
+                    f"Fusion already deployed (CSV '{csv_name}' is Succeeded), skipping verification"
+                )
+                self.get_installed_version()
+                return
+        except (CommandFailed, ChannelNotFound):
+            pass
+
         logger.info("Verifying Fusion is deployed")
         logger.info("Waiting for Subscription and CSV to be found")
         wait_for_subscription(self.operator_name, self.namespace)
@@ -167,7 +203,6 @@ class FusionDeployment:
             time.sleep(sleep)
 
         logger.info("Waiting for PackageManifest to be found and CSV Succeeded")
-        package_manifest = PackageManifest(resource_name=self.operator_name)
         package_manifest.wait_for_resource(timeout=120)
         csv_name = package_manifest.get_current_csv()
         csv = CSV(resource_name=csv_name, namespace=self.namespace)
@@ -184,8 +219,14 @@ class FusionDeployment:
 
         """
         logger.info("Retrieving installed Fusion version")
+
+        sub_name = (
+            self.subscription_name
+            if config.ENV_DATA.get("platform", "").lower() == constants.IBM_HCI_PLATFORM
+            else self.operator_name
+        )
         results = run_cmd(
-            f"oc get subscription {self.operator_name} -n {self.namespace} --kubeconfig {self.kubeconfig} -o yaml"
+            f"oc get subscription {sub_name} -n {self.namespace} --kubeconfig {self.kubeconfig} -o yaml"
         )
         build = yaml.safe_load(results)["status"]["installedCSV"]
         version = ".".join(build.split(".")[1:])
@@ -197,6 +238,24 @@ class FusionDeployment:
         """
         Create SpectrumFusion CR.
         """
+        # The isf-operator installs a validating webhook vspectrumfusion.kb.io
+        # (with a random suffix) that rejects SpectrumFusion CR creation on
+        # unsupported OCP versions. Delete it before applying the CR.
+        webhooks = OCP(kind=constants.WEBHOOK)
+        for item in webhooks.get().get("items", []):
+            name = item["metadata"]["name"]
+            if name.startswith("vspectrumfusion.kb.io"):
+                logger.info(f"Deleting validating webhook '{name}'")
+                try:
+                    webhooks.delete(resource_name=name)
+                except CommandFailed:
+                    logger.warning(f"Webhook '{name}' already gone, skipping")
+
+        sf_ocp = OCP(kind="SpectrumFusion", namespace=self.namespace)
+        if sf_ocp.is_exist(resource_name="spectrumfusion"):
+            logger.info("SpectrumFusion CR already exists, skipping creation")
+            spectrum_fusion_status_check()
+            return
         logger.info("Creating SpectrumFusion")
         run_cmd(
             f"oc --kubeconfig {self.kubeconfig} create -f {constants.SPECTRUM_FUSION_CR}"

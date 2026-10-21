@@ -1,28 +1,20 @@
 import argparse
 import logging
 import os
-from shutil import which
-import time
 
 from junitparser import TestCase, TestSuite, JUnitXml, Failure, Properties, Property
 
-from ocs_ci import framework
 from ocs_ci.framework.exceptions import (
-    ClusterNameNotProvidedError,
-    ClusterNotAccessibleError,
     InvalidDeploymentType,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.utility import reporting, utils
+from ocs_ci.ocs.constants import OCP_VERSION_CONF_DIR
+from ocs_ci.utility import reporting
+from ocs_ci.utility.framework.base_initializer import BaseInitializer
 from ocs_ci.utility.framework.initialization import load_config
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import (
-    get_cluster_name,
-    get_openshift_client,
     get_running_ocp_version,
-    run_cmd,
-    create_kubeconfig,
 )
 
 
@@ -34,7 +26,7 @@ LOG_NAMES = {
 }
 
 
-class Initializer(object):
+class Initializer(BaseInitializer):
     def __init__(self, deployment_type: str) -> None:
         """
         Create initializer object.
@@ -47,14 +39,19 @@ class Initializer(object):
 
         """
         try:
-            self.deployment_type = deployment_type
-            self.log_basename = LOG_NAMES[deployment_type]
-            self.run_id = generate_run_id()
+            log_basename = LOG_NAMES[deployment_type]
         except KeyError:
             raise InvalidDeploymentType(
                 f"Deployment type '{deployment_type}' is invalid. "
                 f"Please provide one of the following: {list(LOG_NAMES.keys())}"
             )
+
+        # 2. Forward the extracted log_basename to the superclass
+        # This automatically handles self.log_basename and self.run_id assignment
+        super().__init__(log_basename=log_basename)
+
+        # 3. Store subclass-specific attributes
+        self.deployment_type = deployment_type
 
     def init_config(self, args: list) -> None:
         """
@@ -68,28 +65,7 @@ class Initializer(object):
             ClusterNameNotProvidedError: If the cluster_name isn't provided or found
 
         """
-        framework.config.init_cluster_configs()
-        load_config(args.conf)
-        # Updating resource_checker to False since it's not needed for FDF deployment
-        config.RUN["resource_checker"] = False
-        logger.debug("Verifying cluster_name and cluster_path")
-        cluster_name = args.cluster_name
-        cluster_path = os.path.expanduser(args.cluster_path)
-
-        if not os.path.exists(cluster_path):
-            raise FileNotFoundError(f"No such directory: {cluster_path}")
-        else:
-            config.ENV_DATA["cluster_path"] = cluster_path
-        if not cluster_name:
-            try:
-                config.ENV_DATA["cluster_name"] = get_cluster_name(cluster_path)
-            except FileNotFoundError:
-                raise ClusterNameNotProvidedError()
-        else:
-            config.ENV_DATA["cluster_name"] = cluster_name
-
-        config.REPORTING["report_path"] = args.report
-
+        super().init_config(args)
         if self.deployment_type == "fusion":
             if args.fusion_version:
                 base_dir = os.path.join(constants.FRAMEWORK_CONF_DIR, "fusion_version")
@@ -107,6 +83,12 @@ class Initializer(object):
                 load_config([cfg_file])
             if args.fdf_image_tag:
                 config.DEPLOYMENT["fdf_image_tag"] = args.fdf_image_tag
+            if args.live_deploy:
+                config.DEPLOYMENT["live_deployment"] = args.live_deploy
+
+        # Set report path if provided
+        if hasattr(args, "report") and args.report:
+            config.REPORTING["report_path"] = args.report
 
     def init_cli(self, args: list) -> list:
         """
@@ -150,55 +132,38 @@ class Initializer(object):
             parser.add_argument(
                 "--fdf-image-tag", default=None, help="Image tag of FDF to install"
             )
+            parser.add_argument(
+                "--live-deploy",
+                action="store_true",
+                default=False,
+                help="Deploy FDF from live registry (GA)",
+            )
 
         parsed_args, _ = parser.parse_known_args(args)
 
         return parsed_args
 
-    def init_logging(self) -> None:
+    def load_ocp_version_config(self) -> None:
         """
-        Initialize the logging config.
+        Load OCP version configuration file based on the running cluster version.
+        This ensures that the correct OCP-specific settings are loaded dynamically.
         """
-        base_log_dir = os.path.expanduser(config.RUN.get("log_dir"))
-        log_level = config.RUN.get("log_level", "INFO")
-        sub_log_dir_name = f"{self.log_basename}-{self.run_id}"
-        sub_log_dir = os.path.join(base_log_dir, sub_log_dir_name)
-        log_formatter = logging.Formatter(constants.LOG_FORMAT)
-        root_logger = logging.getLogger()
-        root_logger.setLevel(log_level)
+        logger.info("Fetching OCP version from cluster")
+        ocp_version = get_running_ocp_version(kubeconfig=config.RUN["kubeconfig"])
+        logger.info(f"Detected OCP version: {ocp_version}")
 
-        if not os.path.exists(sub_log_dir):
-            os.makedirs(sub_log_dir)
-
-        log_file = os.path.join(sub_log_dir, "logs")
-
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(log_formatter)
-        file_handler.setLevel(log_level)
-        root_logger.addHandler(file_handler)
-
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(log_formatter)
-        console_handler.setLevel(log_level)
-        root_logger.addHandler(console_handler)
-
-        logger.info("Logging initialized")
-        logger.info(f"Log file configured: {log_file}")
-
-    def set_cluster_connection(self) -> None:
-        """
-        Setup cluster connection.
-        """
-        logger.info("Setting kubeconfig")
-        config.RUN["kubeconfig"] = os.path.join(
-            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+        ocp_version_config_file = f"ocp-{ocp_version}-config.yaml"
+        ocp_version_config_file_path = os.path.join(
+            OCP_VERSION_CONF_DIR, ocp_version_config_file
         )
 
-        # create kubeconfig if doesn't exist and OCP url and kubeadmin password is provided
-        create_kubeconfig(config.RUN["kubeconfig"])
-
-        setup_bin_dir()
-        check_cluster_access(config.RUN["kubeconfig"])
+        if os.path.exists(ocp_version_config_file_path):
+            logger.info(f"Loading OCP version config: {ocp_version_config_file_path}")
+            load_config([ocp_version_config_file_path])
+        else:
+            logger.warning(
+                f"OCP version config file not found: {ocp_version_config_file_path}"
+            )
 
     def get_test_suite_props(self) -> dict:
         """
@@ -254,57 +219,6 @@ class Initializer(object):
         props = {}
         props["squad"] = "Purple"
         return props
-
-
-def generate_run_id() -> int:
-    """
-    Generate run_id for the deployment.
-
-    Returns:
-        int: Unique identifier for the run
-
-    """
-    logger.debug("Generating run_id from timestamp")
-    run_id = int(time.time() * 1000)
-    config.RUN["run_id"] = run_id
-    return run_id
-
-
-def check_cluster_access(kubeconfig_path: str):
-    """
-    Checks access to cluster with provided kubeconfig.
-
-    Args:
-        kubeconfig_path (str): path to kubeconfig file
-
-    Raises:
-        ClusterNotAccessibleError: if the cluster is inaccessible
-
-    """
-    logger.info("Testing access to cluster with %s", kubeconfig_path)
-    if not os.path.isfile(kubeconfig_path):
-        raise ClusterNotAccessibleError(
-            "The kubeconfig file %s doesn't exist!", kubeconfig_path
-        )
-    if not which("oc"):
-        get_openshift_client()
-    try:
-        run_cmd(f"oc --kubeconfig {kubeconfig_path} cluster-info")
-    except CommandFailed as ex:
-        raise ClusterNotAccessibleError("Cluster is not ready to use: %s", ex)
-    logger.info("Access to cluster is OK!")
-
-
-def setup_bin_dir() -> None:
-    """
-    Add the bin dir to PATH.
-    """
-    bin_dir = framework.config.RUN.get("bin_dir")
-    if bin_dir:
-        framework.config.RUN["bin_dir"] = os.path.abspath(
-            os.path.expanduser(framework.config.RUN["bin_dir"])
-        )
-        utils.add_path_to_env_path(framework.config.RUN["bin_dir"])
 
 
 def create_junit_report(

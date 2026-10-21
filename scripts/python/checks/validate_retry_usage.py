@@ -75,8 +75,6 @@ class RetryValidator(ast.NodeVisitor):
         """Evaluate a constant value from an AST node."""
         if isinstance(node, ast.Constant):
             return node.value
-        if isinstance(node, ast.Num):
-            return node.n
         return default
 
 

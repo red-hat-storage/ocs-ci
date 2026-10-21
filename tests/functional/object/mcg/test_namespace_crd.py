@@ -35,6 +35,8 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
+    sts_deployment_required,
+    azure_platform_required,
     red_squad,
     runs_on_provider,
     mcg,
@@ -116,6 +118,21 @@ class TestNamespace(MCGTest):
                     },
                 },
                 marks=[tier1, pytest.mark.polarion_id("OCS-2409")],
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"azure-sts": [(1, None)]},
+                    },
+                },
+                marks=[
+                    tier1,
+                    sts_deployment_required,
+                    azure_platform_required,
+                    pytest.mark.polarion_id("OCS-7948"),
+                ],
             ),
             pytest.param(
                 {
@@ -302,6 +319,7 @@ class TestNamespace(MCGTest):
         ids=[
             "AWS-OC-Single",
             "Azure-OC-Single",
+            "AZURE-STS-OC-Single",
             "RGW-OC-Single",
             "RGW-CLI-Single",
             "AWS-CLI-Single",

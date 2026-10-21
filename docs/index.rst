@@ -16,25 +16,28 @@ and functionality using AWS and other supported platforms.
    :maxdepth: 2
    :caption: Contents:
 
+   aws_cleanup.md
    code_review.md
    coding_guidelines.md
-   getting_started.md
-   supported_platforms.md
-   usage.md
-   upgrade.md
-   results.md
-   writing_tests.md
-   stable_branch.md
-   readmefiles/conf.README.md
-   fixture_usage.md
    debugging.md
-   unit_tests.md
-   workarounds.md
-   release_guidelines.md
-   usecases/index.rst
-   multicluster_test_example.md
+   fixture_usage.md
+   getting_started.md
    graceful_stop_feature.md
+   logging_guide.md
+   multicluster_test_example.md
+   readmefiles/conf.README.md
+   release_guidelines.md
+   results.md
+   stable_branch.md
+   supported_platforms.md
+   ui_guidelines.md
+   unit_tests.md
+   upgrade.md
+   usecases/index.rst
+   usage.md
    uv.md
+   workarounds.md
+   writing_tests.md
 
 
 Indices and tables

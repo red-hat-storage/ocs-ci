@@ -7,8 +7,150 @@ from ocs_ci.resiliency.resiliency_helper import (
     ResiliencyConfig,
     WorkloadScalingHelper,
 )
+from ocs_ci.resiliency.resiliency_tools import (
+    CEPH_CRASH_POLL_INTERVAL,
+    CephStatusTool,
+    ceph_crash_monitor,
+    raise_if_ceph_crashes_detected,
+)
+from ocs_ci.krkn_chaos.cluster_health_gate import (
+    skip_test_if_cluster_unrecoverable,
+)
+from ocs_ci.krkn_chaos.krkn_helpers import cleanup_krkn_hog_pods
 
 log = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def resiliency_netem_session_cleanup():
+    """Sweep leftover tc netem once at the end of the resiliency session."""
+    yield
+    from ocs_ci.resiliency.netem_cleanup import cleanup_session_netem_and_chaos_pods
+
+    cleanup_session_netem_and_chaos_pods(
+        "Resiliency session",
+        "resiliency session finalizer",
+    )
+
+
+@pytest.fixture(autouse=True)
+def resiliency_test_lifecycle(request):
+    """
+    Common lifecycle for all resiliency tests in this directory.
+
+    - At test start: skip this test, before chaos, if StorageCluster is still
+      Error after the recovery wait or Ceph is unrecoverable. Later tests
+      skip with the same reason. Degraded HEALTH_WARN is allowed.
+    - At test start: fail if leftover tc netem is already on any node.
+    - At test start: delete leftover Krkn hog / network-chaos Jobs and
+      completed oc debug pods (they are not always removed after chaos).
+    - At test start: archive any existing Ceph crashes so the test starts clean.
+    - During the entire test: background Ceph crash monitor every CEPH_CRASH_POLL_INTERVAL s.
+    - finalizer: sweep leftover netem (fail if residue remains), delete leftover
+      hog / network-chaos / debug pods, then fail if Ceph crashes were
+      introduced during the test.
+    """
+    try:
+        cleanup_krkn_hog_pods()
+    except Exception as e:
+        log.warning(
+            "Resiliency test lifecycle: could not clean leftover chaos pods: %s",
+            e,
+        )
+
+    # Runs before the StorageCluster gate on purpose. A node that cannot reach
+    # the apiserver ClusterIP keeps StorageCluster in Error, so the gate below
+    # would otherwise wait an hour and then skip the whole session blaming ODF
+    # instead of naming the SDN as the cause.
+    from ocs_ci.resiliency.service_connectivity import (
+        assert_cluster_service_connectivity,
+    )
+
+    assert_cluster_service_connectivity(
+        tries=2,
+        delay=10,
+        context="resiliency test pre-flight",
+    )
+
+    skip_test_if_cluster_unrecoverable("Resiliency")
+
+    try:
+        ceph_status = CephStatusTool()
+        ceph_status.archive_ceph_crashes()
+        log.info(
+            "Resiliency test lifecycle: archived pre-existing Ceph crashes (baseline)"
+        )
+    except Exception as e:
+        log.warning(
+            "Resiliency test lifecycle: could not archive pre-existing Ceph crashes: %s",
+            e,
+        )
+
+    def _resiliency_finalizer():
+        try:
+            cleanup_krkn_hog_pods()
+        except Exception as e:
+            log.warning(
+                "Resiliency test lifecycle: could not clean leftover chaos pods after test: %s",
+                e,
+            )
+        config = ResiliencyConfig()
+        if not config.stop_when_ceph_crashed:
+            return
+        try:
+            raise_if_ceph_crashes_detected(
+                CephStatusTool(),
+                "resiliency test finalizer",
+                poll_interval=0,
+            )
+        except AssertionError:
+            raise
+        except Exception as e:
+            log.warning(
+                "Resiliency test lifecycle: could not run Ceph crash finalizer: %s",
+                e,
+            )
+
+    request.addfinalizer(_resiliency_finalizer)
+
+    from ocs_ci.resiliency.netem_cleanup import (
+        assert_cluster_free_of_netem,
+        sweep_cluster_netem,
+    )
+
+    # Registered before the netem finalizer so it runs after it (LIFO): the
+    # faults must be gone before we can call a lingering outage a failure.
+    def _service_connectivity_finalizer():
+        assert_cluster_service_connectivity(
+            context="resiliency test finalizer",
+        )
+
+    request.addfinalizer(_service_connectivity_finalizer)
+
+    def _netem_finalizer():
+        try:
+            sweep_cluster_netem(
+                fail_on_residue=True,
+                context="resiliency test finalizer",
+            )
+        except Exception:
+            log.exception("Resiliency test lifecycle: netem sweep failed")
+            raise
+
+    request.addfinalizer(_netem_finalizer)
+    assert_cluster_free_of_netem(context="resiliency test pre-flight")
+
+    config = ResiliencyConfig()
+    with ceph_crash_monitor(
+        enabled=config.stop_when_ceph_crashed,
+        context="resiliency test",
+    ):
+        log.info(
+            "Resiliency test lifecycle: background Ceph crash monitor active "
+            "for entire test (every %ss, including workload setup)",
+            CEPH_CRASH_POLL_INTERVAL,
+        )
+        yield
 
 
 @pytest.fixture

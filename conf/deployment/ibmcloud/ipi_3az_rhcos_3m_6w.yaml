@@ -1,6 +1,5 @@
 ---
 DEPLOYMENT:
-  openshift_install_timeout: 4800
   allow_lower_instance_requirements: false
   ocs_operator_nodes_to_label: 6
 ENV_DATA:
@@ -8,12 +7,12 @@ ENV_DATA:
   deployment_type: 'ipi'
   region: 'us-south'
   base_domain: 'ibmcloud2.qe.rh-ocs.com'
-  worker_instance_type: 'bx2-16x64'
+  worker_instance_type: 'bxf-16x64'
   worker_availability_zones:
     - 'us-south-1'
     - 'us-south-2'
     - 'us-south-3'
-  master_instance_type: 'bx2-4x16'
+  master_instance_type: 'bxf-4x16'
   master_availability_zones:
     - 'us-south-1'
     - 'us-south-2'

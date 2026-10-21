@@ -90,6 +90,56 @@ def check_alert_list(
     logger.info("Alerts were triggered correctly during utilization")
 
 
+def validate_alert(
+    threading_lock,
+    alert_constant,
+    message,
+    description,
+    runbook,
+    severity="warning",
+    state="pending",
+    timeout=1200,
+    sleep=None,
+):
+    """
+    Wait for an alert and validate its properties.
+
+    Args:
+        threading_lock: Threading lock object for thread-safe Prometheus API operations
+        alert_constant (str): Alert name constant
+        message (str): Expected alert message
+        description (str): Expected alert description
+        runbook (str): Expected runbook URL
+        severity (str): Expected severity
+        state (str): Alert state to wait for
+        timeout (int): Timeout in seconds to wait for the alert
+        sleep (int): Optional polling interval for alert wait
+
+    Returns:
+        bool: True if alert is validated successfully, False otherwise
+    """
+    api = PrometheusAPI(threading_lock=threading_lock)
+    wait_kwargs = {"name": alert_constant, "state": state, "timeout": timeout}
+    if sleep is not None:
+        wait_kwargs["sleep"] = sleep
+    alerts = api.wait_for_alert(**wait_kwargs)
+
+    try:
+        check_alert_list(
+            label=alert_constant,
+            msg=message,
+            description=description,
+            runbook=runbook,
+            states=[state],
+            severity=severity,
+            alerts=alerts,
+        )
+        logger.info("Alert verified successfully")
+        return True
+    except AssertionError:
+        return False
+
+
 def check_query_range_result_viafunction(
     result,
     is_value_good,
@@ -324,6 +374,123 @@ def validate_status(content):
         raise ValueError("content status is not success")
 
 
+def _validate_alert_instance(
+    alert, alert_name, instance_index, expected_severity, expected_message_substr
+):
+    """
+    Assert that a single alert instance matches the expected criteria.
+
+    Args:
+        alert (dict): A single alert record from the Prometheus API.
+        alert_name (str): Alert name (used in assertion messages).
+        instance_index (int): Instance index (used in assertion messages).
+        expected_severity (str | None): If given, assert that
+            ``alert["labels"]["severity"]`` equals this value.
+        expected_message_substr (str | None): If given, assert that this
+            substring appears (case-insensitive) in
+            ``alert["annotations"]["message"]``.
+
+    Raises:
+        AssertionError: If any validation check fails.
+    """
+    if expected_severity is not None:
+        assert alert["labels"]["severity"] == expected_severity, (
+            f"Alert '{alert_name}' instance {instance_index}: expected severity "
+            f"'{expected_severity}', "
+            f"got '{alert['labels']['severity']}'"
+        )
+    if expected_message_substr is not None:
+        assert expected_message_substr.lower() in (
+            alert["annotations"]["message"].lower()
+        ), (
+            f"Alert '{alert_name}' instance {instance_index}: expected "
+            f"'{expected_message_substr}' in message: "
+            f"{alert['annotations']['message']}"
+        )
+    assert alert["annotations"].get("runbook_url") or alert["annotations"].get(
+        "description"
+    ), (
+        f"Alert '{alert_name}' instance {instance_index} is missing both "
+        f"runbook_url and description"
+    )
+
+
+def wait_for_alert_firing(
+    api,
+    alert_name,
+    timeout=600,
+    expected_severity=None,
+    expected_message_substr=None,
+    min_count=1,
+):
+    """
+    Wait for a Prometheus alert to reach the ``firing`` state and validate it.
+
+    Args:
+        api (PrometheusAPI): Prometheus API instance.
+        alert_name (str): Alert name to wait for.
+        timeout (int): Seconds to wait for the alert to fire.
+        expected_severity (str | None): If given, assert that
+            ``alert["labels"]["severity"]`` equals this value.
+        expected_message_substr (str | None): If given, assert that this
+            substring appears (case-insensitive) in
+            ``alert["annotations"]["message"]``.
+        min_count (int): Minimum number of firing alert instances to
+            wait for. Defaults to 1.
+
+    Returns:
+        list[dict]: All fired alert records (at least ``min_count``).
+
+    Raises:
+        AssertionError: If fewer than ``min_count`` alerts fire, or any
+            validation fails.
+    """
+    alerts = api.wait_for_alert(
+        name=alert_name,
+        state="firing",
+        timeout=timeout,
+        sleep=10,
+        min_count=min_count,
+    )
+    assert len(alerts) >= min_count, (
+        f"Expected at least {min_count} '{alert_name}' alert(s) to fire "
+        f"within {timeout}s, got {len(alerts)}"
+    )
+    for instance_index, alert in enumerate(alerts):
+        _validate_alert_instance(
+            alert,
+            alert_name,
+            instance_index,
+            expected_severity,
+            expected_message_substr,
+        )
+    logger.info(
+        "Alert '%s' fired: %d instance(s), labels=%s message=%s",
+        alert_name,
+        len(alerts),
+        alerts[0]["labels"],
+        alerts[0]["annotations"].get("message"),
+    )
+    return alerts
+
+
+def wait_for_alert_cleared(api, alert_name, timeout=600):
+    """
+    Wait for a Prometheus alert to disappear (no longer firing or pending).
+
+    Args:
+        api (PrometheusAPI): Prometheus API instance.
+        alert_name (str): Alert name to wait for clearing.
+        timeout (int): Seconds to wait for the alert to clear.
+
+    Raises:
+        AssertionError: If the alert is still present after ``timeout``.
+    """
+    alerts = api.wait_for_alert(name=alert_name, timeout=timeout, sleep=10)
+    assert not alerts, f"Alert '{alert_name}' did not clear within {timeout}s"
+    logger.info("Alert '%s' cleared successfully", alert_name)
+
+
 class PrometheusAPI(object):
     """
     This is wrapper class for Prometheus API.
@@ -398,6 +565,7 @@ class PrometheusAPI(object):
                 namespace=defaults.OCS_MONITORING_NAMESPACE,
                 threading_lock=self._threading_lock,
                 cluster_kubeconfig=kubeconfig,
+                skip_tls_verify=config.ENV_DATA.get("skip_tls_verify", False),
             )
             kube_data = ""
             with open(kubeconfig, "r") as kube_file:
@@ -648,7 +816,7 @@ class PrometheusAPI(object):
         # return actual result of the query
         return content["data"]["result"]
 
-    def wait_for_alert(self, name, state=None, timeout=1200, sleep=5):
+    def wait_for_alert(self, name, state=None, timeout=1200, sleep=5, min_count=1):
         """
         Search for alerts that have requested name and state.
 
@@ -663,6 +831,9 @@ class PrometheusAPI(object):
             timeout (int): Number of seconds for how long the alert should
                 be searched
             sleep (int): Number of seconds to sleep in between alert search
+            min_count (int): Minimum number of matching alerts required
+                before breaking out of the polling loop (only applies when
+                ``state`` is provided). Defaults to 1.
 
         Returns:
             list: List of alert records
@@ -689,9 +860,9 @@ class PrometheusAPI(object):
                     ]
                     logger.info(
                         f"Checking for {name} alerts with state {state}... "
-                        f"{len(alerts)} found"
+                        f"{len(alerts)} found (need {min_count})"
                     )
-                    if len(alerts) > 0:
+                    if len(alerts) >= min_count:
                         break
                 else:
                     # search for missing alerts, search is completed when
@@ -710,6 +881,33 @@ class PrometheusAPI(object):
                 time.sleep(sleep)
                 timeout -= sleep
         return alerts
+
+    def get_alerts_by_labels(self, alert_name, labels_dict):
+        """
+        Get alerts (pending or firing) matching a specific alert name and
+        label values.
+
+        Args:
+            alert_name (str): Alert name to match.
+            labels_dict (dict): Label key-value pairs to filter by
+                (e.g. {"source_bucket": "my-bucket"}).
+
+        Returns:
+            list: Matching alert records, empty if none found.
+        """
+        with self._cluster_context():
+            response = self.get(
+                "alerts",
+                payload={"silenced": False, "inhibited": False},
+            )
+            if not response.ok:
+                raise AlertingError(f"Request {response.request.url} failed")
+            return [
+                alert
+                for alert in response.json()["data"]["alerts"]
+                if alert["labels"].get("alertname") == alert_name
+                and all(alert["labels"].get(k) == v for k, v in labels_dict.items())
+            ]
 
     def check_alert_cleared(self, label, measure_end_time, time_min=120):
         """

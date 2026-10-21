@@ -20,15 +20,6 @@ def log_test_start(test_type, target_name, **kwargs):
     log = logging.getLogger(__name__)
 
     log.info(f"Starting {test_type} chaos for {target_name}")
-
-
-def log_execution_start(test_type, target_name):
-    """
-    Log standardized execution start information (simplified version).
-
-    Args:
-        test_type: Type of chaos test (e.g., "network chaos", "port chaos")
-        target_name: Target component/node name
-    """
-    log = logging.getLogger(__name__)
-    log.info(f"Starting {test_type} test for {target_name}")
+    if kwargs:
+        details = ", ".join(f"{k}={v}" for k, v in kwargs.items())
+        log.info(f"  Parameters: {details}")

@@ -1,0 +1,16 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: block-cloud-egress
+spec:
+  # Only targets noobaa-endpoint pods, not other pods in the namespace
+  podSelector:
+    matchLabels:
+      noobaa-s3: noobaa
+  policyTypes:
+    - Egress
+  # Allow egress only to pods within the cluster (any namespace).
+  # All external traffic (cloud storage, internet) is blocked.
+  egress:
+    - to:
+        - namespaceSelector: {}

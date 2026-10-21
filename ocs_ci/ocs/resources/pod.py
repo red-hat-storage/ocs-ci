@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import logging
 import os
 import re
+import shlex
 import yaml
 import tempfile
 import time
@@ -47,7 +48,6 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     exec_cmd,
 )
-from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.constants import CSI_RBD_ADDON_NODEPLUGIN_LABEL_420
 
@@ -594,9 +594,11 @@ class Pod(OCS):
         if isinstance(packages, list):
             packages = " ".join(packages)
 
-        # Detect OS inside pod
+        # oc rsh does not invoke a shell, so compound commands need sh -c.
+        # Use POSIX sh (not bash) so Alpine/busybox images can still run this.
         os_release = self.exec_cmd_on_pod(
-            "cat /etc/os-release || true", out_yaml_format=False
+            f"sh -c {shlex.quote('cat /etc/os-release || true')}",
+            out_yaml_format=False,
         )
 
         os_release_lower = os_release.lower() if os_release else ""
@@ -621,7 +623,7 @@ class Pod(OCS):
                 f"Unsupported OS for package install. /etc/os-release:\n{os_release}"
             )
 
-        self.exec_cmd_on_pod(cmd, out_yaml_format=False)
+        self.exec_cmd_on_pod(f"sh -c {shlex.quote(cmd)}", out_yaml_format=False)
 
     def copy_to_server(self, server, authkey, localpath, remotepath, user=None):
         """
@@ -1097,6 +1099,25 @@ def get_noobaa_db_pod():
     return get_primary_nb_db_pod()
 
 
+def get_noobaa_core_pods(namespace=None):
+    """
+    Fetch all NooBaa core pods in the cluster namespace.
+
+    Args:
+        namespace (str): Namespace to search. Defaults to the configured
+            cluster namespace.
+
+    Returns:
+        list: List of NooBaa core Pod objects
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    core_pods = get_pods_having_label(
+        label=constants.NOOBAA_CORE_POD_LABEL, namespace=namespace
+    )
+    return [Pod(**core_pod) for core_pod in core_pods]
+
+
 def get_noobaa_core_pod():
     """
     Fetches Noobaa core pod details
@@ -1105,12 +1126,40 @@ def get_noobaa_core_pod():
         Pod object: Noobaa core pod object
 
     """
-    noobaa_core = get_pods_having_label(
-        label=constants.NOOBAA_CORE_POD_LABEL,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
-    noobaa_core_pod = Pod(**noobaa_core[0])
-    return noobaa_core_pod
+    return get_noobaa_core_pods()[0]
+
+
+def get_active_core_pod(core_pods=None, namespace=None):
+    """
+    Identify the active (leader) NooBaa core pod from the leader-election lease.
+
+    The search is scoped to NooBaa-owned leases and the holderIdentity is
+    matched exactly or on the ``<pod-name>_`` prefix, so an unrelated lease
+    cannot be mistaken for the core leader.
+
+    Args:
+        core_pods (list): NooBaa core Pod objects to match against. Defaults to
+            the current core pods in the cluster.
+        namespace (str): Namespace containing the lease. Defaults to the
+            configured cluster namespace.
+
+    Returns:
+        Pod: The active (leader) Pod object, or None if no holder matches.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    core_pods = core_pods if core_pods is not None else get_noobaa_core_pods(namespace)
+    leases = OCP(kind="Lease", namespace=namespace).get().get("items", [])
+    for lease in leases:
+        if "noobaa" not in lease.get("metadata", {}).get("name", ""):
+            continue
+        holder = lease.get("spec", {}).get("holderIdentity")
+        if not holder:
+            continue
+        for core_pod in core_pods:
+            if holder == core_pod.name or holder.startswith(f"{core_pod.name}_"):
+                return core_pod
+    return None
 
 
 def get_noobaa_endpoint_pods():
@@ -1127,6 +1176,26 @@ def get_noobaa_endpoint_pods():
     )
     noobaa_endpoint_pods = [Pod(**pod) for pod in noobaa_endpoints]
     return noobaa_endpoint_pods
+
+
+def get_noobaa_pvpool_pods(backingstore_name, namespace=None):
+    """
+    Fetches the PVPool agent pods for a given NooBaa backingstore.
+
+    Args:
+        backingstore_name (str): Name of the PVPool backingstore
+        namespace (str): Namespace of the backingstore. Defaults to
+            the cluster namespace from ENV_DATA
+
+    Returns:
+        list: List of Pod objects for the given backingstore
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pod_data_list = get_pods_having_label(
+        label=f"pool={backingstore_name}", namespace=namespace
+    )
+    return [Pod(**pod_data) for pod_data in pod_data_list]
 
 
 def get_odf_operator_controller_manager(
@@ -1343,7 +1412,7 @@ def list_ceph_images(pool_name="rbd"):
     return ct_pod.exec_ceph_cmd(ceph_cmd=f"rbd ls {pool_name}", format="json")
 
 
-@retry(TypeError, tries=5, delay=2, backoff=1)
+@retry((TypeError, CommandFailed), tries=5, delay=2, backoff=1)
 def check_file_existence(pod_obj, file_path):
     """
     Check if file exists inside the pod
@@ -1356,14 +1425,14 @@ def check_file_existence(pod_obj, file_path):
     Returns:
         bool: True if the file exist, False otherwise
     """
-    try:
-        check_if_executable_in_path(pod_obj.exec_cmd_on_pod("which find"))
-    except CommandFailed:
-        pod_obj.install_packages("findutils")
-    ret = pod_obj.exec_cmd_on_pod(f'bash -c "find {file_path}"')
-    if re.search(file_path, ret):
-        return True
-    return False
+    existence_script = (
+        f"if [ -e {shlex.quote(file_path)} ]; then echo EXISTS; else echo MISSING; fi"
+    )
+    ret = pod_obj.exec_cmd_on_pod(
+        f"bash -c {shlex.quote(existence_script)}",
+        out_yaml_format=False,
+    )
+    return "EXISTS" in str(ret)
 
 
 def get_file_path(pod_obj, file_name):
@@ -1688,9 +1757,9 @@ def get_pods_having_label(
         "items"
     )
     if statuses:
-        for pod in pods:
-            if pod["status"]["phase"] not in statuses:
-                pods.remove(pod)
+        # Build a new list instead of removing from the list being iterated,
+        # which would skip consecutive non-matching pods.
+        pods = [pod for pod in pods if pod["status"]["phase"] in statuses]
     return pods
 
 
@@ -2238,15 +2307,119 @@ def get_plugin_provisioner_leader(interface, namespace=None, leader_type="provis
         for log_msg in log_list:
             # Check for last occurrence of leader message
             # This will be the first occurrence in reversed list.
-            if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
+            # Use case-insensitive comparison to handle both old (lowercase)
+            # and new structured-logging (Title-case) leaderelection messages.
+            log_msg_lower = log_msg.lower()
+            if (lease_renew_msg in log_msg_lower) or (lease_acq_msg in log_msg_lower):
                 curr_index = log_list.index(log_msg)
                 # Ensure that there is no non leader message logged after
                 # the last occurrence of leader message
-                if not any(non_leader_msg in msg for msg in log_list[:curr_index]):
+                if not any(
+                    non_leader_msg in msg.lower() for msg in log_list[:curr_index]
+                ):
                     leader_pod = pod
                 break
     assert leader_pod, "Couldn't identify plugin provisioner leader pod."
     logger.info(f"Plugin provisioner leader pod is {leader_pod.name}")
+    return leader_pod
+
+
+def get_odf_snapshotter_leader(
+    namespace=None,
+    label=constants.ODF_EXTERNAL_SNAPSHOTTER,
+    container="odf-external-snapshotter-operator",
+):
+    """
+    Get the snapshotter leader pod (leader-elected).
+
+    Resolves the leader by reading the Lease object whose name matches the
+    label-selector value (e.g. ``snapshot-controller-leader``).  The Lease
+    ``spec.holderIdentity`` field is the authoritative pod name — it is set
+    atomically by client-go and is always present regardless of whether the
+    pod logged any leader-election messages (uncontested wins produce no
+    success log line).
+
+    Falls back to log scanning (legacy behaviour) only when no matching
+    Lease exists in the namespace.
+
+    Args:
+        namespace (str): Namespace to look in. Defaults to the cluster namespace.
+        label (str): Pod label selector used to find the snapshotter pods
+            (e.g. ``"app=csi-snapshot-controller"``).
+        container (str): Container name used only in the log-scan fallback path.
+            Pass ``None`` to let ``oc logs`` pick the pod's default container.
+
+    Returns:
+        Pod: the current leader pod object
+
+    Raises:
+        AssertionError: when the leader pod cannot be identified
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    # ── Primary path: read the Lease holderIdentity ──────────────────────────
+    # The label value (the part after "=") is typically the Lease name
+    # (e.g. "app=csi-snapshot-controller" → lease "snapshot-controller-leader",
+    #  "app.kubernetes.io/name=odf-external-snapshotter-operator" → same pattern).
+    # We list all Leases in the namespace and pick the one whose holderIdentity
+    # matches one of the running pods, which avoids hardcoding Lease names.
+    pods = get_pods_having_label(label, namespace)
+    snapshotter_pods = [Pod(**pod) for pod in pods]
+    pod_names = {p.name for p in snapshotter_pods}
+
+    lease_ocp = OCP(kind=constants.LEASE, namespace=namespace)
+    try:
+        leases = lease_ocp.get().get("items", [])
+    except CommandFailed as e:
+        logger.warning(
+            f"Failed to list Lease objects in namespace '{namespace}': {e}; "
+            "falling back to log-scan leader detection."
+        )
+        leases = []
+    for lease in leases:
+        holder = lease.get("spec", {}).get("holderIdentity", "")
+        if holder in pod_names:
+            leader_pod = next(p for p in snapshotter_pods if p.name == holder)
+            logger.info(
+                f"Snapshotter leader pod identified via Lease "
+                f"'{lease['metadata']['name']}': {leader_pod.name}"
+            )
+            return leader_pod
+
+    # ── Fallback: legacy log-scan (kept for backwards compatibility) ─────────
+    logger.warning(
+        "No Lease found whose holderIdentity matches a snapshotter pod; "
+        "falling back to log-scan leader detection."
+    )
+    leader_pod = ""
+    non_leader_msgs = ("Failed to acquire lease", "failed to acquire")
+    leader_msgs = (
+        "Successfully acquired lease",
+        "Successfully renewed lease",
+        "became leader",
+    )
+
+    pods_log = {}
+    for pod in snapshotter_pods:
+        pods_log[pod] = get_pod_logs(
+            pod_name=pod.name,
+            container=container,
+            namespace=namespace,
+        ).split("\n")
+
+    for pod, log_list in pods_log.items():
+        log_list.reverse()
+        for log_msg in log_list:
+            if any(m in log_msg for m in leader_msgs):
+                curr_index = log_list.index(log_msg)
+                if not any(
+                    nl in msg for msg in log_list[:curr_index] for nl in non_leader_msgs
+                ):
+                    leader_pod = pod
+                break
+
+    assert leader_pod, "Couldn't identify snapshotter leader pod."
+    logger.info(f"Snapshotter leader pod is {leader_pod.name}")
     return leader_pod
 
 
@@ -2411,6 +2584,100 @@ def wait_for_noobaa_pods_running(timeout=300, sleep=10):
     sampler.wait_for_func_status(True)
 
 
+@config.run_with_provider_context_if_available
+def wait_for_noobaa_db_ready(timeout=300, sleep=10, stability_count=3):
+    """
+    Wait for all NooBaa DB pods to be container-ready (1/1) and stable.
+
+    Operations like endpoint scaling can trigger CNPG to rolling-restart
+    DB pods. This function first waits for the restart to begin (at least
+    one pod goes not-ready), then requires all DB pods to report ready for
+    multiple consecutive checks, ensuring the pods are genuinely stable
+    and not mid-rolling-restart.
+
+    The expected pod count is derived from the CNPG Cluster CR's
+    spec.instances field.
+
+    Args:
+        timeout (int): Overall timeout in seconds
+        sleep (int): Seconds between checks
+        stability_count (int): Number of consecutive ready checks required
+
+    """
+    if config.ENV_DATA.get("noobaa_external_pgsql"):
+        logger.info(
+            "NooBaa is configured with an external PostgreSQL DB; there is no "
+            "internal CNPG DB cluster to wait for. Skipping NooBaa DB readiness check."
+        )
+        return
+
+    namespace = config.ENV_DATA["cluster_namespace"]
+    stable_checks = 0
+
+    cnpg_cluster = OCP(
+        kind=constants.CNPG_CLUSTER_KIND,
+        resource_name=constants.NB_DB_CNPG_CLUSTER_NAME,
+        namespace=namespace,
+    )
+    expected_instances = cnpg_cluster.get()["spec"]["instances"]
+    logger.info(f"Expecting {expected_instances} NooBaa DB pod(s) from CNPG Cluster CR")
+
+    def _all_db_pods_ready():
+        pods = get_pods_having_label(
+            constants.NOOBAA_DB_LABEL_419_AND_ABOVE, namespace=namespace
+        )
+        if len(pods) < expected_instances:
+            logger.info(
+                f"Found {len(pods)} NooBaa DB pods, waiting for {expected_instances}"
+            )
+            return False
+        for pod_info in pods:
+            container_statuses = pod_info.get("status", {}).get("containerStatuses")
+            if not container_statuses or not container_statuses[0].get("ready"):
+                pod_name = pod_info.get("metadata", {}).get("name", "unknown")
+                logger.info(f"Pod {pod_name} container not ready: {container_statuses}")
+                return False
+        return True
+
+    # Wait for the rolling restart to begin before checking stability.
+    # Without this, the stability checks could pass before the CNPG
+    # operator even starts restarting pods.
+    restart_grace_timeout = 60
+    logger.info(f"Waiting up to {restart_grace_timeout}s for a DB pod restart to begin")
+    try:
+        for pods_ready in TimeoutSampler(
+            restart_grace_timeout, sleep, _all_db_pods_ready
+        ):
+            if not pods_ready:
+                logger.info("Detected DB pod restart, proceeding to stability checks")
+                break
+    except TimeoutExpiredError:
+        logger.info(
+            "No DB pod restart detected within the grace period, "
+            "proceeding to stability checks"
+        )
+
+    try:
+        for is_ready in TimeoutSampler(timeout, sleep, _all_db_pods_ready):
+            if is_ready:
+                stable_checks += 1
+                logger.info(f"NooBaa DB pods ready ({stable_checks}/{stability_count})")
+                if stable_checks >= stability_count:
+                    logger.info("NooBaa DB pods are stable and ready")
+                    return
+            else:
+                if stable_checks > 0:
+                    logger.warning(
+                        "NooBaa DB readiness check failed, resetting counter"
+                    )
+                stable_checks = 0
+    except TimeoutExpiredError:
+        raise TimeoutExpiredError(
+            f"NooBaa DB pods did not stabilize within {timeout}s. "
+            f"Achieved {stable_checks}/{stability_count} consecutive ready checks."
+        )
+
+
 def verify_pods_upgraded(
     old_images, selector, count=1, timeout=720, ignore_psql_12_verification=False
 ):
@@ -2437,20 +2704,26 @@ def verify_pods_upgraded(
     logger.info(info_message)
     start_time = time.time()
     selector_label, selector_value = selector.split("=")
+    last_upgrade_error = None
+    verified_pods = set()
     while True:
         pod_count = 0
         pod_images = {}
         try:
             pods = get_all_pods(namespace, [selector_value], selector_label)
             pods_len = len(pods)
-            logger.info(f"Found {pods_len} pod(s) for selector: {selector}")
+            logger.debug(f"Found {pods_len} pod(s) for selector: {selector}")
             if pods_len != count:
                 logger.warning(
                     f"Number of found pods {pods_len} is not as expected: " f"{count}"
                 )
             for pod in pods:
                 pod_obj = pod.get()
-                verify_images_upgraded(old_images, pod_obj, ignore_psql_12_verification)
+                pod_name = pod_obj.get("metadata", {}).get("name", "")
+                if pod_name not in verified_pods:
+                    verify_images_upgraded(
+                        old_images, pod_obj, ignore_psql_12_verification
+                    )
                 current_pod_images = get_images(pod_obj)
                 current_pod_image_ids = get_images(pod_obj, image_key="imageID")
                 for container_name, container_image in current_pod_images.items():
@@ -2477,13 +2750,19 @@ def verify_pods_upgraded(
                                     "Or it's caused by other discrepancy which needs to be investigated!"
                                     f"ImageID is: {current_pod_image_id}"
                                 )
+                verified_pods.add(pod_name)
                 pod_count += 1
         except CommandFailed as ex:
             logger.warning(
                 f"Failed when getting pods with selector {selector}." f"Error: {ex}"
             )
         except (NonUpgradedImagesFoundError, NotAllPodsHaveSameImagesError) as ex:
-            logger.warning(ex)
+            ex_str = str(ex)
+            if ex_str != last_upgrade_error:
+                logger.warning(ex)
+                last_upgrade_error = ex_str
+            else:
+                logger.debug(ex)
         check_timeout_reached(start_time, timeout, info_message)
         if pods_len != count:
             logger.error(f"Found pods: {pods_len} but expected: {count}!")
@@ -4184,6 +4463,29 @@ def fetch_rgw_pod_restart_count(namespace=None):
     return rgw_pod_restart_count
 
 
+def verify_mon_pod_running(mon_count):
+    """
+    Verify that all the mon pods are in Running state.
+    Args:
+        mon_count(int): Expected number of mon pods to which should be in running state
+
+    Returns:
+        bool: True if all mon pods are in running state, False otherwise
+    """
+    pod_objs = ocp.OCP(
+        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    ret = pod_objs.wait_for_resource(
+        condition=constants.STATUS_RUNNING,
+        selector=constants.MON_APP_LABEL,
+        resource_count=mon_count,
+        dont_allow_other_resources=True,
+        timeout=660,
+    )
+    logger.info(f"Waited for all mon pods to come up and running {ret}")
+    return ret
+
+
 def get_pod_used_memory_in_mebibytes(podname):
     """
     Get a pod's used memory in MiB
@@ -4583,6 +4885,48 @@ def get_ocs_client_operator_controller_manager(
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocs_client_operator_controller_manager = get_pods_having_label(label, namespace)
     return [Pod(**pod) for pod in ocs_client_operator_controller_manager]
+
+
+def wait_for_ocs_client_operator_ready(
+    namespace=None, timeout=600, sleep=15, previous_fingerprints=None
+):
+    """
+    Wait until ocs-client-operator manager is Running and ready.
+
+    A TLS 1.3 apply typically restarts the manager in place (same pod UID,
+    new startedAt). A later TLS 1.2 patch may reload in-process with no
+    fingerprint change. When ``previous_fingerprints`` is set, wait until
+    those fingerprints are gone; omit it when a roll is not required.
+
+    Args:
+        namespace (str): Namespace of the operator pod.
+        timeout (int): Seconds to wait.
+        sleep (int): Seconds between polls.
+        previous_fingerprints: Optional fingerprints from before a TLSProfile
+            apply; when set, wait until none remain.
+    """
+    from ocs_ci.helpers.tlsprofile_helper import _wait_for_tls_workload_ready
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    def _list_pods():
+        return (
+            get_pods_having_label(
+                constants.OCS_CLIENT_OPERATOR_LABEL,
+                namespace=namespace,
+                statuses=[constants.STATUS_RUNNING],
+            )
+            or []
+        )
+
+    _wait_for_tls_workload_ready(
+        _list_pods,
+        previous_fingerprints,
+        container_name_substr="manager",
+        workload_name="ocs-client-operator",
+        timeout=timeout,
+        sleep=sleep,
+    )
 
 
 def get_csi_addons_controller_manager_pod():

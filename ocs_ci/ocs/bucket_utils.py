@@ -8,6 +8,8 @@ import os
 import shlex
 import time
 
+from subprocess import TimeoutExpired
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import uuid4
 
@@ -39,8 +41,14 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 
 logger = logging.getLogger(__name__)
 
+# The noobaa CLI waits for the backingstore to become healthy by itself. It only needs
+# to stay alive long enough to create the CR, so cap its share of the create timeout
+PV_BACKINGSTORE_CLI_CREATE_TIMEOUT = 120
 
-def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
+
+def craft_s3_command(
+    cmd, mcg_obj=None, api=False, signed_request_creds=None, max_attempts=8
+):
     """
     Crafts the AWS CLI S3 command including the
     login credentials and command to be ran
@@ -50,6 +58,9 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         cmd: The AWSCLI command to run
         api: True if the call is for s3api, false if s3
         signed_request_creds: a dictionary containing AWS S3 creds for a signed request
+        max_attempts: The maximum number of AWSCLI retry attempts
+                     max_attempts=8 means a maximum of one minute
+                     additional waiting time in case of failure
 
     Returns:
         str: The crafted command, ready to be executed on the pod
@@ -60,7 +71,8 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     no_ssl = (
         "--no-verify-ssl"
         if (
-            (signed_request_creds and signed_request_creds.get("ssl")) is False
+            (signed_request_creds and signed_request_creds.get("ssl") is False)
+            or (mcg_obj and getattr(mcg_obj, "ssl", None) is False)
             or (
                 config.multicluster
                 and not config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
@@ -77,6 +89,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
             f'sh -c "AWS_CA_BUNDLE={constants.AWSCLI_CA_BUNDLE_PATH} '
             f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+            f"AWS_MAX_ATTEMPTS={max_attempts} "
             f"{region}"
             f"aws s3{api} "
             f"--endpoint={mcg_obj.s3_internal_endpoint} "
@@ -91,6 +104,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         base_command = (
             f'sh -c "AWS_ACCESS_KEY_ID={signed_request_creds.get("access_key_id")} '
             f'AWS_SECRET_ACCESS_KEY={signed_request_creds.get("access_key")} '
+            f"AWS_MAX_ATTEMPTS={max_attempts} "
             f'region={signed_request_creds.get("region")} '
             f"aws s3{api} "
             f'--endpoint={signed_request_creds.get("endpoint")} '
@@ -785,6 +799,93 @@ def cli_create_aws_sts_backingstore(
     )
 
 
+def cli_create_azure_sts_backingstore(
+    mcg_obj, cld_mgr, backingstore_name, uls_name, region
+):
+    """
+    Create a new backingstore of type azure-sts-blob using managed identity credentials
+
+    Args:
+        mcg_obj (MCG): Used for execution for the NooBaa CLI command
+        cld_mgr (CloudManager): holds Azure STS credentials for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    mcg_obj.exec_mcg_cmd(
+        f"backingstore create azure-sts-blob {backingstore_name} "
+        f"--target-blob-container {uls_name} "
+        f"--tenant-id {cld_mgr.azure_sts_client.tenant_id} "
+        f"--client-id {cld_mgr.azure_sts_client.client_id} "
+        f"--account-name {cld_mgr.azure_sts_client.account_name}",
+        use_yes=True,
+    )
+
+
+def oc_create_azure_sts_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new backingstore with Azure STS (managed identity) using oc create command
+
+    Args:
+        cld_mgr (CloudManager): holds Azure STS credentials for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+    bs_data["spec"] = {
+        "type": constants.BACKINGSTORE_TYPE_AZURE,
+        "azureBlob": {
+            "targetBlobContainer": uls_name,
+            "clientId": cld_mgr.azure_sts_client.client_id,
+            "secret": {
+                "name": cld_mgr.azure_sts_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
+        },
+    }
+    create_resource(**bs_data)
+
+
+def oc_create_gcp_sts_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new backingstore of type google-cloud-storage-sts via oc apply,
+    referencing the existing WIF secret from the default GCP STS backingstore
+
+    Args:
+        cld_mgr (CloudManager): holds GCP STS credentials for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    namespace = config.ENV_DATA["cluster_namespace"]
+    default_bs = OCP(
+        kind="backingstore",
+        namespace=namespace,
+        resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
+    ).get()
+    secret_name = default_bs["spec"]["googleCloudStorage"]["secret"]["name"]
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = namespace
+    bs_data["spec"] = {
+        "type": constants.BACKINGSTORE_TYPE_GOOGLE,
+        "googleCloudStorage": {
+            "targetBucket": uls_name,
+            "secret": {
+                "name": secret_name,
+                "namespace": namespace,
+            },
+        },
+    }
+    create_resource(**bs_data)
+
+
 def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
     """
     Create a new backingstore with GCP underlying storage using oc create command
@@ -992,7 +1093,73 @@ def cli_create_rgw_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
     )
 
 
-def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
+def oc_create_self_ref_mcg_backingstore(cld_mgr, backingstore_name, uls_name, region):
+    """
+    Create a new self-ref MCG backingstore using oc create command.
+    Self-ref MCG is an S3-compatible store backed by an MCG's own
+    bucket on the same cluster.
+
+    Args:
+        cld_mgr (CloudManager): holds secret for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): unused, kept for interface compatibility
+
+    """
+    bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
+    bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
+    bs_data["spec"] = {
+        "type": "s3-compatible",
+        "s3Compatible": {
+            "targetBucket": uls_name,
+            "endpoint": cld_mgr.self_ref_mcg_client.s3_internal_endpoint,
+            "signatureVersion": "v4",
+            "secret": {
+                "name": cld_mgr.self_ref_mcg_client.secret.name,
+                "namespace": bs_data["metadata"]["namespace"],
+            },
+        },
+    }
+    create_resource(**bs_data)
+
+
+def cli_create_self_ref_mcg_backingstore(
+    mcg_obj, cld_mgr, backingstore_name, uls_name, region
+):
+    """
+    Create a new self-ref MCG backingstore using the NooBaa CLI.
+    Self-ref MCG is an S3-compatible store backed by an MCG's own
+    bucket on the same cluster.
+
+    Args:
+        mcg_obj (MCG): MCG object for executing CLI commands
+        cld_mgr (CloudManager): holds self-ref MCG client credentials
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): unused, kept for interface compatibility
+
+    """
+    mcg_obj.exec_mcg_cmd(
+        f"backingstore create s3-compatible {backingstore_name} "
+        f"--endpoint {cld_mgr.self_ref_mcg_client.s3_internal_endpoint} "
+        f"--access-key {cld_mgr.self_ref_mcg_client.access_key} "
+        f"--secret-key {cld_mgr.self_ref_mcg_client.secret_key} "
+        f"--target-bucket {uls_name}",
+        use_yes=True,
+    )
+
+
+def oc_create_pv_backingstore(
+    backingstore_name,
+    vol_num,
+    size,
+    storage_class,
+    req_cpu=None,
+    req_mem=None,
+    lim_cpu=None,
+    lim_mem=None,
+):
     """
     Create a new backingstore with pv underlying storage using oc create command
 
@@ -1001,6 +1168,10 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
         vol_num (int): number of pv volumes
         size (int): each volume size in GB
         storage_class (str): which storage class to use
+        req_cpu (str): requested cpu value for the agent pods
+        req_mem (str): requested memory value for the agent pods
+        lim_cpu (str): cpu limit for the agent pods
+        lim_mem (str): memory limit for the agent pods
 
     """
     bs_data = templating.load_yaml(constants.PV_BACKINGSTORE_YAML)
@@ -1010,6 +1181,21 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     bs_data["spec"]["pvPool"]["numVolumes"] = vol_num
     if storage_class:
         bs_data["spec"]["pvPool"]["storageClass"] = storage_class
+    # spec.pvPool.resources is a VolumeResources: its cpu/memory keys override
+    # the performance profile's pvPoolResources for the agent pods, while its
+    # storage key sizes the PVC. requests.storage is always set above, which is
+    # required - the noobaa admission webhook rejects a backingstore whose
+    # volume size is unset or below the minimum.
+    if req_cpu:
+        bs_data["spec"]["pvPool"]["resources"]["requests"]["cpu"] = req_cpu
+    if req_mem:
+        bs_data["spec"]["pvPool"]["resources"]["requests"]["memory"] = req_mem
+    if lim_cpu or lim_mem:
+        limits = bs_data["spec"]["pvPool"]["resources"].setdefault("limits", {})
+        if lim_cpu:
+            limits["cpu"] = lim_cpu
+        if lim_mem:
+            limits["memory"] = lim_mem
     create_resource(**bs_data)
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
 
@@ -1024,6 +1210,7 @@ def cli_create_pv_backingstore(
     req_mem=None,
     lim_cpu=None,
     lim_mem=None,
+    timeout=600,
 ):
     """
     Create a new backingstore with pv underlying storage using noobaa cli command
@@ -1037,6 +1224,7 @@ def cli_create_pv_backingstore(
         req_mem (str): requested memory value
         lim_cpu (str): limit cpu value
         lim_mem (str): limit memory value
+        timeout (int): total time to wait for the backingstore to become healthy
 
     """
     cmd = (
@@ -1053,23 +1241,41 @@ def cli_create_pv_backingstore(
         cmd += f" --limit-cpu {lim_cpu}"
     if lim_mem:
         cmd += f" --limit-memory {lim_mem}"
-    mcg_obj.exec_mcg_cmd(cmd)
-    wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
+
+    # The noobaa CLI blocks until the backingstore is healthy, so on a slow cluster
+    # the subprocess timeout kills it and raises an opaque TimeoutExpired even though
+    # the backingstore CR itself was created. Keep the CLI on a short leash and let
+    # wait_for_pv_backingstore decide whether the creation actually succeeded.
+    cli_timeout = min(PV_BACKINGSTORE_CLI_CREATE_TIMEOUT, timeout // 2)
+    try:
+        mcg_obj.exec_mcg_cmd(cmd, timeout=cli_timeout)
+    except TimeoutExpired:
+        logger.warning(
+            f"The noobaa CLI did not return within {cli_timeout} seconds while waiting "
+            f"for backingstore {backingstore_name} to become healthy. Falling back to "
+            "polling the backingstore CR."
+        )
+    wait_for_pv_backingstore(
+        backingstore_name,
+        config.ENV_DATA["cluster_namespace"],
+        timeout=max(timeout - cli_timeout, 60),
+    )
 
 
-def wait_for_pv_backingstore(backingstore_name, namespace=None):
+def wait_for_pv_backingstore(backingstore_name, namespace=None, timeout=360):
     """
     wait for existing pv backing store to reach OPTIMAL state
 
     Args:
         backingstore_name (str): backingstore name
         namespace (str): backing store's namespace
+        timeout (int): time to wait for the backing store to become healthy
 
     """
 
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     sample = TimeoutSampler(
-        timeout=360,
+        timeout=timeout,
         sleep=15,
         func=check_pv_backingstore_status,
         backingstore_name=backingstore_name,
@@ -1077,10 +1283,67 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
     )
     if not sample.wait_for_func_status(result=True):
         raise TimeoutExpiredError(
-            f"Backing Store {backingstore_name} never reached OPTIMAL state"
+            f"Backing Store {backingstore_name} never reached OPTIMAL state. "
+            f"{get_pv_backingstore_unhealthy_reason(backingstore_name, namespace)}"
         )
     else:
         logger.info(f"Backing Store {backingstore_name} created successfully")
+
+
+def get_pv_backingstore_unhealthy_reason(backingstore_name, namespace=None):
+    """
+    Collect why a pv backing store hasn't become healthy.
+
+    Meant for enriching timeout messages, so it never raises - a failure to collect
+    the details is reported in the returned string instead.
+
+    Args:
+        backingstore_name (str): backingstore name
+        namespace (str): backing store's namespace
+
+    Returns:
+        str: The backing store phase and conditions, plus the phase and the
+            scheduling reason of every pv pool pod that isn't running
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    details = []
+    try:
+        status = (
+            OCP(
+                kind=constants.BACKINGSTORE,
+                namespace=namespace,
+                resource_name=backingstore_name,
+            )
+            .get()
+            .get("status", {})
+        )
+        details.append(f"Backing store phase: {status.get('phase')}")
+        for condition in status.get("conditions", []):
+            details.append(
+                f"condition {condition.get('type')}={condition.get('status')} "
+                f"({condition.get('reason')}): {condition.get('message')}"
+            )
+
+        pods = OCP(kind=constants.POD, namespace=namespace).get(
+            selector=f"pool={backingstore_name}"
+        )["items"]
+        for pod_data in pods:
+            pod_status = pod_data.get("status", {})
+            if pod_status.get("phase") == constants.STATUS_RUNNING:
+                continue
+            reasons = [
+                f"{cond.get('reason')}: {cond.get('message')}"
+                for cond in pod_status.get("conditions", [])
+                if cond.get("reason")
+            ]
+            details.append(
+                f"pod {pod_data['metadata']['name']} is "
+                f"{pod_status.get('phase')} - {'; '.join(reasons) or 'no reason given'}"
+            )
+    except Exception as ex:
+        details.append(f"Could not collect the backing store details: {ex}")
+    return " | ".join(details)
 
 
 def check_pv_backingstore_status(
@@ -1629,17 +1892,35 @@ def obc_io_create_delete(mcg_obj, awscli_pod, bucket_factory):
 
 
 def retrieve_verification_mode():
+    if config.DEPLOYMENT.get("disable_s3_ssl_verify"):
+        logger.info(
+            "S3 boto3 TLS verification disabled (DEPLOYMENT.disable_s3_ssl_verify)"
+        )
+        return False
+    base_domain = config.ENV_DATA.get("base_domain") or ""
     if (
-        (
-            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and config.ENV_DATA["deployment_type"] == "managed"
+        not config.DEPLOYMENT.get("force_s3_ssl_verify")
+        and config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and "qe.rh-ocs.com" in base_domain
+    ):
+        # Router CA (DEFAULT_INGRESS_CRT_LOCAL_PATH) and public CAs often do not
+        # validate the NooBaa S3 HTTPS endpoint chain on IBM Cloud QE (self-signed
+        # intermediates, or routes not signed by router-ca). Boto3 then fails with
+        # SSL: CERTIFICATE_VERIFY_FAILED. AWS CLI in-cluster uses SERVICE_CA mounts;
+        # the Jenkins runner only has local PEMs, so we skip verify on this domain.
+        logger.info(
+            "S3 boto3 TLS verification disabled for IBM Cloud QE base_domain "
+            "(non-matching S3 certificate chain). "
+            "Set DEPLOYMENT.force_s3_ssl_verify: true to enforce verification."
         )
-        or config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM
-        or (
-            config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
-            and config.DEPLOYMENT["custom_ssl_cert_provider"]
-            == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT
-        )
+        return False
+    # IBM Cloud managed: do not use verify=True here. Many QE clusters present
+    # S3 endpoints with a self-signed chain; MCG.__init__ already writes the
+    # cluster router CA to DEFAULT_INGRESS_CRT_LOCAL_PATH for boto3.
+    if config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM or (
+        config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
+        and config.DEPLOYMENT["custom_ssl_cert_provider"]
+        == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT
     ):
         verify = True
     elif (
@@ -2095,6 +2376,53 @@ def compare_bucket_object_list(
     except TimeoutExpiredError:
         logger.error(
             f"The compared buckets did not contain the same set of objects after {timeout} seconds"
+        )
+        return False
+
+
+def wait_for_expected_objects_in_bucket(
+    mcg_obj, object_names, bucket_name, timeout=600
+):
+    """
+    Wait for specific objects to appear in a bucket (subset check).
+
+    Unlike compare_bucket_object_list which checks for exact set equality
+    between two buckets, this function checks that a given set of object
+    names exists in the target bucket. Use this when multiple sources
+    replicate to the same target, making exact comparison impossible.
+
+    Args:
+        mcg_obj (MCG): An initialized MCG object
+        object_names (list): Object names expected to appear in the bucket
+        bucket_name (str): Bucket to check
+        timeout (int): The maximum time in seconds to wait for the objects
+            to appear
+
+    Returns:
+        bool: True if all expected objects are found within timeout,
+        False otherwise
+    """
+    expected = set(object_names)
+    try:
+        for bucket_objects in TimeoutSampler(
+            timeout,
+            30,
+            mcg_obj.s3_list_all_objects_in_bucket,
+            bucketname=bucket_name,
+        ):
+            found = {obj.key for obj in bucket_objects}
+            if expected.issubset(found):
+                logger.info(
+                    f"All {len(expected)} expected objects found in {bucket_name}"
+                )
+                return True
+            logger.debug(
+                f"Waiting for objects in {bucket_name}: " f"missing={expected - found}"
+            )
+    except TimeoutExpiredError:
+        logger.error(
+            f"Expected objects were not found in {bucket_name} "
+            f"after {timeout} seconds"
         )
         return False
 
@@ -3573,6 +3901,76 @@ def get_noobaa_bucket_replication_metrics_in_prometheus(
         )
 
 
+def get_bucket_mode(mcg_obj, bucket_name):
+    """
+    Get the current mode of a bucket from NooBaa.
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+
+    Returns:
+        str: The bucket mode (e.g. "OPTIMAL", "EXCEEDING_QUOTA")
+    """
+    bucket_info = mcg_obj.get_bucket_info(bucket_name)
+    if bucket_info:
+        logger.debug(f"Bucket info for {bucket_name}: {bucket_info}")
+        return bucket_info.get("mode", "UNKNOWN")
+    logger.warning(f"Bucket {bucket_name} not found in NooBaa system")
+    return "UNKNOWN"
+
+
+def wait_for_bucket_mode(mcg_obj, bucket_name, expected_mode, timeout=600, sleep=15):
+    """
+    Poll NooBaa until the bucket enters the expected mode or timeout.
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        expected_mode (str): Expected bucket mode (e.g. "EXCEEDING_QUOTA")
+            or "!OPTIMAL" to wait for any non-OPTIMAL mode
+            (UNKNOWN is excluded to avoid false positives on lookup failures)
+        timeout (int): Timeout in seconds (default: 600)
+        sleep (int): Poll interval in seconds (default: 15)
+
+    Returns:
+        str: The actual bucket mode once matched
+
+    Raises:
+        AssertionError: If the bucket does not reach the expected mode
+            within the timeout
+    """
+    check_not_optimal = expected_mode == "!OPTIMAL"
+    last_mode = "UNKNOWN"
+
+    try:
+        for mode in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_bucket_mode,
+            mcg_obj=mcg_obj,
+            bucket_name=bucket_name,
+        ):
+            last_mode = mode
+            if check_not_optimal and mode not in ("OPTIMAL", "UNKNOWN"):
+                logger.info(f"Bucket {bucket_name} entered non-OPTIMAL mode: {mode}")
+                return mode
+            elif not check_not_optimal and mode == expected_mode:
+                logger.info(f"Bucket {bucket_name} entered expected mode: {mode}")
+                return mode
+    except TimeoutExpiredError:
+        if check_not_optimal:
+            assert False, (
+                f"Bucket {bucket_name} is still OPTIMAL after "
+                f"{timeout}s (last mode: {last_mode})"
+            )
+        else:
+            assert False, (
+                f"Expected bucket mode {expected_mode} for {bucket_name}, "
+                f"got {last_mode} after {timeout}s"
+            )
+
+
 def get_bucket_status_value(mcg_obj, bucket_name, key):
     """
     Helper function returning specific bucket status value by key
@@ -3592,3 +3990,70 @@ def get_bucket_status_value(mcg_obj, bucket_name, key):
     op = bucket_status.split("\n")
     value = next(item.split(":")[1].strip() for item in op if key in item)
     return value
+
+
+def assert_store_phase_and_mode(
+    store_name, store_kind, expected_phase, expected_mode, mcg_obj, timeout=180
+):
+    """
+    Assert both the K8s CR PHASE and NooBaa mode of a store.
+
+    For backingstores, the mode is read from the "pools" section
+    of the NooBaa system info.
+    For namespacestores, the mode is read from the
+    "namespace_resources" section (resource name = store name).
+
+    Args:
+        store_name (str): Store resource name
+        store_kind (str): K8s kind - constants.BACKINGSTORE or
+            constants.NAMESPACESTORE
+        expected_phase (str): Expected K8s PHASE (e.g. "Ready", "Rejected")
+        expected_mode (str): Expected NooBaa mode (e.g. "OPTIMAL",
+            "AUTH_FAILED", "STORAGE_NOT_EXIST")
+        mcg_obj: MCG object for RPC calls
+        timeout (int): Timeout in seconds for each check
+
+    Raises:
+        TimeoutExpiredError: If the PHASE or mode does not reach
+            the expected value within the timeout
+
+    """
+    store_ocp = OCP(
+        kind=store_kind,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    assert store_ocp.wait_for_resource(
+        condition=expected_phase,
+        resource_name=store_name,
+        column="PHASE",
+        timeout=timeout,
+    ), f"{store_kind} {store_name} did not reach PHASE {expected_phase}"
+
+    rpc_name = store_name
+    rpc_collection = (
+        "pools" if store_kind == constants.BACKINGSTORE else "namespace_resources"
+    )
+
+    def _check_mode():
+        sysinfo = mcg_obj.read_system()
+        for item in sysinfo.get(rpc_collection, []):
+            if item.get("name") == rpc_name:
+                current_mode = item.get("mode")
+                logger.info(
+                    f"Current mode of {store_kind} {store_name}: {current_mode}"
+                )
+                return current_mode == expected_mode
+        logger.debug(f"{rpc_name} not found in {rpc_collection}")
+        return False
+
+    try:
+        for reached in TimeoutSampler(timeout, 10, _check_mode):
+            if reached:
+                logger.info(f"{store_kind} {store_name} reached mode {expected_mode}")
+                return
+    except TimeoutExpiredError:
+        logger.error(
+            f"{store_kind} {store_name} did not reach mode "
+            f"{expected_mode} within {timeout}s"
+        )
+        raise

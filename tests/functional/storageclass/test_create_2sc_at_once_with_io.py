@@ -7,10 +7,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ocs_version,
     green_squad,
+    ec_allowed,
 )
 from ocs_ci.ocs.cluster import (
     validate_compression,
     validate_replica_data,
+    is_ec_pool_supported,
 )
 from ocs_ci.ocs.exceptions import (
     PoolNotCompressedAsExpected,
@@ -31,17 +33,63 @@ class TestCreate2ScAtOnceWithIo(ManageTest):
     different replica and compression options
     """
 
+    @pytest.mark.parametrize(
+        argnames=["sc1_erasure_coded", "sc2_erasure_coded"],
+        argvalues=[
+            pytest.param(False, False),
+            pytest.param(
+                True,
+                False,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7971"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+            pytest.param(
+                False,
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7972"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+            pytest.param(
+                True,
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7973"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+        ],
+    )
     def test_new_sc_rep2_rep3_at_once(
-        self, storageclass_factory, pvc_factory, pod_factory
+        self,
+        sc1_erasure_coded,
+        sc2_erasure_coded,
+        storageclass_factory,
+        pvc_factory,
+        pod_factory,
     ):
         """
-
         This test function does below,
         *. Creates 2 Storage Class with creating new rbd pool replica 2 and 3 with compression
         *. Creates PVCs using new Storage Classes
         *. Mount PVC to an app pod
         *. Run IO on an app pod
-        *. Validate compression and replication
+        *. Validate compression and replication (skipped for EC pools)
 
         """
 
@@ -51,19 +99,25 @@ class TestCreate2ScAtOnceWithIo(ManageTest):
             interface=interface_type,
             new_rbd_pool=True,
             replica=2,
-            compression="aggressive",
+            compression="none" if sc1_erasure_coded else "aggressive",
+            erasure_coded=sc1_erasure_coded,
         )
 
         sc_obj2 = storageclass_factory(
             interface=interface_type,
             new_rbd_pool=True,
             replica=3,
-            compression="aggressive",
+            compression="none" if sc2_erasure_coded else "aggressive",
+            erasure_coded=sc2_erasure_coded,
         )
 
         replicas = dict()
         replicas[sc_obj1.name] = 2
         replicas[sc_obj2.name] = 3
+        ec_flags = {
+            sc_obj1.name: sc1_erasure_coded,
+            sc_obj2.name: sc2_erasure_coded,
+        }
         sc_obj_list = [sc_obj1, sc_obj2]
 
         log.info("Creating pvc and pods")
@@ -91,6 +145,8 @@ class TestCreate2ScAtOnceWithIo(ManageTest):
             )
 
         for sc_obj in sc_obj_list:
+            if ec_flags[sc_obj.name]:
+                continue
             cbp_name = sc_obj.get()["parameters"]["pool"]
             cbp_size = replicas[sc_obj.name]
             compression_result = validate_compression(cbp_name)

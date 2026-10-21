@@ -1,0 +1,30 @@
+name: gitleaks
+on: [pull_request, push, workflow_dispatch]
+jobs:
+  gitleaks_check:
+    name: "Gitleaks Secret Scan"
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.11"
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r .tag_name)
+          GITLEAKS_VERSION_NUM=${GITLEAKS_VERSION#v}
+          echo "Installing gitleaks ${GITLEAKS_VERSION}"
+          wget https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION_NUM}_linux_x64.tar.gz
+          tar -xzf gitleaks_${GITLEAKS_VERSION_NUM}_linux_x64.tar.gz
+          sudo mv gitleaks /usr/local/bin/
+          gitleaks version
+      - name: Install tox
+        run: |
+          python -m pip install --upgrade pip
+          pip install tox
+      - name: Run gitleaks via tox
+        run: tox -e gitleaks

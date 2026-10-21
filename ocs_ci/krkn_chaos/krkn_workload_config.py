@@ -31,18 +31,37 @@ class KrknWorkloadConfig:
         """
         self.config = config
 
-    def get_workloads(self) -> List[str]:
-        """
-        Get list of enabled workload types.
-
-        Returns:
-            list: List of workload type strings
-        """
+    def _get_configured_workloads(self) -> List[str]:
+        """Return workload types from krkn_config without PVC/bg-op adjustments."""
         krkn_config = self.config.ENV_DATA.get("krkn_config", {})
         workloads = krkn_config.get("workloads", ["VDBENCH"])
 
         if isinstance(workloads, str):
             return [workloads]
+        return list(workloads)
+
+    def get_workloads(self) -> List[str]:
+        """
+        Get list of enabled workload types.
+
+        Automatically adds VDBENCH when PVC-backed background operations are enabled
+        (e.g. aggressive_clone_operation) but no PVC workload type is configured.
+
+        Returns:
+            list: List of workload type strings
+        """
+        from ocs_ci.krkn_chaos.background_cluster_operations import (
+            bg_ops_require_pvc_workloads,
+        )
+
+        workloads = self._get_configured_workloads()
+        bg_config = self.get_background_cluster_operations_config()
+        if bg_ops_require_pvc_workloads(bg_config) and self.VDBENCH not in workloads:
+            log.info(
+                "Adding VDBENCH workload: PVC-backed background operations are "
+                "enabled but no PVC workload type is configured"
+            )
+            workloads.append(self.VDBENCH)
         return workloads
 
     def should_run_workload(self) -> bool:
@@ -72,8 +91,26 @@ class KrknWorkloadConfig:
         Returns:
             dict: VDBENCH configuration
         """
+        from ocs_ci.krkn_chaos.background_cluster_operations import (
+            MINIMAL_VDBENCH_CONFIG_FOR_BG_OPS,
+            bg_ops_require_pvc_workloads,
+        )
+
         krkn_config = self.config.ENV_DATA.get("krkn_config", {})
-        return krkn_config.get("vdbench_config", {})
+        vdbench_config = krkn_config.get("vdbench_config", {})
+        if vdbench_config:
+            return vdbench_config
+
+        if bg_ops_require_pvc_workloads(
+            self.get_background_cluster_operations_config()
+        ):
+            log.info(
+                "Using minimal vdbench_config defaults for PVC-backed background "
+                "operations"
+            )
+            return dict(MINIMAL_VDBENCH_CONFIG_FOR_BG_OPS)
+
+        return {}
 
     def get_rgw_config(self) -> Dict[str, Any]:
         """
@@ -94,6 +131,32 @@ class KrknWorkloadConfig:
         """
         krkn_config = self.config.ENV_DATA.get("krkn_config", {})
         return krkn_config.get("cnv_config", {})
+
+    def get_mcg_config(self) -> Dict[str, Any]:
+        """
+        Get MCG/NooBaa configuration.
+
+        Returns:
+            dict: MCG configuration
+        """
+        krkn_config = self.config.ENV_DATA.get("krkn_config", {})
+        return krkn_config.get("mcg_config", {})
+
+    def get_warp_config(self) -> Dict[str, Any]:
+        """
+        Get Warp MCG stress workload configuration.
+
+        Returns:
+            dict: Warp configuration
+        """
+        krkn_config = self.config.ENV_DATA.get("krkn_config", {})
+        warp_config = krkn_config.get("warp_config", {})
+
+        # Set default namespace to 'default' if not specified
+        if "namespace" not in warp_config:
+            warp_config["namespace"] = "default"
+
+        return warp_config
 
     def get_background_cluster_operations_config(self) -> Dict[str, Any]:
         """
@@ -149,6 +212,43 @@ class KrknWorkloadConfig:
         bg_ops_config = self.get_background_cluster_operations_config()
         return bg_ops_config.get("enabled_operations", [])
 
+    def is_cephx_keyrotation_enabled(self) -> bool:
+        """
+        Check if CephX key rotation background operations are enabled.
+
+        Returns:
+            bool: True if CephX key rotation is enabled in config
+        """
+        from ocs_ci.helpers.cephx_bg_ops_config import is_cephx_keyrotation_enabled
+
+        return is_cephx_keyrotation_enabled(
+            self.get_background_cluster_operations_config()
+        )
+
+    def get_cephx_keys(self) -> List[str]:
+        """
+        Get CephX key components to rotate in background operations.
+
+        Returns:
+            list: Component names (rook_daemon, csi, rbdMirrorPeer)
+        """
+        from ocs_ci.helpers.cephx_bg_ops_config import get_cephx_keys
+
+        return get_cephx_keys(self.get_background_cluster_operations_config())
+
+    def get_cephx_keyrotation_interval(self) -> int:
+        """
+        Get minimum interval between CephX key rotation iterations.
+
+        Returns:
+            int: Interval in seconds (default: 180)
+        """
+        from ocs_ci.helpers.cephx_bg_ops_config import get_cephx_keyrotation_interval
+
+        return get_cephx_keyrotation_interval(
+            self.get_background_cluster_operations_config()
+        )
+
     def is_parallel_verification_enabled(self) -> bool:
         """
         Check if parallel verification is enabled.
@@ -199,9 +299,39 @@ class KrknWorkloadConfig:
         vdbench_config = self.get_vdbench_config()
         return vdbench_config.get("workload_loop", 1)
 
+    def get_num_rbd_pvcs(self) -> int:
+        """
+        Get number of RBD (CephBlockPool) PVCs to create.
+
+        Falls back to ``num_pvcs_per_interface`` when ``num_rbd_pvcs`` is not set.
+
+        Returns:
+            int: Number of RBD PVCs (default: 4)
+        """
+        vdbench_config = self.get_vdbench_config()
+        if "num_rbd_pvcs" in vdbench_config:
+            return vdbench_config["num_rbd_pvcs"]
+        return vdbench_config.get("num_pvcs_per_interface", 4)
+
+    def get_num_cephfs_pvcs(self) -> int:
+        """
+        Get number of CephFS PVCs to create.
+
+        Falls back to ``num_pvcs_per_interface`` when ``num_cephfs_pvcs`` is not set.
+
+        Returns:
+            int: Number of CephFS PVCs (default: 4)
+        """
+        vdbench_config = self.get_vdbench_config()
+        if "num_cephfs_pvcs" in vdbench_config:
+            return vdbench_config["num_cephfs_pvcs"]
+        return vdbench_config.get("num_pvcs_per_interface", 4)
+
     def get_num_pvcs_per_interface(self) -> int:
         """
         Get number of PVCs to create per storage interface.
+
+        Deprecated: use :meth:`get_num_rbd_pvcs` and :meth:`get_num_cephfs_pvcs`.
 
         Returns:
             int: Number of PVCs per interface (default: 4)
@@ -235,6 +365,19 @@ class KrknWorkloadConfig:
         """
         vdbench_config = self.get_vdbench_config()
         return vdbench_config.get("use_encrypted_pvc", False)
+
+    def get_pv_encryption_keyrotation_schedule(self) -> str:
+        """
+        Cron schedule for PV encryption key rotation annotation on encrypted RBD StorageClass.
+
+        Applied as ``keyrotation.csiaddons.openshift.io/schedule`` when encrypted
+        RBD storage classes are created for Krkn VDBENCH workloads.
+
+        Returns:
+            str: Cron expression (default: every 3 minutes, matching prior hardcoded behavior)
+        """
+        vdbench_config = self.get_vdbench_config()
+        return vdbench_config.get("PV_ENCRYPTION_KEYROTATION_SCHEDULE", "*/3 * * * *")
 
     def get_block_workload_config(self) -> Dict[str, Any]:
         """
@@ -376,3 +519,5 @@ class KrknWorkloadConfig:
     VDBENCH = "VDBENCH"
     CNV_WORKLOAD = "CNV_WORKLOAD"
     RGW_WORKLOAD = "RGW_WORKLOAD"
+    MCG_WORKLOAD = "MCG_WORKLOAD"  # NooBaa/MCG S3 workload
+    WARP_WORKLOAD = "WARP_WORKLOAD"  # Warp MCG stress workload

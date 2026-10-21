@@ -19,6 +19,9 @@ from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import update_container_with_mirrored_image
+from ocs_ci.deployment.helpers.external_cluster_helpers import (
+    try_embed_rgw_ca_pem_in_mcg_cli_resources,
+)
 from ocs_ci.utility.ssl_certs import (
     create_ocs_ca_bundle,
     get_root_ca_cert,
@@ -49,19 +52,21 @@ def create_awscli_pod(scope_name=None, namespace=None, service_account=None):
     service_ca_data["metadata"]["namespace"] = namespace
     s3cli_label_k, s3cli_label_v = constants.S3CLI_APP_LABEL.split("=")
     service_ca_data["metadata"]["labels"] = {s3cli_label_k: s3cli_label_v}
-    log.info("Trying to create the AWS CLI service CA")
 
-    service_ca_configmap = create_resource(**service_ca_data)
-    OCP(namespace=namespace, kind="ConfigMap").wait_for_resource(
-        resource_name=service_ca_configmap.name, column="DATA", condition="1"
-    )
-
-    log.info("Creating the AWS CLI StatefulSet")
+    log.info("Creating the AWS CLI StatefulSet manifest (before service-ca ConfigMap)")
     awscli_sts_dict = templating.load_yaml(constants.S3CLI_MULTIARCH_STS_YAML)
     awscli_sts_dict["spec"]["template"]["spec"]["volumes"][0]["configMap"][
         "name"
     ] = service_ca_configmap_name
     awscli_sts_dict["metadata"]["namespace"] = namespace
+    try_embed_rgw_ca_pem_in_mcg_cli_resources(service_ca_data, awscli_sts_dict)
+
+    log.info("Trying to create the AWS CLI service CA")
+    service_ca_configmap = create_resource(**service_ca_data)
+    OCP(namespace=namespace, kind="ConfigMap").wait_for_resource(
+        resource_name=service_ca_configmap.name, column="DATA", condition="1"
+    )
+
     update_container_with_mirrored_image(awscli_sts_dict)
     update_container_with_proxy_env(awscli_sts_dict)
     _add_startup_commands_to_set_ca(awscli_sts_dict)
@@ -151,11 +156,19 @@ def _add_startup_commands_to_set_ca(awscli_sts_dict):
         f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
     )
 
-    # Download and concatenate an additional CA cert if needed
     if storagecluster_independent_check() and config.EXTERNAL_MODE.get("rgw_secure"):
-        startup_cmds.append(
-            f"wget -O - {config.EXTERNAL_MODE['rgw_cert_ca']} >> {constants.AWSCLI_CA_BUNDLE_PATH}"
-        )
+        if config.EXTERNAL_MODE.get("embedded_external_rgw_ca_pem"):
+            startup_cmds.append(
+                f"cat {constants.EXTERNAL_RGW_CA_CONTAINER_PATH} >> {constants.AWSCLI_CA_BUNDLE_PATH}"
+            )
+        elif config.EXTERNAL_MODE.get("rgw_cert_ca"):
+            startup_cmds.append(
+                f"wget -O - {config.EXTERNAL_MODE['rgw_cert_ca']} >> {constants.AWSCLI_CA_BUNDLE_PATH}"
+            )
+        else:
+            log.warning(
+                "rgw_secure is set but neither embedded RGW CA nor rgw_cert_ca URL is available"
+            )
     if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
         startup_cmds.append(
             f"cat /cert/ocs-ca-bundle.crt >> {constants.AWSCLI_CA_BUNDLE_PATH}"

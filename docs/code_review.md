@@ -77,14 +77,33 @@ You can also run all pre-commit hooks manually using:
    pre-commit run --all-files
 ```
 
-### Detect-secrets
+### Gitleaks Secret Scanning
 
-We are using IBM fork of [detect-secret](https://github.com/ibm/detect-secrets)
-to make sure we do not leak any secrets to public GitHub. This is handled both
-as a pre-commit hook and as a PR check triggered via a GitHub Action defined
-in `tox.ini` file.
+We use [Gitleaks](https://github.com/gitleaks/gitleaks) to prevent secrets
+from being committed to the repository. Gitleaks runs in "protect" mode, which
+means it only scans your staged changes (not the entire git history), making it
+fast and avoiding merge conflicts.
 
-As part of the pre-commit hook, we remove the `generated_at` line from the
-baseline file `.secrets.baseline`. This avoids unnecessary conflicts in PRs,
-so please make sure you either run the pre-commit hook or manually remove the
-`generated_at` line from the baseline.
+**How it works:**
+- Pre-commit hook: Scans only your staged changes before commit
+- CI/CD: Runs on every PR to check for secrets
+- If a secret is detected, the commit/PR is blocked
+
+**Prerequisites:**
+Gitleaks must be installed on your system before using pre-commit hooks.
+See [Getting Started](getting_started.md) (Prerequisites section) for installation instructions.
+
+**Suppressing False Positives:**
+If Gitleaks flags something that isn't a real secret (test data, examples, etc.),
+add an inline comment on that line:
+
+```python
+api_key = "test-key-not-real"  # gitleaks:allow
+```
+
+```yaml
+data:
+  token: PLACEHOLDER  # gitleaks:allow
+```
+
+The comment works in any language. Just add `# gitleaks:allow` at the end of the line.

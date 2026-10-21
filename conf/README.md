@@ -179,6 +179,9 @@ version.
 * `fdf_image_tag`: FDF image tag, used to retrieve fdf_pre_release_image_digest.
 * `fdf_pre_release_registry`: Registry where the pre-release image of FDF is hosted.
 * `fdf_pre_release_image_digest`: sha256 of the pre-release image of FDF to deploy.
+* `fdf_upgrade_registry`: Registry URL for the FDF upgrade catalog image (Default: cp.stg.icr.io/cp/df). If not specified during upgrade, falls back to fdf_pre_release_registry.
+* `fdf_upgrade_image_tag`: Image tag for the FDF upgrade catalog (e.g., v4.22). If not specified during upgrade, falls back to fdf_image_tag.
+* `fdf_upgrade_image_digest`: sha256 of the pre-release image for FDF upgrade. If not provided, automatically retrieved using skopeo.
 * `storage_cluster_override` - Dictionary with data which will allow you to dynamically override data in storageCluster CR.
 * `konflux_build` - Set to True if build is made by Konflux build system.
 * `enable_data_replication_separation` - Set to True to label worker nodes with `network.rook.io/mon-ip: <IPAddress>` and enable data replication separation.
@@ -189,8 +192,15 @@ version.
 * `hub_cluster_name` - Name of the Management cluster. Applicable for Agent deployments, where the hub cluster is pre-created.
 * `hub_cluster_path` - Path to the Management cluster directory to store auth_path, credentials files or cluster related files.
 * `partitioned_disk_primary_affinity` - Configure primaryAffinity for OSDs on partitioned disks, https://access.redhat.com/solutions/5807201 (default: "0.0")
-* `vsphere_vm_start_timeout` - Number of seconds to wait for vsphere vms to start up (default: 240)
+* `vsphere_vm_start_timeout` - Number of seconds to wait for vsphere vms to start up (default: 900)
 * `deploy_multiple_device_classes` - Deploy a second storageDeviceSet with a separate device class on LSO-backed vSphere clusters. When enabled, additional disks are attached to each worker node and a second device class (e.g. `localblock-1`) is added to the StorageCluster (Default: false)
+* `ec_default_pools` - Deploy ODF with Erasure Coding as the default pool type instead of replication. When true, the StorageCluster CR is patched with EC spec for block, file, and object pools. No user-facing replicated pools are created (Default: false)
+* `ec_data_chunks` - The k value for erasure coding — number of data chunks. Data is split into this many pieces. Requires `ec_default_pools: true` (Default: 2)
+* `ec_coding_chunks` - The m value for erasure coding — number of parity (coding) chunks. Determines how many simultaneous host failures the pool can tolerate. Requires `ec_default_pools: true` (Default: 1)
+* `ec_failure_domain` - CRUSH failure domain for EC pools. Each chunk is placed on a different unit of this domain. Use `host` for vSphere/bare metal. Requires k+m failure domain units. (Default: "host")
+* `fusion_access_deployment` - Enable IBM Fusion Access for SAN operator deployment after OCP is deployed. When `true`, the `openshift-fusion-access-operator` is installed from the `certified-operators` CatalogSource. (Default: false). Use with `conf/ocsci/fusion_access_deployment.yaml`.
+* `fusion_access_channel` - Subscription channel for the Fusion Access operator. (Default: `"stable-v1"`)
+* `fusion_access_skip_cr` - When `true`, skip creation of the `FusionAccess` CR after the operator CSV reaches `Succeeded`. Useful when the CR is managed externally or created manually. (Default: false)
 
 #### REPORTING
 
@@ -253,7 +263,10 @@ higher priority).
 * `skip_ocs_deployment` - Skip the OCS deployment step or not (Default: false)
 * `ocs_version` - Version of OCS that is being deployed
 * `acm_version` - Version of acm to be used for this run (applicable mostly to DR scenarios)
-* `vm_template` - VMWare template to use for RHCOS images
+* `vm_template` - VMWare template to use for RHCOS images (legacy single template, used as fallback)
+* `vm_template_overwrite` - VM template to overwirthe for early testing deployment e.g. rhcos-47.84.202103151537-0-vmware.x86_64
+* `vm_templates` - Dictionary of available RHCOS templates by major version for VMWare deployments (e.g., `{"9": "rhcos-9.6...", "10": "rhcos-10.2..."}`)
+* `rhcos_version` - Select which RHCOS major version to use from vm_templates dictionary (e.g., "9" or "10"). Defaults to "9" for OCP 4.x and "10" for OCP 5.0+. When set to "10" on OCP < 5.0, automatically configures `featureSet: "TechPreviewNoUpgrade"` and `osImageStream: "rhel-10"` in install-config.yaml. On OCP 5.0+, RHEL 10 is the default and no TechPreviewNoUpgrade or osImageStream is needed.
 * `fio_storageutilization_min_mbps` - Minimal write speed of FIO used in workload_fio_storageutilization
 * `TF_LOG_LEVEL` - Terraform log level
 * `TF_LOG_FILE` - Terraform log file
@@ -390,6 +403,7 @@ higher priority).
       * `infra_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "HighlyAvailable"
       * `disable_default_sources` - If set to true, default sources will be disabled on the hosted cluster
       * `auto_repair` - If set to true, auto repair of the nodes will be enabled on the hosted cluster
+      * `hcp_image` - The OCP image url to be used for the hcp cluster. The parameter hcp_image will take precedence over the parameter ocp_version to identify the image if both are given.
 * `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
 * `osd_maintenance_timeout` - is a duration in minutes that determines how long an entire failureDomain like region/zone/host will be held in noout
 * `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
@@ -420,13 +434,13 @@ higher priority).
 * `use_config_file` - If set to true the external-cluster-details-exporter python script will use a config file to setup the external cluster.
 * `configure_acm_to_import_mce` - If set to true while installing ACM, the configuration to discover and import MCE clusters will be done
 * `skip_disks_cleanup` - If set to true, skips disks cleanup on BareMetal and LSO cluster deployments.
+* `simulate_bluestore_label` - If set to true, simulates Ceph OSD BlueStore metadata on OSD disks before deploying a new ODF cluster. Used to test whether Ceph correctly detects existing BlueStore metadata. Intended for use only with LSO deployments (Default: false)
 * `wipe_devices_from_other_clusters` - If set to true, automatically wipes devices with old Ceph metadata during ODF deployment. This prevents conflicts when reusing disks that were previously part of a different Ceph cluster.
 * `product_type` - Differentiate between ODF or FDF deployments. Set via --product-type CLI option. Default value is 'odf'
 * `enable_infrastructure_management_for_agent` - To enable central infrastructure management service while installing dependencies for hosted cluster. This is used to create agent based hosted cluster.
 * `early_testing` - set to True if it's early testing of RHCOS and provide  release_img
     e.g. registry.ci.openshift.org/rhcos-devel/rhel4784:4.7.2
 * `release_img` - release image for early testing of RHCOS or multi arch setup
-* `vm_template_overwrite` - VM template to overwirthe for early testing deployment e.g. rhcos-47.84.202103151537-0-vmware.x86_64
 * `multi_arch` - Set to True if it's multi arch setup/deployment - it will use
     proper OCP release image for OCP deployment or you can set custom via
     release_img e.g. quay.io/openshift-release-dev/ocp-release:4.21.0-rc.1-multi.
@@ -442,6 +456,7 @@ higher priority).
 * `iscsi_target_password`- The password for the iSCSI target authentication.
 * `iscsi_target_iqn`- The iSCSI Qualified Name (IQN) identifying the iSCSI target.
 * `iscsi_setup` - Configure iscsi or not (Default: false). Necessory for FDF backed by SAN storage.
+* `enable_efi_secure_boot`  - (bool) Enable EFI Secure boot for vSphere UPI deployment (default: False)
 
 #### UPGRADE
 
@@ -460,6 +475,9 @@ example: <brew_registry_url>/rh-osbs/iib:565330
 * `upgrade_cnv_version` - cnv version to which we have to upgrade
 * `upgrade_metallb_version` - metallb version to which we have to upgrade
 * `upgrade_lso_version` - lso version to which want to upgrade
+* `custom_ramen_image` - Replace the downstream Ramen image for DR testing.
+    Set to true to use the default upstream image (quay.io/ramendr/ramen-operator:canary),
+    or set to a specific image URL to use that instead.
 
 #### AUTH
 
@@ -523,7 +541,11 @@ Configuration specific to external Ceph cluster
     * `key` - Admin keyring value used for the external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
 * `rgw_secure` - boolean parameter which defines if external Ceph cluster RGW is secured using SSL
-* `rgw_cert_ca` - url pointing to CA certificate used to sign certificate for RGW with SSL
+* `rgw_cert_ca` - URL for the RGW signing CA, used as a **fallback** when automatic certificate retrieval fails
+* For external Ceph **19.0+ (Squid and newer)**: ocs-ci runs ``ceph orch certmgr cert get cephadm_root_ca_cert`` via ``cephadm shell`` on the ``_admin`` node to fetch the cephadm root CA certificate
+* For external Ceph **18.x (Reef)**: ocs-ci fetches the certificate directly from the RGW server endpoint using ``openssl s_client``, since cephadm certmgr is not available in this version
+* For external Ceph **below 18.0**: Falls back to downloading from ``rgw_cert_ca`` URL
+* All methods fall back to ``rgw_cert_ca`` URL if the automatic fetch fails
 * `use_rbd_namespace` - boolean parameter to use RBD namespace in pool
 * `rbd_namespace` - Name of RBD namespace to use in pool
 
@@ -554,6 +576,7 @@ Configurations specific to disable/enable OCS components
 * `disable_noobaa` - Disable noobaa component deployment (Default: False)
 * `disable_cephfs` - Disable cephfs component deployment (Default: False)
 * `disable_blockpools` - Disable blockpools (rbd) component deployment (Default: False)
+* `disable_cephobjectstoreusers` - Disable cephObjectStoreUsers, this should be disabled together with RGW! (Default: False)
 
 ## Example of accessing config/default data
 

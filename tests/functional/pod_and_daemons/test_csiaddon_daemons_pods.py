@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     green_squad,
     skipif_ocs_version,
 )
+from ocs_ci.framework.pytest_customization.marks import skipif_cephfs_disabled
 from ocs_ci.ocs import (
     ocp,
     constants,
@@ -40,7 +41,12 @@ class TestCSIADDonDaemonset(ManageTest):
             ),
             pytest.param(
                 "cephfs",
-                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7501")],
+                marks=[
+                    tier1,
+                    green_squad,
+                    pytest.mark.polarion_id("OCS-7501"),
+                    skipif_cephfs_disabled,
+                ],
             ),
         ],
     )
@@ -121,6 +127,7 @@ class TestCSIADDonDaemonset(ManageTest):
                     tier1,
                     green_squad,
                     pytest.mark.polarion_id("OCS-7503"),
+                    skipif_cephfs_disabled,
                 ],
             ),
         ],
@@ -155,7 +162,12 @@ class TestCSIADDonDaemonset(ManageTest):
             ),
             pytest.param(
                 constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
-                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7502")],
+                marks=[
+                    tier1,
+                    green_squad,
+                    pytest.mark.polarion_id("OCS-7502"),
+                    skipif_cephfs_disabled,
+                ],
             ),
         ],
     )
@@ -189,7 +201,12 @@ class TestCSIADDonDaemonset(ManageTest):
             ),
             pytest.param(
                 constants.DAEMONSET_CSI_CEPHFS_CSI_ADDONS,
-                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7504")],
+                marks=[
+                    tier1,
+                    green_squad,
+                    pytest.mark.polarion_id("OCS-7504"),
+                    skipif_cephfs_disabled,
+                ],
             ),
         ],
     )
@@ -239,7 +256,12 @@ class TestCSIADDonDaemonset(ManageTest):
             ),
             pytest.param(
                 constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
-                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7505")],
+                marks=[
+                    tier1,
+                    green_squad,
+                    pytest.mark.polarion_id("OCS-7505"),
+                    skipif_cephfs_disabled,
+                ],
             ),
         ],
     )
@@ -299,7 +321,12 @@ class TestCSIADDonDaemonset(ManageTest):
             ),
             pytest.param(
                 constants.CSI_CEPHFS_ADDON_NODEPLUGIN_LABEL_420,
-                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7506")],
+                marks=[
+                    tier1,
+                    green_squad,
+                    pytest.mark.polarion_id("OCS-7506"),
+                    skipif_cephfs_disabled,
+                ],
             ),
         ],
     )
@@ -335,7 +362,12 @@ class TestCSIADDonDaemonset(ManageTest):
             ),
             pytest.param(
                 "cephfs",
-                marks=[tier1, green_squad, pytest.mark.polarion_id("OCS-7507")],
+                marks=[
+                    tier1,
+                    green_squad,
+                    pytest.mark.polarion_id("OCS-7507"),
+                    skipif_cephfs_disabled,
+                ],
             ),
         ],
     )

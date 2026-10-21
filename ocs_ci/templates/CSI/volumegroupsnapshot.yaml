@@ -1,0 +1,11 @@
+---
+apiVersion: groupsnapshot.storage.k8s.io/v1
+kind: VolumeGroupSnapshot
+metadata:
+  name: test-volume-group-snapshot
+spec:
+  volumeGroupSnapshotClassName: ocs-storagecluster-cephfs-groupsnapclass
+  source:
+    selector:
+      matchLabels:
+        app: vgs-test

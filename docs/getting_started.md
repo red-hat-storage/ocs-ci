@@ -8,15 +8,19 @@
 2. Following dependency packages for fedora/centos for successfully installing modules in virtualenv
    - gcc, git, openssl-devel, python3-devel or python specific version packages
    depends on Python version installed e.g. python39-devel (or similar packages for ubuntu).
-3. Configure AWS Account credentials when testing with AWS platforms,
+3. [Gitleaks](https://github.com/gitleaks/gitleaks) for secret scanning (required for pre-commit hooks)
+   - **Mac**: `brew install gitleaks`
+   - **Fedora**: `dnf install gitleaks`
+   - **Other Linux**: Download the latest release from [gitleaks/releases/latest](https://github.com/gitleaks/gitleaks/releases/latest), extract, and move to `/usr/local/bin/`
+4. Configure AWS Account credentials when testing with AWS platforms,
    check default section in `~/.aws/credentials` for access/secret key
    [check aws-configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
-4. oc client binary is installed on your localhost and binary is listed in $PATH
+5. oc client binary is installed on your localhost and binary is listed in $PATH
    (running oc version on terminal should display version > 3.11).
    Latest client can be downloaded from [oc-client](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/).
-5. For vSphere based installations, [terraform](https://learn.hashicorp.com/terraform/getting-started/install.html)
+6. For vSphere based installations, [terraform](https://learn.hashicorp.com/terraform/getting-started/install.html)
    and [jq]( https://stedolan.github.io/jq/download/) should be installed ( terraform version should be 0.11.13  )
-6. Installation of ovirt-engine-sdk-python requires `curl-config` and
+7. Installation of ovirt-engine-sdk-python requires `curl-config` and
    `libxml/xmlreader.h` (they are on Fedora, RHEL or CentOS provided by
    packages `libcurl-devel` and `libxml2-devel` respectively).
 
@@ -91,10 +95,12 @@ necessary dependencies
 
 4. Upgrade pip and setuptools with `pip install --upgrade pip setuptools`
 5. Install requirements with `pip install -r requirements.txt`
-6. Install pre-commit hooks to enforce commits sign-offs, flake8, black and more compliance
+6. **Install gitleaks** (if not already installed - see Prerequisites #3 above)
+7. Install pre-commit hooks to enforce commits sign-offs, flake8, black, secret scanning and more compliance
 
    * `pip install -r requirements-dev.txt`
    * `pre-commit install --hook-type pre-commit --hook-type commit-msg --install-hooks`
+   * **Note**: Pre-commit hooks will fail if gitleaks is not installed
 
 ## Initial Setup
 

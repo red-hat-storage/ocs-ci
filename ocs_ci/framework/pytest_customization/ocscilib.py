@@ -49,6 +49,10 @@ from ocs_ci.utility.utils import (
     create_stats_dir,
     create_kubeconfig,
 )
+from ocs_ci.deployment.helpers.hypershift_base import (
+    create_kubeadmin_password_file_hosted_cluster,
+    create_kubeconfig_file_hosted_cluster,
+)
 
 from ocs_ci.utility.memory import (
     get_consumed_ram,
@@ -273,6 +277,19 @@ def pytest_addoption(parser):
         ),
     )
     parser.addoption(
+        "--fdf-upgrade-registry",
+        dest="fdf_upgrade_registry",
+        help=(
+            "FDF upgrade registry for pre-release catalog image "
+            "(e.g. cp.stg.icr.io/cp/df)"
+        ),
+    )
+    parser.addoption(
+        "--fdf-upgrade-image-tag",
+        dest="fdf_upgrade_image_tag",
+        help=("FDF upgrade image tag for pre-release catalog (e.g. v4.22)"),
+    )
+    parser.addoption(
         "--acm-version",
         dest="acm_version",
         help="acm version(e.g. 2.8) to be used for the current run",
@@ -405,6 +422,13 @@ def pytest_configure(config):
     set_log_level(config)
     # Set the new factory for the logging of pytest
     set_log_record_factory()
+    # Ensure custom log levels are registered
+    from ocs_ci.framework.custom_logger import TEST_STEP, ASSERTION, AI_DATA
+    from ocs_ci.utility.utils import auto_configure_acm, auto_configure_submariner
+
+    logging.addLevelName(TEST_STEP, "TEST_STEP")
+    logging.addLevelName(ASSERTION, "ASSERTION")
+    logging.addLevelName(AI_DATA, "AI_DATA")
     # Somewhat hacky but this lets us differentiate between run-ci executions
     # and plain pytest unit test executions
     ocscilib_module = "ocs_ci.framework.pytest_customization.ocscilib"
@@ -416,6 +440,8 @@ def pytest_configure(config):
 
         if not (config.getoption("--help") or config.getoption("collectonly")):
             process_cluster_cli_params(config)
+            auto_configure_acm()
+            auto_configure_submariner()
             config_file = os.path.expanduser(
                 os.path.join(
                     ocsci_config.RUN["log_dir"],
@@ -637,7 +663,11 @@ def process_cluster_cli_params(config):
         or get_cli_param(config, "teardown", default=False)
         or get_cli_param(config, "kubeconfig")
     ):
-        create_kubeconfig(kubeconfig_path)
+        if ocsci_config.ENV_DATA.get("hosted_cluster_exists", False):
+            create_kubeconfig_file_hosted_cluster()
+            create_kubeadmin_password_file_hosted_cluster()
+        else:
+            create_kubeconfig(kubeconfig_path)
 
     # Importing here cause once the function is invoked we have already config
     # loaded, so this is OK to import once you sure that config is loaded.
@@ -716,6 +746,12 @@ def process_cluster_cli_params(config):
     upgrade_ocs_registry_image = get_cli_param(config, "upgrade_ocs_registry_image")
     if upgrade_ocs_registry_image:
         ocsci_config.UPGRADE["upgrade_ocs_registry_image"] = upgrade_ocs_registry_image
+    fdf_upgrade_registry = get_cli_param(config, "fdf_upgrade_registry")
+    if fdf_upgrade_registry:
+        ocsci_config.DEPLOYMENT["fdf_upgrade_registry"] = fdf_upgrade_registry
+    fdf_upgrade_image_tag = get_cli_param(config, "fdf_upgrade_image_tag")
+    if fdf_upgrade_image_tag:
+        ocsci_config.DEPLOYMENT["fdf_upgrade_image_tag"] = fdf_upgrade_image_tag
     ocsci_config.ENV_DATA["cluster_name"] = cluster_name
     ocsci_config.ENV_DATA["cluster_path"] = cluster_path
     get_cli_param(config, "collect-logs")
@@ -845,20 +881,20 @@ def pytest_collection_modifyitems(session, config, items):
                 f"\nTest name length: {length} characters (exceeds limit of {MAX_TEST_NAME_LENGTH})\n"
                 f"Test name: {test_name}\n"
                 f"Full path: {nodeid}\n"
-                f"{'-'*80}"
+                f"{'-' * 80}"
             )
 
         # Combine all details into one message
         full_error_message = (
-            f"\n{'='*80}\n"
+            f"\n{'=' * 80}\n"
             f"ERROR: Found {len(long_test_names)} test(s) with names exceeding "
             f"{MAX_TEST_NAME_LENGTH} characters.\n"
             f"Long test names cause issues with data upload and reporting.\n"
-            f"{'='*80}" + "".join(error_details) + f"\n{'='*80}\n"
+            f"{'=' * 80}" + "".join(error_details) + f"\n{'=' * 80}\n"
             f"Test collection failed: {len(long_test_names)} test(s) have names "
             f"exceeding {MAX_TEST_NAME_LENGTH} characters.\n"
             f"Please shorten the parametrization names or test function names.\n"
-            f"{'='*80}"
+            f"{'=' * 80}"
         )
 
         # Exit with the complete error message
@@ -1096,12 +1132,66 @@ def set_stop_flags_for_all_clusters(stop_requested, graceful_stop):
         ocsci_config.RUN["graceful_stop"] = graceful_stop
 
 
+def _check_disabled_components(item):
+    """
+    Check if test should be skipped based on disabled components.
+
+    This function automatically detects component requirements based on:
+    - Test file path (e.g., tests/functional/object/mcg/ -> requires NooBaa)
+    - Test markers (e.g., @pytest.mark.mcg -> requires NooBaa)
+
+    Args:
+        item: pytest test item
+
+    Raises:
+        pytest.skip: If test requires a disabled component
+    """
+    # Component path patterns - map directory patterns to component requirements
+    component_paths = {
+        "/object/mcg/": ("disable_noobaa", "NooBaa"),
+        "/object/rgw/": ("disable_rgw", "RGW"),
+        "/monitoring/prometheus/alerts/test_rgw": ("disable_rgw", "RGW"),
+        "/monitoring/prometheus/metrics/test_rgw": ("disable_rgw", "RGW"),
+        "/workloads/app/amq/test_rgw": ("disable_rgw", "RGW"),
+        "test_bucket": ("disable_noobaa", "NooBaa"),
+        "test_mcg": ("disable_noobaa", "NooBaa"),
+        "test_noobaa": ("disable_noobaa", "NooBaa"),
+        "cephfs": ("disable_cephfs", "CephFS"),
+    }
+
+    # Component markers - map pytest markers to component requirements
+    component_markers = {
+        "mcg": ("disable_noobaa", "NooBaa"),
+        "rgw": ("disable_rgw", "RGW"),
+    }
+
+    # Get test file path
+    test_path = str(item.fspath)
+
+    # Check if test path indicates a specific component
+    for path_pattern, (disable_key, component_name) in component_paths.items():
+        if path_pattern in test_path:
+            if ocsci_config.COMPONENTS.get(disable_key, False):
+                pytest.skip(f"Test requires {component_name} but it is disabled")
+
+    # Check test markers
+    for marker_name, (disable_key, component_name) in component_markers.items():
+        if item.get_closest_marker(marker_name):
+            if ocsci_config.COMPONENTS.get(disable_key, False):
+                pytest.skip(
+                    f"Test requires {component_name} but it is disabled (marker: {marker_name})"
+                )
+
+
 global consumed_ram_start_test
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     try:
+        # Check if test should be skipped due to disabled components
+        _check_disabled_components(item)
+
         # Check for stop files before starting the test
         stop_requested, graceful_stop, skip_message = check_stop_file()
 
@@ -1120,6 +1210,11 @@ def pytest_runtest_setup(item):
 
         # Capture test start time in UTC for must-gather --since-time option
         test_start_time = datetime.datetime.utcnow()
+
+        # Reset step counters for numbering per test
+        from ocs_ci.framework.custom_logger import reset_step_counts
+
+        reset_step_counts()
 
         log.debug(
             f"Consumed memory at the start of TC {item.nodeid}: {bytes2human(consumed_ram_start_test)}"

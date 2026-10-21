@@ -3,6 +3,53 @@ from jinja2 import Environment, FileSystemLoader
 from ocs_ci.ocs.constants import KRKN_SCENARIO_TEMPLATE
 
 
+# Signal name to number mapping for container kill scenarios
+SIGNAL_MAP = {
+    "SIGTERM": 15,
+    "SIGKILL": 9,
+    "SIGINT": 2,
+    "SIGHUP": 1,
+}
+
+
+def convert_signal_to_number(signal):
+    """Convert signal name to signal number.
+
+    Args:
+        signal (str or int): Signal name (e.g., "SIGKILL", "SIGTERM") or number (e.g., 9, "9", 15)
+
+    Returns:
+        int: Signal number as integer
+
+    Examples:
+        >>> convert_signal_to_number("SIGKILL")
+        9
+        >>> convert_signal_to_number("SIGTERM")
+        15
+        >>> convert_signal_to_number("9")
+        9
+        >>> convert_signal_to_number(9)
+        9
+    """
+    if isinstance(signal, int):
+        return signal
+    if isinstance(signal, str) and signal.isdigit():
+        return int(signal)
+    if isinstance(signal, str):
+        upper = signal.upper()
+        mapped = SIGNAL_MAP.get(upper)
+        if mapped is None:
+            without_sig = upper.removeprefix("SIG")
+            mapped = SIGNAL_MAP.get(f"SIG{without_sig}")
+        if mapped is not None:
+            return int(mapped)
+        raise ValueError(
+            f"Unsupported kill signal {signal!r}; "
+            f"expected one of {sorted(SIGNAL_MAP)} or a numeric signal"
+        )
+    raise ValueError(f"Unsupported kill signal type: {type(signal).__name__}")
+
+
 class TemplateWriter:
     """Generates YAML from Jinja2 templates."""
 
@@ -696,6 +743,7 @@ class ContainerScenarios:
         instance_count=1,
         wait_duration=300,
         scenarios=None,
+        filename="container_kill.yaml",
     ):
         """Generates container kill scenario YAML.
 
@@ -713,6 +761,7 @@ class ContainerScenarios:
             scenarios (list, optional): List of scenario dicts for unified chaos.
                 Each dict should have: name, namespace, label_selector, container_name,
                 kill_signal, count, expected_recovery_time
+            filename (str): Output YAML filename (default: container_kill.yaml).
 
         Returns:
             str: Path to the generated YAML file.
@@ -724,98 +773,32 @@ class ContainerScenarios:
         if scenarios is not None:
             # Generate unified scenarios
             if not scenarios:
-                # Build default scenarios directly
-                # OSD is placed at the end to ensure it executes last in container kill scenarios
-                default_namespace = namespace or "openshift-storage"
-                scenarios = [
-                    {
-                        "name": f"nodeplugin_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "CephFS Node Plugin",
-                    },
-                    {
-                        "name": f"mgr_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=rook-ceph-mgr",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "MGR",
-                    },
-                    {
-                        "name": f"rbd_nodeplugin_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=openshift-storage.rbd.csi.ceph.com-nodeplugin",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "RBD Node Plugin",
-                    },
-                    {
-                        "name": f"rgw_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=rook-ceph-rgw",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "RGW (RADOS Gateway)",
-                    },
-                    {
-                        "name": f"noobaa_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=noobaa",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "NooBaa",
-                    },
-                    {
-                        "name": f"cephfs_ctrlplugin_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "CephFS Control Plugin",
-                    },
-                    {
-                        "name": f"rbd_ctrlplugin_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "RBD Control Plugin",
-                    },
-                    {
-                        "name": f"osd_{kill_signal.lower()}_kill",
-                        "namespace": default_namespace,
-                        "label_selector": "app=rook-ceph-osd",
-                        "container_name": container_name,
-                        "kill_signal": kill_signal,
-                        "count": instance_count,
-                        "expected_recovery_time": wait_duration // 2,
-                        "description": "OSD",
-                    },
-                ]
+                # Delegate to ContainerScenarioHelper to avoid duplicating the
+                # component list (single source of truth in krkn_helpers.py).
+                # Late import to avoid circular dependency.
+                from ocs_ci.krkn_chaos.krkn_helpers import ContainerScenarioHelper
+
+                helper = ContainerScenarioHelper()
+                scenarios = helper.build_unified_scenarios(
+                    namespace=namespace or "openshift-storage",
+                    kill_signal=kill_signal,
+                    count=instance_count,
+                    expected_recovery_time=wait_duration // 2,
+                )
+            else:
+                # Convert kill_signal to number in each provided scenario
+                for scenario in scenarios:
+                    if "kill_signal" in scenario:
+                        scenario["kill_signal"] = convert_signal_to_number(
+                            scenario["kill_signal"]
+                        )
 
             config = {"scenarios": scenarios}
             return ContainerScenarios._create_container_scenario(
                 scenario_dir,
                 "openshift/container_kill.yml.j2",
                 config,
-                "container_kill.yaml",
+                filename,
             )
         else:
             # Original single scenario logic
@@ -826,10 +809,13 @@ class ContainerScenarios:
                     "Either pod_name or label_selector must be provided for single scenario"
                 )
 
+            # Convert signal name to number
+            kill_signal_number = convert_signal_to_number(kill_signal)
+
             config = {
                 "namespace": namespace,
                 "container_name": container_name,
-                "kill_signal": kill_signal,
+                "kill_signal": kill_signal_number,
                 "instance_count": instance_count,
                 "wait_duration": wait_duration,
                 **_get_pod_selector_config(pod_name, label_selector),
@@ -838,7 +824,7 @@ class ContainerScenarios:
                 scenario_dir,
                 "openshift/container_kill.yml.j2",
                 config,
-                "container_kill.yaml",
+                filename,
             )
 
     @staticmethod
@@ -918,7 +904,7 @@ class NodeScenarios:
     Supported cloud types:
         - aws: Amazon Web Services
         - azure: Microsoft Azure
-        - ibm: IBM Cloud
+        - ibmcloud: IBM Cloud
         - bm: BareMetal
         - vmware: VMware vSphere
 
@@ -938,7 +924,7 @@ class NodeScenarios:
     # Cloud type constants
     CLOUD_AWS = "aws"
     CLOUD_AZURE = "azure"
-    CLOUD_IBM = "ibm"
+    CLOUD_IBM = "ibmcloud"
     CLOUD_BAREMETAL = "bm"
     CLOUD_VMWARE = "vmware"
 
@@ -1001,7 +987,7 @@ class NodeScenarios:
 
         Args:
             scenario_dir (str): Directory to write the YAML file.
-            cloud_type (str): Cloud provider type (aws, azure, ibm, bm, vmware).
+            cloud_type (str): Cloud provider type (aws, azure, ibmcloud, bm, vmware).
             scenarios (list, optional): List of scenario dicts for multiple scenarios.
                 Each dict can have all the parameters below.
             actions (list, optional): List of actions for single scenario mode

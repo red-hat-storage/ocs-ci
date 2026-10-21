@@ -3,7 +3,7 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, ec_allowed
 from ocs_ci.framework.testlib import (
     E2ETest,
     tier2,
@@ -15,11 +15,12 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
+    is_ec_pool_supported,
 )
 from ocs_ci.ocs import flowtest
 
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -31,12 +32,46 @@ log = logging.getLogger(__name__)
 @skipif_proxy_cluster
 class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
     @pytest.mark.parametrize(
-        argnames=["replica", "compression"],
+        argnames=["replica", "compression", "erasure_coded"],
         argvalues=[
-            pytest.param(*[3, "aggressive"], marks=pytest.mark.polarion_id("OCS-2347")),
-            pytest.param(*[2, "aggressive"], marks=pytest.mark.polarion_id("OCS-2345")),
-            pytest.param(*[3, "none"], marks=pytest.mark.polarion_id("OCS-2346")),
-            pytest.param(*[2, "none"], marks=pytest.mark.polarion_id("OCS-2344")),
+            pytest.param(
+                *[3, "aggressive", False],
+                marks=pytest.mark.polarion_id("OCS-2347"),
+            ),
+            pytest.param(
+                *[2, "aggressive", False],
+                marks=pytest.mark.polarion_id("OCS-2345"),
+            ),
+            pytest.param(
+                *[3, "none", False],
+                marks=pytest.mark.polarion_id("OCS-2346"),
+            ),
+            pytest.param(
+                *[2, "none", False],
+                marks=pytest.mark.polarion_id("OCS-2344"),
+            ),
+            pytest.param(
+                *[3, "none", True],
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7959"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+            pytest.param(
+                *[2, "none", True],
+                marks=[
+                    ec_allowed,
+                    pytest.mark.polarion_id("OCS-7960"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
         ],
     )
     def test_new_sc_new_rbd_pool_e2e_wl(
@@ -46,21 +81,33 @@ class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
         pgsql_factory_fixture,
         replica,
         compression,
+        erasure_coded,
     ):
         """
         Testing workloads on new storage class with new cephblockpool
         """
+        logger.test_step(
+            f"Create storage class with new RBD pool: replica={replica}, compression={compression}, EC={erasure_coded}"
+        )
         interface_type = constants.CEPHBLOCKPOOL
         sc_obj = storageclass_factory(
             interface=interface_type,
             new_rbd_pool=True,
             replica=replica,
             compression=compression,
+            erasure_coded=erasure_coded,
         )
+        logger.info(
+            f"Created storage class: {sc_obj.name} (replica={replica}, compression={compression}, EC={erasure_coded})"
+        )
+
+        logger.test_step("Deploy AMQ workload with new storage class")
         bg_handler = flowtest.BackgroundOps()
         executor_run_bg_ios_ops = ThreadPoolExecutor(max_workers=5)
         self.amq, self.threads = amq_factory_fixture(sc_name=sc_obj.name)
+        logger.info(f"AMQ workload deployed with storage class: {sc_obj.name}")
 
+        logger.test_step("Deploy PostgreSQL workload in background")
         pgsql_workload = executor_run_bg_ios_ops.submit(
             bg_handler.handler,
             pgsql_factory_fixture,
@@ -73,14 +120,22 @@ class TestCreateNewScWithNeWRbDPoolE2EWorkloads(E2ETest):
         )
         bg_handler = flowtest.BackgroundOps()
         bg_ops = [pgsql_workload]
-        bg_handler.wait_for_bg_operations(bg_ops, timeout=3600)
-        # AMQ Validate the results
-        log.info("Validate message run completely")
-        for thread in self.threads:
-            thread.result(timeout=1800)
 
+        logger.test_step("Wait for PostgreSQL workload to complete")
+        bg_handler.wait_for_bg_operations(bg_ops, timeout=3600)
+        logger.info("PostgreSQL workload completed successfully")
+
+        logger.test_step("Validate AMQ message processing")
+        for idx, thread in enumerate(self.threads, 1):
+            logger.debug(f"Waiting for AMQ thread {idx}/{len(self.threads)}")
+            thread.result(timeout=1800)
+        logger.info(
+            f"All {len(self.threads)} AMQ message thread(s) completed successfully"
+        )
+
+        logger.test_step("Check cluster storage usage")
         cluster_used_space = get_percent_used_capacity()
-        log.info(
-            f" Cluster used percentage space with replica size {replica}, "
-            f"compression mode {compression}={cluster_used_space}"
+        logger.info(
+            f"Cluster used space: {cluster_used_space}% "
+            f"(replica={replica}, compression={compression}, EC={erasure_coded})"
         )

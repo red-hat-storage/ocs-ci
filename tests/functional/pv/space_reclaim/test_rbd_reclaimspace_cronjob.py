@@ -4,7 +4,7 @@ import pytest
 
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, ec_allowed
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -13,7 +13,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     skipif_hci_provider_and_client,
 )
-from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.cluster import CephCluster, is_ec_pool_supported
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
@@ -152,7 +152,13 @@ class TestRbdSpaceReclaim(ManageTest):
     @skipif_hci_provider_and_client
     @skipif_external_mode
     @pytest.mark.parametrize(
-        argnames=["replica", "compression", "volume_binding_mode", "pvc_status"],
+        argnames=[
+            "replica",
+            "compression",
+            "volume_binding_mode",
+            "pvc_status",
+            "erasure_coded",
+        ],
         argvalues=[
             pytest.param(
                 *[
@@ -160,6 +166,7 @@ class TestRbdSpaceReclaim(ManageTest):
                     "aggressive",
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
+                    False,
                 ],
                 marks=pytest.mark.polarion_id("OCS-4587"),
             ),
@@ -169,8 +176,27 @@ class TestRbdSpaceReclaim(ManageTest):
                     "none",
                     constants.IMMEDIATE_VOLUMEBINDINGMODE,
                     constants.STATUS_BOUND,
+                    False,
                 ],
                 marks=pytest.mark.polarion_id("OCS-4587"),
+            ),
+            pytest.param(
+                *[
+                    3,
+                    "none",
+                    constants.IMMEDIATE_VOLUMEBINDINGMODE,
+                    constants.STATUS_BOUND,
+                    True,
+                ],
+                marks=[
+                    ec_allowed,
+                    tier2,
+                    pytest.mark.polarion_id("OCS-7962"),
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
             ),
         ],
     )
@@ -180,20 +206,21 @@ class TestRbdSpaceReclaim(ManageTest):
         compression,
         volume_binding_mode,
         pvc_status,
+        erasure_coded,
         project_factory,
         storageclass_factory_class,
         pvc_factory,
     ):
         """
-        Test case to check that reclaim space job is created for rbd pvc with reclaim space annotation
+        Test case to check that reclaim space cronjob is created for rbd pvc
+        when the StorageClass carries the reclaimspace schedule annotation.
 
         Steps:
         1. Create a project
         2. Create a storage class with reclaim policy as delete
-        3. Create a pvc with above storage class
-        4. Run IO on the pod
-        5. Add reclaim space annotation to the pvc
-        6. Validate the reclaim space cronjob
+        3. Annotate the storage class with reclaimspace schedule
+        4. Create a pvc with above storage class
+        5. Validate the reclaim space cronjob is auto-created
         """
 
         # get random size for pvc
@@ -217,6 +244,15 @@ class TestRbdSpaceReclaim(ManageTest):
             compression=compression,
             volume_binding_mode=volume_binding_mode,
             pool_name="test-pool-cronjob",
+            erasure_coded=erasure_coded,
+        )
+
+        log.info(
+            f"Annotating StorageClass {sc_obj.name} with "
+            f"reclaimspace.csiaddons.openshift.io/schedule=@{schedule}"
+        )
+        OCP(kind=constants.STORAGECLASS).annotate(
+            f"reclaimspace.csiaddons.openshift.io/schedule=@{schedule}", sc_obj.name
         )
 
         pvc_obj = pvc_factory(
@@ -231,30 +267,19 @@ class TestRbdSpaceReclaim(ManageTest):
 
         helpers.wait_for_resource_state(pvc_obj, pvc_status)
 
-        log.info("add reclaimspace.csiaddons.openshift.io/schedule label to PVC ")
-        OCP(kind=constants.PVC, namespace=self.namespace).annotate(
-            f"reclaimspace.csiaddons.openshift.io/schedule=@{schedule}", pvc_obj.name
-        )
-
         pvc_to_chron_job_dict = self.wait_for_cronjobs(True, 60)
         assert pvc_to_chron_job_dict, "Reclaim space cron job does not exist"
 
-        chron_job_name = (
-            pvc_obj.get()
-            .get("metadata")
-            .get("annotations")
-            .get("reclaimspace.csiaddons.openshift.io/cronjob")
+        expected_cronjob_name = f"{pvc_obj.name}-reclaimspace"
+        expected_schedule = f"@{schedule}"
+        assert expected_cronjob_name in pvc_to_chron_job_dict, (
+            f"Expected cronjob {expected_cronjob_name} not found. "
+            f"Found: {list(pvc_to_chron_job_dict.keys())}"
         )
-        chron_job_schedule = (
-            pvc_obj.get()
-            .get("metadata")
-            .get("annotations")
-            .get(constants.RECLAIMSPACE_SCHEDULE_ANNOTATION)
+        assert pvc_to_chron_job_dict[expected_cronjob_name] == expected_schedule, (
+            f"Cronjob schedule mismatch: expected {expected_schedule}, "
+            f"got {pvc_to_chron_job_dict[expected_cronjob_name]}"
         )
-
-        assert (
-            pvc_to_chron_job_dict[chron_job_name] == chron_job_schedule
-        ), "Reclaim space cron job does not exist, or schedule is not correct"
 
     def wait_for_cronjobs(self, cronjobs_exist, timeout=60):
         """

@@ -2,17 +2,23 @@
 Helper functions specific for DR
 """
 
+import base64
 import json
 import logging
+import os
 import tempfile
 import time
 from datetime import datetime
 from time import sleep
 
+import pytest
+
 from novaclient.exceptions import ResourceNotFound
 
-from ocs_ci.deployment.helpers.hypershift_base import is_hosted_cluster
 
+import yaml
+
+from ocs_ci.deployment.fusion_data_foundation import FusionDataFoundationDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.cluster import is_hci_cluster
@@ -30,6 +36,7 @@ from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     get_ceph_tools_pod,
+    get_odf_snapshotter_leader,
     get_pods_having_label,
     wait_for_matching_pattern_in_pod_logs,
 )
@@ -40,12 +47,20 @@ from ocs_ci.ocs.node import (
     get_node_internal_ip,
     get_worker_nodes,
 )
+from ocs_ci.ocs.resources.storage_cluster import (
+    StorageCluster,
+    validate_serviceexport,
+    get_storage_cluster,
+)
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.utils import (
+    enable_literal_block_style,
     get_non_acm_cluster_config,
     get_active_acm_index,
     get_primary_cluster_config,
     get_passive_acm_index,
     enable_mco_console_plugin,
+    is_hostnetwork_enabled,
     set_recovery_as_primary,
     get_all_acm_indexes,
     get_non_acm_cluster_and_non_provider_cluster_config,
@@ -56,17 +71,23 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     CommandFailed,
+    clone_repo,
     run_cmd,
     exec_cmd,
     is_cluster_y_version_upgraded,
+    wait_for_machineconfigpool_status,
+    create_directory_path,
 )
 from ocs_ci.helpers.helpers import (
+    create_resource,
     run_cmd_verify_cli_output,
     find_cephblockpoolradosnamespace,
     find_cephfilesystemsubvolumegroup,
     create_unique_resource_name,
+    find_radosnamespace,
 )
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.odf_cli import ODFCliRunner
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +105,8 @@ def get_current_primary_cluster_name(
         namespace (str): Name of the namespace
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         discovered_apps (bool): If true then deployed workload is discovered_apps
-        resource_name (str): DRPC NAME Only Used for discovered apps
+        resource_name (str): DRPC resource name; required for discovered apps,
+            optional for AppSet (used to disambiguate when multiple DRPCs exist)
 
     Returns:
         str: Current primary cluster name
@@ -99,7 +121,7 @@ def get_current_primary_cluster_name(
         namespace = constants.DR_OPS_NAMESPACE
         drpc_data = DRPC(namespace=namespace, resource_name=resource_name).get()
     else:
-        drpc_data = DRPC(namespace=namespace).get()
+        drpc_data = DRPC(namespace=namespace, resource_name=resource_name or "").get()
     if drpc_data.get("spec").get("action") == constants.ACTION_FAILOVER:
         cluster_name = drpc_data["spec"]["failoverCluster"]
     else:
@@ -121,8 +143,8 @@ def get_current_secondary_cluster_name(
         namespace (str): Name of the namespace
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         discovered_apps (bool): If true then deployed workload is discovered_apps
-        resource_name (str): DRPC NAME Only Used for discovered apps
-
+        resource_name (str): DRPC resource name; required for discovered apps,
+            optional for AppSet (used to disambiguate when multiple DRPCs exist)
 
     Returns:
         str: Current secondary cluster name
@@ -142,8 +164,14 @@ def get_current_secondary_cluster_name(
             namespace=namespace, resource_name=resource_name
         ).drpolicy_obj.get()
     else:
-        primary_cluster_name = get_current_primary_cluster_name(namespace)
-        drpolicy_data = DRPC(namespace=namespace).drpolicy_obj.get()
+        primary_cluster_name = get_current_primary_cluster_name(
+            namespace,
+            workload_type=workload_type,
+            resource_name=resource_name,
+        )
+        drpolicy_data = DRPC(
+            namespace=namespace, resource_name=resource_name or ""
+        ).drpolicy_obj.get()
     config.switch_ctx(restore_index)
     for cluster_name in drpolicy_data["spec"]["drClusters"]:
         if not cluster_name == primary_cluster_name:
@@ -227,6 +255,7 @@ def failover(
     switch_ctx=None,
     discovered_apps=False,
     old_primary=None,
+    skip_odf_cli_validation=False,
 ):
     """
     Initiates Failover action to the specified cluster
@@ -239,6 +268,8 @@ def failover(
         switch_ctx (int): The cluster index by the cluster name
         discovered_apps (bool): True when cluster is failing over DiscoveredApps
         old_primary (str): Name of cluster where workload were running
+        skip_odf_cli_validation (bool): If True, skip ODF CLI validation
+            (e.g. when the primary cluster is down and unreachable)
 
     """
     restore_index = config.cur_index
@@ -271,11 +302,21 @@ def failover(
         f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_FAILEDOVER} phase"
     )
 
-    drpc_obj.wait_for_phase(
-        constants.STATUS_FAILEDOVER,
-        timeout=360,
-    )
+    drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER, timeout=360, sleep=10)
+
     config.switch_ctx(restore_index)
+
+    if skip_odf_cli_validation:
+        logger.info(
+            "Skipping ODF CLI validation for app-failover (primary cluster is down)"
+        )
+    else:
+        validate_application_odf_cli(
+            drpc_name=drpc_obj.resource_name,
+            namespace=namespace,
+            dr_action="app-failover",
+            retries=10,
+        )
 
 
 def relocate(
@@ -290,6 +331,7 @@ def relocate(
     multi_ns=False,
     workload_instances_shared=None,
     vm_auto_cleanup=False,
+    skip_odf_cli_validation=False,
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -306,6 +348,7 @@ def relocate(
         multi_ns (bool): Multi Namespace
         workload_instances_shared (list): List of workloads tied to a single DRPC using Shared Protection type
         vm_auto_cleanup (bool): If true, cleanup will not be initiated after relocate action, False otherwise.
+        skip_odf_cli_validation (bool): If True, skip ODF CLI validation
 
     """
     restore_index = config.cur_index
@@ -340,7 +383,7 @@ def relocate(
     relocate_condition = constants.STATUS_RELOCATED
     if discovered_apps:
         relocate_condition = constants.STATUS_RELOCATING
-    drpc_obj.wait_for_phase(relocate_condition)
+    drpc_obj.wait_for_phase(relocate_condition, timeout=1200, sleep=15)
 
     if multi_ns:
         logger.info("Doing Cleanup Operations")
@@ -381,17 +424,72 @@ def relocate(
                     skip_resource_deletion_verification=True,
                 )
 
+    if skip_odf_cli_validation:
+        logger.info("Skipping ODF CLI validation for app-relocate")
+    else:
+        validate_application_odf_cli(
+            drpc_name=drpc_obj.resource_name,
+            namespace=namespace,
+            dr_action="app-relocate",
+            retries=10,
+        )
+
     config.switch_ctx(restore_index)
 
 
+def check_rbd_mirror_running(namespace=None):
+    """
+    Check if the rbd-mirror daemon deployment is running with at least one ready replica.
+    Ceph HEALTH_OK does not reflect rbd-mirror daemon absence, so this explicit
+    check is needed to catch silent failures before tests run.
+
+    Args:
+        namespace (str): Namespace to check in.
+            Defaults to config.ENV_DATA['cluster_namespace'].
+
+    Returns:
+        bool: True if rbd-mirror deployment has ready replicas
+
+    Raises:
+        UnexpectedDeploymentConfiguration: If the rbd-mirror deployment is
+            not found or not running
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    dep_ocp = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+    try:
+        dep_data = dep_ocp.get(resource_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT)
+    except CommandFailed:
+        raise UnexpectedDeploymentConfiguration(
+            f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} deployment not found in {namespace}"
+        )
+    spec_replicas = dep_data.get("spec", {}).get("replicas") or 0
+    ready_replicas = dep_data.get("status", {}).get("readyReplicas") or 0
+    if spec_replicas < 1 or ready_replicas < 1:
+        raise UnexpectedDeploymentConfiguration(
+            f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} is not running: "
+            f"spec.replicas={spec_replicas}, status.readyReplicas={ready_replicas}"
+        )
+    logger.info(
+        f"{constants.RBD_MIRROR_DAEMON_DEPLOYMENT} is running: "
+        f"replicas={spec_replicas}, readyReplicas={ready_replicas}"
+    )
+    return True
+
+
 def check_mirroring_status_ok(
-    replaying_images=None, cephblockpoolradosns=None, storageclient_uid=None
+    replaying_images=None,
+    replaying_groups=None,
+    cephblockpoolradosns=None,
+    storageclient_uid=None,
 ):
     """
-    Check if mirroring status has health OK and expected number of replaying images
+    Check if mirroring status has health OK and expected number of replaying images and groups.
 
     Args:
         replaying_images (int): Expected number of images in replaying state
+        replaying_groups (int): Expected number of groups in replaying state.
+            Applicable when CG is enabled.
         cephblockpoolradosns (string): The name of the cephblockpoolradosnamespace
         storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
             Applicable for provider - client configuration.
@@ -415,8 +513,20 @@ def check_mirroring_status_ok(
         if not cephbpradosns:
             raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
 
-        if "ocs-storagecluster-cephblockpool" not in cephbpradosns:
-            cephbpradosns = "ocs-storagecluster-cephblockpool-" + cephbpradosns
+        if (
+            "ocs-storagecluster-cephblockpool" not in cephbpradosns
+            and "replicated-metadata-pool" not in cephbpradosns
+        ):
+            cephblockpool_rns_names = [
+                cephbprns_data["metadata"]["name"]
+                for cephbprns_data in ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOLRADOSNS,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                ).get()["items"]
+            ]
+            cephbpradosns = list(
+                filter(lambda x: f"-{cephbpradosns}" in x, cephblockpool_rns_names)
+            )[0]
 
         logger.info(f"Got cephblockpoolradosnamespace {cephbpradosns}")
 
@@ -429,7 +539,17 @@ def check_mirroring_status_ok(
         )
     else:
         if ocs_version >= version.VERSION_4_19:
-            cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
+            # The name of builtin-implicit cephblockpoolradosnamespace is different in EC cluster and non EC cluster
+            cephblockpool_rns_names = [
+                cephbprns_data["metadata"]["name"]
+                for cephbprns_data in ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOLRADOSNS,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                ).get()["items"]
+            ]
+            cephbpradosns = list(
+                filter(lambda x: "-builtin-implicit" in x, cephblockpool_rns_names)
+            )[0]
             cbp_obj = ocp.OCP(
                 kind=constants.CEPHBLOCKPOOLRADOSNS,
                 namespace=config.ENV_DATA["cluster_namespace"],
@@ -487,16 +607,32 @@ def check_mirroring_status_ok(
                 )
             return False
 
+    if is_cg_enabled():
+        if replaying_groups is not None:
+            current_replaying_groups = mirroring_status.get("group_states", {}).get(
+                "replaying"
+            )
+            if current_replaying_groups != replaying_groups:
+                logger.warning(
+                    f"Unexpected replaying groups. Current: {current_replaying_groups}, "
+                    f"expected: {replaying_groups}"
+                )
+                return False
+
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
+def wait_for_mirroring_status_ok(
+    replaying_images=None, replaying_groups=None, timeout=900
+):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
-    images for each of the ODF cluster
+    images and groups for each of the ODF cluster.
 
     Args:
         replaying_images (int): Expected number of images in replaying state
+        replaying_groups (int): Expected number of groups in replaying state.
+            Applicable when CG is enabled.
         timeout (int): time in seconds to wait for mirroring status reach OK
 
     Returns:
@@ -506,6 +642,11 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
         TimeoutExpiredError: In case of unexpected mirroring status
 
     """
+    if config.ENV_DATA.get("skip_mirroring_status_check"):
+        logger.warning(
+            "Skipping mirroring status check (skip_mirroring_status_check is set)"
+        )
+        return True
     restore_index = config.cur_index
     dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
     if dr_cluster_relations:
@@ -522,6 +663,7 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=900):
             sleep=5,
             func=check_mirroring_status_ok,
             replaying_images=replaying_images,
+            replaying_groups=replaying_groups,
         )
         if not sample.wait_for_func_status(result=True):
             error_msg = (
@@ -605,6 +747,61 @@ def check_mirroring_status_for_custom_pool(
                 raise ValueError(
                     f"Replaying count too low: image_states={img}, states={state} for pool {custom_pool_name}"
                 )
+
+    config.switch_ctx(restore_index)
+    return True
+
+
+def verify_custom_pool_image_isolation(pool_name):
+    """
+    Verify that RBD images in a custom pool are isolated from the
+    default pool on both managed clusters.
+
+    Checks on each managed cluster that:
+    - The custom pool contains at least one RBD image
+    - No images are shared between the custom pool and the default pool
+
+    Args:
+        pool_name (str): Name of the custom CephBlockPool to verify
+
+    Returns:
+        bool: True if isolation checks pass on both clusters
+
+    Raises:
+        AssertionError: If no images found in custom pool or if
+            images overlap between pools
+
+    """
+    from ocs_ci.ocs.resources.pod import list_ceph_images
+
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    for cluster in managed_clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+        cluster_name = config.ENV_DATA.get("cluster_name")
+
+        custom_images = list_ceph_images(pool_name=pool_name)
+        default_images = list_ceph_images(pool_name=constants.DEFAULT_CEPHBLOCKPOOL)
+        logger.info(
+            f"Cluster {cluster_name}: custom pool {pool_name}"
+            f" images={custom_images},"
+            f" default pool images={default_images}"
+        )
+        assert custom_images, (
+            f"No RBD images found in custom pool {pool_name}" f" on {cluster_name}"
+        )
+        overlap = set(custom_images) & set(default_images)
+        assert not overlap, (
+            f"Pool isolation violated on {cluster_name}:"
+            f" images {overlap} found in both"
+            f" {pool_name} and {constants.DEFAULT_CEPHBLOCKPOOL}"
+        )
+        logger.info(
+            f"Pool isolation verified on {cluster_name}:"
+            f" {len(custom_images)} images in {pool_name},"
+            f" no overlap with default pool"
+        )
 
     config.switch_ctx(restore_index)
     return True
@@ -987,6 +1184,7 @@ def wait_for_replication_resources_deletion(
     discovered_apps=False,
     vrg_name="",
     skip_vrg_check=False,
+    workload_cleanup=False,
 ):
     """
     Wait for replication resources to be deleted
@@ -999,6 +1197,8 @@ def wait_for_replication_resources_deletion(
         discovered_apps (bool): If true then deployed workload is discovered_apps
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
+        workload_cleanup (bool): Set to True during final workload teardown.
+            For CephFS workloads, wait for all VolumeSnapshots to be deleted.
 
     Raises:
         TimeoutExpiredError: In case replication resources not deleted
@@ -1064,6 +1264,7 @@ def wait_for_replication_resources_deletion(
                 kind=constants.VOLUME_GROUP_REPLICATION,
                 namespace=namespace,
                 timeout=timeout,
+                resource_name=vrg_name,
                 should_exist=False,
             )
 
@@ -1075,12 +1276,20 @@ def wait_for_replication_resources_deletion(
                 timeout=timeout,
             )
 
+        if "cephfs" in namespace and workload_cleanup:
+            wait_for_resource_count(
+                kind=constants.VOLUMESNAPSHOT,
+                namespace=namespace,
+                expected_count=0,
+                timeout=timeout,
+            )
+
 
 def wait_for_all_resources_creation(
     pvc_count,
     pod_count,
     namespace,
-    timeout=900,
+    timeout=1800,
     skip_replication_resources=False,
     discovered_apps=False,
     vrg_name="",
@@ -1134,7 +1343,7 @@ def wait_for_all_resources_creation(
 
 def wait_for_all_resources_deletion(
     namespace,
-    timeout=1000,
+    timeout=2000,
     discovered_apps=False,
     workload_cleanup=False,
     vrg_name="",
@@ -1147,10 +1356,10 @@ def wait_for_all_resources_deletion(
         namespace (str): the namespace of the workload
         timeout (int): time in seconds to wait for resource deletion
         discovered_apps (bool): If true then deployed workload is discovered_apps
-        workload_cleanup (bool): Set to True when performing final workload cleanup.
-            If True:
-            - PVC and PV deletion will always be checked
-            - Replication resources state check will be skipped.
+        workload_cleanup (bool): Set to True when performing final workload
+            cleanup. When True, waits for PVC and PV deletion, skips
+            replication resource state checks, and for CephFS workloads
+            waits for all VolumeSnapshots to be deleted.
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
 
@@ -1187,7 +1396,13 @@ def wait_for_all_resources_deletion(
 
     check_state = not workload_cleanup
     wait_for_replication_resources_deletion(
-        namespace, timeout, check_state, discovered_apps, vrg_name, skip_vrg_check
+        namespace,
+        timeout,
+        check_state,
+        discovered_apps,
+        vrg_name,
+        skip_vrg_check,
+        workload_cleanup=workload_cleanup,
     )
 
     if workload_cleanup or "cephfs" not in namespace:
@@ -1304,6 +1519,7 @@ def get_backend_volumes_for_pvcs(namespace):
             elif pvc_obj.backed_sc in [
                 constants.DEFAULT_STORAGECLASS_CEPHFS,
                 constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS,
+                constants.CUSTOM_CEPHFS_STORAGECLASS,
             ]:
                 backend_volume = pvc_obj.get_cephfs_subvolume_name
 
@@ -1356,7 +1572,7 @@ def verify_backend_volume_deletion(
         cephbpradosns = (
             cephblockpoolradosns
             or config.ENV_DATA.get("radosnamespace_name", None)
-            or find_cephblockpoolradosnamespace(storageclient_uid=storageclient_uid)
+            or find_radosnamespace(storageclient_uid=storageclient_uid)
         )
 
         if not cephbpradosns:
@@ -1435,24 +1651,40 @@ def get_all_drpolicy():
     config.switch_acm_ctx()
     return_drpolicy_list = []
     current_managed_clusters_list = []
-    acm_hub_name = config.get_cluster_name_by_index(get_active_acm_index())
     with config.RunWithAcmConfigContext():
         drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
         drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
+    # Build list of managed clusters for DR
+    # Include clusters in RDR or MDR mode
+    # Exclude all ACM hubs (both active and passive) as they are not managed clusters
+    multicluster_mode = config.MULTICLUSTER.get("multicluster_mode")
+    acm_indexes = get_all_acm_indexes()
+
     for cluster_name in config.clusters:
-        if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
+        cluster_index = cluster_name.MULTICLUSTER.get("multicluster_index")
+        # Skip ACM hub clusters
+        if cluster_index in acm_indexes:
+            continue
+
+        if multicluster_mode in (constants.RDR_MODE, constants.MDR_MODE):
             current_managed_clusters_list.append(
                 cluster_name.ENV_DATA.get("cluster_name")
             )
+
     dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
     if dr_cluster_relations:
-        current_managed_clusters_list = [
-            f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
-            for item in dr_cluster_relations[0]
-            if is_hosted_cluster(cluster_name=item)
-        ]
-    else:
-        current_managed_clusters_list.remove(acm_hub_name)
+        current_managed_clusters_list = []
+        for item in dr_cluster_relations[0]:
+            try:
+                idx = config.get_cluster_index_by_name(item)
+                _is_hosted = config.clusters[idx].MULTICLUSTER.get("is_hosted", False)
+            except Exception:
+                _is_hosted = False
+            current_managed_clusters_list.append(
+                f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
+                if _is_hosted
+                else item
+            )
 
     for drpolicy in drpolicy_list:
 
@@ -1464,7 +1696,12 @@ def get_all_drpolicy():
     return return_drpolicy_list
 
 
-@retry(UnexpectedBehaviour, tries=5, delay=10, backoff=2)
+# Guard flag: bounce the ramen-hub-operator pod at most once per process
+# across all retry attempts of validate_drpolicy_grouping.
+_ramen_hub_pod_bounced = False
+
+
+@retry(UnexpectedBehaviour, tries=10, delay=30, backoff=2, max_delay=120)
 def validate_drpolicy_grouping(drpolicy_name=None):
     """
     Validate DRPolicy configuration for CG behavior.
@@ -1514,7 +1751,135 @@ def validate_drpolicy_grouping(drpolicy_name=None):
         if not peer_classes:
             error_msg = f"PeerClasses not found in DRPolicy: {drp_name}"
             logger.error(error_msg)
-            raise UnexpectedBehaviour(error_msg)
+
+            # --- Diagnostic: dump drcconfig-mw ManifestWork for each DR cluster
+            # using the OCP resource API (avoids raw oc subprocess calls).
+            dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+            cluster_names = dr_cluster_relations[0] if dr_cluster_relations else []
+            for cl_name in cluster_names:
+                # ManifestWorks on the ACM hub live in a namespace named after
+                # the managed cluster.  For hosted (HCP) clusters the managed
+                # cluster name carries the "dr-" prefix, so we must apply it
+                # here the same way deploy_dr_policy does.
+                try:
+                    idx = config.get_cluster_index_by_name(cl_name)
+                    cl_is_hosted = config.clusters[idx].MULTICLUSTER.get(
+                        "is_hosted", False
+                    )
+                except Exception:
+                    cl_is_hosted = False
+                mw_namespace = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{cl_name}"
+                    if cl_is_hosted
+                    else cl_name
+                )
+                try:
+                    mw_obj = ocp.OCP(
+                        kind=constants.MANIFEST_WORKS,
+                        namespace=mw_namespace,
+                        resource_name="drcconfig-mw",
+                    )
+                    mw_data = mw_obj.get()
+                    mw_status = mw_data.get("status", {}).get(
+                        "conditions", "(no conditions)"
+                    )
+                    logger.info(
+                        f"[{cl_name}] drcconfig-mw ManifestWork status "
+                        f"conditions: {mw_status}"
+                    )
+                except Exception as dump_exc:
+                    logger.warning(
+                        f"[{cl_name}] Could not fetch drcconfig-mw "
+                        f"ManifestWork: {dump_exc}"
+                    )
+
+            # --- Recovery: delete the ramen-hub-operator pod once to speed up
+            # reconciliation.  The operator will be immediately recreated by its
+            # Deployment controller and will re-reconcile all DRPolicy resources
+            # on startup.  This is purely a reconciliation acceleration technique
+            # — it does NOT indicate a bug in the operator; peerClasses can
+            # legitimately take several minutes to appear on a loaded cluster.
+            # The normal retry loop above already handles the waiting; this bounce
+            # just gives the operator a nudge to process sooner.
+            global _ramen_hub_pod_bounced
+            if not _ramen_hub_pod_bounced:
+                _ramen_hub_pod_bounced = True
+                logger.info(
+                    "Deleting ramen-hub-operator pod in "
+                    f"{constants.OPENSHIFT_OPERATORS} to accelerate DRPolicy "
+                    "reconciliation (pod will be recreated automatically by its "
+                    "Deployment — this is a speed-up, not an error recovery)"
+                )
+                try:
+                    ramen_pods = get_pods_having_label(
+                        label="app=ramen-hub",
+                        namespace=constants.OPENSHIFT_OPERATORS,
+                    )
+                    for pod_info in ramen_pods:
+                        pod_name = pod_info["metadata"]["name"]
+                        ocp.OCP(
+                            kind=constants.POD,
+                            namespace=constants.OPENSHIFT_OPERATORS,
+                        ).delete(resource_name=pod_name, wait=True)
+                        logger.info(
+                            f"Deleted pod '{pod_name}' — Deployment controller "
+                            "will recreate it; waiting for new pod to start"
+                        )
+                    logger.info(
+                        "Sleeping 120s to allow ramen-hub-operator to restart "
+                        "and re-reconcile DRPolicy peerClasses"
+                    )
+                    time.sleep(120)
+                    # Re-fetch the DRPolicy and check peerClasses once
+                    # before falling through to raise (which triggers retry).
+                    logger.info(
+                        "Re-checking peerClasses after ramen-hub-operator bounce"
+                    )
+                    if drpolicy_name:
+                        refreshed = ocp.OCP(
+                            kind=constants.DRPOLICY,
+                            resource_name=drpolicy_name,
+                            namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+                        ).get()
+                        refreshed_peer_classes = (
+                            refreshed.get("status", {})
+                            .get("async", {})
+                            .get("peerClasses")
+                        )
+                    else:
+                        refreshed_list = get_all_drpolicy()
+                        refreshed_peer_classes = next(
+                            (
+                                p.get("status", {}).get("async", {}).get("peerClasses")
+                                for p in refreshed_list
+                                if p.get("metadata", {}).get("name") == drp_name
+                            ),
+                            None,
+                        )
+                    if refreshed_peer_classes:
+                        logger.info(
+                            f"peerClasses now populated after pod bounce: "
+                            f"{refreshed_peer_classes}"
+                        )
+                        # Patch the in-loop variable so the rest of the
+                        # validation loop proceeds normally.
+                        peer_classes = refreshed_peer_classes
+                    else:
+                        logger.warning(
+                            "peerClasses still absent after pod bounce; "
+                            "retry loop will continue"
+                        )
+                        raise UnexpectedBehaviour(error_msg)
+                except UnexpectedBehaviour:
+                    raise
+                except Exception as bounce_exc:
+                    logger.warning(
+                        f"Pod bounce attempt failed: {bounce_exc}; "
+                        "retry loop will continue"
+                    )
+                    raise UnexpectedBehaviour(error_msg)
+            else:
+                raise UnexpectedBehaviour(error_msg)
 
         # Validate grouping is true for every storageClass in peerClasses
         logger.info(f"Check grouping for storageClasses in DRPolicy: {drp_name}")
@@ -1541,6 +1906,102 @@ def validate_drpolicy_grouping(drpolicy_name=None):
         )
 
     logger.info("DRPolicy grouping validation completed successfully")
+    return True
+
+
+def validate_drpolicy_replication_ids(drpolicy_name, sc_names):
+    """
+    Validate groupreplicationID values in DRPolicy peerClasses against
+    StorageClass labels.
+
+    Checks:
+        1. Each SC's ramendr.openshift.io/groupreplicationid label matches
+           the groupreplicationID in the corresponding DRPolicy peerClass.
+        2. SCs backed by different pools have different groupreplicationID
+           values in peerClasses.
+
+    Args:
+        drpolicy_name (str): Name of the DRPolicy to validate.
+        sc_names (list): List of StorageClass names to validate
+            (e.g. [default_sc, custom_sc]).
+
+    Returns:
+        bool: True if validation passes.
+
+    Raises:
+        UnexpectedBehaviour: If replication IDs don't match or aren't
+            unique across different pools.
+
+    """
+    restore_index = config.cur_index
+    try:
+        config.switch_acm_ctx()
+        drpolicy_ocp = ocp.OCP(
+            kind=constants.DRPOLICY,
+            resource_name=drpolicy_name,
+        )
+        drpolicy_data = drpolicy_ocp.get()
+        peer_classes = (
+            drpolicy_data.get("status", {}).get("async", {}).get("peerClasses", [])
+        )
+        pc_by_sc = {
+            pc["storageClassName"]: pc
+            for pc in peer_classes
+            if pc.get("storageClassName") in sc_names
+        }
+
+        missing = set(sc_names) - set(pc_by_sc.keys())
+        if missing:
+            raise UnexpectedBehaviour(
+                f"StorageClasses {missing} not found in DRPolicy"
+                f" {drpolicy_name} peerClasses"
+            )
+
+        # Switch to a managed cluster to read SC labels
+        managed_clusters = get_non_acm_cluster_config()
+        config.switch_ctx(managed_clusters[0].MULTICLUSTER["multicluster_index"])
+
+        group_rep_ids = {}
+        for sc_name in sc_names:
+            pc = pc_by_sc[sc_name]
+            pc_group_rep_id = pc.get("groupreplicationID")
+            if not pc_group_rep_id:
+                logger.info(
+                    f"No groupreplicationID in peerClass for SC" f" {sc_name}, skipping"
+                )
+                continue
+
+            sc_ocp = ocp.OCP(kind=constants.STORAGECLASS)
+            sc_data = sc_ocp.get(resource_name=sc_name)
+            sc_labels = sc_data.get("metadata", {}).get("labels", {})
+            sc_group_rep_id = sc_labels.get(constants.RAMEN_GROUP_REPLICATION_ID_LABEL)
+
+            if sc_group_rep_id != pc_group_rep_id:
+                raise UnexpectedBehaviour(
+                    f"SC {sc_name} label groupreplicationid"
+                    f" ({sc_group_rep_id}) does not match DRPolicy"
+                    f" peerClass value ({pc_group_rep_id})"
+                )
+            logger.info(
+                f"SC {sc_name} groupreplicationID matches DRPolicy"
+                f" peerClass: {pc_group_rep_id}"
+            )
+            group_rep_ids[sc_name] = pc_group_rep_id
+
+        if len(group_rep_ids) >= 2:
+            unique_ids = set(group_rep_ids.values())
+            if len(unique_ids) < len(group_rep_ids):
+                raise UnexpectedBehaviour(
+                    f"SCs from different pools share the same"
+                    f" groupreplicationID: {group_rep_ids}"
+                )
+            logger.info(
+                f"Verified SCs have unique groupreplicationID"
+                f" values: {group_rep_ids}"
+            )
+    finally:
+        config.switch_ctx(restore_index)
+
     return True
 
 
@@ -1628,7 +2089,14 @@ def verify_last_group_sync_time(
                 "The value of lastGroupSyncTime in drpc is not updated. Retrying..."
             )
     else:
-        last_group_sync_time = drpc_obj.get_last_group_sync_time()
+        logger.info("Waiting for lastGroupSyncTime to be set")
+        for last_group_sync_time in TimeoutSampler(
+            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
+        ):
+            if last_group_sync_time:
+                logger.info(f"lastGroupSyncTime is now set: {last_group_sync_time}")
+                break
+            logger.info("lastGroupSyncTime not yet set, retrying...")
 
     # Verify lastGroupSyncTime
     time_format = "%Y-%m-%dT%H:%M:%SZ"
@@ -1668,38 +2136,192 @@ def get_all_drclusters():
     return drclusters
 
 
-def get_managed_cluster_node_ips():
+def get_dr_topology_clusters():
     """
-    Gets node ips of individual managed clusters for enabling fencing on MDR DRCluster configuration
+    Return DRCluster names eligible for DR Topology validation.
+
+    The ACM hub (local-cluster) is excluded because it does not have ODF installed.
 
     Returns:
-        cluster (list): Returns list of managed cluster, indexes and their node IPs
+        list: Sorted DRCluster names for topology UI checks
+    """
+    return sorted(
+        name for name in get_all_drclusters() if name != constants.ACM_LOCAL_CLUSTER
+    )
+
+
+def get_dr_topology_policy_details():
+    """
+    Return DRPolicy details from the hub for DR Topology validation.
+
+    Returns:
+        dict: policy name, connected cluster names, and scheduling interval
+    """
+    policies = get_all_drpolicy()
+    if not policies:
+        raise AssertionError(
+            "No DRPolicy found on hub; cannot validate DR Topology policy"
+        )
+    policy = policies[0]
+    policy_details = {
+        "name": policy["metadata"]["name"],
+        "connected_clusters": sorted(policy["spec"]["drClusters"]),
+        "scheduling_interval": policy["spec"]["schedulingInterval"],
+    }
+    logger.info(f"DRPolicy details for topology validation: {policy_details}")
+    return policy_details
+
+
+def get_dr_topology_protected_apps(workloads):
+    """
+    Return protected application details for DR Topology Applications sidebar checks.
+
+    Args:
+        workloads (list): Deployed DR workload objects (ApplicationSet and/or discovered)
+
+    Returns:
+        list: dicts with application name, UI DR status, and DRPolicy name
+    """
+    protected_apps = []
+    for workload in workloads:
+        if workload.workload_type == constants.APPLICATION_SET:
+            app_name = workload._get_applicationset_name()
+        elif getattr(workload, "discovered_apps_placement_name", None):
+            app_name = workload.discovered_apps_placement_name
+        else:
+            workload_type = getattr(workload, "workload_type", type(workload).__name__)
+            raise ValueError(
+                f"Unsupported workload type for DR Topology validation: "
+                f"{workload_type}"
+            )
+        protected_apps.append(
+            {
+                "name": app_name,
+                "status": constants.DR_TOPOLOGY_DRPC_HEALTHY_STATUS,
+                "policy": workload.dr_policy_name,
+            }
+        )
+    logger.info(f"Protected applications for topology validation: {protected_apps}")
+    return protected_apps
+
+
+def ordered_unique_cidrs(cidrs):
+    """
+    Preserve order while removing duplicates
+    """
+    seen = set()
+    ordered = []
+    for cidr in cidrs:
+        if not cidr or cidr in seen:
+            continue
+        seen.add(cidr)
+        ordered.append(cidr)
+    return ordered
+
+
+@retry(UnexpectedBehaviour, tries=25, delay=10, backoff=2)
+def get_fencing_cidrs_from_drclusterconfig(cluster_name):
+    """
+    Read fencing CIDRs from DRClusterConfig.status.storageAccessDetails on the
+    current (managed) cluster context (ODF 4.21+ / Ramen).
+
+    Prefers the DRClusterConfig named like the managed cluster, then RBD CSI
+    provisioner entries, with sensible fallbacks.
+
+    Args:
+        cluster_name (str): Managed cluster name (matches DRCluster / DRClusterConfig name on hub)
+
+    Returns:
+        list: CIDR strings for hub DRCluster.spec.cidrs
+
+    Raises:
+        UnexpectedBehaviour: If CIDRs are not yet published or cannot be determined
+    """
+    drc_ocp = ocp.OCP(kind=constants.DRCLUSTERCONFIG)
+    items = (drc_ocp.get(silent=True) or {}).get("items") or []
+    if not items:
+        raise UnexpectedBehaviour(
+            "No DRClusterConfig resources found on managed cluster"
+        )
+    configs = [i for i in items if i.get("metadata", {}).get("name") == cluster_name]
+
+    cidrs = []
+    for item in configs:
+        details = (item.get("status") or {}).get("storageAccessDetails") or []
+        for detail in details:
+            detail_cidrs = detail.get("cidrs") or []
+            cidrs.extend(detail_cidrs)
+
+    cidrs = ordered_unique_cidrs(cidrs)
+    if not cidrs:
+        raise UnexpectedBehaviour(
+            f"DRClusterConfig on cluster {cluster_name} has no status.storageAccessDetails.cidrs yet"
+        )
+    logger.info(
+        f"Collected {len(cidrs)} fencing CIDR(s) from DRClusterConfig for {cluster_name}"
+    )
+
+    return cidrs
+
+
+def get_managed_cluster_node_ips():
+    """
+    Gets worker node IPs of individual managed clusters for enabling fencing on MDR DRCluster configuration
+
+    Returns:
+        list: [[managed_cluster_name, multicluster_index, [cidr, ...]], ...]
 
     """
+    restore_index = config.cur_index
     primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
-    secondary_index = [
-        s.MULTICLUSTER["multicluster_index"]
-        for s in get_non_acm_cluster_config()
-        if s.MULTICLUSTER["multicluster_index"] != primary_index
-    ][0]
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        # dr_cluster_relations is a list containing cluster pairs list with the index 0 pair as current pair under test
+        dr_cluster_names = dr_cluster_relations[0]
+        primary_name = config.get_cluster_name_by_index(primary_index)
+        secondary_index = config.get_cluster_index_by_name(
+            [
+                cluster_name
+                for cluster_name in dr_cluster_names
+                if cluster_name != primary_name
+            ][0]
+        )
+    else:
+        secondary_index = [
+            s.MULTICLUSTER["multicluster_index"]
+            for s in get_non_acm_cluster_config()
+            if s.MULTICLUSTER["multicluster_index"] != primary_index
+        ][0]
     cluster_name_primary = config.clusters[primary_index].ENV_DATA["cluster_name"]
     cluster_name_secondary = config.clusters[secondary_index].ENV_DATA["cluster_name"]
     cluster_data = [
         [cluster_name_primary, primary_index],
         [cluster_name_secondary, secondary_index],
     ]
-    for cluster in cluster_data:
-        config.switch_ctx(cluster[1])
-        logger.info(f"Getting node IPs on managed cluster: {cluster[0]}")
-        node_obj = ocp.OCP(kind=constants.NODE).get()
-        external_ips = []
-        for node in node_obj.get("items"):
-            addresses = node.get("status").get("addresses")
-            for address in addresses:
-                if address.get("type") == "ExternalIP":
-                    external_ips.append(address.get("address"))
-        external_ips_with_cidr = [f"{ip}/32" for ip in external_ips]
-        cluster.append(external_ips_with_cidr)
+    try:
+        for cluster in cluster_data:
+            config.switch_ctx(cluster[1])
+            logger.info(f"Getting worker node IPs on managed cluster: {cluster[0]}")
+            node_obj = ocp.OCP(kind=constants.NODE).get()
+            external_ips = []
+            for node in node_obj.get("items", []):
+                # Check if node has worker role
+                labels = node.get("metadata", {}).get("labels", {})
+                if "node-role.kubernetes.io/worker" in labels:
+                    addresses = node.get("status", {}).get("addresses", [])
+                    for address in addresses:
+                        if address.get("type") == "ExternalIP" and address.get(
+                            "address"
+                        ):
+                            external_ips.append(address["address"])
+            external_ips_with_cidr = [f"{ip}/32" for ip in dict.fromkeys(external_ips)]
+            if not external_ips_with_cidr:
+                raise UnexpectedBehaviour(
+                    f"No worker ExternalIP addresses found on managed cluster {cluster[0]}"
+                )
+            cluster.append(external_ips_with_cidr)
+    finally:
+        config.switch_ctx(restore_index)
     return cluster_data
 
 
@@ -1727,32 +2349,60 @@ def enable_fence(drcluster_name, switch_ctx=None):
     config.switch_ctx(restore_index)
 
 
+@retry(UnexpectedBehaviour, tries=25, delay=10, backoff=2)
+def verify_drcluster_validated_on_hub(drcluster_name, switch_ctx=None):
+    """
+    Wait until hub DRCluster reports a successful validation condition.
+
+    Ramen surfaces hub reconciliation via status.conditions (reason/type
+    Validated or legacy Succeeded).
+    """
+    restore_index = config.cur_index
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    dr_obj = ocp.OCP(resource_name=drcluster_name, kind=constants.DRCLUSTER)
+    data = dr_obj.get()
+    conditions = (data.get("status") or {}).get("conditions") or []
+    for cond in conditions:
+        if cond.get("status") != "True":
+            continue
+        reason = cond.get("reason") or ""
+        ctype = cond.get("type") or ""
+        if reason in constants.DRPOLICY_SUCCESS_REASONS:
+            logger.info(f"DRCluster {drcluster_name} validation OK ({reason or ctype})")
+            config.switch_ctx(restore_index)
+            return True
+        if ctype.lower() == "validated":
+            logger.info(f"DRCluster {drcluster_name} validation OK (type={ctype})")
+            config.switch_ctx(restore_index)
+            return True
+    config.switch_ctx(restore_index)
+    raise UnexpectedBehaviour(
+        f"DRCluster {drcluster_name} not validated yet; conditions={conditions}"
+    )
+
+
 def configure_drcluster_for_fencing():
     """
     Configures DRClusters for enabling fencing
 
     """
     old_ctx = config.cur_index
-    cluster_ip_list = get_managed_cluster_node_ips()
+    cluster_rows = get_managed_cluster_node_ips()
     config.switch_acm_ctx()
-    for cluster in cluster_ip_list:
+    for cluster in cluster_rows:
+        drcluster_name = cluster[0]
         fence_ip_data = json.dumps({"spec": {"cidrs": cluster[2]}})
         fence_ip_cmd = (
-            f"oc patch drcluster {cluster[0]} --type merge -p '{fence_ip_data}'"
+            f"oc patch drcluster {drcluster_name} --type merge -p '{fence_ip_data}'"
         )
-        logger.info(f"Patching DRCluster: {cluster[0]} to add node IP addresses")
+        logger.info(
+            f"Patching hub DRCluster {drcluster_name} with CIDRs from worker node IPs"
+        )
         run_cmd(fence_ip_cmd)
 
-        fence_annotation_data = """{"metadata": {"annotations": {
-        "drcluster.ramendr.openshift.io/storage-clusterid": "openshift-storage",
-        "drcluster.ramendr.openshift.io/storage-driver": "openshift-storage.rbd.csi.ceph.com",
-        "drcluster.ramendr.openshift.io/storage-secret-name": "rook-csi-rbd-provisioner",
-        "drcluster.ramendr.openshift.io/storage-secret-namespace": "openshift-storage" } } }"""
-        fencing_annotation_cmd = (
-            f"oc patch drcluster {cluster[0]} --type merge -p '{fence_annotation_data}'"
-        )
-        logger.info(f"Patching DRCluster: {cluster[0]} to add fencing annotations")
-        run_cmd(fencing_annotation_cmd)
+    verify_drpolicy_cli()
+    for cluster in cluster_rows:
+        verify_drcluster_validated_on_hub(cluster[0])
 
     config.switch_ctx(old_ctx)
 
@@ -1938,18 +2588,27 @@ def verify_drpolicy_cli(switch_ctx=None):
 
     restore_index = config.cur_index
     config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
-    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
-    status = drpolicy_obj.get().get("items")[0].get("status").get("conditions")[0]
-    if status.get("reason") == "Succeeded":
-        logger.info("DRPolicy validation succeeded")
+    drpolicy_items = get_all_drpolicy()
+    if not drpolicy_items:
         config.switch_ctx(restore_index)
-        return True
-    else:
-        logger.warning(f"DRPolicy is not in succeeded or validated state: {status}")
-        config.switch_ctx(restore_index)
-        raise UnexpectedBehaviour(
-            f"DRPolicy is not in succeeded or validated state: {status}"
-        )
+        raise UnexpectedBehaviour("No DRPolicy resources found on hub")
+    conditions = drpolicy_items[0].get("status", {}).get("conditions") or []
+    for cond in conditions:
+        if cond.get("status") != "True":
+            continue
+        reason = cond.get("reason") or ""
+        if reason in constants.DRPOLICY_SUCCESS_REASONS:
+            logger.info(f"DRPolicy validation succeeded (reason={reason})")
+            config.switch_ctx(restore_index)
+            return True
+    logger.warning(
+        f"DRPolicy is not in succeeded or validated state; conditions={conditions}"
+    )
+    config.switch_ctx(restore_index)
+    raise UnexpectedBehaviour(
+        "DRPolicy is not in succeeded or validated state "
+        f"(expected reason in {sorted(constants.DRPOLICY_SUCCESS_REASONS)})"
+    )
 
 
 @retry(UnexpectedBehaviour, tries=25, delay=5, backoff=5)
@@ -2552,21 +3211,31 @@ def get_cluster_set_name(switch_ctx=None):
     restore_index = config.cur_index
     config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+    multicluster_mode = config.MULTICLUSTER.get("multicluster_mode")
     for cluster_name in config.clusters:
-        if cluster_name.ENV_DATA.get("rbd_dr_scenario"):
+        if multicluster_mode == constants.RDR_MODE:
             current_managed_clusters_list.append(
                 cluster_name.ENV_DATA.get("cluster_name")
             )
     dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
     if dr_cluster_relations:
-        current_managed_clusters_list = [
-            (
+        current_managed_clusters_list = []
+        for item in dr_cluster_relations[0]:
+            try:
+                idx = config.get_cluster_index_by_name(item)
+                _is_hosted = config.clusters[idx].MULTICLUSTER.get("is_hosted", False)
+            except Exception:
+                _is_hosted = False
+            current_managed_clusters_list.append(
                 f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{item}"
-                if is_hosted_cluster(cluster_name=item)
+                if _is_hosted
                 else item
             )
-            for item in dr_cluster_relations[0]
-        ]
+
+    # The list current_managed_clusters_list is required for RDR, not mandatory for MDR
+    current_managed_clusters_list = current_managed_clusters_list or [
+        mng_cluster["metadata"]["name"] for mng_cluster in managed_clusters
+    ]
 
     # ignore local-cluster here
     for i in managed_clusters:
@@ -2596,6 +3265,9 @@ def wait_for_vrg_state(vrg_state, vrg_namespace, resource_name, timeout=900):
         resource_name (str): VRG resource name
         timeout (int): Timeout for wait
 
+    Raises:
+        TimeoutExpiredError: With VRG specific context to make failures actionable
+
     """
     wait_for_resource_state(
         kind=constants.VOLUME_REPLICATION_GROUP,
@@ -2604,6 +3276,33 @@ def wait_for_vrg_state(vrg_state, vrg_namespace, resource_name, timeout=900):
         resource_name=resource_name,
         timeout=timeout,
     )
+
+
+def wait_for_drpc_progression_completed(
+    namespace, resource_name, timeout=600, sleep=10
+):
+    """
+    Wait until the given DRPC reaches Completed progression.
+
+    Args:
+        namespace (str): Namespace of the DRPC
+        resource_name (str): DRPC resource name
+        timeout (int): Time in seconds to wait (default: 600)
+        sleep (int): Seconds between polls (default: 10)
+
+    Raises:
+        AssertionError: If progression does not reach Completed within timeout
+
+    """
+    with config.RunWithAcmConfigContext():
+        drpc_obj = DRPC(namespace=namespace, resource_name=resource_name)
+        logger.info(
+            f"Waiting for DRPC {resource_name} in namespace {namespace} "
+            f"to reach progression {constants.STATUS_COMPLETED}"
+        )
+        drpc_obj.wait_for_progression_status(
+            status=constants.STATUS_COMPLETED, timeout=timeout, sleep=sleep
+        )
 
 
 def validate_storage_cluster_peer_state():
@@ -2677,39 +3376,127 @@ def create_service_exporter(annotate=True):
     for cluster in managed_clusters:
         index = cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
-        if (
+
+        if not (
             cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT
             or get_provider_service_type() == "NodePort"
+            or is_hostnetwork_enabled()
         ):
-            logger.info("Skipping ServiceExport creation for multiclient cluster")
+            logger.info("Checking if multiClusterService exists")
+            create_multiclusterservice_dr()
+        else:
+            logger.info("Skipping multiClusterService creation for multiclient cluster")
+
+        if cluster.ENV_DATA.get("cluster_type").lower() == constants.HCI_CLIENT:
             continue
+
         logger.info("Creating Service exporter")
-        run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
+        exec_cmd(f"oc apply -f {constants.DR_SERVICE_EXPORTER}")
 
         if annotate:
-            if (
-                config.ENV_DATA.get("odf_provider_mode_deployment")
-                and cluster.ENV_DATA.get("cluster_type").lower()
-                == constants.HCI_PROVIDER
-            ):
-                cluster_address = get_node_internal_ip(
-                    get_node_objs(get_worker_nodes()[0])[0]
-                )
-                cluster_address_port = "31659"
-                cluster_service_export_provider_server = ""
+            cluster_type = cluster.ENV_DATA.get("cluster_type", "").lower()
+            service_type = get_provider_service_type()
+            odf_provider_mode = config.ENV_DATA.get("odf_provider_mode_deployment")
 
-            else:
+            logger.info(
+                f"Determining cluster address configuration: "
+                f"service_type={service_type}, cluster_type={cluster_type}, "
+                f"odf_provider_mode={odf_provider_mode}"
+            )
+
+            # Check service type first - ClusterIP always uses cluster service
+            if service_type == "ClusterIP":
+                logger.info(
+                    "Using ClusterIP configuration: cluster service with port 50051"
+                )
                 cluster_address = config.ENV_DATA["cluster_name"]
                 cluster_address_port = "50051"
                 cluster_service_export_provider_server = (
                     ".ocs-provider-server.openshift-storage.svc.clusterset.local"
                 )
+            elif (
+                odf_provider_mode
+                or cluster_type == constants.HCI_PROVIDER
+                or service_type == "NodePort"
+            ):
+                logger.info(
+                    f"Using NodePort/Provider configuration: node IP with port 31659 "
+                    f"(odf_provider_mode={odf_provider_mode}, "
+                    f"cluster_type={cluster_type}, service_type={service_type})"
+                )
+                cluster_address = get_node_internal_ip(
+                    get_node_objs(get_worker_nodes()[0])[0]
+                )
+                cluster_address_port = "31659"
+                cluster_service_export_provider_server = ""
+            else:
+                logger.info(
+                    f"Using default configuration: cluster service with port 50051 "
+                    f"(service_type={service_type})"
+                )
+                cluster_address = config.ENV_DATA["cluster_name"]
+                cluster_address_port = "50051"
+                cluster_service_export_provider_server = (
+                    ".ocs-provider-server.openshift-storage.svc.clusterset.local"
+                )
+            if (
+                not get_storage_cluster()
+                .get()["items"][0]["metadata"]
+                .get("annotations", {})
+                .get("ocs.openshift.io/api-server-exported-address")
+            ):
+                exec_cmd(
+                    "oc annotate storagecluster ocs-storagecluster -n openshift-storage"
+                    f" ocs.openshift.io/api-server-exported-address={cluster_address}"
+                    f"{cluster_service_export_provider_server}:{cluster_address_port} --overwrite"
+                )
 
-            run_cmd(
-                "oc annotate storagecluster ocs-storagecluster -n openshift-storage"
-                f" ocs.openshift.io/api-server-exported-address={cluster_address}"
-                f"{cluster_service_export_provider_server}:{cluster_address_port}"
+            # On proxy clusters, add the provider-server address to the
+            # cluster-wide noProxy list so that internal ODF traffic is not
+            # routed through the proxy.
+            #
+            # Auto-detection: read the live proxy/cluster object — if
+            # spec.httpProxy is set the cluster is behind a proxy, regardless
+            # of what config.DEPLOYMENT["proxy"] says (handles re-runs and
+            # clusters where the flag was never explicitly set in the config).
+            # config.DEPLOYMENT["proxy"] is also respected as an explicit
+            # override so test configs can force the behaviour.
+            no_proxy_entry = (
+                f"{cluster_address}{cluster_service_export_provider_server}"
             )
+            proxy_obj = OCP(kind=constants.PROXY, resource_name="cluster").get()
+            live_http_proxy = proxy_obj.get("spec", {}).get("httpProxy", "")
+            is_proxy_cluster = bool(live_http_proxy) or bool(
+                config.DEPLOYMENT.get("proxy")
+            )
+
+            if is_proxy_cluster:
+                # Read the current noProxy value from the live object status
+                # (status.noProxy is the fully-resolved list including defaults).
+                current_no_proxy = proxy_obj.get("status", {}).get("noProxy", "")
+                entries = [e.strip() for e in current_no_proxy.split(",") if e.strip()]
+
+                if no_proxy_entry in entries:
+                    logger.info(
+                        f"'{no_proxy_entry}' already present in proxy/cluster "
+                        "noProxy — skipping patch and MCP wait"
+                    )
+                else:
+                    entries.append(no_proxy_entry)
+                    updated_no_proxy = ",".join(entries)
+                    logger.info(
+                        f"Proxy cluster detected — adding '{no_proxy_entry}' "
+                        f"to proxy/cluster noProxy (new value: '{updated_no_proxy}')"
+                    )
+                    exec_cmd(
+                        "oc patch proxy/cluster --type=merge "
+                        f'--patch=\'{{"spec":{{"noProxy":"{updated_no_proxy}"}}}}\''
+                    )
+                    logger.info(
+                        "Waiting for MachineConfigPool to roll out after "
+                        "noProxy update"
+                    )
+                    wait_for_machineconfigpool_status("all")
     config.switch_ctx(restore_index)
 
 
@@ -2799,44 +3586,47 @@ def get_vgs_name(vgs_namespace):
 
 def validate_volumegroupsnapshot(vgs_namespace):
     """
-    Validates Volume Group Snapshot resource creation from odf external snapshotter
+    Validates Volume Group Snapshot resource creation.
+
+    For ODF <= 4.22 this reads the odf external snapshotter leader pod logs.
+    For ODF > 4.22 this reads the csi-snapshot-controller leader pod logs
+    (namespace openshift-cluster-storage-operator).
 
     Args:
         vgs_namespace (str): the namespace of the Volume Group snapshot resources
 
     """
-    namespace = config.ENV_DATA["cluster_namespace"]
-    odf_external_snapshotter_pod = get_pods_having_label(
-        constants.ODF_EXTERNAL_SNAPSHOTTER, namespace
-    )
+    ocs_version = version.get_semantic_ocs_version_from_config()
     vgs_name = get_vgs_name(vgs_namespace)
     expected_output_lst = (
         f"{vgs_name} was successfully created by the CSI driver",
         f"{vgs_name} is ready to use",
     )
+
+    if ocs_version > version.VERSION_4_22:
+        namespace = constants.OPENSHIFT_CLUSTER_STORAGE_OPERATOR_NAMESPACE
+        snapshotter_leader = get_odf_snapshotter_leader(
+            namespace,
+            label=constants.CSI_SNAPSHOT_CONTROLLER_LABEL,
+            container=None,
+        )
+    else:
+        namespace = config.ENV_DATA["cluster_namespace"]
+        snapshotter_leader = get_odf_snapshotter_leader(namespace)
+
     try:
         for expected_val in expected_output_lst:
             wait_for_matching_pattern_in_pod_logs(
-                pod_name=odf_external_snapshotter_pod[0]["metadata"]["name"],
+                pod_name=snapshotter_leader.name,
                 pattern=expected_val,
                 namespace=namespace,
                 timeout=300,
                 sleep=5,
             )
     except TimeoutExpiredError:
-        if len(odf_external_snapshotter_pod) > 1:
-            for expected_val in expected_output_lst:
-                wait_for_matching_pattern_in_pod_logs(
-                    pod_name=odf_external_snapshotter_pod[1]["metadata"]["name"],
-                    pattern=expected_val,
-                    namespace=namespace,
-                    timeout=300,
-                    sleep=5,
-                )
-        else:
-            raise UnexpectedBehaviour(
-                f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
-            )
+        raise UnexpectedBehaviour(
+            f"VolumeGroupSnapshot {vgs_name} has not been created or it is not ready."
+        )
 
 
 def is_cg_cephfs_enabled():
@@ -2850,6 +3640,461 @@ def is_cg_cephfs_enabled():
     vgsc = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS, resource_name=resource_name)
 
     return vgsc.is_exist(resource_name=resource_name)
+
+
+def create_ingress_cert_dr(
+    cert_name="user-ca-bundle",
+    namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
+    patch_proxy=True,
+):
+    """
+    Build a combined ingress CA bundle from all non-hosted clusters (both spoke
+    and ACM hub), apply it as a ConfigMap on every non-hosted cluster, and
+    optionally patch the cluster-wide proxy so OpenShift trusts the new CAs.
+
+    Why this is needed in a DR setup
+    ---------------------------------
+    In a Regional-DR or Metro-DR topology the spoke clusters and the ACM hub
+    each have their own self-signed ingress CA.  For cross-cluster traffic
+    (e.g. Submariner, OADP, ACM observability) to succeed without TLS errors
+    every cluster must trust the ingress CAs of every other cluster.  This
+    function collects those CAs and distributes the combined bundle cluster-wide.
+
+    Hosted / HCP clusters are skipped entirely because they share the hosting
+    cluster's ingress and therefore have no independent ingress CA or
+    MachineConfigPool to update.
+
+    High-level flow
+    ---------------
+    1. Collect indexes of all non-hosted clusters (spokes + ACM hub).
+    2. For each such cluster fetch the default ingress CA bundle
+       (ConfigMap ``default-ingress-cert`` in ``openshift-config-managed``),
+       split it into individual PEM blocks, and add each block to a combined
+       list — skipping any block already seen to avoid duplicates.
+    3. Write the deduplicated bundle to a temp YAML file as a ConfigMap
+       named *cert_name* in *namespace* (default: ``openshift-config``).
+    4. Apply that ConfigMap on every non-hosted cluster (``oc apply``).
+    5. If *patch_proxy* is True, merge-patch ``proxy/cluster`` so that
+       ``spec.trustedCA.name`` points at the new ConfigMap — this makes the
+       OpenShift node trust store pick up the new CAs.
+    6. Wait for all MachineConfigPools to finish rolling out on every
+       non-hosted cluster (the proxy patch triggers a MCO update).
+
+    Args:
+        cert_name (str): Name of the ConfigMap that will hold the CA bundle.
+                         Defaults to ``user-ca-bundle``.
+        namespace (str): Namespace where the ConfigMap is created.
+                         Defaults to ``openshift-config``.
+        patch_proxy (bool): Whether to patch ``proxy/cluster`` after applying
+                            the ConfigMap.  Set to False when the proxy has
+                            already been configured externally.
+    """
+    logger.info(
+        "create_ingress_cert_dr: collecting ingress CA certs from all "
+        "non-hosted clusters (spokes + ACM hub) to build a combined trust bundle"
+    )
+
+    # --- Phase 1: determine which clusters to collect certs from -------------
+    # Include every cluster that is NOT a hosted (HCP) cluster.
+    # This covers both the DR spoke clusters and the ACM hub(s).
+    # dict.fromkeys preserves insertion order while dropping duplicate indexes.
+    all_cert_indexes = list(
+        dict.fromkeys(
+            [
+                c.MULTICLUSTER["multicluster_index"]
+                for c in config.clusters
+                if not c.MULTICLUSTER.get("is_hosted", False)
+            ]
+        )
+    )
+    logger.info(f"Cluster indexes selected for CA collection: {all_cert_indexes}")
+
+    original_index = config.cur_index
+
+    ingress_data = templating.load_yaml(constants.OC_INGRESS_CERT_YAML)
+    # LiteralString ensures the PEM bundle is written with YAML block-scalar
+    # style (|), which preserves embedded newlines correctly in the output file.
+    LiteralString = enable_literal_block_style()
+    # ssl_data holds individual deduplicated PEM blocks that will be joined
+    # into the final ca-bundle.crt value.
+    ssl_data = []
+
+    # --- Phase 2: collect and deduplicate individual PEM blocks --------------
+    # Each cluster's ConfigMap may contain multiple PEM certs (leaf + CA chain).
+    # We split on the PEM footer so every cert is checked independently —
+    # this prevents duplicates when two clusters share the same signing CA.
+    seen_certs = set()
+
+    # Seed ssl_data with whatever is already in the existing user-ca-bundle on
+    # each non-hosted cluster BEFORE collecting from default-ingress-cert.
+    # This preserves certs from other spoke-pair test runs that were previously
+    # applied to the ACM hub (or any cluster) so they are not wiped out when
+    # this run's bundle is applied.
+    for cert_index in all_cert_indexes:
+        with config.RunWithConfigContext(cert_index):
+            cluster_name = config.clusters[cert_index].MULTICLUSTER.get(
+                "name", f"Cluster-{cert_index}"
+            )
+            try:
+                existing_cm = ocp.OCP(
+                    kind=constants.CONFIGMAP,
+                    resource_name=cert_name,
+                    namespace=namespace,
+                ).get()
+                existing_raw = existing_cm.get("data", {}).get("ca-bundle.crt", "")
+            except Exception:
+                existing_raw = ""
+            if existing_raw:
+                pre_count = 0
+                for pem_block in existing_raw.split("-----END CERTIFICATE-----"):
+                    pem_block = pem_block.strip()
+                    if pem_block:
+                        pem_block = pem_block + "\n-----END CERTIFICATE-----\n"
+                        if pem_block not in seen_certs:
+                            seen_certs.add(pem_block)
+                            ssl_data.append(pem_block)
+                            pre_count += 1
+                if pre_count:
+                    logger.info(
+                        f"[{cluster_name}] Seeded {pre_count} existing cert(s) "
+                        f"from '{cert_name}' (preserving certs from other spoke pairs)"
+                    )
+
+    for cert_index in all_cert_indexes:
+        config.switch_ctx(cert_index)
+        cluster_name = config.clusters[cert_index].MULTICLUSTER.get(
+            "name", f"Cluster-{cert_index}"
+        )
+        logger.info(
+            f"[{cluster_name}] Fetching ingress CA bundle from "
+            f"{constants.DEFAULT_INGRESS_CRT_OPENSHIFT} "
+            f"in {constants.OPENSHIFT_CONFIG_MANAGED_NAMESPACE}"
+        )
+        default_ingress_cert = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            resource_name=constants.DEFAULT_INGRESS_CRT_OPENSHIFT,
+            namespace=constants.OPENSHIFT_CONFIG_MANAGED_NAMESPACE,
+        )
+
+        bundle = default_ingress_cert.get()["data"]["ca-bundle.crt"]
+        # Split the multi-cert bundle into individual PEM blocks.
+        # Each block ends with "-----END CERTIFICATE-----"; splitting on that
+        # delimiter leaves the body without the footer, so we re-attach it.
+        new_count = 0
+        for pem_block in bundle.split("-----END CERTIFICATE-----"):
+            pem_block = pem_block.strip()
+            if not pem_block:
+                # Trailing empty segment after the last delimiter — skip it.
+                continue
+            pem_block = pem_block + "\n-----END CERTIFICATE-----\n"
+            if pem_block not in seen_certs:
+                seen_certs.add(pem_block)
+                ssl_data.append(pem_block)
+                new_count += 1
+
+        logger.info(
+            f"[{cluster_name}] Added {new_count} new PEM block(s) "
+            f"(bundle total so far: {len(ssl_data)} cert(s))"
+        )
+
+        # Update the ConfigMap template with the growing bundle and write to
+        # a temp file.  The file is overwritten each iteration so the final
+        # file always reflects the fully accumulated bundle.
+        ingress_data["data"]["ca-bundle.crt"] = LiteralString("".join(ssl_data))
+        ingress_data["metadata"]["name"] = cert_name
+        ingress_data["metadata"]["namespace"] = namespace
+        ingress_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="ingress_cert_", delete=False
+        )
+        templating.dump_data_to_temp_yaml(ingress_data, ingress_file.name)
+
+    logger.info(
+        f"Combined CA bundle written to {ingress_file.name} "
+        f"({len(ssl_data)} unique PEM block(s))"
+    )
+
+    # Restore the cluster context that was active before cert collection.
+    config.switch_ctx(original_index)
+
+    # --- Early-exit: skip apply + MCP wait if every cluster already has the
+    # correct bundle and (when patch_proxy=True) proxy is already configured.
+    # This prevents redundant apply/MCP-rollout cycles on repeated test runs.
+    # Build a frozenset of the expected PEM blocks for order-independent comparison.
+    # Two bundles are considered identical when they contain the same set of certs
+    # regardless of the order they were written into the ConfigMap.
+    expected_cert_set = frozenset(ssl_data)
+    all_done = True
+    for cluster in config.clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
+        if cluster.MULTICLUSTER.get("is_hosted", False):
+            continue
+        with config.RunWithConfigContext(index):
+            # Check whether the ConfigMap already contains exactly the same
+            # set of PEM blocks (order-independent).
+            try:
+                existing = ocp.OCP(
+                    kind=constants.CONFIGMAP,
+                    resource_name=cert_name,
+                    namespace=namespace,
+                ).get()
+                existing_raw = existing.get("data", {}).get("ca-bundle.crt", "")
+            except Exception:
+                existing_raw = ""
+
+            # Split the existing bundle into individual PEM blocks the same
+            # way Phase 2 does, then compare as sets.
+            existing_cert_set = set()
+            for pem_block in existing_raw.split("-----END CERTIFICATE-----"):
+                pem_block = pem_block.strip()
+                if pem_block:
+                    existing_cert_set.add(pem_block + "\n-----END CERTIFICATE-----\n")
+
+            if existing_cert_set != expected_cert_set:
+                logger.info(
+                    f"[{cluster_name}] ConfigMap '{cert_name}' missing or "
+                    "outdated — applying updated bundle"
+                )
+                all_done = False
+                break
+
+            if patch_proxy:
+                try:
+                    proxy_obj = ocp.OCP(kind="Proxy", resource_name="cluster").get()
+                    proxy_ca = (
+                        proxy_obj.get("spec", {}).get("trustedCA", {}).get("name", "")
+                    )
+                except Exception:
+                    proxy_ca = ""
+                if proxy_ca != cert_name:
+                    logger.info(
+                        f"[{cluster_name}] proxy/cluster not yet pointing at "
+                        f"'{cert_name}' — applying"
+                    )
+                    all_done = False
+                    break
+
+            logger.info(
+                f"[{cluster_name}] already has correct bundle and proxy config — "
+                "skipping apply"
+            )
+
+    if all_done:
+        logger.info(
+            "create_ingress_cert_dr: all clusters already up-to-date — skipping "
+            "apply and MCP wait"
+        )
+        return
+
+    # --- Phase 3: apply ConfigMap and patch proxy on every non-hosted cluster -
+    # The ConfigMap is applied on ALL clusters (not just the ones we collected
+    # certs from) so that every cluster trusts the complete cross-cluster bundle.
+    for cluster in config.clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
+        is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+
+        # Hosted (HCP) clusters have no independent MachineConfigPool or node
+        # trust store — skip them entirely.
+        if not is_hosted:
+            with config.RunWithConfigContext(index):
+                logger.info(f"[{cluster_name}] Applying ingress CA ConfigMap")
+                run_cmd(cmd=f"oc apply -f {ingress_file.name}")
+
+                if patch_proxy:
+                    # Patching proxy/cluster tells the MCO to inject the new
+                    # CA bundle into every node's trust store via a MachineConfig.
+                    logger.info(
+                        f"[{cluster_name}] Patching proxy/cluster to trust "
+                        f"ConfigMap '{cert_name}'"
+                    )
+                    cmd = (
+                        f"oc patch proxy/cluster --type=merge "
+                        f'--patch=\'{{"spec":{{"trustedCA":{{"name":"{cert_name}"}}}}}}\''
+                    )
+                    run_cmd(cmd=cmd)
+
+    # --- Phase 4: wait for MachineConfigPool rollout on every non-hosted cluster
+    # The proxy patch above triggers the MCO to create a new MachineConfig and
+    # roll it out to all nodes.  We must wait here before declaring success,
+    # otherwise subsequent steps may run against nodes that have not yet
+    # reloaded their trust store.
+    # Only wait when patch_proxy is True — no proxy patch means no MCO rollout.
+    if patch_proxy:
+        for cluster in config.clusters:
+            index = cluster.MULTICLUSTER["multicluster_index"]
+            cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
+            is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+
+            if not is_hosted:
+                with config.RunWithConfigContext(index):
+                    logger.info(
+                        f"[{cluster_name}] Waiting for MachineConfigPool to finish "
+                        "rolling out the updated trust bundle"
+                    )
+                    wait_for_machineconfigpool_status(node_type="all")
+
+        # --- Phase 5: restart ramen operator pods so they reload the new trust bundle
+        # The MCP rollout injects the new CA into the node trust store on disk, but
+        # operator pods that were already running before the rollout still hold the
+        # old in-memory trust store.  Deleting them forces the Deployment controller
+        # to recreate them and they will start with the updated CA bundle.
+        # Hub clusters run ramen-hub-operator (label: app=ramen-hub).
+        # Spoke clusters run ramen-dr-cluster-operator (label: app=ramen-dr-cluster).
+        for cluster in config.clusters:
+            index = cluster.MULTICLUSTER["multicluster_index"]
+            cluster_name = cluster.MULTICLUSTER.get("name", f"Cluster-{index}")
+            is_hosted = cluster.MULTICLUSTER.get("is_hosted", False)
+            is_hub = cluster.MULTICLUSTER.get("acm_cluster", False)
+
+            if is_hosted:
+                continue
+
+            ramen_label = (
+                "app=ramen-hub"
+                if is_hub
+                else constants.RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL
+            )
+
+            with config.RunWithConfigContext(index):
+                try:
+                    ramen_pods = get_pods_having_label(
+                        label=ramen_label,
+                        namespace=constants.OPENSHIFT_OPERATORS,
+                    )
+                except Exception:
+                    ramen_pods = []
+
+                if not ramen_pods:
+                    logger.info(
+                        f"[{cluster_name}] No pods found for label '{ramen_label}' "
+                        "in openshift-operators — skipping restart"
+                    )
+                    continue
+
+                logger.info(
+                    f"[{cluster_name}] Restarting ramen operator pods "
+                    f"(label: {ramen_label}) to reload updated CA trust bundle"
+                )
+                for pod_info in ramen_pods:
+                    pod_name = pod_info["metadata"]["name"]
+                    ocp.OCP(
+                        kind=constants.POD,
+                        namespace=constants.OPENSHIFT_OPERATORS,
+                    ).delete(resource_name=pod_name, wait=True)
+                    logger.info(
+                        f"[{cluster_name}] Deleted pod '{pod_name}' — "
+                        "Deployment controller will recreate it"
+                    )
+
+
+def create_multiclusterservice_dr():
+    """
+    This function is used to create multiClusterService used for RDR
+
+    Returns:
+        bool: true when multiClusterService already exists
+    """
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    try:
+        if (
+            storage_cluster.data.get("spec")
+            .get("network")
+            .get("multiClusterService")
+            .get("enabled")
+        ):
+            logger.info("Found multiClusterService skipping creation")
+            return
+    except AttributeError:
+        logger.info("multiClusterService not found creating now")
+    ptch = (
+        f'\'{{"spec": {{"network": {{"multiClusterService": '
+        f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", "
+        f'"enabled": true}}}}}}}}\''
+    )
+    ptch_cmd = (
+        f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
+        f"-n openshift-storage  --type merge --patch {ptch}"
+    )
+    run_cmd(ptch_cmd)
+    storage_cluster.reload_data()
+    assert (
+        storage_cluster.data.get("spec")
+        .get("network")
+        .get("multiClusterService")
+        .get("enabled")
+    ), "Failed to update StorageCluster globalnet"
+    validate_serviceexport()
+
+
+def setup_fdf_catsrc_for_hub():
+    """
+    Create or verify the FDF CatalogSource (isf-data-foundation-catalog) on the
+    ACM hub cluster.
+
+    If the CatalogSource already exists:
+      - Compare its installed image tag against the expected ``fdf_image_tag``
+        from ``DEPLOYMENT`` config.
+      - If tags match: skip creation and wait for READY state.
+      - If tags differ: log a warning and re-apply with the new tag so the
+        catalog is updated to the correct version.
+
+    If the CatalogSource does not exist: create it from scratch.
+    """
+    logger.info("Creating FDF specific resource")
+
+    fdf = FusionDataFoundationDeployment()
+    fdf.create_image_tag_mirror_set()
+    fdf.create_image_digest_mirror_set()
+
+    expected_tag = config.DEPLOYMENT.get("fdf_image_tag")
+    logger.info(f"Expected FDF catalog image tag: {expected_tag}")
+
+    fdf_catalog_source = CatalogSource(
+        resource_name=constants.FDF_CATALOG_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+
+    if fdf_catalog_source.is_exist():
+        installed_tag = fdf_catalog_source.get_image_name()
+        logger.info(
+            f"CatalogSource '{constants.FDF_CATALOG_NAME}' already exists "
+            f"with image tag: {installed_tag}"
+        )
+        if installed_tag == expected_tag:
+            logger.info(
+                f"Installed tag '{installed_tag}' matches expected tag — "
+                "skipping CatalogSource creation"
+            )
+            fdf_catalog_source.wait_for_state("READY")
+            return
+        else:
+            logger.warning(
+                f"Installed tag '{installed_tag}' differs from expected tag "
+                f"'{expected_tag}' — re-applying CatalogSource with new tag"
+            )
+
+    logger.info("Creating FDF CatalogSource from Primary")
+    isf_data_foundation_catsrc = templating.load_yaml(constants.FDF_CATSRC_CR)
+    isf_data_foundation_catsrc["spec"]["image"] = (
+        constants.FDF_CATSRC_IMAGE_PATH + ":" + expected_tag
+    )
+    isf_data_foundation_catsrc_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="isf_df_catsrc", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        isf_data_foundation_catsrc, isf_data_foundation_catsrc_yaml.name
+    )
+
+    wait_for_machineconfigpool_status("all", timeout=1800)
+    run_cmd(f"oc apply -f {isf_data_foundation_catsrc_yaml.name}")
+
+    logger.info("Waiting for CatalogSource to be READY")
+    fdf_catalog_source.wait_for_state("READY")
 
 
 def validate_protection_label(kind, namespace, protection_name=None):
@@ -2886,3 +4131,781 @@ def validate_protection_label(kind, namespace, protection_name=None):
     logger.info(
         f"Label is added to all {len(resource_items)} {kind} under {namespace} successfully"
     )
+
+
+def create_gitops_private_repo_secret():
+    """
+    Create Gitops Secret that are required to pull workloads from Private Git repo
+    """
+
+    gitops_private_repo_secret = templating.load_yaml(
+        constants.GITOPS_PRIVATE_REPO_SECRET_YAML
+    )
+    gitops_private_repo_secret["metadata"][
+        "name"
+    ] = constants.GITOPS_PRIVATE_REPO_SECRET
+
+    gitops_private_repo_secret["stringData"]["url"] = config.ENV_DATA.get(
+        "dr_workload_repo_url"
+    )
+    gitops_private_repo_secret["stringData"]["password"] = config.clusters[
+        get_active_acm_index()
+    ].AUTH["ibm_hci"]["github_token"]
+    gitops_private_repo_secret_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="gitops_private", delete=False
+    )
+    try:
+        gitops_private_repo_secret_yaml.close()
+        templating.dump_data_to_temp_yaml(
+            gitops_private_repo_secret, gitops_private_repo_secret_yaml.name
+        )
+        run_cmd(  # IgnoreDeprecation
+            f"oc create -f {gitops_private_repo_secret_yaml.name}"
+        )
+    finally:
+        os.unlink(gitops_private_repo_secret_yaml.name)
+
+
+def generate_rdr_mirror_images():
+    """
+    Extract and return list of container images from RDR workload repository.
+
+    Returns:
+        list: List of container image strings for mirroring in disconnected environments
+    """
+    # Check whether deployment is disconnected
+    if config.DEPLOYMENT.get("disconnected"):
+
+        workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
+        logger.info(f"Repo used: {workload_repo_url}")
+        workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
+        clone_repo(
+            url=workload_repo_url,
+            location="/tmp/ocs-workload-repo",
+            branch=workload_repo_branch,
+        )
+
+        # List all Kubernetes container images under rdr/ folder
+        rdr_path = "/tmp/ocs-workload-repo/rdr"
+        if os.path.exists(rdr_path):
+            logger.info(f"Extracting Kubernetes container images from {rdr_path}:")
+            images_found = set()
+
+            for root, dirs, files in os.walk(rdr_path):
+                for file in files:
+                    # Process YAML files
+                    if file.lower().endswith((".yaml", ".yml")):
+                        yaml_file_path = os.path.join(root, file)
+                        relative_path = os.path.relpath(yaml_file_path, rdr_path)
+
+                        try:
+                            with open(yaml_file_path, "r") as f:
+                                yaml_content = yaml.safe_load_all(f)
+
+                                for doc in yaml_content:
+                                    if doc:
+                                        # Extract images from the YAML document
+                                        images = extract_images_from_yaml(doc)
+                                        for image in images:
+                                            if image not in images_found:
+                                                images_found.add(image)
+                                                logger.info(
+                                                    f"  - {image} (from {relative_path})"
+                                                )
+                        except Exception as e:
+                            logger.warning(f"Failed to parse {relative_path}: {e}")
+
+            # Convert set to sorted list for consistent ordering
+            image_list = sorted(list(images_found))
+
+            if image_list:
+                logger.info(f"Total unique container images found: {len(image_list)}")
+                logger.info("Images ready for mirroring in disconnected environment")
+            else:
+                logger.warning("No container images found in YAML files")
+            logger.info(image_list)
+            return image_list
+        else:
+            logger.warning(f"RDR path does not exist: {rdr_path}")
+            return []
+
+    return []
+
+
+def apply_itms_to_managed_clusters(itms_file_path):
+    """
+    Apply itms configuration to all managed clusters and wait for MCP to complete.
+
+    Args:
+        itms_file_path (str): Path to the itms-oc-mirror.yaml file
+    """
+    logger.info("Applying itms to managed clusters")
+
+    # Get all managed cluster configs
+    managed_clusters = get_non_acm_cluster_config()
+
+    if not managed_clusters:
+        logger.warning("No managed clusters found")
+        return
+
+    # Store original context to restore later
+    original_ctx = config.cur_index
+
+    try:
+        for cluster_config in managed_clusters:
+            cluster_name = cluster_config.ENV_DATA.get("cluster_name", "unknown")
+            logger.info(f"Applying itms to managed cluster: {cluster_name}")
+
+            # Switch to the managed cluster context
+            cluster_index = cluster_config.MULTICLUSTER.get("multicluster_index")
+            if cluster_index is not None:
+                config.switch_ctx(cluster_index)
+
+                try:
+                    # Apply the itms file
+                    run_cmd(f"oc apply -f {itms_file_path}")
+                    logger.info(f"Successfully applied itms to {cluster_name}")
+
+                    # Wait for MachineConfigPool to complete
+                    logger.info(
+                        f"Waiting for MachineConfigPool to complete on {cluster_name}"
+                    )
+                    wait_for_machineconfigpool_status("all", timeout=1800)
+                    logger.info(f"MachineConfigPool update completed on {cluster_name}")
+
+                except CommandFailed as e:
+                    logger.error(f"Failed to apply itms to {cluster_name}: {e}")
+                    raise
+                except Exception as e:
+                    logger.error(
+                        f"Error during itms application to {cluster_name}: {e}"
+                    )
+                    raise
+            else:
+                logger.warning(f"Could not find cluster index for {cluster_name}")
+
+    finally:
+        # Restore original context
+        config.switch_ctx(original_ctx)
+        logger.info("Restored original cluster context")
+
+
+def extract_images_from_yaml(obj, images=None):
+    """
+    Recursively extract container image references from a YAML object.
+    Extracts values from 'image', 'url', and 'value' keys that contain image references.
+
+    Args:
+        obj: YAML object (dict, list, or primitive)
+        images: Set to collect images (created if None)
+
+    Returns:
+        set: Set of container image strings
+    """
+    if images is None:
+        images = set()
+
+    if isinstance(obj, dict):
+        # Check for 'image', 'url', and 'value' keys that contain image references
+        for key in ["image", "url", "value"]:
+            if key in obj and isinstance(obj[key], str):
+                # Only add if it looks like a container image reference
+                # (contains registry path or common image patterns)
+                value = obj[key].strip()
+                if value and ("/" in value or ":" in value):
+                    # Skip obvious non-image schemes (URLs, git refs, file paths)
+                    if any(
+                        value.startswith(scheme)
+                        for scheme in ["http://", "https://", "git://", "git@"]
+                    ):
+                        continue
+                    if "://" in value and not value.startswith("docker://"):
+                        continue
+                    # Require either a registry-like domain (contains '.' or ':' before first '/')
+                    # or typical image pattern (path segments with optional :tag or @sha256:)
+                    first_slash = value.find("/")
+                    if first_slash > 0:
+                        # Check if there's a domain-like prefix before the first slash
+                        prefix = value[:first_slash]
+                        if "." in prefix or ":" in prefix:
+                            images.add(value)
+                    elif ":" in value and not value.startswith("/"):
+                        # Simple image:tag format without registry
+                        images.add(value)
+
+        # Recursively process all values
+        for value in obj.values():
+            extract_images_from_yaml(value, images)
+
+    elif isinstance(obj, list):
+        # Recursively process all items
+        for item in obj:
+            extract_images_from_yaml(item, images)
+
+    return images
+
+
+def get_cdi_registry_credentials():
+    """
+    Extract the username and password for the internal mirror registry from
+    the cluster's global pull secret (``secret/pull-secret`` in
+    ``openshift-config``).
+
+    The pull-secret ``auths`` map may contain multiple entries keyed by
+    registry hostname or hostname/path.  We match on the bare hostname from
+    ``config.DEPLOYMENT["mirror_registry"]`` — the first entry whose key
+    equals that hostname exactly is preferred; if not found we fall back to
+    any entry whose key starts with that hostname (sub-repo paths).
+
+    Each auth entry may carry explicit ``username`` / ``password`` fields, or
+    only an ``auth`` field which is ``base64(username:password)``.  Both forms
+    are handled.
+
+    Returns:
+        tuple[str, str]: ``(username, password)`` as plain strings.
+
+    Raises:
+        CommandFailed: If the ``oc`` call fails.
+        KeyError: If no entry for the mirror registry is found in the secret.
+        ValueError: If the ``auth`` field cannot be decoded into ``user:pass``.
+    """
+    mirror_host = config.DEPLOYMENT["mirror_registry"].rstrip("/")
+
+    raw_b64 = (
+        exec_cmd(
+            f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE}"
+            r" -o jsonpath='{.data.\.dockerconfigjson}'"
+        )
+        .stdout.decode()
+        .strip()
+    )
+    auths = json.loads(base64.b64decode(raw_b64)).get("auths", {})
+
+    # Prefer an exact-hostname match over sub-repo entries.
+    entry = auths.get(mirror_host) or next(
+        (v for k, v in auths.items() if k.startswith(mirror_host)),
+        None,
+    )
+    if entry is None:
+        raise KeyError(
+            f"No pull-secret entry found for mirror registry '{mirror_host}'. "
+            f"Available hosts: {list(auths.keys())}"
+        )
+
+    username = entry.get("username")
+    password = entry.get("password")
+    if not username or not password:
+        # Decode "auth": base64("username:password")
+        auth_decoded = base64.b64decode(entry["auth"]).decode()
+        if ":" not in auth_decoded:
+            raise ValueError(
+                f"Cannot parse 'auth' field for '{mirror_host}': "
+                f"expected 'user:password', got '{auth_decoded}'"
+            )
+        username, password = auth_decoded.split(":", 1)
+
+    logger.debug(
+        f"Extracted CDI registry credentials for '{mirror_host}': user='{username}'"
+    )
+    return username, password
+
+
+def create_cdi_pull_secret(namespace, secret_name="quayadmin"):
+    """
+    Create an Opaque Secret in *namespace* so CDI can authenticate against
+    the internal mirror registry when importing VM disk images.
+
+    CDI's ``spec.source.registry.secretRef`` expects an Opaque secret with
+    two keys:
+
+    * ``accessKeyId`` — registry username (base64-encoded)
+    * ``secretKey``   — registry password (base64-encoded)
+
+    The credentials are derived automatically from the cluster's existing
+    ``secret/pull-secret`` in ``openshift-config`` — no manual credential
+    management is required.
+
+    This function is idempotent — it deletes an existing secret before
+    re-creating it.
+
+    Args:
+        namespace (str): Workload namespace where the secret is created.
+        secret_name (str): Name to give the Secret.  Defaults to
+            ``quayadmin`` to match the workload YAML ``secretRef``.
+    """
+    secret_ocp = ocp.OCP(kind=constants.SECRET, namespace=namespace)
+
+    if secret_ocp.is_exist(resource_name=secret_name):
+        logger.info(
+            f"CDI pull secret '{secret_name}' already exists in "
+            f"'{namespace}', recreating."
+        )
+        secret_ocp.delete(resource_name=secret_name, wait=True)
+
+    mirror_host = config.DEPLOYMENT.get("mirror_registry")
+    logger.info(
+        f"Creating CDI registry secret '{secret_name}' in namespace "
+        f"'{namespace}' (mirror registry: {mirror_host})"
+    )
+    username, password = get_cdi_registry_credentials()
+    secret_manifest = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {"name": secret_name, "namespace": namespace},
+        "type": "Opaque",
+        "data": {
+            "accessKeyId": base64.b64encode(username.encode()).decode(),
+            "secretKey": base64.b64encode(password.encode()).decode(),
+        },
+    }
+    create_resource(**secret_manifest)
+    logger.info(
+        f"CDI registry secret '{secret_name}' created in namespace '{namespace}'"
+    )
+
+
+def fetch_mirror_registry_cert():
+    """
+    Fetch the TLS certificate presented by ``config.DEPLOYMENT["mirror_registry"]``
+    using ``openssl s_client``.
+
+    Port 443 is assumed when none is specified in the registry address.
+
+    Returns:
+        str: PEM-encoded certificate string (includes trailing newline).
+
+    Raises:
+        CommandFailed: If ``openssl`` is not available or the connection fails.
+        ValueError: If the output contains no PEM certificate block.
+    """
+    mirror_registry = config.DEPLOYMENT["mirror_registry"].rstrip("/")
+
+    # Split off an explicit port; default to 443.
+    if ":" in mirror_registry:
+        host, port = mirror_registry.rsplit(":", 1)
+    else:
+        host, port = mirror_registry, "443"
+
+    endpoint = f"{host}:{port}"
+    logger.info(
+        f"Fetching TLS certificate from mirror registry '{endpoint}' "
+        f"via openssl s_client"
+    )
+    cmd = (
+        f"echo | openssl s_client -connect {endpoint} -showcerts 2>/dev/null"
+        f" | openssl x509 -outform PEM"
+    )
+    result = exec_cmd(cmd, shell=True)
+    pem = result.stdout.decode().strip()
+
+    if "BEGIN CERTIFICATE" not in pem:
+        raise ValueError(
+            f"openssl s_client returned no PEM certificate for '{endpoint}'. "
+            f"Output: {pem!r}"
+        )
+
+    if not pem.endswith("\n"):
+        pem += "\n"
+
+    logger.debug(f"Successfully fetched TLS certificate for '{endpoint}'")
+    return pem
+
+
+def create_cdi_cert_configmap(namespace, configmap_name="user-ca-bundle"):
+    """
+    Create a ConfigMap in *namespace* containing the TLS CA certificate of
+    ``config.DEPLOYMENT["mirror_registry"]``, so CDI can verify the registry's
+    TLS certificate when importing VM disk images in a disconnected environment.
+
+    CDI's ``spec.source.registry.certConfigMap`` is namespace-scoped — it must
+    exist in the same namespace as the DataVolume / VolumeImportSource.
+
+    This function is idempotent — it deletes an existing ConfigMap before
+    re-creating it.
+
+    Args:
+        namespace (str): Workload namespace where the ConfigMap is created.
+        configmap_name (str): Name to give the ConfigMap.  Defaults to
+            ``user-ca-bundle`` to match the workload YAML ``certConfigMap``.
+    """
+    cm_ocp = ocp.OCP(kind=constants.CONFIGMAP, namespace=namespace)
+
+    if cm_ocp.is_exist(resource_name=configmap_name):
+        logger.info(
+            f"CDI cert ConfigMap '{configmap_name}' already exists in "
+            f"'{namespace}', recreating."
+        )
+        cm_ocp.delete(resource_name=configmap_name, wait=True)
+
+    mirror_registry = config.DEPLOYMENT.get("mirror_registry")
+    logger.info(
+        f"Creating CDI cert ConfigMap '{configmap_name}' in namespace "
+        f"'{namespace}' (mirror registry: {mirror_registry})"
+    )
+    ca_bundle = fetch_mirror_registry_cert()
+
+    cm_manifest = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": configmap_name, "namespace": namespace},
+        "data": {"ca-bundle.crt": ca_bundle},
+    }
+    create_resource(**cm_manifest)
+    logger.info(
+        f"CDI cert ConfigMap '{configmap_name}' created in namespace '{namespace}'"
+    )
+
+
+def validate_application_odf_cli(
+    drpc_name,
+    namespace,
+    action="validate",
+    dr_action=None,
+    retries=5,
+    retry_interval=100,
+):
+    """
+    Validate DR application using the ODF CLI tool.
+
+    Run an ODF CLI DR action on a DR application.
+
+    Supports 'validate' and 'gather' actions. For 'validate', runs
+    'odf dr validate application' and asserts success, retrying up to
+    ``retries`` times with ``retry_interval`` seconds between attempts
+    to allow post-failover/relocate resources time to stabilise.
+    For 'gather', runs 'odf dr gather application' to collect diagnostic
+    data (non-fatal on failure).
+
+    Args:
+        drpc_name (str): Name of the DRPC resource
+        namespace (str): Namespace of the application
+        action (str): Action to perform - "validate" or "gather"
+        dr_action (str): Label for the output directory
+            (e.g., "app-failover", "app-relocate"). Defaults to
+            "{action}-app" if not provided.
+        retries (int): Number of retry attempts for validate action.
+        retry_interval (int): Seconds to wait between retries.
+
+    Returns:
+        str or None: The stdout output from the command,
+            or None if any cluster in the multicluster config is a hosted
+            cluster, or if gather failed, or if
+            ``skip_odf_cli_validation`` is set in ENV_DATA.
+
+    Note:
+        Returns None immediately (without running any command) when any
+        cluster in ``config.clusters`` has ``is_hosted=True``, or when
+        ``skip_odf_cli_validation`` is ``True`` in ``config.ENV_DATA``.
+        Skips the test on validation failure.
+
+    """
+    if config.ENV_DATA.get("skip_odf_cli_validation", False):
+        logger.info(
+            f"Skipping ODF CLI DR {action} for DRPC '{drpc_name}': "
+            f"'skip_odf_cli_validation' is set in ENV_DATA"
+        )
+        return None
+
+    for cluster in config.clusters:
+        if cluster.MULTICLUSTER.get("is_hosted", False):
+            cluster_name = cluster.MULTICLUSTER.get(
+                "name", cluster.ENV_DATA.get("cluster_name", "unknown")
+            )
+            logger.info(
+                f"Skipping ODF CLI DR {action} for DRPC '{drpc_name}': "
+                f"cluster '{cluster_name}' is a hosted cluster"
+            )
+            return None
+
+    dir_label = dr_action or f"{action}-app"
+    output_dir = os.path.join(
+        os.path.expanduser(config.RUN["log_dir"]),
+        f"odf_dr_{dir_label}_{config.RUN['run_id']}",
+        f"{dir_label}_{drpc_name}",
+    )
+    odf_cli_runner = ODFCliRunner()
+    cmd_args = (
+        f"dr {action} application "
+        f"--config {constants.ODF_CLI_DR_CONFIG_PATH} "
+        f"--name {drpc_name} "
+        f"--namespace {namespace} "
+        f"-o {output_dir}"
+    )
+
+    create_directory_path(output_dir)
+    logger.info(f"ODF DR {action} application output will be stored in: {output_dir}")
+
+    if action == "gather":
+        try:
+            logger.info(
+                f"Running ODF DR gather application for DRPC '{drpc_name}' "
+                f"in namespace '{namespace}'"
+            )
+            result = odf_cli_runner.run_command(cmd_args)
+            stdout = result.stdout.decode()
+            logger.info(f"ODF DR gather application output:\n{stdout}")
+            return stdout
+        except Exception:
+            logger.warning(
+                f"ODF DR gather application failed for DRPC '{drpc_name}' "
+                f"in namespace '{namespace}'. Continuing with teardown.",
+                exc_info=True,
+            )
+            return None
+    else:
+        last_exception = None
+        last_stdout = None
+        for attempt in range(1, retries + 1):
+            logger.info(
+                f"Running ODF DR validate application for DRPC '{drpc_name}' "
+                f"in namespace '{namespace}' (attempt {attempt}/{retries})"
+            )
+            try:
+                result = odf_cli_runner.run_command(cmd_args, timeout=1200)
+                last_stdout = result.stdout.decode()
+                last_exception = None
+                logger.info(f"ODF DR validate application output:\n{last_stdout}")
+            except Exception as ex:
+                last_exception = ex
+                last_stdout = None
+                logger.warning(
+                    f"ODF DR validate application command failed for DRPC "
+                    f"'{drpc_name}' in namespace '{namespace}' "
+                    f"(attempt {attempt}/{retries}).",
+                    exc_info=True,
+                )
+
+            if last_exception is None and last_stdout is not None:
+                if "validation completed" in last_stdout.lower():
+                    return last_stdout
+
+            if attempt < retries:
+                logger.info(
+                    f"Retrying ODF DR validate in {retry_interval}s "
+                    f"(attempt {attempt}/{retries} did not pass)"
+                )
+                sleep(retry_interval)
+
+        if last_exception is not None:
+            logger.error(
+                f"ODF DR validate application command failed for DRPC '{drpc_name}' "
+                f"in namespace '{namespace}' after {retries} attempts. "
+                f"Last exception: {last_exception}"
+            )
+            pytest.skip(
+                f"ODF DR validate application command failed for DRPC '{drpc_name}' "
+                f"in namespace '{namespace}' after {retries} attempts"
+            )
+
+        logger.error(
+            f"ODF DR validate application did not report success for DRPC '{drpc_name}' "
+            f"in namespace '{namespace}' after {retries} attempts. Output:\n{last_stdout}"
+        )
+        pytest.skip(
+            f"ODF DR validate application did not report success for DRPC '{drpc_name}' "
+            f"in namespace '{namespace}' after {retries} attempts. Output:\n{last_stdout}"
+        )
+
+    return last_stdout
+
+
+def update_odf_cli_dr_config_kubeconfigs():
+    """
+    Update the kubeconfig paths in the ODF CLI DR config file at runtime.
+
+    Reads the odf_cli_dr.yaml config, resolves the actual kubeconfig paths
+    for hub, c1, and c2 clusters from the framework's multicluster config,
+    and writes them back. This follows the same pattern used by
+    ocs_ci/utility/proxy.py for runtime kubeconfig modifications.
+
+    The mapping is:
+        - hub: first ACM cluster
+        - c1, c2: first and second non-ACM (managed) clusters
+        - passive-hub: recovery cluster (if configured)
+
+    """
+    from ocs_ci.ocs.utils import get_all_acm_indexes, get_non_acm_cluster_config
+
+    config_path = constants.ODF_CLI_DR_CONFIG_PATH
+    with open(config_path, "r") as f:
+        cli_config = yaml.safe_load(f)
+
+    acm_indexes = get_all_acm_indexes()
+    if acm_indexes:
+        hub_kubeconfig = config.get_cluster_kubeconfig_by_index(acm_indexes[0])
+        cli_config["clusters"]["hub"]["kubeconfig"] = hub_kubeconfig
+        logger.info(f"Updated odf_cli_dr.yaml hub kubeconfig: {hub_kubeconfig}")
+
+    managed_clusters = get_non_acm_cluster_config()
+    cluster_keys = ["c1", "c2"]
+    for i, key in enumerate(cluster_keys):
+        if i < len(managed_clusters):
+            idx = managed_clusters[i].MULTICLUSTER["multicluster_index"]
+            kubeconfig = config.get_cluster_kubeconfig_by_index(idx)
+            cli_config["clusters"][key]["kubeconfig"] = kubeconfig
+            logger.info(f"Updated odf_cli_dr.yaml {key} kubeconfig: {kubeconfig}")
+
+    for cluster in config.clusters:
+        if cluster.MULTICLUSTER.get("recovery_cluster"):
+            idx = cluster.MULTICLUSTER["multicluster_index"]
+            kubeconfig = config.get_cluster_kubeconfig_by_index(idx)
+            cli_config["clusters"]["passive-hub"]["kubeconfig"] = kubeconfig
+            logger.info(f"Updated odf_cli_dr.yaml passive-hub kubeconfig: {kubeconfig}")
+            break
+
+    cluster_set_names = get_cluster_set_name()
+    if cluster_set_names:
+        cli_config["clusterSet"] = cluster_set_names[0]
+        logger.info(f"Updated odf_cli_dr.yaml clusterSet: {cluster_set_names[0]}")
+
+    with open(config_path, "w") as f:
+        yaml.dump(cli_config, f, default_flow_style=False)
+
+    logger.info(f"ODF CLI DR config updated at: {config_path}")
+
+
+def validate_cluster_odf_cli(retries=5, retry_interval=60):
+    """
+    Validate DR cluster configuration using the ODF CLI tool.
+
+    Runs 'odf dr validate clusters' and stores the output files
+    to the test log directory, retrying up to ``retries`` times
+    with ``retry_interval`` seconds between attempts.
+
+    Args:
+        retries (int): Number of retry attempts.
+        retry_interval (int): Seconds to wait between retries.
+
+    Returns:
+        str or None: The stdout output from the validation command,
+            or None if any cluster in the multicluster config is a hosted
+            cluster, or if ``skip_odf_cli_validation`` is set in ENV_DATA.
+
+    Raises:
+        CommandFailed: If the ODF CLI command fails
+
+    """
+    if config.ENV_DATA.get("skip_odf_cli_validation", False):
+        logger.info(
+            "Skipping ODF CLI DR validate clusters: "
+            "'skip_odf_cli_validation' is set in ENV_DATA"
+        )
+        return None
+
+    for cluster in config.clusters:
+        if cluster.MULTICLUSTER.get("is_hosted", False):
+            cluster_name = cluster.MULTICLUSTER.get(
+                "name", cluster.ENV_DATA.get("cluster_name", "unknown")
+            )
+            logger.info(
+                f"Skipping ODF CLI DR validate clusters: "
+                f"cluster '{cluster_name}' is a hosted cluster"
+            )
+            return None
+
+    output_dir = os.path.join(
+        os.path.expanduser(config.RUN["log_dir"]),
+        f"odf_dr_validate_clusters_{config.RUN['run_id']}",
+    )
+    create_directory_path(output_dir)
+    logger.info(f"ODF DR validate clusters output will be stored in: {output_dir}")
+
+    odf_cli_runner = ODFCliRunner()
+    cmd_args = f"dr validate clusters --config {constants.ODF_CLI_DR_CONFIG_PATH} -o {output_dir}"
+
+    last_exception = None
+    last_stdout = None
+    for attempt in range(1, retries + 1):
+        logger.info(f"Running ODF DR validate clusters (attempt {attempt}/{retries})")
+        try:
+            result = odf_cli_runner.run_command(cmd_args, timeout=1200)
+            last_stdout = result.stdout.decode()
+            last_exception = None
+            logger.info(f"ODF DR validate clusters output:\n{last_stdout}")
+        except Exception as ex:
+            last_exception = ex
+            last_stdout = None
+            logger.warning(
+                f"ODF DR validate clusters command failed "
+                f"(attempt {attempt}/{retries}).",
+                exc_info=True,
+            )
+
+        if last_exception is None and last_stdout is not None:
+            if "validation completed" in last_stdout.lower():
+                return last_stdout
+
+        if attempt < retries:
+            logger.info(
+                f"Retrying ODF DR validate clusters in {retry_interval}s "
+                f"(attempt {attempt}/{retries} did not pass)"
+            )
+            sleep(retry_interval)
+
+    if last_exception is not None:
+        logger.error(
+            f"ODF DR validate clusters command failed after {retries} attempts. "
+            f"Last exception: {last_exception}"
+        )
+        pytest.skip(f"ODF DR validate clusters command failed after {retries} attempts")
+
+    logger.error(
+        f"ODF DR validate clusters did not report success after {retries} attempts. "
+        f"Output:\n{last_stdout}"
+    )
+    pytest.skip(
+        f"ODF DR validate clusters did not report success after {retries} attempts. "
+        f"Output:\n{last_stdout}"
+    )
+
+
+def configure_submariner_lighthouse_import_namespace_deny_list():
+    """
+    Temporary workaround required only for submariner version 0.24.1 in a
+    globalnet RDR setup, to be run immediately after submariner is installed on
+    both managed clusters.
+
+    On each managed cluster, if the deployed submariner version is 0.24.1,
+    create the submariner-lighthouse-agent configmap with the
+    import-namespace-deny-list set to "kube-".
+
+    """
+    # Local imports to keep this temporary workaround self-contained
+    from ocs_ci.utility import version
+
+    target_version = version.get_semantic_version("0.24.1")
+    restore_index = config.cur_index
+    try:
+        for cluster in get_non_acm_cluster_config():
+            # Skip hosted/client clusters, apply only on managed clusters
+            if cluster.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT:
+                continue
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            cluster_name = cluster.ENV_DATA["cluster_name"]
+
+            submariner_version = version.get_submariner_operator_version()
+            if (
+                not submariner_version
+                or version.get_semantic_version(submariner_version) != target_version
+            ):
+                logger.info(
+                    f"Submariner version on cluster {cluster_name} is "
+                    f"{submariner_version}, skipping the submariner-lighthouse-agent "
+                    "import-namespace-deny-list configmap workaround "
+                    f"(only applicable for {target_version})"
+                )
+                continue
+
+            logger.info(
+                f"Submariner version on cluster {cluster_name} is {target_version}, "
+                "creating the submariner-lighthouse-agent configmap"
+            )
+            exec_cmd(
+                "oc create configmap submariner-lighthouse-agent "
+                '--from-literal=import-namespace-deny-list="kube-" '
+                f"-n {constants.SUBMARINER_OPERATOR_NAMESPACE} "
+                "--dry-run=client -o yaml | oc apply -f -",
+                shell=True,
+            )
+    finally:
+        config.switch_ctx(restore_index)

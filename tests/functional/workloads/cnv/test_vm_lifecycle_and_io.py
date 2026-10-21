@@ -5,7 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import check_fio_status
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -34,7 +34,7 @@ class TestVmOperations(E2ETest):
 
         """
 
-        # Create a project
+        logger.test_step("Create project and deploy CNV workload VMs")
         proj_obj = project_factory()
 
         (
@@ -44,8 +44,14 @@ class TestVmOperations(E2ETest):
             self.sc_obj_aggressive,
         ) = multi_cnv_workload(namespace=proj_obj.namespace)
         all_vm_list = self.vm_objs_def + self.vm_objs_aggr
+        logger.info(f"Created {len(all_vm_list)} VMs successfully")
 
+        logger.test_step("Restart VMs and verify FIO status")
         for vm_obj in all_vm_list:
+            logger.info(f"Restarting VM '{vm_obj.name}'")
             vm_obj.restart()
-            if check_fio_status(vm_obj):
-                log.info("FIO started after restarting VM")
+            assert check_fio_status(
+                vm_obj
+            ), f"FIO failed to run on VM '{vm_obj.name}' after restart"
+            logger.info(f"FIO running successfully on VM '{vm_obj.name}' after restart")
+        logger.info("VM lifecycle operations completed for all VMs")

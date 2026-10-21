@@ -2,7 +2,11 @@ import pytest
 import logging
 
 log = logging.getLogger(__name__)
-from ocs_ci.framework.pytest_customization.marks import green_squad, tier1
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    skipif_external_mode,
+    tier1,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -70,6 +74,7 @@ class TestEncryptionConfigurationDashboard:
         assert actual_status == expected_status, error_message
         log.info(f"{context} status is as expected: {actual_status}")
 
+    @skipif_external_mode
     @pytest.mark.polarion_id("OCS-6300")
     def test_file_block_encryption_configuration_dashboard(self, setup_ui_class):
         """Test the encryption configuration dashboard of File And Block details for correctness.
@@ -127,6 +132,7 @@ class TestEncryptionConfigurationDashboard:
             "InTransit Encryption status is incorrect in the dashboard.",
         )
 
+    @skipif_external_mode
     @pytest.mark.polarion_id("OCS-6301")
     def test_object_storage_encryption_configuration_dashboard(self, setup_ui_class):
         """Test the encryption configuration dashboard of Object details for correctness.

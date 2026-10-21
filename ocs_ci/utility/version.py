@@ -16,6 +16,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.utility.retry import retry
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +74,9 @@ VERSION_4_19 = get_semantic_version("4.19", True)
 VERSION_4_20 = get_semantic_version("4.20", True)
 VERSION_4_21 = get_semantic_version("4.21", True)
 VERSION_4_22 = get_semantic_version("4.22", True)
+VERSION_4_23 = get_semantic_version("4.23", True)
+VERSION_5_0 = get_semantic_version("5.0", True)
+VERSION_5_1 = get_semantic_version("5.1", True)
 
 # Fusion version constants
 VERSION_2_11 = get_semantic_version("2.11", True)
@@ -91,6 +95,28 @@ def get_semantic_ocs_version_from_config(cluster_config=None):
     if not cluster_config:
         cluster_config = config
     return get_semantic_version(cluster_config.ENV_DATA["ocs_version"], True)
+
+
+def get_odf_image_namespace(ocs_version=None):
+    """
+    Returning the container image namespace used by ODF builds.
+
+    ODF images are published under a namespace derived from the ODF major
+    version - ODF 4.y.z builds use odf4 (e.g.
+    registry.redhat.io/odf4/odf-cli-rhel9 and
+    quay.io/rhceph-dev/odf4-odf-cli-rhel9), ODF 5.y.z builds use odf5.
+
+    Args:
+        ocs_version (semantic_version.base.Version): ODF version to get the
+            namespace for. If not provided, the version from config is used.
+
+    Returns:
+        str: ODF container image namespace (e.g. "odf4" or "odf5")
+
+    """
+    if not ocs_version:
+        ocs_version = get_semantic_ocs_version_from_config()
+    return f"odf{ocs_version.major}"
 
 
 def get_semantic_ocp_version_from_config():
@@ -149,25 +175,62 @@ def get_ocp_version(seperator=None):
     return char.join([str(version.major), str(version.minor)])
 
 
+@retry(
+    (requests.exceptions.RequestException, json.JSONDecodeError),
+    tries=6,
+    delay=10,
+    backoff=2,
+)
 def get_ocp_ga_version(channel):
     """
-    Retrieve the latest GA version for
+    Retrieve the latest GA version for the given OCP channel.
+
+    This function queries the Red Hat OpenShift upgrade graph API to find
+    the latest GA version. It includes retry logic to handle transient
+    network issues and API timeouts.
 
     Args:
         channel (str): the OCP version channel to retrieve GA version for
 
     Returns:
         str: latest GA version for the provided channel.
-            An empty string is returned if no version exists.
+            An empty string is returned if no version exists or if all retries fail.
 
-
+    Raises:
+        requests.exceptions.RequestException: if the HTTP request fails after all retries
+        json.JSONDecodeError: if the response is not valid JSON after all retries
     """
     log.debug("Retrieving GA version for channel: %s", channel)
     url = "https://api.openshift.com/api/upgrades_info/v1/graph"
     headers = {"Accept": "application/json"}
     payload = {"channel": f"stable-{channel}"}
-    r = requests.get(url, headers=headers, params=payload, timeout=120)
-    nodes = r.json()["nodes"]
+
+    try:
+        r = requests.get(url, headers=headers, params=payload, timeout=120)
+        r.raise_for_status()
+        nodes = r.json()["nodes"]
+    except requests.exceptions.HTTPError as http_err:
+        log.error(
+            f"HTTP error {r.status_code} when retrieving GA version for channel {channel}: {http_err}"
+        )
+        raise
+    except requests.exceptions.Timeout as timeout_err:
+        log.error(
+            f"Timeout when retrieving GA version for channel {channel}: {timeout_err}"
+        )
+        raise
+    except requests.exceptions.RequestException as req_err:
+        log.error(
+            f"Request error when retrieving GA version for channel {channel}: {req_err}"
+        )
+        raise
+    except json.JSONDecodeError as json_err:
+        log.error(
+            f"Invalid JSON response when retrieving GA version for channel {channel}. "
+            f"Response status: {r.status_code}, Response text: {r.text[:200]}, Error: {json_err}"
+        )
+        raise
+
     if nodes:
         versions = [node["version"] for node in nodes]
         versions.sort()

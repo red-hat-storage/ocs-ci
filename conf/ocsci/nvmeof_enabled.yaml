@@ -1,0 +1,11 @@
+---
+# Use this config to enable NVMe-oF (NVMe over Fabrics) on the StorageCluster.
+# When nvmeof_enable is true, the StorageCluster spec.nvmeof section is populated
+# during OCS deployment with the enable flag and the number of gateway instances.
+#
+# Availability: NVMe-oF is currently supported only with FDF (Fusion Data
+# Foundation) deployments. Enabling it with other deployment types is not
+# supported at the moment.
+DEPLOYMENT:
+  nvmeof_enable: true
+  nvmeof_gateway_instances: 2

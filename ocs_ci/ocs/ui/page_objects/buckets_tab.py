@@ -11,8 +11,9 @@ from selenium.common.exceptions import (
     TimeoutException,
     StaleElementReferenceException,
 )
+from selenium.webdriver.support.ui import WebDriverWait
 
-
+from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
@@ -30,6 +31,31 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
     # Methods can directly access locators via self.bucket_tab, self.generic_locators etc.
     # No need to explicitly import or assign them
+
+    def nav_s3_vector_tab(self):
+        """
+        Navigate to the S3 Vector tab within the Object Storage Buckets page.
+
+        Follows the Fluent Interface / POM pattern: the parent returns the child
+        page object so callers can chain directly into S3 Vector operations.
+
+        Returns:
+            S3VectorTab: page object for the S3 Vector tab.
+        """
+        logger.info("Navigating to Object Storage Buckets page")
+        self.navigate_buckets_page()
+        self.page_has_loaded(sleep_time=2)
+
+        logger.info("Clicking S3 Vector tab")
+        self.do_click(
+            self.s3_vector_loc["s3_vector_tab_button"], enable_screenshot=True
+        )
+        self.page_has_loaded(sleep_time=2)
+        logger.info("Successfully navigated to S3 Vector tab")
+
+        from ocs_ci.ocs.ui.page_objects.s3_vector_tab import S3VectorTab
+
+        return S3VectorTab()
 
     def create_bucket_ui(self, method: str, return_name: bool = False):
         """
@@ -595,6 +621,10 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         Args:
             folder_path (str): Path to the folder to upload.
             wait_time (int): Time to wait after upload (default: 2 seconds).
+
+        Raises:
+            exceptions.TimeoutExpiredError: If the folder does not appear
+                  in the bucket after upload.
         """
         file_input = self.driver.find_element(
             self.bucket_tab["file_input_directory"][1],
@@ -607,6 +637,16 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         file_input.clear()
         file_input.send_keys(folder_path)
         time.sleep(wait_time)
+        folder_name = os.path.basename(folder_path)
+        try:
+            self.wait_for_element_to_be_present(
+                format_locator(self.bucket_tab["uploaded_folder_name"], folder_name),
+            )
+            logger.info(f"Upload verified: {folder_name} appears in bucket")
+        except TimeoutException as err:
+            raise exceptions.TimeoutExpiredError(
+                f"Upload failed: {folder_name} not found in bucket"
+            ) from err
 
     def navigate_to_bucket(self, bucket_name: str) -> None:
         """
@@ -620,7 +660,51 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         logger.info(f"Looking for bucket link with text: {bucket_name}")
         bucket_link_locator = f"//tr//a[contains(text(), '{bucket_name}')]"
         self.do_click((bucket_link_locator, By.XPATH))
+        self.page_has_loaded()
         logger.info(f"Successfully navigated into bucket: {bucket_name}")
+
+    def navigate_into_folder(self, folder_name: str) -> None:
+        """
+        Click a folder link in the object browser to navigate into it.
+
+        Args:
+            folder_name (str): Name of the folder to navigate into.
+        """
+        folder_locator = format_locator(
+            self.bucket_tab["folder_link_by_name"], folder_name
+        )
+        self.do_click(folder_locator)
+        self.page_has_loaded()
+        logger.info(f"Navigated into folder: {folder_name}")
+
+    def wait_for_object_listed(self, object_name, timeout=30):
+        """
+        Wait for an object or folder to appear in the object browser listing.
+
+        Args:
+            object_name (str): Name of the object or folder to wait for.
+            timeout (int): Seconds to wait before timing out.
+
+        """
+        locator = format_locator(self.bucket_tab["file_name_text"], object_name)
+        WebDriverWait(self.driver, timeout).until(
+            lambda d: self.get_elements(locator),
+            message=f"'{object_name}' not found in object browser within {timeout}s",
+        )
+
+    def is_object_listed(self, object_name):
+        """
+        Check if an object or folder is visible in the object browser listing.
+
+        Args:
+            object_name (str): Name of the object or folder.
+
+        Returns:
+            bool: True if the object is listed, False otherwise.
+
+        """
+        locator = format_locator(self.bucket_tab["file_name_text"], object_name)
+        return bool(self.get_elements(locator))
 
     def navigate_to_folder_and_enable_versions(
         self,
@@ -695,3 +779,30 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_click(self.bucket_tab["permissions_tab"])
         self.do_click(self.bucket_tab["bucket_policy_tab"])
         return BucketsTabPermissions()
+
+    def preview_object_content(self, object_key, timeout=15):
+        """
+        Open the Preview of an object in the object browser and return its
+        text content.
+
+        Assumes the object contains UTF-8 text.
+
+        Args:
+            object_key (str): The S3 object key visible in the object browser.
+            timeout (int): Seconds to wait for the preview tab to open.
+
+        Returns:
+            str: The text content of the previewed object.
+
+        """
+        kebab_locator = format_locator(self.bucket_tab["object_row_kebab"], object_key)
+        self.do_click(kebab_locator, enable_screenshot=True)
+
+        locator = self.bucket_tab["object_action_preview"]
+        with self.run_in_new_tab(locator, timeout=timeout):
+            # Read the content directly from the DOM - browsers consistently
+            # render text/plain blobs inside a <pre> tag.
+            content = self.driver.find_element(By.TAG_NAME, "pre").text
+
+        logger.info(f"Preview content length for '{object_key}': {len(content)}")
+        return content

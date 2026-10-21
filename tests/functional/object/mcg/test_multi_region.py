@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     mcg,
     tier2,
+    jira,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import ocp, constants
@@ -87,6 +88,7 @@ class TestMultiRegion(MCGTest):
     @tier4a
     @skipif_ocs_version("==4.4")
     @pytest.mark.polarion_id("OCS-1784")
+    @jira("DFBUGS-9429")
     def test_multiregion_mirror(
         self,
         cld_mgr,
@@ -120,7 +122,7 @@ class TestMultiRegion(MCGTest):
             awscli_pod_session, local_testobjs_dir_path, mcg_bucket_path, mcg_obj
         )
 
-        mcg_obj.check_if_mirroring_is_done(bucket_name, timeout=420)
+        mcg_obj.check_if_mirroring_is_done(bucket_name)
 
         # Bring bucket A down
         aws_client.toggle_aws_bucket_readwrite(backingstore1.uls_name)

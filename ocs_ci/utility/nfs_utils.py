@@ -3,9 +3,12 @@ Module that contains all operations related to nfs feature in a cluster
 
 """
 
+import json
 import logging
 import yaml
 import pytest
+import time
+
 from ocs_ci.ocs import constants, resources, ocp
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
@@ -13,6 +16,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.utility import version as version_module
+from ocs_ci.utility import templating
 from ocs_ci.utility.utils import convert_device_size, exec_cmd, TimeoutSampler
 from ocs_ci.deployment.hub_spoke import get_autodistributed_storage_classes
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
@@ -176,7 +180,14 @@ def create_nfs_load_balancer_service(
             """
 
     nfs_service_data = yaml.safe_load(service)
-    helpers.create_resource(**nfs_service_data)
+    svc_ocp = ocp.OCP(
+        kind=constants.SERVICE,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    if svc_ocp.is_exist(resource_name="rook-ceph-nfs-my-nfs-load-balancer"):
+        log.info("NFS LoadBalancer service already exists, skipping creation")
+    else:
+        helpers.create_resource(**nfs_service_data)
 
     log.info("Waiting for NFS LoadBalancer ingress to be assigned...")
     for ingress_add in TimeoutSampler(
@@ -196,13 +207,27 @@ def create_nfs_load_balancer_service(
     if "hostname" in host_details:
         hostname_add = host_details["hostname"]
         log.info("ingress hostname, %s", hostname_add)
-        return hostname_add
     elif "ip" in host_details:
-        host_ip = host_details["ip"]
-        log.info("ingress host ip, %s", host_ip)
-        return host_ip
+        hostname_add = host_details["ip"]
+        log.info(f"ingress host ip, {hostname_add}")
     else:
         log.error("host details unavailable")
+        return None
+
+    platform = config.ENV_DATA.get("platform", "").lower()
+    if platform == constants.IBMCLOUD_PLATFORM:
+        from ocs_ci.utility.ibmcloud import (
+            configure_nfs_lb_security_group,
+        )
+
+        log.info("Configuring IBM Cloud security group for NFS LoadBalancer...")
+        configure_nfs_lb_security_group()
+        log.info(
+            "Security group configured. Waiting 60 seconds for rules to propagate..."
+        )
+        time.sleep(60)
+
+    return hostname_add
 
 
 def update_etc_hosts_on_nfs_client(con, hostname):
@@ -296,6 +321,14 @@ def delete_nfs_load_balancer_service(
             "NFS LoadBalancer service %s does not exist, skipping delete", svc_name
         )
         return
+
+    platform = config.ENV_DATA.get("platform", "").lower()
+    if platform == constants.IBMCLOUD_PLATFORM:
+        from ocs_ci.utility.ibmcloud import (
+            remove_nfs_lb_security_group_rules,
+        )
+
+        remove_nfs_lb_security_group_rules()
 
     log.info("Deleting NFS LoadBalancer service %s", svc_name)
     storage_cluster_obj.exec_oc_cmd(f"delete service {svc_name}")
@@ -463,6 +496,103 @@ def distribute_nfs_storage_class_to_all_consumers(nfs_sc):
     return check_storage_classes_on_clients(ready_consumer_names)
 
 
+def remove_nfs_storage_class_from_all_consumers(nfs_sc):
+    """
+    Remove the NFS storage class from all ready StorageConsumer resources on
+    the provider. This undoes the distribution done by
+    distribute_nfs_storage_class_to_all_consumers().
+
+    Args:
+        nfs_sc (str): NFS storage class name to remove
+
+    """
+    from ocs_ci.ocs.resources.storageconsumer import get_ready_storage_consumers
+
+    consumers = get_ready_storage_consumers()
+    consumers = [
+        consumer
+        for consumer in consumers
+        if consumer.name != constants.INTERNAL_STORAGE_CONSUMER_NAME
+    ]
+
+    if not consumers:
+        log.warning("No ready storage consumers found")
+        return
+
+    for consumer in consumers:
+        log.info(
+            "Removing NFS storage class '%s' from consumer '%s'",
+            nfs_sc,
+            consumer.name,
+        )
+        consumer.remove_custom_storage_class(nfs_sc)
+
+
+def wait_for_nfs_csi_config_on_client_cluster(timeout=300):
+    """
+    Wait until the NFS CSI configuration is populated in the ``ceph-csi-config``
+    ConfigMap on the client (consumer) cluster.
+
+    After distributing the NFS StorageClass via StorageConsumer.spec.storageClasses,
+    the ``ocs-client-operator`` reconciles the ``ceph-csi-config`` ConfigMap
+    asynchronously. Until the ``nfs`` section for a cluster entry is present,
+    the NFS CSI provisioner cannot create PVCs.
+
+    Args:
+        timeout (int): Maximum seconds to wait (default: 300).
+
+    Raises:
+        TimeoutExpiredError: If the NFS CSI config is not populated within timeout.
+
+    """
+    config.switch_to_consumer()
+    cluster_name = config.ENV_DATA["cluster_name"]
+    log.info(
+        "Waiting for NFS CSI config to be populated in 'ceph-csi-config' "
+        "on client cluster '%s'",
+        cluster_name,
+    )
+
+    configmap_obj = ocp.OCP(
+        kind=constants.CONFIGMAP,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+
+    def _nfs_csi_config_populated():
+        cm = configmap_obj.get(resource_name="ceph-csi-config", dont_raise=True)
+        if not cm:
+            return False
+        config_json = cm.get("data", {}).get("config.json", "")
+        if not config_json:
+            return False
+        try:
+            entries = json.loads(config_json)
+        except (ValueError, TypeError):
+            return False
+        for entry in entries:
+            # Check if 'nfs' key exists (even if empty dict)
+            # NFS section can be empty {} and still work
+            if "nfs" in entry:
+                nfs_section = entry.get("nfs", {})
+                log.info(
+                    "NFS CSI config key found on client cluster '%s': %s",
+                    cluster_name,
+                    nfs_section if nfs_section else "{} (empty, but present)",
+                )
+                return True
+        return False
+
+    for populated in TimeoutSampler(
+        timeout=timeout, sleep=15, func=_nfs_csi_config_populated
+    ):
+        if populated:
+            break
+        log.info(
+            "NFS CSI config not yet populated on client cluster '%s', retrying...",
+            cluster_name,
+        )
+
+
 def nfs_access_for_clients(nfs_sc):
     """
     This method is for client clusters to be able to access nfs
@@ -507,6 +637,10 @@ def nfs_access_for_clients(nfs_sc):
     # Distribute the scs to consumers
     distribute_nfs_storage_class_to_all_consumers(nfs_sc)
 
+    # Wait for ocs-client-operator to populate NFS section in ceph-csi-configs
+    # on the client cluster before attempting PVC creation
+    wait_for_nfs_csi_config_on_client_cluster()
+
     # verify nfs server details shared
     server = fetch_nfs_server_details_on_client_cluster()
 
@@ -516,7 +650,7 @@ def nfs_access_for_clients(nfs_sc):
     ):
         server == hostname_add
     else:
-        server == "ocs-storagecluster-cephnfs-service"
+        server == constants.NFS_DEFAULT_SERVICE_NAME
 
     # switch to consumer
     config.switch_to_consumer()
@@ -671,13 +805,27 @@ def remove_nfs_endpoint_details():
     config.switch_to_consumer()
 
 
-def fetch_nfs_server_details_on_client_cluster():
+def fetch_nfs_server_details_on_client_cluster(default_server=False):
     """
     Fetch the NFS server endpoint configured on the client (consumer) cluster.
+
+    The NFS StorageClass is propagated asynchronously after the StorageConsumer
+    spec is patched on the provider. This function retries until the StorageClass
+    appears on the client cluster and its server parameter is populated.
+
+    Args:
+        default_server (bool): If True, wait until the server parameter equals
+            the default NFS service name (constants.NFS_DEFAULT_SERVICE_NAME).
+            Use this when the external endpoint has been removed and the
+            operator is expected to revert to the default. Default is False.
 
     Returns:
         str: NFS server endpoint (IP address or hostname) configured
              in the NFS StorageClass.
+
+    Raises:
+        TimeoutExpiredError: If the NFS StorageClass does not appear or the
+            expected server value is not reached within the timeout.
 
     """
     # switch to consumer
@@ -687,4 +835,58 @@ def fetch_nfs_server_details_on_client_cluster():
         kind=constants.STORAGECLASS, resource_name=constants.NFS_STORAGECLASS_NAME
     )
 
-    return nfs_sc.data["parameters"]["server"]
+    log.info(
+        "Waiting for NFS StorageClass '%s' to appear on client cluster '%s'",
+        constants.NFS_STORAGECLASS_NAME,
+        config.ENV_DATA["cluster_name"],
+    )
+
+    def _get_nfs_server():
+        sc_data = nfs_sc.get(dont_raise=True)
+        if sc_data:
+            return sc_data.get("parameters", {}).get("server")
+        return None
+
+    sample = TimeoutSampler(timeout=120, sleep=10, func=_get_nfs_server)
+    for server in sample:
+        if server:
+            if default_server and server != constants.NFS_DEFAULT_SERVICE_NAME:
+                continue
+            log.info(
+                "NFS StorageClass '%s' found on client cluster with server: %s",
+                constants.NFS_STORAGECLASS_NAME,
+                server,
+            )
+            return server
+
+
+def frame_deployment_config(deployment_name, pvc_name, node_name=None):
+    """
+    Build a Deployment manifest for a pod that mounts the given PVC.
+
+    Args:
+        deployment_name (str): Name for the Deployment and its pod label.
+        pvc_name (str): Name of the PVC to mount at ``/mnt``.
+        node_name (str): Optional node hostname to pin the pod to.
+
+    Returns:
+        dict: Deployment manifest ready for creation.
+    """
+    deployment_data = templating.load_yaml(constants.NFS_APP_POD_YAML)
+
+    deployment_data["metadata"]["name"] = deployment_name
+
+    deployment_data["metadata"]["labels"]["app"] = deployment_name
+    deployment_data["spec"]["selector"]["matchLabels"]["name"] = deployment_name
+    deployment_data["spec"]["template"]["metadata"]["labels"]["name"] = deployment_name
+
+    deployment_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+        "claimName"
+    ] = pvc_name
+
+    # Pin the pod to a specific node so it never lands on the node being rebooted
+    if node_name:
+        deployment_data["spec"]["template"]["spec"]["nodeName"] = node_name
+        log.info(f"Deployment '{deployment_name}': nodeName set to '{node_name}'")
+
+    return deployment_data

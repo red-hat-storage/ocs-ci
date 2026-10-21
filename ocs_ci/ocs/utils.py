@@ -56,6 +56,7 @@ from ocs_ci.utility.version import (
     get_submariner_operator_version,
     get_volsync_operator_version,
 )
+from ocs_ci.helpers.odf_cli import ODFCLIRetriever
 
 
 log = logging.getLogger(__name__)
@@ -805,6 +806,12 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
         log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
         return
 
+    if ocsci_config.DEPLOYMENT.get("fusion_access"):
+        log.info(
+            "Skipping Ceph toolbox setup — Fusion Access cluster has no CephCluster"
+        )
+        return
+
     with config.RunWithProviderConfigContextIfAvailable():
         namespace = ocsci_config.ENV_DATA["cluster_namespace"]
         ceph_toolbox = get_pod_name_by_pattern("rook-ceph-tools", namespace)
@@ -1023,10 +1030,13 @@ def run_must_gather(
 
     if config.REPORTING.get("tarball_mg_logs"):
         tarball_path = f"{log_dir_path}.tar.gz"
+        log.info(f"Packing must-gather logs to {tarball_path}")
         try:
             with tarfile.open(tarball_path, "w:gz") as tar:
                 tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+            log.info(f"Must-gather tarball created: {tarball_path}")
             if config.REPORTING.get("delete_packed_mg_logs"):
+                log.info(f"Deleting packed must-gather directory: {log_dir_path}")
                 shutil.rmtree(log_dir_path)
         except Exception as err:
             log.error(f"Failed during packing files! Error: {err}")
@@ -1279,6 +1289,42 @@ def _collect_ocs_logs(
             ocs_must_gather_image_and_tag = mirror_image(
                 ocs_must_gather_image_and_tag, cluster_config
             )
+        try:
+            if (
+                version.get_semantic_ocs_version_from_config(
+                    cluster_config=cluster_config
+                )
+                >= version.VERSION_5_0
+            ):
+                # Avoid circular import: ocs.utils -> utility.utils -> ocs.utils
+                from ocs_ci.utility.utils import exec_cmd as _exec_cmd
+
+                retriever = ODFCLIRetriever()
+                retriever.retrieve_odf_cli_binary()
+                ns = cluster_config.ENV_DATA["cluster_namespace"]
+                log.info(
+                    f"Collecting 'odf get health' for cluster "
+                    f"{cluster_config.ENV_DATA['cluster_name']}"
+                )
+                result = _exec_cmd(
+                    f"{retriever.local_cli_path} -n {ns} get health",
+                    cluster_config=cluster_config,
+                    ignore_error=True,
+                )
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                odf_health_file = os.path.join(
+                    ocs_log_dir_path,
+                    f"odf_get_health_{timestamp}.log",
+                )
+                os.makedirs(ocs_log_dir_path, exist_ok=True)
+                with open(odf_health_file, "w") as f:
+                    f.write(result.stdout.decode())
+                    if result.stderr:
+                        f.write("\n--- stderr ---\n")
+                        f.write(result.stderr.decode())
+                log.info(f"'odf get health' output saved to {odf_health_file}")
+        except Exception as e:
+            log.warning(f"Failed to collect 'odf get health' output: {e}")
         mg_output = run_must_gather(
             ocs_log_dir_path,
             ocs_must_gather_image_and_tag,
@@ -1377,36 +1423,43 @@ def _collect_ocs_logs(
                 )
 
             # We want to skip submariner log collection if it's in import clusters phase
-            if not cluster_config.ENV_DATA.get(
-                "import_clusters_to_acm", False
-            ) or cluster_config.ENV_DATA.get("submariner_source", ""):
+            if not cluster_config.ENV_DATA.get("import_clusters_to_acm", False):
+                subctl_available = True
                 with subctl_lock:
                     try:
                         run_cmd("subctl")
                     except (CommandFailed, FileNotFoundError):
-                        log.debug("subctl binary not found, downloading now...")
-                        # Importing here to avoid circular import error
-                        from ocs_ci.deployment.acm import Submariner
+                        if not cluster_config.ENV_DATA.get("subctl_version"):
+                            log.warning(
+                                "subctl binary not found and subctl_version not configured, "
+                                "skipping submariner log collection"
+                            )
+                            subctl_available = False
+                        else:
+                            log.debug("subctl binary not found, downloading now...")
+                            # Importing here to avoid circular import error
+                            from ocs_ci.deployment.acm import Submariner
 
-                        submariner = Submariner()
-                        submariner.download_binary()
+                            submariner = Submariner()
+                            submariner.download_binary()
 
-                submariner_log_path = os.path.join(
-                    log_dir_path,
-                    "submariner",
-                )
-                run_cmd(f"mkdir -p {submariner_log_path}")
-                cwd = os.getcwd()
-                run_cmd(f"chmod -R 777 {submariner_log_path}")
-                os.chdir(submariner_log_path)
-                submariner_log_collect = (
-                    f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
-                )
-                log.info("Collecting submariner logs")
-                out = run_cmd(submariner_log_collect, timeout=1200)
-                run_cmd(f"chmod -R 777 {submariner_log_path}")
-                os.chdir(cwd)
-                log.info(out)
+                if subctl_available:
+                    submariner_log_path = os.path.join(
+                        log_dir_path,
+                        "submariner",
+                    )
+                    run_cmd(f"mkdir -p {submariner_log_path}")
+                    cwd = os.getcwd()
+                    run_cmd(f"chmod -R 777 {submariner_log_path}")
+                    os.chdir(submariner_log_path)
+                    submariner_log_collect = (
+                        f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
+                    )
+                    log.info("Collecting submariner logs")
+                    out = run_cmd(submariner_log_collect, timeout=1200)
+                    run_cmd(f"chmod -R 777 {submariner_log_path}")
+                    os.chdir(cwd)
+                    log.info(out)
 
 
 def collect_ocs_logs(
@@ -1425,6 +1478,10 @@ def collect_ocs_logs(
 ):
     """
     Collects OCS logs
+
+    Also copies Krkn scenario/output logs from ``data/krkn_scenarios`` and
+    ``data/krkn_output`` into the collected log directory when those trees
+    exist. Missing or empty sources are skipped.
 
     Args:
         dir_name (str): directory name to store OCS logs. Logs will be stored
@@ -1445,6 +1502,18 @@ def collect_ocs_logs(
         since_time (str): Only return logs after a specific date (RFC3339). For example "2024-01-15T10:30:00Z"
 
     """
+    try:
+        from ocs_ci.krkn_chaos.krkn_log_collector import (
+            collect_krkn_run_logs,
+            get_krkn_logs_collection_dir,
+        )
+
+        collect_krkn_run_logs(
+            get_krkn_logs_collection_dir(dir_name, status_failure=status_failure)
+        )
+    except Exception:
+        log.exception("Failed to collect Krkn run logs")
+
     cwd = os.getcwd()
     results = list()
     with ThreadPoolExecutor() as executor:
@@ -1855,22 +1924,31 @@ def get_all_acm_and_recovery_indexes():
 
 def enable_mco_console_plugin():
     """
-    Enables console plugin for MCO
+    Enables the ODF multicluster console plugin on the ACM hub cluster.
+
+    This function is idempotent — it checks whether the plugin is already
+    present in ``console.operator/cluster`` before patching, so it is safe
+    to call multiple times without side effects.
+
+    If ``spec.plugins`` does not exist yet (fresh cluster with no plugins),
+    the key is treated as an empty list so the membership check never raises
+    a KeyError.
     """
-    if (
-        "odf-multicluster-console"
-        in OCP(kind="console.operator", resource_name="cluster").get()["spec"][
-            "plugins"
-        ]
-    ):
-        log.info("MCO console plugin is enabled")
+    plugins = (
+        OCP(kind="console.operator", resource_name="cluster")
+        .get()
+        .get("spec", {})
+        .get("plugins", [])
+    )
+    if "odf-multicluster-console" in plugins:
+        log.info("MCO console plugin is already enabled — skipping patch")
     else:
+        log.info("Enabling MCO console plugin")
         patch = '\'[{"op": "add", "path": "/spec/plugins/-", "value": "odf-multicluster-console"}]\''
         patch_cmd = (
             f"patch console.operator cluster -n openshift-console"
             f" --type json -p {patch}"
         )
-        log.info("Enabling MCO console plugin")
         ocp_obj = OCP()
         ocp_obj.exec_oc_cmd(command=patch_cmd)
 
@@ -1920,6 +1998,60 @@ def get_recovery_cluster_config():
     for cluster in ocsci_config.clusters:
         if cluster.MULTICLUSTER.get("recovery_cluster"):
             return cluster
+
+
+def get_secondary_cluster_config():
+    """
+    Get the secondary cluster config object in a DR scenario.
+    The secondary cluster is the one that is not primary, not recovery,
+    not active_acm, and not passive_acm.
+
+    If multiple clusters remain after filtering, it uses dr_cluster_relations
+    to identify which one is the secondary (the one that is not primary).
+
+    Return:
+        framework.config: secondary cluster config object from config.clusters
+
+    """
+    # Get primary cluster name
+    primary_cluster = get_primary_cluster_config()
+    primary_cluster_name = (
+        primary_cluster.ENV_DATA["cluster_name"] if primary_cluster else None
+    )
+
+    # Filter out primary, recovery, and ACM clusters
+    candidate_clusters = []
+    for cluster in ocsci_config.clusters:
+        if (
+            not cluster.MULTICLUSTER.get("primary_cluster")
+            and not cluster.MULTICLUSTER.get("recovery_cluster")
+            and not cluster.MULTICLUSTER.get("active_acm_cluster")
+            and not (
+                cluster.MULTICLUSTER.get("acm_cluster")
+                and not cluster.MULTICLUSTER.get("active_acm_cluster")
+            )
+        ):
+            candidate_clusters.append(cluster)
+
+    # If only one candidate, return it
+    if len(candidate_clusters) == 1:
+        return candidate_clusters[0]
+
+    # If multiple candidates, use dr_cluster_relations to find secondary
+    if len(candidate_clusters) > 1 and primary_cluster_name:
+        dr_relations = ocsci_config.MULTICLUSTER.get("dr_cluster_relations", [])
+        for relation in dr_relations:
+            if primary_cluster_name in relation:
+                # Find the other cluster in the relation (the secondary)
+                for cluster_name in relation:
+                    if cluster_name != primary_cluster_name:
+                        # Find the cluster config with this name
+                        for cluster in candidate_clusters:
+                            if cluster.ENV_DATA["cluster_name"] == cluster_name:
+                                return cluster
+
+    # Fallback: return first candidate if no match found
+    return candidate_clusters[0] if candidate_clusters else None
 
 
 def set_recovery_as_primary():
@@ -2084,9 +2216,11 @@ def collect_pod_container_rpm_package(dir_name):
         tarball_path = f"{package_log_dir_path}.tar.gz"
         try:
             with tarfile.open(tarball_path, "w:gz") as tar:
-                tar.add(log_dir_path, arcname=os.path.basename(log_dir_path))
+                tar.add(
+                    package_log_dir_path, arcname=os.path.basename(package_log_dir_path)
+                )
             if config.REPORTING.get("delete_packed_mg_logs"):
-                shutil.rmtree(log_dir_path)
+                shutil.rmtree(package_log_dir_path)
         except Exception as err:
             log.error(f"Failed during packing files! Error: {err}")
 
@@ -2182,6 +2316,8 @@ def get_nb_db_psql_version_from_image():
         )
 
 
+# Retry on failures as during upgrades we may encounter transient errors like "the database system is shutting down"
+@retry(UnexpectedBehaviour, tries=10, delay=10, backoff=1)
 def query_nb_db_psql_version():
     """
     Query the NooBaa DB for its PostgreSQL version
@@ -2239,3 +2375,46 @@ def get_expected_nb_db_psql_version():
         raise UnexpectedBehaviour(
             f"Failed to extract the NooBaa DB version from the NooBaa CR: {e}"
         )
+
+
+def enable_literal_block_style():
+    class LiteralString(str):
+        pass
+
+    def represent_literal(dumper, data):
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+
+    yaml.add_representer(LiteralString, represent_literal)
+    yaml.SafeDumper.add_representer(LiteralString, represent_literal)
+
+    return LiteralString
+
+
+def is_hostnetwork_enabled():
+    """
+    Check if host networking is enabled in the storage cluster
+
+    Returns:
+        bool: True if host networking is enabled, False otherwise
+
+    """
+    storagecluster_obj = OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+    )
+    try:
+        resp = storagecluster_obj.get()
+        if resp is None:
+            resp = {}
+    except Exception as e:
+        log.debug(f"Failed to get StorageCluster: {e}")
+        resp = {}
+
+    spec = resp.get("spec", {})
+    host_network = spec.get("hostNetwork", False)
+    if host_network:
+        log.info("Cluster has HostNetworking enabled")
+    else:
+        log.info("Cluster has HostNetworking disabled")
+    return host_network

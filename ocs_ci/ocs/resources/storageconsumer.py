@@ -330,15 +330,10 @@ class StorageConsumer:
 
         """
         with config.RunWithConfigContext(self.consumer_context):
-            current_storage_classes = (
-                self.ocp.get(resource_name=self.name).get("spec").get("storageClasses")
-            )
+            current_storage_classes = self.get_storage_classes()
             if storage_class in current_storage_classes:
                 current_storage_classes.remove(storage_class)
-                patch_param = (
-                    f'{{"spec": {{"storageClasses": {current_storage_classes}}}}}'
-                )
-                self.ocp.patch(resource_name=self.name, params=patch_param)
+                self.set_storage_classes(current_storage_classes)
 
     @if_version(">4.18")
     def set_custom_volume_snapshot_class(self, snapshot_class):
@@ -738,6 +733,23 @@ def verify_consumer_configmap(
     disable_blockpools = config.COMPONENTS["disable_blockpools"]
     disable_cephfs = config.COMPONENTS["disable_cephfs"]
 
+    # Get the actual CSI ClientProfile name from the cluster.
+    # The ClientProfile name is a stable CSI identity (e.g. "openshift-storage") that
+    # may differ from cluster_namespace (e.g. "odf-storage" in ROSA HCP odf deployments).
+    client_profile_items = (
+        ocp.OCP(
+            kind=constants.CLIENT_PROFILE,
+            namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+        )
+        .get()
+        .get("items", [])
+    )
+    csi_client_profile_name = (
+        client_profile_items[0]["metadata"]["name"]
+        if client_profile_items
+        else config.cluster_ctx.ENV_DATA["cluster_namespace"]
+    )
+
     def convergence_ver(version):
         return get_semantic_version(
             version, only_major_minor=True
@@ -844,11 +856,10 @@ def verify_consumer_configmap(
         )
         ceph_data_on_consumer_match_arg["csiop-cephfs-client-profile"] = (
             ceph_data_arg.get("csiop-cephfs-client-profile", "")
-            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
+            == csi_client_profile_name
         )
         ceph_data_on_consumer_match_arg["csiop-rbd-client-profile"] = (
-            ceph_data_arg.get("csiop-rbd-client-profile", "")
-            == config.cluster_ctx.ENV_DATA["cluster_namespace"]
+            ceph_data_arg.get("csiop-rbd-client-profile", "") == csi_client_profile_name
         )
 
     if internal_consumer and not (disable_blockpools or disable_cephfs):
@@ -876,6 +887,25 @@ def verify_consumer_configmap(
         )
 
         _handle_converged_client_ceph_names(ceph_data, ceph_data_on_consumer_match)
+    elif internal_consumer and disable_cephfs and not disable_blockpools:
+        """
+        Handle internal consumer with CephFS disabled.
+        Only verify RBD-related configuration.
+        """
+        # Only check RBD configuration
+        ceph_data_on_consumer_match["rbd-rados-ns"] = (
+            ceph_data.get("rbd-rados-ns", "") == "<implicit>"
+        )
+        ceph_data_on_consumer_match["csi-rbd-node-ceph-user"] = (
+            ceph_data.get("csi-rbd-node-ceph-user", "") == "rook-csi-rbd-node"
+        )
+        ceph_data_on_consumer_match["csi-rbd-provisioner-ceph-user"] = (
+            ceph_data.get("csi-rbd-provisioner-ceph-user", "")
+            == "rook-csi-rbd-provisioner"
+        )
+        ceph_data_on_consumer_match["csiop-rbd-client-profile"] = (
+            ceph_data.get("csiop-rbd-client-profile", "") == csi_client_profile_name
+        )
     elif (
         not internal_consumer
         and not (disable_blockpools or disable_cephfs)
@@ -977,6 +1007,79 @@ def get_ready_consumers_names():
     """
     ready_consumers = get_ready_storage_consumers()
     return [consumer.name for consumer in ready_consumers]
+
+
+def find_consumer_for_storage_client(storage_client_name, client_cluster_name=None):
+    """
+    Find the StorageConsumer CR on the provider that owns
+    ``storage_client_name``.
+
+    Must be called within an active provider config context.
+
+    Args:
+        storage_client_name (str): StorageClient CR name on the client
+            cluster.
+        client_cluster_name (str or None): When multiple consumers share
+            the same storage-client name, pass the client cluster name
+            (e.g. ``config.ENV_DATA["cluster_name"]``) to disambiguate.
+            The value is matched against the prefix of the consumer's
+            ``status.client.clusterName`` field.  When ``None`` the first
+            name-only match is returned (original behaviour).
+
+    Returns:
+        tuple[str, dict]: ``(consumer_name, consumer_data)`` for the
+            matching StorageConsumer.
+
+    Raises:
+        AssertionError: If no matching StorageConsumer is found.
+    """
+    consumer_ns = config.ENV_DATA["cluster_namespace"]
+    consumer_ocp = ocp.OCP(kind=constants.STORAGECONSUMER, namespace=consumer_ns)
+    for name in get_consumer_names():
+        consumer_data = consumer_ocp.get(resource_name=name)
+        client_info = consumer_data.get("status", {}).get("client", {})
+        if client_info.get("name") != storage_client_name:
+            continue
+        if client_cluster_name:
+            cluster_name_field = client_info.get("clusterName", "")
+            if not cluster_name_field.startswith(client_cluster_name + "."):
+                continue
+        return name, consumer_data
+    raise AssertionError(
+        f"No StorageConsumer found for storage client "
+        f"'{storage_client_name}'"
+        + (f" on cluster '{client_cluster_name}'" if client_cluster_name else "")
+    )
+
+
+def get_consumer_svg_on_provider(storage_client_name, client_cluster_name=None):
+    """
+    Return the CephFS subvolume group name for a storage client on the
+    provider cluster.
+
+    The SVG name equals the StorageConsumer CR name on the provider.
+    Must be called within an active provider config context.
+
+    Args:
+        storage_client_name (str): StorageClient CR name on the client
+            cluster.
+        client_cluster_name (str or None): Pass ``config.ENV_DATA["cluster_name"]``
+            from the client context when multiple consumers share the same
+            storage-client name, to ensure the correct consumer is found.
+
+    Returns:
+        str: Subvolume group name on the provider cluster.
+
+    Raises:
+        AssertionError: If no matching StorageConsumer is found.
+    """
+    consumer_name, _ = find_consumer_for_storage_client(
+        storage_client_name,
+        client_cluster_name=client_cluster_name,
+    )
+    # The CephFS subvolume group name on the provider equals the
+    # StorageConsumer CR name (this mapping may change in future versions).
+    return consumer_name
 
 
 def check_consumer_rns(consumer_name, pool_list, rns_list):
@@ -1233,6 +1336,95 @@ def get_cluster_name_from_storage_consumer(storage_consumer):
         consumer_url = client_info.get("clusterName", "")
 
         return consumer_url.split(".")[0] if consumer_url else ""
+
+
+def add_storageclasses_to_storageconsumer(consumer_name, storageclasses):
+    """
+    Add storageclass(es) to a specific StorageConsumer on the provider cluster.
+
+    This function runs on the provider cluster and adds the specified storageclasses
+    to the StorageConsumer's spec.storageClasses list if they are not already present.
+
+    Args:
+        consumer_name (str): Name of the StorageConsumer CR
+        storageclasses (str or list): Storageclass name(s) to add
+
+    Returns:
+        tuple: (success: bool, added_scs: list, current_scs: list)
+            success: True if operation completed without errors
+            added_scs: List of storageclasses that were added
+            current_scs: Final list of storageclasses in the StorageConsumer
+
+    Examples:
+        Add single storageclass::
+
+            success, added, current = add_storageclasses_to_storageconsumer(
+                "consumer-c21-c5", "openshift-storage.noobaa.io"
+            )
+
+        Add multiple storageclasses::
+
+            success, added, current = add_storageclasses_to_storageconsumer(
+                "consumer-c21-c5",
+                ["openshift-storage.noobaa.io", "my-custom-noobaa-sc"]
+            )
+
+    """
+    # Normalize to list
+    if isinstance(storageclasses, str):
+        storageclasses = [storageclasses]
+
+    if not isinstance(storageclasses, list):
+        log.error("storageclasses must be a string or list of strings")
+        return False, [], []
+
+    added_scs = []
+    current_scs = []
+
+    # Must run on provider cluster
+    with config.RunWithProviderConfigContextIfAvailable():
+        try:
+            # StorageConsumer CR lives on provider, so we need provider context
+            provider_index = config.get_provider_index()
+            consumer = StorageConsumer(
+                consumer_name,
+                config.ENV_DATA["cluster_namespace"],
+                provider_index,
+            )
+            current_scs = consumer.get_storage_classes()
+            log.info(
+                "StorageConsumer '%s' current storage classes: %s",
+                consumer_name,
+                current_scs,
+            )
+
+            # Check which SCs need to be added
+            scs_missing = [sc for sc in storageclasses if sc not in current_scs]
+
+            if scs_missing:
+                log.info(
+                    "Adding %s to StorageConsumer '%s'", scs_missing, consumer_name
+                )
+                updated_scs = current_scs + scs_missing
+                consumer.set_storage_classes(updated_scs)
+                added_scs = scs_missing
+                current_scs = updated_scs
+                log.info(
+                    "Updated StorageConsumer '%s' with storage classes: %s",
+                    consumer_name,
+                    updated_scs,
+                )
+            else:
+                log.info(
+                    "StorageConsumer '%s' already has all specified storageclasses",
+                    consumer_name,
+                )
+
+            return True, added_scs, current_scs
+
+        except Exception as e:
+            log.error("Failed to update StorageConsumer '%s': %s", consumer_name, e)
+            return False, [], current_scs
 
 
 def verify_last_heartbeat_timestamp(cluster_name):

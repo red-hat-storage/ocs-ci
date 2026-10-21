@@ -11,7 +11,7 @@ from ocs_ci.utility.svt import (
     svt_cleanup,
 )
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @magenta_squad
@@ -34,24 +34,35 @@ class TestRegistryWorkload:
 
         """
 
+        logger.test_step("Setup SVT environment")
         try:
             svt_project_clone()
             svt_create_venv_setup()
             svt_cluster_loader()
+
+            logger.test_step(f"Execute build test with {iterations} iterations")
             cmd = (
                 "/bin/sh -c 'source /tmp/venv/bin/activate && "
                 f"python /tmp/svt/openshift_performance/ose3_perf/scripts/build_test.py -z -a -n {iterations}'"
             )
-            log.info(f"Running command {cmd}")
+            logger.info(f"Running command: {cmd}")
             build = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE)
             stdout, stderr = build.communicate()
             out = stderr.split("\n".encode())[-5].split()[-1]
-            log.info(stderr)
-            # Sometimes builds just fails and we accept a small # of failures
-            # so checking the number of builds succeeded instead of failures as
-            # suggested by OCP team
-            assert int(out) >= 100, "More failed builds found"
+            logger.debug(f"Build output: {stderr}")
+
+            logger.test_step("Verify build success count")
+            build_count = int(out)
+            logger.assertion(
+                f"Successful builds: actual={build_count}, minimum=100, "
+                f"passed={build_count >= 100}"
+            )
+            assert (
+                build_count >= 100
+            ), f"Insufficient successful builds: {build_count} < 100"
 
         finally:
-            print("Calling svt cleanup")
-            assert svt_cleanup()
+            logger.test_step("Cleanup SVT resources")
+            cleanup_result = svt_cleanup()
+            logger.assertion(f"SVT cleanup: successful={cleanup_result}")
+            assert cleanup_result, "SVT cleanup failed"

@@ -5,10 +5,9 @@ import logging
 import re
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from time import sleep
-from pathlib import Path
-import base64
 
 import yaml
 import requests
@@ -49,6 +48,14 @@ from ocs_ci.utility.utils import (
 from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
+
+
+def is_vpc_infra():
+    """Return whether the current bare-metal deployment uses IBM Cloud VPC."""
+    return (
+        config.ENV_DATA.get("infra_type", constants.CLASSIC_INFRA_TYPE)
+        == constants.VPC_INFRA_TYPE
+    )
 
 
 class BAREMETALBASE(Deployment):
@@ -628,7 +635,7 @@ class BAREMETALUPI(BAREMETALBASE):
                     f"{self.installer} wait-for bootstrap-complete "
                     f"--dir {self.cluster_path} "
                     f"--log-level {log_cli_level}",
-                    timeout=3600,
+                    timeout=config.DEPLOYMENT.get("bootstrap_complete_timeout", 5400),
                 )
             except CommandFailed as e:
                 if constants.GATHER_BOOTSTRAP_PATTERN in str(e):
@@ -714,6 +721,24 @@ class BAREMETALUPI(BAREMETALBASE):
             install_config_obj["pullSecret"] = self.get_pull_secret()
             install_config_obj["sshKey"] = self.get_ssh_key()
             install_config_obj["metadata"]["name"] = config.ENV_DATA.get("cluster_name")
+
+            # Configure RHCOS 10 specific settings
+            rhcos_version = config.ENV_DATA.get("rhcos_version")
+            if rhcos_version and str(rhcos_version) == "10":
+                ocp_version = version.get_semantic_ocp_version_from_config()
+                if ocp_version < version.VERSION_5_0:
+                    install_config_obj["featureSet"] = "TechPreviewNoUpgrade"
+                    install_config_obj["osImageStream"] = "rhel-10"
+                    logger.info(
+                        "Configured install-config for RHEL 10 deployment with "
+                        "TechPreviewNoUpgrade feature set"
+                    )
+                else:
+                    logger.info(
+                        "OCP 5.0+ detected - RHEL 10 is the default, skipping "
+                        "TechPreviewNoUpgrade and osImageStream configuration"
+                    )
+
             install_config_str = yaml.safe_dump(install_config_obj)
             install_config = os.path.join(self.cluster_path, "install-config.yaml")
             install_config_backup = os.path.join(
@@ -874,7 +899,106 @@ class BAREMETALAI(BAREMETALBASE):
                     {"clusterName": self.cluster_name, "infraID": self.cluster_name},
                     metadata_file,
                 )
-            # load API and Ingress IPs from config
+            # IBM Cloud VPC BM: Create Network Load Balancers for VIPs
+            if is_vpc_infra():
+                logger.info(
+                    "VPC BM platform detected - creating Network Load Balancers"
+                )
+
+                # Import here to avoid circular dependency
+                from ocs_ci.utility import ibmcloud_bm
+
+                vpc_bm_manager = ibmcloud_bm.IBMCloudVPCBM(
+                    region=config.ENV_DATA.get("region")
+                )
+
+                # Extract server IPs from config by role
+                master_ips = [
+                    srv["private_ip"]
+                    for srv in config.ENV_DATA["baremetal"]["servers"].values()
+                    if srv.get("role") == constants.MASTER_MACHINE
+                ]
+                worker_ips = [
+                    srv["private_ip"]
+                    for srv in config.ENV_DATA["baremetal"]["servers"].values()
+                    if srv.get("role") == constants.WORKER_MACHINE
+                ]
+                if not master_ips:
+                    # Fallback: split servers between masters and workers by replica count
+                    all_servers = list(config.ENV_DATA["baremetal"]["servers"].values())
+                    master_count = config.ENV_DATA["master_replicas"]
+                    worker_count = config.ENV_DATA["worker_replicas"]
+                    master_ips = [
+                        srv["private_ip"] for srv in all_servers[:master_count]
+                    ]
+                    worker_ips = [
+                        srv["private_ip"]
+                        for srv in all_servers[
+                            master_count : master_count + worker_count
+                        ]
+                    ]
+
+                ingress_ips = worker_ips if worker_ips else master_ips
+                subnet_id = config.ENV_DATA["baremetal"]["subnet_id"]
+
+                # Create Internal API ALB (ports 6443, 22623)
+                api_int_lb_ip, api_int_lb_id = vpc_bm_manager.create_alb_for_api(
+                    cluster_name=self.cluster_name,
+                    subnet_id=subnet_id,
+                    server_ips=master_ips,
+                )
+
+                # Create Public API ALB for external client access (port 6443 only)
+                api_public_lb_ip, api_public_lb_id = (
+                    vpc_bm_manager.create_alb_for_public_api(
+                        cluster_name=self.cluster_name,
+                        subnet_id=subnet_id,
+                        server_ips=master_ips,
+                    )
+                )
+
+                # Create Ingress ALB
+                ingress_lb_ip, ingress_lb_id = vpc_bm_manager.create_alb_for_ingress(
+                    cluster_name=self.cluster_name,
+                    subnet_id=subnet_id,
+                    server_ips=ingress_ips,
+                )
+
+                # Override VIPs with ALB IPs:
+                # self.api_vip is the public IP exposed externally for client access / kubeconfig
+                self.api_vip = api_public_lb_ip
+                self.api_int_vip = api_int_lb_ip
+                self.ingress_vip = ingress_lb_ip
+
+                # Store LB IDs for cleanup
+                self.api_lb_id = api_int_lb_id
+                self.public_api_lb_id = api_public_lb_id
+                self.ingress_lb_id = ingress_lb_id
+
+                logger.info(
+                    f"VPC BM ALBs created - Internal API: {api_int_lb_ip} (ID: {api_int_lb_id}), "
+                    f"Public API: {api_public_lb_ip} (ID: {api_public_lb_id}), "
+                    f"Ingress: {ingress_lb_ip} (ID: {ingress_lb_id})"
+                )
+
+                # Persist ALB IDs to vpc_bm_resources.json for cleanup during destroy
+                # (separate from metadata.json which gets overwritten by install_cluster)
+                vpc_resources = {
+                    "api_lb_id": self.api_lb_id,
+                    "public_api_lb_id": self.public_api_lb_id,
+                    "ingress_lb_id": self.ingress_lb_id,
+                    "cluster_name": self.cluster_name,
+                }
+                vpc_resources_file = os.path.join(
+                    self.cluster_path, "vpc_bm_resources.json"
+                )
+                with open(vpc_resources_file, "w") as f:
+                    json.dump(vpc_resources, f, indent=2)
+                logger.info(f"Saved VPC BM resources to {vpc_resources_file}")
+
+                return
+
+            # load API and Ingress IPs from config (for non-VPC platforms)
             self.api_vip = config.ENV_DATA["api_vip"]
             self.ingress_vip = config.ENV_DATA["ingress_vip"]
 
@@ -1011,75 +1135,180 @@ class BAREMETALAI(BAREMETALBASE):
 
             # download discovery ipxe config
             ipxe_config_file = self.ai_cluster.download_ipxe_config(self.cluster_path)
-            # parse ipxe_config_file for initrd, kernel and rootfs urls
             with open(ipxe_config_file) as ipxe_config_content:
-                content = ipxe_config_content.read()
-            initrd_url = re.search(r"\ninitrd --name initrd (.*)\n", content).group(1)
-            kernel_url, rootfs_url = re.search(
-                r"\nkernel ([^ ]*) initrd=initrd coreos.live.rootfs_url=([^ ]*)",
-                content,
-            ).groups()
+                ipxe_content = ipxe_config_content.read()
 
-            # download initrd, kernel and rootfs to httpd server
-            dest_dir = f"{self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
-            cmd = f"wget --no-verbose -O {dest_dir}/initrd '{initrd_url}'"
-            assert (
-                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
-            ), "Failed to download initrd"
-            cmd = f"wget --no-verbose -O {dest_dir}/kernel '{kernel_url}'"
-            assert (
-                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
-            ), "Failed to download kernel"
-            cmd = f"wget --no-verbose -O {dest_dir}/rootfs '{rootfs_url}'"
-            assert (
-                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
-            ), "Failed to download rootfs"
-
-            # update ipxe_config_file to point initrd, kernel and rootfs to the downloaded files
-            base_dest_url = (
-                f"http://{self.bm_config['bm_httpd_provision_server']}/ipxe/"
-                f"{self.bm_config['env_name']}"
-            )
-            replace_content_in_file(
-                ipxe_config_file, initrd_url, f"{base_dest_url}/initrd"
-            )
-            replace_content_in_file(
-                ipxe_config_file, kernel_url, f"{base_dest_url}/kernel"
-            )
-            replace_content_in_file(
-                ipxe_config_file, rootfs_url, f"{base_dest_url}/rootfs"
-            )
-
-            # upload ipxe config to httpd server (helper_node)
-            discovery_ipxe_file_dest = (
-                f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
-                f"{self.bm_config['env_name']}/discovery.ipxe"
-            )
-            self.helper_node_handler.upload_file(
-                ipxe_config_file,
-                discovery_ipxe_file_dest,
-            )
-            ipxe_file_url = (
-                f"http://{self.bm_config['bm_httpd_provision_server']}/ipxe/"
-                f"{self.bm_config['env_name']}/discovery.ipxe"
-            )
-
-            # configure pxelinux.cfg files for each server (named based on MAC address)
-            # to boot from the ipxe configuration file
-            pxelinux_cfg_file = self.create_pxe_file(ipxe_file_url=ipxe_file_url)
-            for machine in master_nodes + worker_nodes:
-                mac = self.srv_details[machine][f"{provisioning_network}_mac"]
-                dest_cfg_file_name = f"01-{mac.replace(':', '-')}"
-                self.helper_node_handler.upload_file(
-                    pxelinux_cfg_file,
-                    f"{self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg/{dest_cfg_file_name}",
+            # IBM Cloud VPC Bare Metal: Use direct iPXE boot with AI script
+            if is_vpc_infra():
+                logger.info(
+                    "IBM Cloud VPC BM detected - using direct iPXE boot from AI service"
                 )
 
-            # reboot all servers and boot them from PXE
-            for machine in master_nodes + worker_nodes:
-                self.set_pxe_boot_and_reboot(machine)
+                # Initialize VPC BM manager
+                vpc_bm_manager = ibmcloud_bm.IBMCloudVPCBM(
+                    region=config.ENV_DATA.get("region", "us-south")
+                )
 
-            # wait for discovering all nodes
+                # Generate inline iPXE script by appending DHCP retry loop to AI script
+                ipxe_script = vpc_bm_manager.generate_rhcos_ipxe_script(ipxe_content)
+                logger.info(
+                    f"Generated iPXE script for VPC BM ({len(ipxe_script)} bytes)"
+                )
+
+                # Prepare all server data for parallel reinitialization
+                servers_to_reinitialize = []
+                for machine in master_nodes + worker_nodes:
+                    server_id = self.srv_details[machine]["server_id"]
+                    servers_to_reinitialize.append((server_id, ipxe_script, machine))
+
+                # Reinitialize all servers in parallel (max 3 concurrent operations)
+                logger.info(
+                    f"Reinitializing {len(servers_to_reinitialize)} servers in parallel"
+                )
+                with ThreadPoolExecutor(max_workers=3) as executor:
+                    future_to_server = {
+                        executor.submit(
+                            vpc_bm_manager.reinitialize_with_ipxe,
+                            server_id,
+                            ipxe_script,
+                        ): machine
+                        for server_id, ipxe_script, machine in servers_to_reinitialize
+                    }
+
+                    for future in as_completed(future_to_server):
+                        machine = future_to_server[future]
+                        try:
+                            future.result()
+                            logger.info(f"Server {machine} reinitialized successfully")
+                        except Exception as e:
+                            logger.error(
+                                f"Server {machine} reinitialization failed: {e}"
+                            )
+                            raise
+
+                logger.info("All servers reinitialized and running with iPXE boot")
+
+                # Verify all servers are running before adding to ALB (no blind wait needed)
+                logger.info("Verifying all servers are in running state")
+                for machine in master_nodes + worker_nodes:
+                    server_id = self.srv_details[machine]["server_id"]
+                    vpc_bm_manager.wait_for_server_status(
+                        server_id, "running", timeout=1800
+                    )
+                    logger.info(f"Server {machine} ({server_id}) is running")
+
+                # Add servers as members to ALB pools now that they are running
+                if hasattr(self, "api_lb_id") and hasattr(self, "ingress_lb_id"):
+                    logger.info("Adding servers to ALB pools")
+                    master_ips = [
+                        self.srv_details[machine]["private_ip"]
+                        for machine in master_nodes
+                    ]
+                    worker_ips = [
+                        self.srv_details[machine]["private_ip"]
+                        for machine in worker_nodes
+                    ]
+
+                    # API ALBs (Internal & Public) always point to master nodes (6443: API, 22623: MCS)
+                    api_ips = master_ips
+
+                    # Ingress ALB points to worker nodes; fallback to master nodes in compact mode
+                    ingress_ips = worker_ips if worker_ips else master_ips
+
+                    logger.info(f"API ALB backend targets (master nodes): {api_ips}")
+                    logger.info(
+                        "Ingress ALB backend targets"
+                        f"({'worker nodes' if worker_ips else 'master nodes (compact mode)'}): {ingress_ips}"
+                    )
+
+                    # Add members to Internal API ALB (ports 6443 and 22623)
+                    vpc_bm_manager.add_alb_pool_members(
+                        self.api_lb_id, api_ips, [6443, 22623]
+                    )
+
+                    # Add members to Public API ALB (port 6443)
+                    if hasattr(self, "public_api_lb_id") and self.public_api_lb_id:
+                        vpc_bm_manager.add_alb_pool_members(
+                            self.public_api_lb_id, api_ips, [6443]
+                        )
+
+                    # Add members to Ingress ALB (ports 80 and 443)
+                    vpc_bm_manager.add_alb_pool_members(
+                        self.ingress_lb_id, ingress_ips, [80, 443]
+                    )
+
+                    logger.info("Successfully added all servers to ALB pools")
+
+            # Traditional baremetal only: parse and download iPXE resources
+            if not is_vpc_infra():
+                # Parse iPXE script for initrd, kernel and rootfs urls
+                initrd_url = re.search(
+                    r"\ninitrd --name initrd (.*)\n", ipxe_content
+                ).group(1)
+                kernel_url, rootfs_url = re.search(
+                    r"\nkernel ([^ ]*) initrd=initrd coreos.live.rootfs_url=([^ ]*)",
+                    ipxe_content,
+                ).groups()
+
+                # Download initrd, kernel and rootfs to httpd server
+                dest_dir = f"{self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
+                cmd = f"wget --no-verbose -O {dest_dir}/initrd '{initrd_url}'"
+                assert (
+                    self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
+                ), "Failed to download initrd"
+                cmd = f"wget --no-verbose -O {dest_dir}/kernel '{kernel_url}'"
+                assert (
+                    self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
+                ), "Failed to download kernel"
+                cmd = f"wget --no-verbose -O {dest_dir}/rootfs '{rootfs_url}'"
+                assert (
+                    self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
+                ), "Failed to download rootfs"
+
+                # Update ipxe_config_file to point to downloaded files
+                base_dest_url = (
+                    f"http://{self.bm_config['bm_httpd_provision_server']}/ipxe/"
+                    f"{self.bm_config['env_name']}"
+                )
+                replace_content_in_file(
+                    ipxe_config_file, initrd_url, f"{base_dest_url}/initrd"
+                )
+                replace_content_in_file(
+                    ipxe_config_file, kernel_url, f"{base_dest_url}/kernel"
+                )
+                replace_content_in_file(
+                    ipxe_config_file, rootfs_url, f"{base_dest_url}/rootfs"
+                )
+
+                # Upload ipxe config to httpd server (helper_node)
+                discovery_ipxe_file_dest = (
+                    f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
+                    f"{self.bm_config['env_name']}/discovery.ipxe"
+                )
+                self.helper_node_handler.upload_file(
+                    ipxe_config_file,
+                    discovery_ipxe_file_dest,
+                )
+                ipxe_file_url = (
+                    f"http://{self.bm_config['bm_httpd_provision_server']}/ipxe/"
+                    f"{self.bm_config['env_name']}/discovery.ipxe"
+                )
+
+                # Configure pxelinux.cfg files for discovery boot
+                pxelinux_cfg_file = self.create_pxe_file(ipxe_file_url=ipxe_file_url)
+                for machine in master_nodes + worker_nodes:
+                    mac = self.srv_details[machine][f"{provisioning_network}_mac"]
+                    dest_cfg_file_name = f"01-{mac.replace(':', '-')}"
+                    self.helper_node_handler.upload_file(
+                        pxelinux_cfg_file,
+                        f"{self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg/{dest_cfg_file_name}",
+                    )
+
+                # Reboot all servers and boot them from PXE
+                for machine in master_nodes + worker_nodes:
+                    self.set_pxe_boot_and_reboot(machine)
+
+            # Wait for discovering all nodes (common for both VPC and classic)
             expected_node_num = (
                 config.ENV_DATA["master_replicas"] + config.ENV_DATA["worker_replicas"]
             )
@@ -1092,42 +1321,61 @@ class BAREMETALAI(BAREMETALBASE):
                 ]
                 for machine in master_nodes + worker_nodes:
                     if machine not in discovered_hosts:
-                        self.set_pxe_boot_and_reboot(machine)
+                        if is_vpc_infra():
+                            # VPC recovery: restart via IBM Cloud API
+                            server_id = self.srv_details[machine]["server_id"]
+                            logger.warning(
+                                f"Node {machine} not discovered, restarting server {server_id}"
+                            )
+                            vpc_bm_manager.stop_server(server_id, stop_type="hard")
+                            try:
+                                vpc_bm_manager.wait_for_server_status(
+                                    server_id, "stopped", timeout=300
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Wait for server {server_id} stopped failed: {e}, proceeding to start"
+                                )
+                            vpc_bm_manager.start_server(server_id)
+                        else:
+                            # Classic recovery: restart via PXE boot
+                            self.set_pxe_boot_and_reboot(machine)
                 self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
 
-            # verify validations info
+            # Verify validations info
             self.ai_cluster.verify_validations_info_for_discovered_nodes()
 
-            # configure pxelinux.cfg files for each server (named based on MAC address)
-            # to boot from the first disk (without this change, if the servers are configured to boot from PXE, they
-            # will be stuck in boot loop
-            pxelinux_cfg_file = self.create_pxe_file(
-                template=constants.PXELINUX_CFG_DISK0_TEMPLATE
-            )
-            for machine in master_nodes + worker_nodes:
-                mac = self.srv_details[machine][f"{provisioning_network}_mac"]
-                dest_cfg_file_name = f"01-{mac.replace(':', '-')}"
-                self.helper_node_handler.upload_file(
-                    pxelinux_cfg_file,
-                    f"{self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg/{dest_cfg_file_name}",
+            # Classic baremetal only: Configure disk boot for after discovery
+            if not is_vpc_infra():
+                pxelinux_cfg_file = self.create_pxe_file(
+                    template=constants.PXELINUX_CFG_DISK0_TEMPLATE
                 )
-            # rename the discovery.ipxe file to continue boot from disk on UEFI boot mode systems
-            cmd = f"mv {discovery_ipxe_file_dest} {discovery_ipxe_file_dest}.backup"
-            assert (
-                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
-            ), "Failed to rename discovery.ipxe file"
+                for machine in master_nodes + worker_nodes:
+                    mac = self.srv_details[machine][f"{provisioning_network}_mac"]
+                    dest_cfg_file_name = f"01-{mac.replace(':', '-')}"
+                    self.helper_node_handler.upload_file(
+                        pxelinux_cfg_file,
+                        f"{self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg/{dest_cfg_file_name}",
+                    )
+                discovery_ipxe_file_dest = (
+                    f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
+                    f"{self.bm_config['env_name']}/discovery.ipxe"
+                )
+                cmd = f"mv {discovery_ipxe_file_dest} {discovery_ipxe_file_dest}.backup"
+                assert (
+                    self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
+                ), "Failed to rename discovery.ipxe file"
 
-            # update discovered hosts (configure hostname and role)
+            # Update discovered hosts (configure hostname and role) - common
             self.ai_cluster.update_hosts_config(
                 mac_name_mapping=mac_name_mapping, mac_role_mapping=mac_role_mapping
             )
 
-            # install the OCP cluster
+            # Install the OCP cluster - common
             self.ai_cluster.install_cluster(
                 pending_user_action_handler=self.pending_user_action_handler
             )
 
-            # workaround for UEFI boot order issue (make sure that PXE boot is on first place)
             for machine in master_nodes + worker_nodes:
                 if self.srv_details[machine].get("fix_uefi_boot_order_first_option"):
                     update_uefi_boot_order(
@@ -1138,11 +1386,14 @@ class BAREMETALAI(BAREMETALBASE):
                         ignore_error=True,
                     )
 
+            # Verify cluster health - common
             self.test_cluster()
+
+            # Clean disks on worker nodes - common
             if config.ENV_DATA.get("skip_disks_cleanup", False):
                 logger.info("Skipping disks cleanup")
             else:
-                logger.info("Performing Disk cleanup")
+                logger.info("Performing Disk cleanup on worker nodes")
                 workers = get_nodes(node_type="worker")
                 for worker in workers:
                     clean_disks(worker)
@@ -1202,35 +1453,68 @@ class BAREMETALAI(BAREMETALBASE):
                 time.sleep(5)
                 ibmcloud.start_machines(m)
 
+            elif self.srv_details[machine].get("mgmt_provider") == "vpc-bm":
+                server_id = self.srv_details[machine].get("server_id")
+                if not server_id:
+                    logger.error(f"Cannot restart {machine}: server_id not found")
+                    return
+
+                logger.info(f"Force restarting VPC BM server {machine} ({server_id})")
+                vpc_bm = ibmcloud_bm.IBMCloudVPCBM(
+                    region=config.ENV_DATA.get("region", "us-south")
+                )
+                vpc_bm.stop_server(server_id, stop_type="hard")
+                time.sleep(60)
+                try:
+                    vpc_bm.wait_for_server_status(server_id, "stopped", timeout=300)
+                except Exception as e:
+                    logger.warning(f"Stop wait failed: {e}, proceeding to start")
+                vpc_bm.start_server(server_id)
+                logger.info(f"Server {machine} restart initiated")
+
             self.handled_pending_user_actions[machine] = time.time()
 
         def create_dns_records(self):
             """
             Configure DNS records for api and ingress
             """
-            response_list = []
-            zone_id = self.aws.get_hosted_zone_id_for_domain()
-            response_list.append(
-                self.aws.update_hosted_zone_record(
-                    zone_id=zone_id,
-                    record_name=f"api.{self.cluster_name}",
-                    data=self.api_vip,
-                    type="A",
-                    operation_type="Add",
+            if is_vpc_infra():
+                # Use IBM Cloud CIS for DNS
+                logger.info(
+                    f"VPC BM: Creating CIS DNS records (Public API VIP: {self.api_vip}, "
+                    f"Internal API VIP: {self.api_int_vip}, Ingress VIP: {self.ingress_vip})"
                 )
-            )
-            response_list.append(
-                self.aws.update_hosted_zone_record(
-                    zone_id=zone_id,
-                    record_name=f"*.apps.{self.cluster_name}",
-                    data=self.ingress_vip,
-                    type="A",
-                    operation_type="Add",
+                ibmcloud_bm.IBMCloudVPCBM.create_cis_dns_records(
+                    cluster_name=self.cluster_name,
+                    api_vip=self.api_vip,
+                    ingress_vip=self.ingress_vip,
+                    api_int_vip=self.api_int_vip,
                 )
-            )
-            logger.info("Waiting for Record Response")
-            self.aws.wait_for_record_set(response_list=response_list)
-            logger.info("Records Created Successfully")
+            else:
+                # Use AWS Route53 for other platforms
+                response_list = []
+                zone_id = self.aws.get_hosted_zone_id_for_domain()
+                response_list.append(
+                    self.aws.update_hosted_zone_record(
+                        zone_id=zone_id,
+                        record_name=f"api.{self.cluster_name}",
+                        data=self.api_vip,
+                        type="A",
+                        operation_type="Add",
+                    )
+                )
+                response_list.append(
+                    self.aws.update_hosted_zone_record(
+                        zone_id=zone_id,
+                        record_name=f"*.apps.{self.cluster_name}",
+                        data=self.ingress_vip,
+                        type="A",
+                        operation_type="Add",
+                    )
+                )
+                logger.info("Waiting for Record Response")
+                self.aws.wait_for_record_set(response_list=response_list)
+                logger.info("Records Created Successfully")
 
         def configure_ipxe_on_helper(self):
             """
@@ -1362,29 +1646,121 @@ class BAREMETALAI(BAREMETALBASE):
                     "(ignoring the failure and continuing the destroy process to remove other resources)"
                 )
 
-            # delete DNS records for API and Ingress
-            # get the record sets
-            record_sets = self.aws.get_record_sets()
-            # form the record sets to delete
-            cluster_domain = (
-                f"{config.ENV_DATA.get('cluster_name')}."
-                f"{config.ENV_DATA.get('base_domain')}"
-            )
-            records_to_delete = [
-                f"api.{cluster_domain}.",
-                f"\\052.apps.{cluster_domain}.",
-            ]
-            # delete the records
-            hosted_zone_id = self.aws.get_hosted_zone_id_for_domain()
-            logger.debug(f"hosted zone id: {hosted_zone_id}")
-            for record in record_sets:
-                if record["Name"] in records_to_delete:
-                    logger.info(f"Deleting DNS record: {record}")
-                    self.aws.delete_record(record, hosted_zone_id)
+            # IBM Cloud VPC BM: Delete ALBs and CIS DNS records
+            if is_vpc_infra():
+                logger.info("VPC BM: Cleaning up ALBs and DNS records...")
+                from ocs_ci.utility import ibmcloud_bm
 
-            # cleanup ipxe provisioning files
-            cmd = f"rm -rf {self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
-            logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
+                cluster_name = config.ENV_DATA.get("cluster_name")
+
+                # Initialize VPC BM manager
+                vpc_bm_manager = ibmcloud_bm.IBMCloudVPCBM(
+                    region=config.ENV_DATA.get("region")
+                )
+
+                # PRIMARY: Use name-based lookup (handles retries/partial deploys)
+                api_lb_name = f"{cluster_name}-api-lb"
+                public_api_lb_name = f"{cluster_name}-api-public-lb"
+                ingress_lb_name = f"{cluster_name}-ingress-lb"
+                public_ingress_lb_name = f"{cluster_name}-ingress-public-lb"
+
+                api_lb_id = vpc_bm_manager.get_alb_id_by_name(api_lb_name)
+                public_api_lb_id = vpc_bm_manager.get_alb_id_by_name(public_api_lb_name)
+                ingress_lb_id = vpc_bm_manager.get_alb_id_by_name(ingress_lb_name)
+                public_ingress_lb_id = vpc_bm_manager.get_alb_id_by_name(
+                    public_ingress_lb_name
+                )
+
+                # FALLBACK: Try vpc_bm_resources.json if name lookup failed
+                if not api_lb_id or not public_api_lb_id or not ingress_lb_id:
+                    vpc_resources_file = os.path.join(
+                        self.cluster_path, "vpc_bm_resources.json"
+                    )
+                    if os.path.exists(vpc_resources_file):
+                        try:
+                            with open(vpc_resources_file, "r") as f:
+                                vpc_resources = json.load(f)
+                                if not api_lb_id:
+                                    api_lb_id = vpc_resources.get("api_lb_id")
+                                if not public_api_lb_id:
+                                    public_api_lb_id = vpc_resources.get(
+                                        "public_api_lb_id"
+                                    )
+                                if not ingress_lb_id:
+                                    ingress_lb_id = vpc_resources.get("ingress_lb_id")
+                            logger.info(f"Loaded ALB IDs from {vpc_resources_file}")
+                        except Exception as e:
+                            logger.warning(f"Failed to load vpc_bm_resources.json: {e}")
+
+                # Delete ALBs
+                for lb_name_label, lb_id in [
+                    ("Internal API ALB", api_lb_id),
+                    ("Public API ALB", public_api_lb_id),
+                    ("Ingress ALB", ingress_lb_id),
+                    ("Public Ingress ALB", public_ingress_lb_id),
+                ]:
+                    if lb_id:
+                        logger.info(f"Deleting {lb_name_label}: {lb_id}")
+                        try:
+                            vpc_bm_manager.delete_alb(lb_id)
+                        except Exception as e:
+                            logger.warning(f"Failed to delete {lb_name_label}: {e}")
+                    else:
+                        logger.warning(
+                            f"{lb_name_label} ID not found, skipping {lb_name_label} deletion"
+                        )
+
+                # Delete CIS DNS records
+                if cluster_name:
+                    logger.info(f"Deleting CIS DNS records for cluster: {cluster_name}")
+                    try:
+                        ibmcloud_bm.IBMCloudVPCBM.delete_cis_dns_records(cluster_name)
+                    except Exception as e:
+                        logger.warning(f"CIS DNS cleanup failed: {e}")
+                else:
+                    logger.warning("Cluster name not found, skipping DNS cleanup")
+
+                # Stop BM servers
+                bm_config = config.ENV_DATA.get("baremetal", {})
+                servers = bm_config.get("servers", {})
+                for server_name, server_config in servers.items():
+                    if server_config.get("mgmt_provider") == "vpc-bm":
+                        server_id = server_config.get("server_id")
+                        if server_id:
+                            logger.info(
+                                f"Stopping BM server {server_name} ({server_id})"
+                            )
+                            try:
+                                vpc_bm_manager.stop_server(server_id, stop_type="hard")
+                            except Exception as e:
+                                logger.warning(f"Failed to stop {server_name}: {e}")
+
+                logger.info("VPC BM cleanup complete")
+                logger.info("VPC BM: Skipping helper node cleanup (not used)")
+
+            else:
+                # delete DNS records for API and Ingress (non-VPC platforms)
+                # get the record sets
+                record_sets = self.aws.get_record_sets()
+                # form the record sets to delete
+                cluster_domain = (
+                    f"{config.ENV_DATA.get('cluster_name')}."
+                    f"{config.ENV_DATA.get('base_domain')}"
+                )
+                records_to_delete = [
+                    f"api.{cluster_domain}.",
+                    f"\\052.apps.{cluster_domain}.",
+                ]
+                # delete the records
+                hosted_zone_id = self.aws.get_hosted_zone_id_for_domain()
+                logger.debug(f"hosted zone id: {hosted_zone_id}")
+                for record in record_sets:
+                    if record["Name"] in records_to_delete:
+                        logger.info(f"Deleting DNS record: {record}")
+                        self.aws.delete_record(record, hosted_zone_id)
+                # cleanup ipxe provisioning files (skip for VPC BM - no helper node)
+                cmd = f"rm -rf {self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
+                logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -1453,28 +1829,29 @@ def clean_disks(worker, namespace=constants.DEFAULT_NAMESPACE):
 
     """
     ocp_obj = ocp.OCP()
-    disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(worker)
-
-    # Get the name and size in bytes of the disks
-    out = ocp_obj.exec_oc_debug_cmd(
-        node=worker.name,
-        cmd_list=["lsblk -nd -e252,7 --output NAME,SIZE -b --json"],
-        namespace=namespace,
+    disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(
+        worker, namespace
     )
-    lsblk_output = json.loads(str(out))
-    lsblk_devices = lsblk_output["blockdevices"]
 
-    for lsblk_device in lsblk_devices:
-        if lsblk_device["name"] not in disks_available_on_worker_nodes_for_cleanup:
-            logger.info(f'the disk cleanup is ignored for, {lsblk_device["name"]}')
-            pass
-        else:
-            clean_disk(
-                worker.name,
-                f"/dev/{lsblk_device['name']}",
-                int(lsblk_device["size"]),
-                ocp_obj=ocp_obj,
-            )
+    # Clean each eligible disk directly using the validated list from
+    # disks_available_to_cleanup. Avoids a global lsblk scan with major-number
+    # exclusions (e.g. -e252) that inadvertently skips virtio-blk devices on
+    # KVM/Fyre platforms where major 252 is assigned to virtio-blk instead of
+    # device-mapper.
+    for disk_name in disks_available_on_worker_nodes_for_cleanup:
+        out = ocp_obj.exec_oc_debug_cmd(
+            node=worker.name,
+            cmd_list=[f"lsblk -n --output SIZE -b --json /dev/{disk_name}"],
+            namespace=namespace,
+        )
+        size = int(json.loads(str(out))["blockdevices"][0]["size"])
+        clean_disk(
+            worker.name,
+            f"/dev/{disk_name}",
+            size,
+            ocp_obj=ocp_obj,
+            namespace=namespace,
+        )
 
     if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
         root_disk_common_path = config.ENV_DATA["baremetal"]["root_disk_common_path"]
@@ -1498,7 +1875,9 @@ def clean_disk(
         device (str): path to the device to be cleaned up
         size (int): size of the device, if not provided, it will be obtained via `lsblk -n --output SIZE -b {device}`
             command
-        run_sgdisk (bool): run `sgdisk --zap-all {device}` command (default: True)
+        run_sgdisk (bool): run `sgdisk --zap-all {device}` command (default:
+            True). Skipped automatically when `sgdisk` is not present on the
+            node (e.g. OCP 5.0+ RHCOS images).
         ocp_obj (obj): OCP object, if not provided, new one is initialized
         namespace (str): namespace where the oc_debug command will be executed
 
@@ -1513,12 +1892,28 @@ def clean_disk(
     )
 
     logger.info(out)
-    out = ocp_obj.exec_oc_debug_cmd(
-        node=node_name,
-        cmd_list=[f"sgdisk --zap-all {device}"],
-        namespace=namespace,
-    )
-    logger.info(out)
+    if run_sgdisk:
+        sgdisk_check = ocp_obj.exec_oc_debug_cmd(
+            node=node_name,
+            cmd_list=["command -v sgdisk || echo SGDISK_MISSING"],
+            namespace=namespace,
+        )
+        if "SGDISK_MISSING" in str(sgdisk_check):
+            logger.warning(
+                "sgdisk not found on node %s; skipping sgdisk --zap-all "
+                "for %s (wipefs and bluestore dd cleanup still run)",
+                node_name,
+                device,
+            )
+        else:
+            out = ocp_obj.exec_oc_debug_cmd(
+                node=node_name,
+                cmd_list=[f"sgdisk --zap-all {device}"],
+                namespace=namespace,
+            )
+            logger.info(out)
+    else:
+        logger.info("Skipping sgdisk --zap-all for %s (run_sgdisk=False)", device)
 
     # Write different portion because bluestore replicates its metadata at multiple places on the device
     # (at 0 / 1Gb / 10Gb / 100Gb / 1000Gb etc.)
@@ -1551,217 +1946,47 @@ def clean_disk(
         logger.info(out)
 
 
-def detect_simulation_disk_on_node(wnode, namespace="default", timeout=300):
+def detect_simulation_disk_on_node(wnode, namespace=None):
     """
-    Detects the last available /dev/sd* disk on a given worker node.
+    Detects an available /dev/sd* or /dev/nvme* disk on a given worker node.
+
+    Uses ``disks_available_to_cleanup`` to identify non-OS disks regardless
+    of platform. This avoids the alphabetical-ordering pitfall where the extra
+    disk sorts before the OS disk (e.g. compute-0: sda=extra, sdb=OS would
+    cause a naive ``tail -1`` to pick the OS disk).
 
     Args:
         wnode (ocs_ci.ocs.resources.ocs.OCS): The worker node object.
         namespace (str): Namespace for the debug pod.
-        timeout (int): Timeout for the command execution.
 
     Returns:
-        str or None: The detected disk path (e.g., "/dev/sdb") or None if not found.
+        str or None: The detected disk path (e.g., "/dev/sdb") or None if
+            not found.
 
     """
+    namespace = namespace or constants.DEFAULT_NAMESPACE
+
     logger.info(
-        f"Attempting to auto-detect a suitable /dev/sd* disk on worker node: {wnode.name}."
-    )
-    cmd = ['lsblk -dn -o NAME | grep -E "^sd[a-z]$" | sed "s#^#/dev/#" | tail -1']
-    ocp_obj = ocp.OCP()
-
-    out = ocp_obj.exec_oc_debug_cmd(
-        node=wnode.name,
-        cmd_list=cmd,
-        namespace=namespace,
-        use_root=True,
-        timeout=timeout,
+        f"Attempting to auto-detect a suitable /dev/sd*, /dev/nvme* "
+        f"disk on worker node: {wnode.name}."
     )
 
-    logger.info(f"Disk detection command output: {out}")
-    disk_name = out.strip()
+    disk_names_available = disks_available_to_cleanup(wnode, namespace=namespace)
+    candidate_disks = [
+        disk_name
+        for disk_name in disk_names_available
+        if disk_name.startswith(("nvme", "sd"))
+    ]
 
-    if not disk_name:
+    if not candidate_disks:
         logger.warning(
             f"No suitable disk found for BlueStore simulation on worker node: {wnode.name}."
         )
         return None
 
+    disk_name = f"/dev/{candidate_disks[-1]}"
     logger.info(f"Detected disk for simulation: {disk_name}")
     return disk_name
-
-
-def upload_script_to_node(
-    wnode,
-    script_src_path: str,
-    script_dest_path: str,
-    namespace: str = "default",
-    timeout: int = 300,
-):
-    """
-    Upload a shell script to a node using base64 encoding via `oc debug`.
-
-    The script is read locally, base64-encoded, and decoded on the node
-    using `echo | base64 -d`.
-
-    Args:
-        wnode (ocs_ci.ocs.resources.ocs.OCS): Worker node object.
-        script_src_path (str): Local path to the script.
-        script_dest_path (str): Destination path on the node.
-        namespace (str): Namespace for the debug pod.
-        timeout (int): Timeout for the oc debug command (in seconds).
-
-    Returns:
-        str: Output of the command execution.
-
-    Raises:
-        FileNotFoundError: If the local script file does not exist.
-
-    """
-    ocp_obj = ocp.OCP()
-
-    if not os.path.exists(script_src_path):
-        raise FileNotFoundError(f"Script not found at {script_src_path}")
-
-    # Read and encode the script
-    with open(script_src_path, "rb") as f:
-        script_content = f.read()
-    script_b64 = base64.b64encode(script_content).decode("utf-8").replace("\n", "")
-
-    logger.info(
-        f"Uploading script from '{script_src_path}' to node '{wnode.name}' at '{script_dest_path}'"
-    )
-
-    # Build the shell command
-    upload_cmd = [
-        (
-            f"set -euo pipefail; "
-            f'echo "{script_b64}" | base64 -d > {script_dest_path} && '
-            f"chmod 755 {script_dest_path} && "
-            f'echo "Script written to {script_dest_path}" && ls -l {script_dest_path}'
-        )
-    ]
-
-    # Execute the command on the node
-    out = ocp_obj.exec_oc_debug_cmd(
-        node=wnode.name,
-        cmd_list=upload_cmd,
-        namespace=namespace,
-        use_root=True,
-        timeout=timeout,
-    )
-
-    return out
-
-
-def run_script_on_node(
-    wnode,
-    script_path: str,
-    args: str = "",
-    namespace: str = "default",
-    timeout: int = 600,
-):
-    """
-    Execute a shell script directly on a node (inside chroot /host)
-    using oc debug.
-
-    Args:
-        wnode (ocs_ci.ocs.resources.ocs.OCS): Worker node object.
-        script_path (str): Full path to the script on the node.
-        args (str): Optional arguments to pass to the script.
-        namespace (str): Namespace for the debug pod.
-        timeout (int): Timeout for the command execution (in seconds).
-
-    Returns:
-        str: Output of the script execution.
-    """
-    ocp_obj = ocp.OCP()
-
-    logger.info(
-        f"Running the script {script_path} with the args '{args}' "
-        f"on the worker node {wnode.name}"
-    )
-    # Build the command — single element, no single quotes inside
-    cmd = [f"set -euo pipefail; " f"bash {script_path} {args} "]
-
-    out = ocp_obj.exec_oc_debug_cmd(
-        node=wnode.name,
-        cmd_list=cmd,
-        namespace=namespace,
-        use_root=True,
-        timeout=timeout,
-    )
-
-    return out
-
-
-def simulate_ceph_bluestore_on_node_disk(wnode, disk_name=None, namespace="default"):
-    """
-    Simulates a Ceph BlueStore label on a specified disk of a given worker node.
-
-
-    This function uploads a local shell script to the node using base64 encoding,
-    verifies its integrity via SHA256 checksum, and executes it to simulate a
-    BlueStore label on the specified disk. If no disk is specified, the function
-    attempts to auto-detect a suitable disk. The output is parsed to determine
-    whether the simulation was successful.
-
-    Args:
-        wnode (ocs_ci.ocs.resources.ocs.OCS): The worker node object where the simulation
-            should be performed.
-        disk_name (str, optional): The disk device name to simulate the label on.
-            If not provided, the function auto-detects the last /dev/sd* disk on the node.
-        namespace (str): Namespace for the debug pod.
-
-    Returns:
-        bool: True if the simulation succeeded (BlueStore label detected), False otherwise.
-
-    """
-    if not disk_name:
-        disk_name = detect_simulation_disk_on_node(wnode, namespace, timeout=300)
-
-    if not disk_name:
-        logger.error("Disk detection failed. Aborting BlueStore simulation.")
-        return False
-
-    script_name = "simulate_bluestore_label.sh"
-    current_dir = Path(__file__).parent.parent.parent
-    script_src_path = os.path.join(current_dir, "scripts", "bash", script_name)
-    script_dest_path = f"/tmp/{script_name}"
-
-    # Step 3: Download the script directly on the node
-    logger.info(
-        f"Uploading BlueStore simulation script to the worker node {wnode.name}"
-    )
-    upload_script_to_node(
-        wnode=wnode,
-        script_src_path=script_src_path,
-        script_dest_path=script_dest_path,
-        namespace=namespace,
-        timeout=300,
-    )
-
-    # Step 5: Run the script on the node
-    logger.info(f"Running BlueStore simulation script on disk: {disk_name}")
-    out = run_script_on_node(
-        wnode=wnode,
-        script_path=script_dest_path,
-        args=disk_name,
-        namespace=namespace,
-        timeout=300,
-    )
-
-    logger.info("Script output:\n" + out)
-    result = "Verification PASSED" in out or ">>> BlueStore UUID:" in out
-    if result:
-        logger.info(
-            f"BlueStore label simulation succeeded on the worker node {wnode.name}"
-        )
-    else:
-        logger.warning(
-            f"BlueStore label simulation failed.on the worker node {wnode.name}"
-        )
-    return result
 
 
 class BaremetalPSIUPI(Deployment):

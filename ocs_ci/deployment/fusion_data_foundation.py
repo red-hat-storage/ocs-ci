@@ -10,17 +10,23 @@ import tempfile
 import yaml
 
 from ocs_ci.deployment.helpers import storage_class
-from ocs_ci.deployment.helpers.lso_helpers import add_disks_lso
-from ocs_ci.deployment.helpers.storage_class import get_storageclass
+from ocs_ci.deployment.helpers.lso_helpers import (
+    add_disks_lso,
+    cleanup_nodes_for_lso_install,
+)
 from ocs_ci.framework import config
 
 from ocs_ci.helpers.helpers import create_lvs_resource
 from ocs_ci.ocs import constants, defaults, node
-from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    CephHealthException,
+    CommandFailed,
+    TimeoutExpiredError,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import ceph_health_check, run_cmd
 
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
@@ -33,6 +39,7 @@ from ocs_ci.utility.utils import (
     get_running_ocp_version,
     mute_mon_netsplit,
 )
+from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +47,10 @@ logger = logging.getLogger(__name__)
 class FusionDataFoundationDeployment:
     def __init__(self):
         self.pre_release = config.DEPLOYMENT.get("fdf_pre_release", False)
+        self.live_deployment = config.DEPLOYMENT.get("live_deployment", False)
         self.kubeconfig = config.RUN["kubeconfig"]
         self.lso_enabled = config.DEPLOYMENT.get("local_storage", False)
+        self.disconnected = config.DEPLOYMENT.get("disconnected", False)
         self.fdf_skip_storage_setup = config.DEPLOYMENT.get(
             "fdf_skip_storage_setup", False
         )
@@ -69,7 +78,12 @@ class FusionDataFoundationDeployment:
         """
 
         logger.info("Installing IBM Fusion Data Foundation")
-        if self.pre_release:
+        if config.ENV_DATA.get("odf_provider_mode_deployment", False):
+            from ocs_ci.deployment.deployment import enable_wildcard_routes
+
+            enable_wildcard_routes()
+
+        if self.pre_release and not self.live_deployment:
             self.create_image_tag_mirror_set()
             self.create_image_digest_mirror_set()
             self.setup_fdf_pre_release_deployment()
@@ -87,15 +101,40 @@ class FusionDataFoundationDeployment:
         """
 
         logger.info("Ensuring Local Storage Operator (LSO) is installed")
-        lso_operator = LocalStorageOperator()
-        if not lso_operator.is_available():
-            lso_operator.create_catalog()
-            lso_operator.deploy()
+        lso_operator = LocalStorageOperator(create_catalog=True)
+        lso_operator.deploy()
+
+    def _is_mirror_already_configured(self):
+        """
+        Check whether mirroring has already been completed externally.
+
+        Returns True when both ``DEPLOYMENT.disconnected`` and
+        ``DEPLOYMENT.disconnected_mirror_completed`` are set to True, meaning
+        the mirror registry is already configured and IDMS/ITMS resources must
+        not be re-created.
+
+        Returns:
+            bool: True if mirroring is already done and should be skipped.
+
+        """
+        return config.DEPLOYMENT.get("disconnected") and config.DEPLOYMENT.get(
+            "disconnected_mirror_completed"
+        )
 
     def create_image_tag_mirror_set(self):
         """
         Create or update ImageTagMirrorSet.
+
+        Skipped when ``DEPLOYMENT.disconnected`` and
+        ``DEPLOYMENT.disconnected_mirror_completed`` are both True (mirroring
+        was completed externally, e.g. via fdf-mirror entrypoint).
         """
+        if self._is_mirror_already_configured():
+            logger.info(
+                "Skipping ImageTagMirrorSet creation: disconnected mirror already configured"
+            )
+            return
+
         logger.info("Creating or Updating FDF ImageTagMirrorSet")
 
         imagetag_file = constants.FDF_IMAGE_TAG_MIRROR_SET
@@ -104,12 +143,27 @@ class FusionDataFoundationDeployment:
             f"oc --kubeconfig {self.kubeconfig} apply -f {imagetag_file}", silent=True
         )
 
-    def create_image_digest_mirror_set(self):
+    def create_image_digest_mirror_set(self, upgrade=False):
         """
-        Create or update ImageTagMirrorSet.
+        Create or update ImageDigestMirrorSet.
+
+        Skipped when ``DEPLOYMENT.disconnected`` and
+        ``DEPLOYMENT.disconnected_mirror_completed`` are both True (mirroring
+        was completed externally, e.g. via fdf-mirror entrypoint).
+
+        Args:
+            upgrade (bool): If True, use upgrade-specific config values for
+                registry and image tag. Default is False.
+
         """
+        if self._is_mirror_already_configured():
+            logger.info(
+                "Skipping ImageDigestMirrorSet creation: disconnected mirror already configured"
+            )
+            return
+
         logger.info("Creating FDF ImageDigestMirrorSet")
-        image_digest_mirror_set = extract_image_digest_mirror_set()
+        image_digest_mirror_set = extract_image_digest_mirror_set(upgrade=upgrade)
 
         run_cmd(
             f"oc --kubeconfig {self.kubeconfig} apply -f {image_digest_mirror_set}",
@@ -127,10 +181,15 @@ class FusionDataFoundationDeployment:
             fdf_service_data = yaml.safe_load(f.read())
 
         backing_storage_type = config.DEPLOYMENT.get("backing_storage_type")
+        platform = config.ENV_DATA.get("platform", "").lower()
 
         if not backing_storage_type:
-            platform = config.ENV_DATA.get("platform", "").lower()
-            local_platforms = [constants.VSPHERE_PLATFORM, constants.BAREMETAL_PLATFORM]
+            local_platforms = [
+                constants.VSPHERE_PLATFORM,
+                constants.BAREMETAL_PLATFORM,
+                constants.HCI_BAREMETAL,
+                constants.IBM_HCI_PLATFORM,
+            ]
             if platform in local_platforms:
                 backing_storage_type = "Local"
 
@@ -140,6 +199,16 @@ class FusionDataFoundationDeployment:
                 if param["name"] == "backingStorageType":
                     param["value"] = backing_storage_type
                     break
+
+        if platform == constants.IBM_HCI_PLATFORM:
+            logger.info("IBM HCI platform detected: adding enableLVMStorage parameter")
+            for param in fdf_service_data["spec"]["parameters"]:
+                if param["name"] == "backingStorageType":
+                    param["provided"] = False
+                    break
+            fdf_service_data["spec"]["parameters"].append(
+                {"name": "enableLVMStorage", "provided": False, "value": "false"}
+            )
 
         fdf_service_cr_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="fdf_service_cr", delete=False
@@ -157,11 +226,36 @@ class FusionDataFoundationDeployment:
         """
         time.sleep(60)
         wait_for_machineconfigpool_status(node_type="all")
+        self.patch_fusion_service_definition()
 
-        fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
+    def patch_fusion_service_definition(self, upgrade=False):
+        """
+        Patch the FusionServiceDefinition with the imageDigest and registryPath of the build.
+
+        Args:
+            upgrade (bool): If True, use upgrade-specific config values
+                (fdf_upgrade_registry and fdf_upgrade_image_tag). Default is False.
+
+        """
+        if config.ENV_DATA.get("platform").lower() == constants.IBM_HCI_PLATFORM:
+            logger.info(
+                "Skipping patching fusion service definition, no need as we'r already using ITMS and IDMS"
+            )
+            return
+        if upgrade:
+            fdf_registry = config.DEPLOYMENT.get(
+                "fdf_upgrade_registry"
+            ) or config.DEPLOYMENT.get("fdf_pre_release_registry")
+            fdf_image_tag = config.DEPLOYMENT.get(
+                "fdf_upgrade_image_tag"
+            ) or config.DEPLOYMENT.get("fdf_image_tag")
+            fdf_image_digest = config.DEPLOYMENT.get("fdf_upgrade_image_digest")
+        else:
+            fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
+            fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
+            fdf_image_digest = config.DEPLOYMENT.get("fdf_pre_release_image_digest")
+
         fdf_catalog_name = defaults.FUSION_CATALOG_NAME
-        fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
-        fdf_image_digest = config.DEPLOYMENT.get("fdf_pre_release_image_digest")
         pull_secret = os.path.join(constants.DATA_DIR, "pull-secret")
 
         if not fdf_image_digest:
@@ -170,7 +264,10 @@ class FusionDataFoundationDeployment:
             catalog_data = run_cmd(cmd)
             fdf_image_digest = json.loads(catalog_data).get("Digest")
             logger.info(f"Retrieved image digest: {fdf_image_digest}")
-            config.DEPLOYMENT["fdf_pre_release_image_digest"] = fdf_image_digest
+            if upgrade:
+                config.DEPLOYMENT["fdf_upgrade_image_digest"] = fdf_image_digest
+            else:
+                config.DEPLOYMENT["fdf_pre_release_image_digest"] = fdf_image_digest
 
         ocp_version = f"ocp{get_running_ocp_version().replace('.', '')}-t"
         logger.info(f"OCP version: {ocp_version}")
@@ -249,8 +346,21 @@ class FusionDataFoundationDeployment:
             resource_name=storage_namespace,
             label="openshift.io/cluster-monitoring=true",
         )
-        if self.lso_enabled:
+        lso_already_deployed = self.lso_enabled and OCP(
+            kind=constants.STORAGECLASS
+        ).is_exist(resource_name=constants.DEFAULT_STORAGECLASS_LSO)
+        if self.lso_enabled and not lso_already_deployed:
             self.ensure_lso_installed()
+            if config.ENV_DATA.get("skip_disks_cleanup", False):
+                logger.info("Skipping disks cleanup")
+            else:
+                logger.info("Performing disk cleanup for LSO")
+                cleanup_nodes_for_lso_install()
+        elif lso_already_deployed:
+            logger.info(
+                "LSO already deployed (StorageClass %s exists), skipping installation",
+                constants.DEFAULT_STORAGECLASS_LSO,
+            )
         self.patch_catalogsource()
 
         fusion_version = config.ENV_DATA["fusion_version"].replace("v", "")
@@ -259,7 +369,7 @@ class FusionDataFoundationDeployment:
         # Storage configuration method changed in Fusion 2.11
         if (
             fusion_version < version.VERSION_2_11
-            or config.ENV_DATA.get("platform").lower() == constants.HCI_BAREMETAL
+            or config.ENV_DATA.get("platform").lower() == constants.IBM_HCI_PLATFORM
         ):
             self.create_odfcluster()
             # Mute MON_NETSPLIT for arbiter deployments to avoid:
@@ -269,7 +379,7 @@ class FusionDataFoundationDeployment:
             odfcluster_status_check()
         else:
             logger.info("Storage configuration for Fusion 2.11 or greater")
-            if self.lso_enabled:
+            if self.lso_enabled and not lso_already_deployed:
                 add_disks_lso()
             # Ensure storage class is resolved and stored in config before
             # StorageCluster creation. The property setter populates
@@ -278,7 +388,7 @@ class FusionDataFoundationDeployment:
             sc = self.storage_class
             logger.info(f"Resolved storage class for StorageCluster: {sc}")
             clustersetup = StorageClusterSetup()
-            if self.lso_enabled:
+            if self.lso_enabled and not lso_already_deployed:
                 create_lvs_resource(self.storage_class, self.storage_class)
             if config.ENV_DATA.get("mark_masters_schedulable", False):
                 node.mark_masters_schedulable()
@@ -291,6 +401,7 @@ class FusionDataFoundationDeployment:
                     "Arbiter deployment detected, muting MON_NETSPLIT health warning"
                 )
                 mute_mon_netsplit(namespace="ibm-spectrum-fusion-ns")
+            self.ensure_ceph_health()
             storagecluster_health_check()
 
     def patch_catalogsource(self):
@@ -307,20 +418,85 @@ class FusionDataFoundationDeployment:
         )
         run_patch_cmd(cmd)
 
+    def ensure_ceph_health(self):
+        """
+        Verify the Ceph cluster is healthy, remediating clock skew if detected.
+
+        Runs a Ceph health check and, if it fails due to a "clock skew detected"
+        error, updates NTP on the cluster's compute nodes (vSphere only) and
+        re-runs the health check, asserting it passes.
+        """
+        logger.info("Ensuring ceph health")
+        try:
+            namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+            ceph_health_check(namespace=namespace, tries=30, delay=10)
+        except CephHealthException as ex:
+            err = str(ex)
+            logger.warning(f"Ceph health check failed with {err}")
+            if "clock skew detected" in err:
+                logger.info("Changing NTP on cluster nodes")
+                platform = config.ENV_DATA.get("platform", "").lower()
+                if platform == constants.VSPHERE_PLATFORM:
+                    update_ntp_compute_nodes()
+                assert ceph_health_check(namespace=namespace, tries=60, delay=10)
+
     @staticmethod
     def create_odfcluster():
         """
-        Create OdfCluster CR
+        Create OdfCluster CR.
+
+        The OdfCluster spec differs by platform:
+
+        - **IBM HCI** (bare-metal): uses ``localVolumeSetSpec`` so LSO
+          discovers the raw local disks already attached to each node and
+          creates PVs from them.  ``deviceSets`` is removed from the spec.
+
+        - **All other platforms** (e.g. AWS, vSphere with dynamic
+          provisioning): uses ``deviceSets`` with a CSI StorageClass so OSD
+          PVCs are fulfilled by the cloud/virtualised block-storage driver.
+          No raw disks are required on the nodes.
         """
 
         logger.info("Creating OdfCluster CR")
-        storageclass = get_storageclass()
+        platform = config.ENV_DATA.get("platform", "").lower()
         worker_nodes = node.get_worker_nodes()
         with open(constants.FDF_ODFCLUSTER_CR, "r") as f:
             odfcluster_data = yaml.safe_load(f.read())
 
-        odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
         odfcluster_data["spec"]["storageNodes"] = worker_nodes
+
+        if platform == constants.IBM_HCI_PLATFORM:
+            # IBM HCI bare-metal: replace deviceSets with localVolumeSetSpec
+            # so LSO provisions PVs from the raw local disks on each node.
+            logger.info(
+                "IBM HCI platform: configuring OdfCluster with localVolumeSetSpec"
+            )
+            odfcluster_data["spec"].pop("deviceSets", None)
+            odfcluster_data["spec"]["localVolumeSetSpec"] = {
+                "deviceTypes": ["disk", "part"],
+                "diskType": "SSD",
+            }
+            odfcluster_data["spec"]["autoScaleUp"] = True
+            odfcluster_data["spec"]["allowRemoteStorageConsumers"] = True
+            odfcluster_data["spec"]["storageClient"] = {"enable": True}
+        else:
+            # Dynamic-provisioning platforms (AWS, vSphere, …): keep deviceSets
+            # and fill in the CSI StorageClass so OSD PVCs are provisioned from
+            # cloud/virtualised block storage.  No raw disks needed on nodes.
+            storageclass = storage_class.get_storageclass()
+            logger.info(
+                "Dynamic-provisioning platform: configuring OdfCluster "
+                "deviceSets with StorageClass '%s'",
+                storageclass,
+            )
+            odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
+
+        if config.ENV_DATA.get("erasureCoding"):
+            odfcluster_data["spec"]["erasureCoding"] = {
+                "codingChunks": config.ENV_DATA.get("codingChunks", 2),
+                "dataChunks": config.ENV_DATA.get("dataChunks", 4),
+                "enable": True,
+            }
 
         odfcluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="odfcluster", delete=False
@@ -372,18 +548,32 @@ def odfcluster_status_check():
     logger.info("OdfCluster created successfully")
 
 
-def extract_image_digest_mirror_set():
+def extract_image_digest_mirror_set(upgrade=False):
     """
     Extract the ImageDigestMirrorSet from the FDF build.
+
+    Args:
+        upgrade (bool): If True, use upgrade-specific config values
+            (fdf_upgrade_registry and fdf_upgrade_image_tag). Default is False.
 
     Returns:
         str: Name of the extracted ImageDigestMirrorSet
 
     """
     pull_secret = os.path.join(constants.DATA_DIR, "pull-secret")
-    fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
+
+    if upgrade:
+        fdf_registry = config.DEPLOYMENT.get(
+            "fdf_upgrade_registry"
+        ) or config.DEPLOYMENT.get("fdf_pre_release_registry")
+        fdf_image_tag = config.DEPLOYMENT.get(
+            "fdf_upgrade_image_tag"
+        ) or config.DEPLOYMENT.get("fdf_image_tag")
+    else:
+        fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
+        fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
+
     fdf_catalog_name = defaults.FUSION_CATALOG_NAME
-    fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
 
     filename = constants.FDF_IMAGE_DIGEST_MIRROR_SET_FILENAME
     cmd = (
@@ -403,7 +593,7 @@ def is_not_arbiter_node(node_obj):
         node_obj (ocs_ci.ocs.ocp.OCP): OCP Node object
 
     Returns:
-        bool: True if node doesn't contain the labelj, False if it does
+        bool: True if node doesn't contain the label, False if it does
 
     """
     arbiter_zone = config.DEPLOYMENT.get(
@@ -449,6 +639,7 @@ def storagecluster_health_check():
         AssertionError: If the StorageCluster is not in a Ready state
                         or Ceph health is not HEALTH_OK.
         KeyError: If expected status keys are missing.
+
     """
     storagecluster = StorageCluster(
         resource_name="ocs-storagecluster",
@@ -468,7 +659,15 @@ def storagecluster_health_check():
 def wait_for_storageclusters_crd():
     """
     Wait for the storageclusters CRD to exist.
+    On IBM HCI platform storage is managed via OdfCluster CR, not
+    StorageCluster, so the storageclusters CRD is not expected to exist.
     """
+    if config.ENV_DATA.get("platform", "").lower() == constants.IBM_HCI_PLATFORM:
+        logger.info(
+            "IBM HCI platform detected, storage managed by OdfCluster CR, "
+            "skipping StorageClusters CRD wait"
+        )
+        return
     logger.info("Waiting for the StorageClusters CRD to exist")
 
     @retry((CommandFailed, AssertionError, KeyError), 30, 30, backoff=1)

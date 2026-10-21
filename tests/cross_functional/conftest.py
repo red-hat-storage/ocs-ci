@@ -22,6 +22,7 @@ from ocs_ci.helpers.e2e_helpers import (
     validate_mcg_nsfs_feature,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.utility import version
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.bucket_utils import (
     compare_object_checksums_between_bucket_and_local,
@@ -1506,12 +1507,14 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             timeout=900,
         )
         # verify noobaa statefulset is present
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        expected_ready = "2/2" if ocs_version >= version.VERSION_4_23 else "1/1"
         sample = TimeoutSampler(
             timeout=500,
             sleep=30,
             func=run_cmd_verify_cli_output,
             cmd="oc get sts noobaa-core -n openshift-storage",
-            expected_output_lst={"noobaa-core", "1/1"},
+            expected_output_lst={"noobaa-core", expected_ready},
         )
         if not sample.wait_for_func_status(result=True):
             raise Exception("Statefulset noobaa-core is not recreated")
@@ -1810,11 +1813,16 @@ def run_platform_stress(request):
 
     def finalizer():
         """Cleanup function to stop all PlatformStress instances."""
+        health_errors = []
         for stress_obj in created_instances:
             if stress_obj.run_status:
                 logger.info("Stopping stress for PlatformStress instance...")
                 stress_obj.stop()
                 logger.info("Stress stopped.")
+            if stress_obj.health_error:
+                health_errors.append(stress_obj.health_error)
+        if health_errors:
+            raise health_errors[0]
 
     request.addfinalizer(finalizer)
     return factory
