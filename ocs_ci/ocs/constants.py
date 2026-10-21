@@ -1513,6 +1513,11 @@ METALLB_WEBHOOK_PREFIX = "metallb-operator-webhook-server"
 METALLB_DEFAULT_NAMESPACE = "metallb-system"
 METALLB_OPERATOR_NAME = "metallb-operator"
 METALLB_KIND = "MetalLB"
+
+# Kernel Module Management operator, builds and loads out of tree kmods
+# such as the IBM Storage Scale gpfs module
+KMM_OPERATOR_NAME = "kernel-module-management"
+KMM_NAMESPACE = "openshift-kmm"
 METALLB_OPERATOR_GROUP_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_METALLB, "operator-group.yaml"
 )
@@ -3030,8 +3035,14 @@ IBM_STORAGE_SCALE_CLUSTER_NAME = "ibm-spectrum-scale"
 IBM_STORAGE_SCALE_CLUSTER_KIND = "Cluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_REMOTECLUSTER_KIND = "RemoteCluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_FILESYSTEM_KIND = "Filesystem.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_DAEMON_KIND = "Daemon.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_DAEMON_NAME = "ibm-spectrum-scale"
+IBM_STORAGE_SCALE_FSRD_KIND = "FilesystemRecoveryData.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_DR_PRIMARY_LABEL = "scale.spectrum.ibm.com/dr-primary"
 IBM_ENTITLEMENT_SECRET_NAME = "ibm-entitlement-key"
 IBM_QUAYIO_SECRET_NAME = "quayio-secret"
+# Registry the IBM Storage Scale pre release images are pulled from
+IBM_PREPROD_REGISTRY = "preprod.icr.io"
 REMOTE_CLUSTER = "RemoteCluster"
 SCALE_NODE_SELECTOR = {"scale-label": "app-scale"}
 SCALE_LABEL = "scale-label=app-scale"
