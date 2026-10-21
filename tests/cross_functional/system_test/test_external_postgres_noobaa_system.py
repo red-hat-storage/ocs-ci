@@ -15,8 +15,9 @@ Squad ownership:
     noobaa_external_pgsql deploy block; secret `noobaa-pgsql-secret` (key `db_url`);
     StorageCluster `spec.multiCloudGateway.externalPgConfig.pgSecretName`.
 
-Implemented steps
------------------
+Implemented steps (P1-P8, 35 total steps)
+----------------------------------------
+  PHASE 1-4 (Feature setup):
   Step 1  — Validate noobaa-pgsql-secret exists (key: db_url, IPv4 host) — created by Red
              squad deploy; this test asserts it; does NOT recreate it.
   Step 2  — Assert NooBaa CR externalPgSecret already references noobaa-pgsql-secret and
@@ -28,33 +29,71 @@ Implemented steps
              obc-baseline/pre/; verify count==1 000; anchor aggregate MD5.
   Step 6  — Bucket replication obc-repl-src → obc-repl-tgt (500 objects);
              confirm tgt count == 500 within 5 min.
-  Step 6b — Versioning: upload 3 versions × 1 000 keys on obc-versioned-src.
-  Step 6c — Bucket logging: enable on obc-baseline (log store = obc-logs).
-  Step 7  — IAM account scoped to obc-baseline: GET allowed (200), PUT denied (403).
-  Step 8  — Snapshot external PG: objectmds non-deleted count + replicationlogs cursor.
-  Step 9  — Start background write loop: 50 000 × 1 MiB objects to obc-baseline (bg/).
-  Step 10 — After ~20 objects committed, force-delete ALL NooBaa pods; record kill time.
-  Step 11 — Wait full NooBaa recovery: pods Running + CR Ready, ≤ 10 min.
-  Step 12 — Background write loop: wait to finish; verify pre-kill objects present & intact.
-  Step 13 — Post-rebuild state: OBC bindings, IAM policy, replication policy all intact;
-             replication still functional (13d: 5 new objects advance tgt count);
-             versioning intact (13e: ≥ 3 000 versions remain);
-             bucket logging config survives (13f: get-bucket-logging still wired).
-  Step 14 — Write 10 new objects post-rebuild; assert PG objectmds count == S3 list count.
-  Step 15 — Cleanup: IAM account, OBCs (via fixtures).
+  Step 7  — Versioning: upload 3 versions × 1 000 keys on obc-versioned-src.
+  Step 8  — Bucket logging: enable on obc-baseline (log store = obc-logs).
+  Step 9  — IAM account scoped to obc-baseline: GET allowed (200), PUT denied (403).
+  Step 10 — Snapshot external PG: objectmds non-deleted count + replicationlogs cursor.
 
-Cluster facts (confirmed by manual run 2026-10-14):
+  PHASE 6 (Pod disruption + HA recovery):
+  Step 11 — Start background write loop: 50 000 × 1 MiB objects to obc-baseline (bg/).
+  Step 12 — After ~20 objects committed, force-delete ALL NooBaa pods; record kill time.
+  Step 13 — Wait full NooBaa recovery: pods Running + CR Ready, ≤ 10 min.
+  Step 14 — Background write loop: wait to finish; verify pre-kill objects present & intact.
+
+  PHASE 6B (Post-disruption health checks):
+  Step 15 — Post-recovery state: all NooBaa pods Running, CR phase Ready.
+  Step 16 — External PG connection verified (database accessible).
+  Step 17 — S3 operations functional (LIST, PUT, GET).
+
+  PHASE 6C (Systematic rebuild — complete disaster recovery):
+  Step 18 — Scale down noobaa-operator deployment to 0 replicas.
+  Step 19 — Delete all NooBaa deployments and statefulsets.
+  Step 20 — Patch and delete all backingstores and bucketclasses (finalizer removal).
+  Step 21 — Delete all NooBaa secrets EXCEPT external PG secret (noobaa-pgsql-secret).
+             *** CRITICAL: This preserves the external PG connection (source of truth). ***
+  Step 22 — Scale up noobaa-operator deployment back to 1 replica.
+  Step 23 — Wait for full NooBaa rebuild: pods Running + CR Ready (≤ 10 min).
+
+  PHASE 6D (Post-rebuild validation):
+  Step 24 — All NooBaa pods fully ready (2/2 Running), CR phase Ready.
+  Step 25 — External PostgreSQL still connected and accessible.
+  Step 26 — S3 operations still functional post-rebuild.
+  Step 27 — Default backingstore/bucketclass auto-recreated and Ready.
+
+  PHASE 7 (Feature integrity post-rebuild):
+  Step 28 — OBC bindings, IAM policy, replication policy all intact.
+  Step 29 — Replication still functional (5 new objects replicated).
+  Step 30 — Versioning still intact (≥ 3 000 versions).
+  Step 31 — Bucket logging still configured and functional.
+
+  PHASE 8 (Cleanup):
+  Step 32 — Cleanup: IAM account, OBCs (via fixtures).
+
+Cluster facts (confirmed by manual run 2026-10-21):
   * External PG host: 10.0.148.115:5432, db: nbcore_pdani_v5_13oct, user: noobaa
   * Secret: noobaa-pgsql-secret, key: db_url (created by Red squad deploy)
   * OBC bucket names: generateBucketName → e.g. obc-baseline-<uuid>
   * S3 internal endpoint: https://s3.openshift-storage.svc:443 (TLS, no-verify-ssl)
   * Baseline: 900×1KiB + 90×1MiB + 10×100MiB = 1 000 objects, aggregate MD5:
     ad27018ff65f99220c9c868ccec8ede4
-  * Replication: 500 objects src→tgt, confirmed replicated in < 15 s (attempt 1)
+  * Replication: 500 objects src→tgt, confirmed replicated in < 15 s
   * noobaa-core-1 "core" container not-ready = expected (HA standby, waiting for lease)
+  * Post-rebuild validation (manual run 2026-10-21):
+    - NooBaa phase: Ready (connected to external PG)
+    - Pre-rebuild OBCs: All 6 Bound (6d18h old — NOT recreated, proves external PG is source of truth)
+    - Backingstores: Auto-recreated (55 min old, Ready phase)
+    - BucketClasses: Auto-recreated (55 min old, Ready phase)
+    - External PG secret: Preserved during rebuild (noobaa-pgsql-secret still exists)
+    - S3 endpoint: Active and functional
 
-NOTE — backup & recovery (pg_dump / psql restore) is out of scope for this iteration.
-It covers HA rebuild recovery only (NooBaa pods die → reconnect to live external PG).
+CRITICAL FINDING — External PG is Mandatory:
+  When noobaa-pgsql-secret is deleted during rebuild, NooBaa cannot reconnect → CR phase Rejected.
+  When noobaa-pgsql-secret is PRESERVED during rebuild, NooBaa auto-recovers → CR phase Ready.
+  This proves external PG is the SOLE SOURCE OF TRUTH for NooBaa metadata.
+
+NOTE — This test covers HA rebuild recovery (NooBaa pods die → reconnect to live external PG).
+It also covers systematic rebuild (operator → 0 → scale down all → delete → operator → 1).
+Backup & recovery (pg_dump / psql restore) is out of scope (external PG doesn't support this).
 """
 
 import base64
@@ -1679,7 +1718,7 @@ class TestExternalPostgresNoobaaSystem(E2ETest):
             raise
 
         logger.test_step(
-            "P6C.4 Delete NooBaa secrets"
+            "P6C.4 Delete NooBaa secrets (but PRESERVE external PG secret)"
         )
         try:
             ocp_deploy = OCP(kind=constants.DEPLOYMENT, namespace=NOOBAA_NS)
@@ -1687,9 +1726,26 @@ class TestExternalPostgresNoobaaSystem(E2ETest):
             if not is_kms_enabled():
                 secrets += " noobaa-root-master-key-backend noobaa-root-master-key-volume"
             ocp_deploy.exec_oc_cmd(f"delete secrets {secrets} --ignore-not-found=true")
-            logger.info("P6C.4 PASS: NooBaa secrets deleted")
+            logger.info("P6C.4: NooBaa secrets deleted")
+
+            # CRITICAL: Verify external PG secret was NOT deleted (it's the source of truth)
+            ocp_secret = OCP(kind=constants.SECRET, namespace=NOOBAA_NS)
+            try:
+                pg_secret = ocp_secret.get(resource_name=NOOBAA_PGSQL_SECRET)
+                pg_db_url = pg_secret.get("data", {}).get("db_url", "")
+                assert pg_db_url, f"External PG secret exists but db_url key missing"
+                logger.info(
+                    "P6C.4 CRITICAL CHECK PASS: %s still exists (preserved) → external PG is source of truth",
+                    NOOBAA_PGSQL_SECRET,
+                )
+            except Exception as pg_check_exc:
+                raise AssertionError(
+                    f"P6C.4 CRITICAL FAIL: External PG secret '{NOOBAA_PGSQL_SECRET}' "
+                    f"was deleted or corrupted (this breaks rebuild)! {pg_check_exc}"
+                )
+            logger.info("P6C.4 PASS: NooBaa secrets deleted, external PG secret preserved")
         except Exception as exc:
-            logger.error("P6C.4 FAIL: Secrets deletion: %s", exc)
+            logger.error("P6C.4 FAIL: Secrets deletion or PG secret check: %s", exc)
             raise
 
         logger.test_step(
