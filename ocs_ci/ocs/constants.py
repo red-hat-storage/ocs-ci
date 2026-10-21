@@ -1200,6 +1200,8 @@ JENKINS_BUILDCONFIG_YAML = os.path.join(TEMPLATE_JENKINS_DIR, "buildconfig.yaml"
 
 SMALLFILE_BENCHMARK_YAML = os.path.join(TEMPLATE_SMALLFILE_DIR, "SmallFile.yaml")
 
+CEPHFS_STRESS_YAML = os.path.join(TEMPLATE_CEPHFS_STRESS_DIR, "cephfs_stress.yaml")
+
 CEPHFS_STRESS_POD_YAML = os.path.join(
     TEMPLATE_CEPHFS_STRESS_DIR, "cephfs_stress_pod.yaml"
 )
@@ -4213,6 +4215,7 @@ MCLOCK_BALANCED = "balanced"
 MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
 
 # chaos Tests constants
+KRKN_REPO_URL = "https://github.com/redhat-chaos/krkn.git"
 KRKN_DIR = os.path.join(DATA_DIR, "krkn")
 KRKN_CHAOS_DIR = os.path.join(TOP_DIR, "ocs_ci", "krkn_chaos")
 KRKN_SCENARIO_TEMPLATE_DIR = os.path.join(KRKN_CHAOS_DIR, "template")
