@@ -873,6 +873,7 @@ class TestRbdCBTMetadata(CBTMetadataTestBase):
 
     @tier4b
     @ignore_leftovers
+    @polarion_id("OCS-8357")
     def test_cbt_service_survives_controller_node_shutdown(
         self, nodes, node_restart_teardown
     ):
@@ -1095,6 +1096,7 @@ class TestRbdCBTMetadataNegative(CBTMetadataTestBase):
 
     # -- Test 1 ----------------------------------------------------
 
+    @polarion_id("OCS-8356")
     def test_cbt_wrong_audience_rejected(self):
         """
         Verify that a token issued for the wrong audience is
@@ -1107,11 +1109,12 @@ class TestRbdCBTMetadataNegative(CBTMetadataTestBase):
         block metadata is returned.
 
         Steps:
-        1. Create an application PVC and a writer pod, and write
-           10 MiB of data.
+        1. Create a Block-mode application PVC and a writer pod,
+           and write 10 MiB of data.
         2. Take a VolumeSnapshot of the PVC.
-        3. Run the CBT lister with a wrong audience and assert it
-           fails with an authentication error.
+        3. Run the CBT lister against the snapshot with a bogus
+           --audience value, and assert it fails with an
+           authentication error.
         """
         log.test_step(
             "Create a Block application PVC and a writer pod, and write 10 MiB"
@@ -1140,6 +1143,7 @@ class TestRbdCBTMetadataNegative(CBTMetadataTestBase):
 
     # -- Test 2 ----------------------------------------------------
 
+    @polarion_id("OCS-8355")
     def test_cbt_wrong_ca_cert_rejected(self):
         """
         Verify that the TLS handshake fails when the client trusts
@@ -1151,12 +1155,13 @@ class TestRbdCBTMetadataNegative(CBTMetadataTestBase):
         complete the handshake, so no block metadata can be read.
 
         Steps:
-        1. Create an application PVC and a writer pod, and write
-           10 MiB of data.
+        1. Create a Block-mode application PVC and a writer pod,
+           and write 10 MiB of data.
         2. Take a VolumeSnapshot of the PVC.
-        3. Generate an untrusted CA certificate and write it into
-           the CBT lister pod.
-        4. Run the CBT lister with the wrong CA certificate and
+        3. Generate an untrusted self-signed CA certificate and
+           write it into the CBT lister pod.
+        4. Run the CBT lister against the snapshot with the
+           untrusted CA certificate passed as --ca-cert-file, and
            assert it fails with a TLS error.
         """
         log.test_step(
