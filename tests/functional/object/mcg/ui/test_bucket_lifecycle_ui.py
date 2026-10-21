@@ -38,7 +38,7 @@ class TestBucketLifecycleUI:
         _, bucket_name = bucket_ui.create_bucket_ui_with_details("s3")
         log_step(f"Created bucket via UI: {bucket_name}")
 
-        lifecycle_ui.do_click(lifecycle_ui.bucket_tab["management_tab"])
+        lifecycle_ui.open_management_tab()
 
         self.created_buckets.append(bucket_name)
         logger.debug(
@@ -313,8 +313,7 @@ class TestBucketLifecycleUI:
             rules={"expiration": {"days": initial_days}},
         )
 
-        lifecycle_ui.do_click(lifecycle_ui.bucket_tab["management_tab"])
-        time.sleep(2)
+        lifecycle_ui.open_management_tab()
 
         rules = lifecycle_ui.get_lifecycle_rules_list()
         assert (
@@ -402,8 +401,7 @@ class TestBucketLifecycleUI:
                 rules={"expiration": {"days": 30}},
             )
 
-            lifecycle_ui.do_click(lifecycle_ui.bucket_tab["management_tab"])
-            time.sleep(2)
+            lifecycle_ui.open_management_tab()
 
             rules = lifecycle_ui.get_lifecycle_rules_list()
             assert rule_to_delete in rules, f"Failed to create rule {rule_to_delete}"

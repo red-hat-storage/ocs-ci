@@ -106,6 +106,22 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                 )
                 raise
 
+    def open_management_tab(self, timeout=60):
+        """
+        Wait for the bucket overview page to fully load, then click the Management tab
+        and wait for it to finish loading.
+
+        Args:
+            timeout (int): Seconds to wait for the Management tab element
+
+        Raises:
+            TimeoutException: If the Management tab does not appear within timeout
+        """
+        self.page_has_loaded()
+        logger.info("Clicking Management tab")
+        self.do_click(self.bucket_tab["management_tab"], timeout=timeout)
+        self.page_has_loaded()
+
     def navigate_to_bucket_lifecycle(self, bucket_name: str) -> None:
         """
         Navigate to a specific bucket's lifecycle rules page
@@ -125,9 +141,7 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
         self.do_click((f"//tr//a[contains(text(), '{bucket_name}')]", By.XPATH))
 
-        self.page_has_loaded()
-
-        self.do_click(self.bucket_tab["management_tab"])
+        self.open_management_tab()
 
         logger.info("Navigated to lifecycle rules page")
 
@@ -215,10 +229,8 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
         # Click Create on the Review step
         self.scroll_into_view(self.bucket_tab["lifecycle_create_button"])
         self.do_click(self.bucket_tab["lifecycle_create_button"])
-        time.sleep(3)
 
-        self.do_click(self.bucket_tab["management_tab"])
-        time.sleep(2)
+        self.open_management_tab()
 
         logger.info(f"Successfully created lifecycle rule: {rule_name}")
 
@@ -306,10 +318,8 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
             self.scroll_into_view(self.bucket_tab["lifecycle_save_button"])
             self.do_click(self.bucket_tab["lifecycle_save_button"])
-            time.sleep(3)
 
-            self.do_click(self.bucket_tab["management_tab"])
-            time.sleep(2)
+            self.open_management_tab()
 
             logger.info(f"Successfully edited lifecycle rule: {rule_name}")
 
@@ -341,7 +351,6 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             list: List of rule names
         """
         try:
-            time.sleep(3)
             self.page_has_loaded()
             rule_elements = self.get_elements(self.bucket_tab["lifecycle_rules_list"])
 
