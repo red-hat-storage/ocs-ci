@@ -171,6 +171,11 @@ HEALTHY_OBC_CLI_PHASE = "Phase:Bound"
 HEALTHY_OB_CLI_MODE = "Mode:OPTIMAL"
 HEALTHY_PV_BS = ["OPTIMAL", "LOW_CAPACITY"]
 
+# NooBaa bucket modes, reported in the bucket_mode label of the
+# NooBaaBucketErrorState and NooBaaNamespaceBucketErrorState alerts
+BUCKET_MODE_EXCEEDING_QUOTA = "EXCEEDING_QUOTA"
+BUCKET_MODE_NOT_ENOUGH_HEALTHY_RESOURCES = "NOT_ENOUGH_HEALTHY_RESOURCES"
+
 # Storage-Auto-Scaler statuses
 NOT_STARTED = "NotStarted"
 IN_PROGRES = "InProgress"
