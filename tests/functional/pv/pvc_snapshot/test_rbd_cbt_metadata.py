@@ -38,7 +38,6 @@ from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.ocs.resources.cbt_metadata import (
     VerifierTool,
     generate_untrusted_ca_cert,
-    get_cbt_service_endpoint_ips,
     get_merged_lister_entries_byte_ranges,
     get_total_covered_bytes,
     get_uncovered_byte_ranges,
@@ -46,7 +45,7 @@ from ocs_ci.ocs.resources.cbt_metadata import (
     verify_lister_authentication_error_markers,
     verify_lister_tls_error_markers,
     wait_for_cbt_service_endpoints,
-    wait_for_ready_cbt_sidecar_on_node,
+    wait_for_ready_cbt_sidecar_pods,
 )
 from ocs_ci.ocs.resources.pod import (
     get_pod_node,
@@ -885,8 +884,13 @@ class TestRbdCBTMetadata(CBTMetadataTestBase):
         Shuts down the node of one controller pod, checks that the
         Service drops its endpoint while the surviving replica still
         answers allocated and delta requests, then powers the node
-        back on and checks that the recovered pod rejoins the
-        Service and the metadata is unchanged.
+        back on and checks that every controller pod serves the CBT
+        sidecar again, that the Service endpoints match them, and
+        that the metadata is unchanged.
+
+        The replacement of the controller pod is not required to
+        land back on the recovered node, since the scheduler is free
+        to place it anywhere.
 
         Steps:
         1. Create a Block application PVC, a Block-mode copy PVC,
@@ -904,8 +908,9 @@ class TestRbdCBTMetadata(CBTMetadataTestBase):
         8. Run a delta-mode verification of snap-2 against snap-1
            while the node is down.
         9. Power the node on and wait for it to become Ready.
-        10. Wait for a controller pod with a ready CBT sidecar on
-            the recovered node and verify its endpoint is back.
+        10. Wait for all the controller pods to have a ready CBT
+            sidecar again and for the Service endpoints to match
+            them.
         11. Run the CBT lister in delta mode and in allocated mode,
             and verify the allocated metadata is unchanged.
         12. Run an allocated-mode verification of snap-2.
@@ -934,8 +939,10 @@ class TestRbdCBTMetadata(CBTMetadataTestBase):
             "Get the RBD CSI controller pods and verify at least two of them "
             "run on different nodes with a ready CBT sidecar"
         )
+        controller_pods = get_rbdfsplugin_provisioner_pods()
+        expected_ready_pods = len(controller_pods)
         pod_ip_by_node = {}
-        for controller_pod in get_rbdfsplugin_provisioner_pods():
+        for controller_pod in controller_pods:
             _, pod_ip = validate_snapshot_metadata_sidecar(controller_pod)
             pod_ip_by_node[get_pod_node(controller_pod).name] = pod_ip
         log.info(
@@ -960,11 +967,6 @@ class TestRbdCBTMetadata(CBTMetadataTestBase):
             node_name for node_name in pod_ip_by_node if node_name != lister_pod_node
         )
         selected_pod_ip = pod_ip_by_node[selected_node_name]
-        remaining_pod_ips = [
-            pod_ip
-            for node_name, pod_ip in pod_ip_by_node.items()
-            if node_name != selected_node_name
-        ]
         log.info(
             "Shutting down node %s hosting controller pod IP %s. The CBT "
             "lister pod runs on node %s",
@@ -1023,27 +1025,18 @@ class TestRbdCBTMetadata(CBTMetadataTestBase):
         wait_for_nodes_status(node_names=[selected_node_name], timeout=600)
 
         log.test_step(
-            "Wait for a controller pod with a ready CBT sidecar on the "
-            "recovered node and verify its endpoint is back"
+            "Wait for all the controller pods to have a ready CBT sidecar "
+            "again and for the Service endpoints to match them"
         )
-        recovered_pod = wait_for_ready_cbt_sidecar_on_node(selected_node_name)
-        recovered_pod_name, recovered_pod_ip = validate_snapshot_metadata_sidecar(
-            recovered_pod
-        )
+        ready_pod_ips = wait_for_ready_cbt_sidecar_pods(expected_ready_pods)
         log.info(
-            "Controller pod %s on the recovered node %s has a ready CBT "
-            "sidecar (IP: %s)",
-            recovered_pod_name,
-            selected_node_name,
-            recovered_pod_ip,
+            "All %d RBD CSI controller pods have a ready CBT sidecar again "
+            "(IPs: %s)",
+            expected_ready_pods,
+            ready_pod_ips,
         )
-        wait_for_cbt_service_endpoints(
-            present_ips=remaining_pod_ips + [recovered_pod_ip]
-        )
-        log.info(
-            "CBT service endpoints after the recovery: %s",
-            get_cbt_service_endpoint_ips(),
-        )
+        endpoint_ips = wait_for_cbt_service_endpoints(exact_ips=ready_pod_ips)
+        log.info("CBT service endpoints after the recovery: %s", endpoint_ips)
 
         log.test_step(
             "Run the CBT lister in delta mode and in allocated mode, and "

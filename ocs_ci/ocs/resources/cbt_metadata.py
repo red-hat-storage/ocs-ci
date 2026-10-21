@@ -26,10 +26,10 @@ from cryptography.x509.oid import NameOID
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.node import get_node_pods
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     get_containers_names_by_pod,
+    get_pod_ip,
     get_rbdfsplugin_provisioner_pods,
 )
 from ocs_ci.helpers import helpers
@@ -335,55 +335,59 @@ def validate_snapshot_metadata_sidecar(pod_obj):
     return pod_obj.name, pod_ip
 
 
-def get_ready_cbt_sidecar_pods_on_node(node_name):
+def get_ready_cbt_sidecar_pod_ips():
     """
-    Get the node's RBD CSI controller pods with a ready CBT sidecar.
-
-    Args:
-        node_name (str): Node the controller pods should run on
+    Get the IPs of the controller pods with a ready CBT sidecar.
 
     Returns:
-        list: Pod objects on the node whose csi-snapshot-metadata
-            container is ready
+        list: Sorted IPs of the RBD CSI controller pods whose
+            csi-snapshot-metadata container is ready
     """
-    node_pods = get_node_pods(
-        node_name,
-        pods_to_search=get_rbdfsplugin_provisioner_pods(),
-    )
-    ready_pods = [
-        pod_obj for pod_obj in node_pods if is_snapshot_metadata_sidecar_ready(pod_obj)
-    ]
+    ready_ips = []
+    for pod_obj in get_rbdfsplugin_provisioner_pods():
+        if not is_snapshot_metadata_sidecar_ready(pod_obj):
+            continue
+        pod_ip = get_pod_ip(pod_obj)
+        if pod_ip:
+            ready_ips.append(pod_ip)
+
+    ready_ips.sort()
     logger.info(
-        "Node %s has %d RBD CSI controller pod(s) with a ready CBT sidecar",
-        node_name,
-        len(ready_pods),
+        "%d RBD CSI controller pod(s) have a ready CBT sidecar: %s",
+        len(ready_ips),
+        ready_ips,
     )
-    return ready_pods
+    return ready_ips
 
 
-def wait_for_ready_cbt_sidecar_on_node(node_name, timeout=900, sleep=20):
+def wait_for_ready_cbt_sidecar_pods(expected_count, timeout=900, sleep=20):
     """
-    Wait for a ready CBT sidecar in a controller pod on a node.
+    Wait for a number of controller pods with a ready CBT sidecar.
+
+    The replacement of a controller pod whose node went down is not
+    guaranteed to land on the same node, so the wait only looks at
+    how many controller pods serve the CBT sidecar, not at where
+    they run.
 
     Args:
-        node_name (str): Node the controller pod should run on
+        expected_count (int): Number of controller pods that must
+            have a ready CBT sidecar
         timeout (int): Time to wait in seconds
         sleep (int): Time to wait between iterations in seconds
 
     Returns:
-        Pod: The controller pod object with the ready sidecar
+        list: Sorted IPs of the pods with a ready CBT sidecar
 
     Raises:
-        TimeoutExpiredError: If no ready sidecar shows up in time
+        TimeoutExpiredError: If the pods do not become ready in time
     """
     for sample in TimeoutSampler(
         timeout=timeout,
         sleep=sleep,
-        func=get_ready_cbt_sidecar_pods_on_node,
-        node_name=node_name,
+        func=get_ready_cbt_sidecar_pod_ips,
     ):
-        if sample:
-            return sample[0]
+        if len(sample) >= expected_count:
+            return sample
 
 
 # ---- CBT service endpoint helpers ---------------------------------
@@ -409,7 +413,9 @@ def get_cbt_service_endpoint_ips():
     ]
 
 
-def get_matching_cbt_service_endpoint_ips(present_ips=(), absent_ips=()):
+def get_matching_cbt_service_endpoint_ips(
+    present_ips=(), absent_ips=(), exact_ips=None
+):
     """
     Get the CBT service endpoint IPs if they match the expectation.
 
@@ -418,6 +424,8 @@ def get_matching_cbt_service_endpoint_ips(present_ips=(), absent_ips=()):
             endpoints
         absent_ips (iterable): IPs that must not be listed as ready
             endpoints
+        exact_ips (iterable): The complete set of IPs the ready
+            endpoints must consist of, with no extra IP listed
 
     Returns:
         list: The sorted ready endpoint IPs, or None if they do not
@@ -427,12 +435,15 @@ def get_matching_cbt_service_endpoint_ips(present_ips=(), absent_ips=()):
     absent_ips = set(absent_ips)
     endpoint_ips = set(get_cbt_service_endpoint_ips())
     logger.info(
-        "CBT service endpoint IPs: %s (expecting present=%s absent=%s)",
+        "CBT service endpoint IPs: %s (expecting present=%s absent=%s exact=%s)",
         sorted(endpoint_ips),
         sorted(present_ips),
         sorted(absent_ips),
+        sorted(exact_ips) if exact_ips is not None else None,
     )
     if present_ips - endpoint_ips or endpoint_ips & absent_ips:
+        return None
+    if exact_ips is not None and endpoint_ips != set(exact_ips):
         return None
     return sorted(endpoint_ips)
 
@@ -440,6 +451,7 @@ def get_matching_cbt_service_endpoint_ips(present_ips=(), absent_ips=()):
 def wait_for_cbt_service_endpoints(
     present_ips=(),
     absent_ips=(),
+    exact_ips=None,
     timeout=600,
     sleep=15,
 ):
@@ -451,6 +463,8 @@ def wait_for_cbt_service_endpoints(
             endpoints
         absent_ips (iterable): IPs that must not be listed as ready
             endpoints
+        exact_ips (iterable): The complete set of IPs the ready
+            endpoints must consist of, with no extra IP listed
         timeout (int): Time to wait in seconds
         sleep (int): Time to wait between iterations in seconds
 
@@ -466,6 +480,7 @@ def wait_for_cbt_service_endpoints(
         func=get_matching_cbt_service_endpoint_ips,
         present_ips=present_ips,
         absent_ips=absent_ips,
+        exact_ips=exact_ips,
     ):
         if sample is not None:
             return sample
