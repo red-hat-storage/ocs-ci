@@ -7,6 +7,7 @@ on IBM Cloud Platform.
 import json
 import logging
 import os
+import time
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
@@ -72,6 +73,81 @@ class IBMCloudOCPDeployment(BaseOCPDeployment):
         )
         ibmcloud.get_kubeconfig(self.cluster_name, kubeconfig_path)
         self.test_cluster()
+
+    def _is_cluster_api_accessible(self, refresh_kubeconfig=False):
+        """
+        Check if cluster API is accessible.
+
+        Args:
+            refresh_kubeconfig (bool): If True, refresh kubeconfig before testing
+
+        Returns:
+            bool: True if cluster API is accessible, False otherwise
+        """
+        from ocs_ci.ocs.openshift_ops import OCP
+
+        kubeconfig_path = os.path.join(
+            self.cluster_path, config.RUN.get("kubeconfig_location")
+        )
+
+        if refresh_kubeconfig:
+            logger.info("Refreshing kubeconfig to ensure fresh IAM credentials")
+            try:
+                ibmcloud.get_kubeconfig(self.cluster_name, kubeconfig_path)
+            except Exception as ex:
+                logger.warning(f"Failed to refresh kubeconfig, will use existing: {ex}")
+
+        return OCP.set_kubeconfig(kubeconfig_path)
+
+    def test_cluster(self):
+        """
+        Test if OCP cluster installed successfully.
+
+        IBM Cloud ROKS clusters may report as "normal" before IAM authentication
+        is fully initialized. This can take 1-2 hours due to IAM propagation delays.
+        Wait for the cluster API to become accessible with periodic kubeconfig refresh.
+        """
+        timeout = 7200  # 2 hours to account for IAM propagation delays
+        sleep_interval = 30
+        refresh_interval = 600  # Refresh kubeconfig every 10 minutes
+        iterations = 0
+
+        logger.info(
+            "Waiting for IBM Cloud cluster API to become accessible "
+            "(IAM authentication may need time to initialize, timeout: %d seconds)",
+            timeout,
+        )
+
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            iterations += 1
+            refresh_kubeconfig = (
+                iterations % (refresh_interval // sleep_interval)
+            ) == 0
+
+            if self._is_cluster_api_accessible(refresh_kubeconfig=refresh_kubeconfig):
+                elapsed = time.time() - start_time
+                logger.info(
+                    "Successfully connected to cluster API after %.0f seconds",
+                    elapsed,
+                )
+                return
+
+            logger.info(
+                "Cluster API not yet accessible, retrying in %d seconds "
+                "(elapsed: %.0f seconds)",
+                sleep_interval,
+                time.time() - start_time,
+            )
+            time.sleep(sleep_interval)
+
+        # Timeout reached
+        logger.error(
+            f"Cluster API not accessible after {timeout} seconds. "
+            "Calling parent test_cluster() for final check."
+        )
+        # Call parent to trigger the pytest.fail() with proper error message
+        super(IBMCloudOCPDeployment, self).test_cluster()
 
     def destroy(self, log_level="DEBUG"):
         """
