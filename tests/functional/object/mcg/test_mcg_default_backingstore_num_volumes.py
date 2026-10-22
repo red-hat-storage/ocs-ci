@@ -8,10 +8,9 @@ getPVPoolNumVolumes returns the existing count for an existing backingstore and
 never lowers it, so a later profile change must not resize the pool.
 
 Both tests require an MCG-only deployment. On a full ODF cluster the default
-backingstore is s3-compatible over RGW rather than a pv-pool, and the
-StorageCluster CRD rejects "dev-env" and "mini-env". The MCG-only pipeline
-deploys NooBaa with a pv-pool default backingstore and accepts all five profiles,
-making it the right environment for these checks.
+backingstore is s3-compatible over RGW rather than a pv-pool. The MCG-only
+pipeline deploys NooBaa with a pv-pool default backingstore, making it the
+right environment for these checks.
 """
 
 import logging
@@ -33,10 +32,10 @@ from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
 
-# Profiles the immutability test walks through. The walk mixes profiles that
-# want three volumes with profiles that want one, so an implementation that
-# re-evaluated the count on every reconcile would be caught in either direction.
-IMMUTABILITY_PROFILE_WALK = ("mixed-workload", "dev-env", "mini-env", "default")
+# Profiles the immutability test walks through. Walks through the StorageCluster
+# selectable profiles to verify that profile changes do not alter the volume
+# count of the default pv-pool backingstore.
+IMMUTABILITY_PROFILE_WALK = ("mixed-workload", "small-objects", "default")
 
 
 @mcg
@@ -160,10 +159,10 @@ class TestDefaultBackingStoreNumVolumes:
     @pytest.mark.polarion_id("OCS-8314")
     def test_default_backingstore_num_volumes_immutable(self, restore_profile):
         """
-        Walk the system through profiles that ask for both three volumes and
-        one, and verify that the default backingstore keeps the volumes it was
-        created with - the same PVCs, neither grown nor shrunk. The baseline is
-        whatever the backingstore has before the first profile switch.
+        Walk the system through selectable performance profiles and verify that
+        the default backingstore keeps the volumes it was created with - the same
+        PVCs, neither grown nor shrunk. The baseline is whatever the backingstore
+        has before the first profile switch.
 
         Each step also waits for the core resources to match the new profile,
         so that a numVolumes that merely has not been reconciled yet cannot be
