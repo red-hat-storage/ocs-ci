@@ -29,6 +29,7 @@ the ``odf`` wrapper, which lags the operator by three fixes (DFBUGS-11485).
 
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -52,7 +53,6 @@ from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     retrieve_cli_binary,
 )
-from ocs_ci.helpers.odf_cli import NoobaaCliRunner
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     assert_store_phase_and_mode,
@@ -67,7 +67,7 @@ from ocs_ci.ocs.resources.pod import (
     search_pattern_in_pod_logs,
 )
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -158,15 +158,37 @@ IDENTICAL_ENDPOINTS_REFUSAL = "endpoints are identical"
 
 
 @lru_cache(maxsize=1)
-def noobaa_cli():
+def noobaa_cli_path():
     """
-    Return a runner for the standalone noobaa CLI, retrieving it on first use.
+    Retrieve the standalone noobaa CLI on first use.
 
     Returns:
-        NoobaaCliRunner: Runner bound to the local noobaa binary.
+        str: Path to the local noobaa binary.
     """
     retrieve_cli_binary(cli_type="noobaa")
-    return NoobaaCliRunner()
+    return os.path.join(config.RUN["bin_dir"], "noobaa")
+
+
+def run_noobaa(command, namespace=None, ignore_error=False):
+    """
+    Run a command through the standalone noobaa CLI.
+
+    Args:
+        command (str): NooBaa command arguments, e.g. "status".
+        namespace (str): Namespace override (defaults to the cluster namespace).
+        ignore_error (bool): If True, don't raise on a non-zero exit.
+
+    Returns:
+        CompletedProcess: Result with stdout and stderr decoded.
+    """
+    ns = namespace or config.ENV_DATA["cluster_namespace"]
+    result = exec_cmd(
+        f"{noobaa_cli_path()} {command} -n {ns}", ignore_error=ignore_error
+    )
+    for stream in ("stdout", "stderr"):
+        if isinstance(getattr(result, stream), bytes):
+            setattr(result, stream, getattr(result, stream).decode())
+    return result
 
 
 def run_connection_update(
@@ -201,7 +223,7 @@ def run_connection_update(
     if via_odf_cli:
         result = mcg_obj.exec_mcg_cmd(cmd, namespace=namespace, ignore_error=True)
     else:
-        result = noobaa_cli().run_noobaa(cmd, namespace=namespace, ignore_error=True)
+        result = run_noobaa(cmd, namespace=namespace, ignore_error=True)
     parsed = parse_connection_update_output(result)
     summary = {k: v for k, v in parsed.items() if k != "raw"}
     logger.info(f"connection update parsed result: {summary}")
@@ -1104,18 +1126,14 @@ def connection_update_cli():
 
     The probe passes one endpoint twice; a fixed CLI refuses that during
     argument parsing, touching nothing.
-
-    Returns:
-        NoobaaCliRunner: The runner the suite's CLI calls go through.
     """
-    cli = noobaa_cli()
+    noobaa_cli_path()
     probe = run_connection_update(None, PROBE_ENDPOINT, PROBE_ENDPOINT)
     if IDENTICAL_ENDPOINTS_REFUSAL not in probe["raw"]:
         pytest.skip(
             "The noobaa CLI predates the connection update fixes and did not "
             f"refuse identical endpoints - DFBUGS-11485:\n{probe['raw']}"
         )
-    return cli
 
 
 @mcg
@@ -1932,7 +1950,7 @@ class TestConnectionUpdateNegative(MCGTest):
         bs = make_store(store_factory, endpoint_conf, old)
 
         if case == "missing_flag":
-            result = noobaa_cli().run_noobaa(
+            result = run_noobaa(
                 f"connection update --old-endpoint {old}", ignore_error=True
             )
             assert (

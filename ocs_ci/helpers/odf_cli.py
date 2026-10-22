@@ -265,49 +265,6 @@ class NoobaaCLIRetriever(ODFCLIRetriever):
         log.info(f"Extracted the noobaa CLI binary to {self.local_cli_path}")
 
 
-class NoobaaCliRunner:
-    """
-    Run the standalone noobaa CLI retrieved by :class:`NoobaaCLIRetriever`.
-
-    Shares the run_noobaa signature with :class:`ODFCliRunner`.
-    """
-
-    def __init__(self) -> None:
-        self.binary_name = os.path.join(config.RUN["bin_dir"], "noobaa")
-
-    def run_noobaa(
-        self,
-        command_args: Union[str, list],
-        namespace: str = None,
-        ignore_error: bool = False,
-        **kwargs,
-    ):
-        """
-        Run a noobaa command through the standalone CLI.
-
-        Args:
-            command_args (str|list): NooBaa command arguments, e.g. "status"
-            namespace (str): Override the default namespace
-            ignore_error (bool): If True, don't raise on a non-zero exit
-            **kwargs: Additional arguments to pass to exec_cmd
-
-        Returns:
-            CompletedProcess: Result object with stdout and stderr decoded
-
-        """
-        args = command_args if isinstance(command_args, str) else " ".join(command_args)
-        ns = namespace or config.ENV_DATA["cluster_namespace"]
-
-        result = exec_cmd(
-            f"{self.binary_name} {args} -n {ns}", ignore_error=ignore_error, **kwargs
-        )
-        if isinstance(result.stdout, bytes):
-            result.stdout = result.stdout.decode()
-        if isinstance(result.stderr, bytes):
-            result.stderr = result.stderr.decode()
-        return result
-
-
 class ODFCliRunner:
     def __init__(self) -> None:
         self.binary_name = os.path.join(config.RUN["bin_dir"], "odf")
