@@ -1691,4 +1691,15 @@ class TestPVCVolumeHealthStaleAnnotation(PVCVolumeHealthTestHelpers, ManageTest)
             stale_key=key_a,
             active_key=key_b,
         )
+
+        logger.test_step("Verify surviving annotation key_b is still healthy")
+        remaining_ann = pvc_obj.get_volume_health_annotations()
+        key_b_state = json.loads(remaining_ann[key_b]).get("state")
+        logger.assertion(
+            f"key_b state == 'healthy' after cleanup; actual='{key_b_state}'"
+        )
+        assert key_b_state == "healthy", (
+            f"key_b state expected 'healthy' after stale cleanup, "
+            f"got '{key_b_state}'"
+        )
         logger.info("RWX per-node annotation dedup and cleanup test passed")
