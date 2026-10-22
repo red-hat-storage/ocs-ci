@@ -126,9 +126,11 @@ class TestDefaultBackingStoreNumVolumes:
         If it has, set ENV_DATA["mcg_creation_profile"] to the profile the
         backingstore was created with.
         """
-        active_profile = config.ENV_DATA.get(
-            "mcg_creation_profile"
-        ) or profiles.get_noobaa_ocp().get().get("spec", {}).get("performanceProfile")
+        active_profile = (
+            config.ENV_DATA.get("mcg_creation_profile")
+            or profiles.get_noobaa_ocp().get().get("spec", {}).get("performanceProfile")
+            or "default"
+        )
         assert active_profile in profiles.PV_POOL_NUM_VOLUMES, (
             f"Creation-time profile '{active_profile}' is not a known MCG profile; "
             f"known profiles: {list(profiles.PV_POOL_NUM_VOLUMES)}"
