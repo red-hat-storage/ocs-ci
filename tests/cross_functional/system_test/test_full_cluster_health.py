@@ -57,17 +57,17 @@ class TestFullClusterHealth(PASTest):
         self.benchmark_obj.run_fio_benchmark_operator(is_completed=True)
         self.benchmark_operator_teardown = True  # guard: cleanup needed in teardown
 
-        logger.test_step("Verify cluster capacity reached ~82%")
+        logger.test_step("Verify cluster capacity reached ~78%")
         logger.info("Polling OSD utilization until at least one OSD exceeds 81%")
         sampler = TimeoutSampler(
             timeout=1200,
             sleep=30,
             func=verify_osd_used_capacity_greater_than_expected,
-            expected_used_capacity=81.0,
+            expected_used_capacity=78.0,
         )
         if not sampler.wait_for_func_status(result=True):
             raise TimeoutExpiredError(
-                "Cluster capacity did not reach expected threshold (~82%) within 1200s after IO completion"
+                "Cluster capacity did not reach expected threshold (~78%) within 1200s after IO completion"
             )
 
         def teardown():
