@@ -7,6 +7,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bm,
     brown_squad,
     skipif_compact_mode,
+    zstream_4_18_1,
+    zstream_4_18_1_ocs_operator,
 )
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes, is_node_rack_or_zone_exist
 from ocs_ci.helpers.helpers import get_failure_domin
@@ -42,6 +44,8 @@ logger = logging.getLogger(__name__)
 @skipif_hci_provider_and_client
 @skipif_compact_mode
 @pytest.mark.polarion_id("OCS-2594")
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestAddNodeCrashCollector(ManageTest):
     """
     Add node with OCS label and verify crashcollector created on new node
