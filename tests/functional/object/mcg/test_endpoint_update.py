@@ -47,8 +47,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
 )
 from ocs_ci.framework.testlib import MCGTest
-from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
-from ocs_ci.helpers.odf_cli import NoobaaCliRunner, NoobaaCLIRetriever
+from ocs_ci.helpers.helpers import (
+    create_resource,
+    create_unique_resource_name,
+    retrieve_cli_binary,
+)
+from ocs_ci.helpers.odf_cli import NoobaaCliRunner
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     assert_store_phase_and_mode,
@@ -161,7 +165,7 @@ def noobaa_cli():
     Returns:
         NoobaaCliRunner: Runner bound to the local noobaa binary.
     """
-    NoobaaCLIRetriever().retrieve_noobaa_cli_binary()
+    retrieve_cli_binary(cli_type="noobaa")
     return NoobaaCliRunner()
 
 

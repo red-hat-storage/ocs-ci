@@ -194,76 +194,24 @@ class ODFCLIRetriever:
         log.info(f"Current PATH: {os.environ['PATH']}")
 
 
-class NoobaaCLIRetriever:
+class NoobaaCLIRetriever(ODFCLIRetriever):
     """
-    Download the standalone noobaa CLI that ships in the ODF CLI image.
+    Retrieve the standalone noobaa CLI that ships in the ODF CLI image.
 
     Unlike the "odf noobaa" wrapper, which is built against a vendored
     noobaa-operator revision and can lag the operator on the cluster
     (DFBUGS-11485), this binary is built from the operator sources.
+
+    Version checks, tagging, permissions and the retrieve flow are inherited
+    from :class:`ODFCLIRetriever`; only the binary location and the extraction
+    differ, because the noobaa CLI is shipped as a per-platform tarball.
     """
 
     def __init__(self):
-        self.semantic_version = get_semantic_ocs_version_from_config()
+        super().__init__()
         self.local_cli_path = os.path.join(config.RUN["bin_dir"], "noobaa")
-        self.version_attribute_name = "user.version"
 
-    def check_noobaa_cli_binary(self):
-        """
-        Check that the noobaa CLI binary exists, is executable and was taken
-        from the image of the version currently under test.
-
-        Returns:
-            bool: True if the local binary can be used as-is, False otherwise.
-
-        """
-        path = self.local_cli_path
-        if not (os.path.isfile(path) and os.access(path, os.X_OK)):
-            log.warning(f"NooBaa CLI binary is not accessible at {path}")
-            return False
-
-        try:
-            binary_version = xattr.getxattr(path, self.version_attribute_name).decode()
-        except OSError:
-            log.warning("NooBaa CLI binary is not tagged with a version attribute")
-            return False
-
-        if binary_version != str(self.semantic_version):
-            log.warning(
-                f"NooBaa CLI binary is tagged {binary_version}, "
-                f"but the cluster is {self.semantic_version}"
-            )
-            return False
-
-        return True
-
-    def retrieve_noobaa_cli_binary(self):
-        """
-        Download and set up the standalone noobaa CLI binary.
-
-        Raises:
-            RuntimeError: If the binary is still unusable after the download.
-
-        """
-        if not self.check_noobaa_cli_binary():
-            self._extract_cli_binary(f"{ODF_CLI_DEV_IMAGE}:v{self.semantic_version}")
-            current_permissions = os.stat(self.local_cli_path).st_mode
-            os.chmod(self.local_cli_path, current_permissions | S_IEXEC)
-            xattr.setxattr(
-                self.local_cli_path,
-                self.version_attribute_name,
-                str(self.semantic_version).encode(),
-            )
-
-        if not self.check_noobaa_cli_binary():
-            raise RuntimeError(
-                f"Failed to retrieve and set up the noobaa CLI binary "
-                f"at {self.local_cli_path}"
-            )
-
-        log.info(f"NooBaa CLI binary is ready at {self.local_cli_path}")
-
-    def _get_archive_path(self):
+    def _get_architecture_path(self):
         """Get the platform-specific noobaa CLI archive path in the image."""
         system = platform.system()
         machine = platform.machine()
@@ -287,7 +235,7 @@ class NoobaaCLIRetriever:
         """
         pull_secret_path = download_pull_secret()
         local_cli_dir = os.path.dirname(self.local_cli_path)
-        archive_path = self._get_archive_path()
+        archive_path = self._get_architecture_path()
         os.makedirs(local_cli_dir, exist_ok=True)
 
         exec_cmd(
