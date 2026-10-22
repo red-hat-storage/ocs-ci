@@ -25,9 +25,11 @@ from ocs_ci.ocs.exceptions import (
     NotAllNodesCreated,
     RebootEventNotFoundException,
     ResourceWrongStatusException,
+    VMIndexNotFoundException,
     VolumePathNotFoundException,
     UnsupportedOSType,
     UnavailableResourceException,
+    CommandFailed,
 )
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs.machinepool import (
@@ -53,6 +55,7 @@ from ocs_ci.utility.csr import (
     get_nodes_csr,
     wait_for_all_nodes_csr_and_approve,
 )
+from ocs_ci.deployment.helpers.hypershift_base import get_hosted_cluster_namespace
 from ocs_ci.utility.utils import (
     get_cluster_name,
     get_infra_id,
@@ -104,11 +107,16 @@ class PlatformNodesFactory:
             "vsphere_ipi": VMWareIPINodes,
             "rosa": AWSNodes,
             "rosa_hcp": ROSAHCPNode,
+            "aws_hcp": HypershiftAWSNode,
             "vsphere_upi": VMWareUPINodes,
             "fusion_aas": AWSNodes,
             "hci_baremetal": IBMCloudBMNodes,
             "kubevirt_vm": KubevirtVMNodes,
             "ibm_cloud_ipi": IBMCloudIPI,
+            "baremetal_ai": IBMCloudBMNodes,
+            "ibm_hci_ipi": IBMHCINode,
+            "ibm_hci_agent": IBMHCIAgentNode,
+            "ibm_vpc_bm": IBMCloudVPCBMNodes,
         }
 
     def get_nodes_platform(self):
@@ -120,12 +128,21 @@ class PlatformNodesFactory:
                 platform += "_lso"
             elif deployment_type in ("ipi", "upi"):
                 platform += f"_{deployment_type}"
-        elif (
-            config.hci_client_exist()
-            and get_client_type_by_name(cluster_name)
-            == constants.HOSTED_CLUSTER_KUBEVIRT
-        ):
-            platform = "kubevirt_vm"
+        elif config.hci_client_exist():
+            client_type = get_client_type_by_name(cluster_name)
+            if client_type == constants.HOSTED_CLUSTER_KUBEVIRT:
+                platform = "kubevirt_vm"
+            elif client_type == constants.AWS_PLATFORM:
+                platform = "aws_hcp"
+            elif (
+                client_type == constants.HOSTED_CLUSTER_AGENT
+                and constants.IBM_HCI_PLATFORM
+                in [
+                    cluster_data.ENV_DATA["platform"]
+                    for cluster_data in config.clusters
+                ]
+            ):
+                platform = "ibm_hci_agent"
 
         if config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "managed_cp":
@@ -134,6 +151,27 @@ class PlatformNodesFactory:
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "ipi":
                 platform += "_ipi"
+
+        if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
+            if config.ENV_DATA["deployment_type"] == "ai":
+                if (
+                    config.ENV_DATA.get("infra_type", constants.CLASSIC_INFRA_TYPE)
+                    == constants.VPC_INFRA_TYPE
+                ):
+                    platform = "ibm_vpc_bm"
+                else:
+                    platform += "_ai"
+        if config.ENV_DATA[
+            "platform"
+        ] == constants.IBM_HCI_PLATFORM and get_client_type_by_name(
+            cluster_name
+        ) not in [
+            constants.HOSTED_CLUSTER_KUBEVIRT,
+            constants.HOSTED_CLUSTER_AGENT,
+        ]:
+            if config.ENV_DATA["deployment_type"] == "ipi":
+                platform += "_ipi"
+
         return self.cls_map[platform]()
 
 
@@ -178,6 +216,16 @@ class NodesBase(object):
 
     def attach_volume(self, volume, node):
         raise NotImplementedError("Attach volume functionality is not implemented")
+
+    def create_and_attach_volume(self, node, size, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volume functionality is not implemented"
+        )
+
+    def create_and_attach_volumes(self, node, volume_sizes, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volumes functionality is not implemented"
+        )
 
     def wait_for_volume_attach(self, volume):
         raise NotImplementedError(
@@ -247,6 +295,11 @@ class NodesBase(object):
     def wait_for_nodes_to_stop_or_terminate(self, nodes):
         raise NotImplementedError(
             "wait for nodes to stop or terminate functionality is not implemented"
+        )
+
+    def disable_nodes_network_temporarily(self, nodes, duration=20):
+        raise NotImplementedError(
+            "disable enable node network temporarily functionality is not implemented"
         )
 
 
@@ -461,17 +514,31 @@ class VMWareNodes(NodesBase):
             vm=vm, identifier=volume, key="volume_path", datastore=delete_from_backend
         )
 
-    def create_and_attach_volume(self, node, size):
+    def create_and_attach_volume(self, node, size, ssd=False):
         """
         Create a new volume and attach it to the given VM
 
         Args:
             node (OCS): The OCS object representing the node
             size (int): The size in GB for the new volume
+            ssd (bool): if True, mark disk as SSD
 
         """
         vm = self.get_vms([node])[0]
-        self.vsphere.add_disk(vm, size)
+        self.vsphere.add_disk(vm=vm, size=size, ssd=ssd)
+
+    def create_and_attach_volumes(self, node, volume_sizes, ssd=False):
+        """
+        Create new volumes and attach them to the given VM
+
+        Args:
+            node (OCS): The OCS object representing the node
+            volume_sizes (list): List of the volume sizes in GB to create and attach to the node
+            ssd (bool): if True, mark disk as SSD
+
+        """
+        vm = self.get_vms([node])[0]
+        self.vsphere.add_disks(vm=vm, disk_sizes=volume_sizes, ssd=ssd)
 
     def attach_volume(self, node, volume):
         raise NotImplementedError(
@@ -571,6 +638,33 @@ class VMWareNodes(NodesBase):
                 datastore_name=self.datastore,
                 datacenter_name=self.datacenter,
             )
+
+    def disable_nodes_network_temporarily(self, nodes, duration=20):
+        """
+        Temporarily disables and re-enables the network interface of a given node.
+
+        Args:
+            node (OCS): The OCS object representing the node.
+            duration (int): Time in seconds to keep the interface disabled. Default is 10.
+        """
+        vms = self.get_vms(nodes)
+        for vm in vms:
+            ip = vm.summary.guest.ipAddress
+
+            if not ip:
+                logger.warning(f"Could not retrieve IP address for node {vm.name}")
+                return
+
+            logger.info(f"Disabling network interface for node: {vm.name} (IP: {ip})")
+            self.vsphere.change_vm_network_state(ip, self.datacenter, connect=False)
+
+            logger.debug(
+                f"Sleeping for {duration} seconds with network disabled on {vm.name}"
+            )
+            time.sleep(duration)
+
+            logger.info(f"Enabling network interface for node: {vm.name} (IP: {ip})")
+            self.vsphere.change_vm_network_state(ip, self.datacenter, connect=True)
 
 
 class AWSNodes(NodesBase):
@@ -2021,21 +2115,39 @@ class VSPHEREUPINode(VMWareNodes):
             vm_name (str): The VM name
 
         """
-        if vm_name.startswith("compute-"):
-            module = "compute_vm"
-        else:
-            module = "control_plane_vm"
-        instance = f"{vm_name}.{config.ENV_DATA.get('cluster_name')}.{config.ENV_DATA.get('base_domain')}"
+        module, vm_index = self.get_vm_module_and_index(vm_name)
 
         os.chdir(self.terraform_data_dir)
         logger.info(f"Modifying terraform state file of the removed vm {vm_name}")
-        self.terraform.change_statefile(
-            module=module,
-            resource_type="vsphere_virtual_machine",
-            resource_name="vm",
-            instance=instance,
-        )
+        self.terraform.change_statefile(module=module, vm_index=vm_index)
         os.chdir(self.previous_dir)
+
+    def get_vm_module_and_index(self, vm_name):
+        """
+        Gets the VM module and index for the node
+
+        Args:
+            vm_name (str): VM name
+
+        Returns:
+            tuple: which contains module and vm_index
+
+        """
+        if vm_name.startswith("compute-"):
+            module = "compute_vm"
+            search_str = "compute-"
+        else:
+            module = "control_plane_vm"
+            search_str = "control-plane-"
+
+        # get the VM index
+        pattern = rf"{search_str}(\d+)"
+        match = re.search(pattern, vm_name)
+        if match:
+            vm_index = match.group(1)
+        else:
+            raise VMIndexNotFoundException
+        return module, vm_index
 
     def change_terraform_tfvars_after_remove_vm(self, num_nodes_removed=1):
         """
@@ -2093,6 +2205,17 @@ class BaremetalNodes(NodesBase):
 
         """
         self.baremetal.restart_baremetal_machines(nodes, force=force)
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Restart baremetal machines by stop and start (IPMI power cycle).
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force BM stop, False otherwise
+
+        """
+        self.restart_nodes(nodes, force=force)
 
     def restart_nodes_by_stop_and_start_teardown(self):
         """
@@ -2310,11 +2433,23 @@ class AZURENodes(NodesBase):
         self.azure.stop_vm_instances(node_names, force=force)
 
         if wait:
-            # When the node is not reachable then the node reaches status NotReady.
-            logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
-            wait_for_nodes_status(
-                node_names=node_names, status=constants.NODE_NOT_READY, timeout=timeout
-            )
+            nodes_not_stopped = []
+            for vm_name in node_names:
+                try:
+                    for vm_state in TimeoutSampler(
+                        timeout=timeout,
+                        sleep=3,
+                        func=self.azure.get_vm_power_status,
+                        vm_name=vm_name,
+                    ):
+                        if vm_state == constants.VM_STOPPED:
+                            break
+                except TimeoutExpiredError:
+                    nodes_not_stopped.append(vm_name)
+            if nodes_not_stopped:
+                raise TimeoutExpiredError(
+                    f"Timeout waiting for the nodes {nodes_not_stopped} to stop"
+                )
 
     def start_nodes(self, nodes, timeout=540, wait=True):
         """
@@ -3200,9 +3335,28 @@ class IBMCloudBMNodes(NodesBase):
         self.ibmcloud_bm.stop_machines(machines)
         if wait:
             node_names = [n.name for n in nodes]
-            wait_for_nodes_status(
-                node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
-            )
+            try:
+                wait_for_nodes_status(
+                    node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
+                )
+            except CommandFailed as err:
+                # Consider the situation where the cluster is not accessible after nodes are down,
+                # example: when all the nodes are off
+                if "Unable to connect to the server" in str(err):
+                    logger.info(
+                        f"Unable to connect to the server to check the nodes NotReady status. "
+                        f"Trying alternate method to verify nodes {node_names} has stopped"
+                    )
+                    machines_not_off = (
+                        self.ibmcloud_bm.get_machines_that_are_not_off_from_sensor_data(
+                            machines
+                        )
+                    )
+                    assert not (
+                        machines_not_off
+                    ), f"Nodes corresponding to the machines {machines_not_off} are not off."
+                else:
+                    raise
 
     def start_nodes(self, nodes, wait=True):
         """
@@ -3283,6 +3437,187 @@ class IBMCloudBMNodes(NodesBase):
 
         """
         raise NotImplementedError("terminate nodes functionality is not implemented")
+
+
+class IBMCloudVPCBMNodes(NodesBase):
+    """
+    IBM Cloud VPC Bare Metal Nodes class
+    """
+
+    def __init__(self):
+        super(IBMCloudVPCBMNodes, self).__init__()
+        from ocs_ci.utility import ibmcloud_bm
+
+        # Get pool tag and region from config
+        pool_tag = config.ENV_DATA.get("baremetal", {}).get(
+            "pool_tag", "odf-qe-reserved-pool"
+        )
+        region = config.ENV_DATA.get("region", "us-south")
+
+        self.ibmcloud_vpc_bm = ibmcloud_bm.IBMCloudVPCBM(
+            region=region, pool_tag=pool_tag
+        )
+        self.cluster_name = config.ENV_DATA.get("cluster_name")
+
+    def get_server_ids_from_nodes(self, nodes):
+        """
+        Extract VPC BM server IDs from node objects
+
+        Args:
+            nodes (list): OCS node objects
+
+        Returns:
+            list: List of (node, server_id) tuples
+        """
+        server_mapping = []
+        srv_details = config.ENV_DATA.get("baremetal", {}).get("servers", {})
+
+        for node in nodes:
+            node_name = node.name
+
+            # Find matching server config by comparing hostnames (prevents master-1 matching master-10)
+            server_id = None
+            for srv_fqdn, details in srv_details.items():
+                # Extract hostname from both sides (handles hostname or FQDN on either side)
+                # e.g., "master-1.example.com" -> "master-1", "master-1" -> "master-1"
+                hostname_from_srv = srv_fqdn.split(".")[0]
+                hostname_from_node = node_name.split(".")[0]
+
+                if hostname_from_node == hostname_from_srv:
+                    server_id = details.get("server_id")
+                    break
+
+            if not server_id:
+                raise ValueError(f"No server_id found in config for node {node_name}")
+
+            server_mapping.append((node, server_id))
+
+        return server_mapping
+
+    def stop_nodes(self, nodes, wait=True, force=True):
+        """
+        Stop VPC BM nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for nodes to be NotReady
+            force (bool): If True, use hard stop. Otherwise soft stop.
+        """
+        server_mapping = self.get_server_ids_from_nodes(nodes)
+        stop_type = "hard" if force else "soft"
+
+        for node, server_id in server_mapping:
+            logger.info(
+                f"Stopping VPC BM server {server_id} for node {node.name} ({stop_type})"
+            )
+            self.ibmcloud_vpc_bm.stop_server(server_id, stop_type=stop_type)
+
+        if wait:
+            # Wait for cloud-side server stopped status
+            for node, server_id in server_mapping:
+                logger.info(
+                    f"Waiting for VPC BM server {server_id} ({node.name}) to reach stopped status"
+                )
+                self.ibmcloud_vpc_bm.wait_for_server_status(
+                    server_id, "stopped", timeout=600
+                )
+
+            node_names = [n.name for n in nodes]
+            try:
+                wait_for_nodes_status(
+                    node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
+                )
+            except CommandFailed as err:
+                if "Unable to connect to the server" in str(err):
+                    logger.info(
+                        "Unable to connect to server after stopping nodes. "
+                        "This is expected when all nodes are stopped."
+                    )
+                else:
+                    raise
+
+    def start_nodes(self, nodes, wait=True):
+        """
+        Start VPC BM nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for nodes to be Ready
+        """
+        server_mapping = self.get_server_ids_from_nodes(nodes)
+
+        for node, server_id in server_mapping:
+            logger.info(f"Starting VPC BM server {server_id} for node {node.name}")
+            self.ibmcloud_vpc_bm.start_server(server_id)
+
+        if wait:
+            node_names = [n.name for n in nodes]
+            wait_for_nodes_status(
+                node_names, constants.NODE_READY, timeout=720, sleep=20
+            )
+
+    def restart_nodes(self, nodes, wait=True, force=False):
+        """
+        Restart VPC BM nodes by stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for nodes to be ready
+            force (bool): If True, use hard stop. Otherwise soft stop.
+        """
+        self.stop_nodes(nodes, wait=True, force=force)
+        self.start_nodes(nodes, wait=wait)
+
+    def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=False):
+        """
+        Restart nodes by stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for nodes to be ready
+            force (bool): If True, use hard stop. Otherwise soft stop.
+        """
+        return self.restart_nodes(nodes, wait=wait, force=force)
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Start any nodes in NotReady state (recovery method).
+        Falls back to cloud-side status check if the cluster API is unreachable.
+        """
+        from ocs_ci.ocs.node import get_nodes_in_statuses
+
+        nodes_not_ready = None
+        try:
+            nodes_not_ready = get_nodes_in_statuses([constants.NODE_NOT_READY])
+        except Exception as e:
+            logger.warning(
+                f"Failed to query node status via cluster API: {e}. Falling back to cloud-side server check."
+            )
+
+        if nodes_not_ready:
+            logger.info(f"Starting {len(nodes_not_ready)} NotReady nodes")
+            self.start_nodes(nodes_not_ready, wait=True)
+        elif nodes_not_ready is None:
+            # Cloud-side recovery: check all configured servers and start any that are stopped
+            srv_details = config.ENV_DATA.get("baremetal", {}).get("servers", {})
+            for srv_name, srv_conf in srv_details.items():
+                server_id = srv_conf.get("server_id")
+                if server_id:
+                    try:
+                        status = self.ibmcloud_vpc_bm.get_server_status(server_id).get(
+                            "status"
+                        )
+                        if status != "running":
+                            logger.info(
+                                f"Teardown recovery: starting server {srv_name} ({server_id}) in status {status}"
+                            )
+                            self.ibmcloud_vpc_bm.start_server(server_id)
+                    except Exception as err:
+                        logger.warning(
+                            f"Failed to check/start server {srv_name} ({server_id}): {err}"
+                        )
+        else:
+            logger.info("All nodes are already ready")
 
 
 class KubevirtVMNodes(NodesBase):
@@ -3424,8 +3759,10 @@ class IBMCloudIPI(object):
     def restart_nodes(self, nodes, wait=True):
         self.ibmcloud_ipi.restart_nodes(nodes=nodes, wait=wait)
 
-    def restart_nodes_by_stop_and_start(self, nodes, force=True):
-        self.ibmcloud_ipi.restart_nodes_by_stop_and_start(nodes=nodes, force=force)
+    def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=True):
+        self.ibmcloud_ipi.restart_nodes_by_stop_and_start(
+            nodes=nodes, wait=wait, force=force
+        )
 
     def detach_volume(self, volume, node=None, delete_from_backend=True):
         self.ibmcloud_ipi.detach_volume(volume=volume, node=node)
@@ -3601,3 +3938,1016 @@ class ROSAHCPNode(AWSNodes):
             node_list.append(ROSAHCPNode(node_conf, constants.RHCOS))
 
         return node_list
+
+
+class HypershiftAWSNode(AWSNodes):
+    """
+    AWS HCP (Hypershift) Nodes class.
+
+    Manages worker nodes for AWS HCP clusters deployed via the hypershift CLI.
+    Unlike ROSA HCP which uses ``rosa`` CLI and MachinePools, AWS HCP clusters
+    use Kubernetes NodePool custom resources on the management cluster.
+
+    Node scaling is performed by patching the NodePool's ``spec.replicas``
+    field via ``oc`` on the management cluster.
+    """
+
+    def __init__(self, node_conf=None, node_type=None):
+        self.node_conf = node_conf
+        self.node_type = node_type
+        super(HypershiftAWSNode, self).__init__()
+
+    def _get_nodepools_for_cluster(self, cluster_name):
+        """
+        Get all NodePool resources for the given cluster from the management cluster.
+
+        Args:
+            cluster_name (str): Name of the hosted cluster.
+
+        Returns:
+            list: List of NodePool dicts from the API response.
+        """
+        with config.RunWithProviderConfigContextIfAvailable():
+            nodepool_ocp = ocp.OCP(kind="NodePool")
+            nodepools = nodepool_ocp.get(all_namespaces=True).get("items", [])
+
+        cluster_nodepools = [
+            np
+            for np in nodepools
+            if np.get("spec", {}).get("clusterName") == cluster_name
+        ]
+        logger.info(
+            f"Found {len(cluster_nodepools)} NodePool(s) for cluster '{cluster_name}'"
+        )
+        return cluster_nodepools
+
+    def create_and_attach_nodes_to_cluster(
+        self, node_conf, node_type=constants.RHCOS, num_nodes=None
+    ):
+        """
+        Create nodes and attach them to the AWS HCP cluster.
+
+        Args:
+            node_conf (dict): Node configuration.
+            node_type (str): Type of node (only RHCOS supported).
+            num_nodes (int): Number of nodes to add.
+        """
+        if node_type != constants.RHCOS:
+            raise UnsupportedOSType("Only RHCOS is supported for AWS HCP clusters.")
+
+        node_conf = node_conf or {}
+        node_list = self.create_nodes(node_conf, node_type, num_nodes)
+        self.attach_nodes_to_cluster(node_list)
+
+    def _wait_nodepool_replicas_ready(self, np_name, target_replicas, timeout=2400):
+        """
+        Wait until the NodePool's current replicas reach the target count.
+
+        Args:
+            np_name (str): NodePool resource name.
+            target_replicas (int): Expected number of ready replicas.
+            timeout (int): Maximum wait time in seconds.
+        """
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=30,
+            func=self._get_nodepool_current_replicas,
+            np_name=np_name,
+        ):
+            if sample == target_replicas:
+                logger.info(f"NodePool '{np_name}' reached {target_replicas} replicas")
+                return
+            logger.info(
+                f"NodePool '{np_name}': current replicas {sample}/{target_replicas}"
+            )
+
+    def _get_nodepool_current_replicas(self, np_name):
+        """
+        Get the current ready replicas count for a NodePool.
+
+        Args:
+            np_name (str): NodePool resource name.
+
+        Returns:
+            int: Number of current ready replicas.
+        """
+        with config.RunWithProviderConfigContextIfAvailable():
+            nodepool_ocp = ocp.OCP(
+                kind="NodePool",
+                namespace=get_hosted_cluster_namespace(
+                    config.ENV_DATA.get("cluster_name")
+                ),
+                resource_name=np_name,
+            )
+            np_data = nodepool_ocp.get()
+        return np_data.get("status", {}).get("replicas", 0)
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        """
+        Scale up an existing NodePool on the management cluster.
+
+        Finds the NodePool for the current cluster and patches its replicas
+        count to add ``num_nodes`` additional workers.
+
+        Args:
+            node_conf (dict): Node configuration (used for metadata only).
+            node_type (str): Type of node.
+            num_nodes (int): Number of nodes to add.
+
+        Returns:
+            list: List of HypershiftAWSNode objects.
+        """
+        cluster_name = config.ENV_DATA.get("cluster_name")
+        nodepools = self._get_nodepools_for_cluster(cluster_name)
+
+        if not nodepools:
+            raise UnavailableResourceException(
+                f"No NodePool found for cluster '{cluster_name}'. "
+                "AWS HCP NodePools are created during cluster deployment."
+            )
+
+        nodepool = nodepools[0]
+        np_name = nodepool["metadata"]["name"]
+        current_replicas = nodepool.get("spec", {}).get("replicas", 0)
+        new_replicas = current_replicas + num_nodes
+
+        logger.info(
+            f"Scaling NodePool '{np_name}' from {current_replicas} "
+            f"to {new_replicas} replicas"
+        )
+
+        with config.RunWithProviderConfigContextIfAvailable():
+            nodepool_ocp = ocp.OCP(
+                kind="NodePool",
+                namespace=get_hosted_cluster_namespace(cluster_name),
+                resource_name=np_name,
+            )
+            patch = {"spec": {"replicas": new_replicas}}
+            nodepool_ocp.patch(params=json.dumps(patch), format_type="merge")
+
+        logger.info(
+            f"Patched NodePool '{np_name}' to {new_replicas} replicas, "
+            "waiting for nodes to become ready"
+        )
+        self._wait_nodepool_replicas_ready(np_name, new_replicas)
+
+        node_list = []
+        for _ in range(num_nodes):
+            node_list.append(HypershiftAWSNode(node_conf, constants.RHCOS))
+
+        return node_list
+
+
+class IBMHCINode(object):
+    """
+    A IBMHCI class for nodes related operations.
+    Should be inherited by specific platform classes
+
+    """
+
+    def __init__(self):
+        from ocs_ci.utility.ibm_hci import IBMHCI
+
+        self.ibm_hci = IBMHCI()
+
+        # Derive domain suffix from rack details
+        self.domain_suffix = self._get_domain_suffix()
+
+    def _get_domain_suffix(self):
+        """
+        Derive domain suffix automatically from existing cluster nodes
+
+        Returns:
+            str: Domain suffix for node names
+        """
+        # Try to derive from existing cluster nodes
+        try:
+            from ocs_ci.ocs.node import get_all_nodes
+
+            nodes = get_all_nodes()
+            if nodes:
+                # Get first node's FQDN and extract domain
+                first_node_name = nodes[0].name
+                # Node name format: nodename.domain.suffix
+                parts = first_node_name.split(".", 1)
+                if len(parts) > 1:
+                    # Return everything after the first dot
+                    return parts[1]
+        except Exception as e:
+            logger.debug(f"Could not derive domain from cluster nodes: {e}")
+
+        # Try to derive from rack details metadata
+        if self.ibm_hci.rack_details:
+            for rack_serial, rack_data in self.ibm_hci.rack_details.items():
+                rack_info = rack_data.get("rackInfo", {})
+                if "domain" in rack_info:
+                    return rack_info["domain"]
+
+        # Default fallback for IBM Fusion environments
+        return "fusion.tadn.ibm.com"
+
+    def get_data_volumes(self):
+        raise NotImplementedError("Get data volume functionality is not implemented")
+
+    def get_node_by_attached_volume(self, volume):
+        raise NotImplementedError(
+            "Get node by attached volume functionality is not implemented"
+        )
+
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop IBM HCI nodes using power management
+
+        Args:
+            nodes (list): The OCS objects of the nodes to stop
+            force (bool): True for force Node stop, False otherwise
+
+        """
+        logger.info(f"Stopping IBM HCI nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self.ibm_hci.power_off(node.name, force=force)
+            logger.info(f"Successfully stopped node: {node.name}")
+
+    def start_nodes(self, nodes):
+        """
+        Start IBM HCI nodes using power management
+
+        Args:
+            nodes (list): The OCS objects of the nodes to start
+
+        """
+        logger.info(f"Starting IBM HCI nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self.ibm_hci.power_on(node.name)
+            logger.info(f"Successfully started node: {node.name}")
+
+    def restart_nodes(self, nodes, wait=True):
+        """
+        Restart IBM HCI nodes using power reset
+
+        Args:
+            nodes (list): The OCS objects of the nodes to restart
+            wait (bool): Wait for nodes to be ready after restart
+
+        """
+        logger.info(f"Restarting IBM HCI nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self.ibm_hci.power_reset(node.name)
+            logger.info(f"Successfully restarted node: {node.name}")
+
+        if wait:
+            wait_for_nodes_status(
+                node_names=[n.name for n in nodes],
+                status=constants.NODE_READY,
+                timeout=300,
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Restart IBM HCI nodes by stopping and then starting them
+
+        Args:
+            nodes (list): The OCS objects of the nodes to restart
+            force (bool): Force the restart operation
+
+        """
+        logger.info(
+            f"Restarting IBM HCI nodes by stop and start: {[n.name for n in nodes]}"
+        )
+
+        # Stop nodes
+        for node in nodes:
+            self.ibm_hci.power_off(node.name, force=force)
+            logger.info(f"Successfully stopped node: {node.name}")
+
+        # Wait a bit before starting
+        time.sleep(10)
+
+        # Start nodes
+        for node in nodes:
+            self.ibm_hci.power_on(node.name)
+            logger.info(f"Successfully started node: {node.name}")
+
+        # Wait for nodes to be ready
+        wait_for_nodes_status(
+            node_names=[n.name for n in nodes], status=constants.NODE_READY, timeout=900
+        )
+
+    def power_on_all_nodes(self):
+        """
+        Power on all nodes in the cluster using rack details
+
+        This method works even when the cluster API is unreachable,
+        as it directly accesses nodes via IPMI/Redfish using rack details.
+        Useful for recovery scenarios where nodes are powered off.
+
+        Returns:
+            list: Names of nodes that were successfully powered on
+        """
+        logger.info("Powering on all nodes from rack details")
+        powered_on_nodes = []
+
+        for rack_serial, rack_data in self.ibm_hci.rack_details.items():
+            nodes_dict = rack_data.get("nodes", {})
+            for node_role, _node_info in nodes_dict.items():
+                # Construct full node name using configurable domain suffix
+                node_name = f"{node_role}.{rack_serial}.{self.domain_suffix}"
+                try:
+                    logger.info(f"Powering on node: {node_name}")
+                    # Use power_on_direct which doesn't require API access
+                    result = self.ibm_hci.power_on_direct(node_name)
+                    if result:
+                        powered_on_nodes.append(node_name)
+                        logger.info(f"Successfully powered on: {node_name}")
+                    else:
+                        logger.warning(f"Failed to power on {node_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to power on {node_name}: {e}")
+
+        return powered_on_nodes
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        raise NotImplementedError("Detach volume functionality is not implemented")
+
+    def attach_volume(self, volume, node):
+        raise NotImplementedError("Attach volume functionality is not implemented")
+
+    def create_and_attach_volume(self, node, size, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volume functionality is not implemented"
+        )
+
+    def create_and_attach_volumes(self, node, volume_sizes, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volumes functionality is not implemented"
+        )
+
+    def wait_for_volume_attach(self, volume):
+        raise NotImplementedError(
+            "Wait for volume attach functionality is not implemented"
+        )
+
+    def _is_api_unavailable_error(self, error):
+        """
+        Check if an error indicates API unavailability
+
+        Args:
+            error (Exception or str): The error to check
+
+        Returns:
+            bool: True if error indicates API is unavailable, False otherwise
+        """
+        error_msg = str(error).lower()
+        api_unavailable_indicators = [
+            "tls handshake timeout",
+            "connection refused",
+            "unable to connect",
+            "unauthorized",
+            "connection reset",
+            "timeout",
+            "connection timed out",
+            "no route to host",
+            "network is unreachable",
+        ]
+        return any(indicator in error_msg for indicator in api_unavailable_indicators)
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Teardown method to ensure all nodes are powered on and cluster is accessible.
+
+        First checks whether the cluster API is reachable and all nodes are Ready.
+        If so, there is nothing to do (nodes were never stopped).
+        Only falls back to powering on all nodes via IPMI/Redfish when the API is
+        unreachable, which indicates the nodes were actually powered off.
+        """
+        from ocs_ci.helpers.helpers import refresh_oc_login_connection
+
+        logger.info(
+            "Teardown: Ensuring all nodes are powered on and cluster is accessible"
+        )
+
+        try:
+            # Re-authenticate first so the API check uses a fresh token.
+            try:
+                refresh_oc_login_connection()
+                logger.info("Successfully re-authenticated to cluster")
+            except Exception as login_error:
+                logger.warning(f"Could not re-authenticate: {login_error}")
+
+            # Check whether all nodes are already Ready.
+            try:
+                wait_for_nodes_status(timeout=60, status=constants.NODE_READY)
+                logger.info("All nodes are already Ready - no power-on action needed")
+                return
+            except Exception as check_error:
+                logger.warning(
+                    f"Node status check failed ({check_error}); "
+                    "assuming nodes are down - proceeding with power-on"
+                )
+
+            # Nodes appear to be down: power them all on via IPMI/Redfish.
+            powered_on_nodes = self.power_on_all_nodes()
+            logger.info(f"Powered on {len(powered_on_nodes)} nodes")
+
+            # Wait for nodes to start booting
+            logger.info("Waiting 30 seconds for nodes to start booting...")
+            time.sleep(30)
+
+            # Wait for nodes to become Ready, retrying if the API is still coming up.
+            max_retries = 5
+            for attempt in range(max_retries):
+                logger.info(
+                    f"Attempting to verify node status via API "
+                    f"(attempt {attempt + 1}/{max_retries})..."
+                )
+                try:
+                    try:
+                        refresh_oc_login_connection()
+                        logger.info("Successfully re-authenticated to cluster")
+                    except Exception as login_error:
+                        logger.warning(
+                            f"Could not re-authenticate (attempt {attempt + 1}): {login_error}"
+                        )
+                        if attempt < max_retries - 1:
+                            logger.info("Waiting 30 seconds before retry...")
+                            time.sleep(30)
+                            continue
+
+                    wait_for_nodes_status(timeout=900, status=constants.NODE_READY)
+                    logger.info("All nodes are ready - cluster is accessible")
+                    return
+
+                except Exception as e:
+                    logger.warning(
+                        f"Could not verify node status (attempt {attempt + 1}): {e}"
+                    )
+                    if attempt < max_retries - 1:
+                        logger.info("Waiting 30 seconds before retry...")
+                        time.sleep(30)
+                    else:
+                        raise RuntimeError(
+                            f"Failed to verify cluster status after {max_retries} attempts. "
+                            "Nodes are powered on but API verification failed."
+                        )
+
+        except Exception as e:
+            logger.error(f"Critical error during teardown: {e}")
+            raise
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError("Create nodes functionality not implemented")
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def read_default_config(self, default_config_path):
+        """
+        Commonly used function to read default config
+
+        Args:
+            default_config_path (str): Path to default config file
+
+        Returns:
+            dict: of default config loaded
+
+        """
+        assert os.path.exists(default_config_path), "Config file doesnt exists"
+
+        with open(default_config_path) as f:
+            default_config_dict = yaml.safe_load(f)
+
+        return default_config_dict
+
+    def terminate_nodes(self, nodes, wait=True):
+        raise NotImplementedError("terminate nodes functionality is not implemented")
+
+    def wait_for_nodes_to_stop(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to terminate functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_stop_or_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop or terminate functionality is not implemented"
+        )
+
+    def disable_nodes_network_temporarily(self, nodes, duration=20):
+        raise NotImplementedError(
+            "disable enable node network temporarily functionality is not implemented"
+        )
+
+
+class IBMHCIAgentNode(object):
+    """
+    IBM HCI class for hosted cluster agent nodes related operations.
+
+    Agent-based hostedcluster nodes are physical baremetal servers managed
+    as Agent resources on the host HCI cluster. Power operations (stop, start,
+    restart) are performed via IPMI/Redfish through the host cluster's rack
+    infrastructure. The rack JSON is loaded from the host/provider cluster
+    context, while node status checks run against the hostedcluster context.
+    """
+
+    def __init__(self):
+        from ocs_ci.utility.ibm_hci import IBMHCI
+
+        self.hosted_cluster_name = config.ENV_DATA.get("cluster_name")
+        self.provider_index = config.get_provider_index()
+
+        orig_index = config.cur_index
+        try:
+            config.switch_ctx(self.provider_index)
+            self.ibm_hci = IBMHCI()
+        finally:
+            config.switch_ctx(orig_index)
+
+        self._agent_node_map = self._build_agent_node_map()
+
+    def _build_agent_node_map(self):
+        """
+        Build mapping of hostedcluster node names to their BMC details
+        by querying Agent resources on the host cluster and correlating
+        BMC addresses with the host cluster's rack details.
+
+        Returns:
+            dict: Mapping of node hostname to BMC details dict
+
+        """
+        agent_map = {}
+        orig_index = config.cur_index
+        try:
+            config.switch_ctx(self.provider_index)
+
+            agent_ns = self.hosted_cluster_name
+            agent_ocp = ocp.OCP(kind="Agent", namespace=agent_ns)
+            agents = agent_ocp.get()
+
+            for agent in agents.get("items", []):
+                inventory_str = (
+                    agent.get("metadata", {})
+                    .get("annotations", {})
+                    .get("agent.agent-install.openshift.io/inventory", "{}")
+                )
+                try:
+                    inventory = json.loads(inventory_str)
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f"Failed to parse inventory for agent "
+                        f"{agent.get('metadata', {}).get('name', 'unknown')}"
+                    )
+                    continue
+
+                hostname = inventory.get("hostname", "")
+                bmc_address = inventory.get("bmc_address", "")
+                bmc_v6address = inventory.get("bmc_v6address", "")
+                manufacturer = inventory.get("system_vendor", {}).get(
+                    "manufacturer", ""
+                )
+
+                if not hostname or not bmc_address:
+                    continue
+
+                rack_serial, rack_ip, creds = self._find_rack_for_bmc(bmc_address)
+
+                if not rack_serial:
+                    logger.warning(
+                        f"Could not find rack for agent node {hostname} "
+                        f"with BMC address {bmc_address}"
+                    )
+                    continue
+
+                agent_map[hostname] = {
+                    "bmc_ipv4": bmc_address,
+                    "bmc_ipv6": bmc_v6address,
+                    "manufacturer": manufacturer,
+                    "rack_serial": rack_serial,
+                    "rack_ip": rack_ip,
+                    "username": creds.get("username"),
+                    "password": creds.get("password"),
+                }
+                logger.info(
+                    f"Mapped agent node {hostname} -> rack {rack_serial}, "
+                    f"BMC {bmc_address}, manufacturer {manufacturer}"
+                )
+        finally:
+            config.switch_ctx(orig_index)
+
+        logger.info(f"Built agent node map with {len(agent_map)} node(s)")
+        return agent_map
+
+    def _find_rack_for_bmc(self, bmc_ipv4):
+        """
+        Find the rack matching a BMC IPv4 address. First tries exact IP match
+        against nodes in the rack details, then falls back to subnet (first
+        3 octets) match.
+
+        Args:
+            bmc_ipv4 (str): BMC IPv4 address of the agent node
+
+        Returns:
+            tuple: (rack_serial, rack_ip, credentials_dict)
+
+        """
+        for rack_serial, rack_data in self.ibm_hci.rack_details.items():
+            rack_ip = rack_data.get("rackInfo", {}).get("rackIP")
+            nodes = rack_data.get("nodes", {})
+
+            for _node_name, node_info in nodes.items():
+                if node_info.get("ipv4") == bmc_ipv4:
+                    return (
+                        rack_serial,
+                        rack_ip,
+                        {
+                            "username": node_info.get("username"),
+                            "password": node_info.get("password"),
+                        },
+                    )
+
+        bmc_parts = bmc_ipv4.split(".")
+        if len(bmc_parts) >= 3:
+            bmc_subnet = ".".join(bmc_parts[:3])
+            for rack_serial, rack_data in self.ibm_hci.rack_details.items():
+                rack_ip = rack_data.get("rackInfo", {}).get("rackIP")
+                for _node_name, node_info in rack_data.get("nodes", {}).items():
+                    node_ipv4 = node_info.get("ipv4", "")
+                    if node_ipv4:
+                        node_parts = node_ipv4.split(".")
+                        if (
+                            len(node_parts) >= 3
+                            and ".".join(node_parts[:3]) == bmc_subnet
+                        ):
+                            return (
+                                rack_serial,
+                                rack_ip,
+                                {
+                                    "username": node_info.get("username"),
+                                    "password": node_info.get("password"),
+                                },
+                            )
+
+        return None, None, {}
+
+    def _power_operation(self, node_name, operation, force=False):
+        """
+        Execute power operation on an agent node via IPMI or Redfish.
+
+        Agent nodes do not have BareMetalHost resources, so no detach/attach
+        is needed unlike IBMHCINode.
+
+        Args:
+            node_name (str): Full node name (FQDN)
+            operation (str): Power operation (on, off, cycle, reset, status)
+            force (bool): Force operation (for off/reset)
+
+        Returns:
+            str: Power state for status operation
+            bool: True if successful for other operations
+
+        Raises:
+            RuntimeError: If operation fails on all IP addresses
+
+        """
+        details = self._agent_node_map.get(node_name)
+        if not details:
+            raise RuntimeError(
+                f"No BMC details found for agent node {node_name}. "
+                f"Known nodes: {list(self._agent_node_map.keys())}"
+            )
+
+        manufacturer = details["manufacturer"].lower()
+        rack_ip = details["rack_ip"]
+        username = details["username"]
+        password = details["password"]
+
+        if not all([rack_ip, username, password]):
+            raise RuntimeError(
+                f"Missing rack IP or credentials for agent node {node_name}"
+            )
+
+        ip_addresses = []
+        if details.get("bmc_ipv6"):
+            ip_addresses.append(("IPv6", details["bmc_ipv6"]))
+        if details.get("bmc_ipv4"):
+            ip_addresses.append(("IPv4", details["bmc_ipv4"]))
+
+        last_error = None
+        for ip_type, bmc_ip in ip_addresses:
+            try:
+                logger.info(
+                    f"Attempting {operation} on {node_name} using {ip_type}: {bmc_ip}"
+                )
+
+                if "lenovo" in manufacturer:
+                    result = self.ibm_hci._power_operation_ipmi(
+                        rack_ip, username, password, bmc_ip, operation, force
+                    )
+                elif "dell" in manufacturer:
+                    result = self.ibm_hci._power_operation_redfish(
+                        rack_ip, username, password, bmc_ip, operation, force
+                    )
+                else:
+                    raise RuntimeError(f"Unsupported manufacturer: {manufacturer}")
+
+                if result or (operation == "status" and result is not None):
+                    logger.info(f"{operation} succeeded on {node_name} using {ip_type}")
+                    return result
+                else:
+                    last_error = f"{operation} failed with {ip_type}"
+                    logger.warning(last_error)
+
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(
+                    f"Exception during {operation} with {ip_type} for {node_name}: {e}"
+                )
+                continue
+
+        raise RuntimeError(
+            f"Failed to perform {operation} on agent node {node_name} "
+            f"with all available IP addresses. Last error: {last_error}"
+        )
+
+    def get_data_volumes(self):
+        raise NotImplementedError("Get data volume functionality is not implemented")
+
+    def get_node_by_attached_volume(self, volume):
+        raise NotImplementedError(
+            "Get node by attached volume functionality is not implemented"
+        )
+
+    def stop_nodes(self, nodes, force=True):
+        """
+        Stop agent hostedcluster nodes via IPMI/Redfish
+
+        Args:
+            nodes (list): The OCS objects of the nodes to stop
+            force (bool): True for force Node stop, False otherwise
+
+        """
+        logger.info(f"Stopping agent hostedcluster nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self._power_operation(node.name, "off", force=force)
+            logger.info(f"Successfully stopped node: {node.name}")
+
+    def start_nodes(self, nodes):
+        """
+        Start agent hostedcluster nodes via IPMI/Redfish
+
+        Args:
+            nodes (list): The OCS objects of the nodes to start
+
+        """
+        logger.info(f"Starting agent hostedcluster nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self._power_operation(node.name, "on")
+            logger.info(f"Successfully started node: {node.name}")
+
+    def restart_nodes(self, nodes, wait=True):
+        """
+        Restart agent hostedcluster nodes via power reset
+
+        Args:
+            nodes (list): The OCS objects of the nodes to restart
+            wait (bool): Wait for nodes to be ready after restart
+
+        """
+        logger.info(f"Restarting agent hostedcluster nodes: {[n.name for n in nodes]}")
+
+        for node in nodes:
+            self._power_operation(node.name, "reset")
+            logger.info(f"Successfully restarted node: {node.name}")
+
+        if wait:
+            wait_for_nodes_status(
+                node_names=[n.name for n in nodes],
+                status=constants.NODE_READY,
+                timeout=300,
+            )
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Restart agent hostedcluster nodes by stopping and then starting them
+
+        Args:
+            nodes (list): The OCS objects of the nodes to restart
+            force (bool): Force the restart operation
+
+        """
+        logger.info(
+            f"Restarting agent nodes by stop and start: {[n.name for n in nodes]}"
+        )
+
+        for node in nodes:
+            self._power_operation(node.name, "off", force=force)
+            logger.info(f"Successfully stopped node: {node.name}")
+
+        time.sleep(10)
+
+        for node in nodes:
+            self._power_operation(node.name, "on")
+            logger.info(f"Successfully started node: {node.name}")
+
+        wait_for_nodes_status(
+            node_names=[n.name for n in nodes],
+            status=constants.NODE_READY,
+            timeout=900,
+        )
+
+    def power_on_all_nodes(self):
+        """
+        Power on all agent hostedcluster nodes using the cached agent node map.
+
+        This method works even when the hostedcluster API is unreachable
+        because the BMC details were cached during initialization.
+
+        Returns:
+            list: Names of nodes that were successfully powered on
+
+        """
+        logger.info("Powering on all agent hostedcluster nodes")
+        powered_on_nodes = []
+
+        for hostname in self._agent_node_map:
+            try:
+                logger.info(f"Powering on agent node: {hostname}")
+                self._power_operation(hostname, "on")
+                powered_on_nodes.append(hostname)
+                logger.info(f"Successfully powered on: {hostname}")
+            except Exception as e:
+                logger.warning(f"Failed to power on {hostname}: {e}")
+
+        return powered_on_nodes
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Teardown method to ensure all agent hostedcluster nodes are powered on
+        and the cluster is accessible.
+
+        First checks whether the hostedcluster API is reachable and all nodes
+        are Ready. Only falls back to powering on all nodes via IPMI/Redfish
+        when the API is unreachable.
+
+        """
+        from ocs_ci.helpers.helpers import refresh_oc_login_connection
+
+        logger.info(
+            "Teardown: Ensuring all agent hostedcluster nodes are powered on "
+            "and cluster is accessible"
+        )
+
+        try:
+            try:
+                refresh_oc_login_connection()
+                logger.info("Successfully re-authenticated to hostedcluster")
+            except Exception as login_error:
+                logger.warning(f"Could not re-authenticate: {login_error}")
+
+            try:
+                wait_for_nodes_status(timeout=60, status=constants.NODE_READY)
+                logger.info("All nodes are already Ready - no power-on action needed")
+                return
+            except Exception as check_error:
+                logger.warning(
+                    f"Node status check failed ({check_error}); "
+                    "assuming nodes are down - proceeding with power-on"
+                )
+
+            powered_on_nodes = self.power_on_all_nodes()
+            logger.info(f"Powered on {len(powered_on_nodes)} node(s)")
+
+            logger.info("Waiting 30 seconds for nodes to start booting...")
+            time.sleep(30)
+
+            max_retries = 5
+            for attempt in range(max_retries):
+                logger.info(
+                    f"Attempting to verify node status via API "
+                    f"(attempt {attempt + 1}/{max_retries})..."
+                )
+                try:
+                    try:
+                        refresh_oc_login_connection()
+                        logger.info("Successfully re-authenticated to hostedcluster")
+                    except Exception as login_error:
+                        logger.warning(
+                            f"Could not re-authenticate (attempt {attempt + 1}): "
+                            f"{login_error}"
+                        )
+                        if attempt < max_retries - 1:
+                            logger.info("Waiting 30 seconds before retry...")
+                            time.sleep(30)
+                            continue
+
+                    wait_for_nodes_status(timeout=900, status=constants.NODE_READY)
+                    logger.info("All nodes are ready - hostedcluster is accessible")
+                    return
+
+                except Exception as e:
+                    logger.warning(
+                        f"Could not verify node status (attempt {attempt + 1}): {e}"
+                    )
+                    if attempt < max_retries - 1:
+                        logger.info("Waiting 30 seconds before retry...")
+                        time.sleep(30)
+                    else:
+                        raise RuntimeError(
+                            f"Failed to verify hostedcluster status after "
+                            f"{max_retries} attempts. Nodes are powered on but "
+                            "API verification failed."
+                        )
+
+        except Exception as e:
+            logger.error(f"Critical error during teardown: {e}")
+            raise
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        raise NotImplementedError("Detach volume functionality is not implemented")
+
+    def attach_volume(self, volume, node):
+        raise NotImplementedError("Attach volume functionality is not implemented")
+
+    def create_and_attach_volume(self, node, size, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volume functionality is not implemented"
+        )
+
+    def create_and_attach_volumes(self, node, volume_sizes, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volumes functionality is not implemented"
+        )
+
+    def wait_for_volume_attach(self, volume):
+        raise NotImplementedError(
+            "Wait for volume attach functionality is not implemented"
+        )
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError("Create nodes functionality not implemented")
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def read_default_config(self, default_config_path):
+        """
+        Commonly used function to read default config
+
+        Args:
+            default_config_path (str): Path to default config file
+
+        Returns:
+            dict: of default config loaded
+
+        """
+        assert os.path.exists(default_config_path), "Config file doesnt exists"
+
+        with open(default_config_path) as f:
+            default_config_dict = yaml.safe_load(f)
+
+        return default_config_dict
+
+    def terminate_nodes(self, nodes, wait=True):
+        raise NotImplementedError("terminate nodes functionality is not implemented")
+
+    def wait_for_nodes_to_stop(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to terminate functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_stop_or_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop or terminate functionality is not implemented"
+        )
+
+    def disable_nodes_network_temporarily(self, nodes, duration=20):
+        raise NotImplementedError(
+            "disable enable node network temporarily functionality is not implemented"
+        )
