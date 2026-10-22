@@ -3,6 +3,7 @@ import time
 
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.views import ODF_OPERATOR
+from ocs_ci.utility import version
 
 
 logger = logging.getLogger(__name__)
@@ -22,16 +23,26 @@ class AddReplaceDeviceUI(PageNavigator):
         Add Capacity via UI
 
         """
-        self.navigate_installed_operators_page()
-        if self.operator_name is ODF_OPERATOR:
-            self.do_click(self.add_capacity_ui_loc["odf_operator"])
-            self.do_click(self.add_capacity_ui_loc["storage_system_tab"])
+        if version.get_semantic_ocp_version_from_config() >= version.VERSION_5_0:
+            logger.info("Navigating to Storage -> Storage cluster")
+            self.nav_storage_cluster_default_page()
+            logger.info("Waiting for the Actions menu on the Storage cluster page")
+            self.wait_for_element_to_be_visible(
+                self.attach_storage_loc["storage_cluster_actions"], timeout=60
+            )
+            logger.info("Clicking the Actions menu on the Storage cluster page")
+            self.do_click(self.attach_storage_loc["storage_cluster_actions"])
         else:
-            self.do_click(self.add_capacity_ui_loc["ocs_operator"])
-            self.do_click(self.add_capacity_ui_loc["storage_cluster_tab"])
-        time.sleep(1)
-        logger.info("Click on kebab menu of Storage Systems")
-        self.do_click(self.add_capacity_ui_loc["kebab_storage_cluster"])
+            self.navigate_installed_operators_page()
+            if self.operator_name is ODF_OPERATOR:
+                self.do_click(self.add_capacity_ui_loc["odf_operator"])
+                self.do_click(self.add_capacity_ui_loc["storage_system_tab"])
+            else:
+                self.do_click(self.add_capacity_ui_loc["ocs_operator"])
+                self.do_click(self.add_capacity_ui_loc["storage_cluster_tab"])
+            time.sleep(1)
+            logger.info("Click on kebab menu of Storage Systems")
+            self.do_click(self.add_capacity_ui_loc["kebab_storage_cluster"])
         self.take_screenshot()
         logger.info("Click on Add Capacity button under the kebab menu")
         self.wait_until_expected_text_is_found(
