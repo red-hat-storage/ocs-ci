@@ -21,10 +21,10 @@ class TestFillPoolJob(ManageTest):
     Test the Fill Pool Job functionalities
     """
 
-    def test_fill_pool_job_with_both_modes(self, fill_job_factory):
+    def test_fill_pool_job_incompressible(self, fill_job_factory):
         """
-        Run Fill Pool Job using both modes to fill the cluster to a target usage.
-        Verifies that the workload completes, logs capacity usage and elapsed time.
+        Run Fill Pool Job with incompressible data to fill the cluster to a
+        target usage. Verifies that used capacity increases and logs elapsed time.
 
         """
         ceph_cluster = CephCluster()
@@ -36,30 +36,19 @@ class TestFillPoolJob(ManageTest):
         )
         if ceph_capacity > 500:
             storage_to_fill = 240  # in GiB
-            timeout = 1200
+            # 240Gi at ~220MiB/s is ~18min; 40min leaves margin for slower clusters.
+            timeout = 2400
         else:
             storage_to_fill = ceph_capacity / 2  # in GiB
-            timeout = 600
+            timeout = 1800
 
-        # Divide the storage to fill between zero and random modes. The random mode will
-        # fill 25% of the total. This is to optimize the time taken to fill the cluster,
-        # as the zero mode is faster.
-        storage_to_fill_random_mode = int(storage_to_fill // 4)
-        storage_to_fill_zero_mode = storage_to_fill - storage_to_fill_random_mode
-        log.info(
-            f"Total storage to fill the cluster: {storage_to_fill}Gi, "
-            f"Storage to fill in zero mode: {storage_to_fill_zero_mode}Gi, "
-            f"Storage to fill in random mode: {storage_to_fill_random_mode}Gi"
-        )
+        log.info(f"Total storage to fill the cluster: {storage_to_fill}Gi")
 
         start = time.time()
         fill_job_factory(
-            fill_mode="zero",
-            storage=f"{storage_to_fill_zero_mode}Gi",
-        )
-        fill_job_factory(
-            fill_mode="random",
-            storage=f"{storage_to_fill_random_mode}Gi",
+            fill_mode="incompressible",
+            storage=f"{int(storage_to_fill)}Gi",
+            block_size="4M",
         )
 
         gap_difference = storage_to_fill * 0.1  # 10% gap
