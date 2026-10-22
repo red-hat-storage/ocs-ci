@@ -2765,6 +2765,7 @@ LOGICALVOLUME = "logicalvolume"
 
 PERF_IMAGE = "quay.io/ocsci/perf:latest"
 NGINX_FIO_IMAGE = "quay.io/ocsci/nginx:fio"
+FEDORA_FIO_IMAGE = "quay.io/ocsci/fedora:fio"
 
 ROOK_CEPH_CONFIG_VALUES = """
 [global]
@@ -3576,3 +3577,7 @@ HIGH_RECOVERY_OPS = "high_recovery_ops"
 MCLOCK_HIGH_CLIENT_OPS = "high_client_ops"
 MCLOCK_BALANCED = "balanced"
 MCLOCK_HIGH_RECOVERY_OPS = "high_recovery_ops"
+
+# Fill pool job and PVC Yaml files
+FILL_POOL_JOB_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_job.yaml")
+FILL_POOL_PVC_YAML = os.path.join(TEMPLATE_FIO_DIR, "fill_pool_pvc.yaml")
