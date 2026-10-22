@@ -504,6 +504,15 @@ NATIVE_STORAGE_CLIENT_YAML = os.path.join(
 STORAGE_CONSUMER_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_consumer.yaml"
 )
+OCS_STORAGE_CLUSTER_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster.yaml"
+)
+OCS_STORAGE_CLUSTER_UPDATED_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_updated.yaml"
+)
+OCS_STORAGE_CLUSTER_CONVERGED_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_converged.yaml"
+)
 
 
 PROVIDER_CLUSTER_RESOURCE_KINDS = [
