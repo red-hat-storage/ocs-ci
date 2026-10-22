@@ -85,6 +85,25 @@ class Initializer(BaseInitializer):
                 config.DEPLOYMENT["fdf_image_tag"] = args.fdf_image_tag
             if args.live_deploy:
                 config.DEPLOYMENT["live_deployment"] = args.live_deploy
+            # Mirroring related args, same as the ones accepted by the
+            # fdf-mirror entrypoint. They are used when the FDF catalog has to
+            # be mirrored as part of a disconnected deployment.
+            if args.catalog_image:
+                config.DEPLOYMENT["fdf_catalog_image"] = args.catalog_image
+                logger.info("Using fdf_catalog_image from CLI argument")
+            if args.mirror_registry:
+                config.DEPLOYMENT["mirror_registry"] = args.mirror_registry
+                logger.info("Using mirror_registry from CLI argument")
+            if args.mirror_registry_user:
+                config.DEPLOYMENT["mirror_registry_user"] = args.mirror_registry_user
+                logger.info("Using mirror_registry_user from CLI argument")
+            if args.mirror_registry_password:
+                config.DEPLOYMENT["mirror_registry_password"] = (
+                    args.mirror_registry_password
+                )
+                logger.info("Using mirror_registry_password from CLI argument")
+            if args.configure_registries:
+                config.DEPLOYMENT["fdf_configure_registries"] = True
 
         # Set report path if provided
         if hasattr(args, "report") and args.report:
@@ -137,6 +156,40 @@ class Initializer(BaseInitializer):
                 action="store_true",
                 default=False,
                 help="Deploy FDF from live registry (GA)",
+            )
+            # Mirroring args, identical to the fdf-mirror entrypoint ones, so
+            # that a disconnected deployment can mirror the catalog itself
+            parser.add_argument(
+                "--catalog-image",
+                default=None,
+                help=(
+                    "FDF catalog image to mirror in a disconnected deployment "
+                    "(e.g., cp.stg.icr.io/cp/df/isf-data-foundation-catalog:v4.20)"
+                ),
+            )
+            parser.add_argument(
+                "--mirror-registry",
+                default=None,
+                help=(
+                    "Target mirror registry (e.g., registry.example.com:5000). "
+                    "If not provided, uses config value."
+                ),
+            )
+            parser.add_argument(
+                "--mirror-registry-user",
+                default=None,
+                help="Mirror registry username. If not provided, uses config value or pull secret.",
+            )
+            parser.add_argument(
+                "--mirror-registry-password",
+                default=None,
+                help="Mirror registry password. If not provided, uses config value or pull secret.",
+            )
+            parser.add_argument(
+                "--configure-registries",
+                action="store_true",
+                default=False,
+                help="Configure /etc/containers/registries.conf for internal FDF images",
             )
 
         parsed_args, _ = parser.parse_known_args(args)
