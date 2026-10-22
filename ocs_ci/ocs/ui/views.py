@@ -4309,6 +4309,140 @@ external_systems = {
         "//td[@data-label='Name']//a[normalize-space()='{}']",
         By.XPATH,
     ),
+    # --- RHSTOR-8585 Scale Dashboard enhancements ---------------------------
+    # NOTE: the locators below are best-effort (derived from screen recordings;
+    # data-test attributes unknown). They use normalize-space()/contains() for
+    # PatternFly v6 span-wrapped labels and are expected to be tuned against the
+    # live console on the first FDF run.
+    #
+    # Local StorageCluster card
+    "scale_local_node_count_link": (
+        "a[data-test='inventory-nodes']",
+        By.CSS_SELECTOR,
+    ),
+    "scale_node_count_edit_pencil": (
+        "button[aria-label='Edit node inventory']",
+        By.CSS_SELECTOR,
+    ),
+    "scale_encryption_edit_pencil": (
+        "button[aria-label='Edit encryption']",
+        By.CSS_SELECTOR,
+    ),
+    # Add nodes to local cluster modal (TC1/TC5)
+    # "Add nodes to local cluster" modal is a PF6 modal-box dialog; presence of
+    # the dialog box (not a page-level <footer>) is the reliable open signal.
+    "add_nodes_modal_title": (
+        "div[role='dialog'].pf-v6-c-modal-box",
+        By.CSS_SELECTOR,
+    ),
+    "include_control_plane_checkbox": (
+        "input#include-control-plane-nodes",
+        By.CSS_SELECTOR,
+    ),
+    # Node rows: data-label='Name' holds the node link, data-label='Role' holds
+    # the role text (e.g. "control-plane, master" for masters, "worker").
+    "node_row_checkbox": (
+        "//tr[.//td[@data-label='Name']//a[normalize-space()='{}']]"
+        "//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "control_plane_node_name_links": (
+        "//tr[.//td[@data-label='Role' and contains(normalize-space(),'control-plane')]]"
+        "//td[@data-label='Name']//a",
+        By.XPATH,
+    ),
+    # Footer buttons live in the PF6 modal-box footer, not a page <footer>.
+    "add_nodes_add_button": (
+        "//div[@role='dialog']//button[normalize-space()='Add']",
+        By.XPATH,
+    ),
+    "add_nodes_cancel_button": (
+        "//div[@role='dialog']//button[normalize-space()='Cancel']",
+        By.XPATH,
+    ),
+    # Kernel-devel validation status rendered as a PF6 helper-text item with a
+    # data-test of kernel-devel-status-<variant>. The success variant means the
+    # packages are present on the selected node.
+    "wizard_kernel_devel_verified": (
+        "div[data-test='kernel-devel-status-success']",
+        By.CSS_SELECTOR,
+    ),
+    # Any kernel-devel validation status (success or a missing/warning variant);
+    # its presence proves the modal validated the target nodes.
+    "wizard_kernel_devel_status": (
+        "div[data-test^='kernel-devel-status']",
+        By.CSS_SELECTOR,
+    ),
+    # Enable data encryption modal (TC4)
+    "encryption_modal_title": (
+        "//*[@role='dialog']//*[normalize-space()='Enable data encryption']",
+        By.XPATH,
+    ),
+    "enable_encryption_checkbox": (
+        "//label[contains(normalize-space(.),'Enable data encryption')]"
+        "//input[@type='checkbox'] | "
+        "//label[contains(normalize-space(.),'Enable data encryption')]"
+        "/preceding-sibling::span//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "enc_username": ("//input[@id='username' or @name='username']", By.XPATH),
+    "enc_password": ("//input[@id='password' or @name='password']", By.XPATH),
+    "enc_port": ("//input[@id='port' or @name='port']", By.XPATH),
+    "enc_client": ("//input[@id='client' or @name='client']", By.XPATH),
+    "enc_remote_rkm": (
+        "//input[@id='remoteRKM' or @name='remoteRKM']",
+        By.XPATH,
+    ),
+    "enc_ca_cert_browse": (
+        "//*[@role='dialog']//input[@type='file']",
+        By.XPATH,
+    ),
+    "enc_server_info": (
+        "//input[@id='serverInformation' or @name='serverInformation']",
+        By.XPATH,
+    ),
+    "enc_tenant_id": (
+        "//input[@id='tenantId' or @name='tenantId']",
+        By.XPATH,
+    ),
+    "encryption_save_button": (
+        "//footer//button[normalize-space()='Save']",
+        By.XPATH,
+    ),
+    # File systems table capacity columns (TC3)
+    "fs_used_capacity_header": (
+        "//th[normalize-space()='Used capacity']",
+        By.XPATH,
+    ),
+    "fs_total_capacity_header": (
+        "//th[normalize-space()='Total capacity']",
+        By.XPATH,
+    ),
+    "fs_used_capacity_cell": (
+        "//tr[.//*[normalize-space()='{}']]//td[@data-label='Used capacity']",
+        By.XPATH,
+    ),
+    "fs_total_capacity_cell": (
+        "//tr[.//*[normalize-space()='{}']]//td[@data-label='Total capacity']",
+        By.XPATH,
+    ),
+    # Scale Dashboard Actions dropdown / offboarding (TC6)
+    # The dashboard page header has one Actions dropdown (a kebab toggle whose
+    # text is "Actions") inside data-test-id='details-actions'; scoping avoids
+    # the per-row kebab toggles in the file systems table.
+    "scale_dashboard_actions_button": (
+        "//div[@data-test-id='details-actions']//button[@data-test='kebab-button']",
+        By.XPATH,
+    ),
+    # Remove/offboard menu item. Rendered (disabled) while file systems exist.
+    "dashboard_remove_action": (
+        "button#REMOVE_REMOTE_CLUSTER",
+        By.CSS_SELECTOR,
+    ),
+    "remove_disabled_subtext": (
+        "//*[contains(text(),'Cannot be removed if file systems exist')]",
+        By.XPATH,
+    ),
 }
 locators = {
     "5.0": {
