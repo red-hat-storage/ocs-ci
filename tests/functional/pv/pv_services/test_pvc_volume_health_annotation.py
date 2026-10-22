@@ -1458,3 +1458,237 @@ class TestPVCVolumeHealthStaleAnnotation(PVCVolumeHealthTestHelpers, ManageTest)
         )
 
         logger.info("RWX multi-node stale volume health annotation cleanup test passed")
+
+    @tier2
+    @pytest.mark.polarion_id("OCS-8373")
+    def test_rwx_per_node_annotation_dedup_and_cleanup(self, pvc_factory, pod_factory):
+        """
+        Verify per-node annotation deduplication and shared-mount
+        retention on a CephFS RWX PVC across three pods and two nodes.
+
+        Steps:
+            1. Verify Ceph health is HEALTH_OK.
+            2. Create CephFS RWX PVC (5Gi).
+            3. Assert >= 2 worker nodes.
+            4. Create pod-A on node-1 and pod-B on node-2; run FIO I/O.
+            5. Wait for reporter tick (~60s).
+            6. Poll for exactly 2 healthy per-node annotation keys.
+            7. Assert both key suffixes match node UIDs; both states
+               'healthy'; node hostnames differ.
+            8. Create pod-C on node-1; run FIO I/O.
+            9. Wait for reporter tick.
+            10. Assert annotation count still == 2 (dedup verified).
+            11. Delete pod-A (pod-C still running on node-1).
+            12. Wait for reporter tick.
+            13. Assert both annotation keys still present and healthy
+                (node-1 key retained via pod-C's active mount).
+            14. Delete pod-C (last pod on node-1).
+            15. Configure stale threshold=2m, cleanup interval=1m.
+            16. Poll until node-1 annotation key disappears.
+            17. Assert node-1 key gone; node-2 key present and healthy.
+        """
+        logger.test_step("Verify Ceph health OK; create CephFS RWX PVC")
+        ceph_health_check(tries=3, delay=10)
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            size=5,
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+        logger.info(f"RWX PVC {pvc_obj.name} created and Bound")
+
+        logger.test_step("Assert >= 2 worker nodes")
+        worker_nodes = node.get_worker_nodes()
+        logger.assertion(
+            f"Worker node count: expected >= 2, " f"actual={len(worker_nodes)}"
+        )
+        assert (
+            len(worker_nodes) >= 2
+        ), f"Need >= 2 worker nodes, found {len(worker_nodes)}"
+
+        logger.test_step("Create pod-A on node-1 and pod-B on node-2")
+        pod_a = pod_factory(
+            pvc=pvc_obj,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=worker_nodes[0],
+        )
+        pod_b = pod_factory(
+            pvc=pvc_obj,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=worker_nodes[1],
+        )
+        node_a = pod_a.get()["spec"]["nodeName"]
+        node_b = pod_b.get()["spec"]["nodeName"]
+        logger.info(
+            f"Pod-A {pod_a.name} on {node_a}, " f"Pod-B {pod_b.name} on {node_b}"
+        )
+        logger.assertion(f"Pods on different nodes: {node_a} != {node_b}")
+        assert node_a != node_b, f"Both pods scheduled on same node: {node_a}"
+
+        logger.test_step("Phase 1: Run FIO I/O on pod-A and pod-B")
+        for p in (pod_a, pod_b):
+            p.run_io(
+                storage_type="fs",
+                size="512M",
+                fio_filename=p.name,
+            )
+        for p in (pod_a, pod_b):
+            pod.get_fio_rw_iops(p)
+        logger.info("FIO I/O completed on pod-A and pod-B")
+
+        logger.test_step(f"Wait {REPORTER_TICK_WAIT}s for reporter tick")
+        time.sleep(REPORTER_TICK_WAIT)
+
+        logger.test_step("Poll for exactly 2 healthy per-node " "annotation keys")
+        health_annotations = pvc_obj.wait_for_volume_health_state(
+            expected_state="healthy",
+            timeout=ANNOTATION_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+            expected_count=2,
+        )
+        logger.assertion(f"Annotation count == 2; " f"actual={len(health_annotations)}")
+        assert len(health_annotations) == 2, (
+            f"Expected 2 annotation keys, "
+            f"got {len(health_annotations)}: "
+            f"{list(health_annotations.keys())}"
+        )
+
+        logger.test_step("Resolve node UIDs and validate annotation keys")
+        uid_a = ocp.OCP(kind="node", resource_name=node_a).get()["metadata"]["uid"]
+        uid_b = ocp.OCP(kind="node", resource_name=node_b).get()["metadata"]["uid"]
+        key_a = f"{constants.VOLUME_HEALTH_ANNOTATION_PREFIX}{uid_a}"
+        key_b = f"{constants.VOLUME_HEALTH_ANNOTATION_PREFIX}{uid_b}"
+
+        logger.assertion(f"key_a ({key_a}) present in annotations")
+        assert key_a in health_annotations, (
+            f"Missing key_a {key_a}. " f"Found: {list(health_annotations.keys())}"
+        )
+        logger.assertion(f"key_b ({key_b}) present in annotations")
+        assert key_b in health_annotations, (
+            f"Missing key_b {key_b}. " f"Found: {list(health_annotations.keys())}"
+        )
+
+        parsed_a = json.loads(health_annotations[key_a])
+        parsed_b = json.loads(health_annotations[key_b])
+        logger.assertion(f"key_a state == 'healthy'; actual='{parsed_a.get('state')}'")
+        assert parsed_a.get("state") == "healthy", (
+            f"key_a state expected 'healthy', " f"got '{parsed_a.get('state')}'"
+        )
+        logger.assertion(
+            f"key_b state == 'healthy'; " f"actual='{parsed_b.get('state')}'"
+        )
+        assert parsed_b.get("state") == "healthy", (
+            f"key_b state expected 'healthy', " f"got '{parsed_b.get('state')}'"
+        )
+
+        hostname_a = parsed_a.get("node", "")
+        hostname_b = parsed_b.get("node", "")
+        logger.assertion(f"Node hostnames differ: {hostname_a} != {hostname_b}")
+        assert hostname_a != hostname_b, (
+            f"Both annotations carry the same node hostname: " f"{hostname_a!r}"
+        )
+        logger.test_step("Create pod-C on node-1 (same as pod-A)")
+        pod_c = pod_factory(
+            pvc=pvc_obj,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=worker_nodes[0],
+        )
+        node_c = pod_c.get()["spec"]["nodeName"]
+        logger.info(f"Pod-C {pod_c.name} on {node_c}")
+
+        logger.test_step("Run FIO I/O on pod-C")
+        pod_c.run_io(
+            storage_type="fs",
+            size="512M",
+            fio_filename=pod_c.name,
+        )
+        pod.get_fio_rw_iops(pod_c)
+        logger.info("FIO I/O completed on pod-C")
+
+        logger.test_step(f" Wait {REPORTER_TICK_WAIT}s for reporter tick")
+        time.sleep(REPORTER_TICK_WAIT)
+
+        logger.test_step("Assert annotation count is still 2 (dedup)")
+        ann = pvc_obj.get_volume_health_annotations()
+        logger.assertion(
+            f"Annotation count still == 2 after pod-C; " f"actual={len(ann)}"
+        )
+        assert len(ann) == 2, (
+            f"Expected 2 annotation keys after pod-C creation, "
+            f"got {len(ann)}: {list(ann.keys())}"
+        )
+        parsed_a2 = json.loads(ann[key_a])
+        logger.assertion(
+            f"key_a still present and healthy after pod-C; "
+            f"state='{parsed_a2.get('state')}'"
+        )
+        assert parsed_a2.get("state") == "healthy", (
+            f"key_a state expected 'healthy' after pod-C, "
+            f"got '{parsed_a2.get('state')}'"
+        )
+        logger.test_step(" Delete pod-A (pod-C still on node-1)")
+        pod_a.delete(wait=True)
+        pod_a.ocp.wait_for_delete(pod_a.name)
+        logger.info(
+            f"Pod-A {pod_a.name} deleted; "
+            f"pod-C {pod_c.name} still running on {node_c}"
+        )
+
+        logger.test_step(f"Wait {REPORTER_TICK_WAIT}s for reporter tick")
+        time.sleep(REPORTER_TICK_WAIT)
+
+        logger.test_step(
+            "Assert both annotation keys still present "
+            "(node-1 retained via pod-C's active mount)"
+        )
+        ann = pvc_obj.get_volume_health_annotations()
+        logger.assertion(
+            f"Annotation count == 2 after pod-A deletion; " f"actual={len(ann)}"
+        )
+        assert len(ann) == 2, (
+            f"Expected 2 annotation keys after pod-A deletion, "
+            f"got {len(ann)}: {list(ann.keys())}"
+        )
+        logger.assertion(f"key_a ({key_a}) still present after pod-A deletion")
+        assert key_a in ann, (
+            f"key_a {key_a} missing after pod-A deletion — "
+            f"should be retained by pod-C. "
+            f"Found: {list(ann.keys())}"
+        )
+        logger.assertion(f"key_b ({key_b}) still present after pod-A deletion")
+        assert key_b in ann, (
+            f"key_b {key_b} missing after pod-A deletion. " f"Found: {list(ann.keys())}"
+        )
+        logger.assertion(
+            f"key_a state == 'healthy' after pod-A deletion; "
+            f"actual='{json.loads(ann[key_a]).get('state')}'"
+        )
+        assert json.loads(ann[key_a]).get("state") == "healthy", (
+            f"key_a state expected 'healthy' after pod-A deletion, "
+            f"got '{json.loads(ann[key_a]).get('state')}'"
+        )
+        logger.assertion(
+            f"key_b state == 'healthy' after pod-A deletion; "
+            f"actual='{json.loads(ann[key_b]).get('state')}'"
+        )
+        assert json.loads(ann[key_b]).get("state") == "healthy", (
+            f"key_b state expected 'healthy' after pod-A deletion, "
+            f"got '{json.loads(ann[key_b]).get('state')}'"
+        )
+        logger.test_step("Delete pod-C (last pod on node-1)")
+        pod_c.delete(wait=True)
+        pod_c.ocp.wait_for_delete(pod_c.name)
+        logger.info(f"Pod-C {pod_c.name} deleted; node-1 has no more mounts")
+
+        logger.test_step(
+            "Configure stale threshold=2m, "
+            "cleanup interval=1m on CSI Addons controller"
+        )
+        update_csi_addons_config("volume-health-stale-threshold", "2m", restart=False)
+        update_csi_addons_config("volume-health-cleanup-interval", "1m", restart=True)
+        logger.info("CSI Addons config updated; controller restarted")
+        self._validate_stale_cleanup(
+            pvc_stale=pvc_obj,
+            stale_key=key_a,
+            active_key=key_b,
+        )
+        logger.info("RWX per-node annotation dedup and cleanup test passed")
