@@ -91,7 +91,10 @@ class OCP(object):
         if (
             (not cluster_kubeconfig)
             and config.multicluster
-            and "hci_" in config.ENV_DATA["platform"]
+            and (
+                "hci_" in config.ENV_DATA["platform"]
+                or "ibm_hci" in config.ENV_DATA["platform"]
+            )
             and kind.lower() in constants.PROVIDER_CLUSTER_RESOURCE_KINDS
         ):
             provider_cluster_index = config.get_provider_index()
