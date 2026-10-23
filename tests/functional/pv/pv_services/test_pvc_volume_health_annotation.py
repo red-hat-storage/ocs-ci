@@ -1498,12 +1498,8 @@ class TestPVCVolumeHealthStaleAnnotation(PVCVolumeHealthTestHelpers, ManageTest)
 
         logger.test_step("Assert >= 2 worker nodes")
         worker_nodes = node.get_worker_nodes()
-        logger.assertion(
-            f"Worker node count: expected >= 2, " f"actual={len(worker_nodes)}"
-        )
-        assert (
-            len(worker_nodes) >= 2
-        ), f"Need >= 2 worker nodes, found {len(worker_nodes)}"
+        if len(worker_nodes) < 2:
+            pytest.skip(f"Need >= 2 worker nodes, found {len(worker_nodes)}")
 
         logger.test_step("Create pod-A on node-1 and pod-B on node-2")
         pod_a = pod_factory(
