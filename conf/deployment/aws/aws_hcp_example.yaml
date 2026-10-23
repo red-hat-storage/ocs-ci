@@ -23,6 +23,7 @@ ENV_DATA:
       cp_availability_policy: "SingleReplica"  # or "HighlyAvailable". Default is "SingleReplica". HighlyAvailable requires nodes on multiple zones.
       infra_availability_policy: "SingleReplica"  # or "HighlyAvailable". Default is "SingleReplica". HighlyAvailable requires nodes on multiple zones.
       disable_default_sources: true  # Disable default operator sources
+      node_upgrade_type: "InPlace"  # or "Replace". Default is "InPlace"
 
       # AWS-specific configuration
       region: "us-west-2"  # AWS region for EC2 workers
