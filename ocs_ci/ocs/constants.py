@@ -2765,6 +2765,9 @@ MCG_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/mcg-cli-rhel9"
 # odf5 for ODF 5.y.z), see ocs_ci.utility.version.get_odf_image_namespace()
 ODF_CLI_DEV_IMAGE_TEMPLATE = "quay.io/rhceph-dev/{namespace}-odf-cli-rhel9"
 ODF_CLI_OFFICIAL_IMAGE_TEMPLATE = "registry.redhat.io/{namespace}/odf-cli-rhel9"
+# The ODF CLI image also ships the standalone noobaa CLI, as one tarball per
+# platform under this directory.
+CLI_IMAGE_RELEASES_DIR = "/releases"
 ACM_CATSRC_IMAGE = "quay.io:443/acm-d/acm-dev-catalog"
 MCE_CATSRC_IMAGE = "quay.io:443/acm-d/mce-dev-catalog"
 

@@ -5349,12 +5349,22 @@ def retrieve_cli_binary(cli_type="mcg"):
     Download the MCG-CLI/ODF-CLI binary and store it locally.
 
     Args:
-        cli_type (str): choose which bin file you want to download ["odf" -> odf-cli , "mcg" -> mcg-cli]
+        cli_type (str): choose which bin file you want to download
+            ["odf" -> odf-cli , "mcg" -> mcg-cli,
+            "noobaa" -> the standalone noobaa CLI shipped in the odf-cli image]
 
     Raises:
         AssertionError: In the case the CLI binary is not executable.
 
     """
+    if cli_type == "noobaa":
+        # Kept apart from "mcg": on OCS >= 4.20 "mcg" resolves to the odf
+        # wrapper, which lags the operator (DFBUGS-11485).
+        from ocs_ci.helpers.odf_cli import NoobaaCLIRetriever
+
+        NoobaaCLIRetriever().retrieve_odf_cli_binary()
+        return
+
     semantic_version = version.get_semantic_ocs_version_from_config()
     ocs_build = get_ocs_build_number()
     original_cli_type = cli_type
