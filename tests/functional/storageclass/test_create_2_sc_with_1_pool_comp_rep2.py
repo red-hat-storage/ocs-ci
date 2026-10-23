@@ -4,6 +4,7 @@ from ocs_ci.framework.testlib import ManageTest, tier1
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ocs_version,
+    skipif_stretch_cluster,
     green_squad,
     ec_allowed,
 )
@@ -23,6 +24,7 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
+@skipif_stretch_cluster
 class TestMultipleScOnePoolRep2Comp(ManageTest):
     """
     Create new rbd pool with replica 2 and compression.
