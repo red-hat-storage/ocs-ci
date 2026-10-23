@@ -89,8 +89,7 @@ class TestScaleConnection(object):
 
     def nav_to_dashboard(self):
         """Open the Scale dashboard for the shared test connection."""
-        external_systems = PageNavigator().nav_external_systems_page()
-        return external_systems.nav_to_scale_dashboard(SCALE_CONNECTION_NAME)
+        return PageNavigator().nav_to_scale_dashboard(SCALE_CONNECTION_NAME)
 
     @ui
     @skipif_ibm_cloud_managed
@@ -147,8 +146,6 @@ class TestScaleConnection(object):
                 "(verified or missing) once control plane nodes are included"
             )
         finally:
-            # Always close the modal so a failed assertion cannot leave an open
-            # overlay that blocks the next test in the shared UI session.
             dashboard.cancel_add_nodes_modal()
 
     @ui
@@ -182,8 +179,6 @@ class TestScaleConnection(object):
         node_count_before = dashboard.get_local_node_count()
         assert node_count_before is not None, "Could not read local cluster node count"
 
-        # Enabling "Include control plane nodes" reveals the master rows and
-        # their kernel-devel validation status.
         logger.test_step("Open the add-nodes modal and select a control plane node")
         assert dashboard.open_add_nodes_modal(), "Add nodes modal did not open"
         try:
@@ -192,9 +187,7 @@ class TestScaleConnection(object):
             control_plane_nodes = dashboard.get_control_plane_node_names()
             assert control_plane_nodes, "No control plane nodes available to add"
 
-            # A node already in the local cluster has a disabled row checkbox.
-            # Pick one that is still addable; if none are, the node was added on a
-            # previous run and the test cannot add it again (no node-removal flow).
+            # A node already in the local cluster has a disabled checkbox.
             selectable = [
                 node
                 for node in control_plane_nodes
@@ -208,17 +201,13 @@ class TestScaleConnection(object):
             master = selectable[0]
             dashboard.select_node(master)
 
-            # Wait for the kernel-devel validation status to render before reading
-            # it; otherwise "not yet rendered" would be misread as "missing" and
-            # trigger an unnecessary, disruptive control-plane reboot.
+            # Wait for the status to render before reading it, else "not rendered"
+            # is misread as "missing" and triggers an unneeded reboot.
             logger.test_step("Apply the master MCO only if kernel-devel is missing")
             assert (
                 dashboard.wait_for_kernel_devel_status()
             ), "Kernel-devel validation status was not shown for the selected node"
 
-            # Installing the kernel-devel packages via the master MachineConfig
-            # reboots the control plane, so only apply the MCO when the modal
-            # reports the packages as missing; skip it when already verified.
             if dashboard.is_kernel_devel_verified():
                 logger.info(
                     "Kernel-devel packages already verified on control plane "
@@ -233,8 +222,6 @@ class TestScaleConnection(object):
                 helpers.apply_scale_mco(
                     node_role=constants.MASTER_MACHINE, wait_for_rollout=True
                 )
-                # The dashboard was reloaded; add_nodes_to_local_cluster below
-                # re-opens the modal, re-enables control plane and re-selects.
                 dashboard = self.nav_to_dashboard()
 
             logger.test_step(f"Add control plane node '{master}' to the local cluster")
@@ -242,13 +229,8 @@ class TestScaleConnection(object):
                 node_names=[master], include_control_plane=True
             ), "Add control plane nodes flow did not complete"
         finally:
-            # Always close the modal so a failed assertion cannot leave an open
-            # overlay that blocks the next test in the shared UI session.
             dashboard.cancel_add_nodes_modal()
 
-        # The selected node was addable, so the add must increase the local
-        # cluster node count; a timeout here is a real failure (TimeoutSampler
-        # raises TimeoutExpiredError and fails the test).
         logger.test_step("Confirm the local cluster node count increased")
         for node_count_after in TimeoutSampler(
             timeout=180, sleep=5, func=dashboard.get_local_node_count

@@ -8018,7 +8018,6 @@ def apply_scale_mco(node_role=constants.WORKER_MACHINE, wait_for_rollout=False):
         if node_role == constants.MASTER_MACHINE:
             resp = requests.get(IBM_STORAGE_SCALE_MCO_URL, timeout=60)
             resp.raise_for_status()
-            # Retarget the worker manifest to the master pool.
             manifest = resp.text.replace(
                 constants.WORKER_MACHINE, constants.MASTER_MACHINE
             )

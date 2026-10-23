@@ -3,11 +3,7 @@ import time
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
-from ocs_ci.ocs.ui.base_ui import (
-    SeleniumDriver,
-    logger,
-    wait_for_element_to_be_clickable,
-)
+from ocs_ci.ocs.ui.base_ui import logger, wait_for_element_to_be_clickable
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
@@ -44,44 +40,6 @@ class ExternalSystems(ResourceList):
         """
         logger.info(f"Navigate to External Storage Cluster {esc_name}")
         self.nav_to_resource_via_name(esc_name)
-        return ExternalStorageCluster()
-
-    def nav_to_scale_dashboard(self, scale_name):
-        """
-        Open the Scale Dashboard for the given Scale connection by navigating
-        directly to its remotecluster dashboard route.
-
-        Args:
-            scale_name (str): Scale connection name.
-
-        Returns:
-            ExternalStorageCluster: Scale Dashboard page object.
-        """
-        logger.info(f"Navigating to Scale dashboard for '{scale_name}'")
-        # Clicking the connection name link in the list does not reliably trigger
-        # the console's client-side navigation (the row anchor click is swallowed
-        # and we stay on the filtered list), so navigate straight to the
-        # remotecluster dashboard route. The console base is derived from the
-        # current URL (we are on the External Systems page when this is called).
-        driver = SeleniumDriver()
-        base_url = driver.current_url.split("/odf/")[0]
-        dashboard_url = (
-            f"{base_url}/odf/external-systems/"
-            f"scale.spectrum.ibm.com~v1beta1~remotecluster/{scale_name}"
-        )
-        logger.info(f"Opening Scale dashboard URL: {dashboard_url}")
-        driver.get(dashboard_url)
-        # driver.get is a full page reload: the console re-downloads its JS
-        # bundles and re-loads the odf-console dynamic plugin before the Scale
-        # dashboard renders, which can take well over a minute on a cold load.
-        # Confirm we landed via a dashboard-only element (the Local StorageCluster
-        # node-inventory link); the list page shares the /odf/external-systems
-        # path and even has its own Actions kebab, so those are not reliable.
-        self.wait_for_element_to_be_visible(
-            self.external_systems["scale_local_node_count_link"], timeout=120
-        )
-        self.page_has_loaded(retries=10)
-        logger.info(f"Scale dashboard for '{scale_name}' loaded")
         return ExternalStorageCluster()
 
     def get_page_title(self):
@@ -482,7 +440,6 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
         except (TimeoutException, NoSuchElementException):
             logger.warning("Local node count link not found on Scale dashboard")
             return None
-        # Text is typically e.g. "3 Nodes"; pull the leading integer.
         for token in text.split():
             if token.isdigit():
                 return int(token)
@@ -499,7 +456,6 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
         Returns:
             bool: True if the modal opened, False otherwise.
         """
-        # Idempotent: if the modal is already open, nothing to do.
         if self.get_elements(self.external_systems["add_nodes_modal_title"]):
             return True
         logger.info("Opening 'Add nodes to local cluster' modal")

@@ -4413,7 +4413,7 @@ external_systems = {
         By.CSS_SELECTOR,
     ),
     "remove_disabled_subtext": (
-        "//*[contains(text(),'Cannot be removed if file systems exist')]",
+        "//*[contains(normalize-space(),'Cannot be removed if file systems exist')]",
         By.XPATH,
     ),
 }
