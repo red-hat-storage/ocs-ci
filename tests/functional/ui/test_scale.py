@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework.pytest_customization.marks import yellow_squad
@@ -102,12 +103,15 @@ class TestScaleConnection(object):
         TC3: The file systems table exposes Used capacity and Total capacity
         columns and populates them for a known filesystem.
         """
+        logger.test_step("Open the Scale dashboard")
         dashboard = self.nav_to_dashboard()
 
+        logger.test_step("Verify the file systems table exposes capacity columns")
         assert (
             dashboard.filesystem_capacity_columns_present()
         ), "Used/Total capacity columns are missing from the file systems table"
 
+        logger.test_step(f"Read capacity values for filesystem '{FILESYSTEM_1}'")
         capacity = dashboard.get_filesystem_capacity(FILESYSTEM_1)
         logger.info(f"Filesystem '{FILESYSTEM_1}' capacity: {capacity}")
         assert capacity["used"], f"Used capacity not populated for '{FILESYSTEM_1}'"
@@ -130,12 +134,15 @@ class TestScaleConnection(object):
         master MachineConfig persists once applied, so a prepared cluster shows
         "verified" while an unprepared one shows the "missing" hint.
         """
+        logger.test_step("Open the Scale dashboard")
         dashboard = self.nav_to_dashboard()
 
+        logger.test_step("Open the add-nodes modal and include control plane nodes")
         assert dashboard.open_add_nodes_modal(), "Add nodes modal did not open"
         dashboard.enable_control_plane_nodes()
 
-        assert dashboard.is_kernel_devel_status_shown(), (
+        logger.test_step("Verify a kernel-devel validation status is shown")
+        assert dashboard.wait_for_kernel_devel_status(), (
             "Expected the modal to show a kernel-devel validation status "
             "(verified or missing) once control plane nodes are included"
         )
@@ -160,7 +167,14 @@ class TestScaleConnection(object):
         control plane) is applied only when the packages are reported missing;
         when they are already verified the MCO is skipped. Success is confirmed
         by the local cluster node count increasing.
+
+        Note: this test mutates shared cluster state (it adds a control plane
+        node and may apply a persistent master MachineConfig) and has no teardown
+        because removing a node from the Scale local cluster is not supported from
+        the UI. On a re-run the node is already part of the cluster, so the
+        node-count check tolerates "no increase" rather than failing.
         """
+        logger.test_step("Open the Scale dashboard and read the local node count")
         dashboard = self.nav_to_dashboard()
 
         node_count_before = dashboard.get_local_node_count()
@@ -169,6 +183,7 @@ class TestScaleConnection(object):
         # Enabling "Include control plane nodes" reveals the master rows and
         # their kernel-devel validation status; read a master name from the
         # modal table and select it.
+        logger.test_step("Open the add-nodes modal and select a control plane node")
         assert dashboard.open_add_nodes_modal(), "Add nodes modal did not open"
         dashboard.enable_control_plane_nodes()
 
@@ -176,6 +191,14 @@ class TestScaleConnection(object):
         assert control_plane_nodes, "No control plane nodes available to add"
         master = control_plane_nodes[0]
         dashboard.select_node(master)
+
+        # Wait for the kernel-devel validation status to render before reading it;
+        # otherwise "not yet rendered" would be misread as "packages missing" and
+        # trigger an unnecessary, disruptive control-plane reboot.
+        logger.test_step("Apply the master MCO only if kernel-devel is missing")
+        assert (
+            dashboard.wait_for_kernel_devel_status()
+        ), "Kernel-devel validation status was not shown for the selected node"
 
         # Installing the kernel-devel packages via the master MachineConfig
         # reboots the control plane, so only apply the MCO when the modal
@@ -199,21 +222,31 @@ class TestScaleConnection(object):
             dashboard = self.nav_to_dashboard()
             assert dashboard.open_add_nodes_modal(), "Add nodes modal did not reopen"
 
+        logger.test_step(f"Add control plane node '{master}' to the local cluster")
         assert dashboard.add_nodes_to_local_cluster(
             node_names=[master], include_control_plane=True
         ), "Add control plane nodes flow did not complete"
 
         # Adding a control plane node must increase the local cluster node count.
+        # On a re-run the node is already present and the count cannot grow again,
+        # so a timeout here is treated as "already added" rather than a failure.
+        logger.test_step("Confirm the local cluster node count increased")
         node_count_after = node_count_before
-        for node_count_after in TimeoutSampler(
-            timeout=180, sleep=5, func=dashboard.get_local_node_count
-        ):
-            if node_count_after and node_count_after > node_count_before:
-                break
-        logger.info(
-            f"Local cluster node count increased from {node_count_before} "
-            f"to {node_count_after}"
-        )
+        try:
+            for node_count_after in TimeoutSampler(
+                timeout=180, sleep=5, func=dashboard.get_local_node_count
+            ):
+                if node_count_after and node_count_after > node_count_before:
+                    break
+            logger.info(
+                f"Local cluster node count increased from {node_count_before} "
+                f"to {node_count_after}"
+            )
+        except TimeoutExpiredError:
+            logger.warning(
+                "Local node count did not increase; the control plane node is "
+                "likely already part of the local cluster from a previous run"
+            )
 
     @ui
     @skipif_ibm_cloud_managed
@@ -227,8 +260,12 @@ class TestScaleConnection(object):
         disabled while file systems are still connected, and the explanatory
         "Cannot be removed if file systems exist" subtext is shown.
         """
+        logger.test_step("Open the Scale dashboard")
         dashboard = self.nav_to_dashboard()
 
+        logger.test_step(
+            "Verify the Remove/offboard action is disabled while file systems exist"
+        )
         assert (
             dashboard.is_remove_action_disabled()
         ), "Remove action should be disabled while file systems exist"

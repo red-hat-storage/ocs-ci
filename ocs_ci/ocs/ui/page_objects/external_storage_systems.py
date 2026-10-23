@@ -1,10 +1,15 @@
 import time
 
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.ui.base_ui import logger, wait_for_element_to_be_clickable
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.ui.base_ui import (
+    SeleniumDriver,
+    logger,
+    wait_for_element_to_be_clickable,
+)
 from ocs_ci.ocs.ui.helpers_ui import format_locator
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     DataFoundationDefaultTab,
@@ -58,13 +63,14 @@ class ExternalSystems(ResourceList):
         # and we stay on the filtered list), so navigate straight to the
         # remotecluster dashboard route. The console base is derived from the
         # current URL (we are on the External Systems page when this is called).
-        base_url = self.driver.current_url.split("/odf/")[0]
+        driver = SeleniumDriver()
+        base_url = driver.current_url.split("/odf/")[0]
         dashboard_url = (
             f"{base_url}/odf/external-systems/"
             f"scale.spectrum.ibm.com~v1beta1~remotecluster/{scale_name}"
         )
         logger.info(f"Opening Scale dashboard URL: {dashboard_url}")
-        self.driver.get(dashboard_url)
+        driver.get(dashboard_url)
         # driver.get is a full page reload: the console re-downloads its JS
         # bundles and re-loads the odf-console dynamic plugin before the Scale
         # dashboard renders, which can take well over a minute on a cold load.
@@ -428,11 +434,34 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
         return is_default
 
     # --- RHSTOR-8585 Scale Dashboard enhancements --------------------------
-    # The locators consumed below (see external_systems in views.py) are
-    # best-effort and expected to be tuned against the live console on the
-    # first FDF run; the methods are written defensively around that.
 
-    # ------------------------------------------------------------------ TC1/TC5
+    def _wait_for_scale_elements(self, locator, timeout=60, sleep=3):
+        """
+        Poll until elements matching the locator are present, tolerating absence.
+
+        Scale dashboard and modal content renders asynchronously, so reading it
+        immediately after navigation/click is racy. This polls ``get_elements``
+        (which does not wait) instead of ``wait_for_element_to_be_visible`` so the
+        AI locator fallback is not triggered for checks that may legitimately find
+        nothing.
+
+        Args:
+            locator (tuple): (selector, By) to look for.
+            timeout (int): how long to poll before giving up.
+            sleep (int): seconds between polls.
+
+        Returns:
+            list: matching web elements, or an empty list if none appear in time.
+        """
+        try:
+            for elements in TimeoutSampler(
+                timeout=timeout, sleep=sleep, func=self.get_elements, locator=locator
+            ):
+                if elements:
+                    return elements
+        except TimeoutExpiredError:
+            logger.warning(f"No elements found for locator {locator} in {timeout}s")
+        return []
 
     def get_local_node_count(self):
         """
@@ -442,10 +471,11 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
             int or None: number of nodes, or None if it cannot be parsed.
         """
         try:
-            text = self.get_element_text(
-                self.external_systems["scale_local_node_count_link"]
+            element = self.wait_for_element_to_be_visible(
+                self.external_systems["scale_local_node_count_link"], timeout=30
             )
-        except TimeoutException:
+            text = element.text
+        except (TimeoutException, NoSuchElementException):
             logger.warning("Local node count link not found on Scale dashboard")
             return None
         # Text is typically e.g. "3 Nodes"; pull the leading integer.
@@ -501,7 +531,7 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
         Returns:
             list: control plane node names present in the modal table.
         """
-        elements = self.get_elements(
+        elements = self._wait_for_scale_elements(
             self.external_systems["control_plane_node_name_links"]
         )
         names = [e.text.strip() for e in elements if e.text.strip()]
@@ -593,6 +623,26 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
             self.get_elements(self.external_systems["wizard_kernel_devel_status"])
         )
 
+    def wait_for_kernel_devel_status(self, timeout=60):
+        """
+        Wait until the modal renders a kernel-devel validation status for the
+        selected node. The status appears asynchronously after a node is
+        selected, so callers must wait for it before reading the specific state
+        (verified vs missing); otherwise "not yet rendered" is misread as
+        "packages missing".
+
+        Args:
+            timeout (int): how long to wait for the status to appear.
+
+        Returns:
+            bool: True if a kernel-devel validation status is shown in time.
+        """
+        return bool(
+            self._wait_for_scale_elements(
+                self.external_systems["wizard_kernel_devel_status"], timeout=timeout
+            )
+        )
+
     # ---------------------------------------------------------------------- TC3
 
     def filesystem_capacity_columns_present(self):
@@ -602,8 +652,12 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
         Returns:
             bool: True only when both column headers are present.
         """
-        used = self.get_elements(self.external_systems["fs_used_capacity_header"])
-        total = self.get_elements(self.external_systems["fs_total_capacity_header"])
+        used = self._wait_for_scale_elements(
+            self.external_systems["fs_used_capacity_header"]
+        )
+        total = self._wait_for_scale_elements(
+            self.external_systems["fs_total_capacity_header"]
+        )
         return bool(used) and bool(total)
 
     def get_filesystem_capacity(self, fs_name):
@@ -618,16 +672,20 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
         """
         capacity = {"used": None, "total": None}
         try:
-            capacity["used"] = self.get_element_text(
-                format_locator(self.external_systems["fs_used_capacity_cell"], fs_name)
-            )
-        except TimeoutException:
+            capacity["used"] = self.wait_for_element_to_be_visible(
+                format_locator(self.external_systems["fs_used_capacity_cell"], fs_name),
+                timeout=30,
+            ).text
+        except (TimeoutException, NoSuchElementException):
             logger.warning(f"Used capacity cell not found for '{fs_name}'")
         try:
-            capacity["total"] = self.get_element_text(
-                format_locator(self.external_systems["fs_total_capacity_cell"], fs_name)
-            )
-        except TimeoutException:
+            capacity["total"] = self.wait_for_element_to_be_visible(
+                format_locator(
+                    self.external_systems["fs_total_capacity_cell"], fs_name
+                ),
+                timeout=30,
+            ).text
+        except (TimeoutException, NoSuchElementException):
             logger.warning(f"Total capacity cell not found for '{fs_name}'")
         return capacity
 
@@ -719,7 +777,7 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
                 "Cannot be removed if file systems exist" subtext is present.
         """
         self.open_dashboard_actions()
-        remove_elements = self.get_elements(
+        remove_elements = self._wait_for_scale_elements(
             self.external_systems["dashboard_remove_action"]
         )
         if not remove_elements:
