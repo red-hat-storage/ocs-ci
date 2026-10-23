@@ -190,6 +190,12 @@ class BaseUI:
         self.vm_loc = self.deep_get(
             locators_for_current_ocp_version(), "virtualmachine"
         )
+        self.configure_performance_loc = self.deep_get(
+            locators_for_current_ocp_version(), "configure_performance"
+        )
+        self.storage_cluster_loc = self.deep_get(
+            locators_for_current_ocp_version(), "storage_cluster"
+        )
         self._locator_fallback = None
 
     @property
