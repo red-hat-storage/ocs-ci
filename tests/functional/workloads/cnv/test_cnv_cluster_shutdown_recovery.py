@@ -37,6 +37,9 @@ class TestVmShutdownStart(E2ETest):
             pytest.param(
                 False,
                 marks=[
+                    pytest.mark.skip(
+                        reason="OCPBUGS-58027: Known limitation in graceful shutdown drain"
+                    ),
                     pytest.mark.polarion_id("OCS-6316"),
                     pytest.mark.jira("OCPBUGS-58027", run=False),
                 ],
