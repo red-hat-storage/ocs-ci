@@ -5,7 +5,11 @@ import time
 from typing import Optional
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.ui.base_ui import BaseUI, SeleniumDriver
+from ocs_ci.ocs.ui.base_ui import (
+    BaseUI,
+    SeleniumDriver,
+    wait_for_element_to_be_clickable,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 
@@ -22,26 +26,18 @@ class ConfigurePerformancePage(BaseUI):
     def is_core_storage_section_present(self) -> bool:
         """Check if Core Storage section is present."""
         logger.info("Checking if Core Storage section is present")
-        try:
-            elements = self.get_elements(
-                self.configure_performance_loc["core_storage_section"]
-            )
-            if len(elements) > 0:
-                return True
-            logger.warning(
-                "Core storage section not found with primary locator, trying fallback"
-            )
-            from selenium.webdriver.common.by import By
-
-            xpath = (
-                "//*[contains(text(), 'Core storage')]"
-                "/ancestor::*[contains(@class, 'panel') or contains(@class, 'form')]"
-            )
-            fallback_elements = self.get_elements((xpath, By.XPATH))
-            return len(fallback_elements) > 0
-        except Exception as e:
-            logger.error("Error checking Core Storage section: %s", e)
-            return False
+        elements = self.get_elements(
+            self.configure_performance_loc["core_storage_section"]
+        )
+        if len(elements) > 0:
+            return True
+        logger.warning(
+            "Core storage section not found with primary locator, trying fallback"
+        )
+        fallback_elements = self.get_elements(
+            self.configure_performance_loc["core_storage_section_fallback"]
+        )
+        return len(fallback_elements) > 0
 
     def is_mcg_section_present(self) -> bool:
         """Check if MCG section is present."""
@@ -50,57 +46,45 @@ class ConfigurePerformancePage(BaseUI):
     def verify_sections_separated(self) -> bool:
         """Verify sections are visually separated."""
         logger.info("Verifying sections are visually separated")
-        try:
-            core_elements = self.get_elements(
-                self.configure_performance_loc["core_storage_section"]
+        core_elements = self.get_elements(
+            self.configure_performance_loc["core_storage_section"]
+        )
+        mcg_elements = self.get_elements(self.configure_performance_loc["mcg_section"])
+        if not core_elements:
+            logger.warning(
+                "Core Storage section not found, trying to verify they exist instead"
             )
-            mcg_elements = self.get_elements(
-                self.configure_performance_loc["mcg_section"]
-            )
-            if not core_elements:
-                logger.warning(
-                    "Core Storage section not found, trying to verify they exist instead"
-                )
-                return (
-                    self.is_core_storage_section_present()
-                    and self.is_mcg_section_present()
-                )
-            if not mcg_elements:
-                logger.warning(
-                    "MCG section not found, trying to verify they exist instead"
-                )
-                return (
-                    self.is_core_storage_section_present()
-                    and self.is_mcg_section_present()
-                )
-
-            core = core_elements[0]
-            mcg = mcg_elements[0]
-
-            # Check if sections are actually different elements
-            if core == mcg:
-                logger.warning(
-                    "Both sections resolved to same element, but both are present"
-                )
-                return True
-
-            # Sections are separated if they have different positions
-            separated = (
-                core.location["y"] != mcg.location["y"]
-                or core.location["x"] != mcg.location["x"]
-            )
-            logger.info(
-                "Sections separated: %s (Core: %s, MCG: %s)",
-                separated,
-                core.location,
-                mcg.location,
-            )
-            return separated
-        except Exception as e:
-            logger.error("Error verifying sections separated: %s", e)
             return (
                 self.is_core_storage_section_present() and self.is_mcg_section_present()
             )
+        if not mcg_elements:
+            logger.warning("MCG section not found, trying to verify they exist instead")
+            return (
+                self.is_core_storage_section_present() and self.is_mcg_section_present()
+            )
+
+        core = core_elements[0]
+        mcg = mcg_elements[0]
+
+        # Check if sections are actually different elements
+        if core == mcg:
+            logger.warning(
+                "Both sections resolved to same element, but both are present"
+            )
+            return True
+
+        # Sections are separated if they have different positions
+        separated = (
+            core.location["y"] != mcg.location["y"]
+            or core.location["x"] != mcg.location["x"]
+        )
+        logger.info(
+            "Sections separated: %s (Core: %s, MCG: %s)",
+            separated,
+            core.location,
+            mcg.location,
+        )
+        return separated
 
     def is_core_storage_inline(self) -> bool:
         """Verify Core Storage displays inline (not modal)."""
@@ -117,15 +101,11 @@ class ConfigurePerformancePage(BaseUI):
     def is_core_storage_select_button_present(self) -> bool:
         """Check if Core Storage 'Select options' button is present and clickable."""
         logger.info("Checking for Core Storage 'Select options' button")
-        try:
-            button_loc = self.configure_performance_loc[
-                "core_storage_select_profile_button"
-            ]
-            buttons = self.get_elements(button_loc)
-            return len(buttons) > 0
-        except Exception as e:
-            logger.error("Core Storage 'Select options' button not found: %s", e)
-            return False
+        button_loc = self.configure_performance_loc[
+            "core_storage_select_profile_button"
+        ]
+        buttons = self.get_elements(button_loc)
+        return len(buttons) > 0
 
     def is_mcg_select_button_present(self) -> bool:
         """Check if the MCG profile dropdown button is present.
@@ -134,13 +114,9 @@ class ConfigurePerformancePage(BaseUI):
         first selection (text "Select a profile") and after it (profile name).
         """
         logger.info("Checking for MCG profile dropdown button")
-        try:
-            button_loc = self.configure_performance_loc["mcg_select_profile_button"]
-            buttons = self.get_elements(button_loc)
-            return len(buttons) > 0
-        except Exception as e:
-            logger.error("MCG profile dropdown button not found: %s", e)
-            return False
+        button_loc = self.configure_performance_loc["mcg_select_profile_button"]
+        buttons = self.get_elements(button_loc)
+        return len(buttons) > 0
 
     def get_core_storage_nodes(self) -> list[dict]:
         """Get nodes from Core Storage section."""
@@ -228,10 +204,7 @@ class ConfigurePerformancePage(BaseUI):
             TimeoutException: if the dropdown button or the profile option is
                 not found, or the selection does not register after 3 attempts.
         """
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
         from selenium.common.exceptions import TimeoutException
-        from selenium.webdriver.common.by import By
 
         logger.info("Selecting MCG profile: %s", profile_name)
 
@@ -248,7 +221,6 @@ class ConfigurePerformancePage(BaseUI):
             self.configure_performance_loc["mcg_profile_menuitem"],
             profile_display.lower(),
         )
-        menuitem_xpath = menuitem_loc[0]
 
         last_button_text = ""
         for attempt in range(1, 4):
@@ -257,9 +229,7 @@ class ConfigurePerformancePage(BaseUI):
             )
             # Open the dropdown.
             try:
-                button = WebDriverWait(SeleniumDriver(), 15).until(
-                    EC.element_to_be_clickable((button_loc[1], button_loc[0]))
-                )
+                button = wait_for_element_to_be_clickable(button_loc, timeout=15)
                 logger.info("Clicking MCG dropdown button")
                 button.click()
                 time.sleep(2)
@@ -268,11 +238,11 @@ class ConfigurePerformancePage(BaseUI):
                 logger.warning(
                     "Primary locator failed on attempt %s, trying fallback", attempt
                 )
-                fallback_xpath = "//button[contains(@class, 'menu-toggle') and contains(@class, 'toggle')]"
+                fallback_loc = self.configure_performance_loc[
+                    "mcg_select_profile_button_fallback"
+                ]
                 try:
-                    button = WebDriverWait(SeleniumDriver(), 15).until(
-                        EC.element_to_be_clickable((By.XPATH, fallback_xpath))
-                    )
+                    button = wait_for_element_to_be_clickable(fallback_loc, timeout=15)
                     logger.info("Found MCG button with fallback locator")
                     button.click()
                     time.sleep(2)
@@ -288,8 +258,8 @@ class ConfigurePerformancePage(BaseUI):
             registered = False
             for click_kind in ("native", "js"):
                 try:
-                    menuitem = WebDriverWait(SeleniumDriver(), 15).until(
-                        EC.element_to_be_clickable((By.XPATH, menuitem_xpath))
+                    menuitem = wait_for_element_to_be_clickable(
+                        menuitem_loc, timeout=15
                     )
                     if click_kind == "native":
                         logger.info(
@@ -301,7 +271,7 @@ class ConfigurePerformancePage(BaseUI):
                             "Clicking MCG profile menuitem: %s (JS click)",
                             profile_name,
                         )
-                        self.click_with_script((menuitem_xpath, By.XPATH))
+                        self.click_with_script(menuitem_loc)
                 except TimeoutException:
                     logger.error(
                         "MCG profile option '%s' did not appear on attempt %s",
@@ -357,30 +327,25 @@ class ConfigurePerformancePage(BaseUI):
 
     def select_core_storage_profile(self, profile_name: str):
         """Select Core Storage profile from menu."""
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-        from selenium.common.exceptions import TimeoutException
-        from selenium.webdriver.common.by import By
-
         logger.info("Selecting Core Storage profile: %s", profile_name)
 
         button_loc = self.configure_performance_loc[
             "core_storage_select_profile_button"
         ]
         logger.info("Waiting for Core Storage dropdown button to be clickable")
+        from selenium.common.exceptions import TimeoutException
+
         try:
-            button = WebDriverWait(SeleniumDriver(), 15).until(
-                EC.element_to_be_clickable((button_loc[1], button_loc[0]))
-            )
+            button = wait_for_element_to_be_clickable(button_loc, timeout=15)
             logger.info("Clicking Core Storage dropdown button")
             button.click()
         except TimeoutException:
             logger.warning("Primary locator failed, trying fallback")
-            fallback_xpath = "//h2[contains(text(), 'Core storage')]/following::button[contains(@class, 'toggle')]"
+            fallback_loc = self.configure_performance_loc[
+                "core_storage_select_profile_button_fallback"
+            ]
             try:
-                button = WebDriverWait(SeleniumDriver(), 10).until(
-                    EC.element_to_be_clickable((By.XPATH, fallback_xpath))
-                )
+                button = wait_for_element_to_be_clickable(fallback_loc, timeout=10)
                 logger.info("Found Core Storage button with fallback locator")
                 button.click()
             except TimeoutException as e:
@@ -394,14 +359,13 @@ class ConfigurePerformancePage(BaseUI):
             "core_storage_profile_option"
         ]
         profile_xpath = profile_option_loc[0].format(profile_name)
+        profile_locator = (profile_xpath, profile_option_loc[1])
         logger.info(
             "Waiting for Core Storage profile option '%s' to be clickable", profile_name
         )
 
         try:
-            option = WebDriverWait(SeleniumDriver(), 15).until(
-                EC.element_to_be_clickable((profile_option_loc[1], profile_xpath))
-            )
+            option = wait_for_element_to_be_clickable(profile_locator, timeout=15)
             logger.info("Clicking Core Storage profile option: %s", profile_name)
             option.click()
         except TimeoutException as e:
@@ -418,10 +382,6 @@ class ConfigurePerformancePage(BaseUI):
 
     def save_configuration(self):
         """Save configuration and wait for page navigation to storage cluster."""
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-        from selenium.common.exceptions import TimeoutException
-
         logger.info("Saving configuration")
         save_button = self.configure_performance_loc["save_button"]
 
@@ -429,12 +389,12 @@ class ConfigurePerformancePage(BaseUI):
         # enablement catch up with the profile selection.
         self.page_has_loaded(retries=3, sleep_time=2)
 
+        from selenium.common.exceptions import TimeoutException
+
         save_btn = None
         for attempt in range(1, 4):
             try:
-                save_btn = WebDriverWait(SeleniumDriver(), 10).until(
-                    EC.element_to_be_clickable((save_button[1], save_button[0]))
-                )
+                save_btn = wait_for_element_to_be_clickable(save_button, timeout=10)
                 logger.info("Save button is enabled, clicking it")
                 break
             except TimeoutException:
@@ -457,6 +417,9 @@ class ConfigurePerformancePage(BaseUI):
         original_url = SeleniumDriver().current_url
         save_btn.click()
         logger.info("Clicked Save button, waiting for page navigation")
+
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
 
         try:
             WebDriverWait(SeleniumDriver(), 15).until(EC.url_changes(original_url))
