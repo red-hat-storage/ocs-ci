@@ -247,12 +247,16 @@ class TestFullClusterHealth(PASTest):
         # TimeoutSampler requires timeout > sleep; when the caller passes 0
         # (single immediate check, no retries) fall back to a direct call.
         if ceph_recovery_timeout == 0:
+            self.ceph_cluster.toolbox = pod.get_ceph_tools_pod()
             status = self.ceph_cluster.get_ceph_health()
             logger.info(f"Ceph health (single check): {status}")
             return "HEALTH_OK" in status or "HEALTH_WARN" in status
 
         def _check():
             try:
+                # The ceph tools pod may have been recreated on another node
+                # (e.g. after a node reboot), so don't reuse the cached pod
+                self.ceph_cluster.toolbox = pod.get_ceph_tools_pod()
                 status = self.ceph_cluster.get_ceph_health()
                 logger.info(f"Ceph health: {status}")
                 if "HEALTH_OK" in status or "HEALTH_WARN" in status:
