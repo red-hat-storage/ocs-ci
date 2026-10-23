@@ -1,10 +1,11 @@
 import time
 
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ui.base_ui import logger, wait_for_element_to_be_clickable
 from ocs_ci.ocs.ui.helpers_ui import format_locator
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     DataFoundationDefaultTab,
@@ -390,3 +391,384 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
         if not is_default:
             logger.warning("Block and File tab is not active")
         return is_default
+
+    # --- RHSTOR-8585 Scale Dashboard enhancements --------------------------
+
+    def _wait_for_scale_elements(self, locator, timeout=60, sleep=3):
+        """
+        Poll until elements matching the locator are present, tolerating absence.
+
+        Scale dashboard and modal content renders asynchronously, so reading it
+        immediately after navigation/click is racy. This polls ``get_elements``
+        (which does not wait) instead of ``wait_for_element_to_be_visible`` so the
+        AI locator fallback is not triggered for checks that may legitimately find
+        nothing.
+
+        Args:
+            locator (tuple): (selector, By) to look for.
+            timeout (int): how long to poll before giving up.
+            sleep (int): seconds between polls.
+
+        Returns:
+            list: matching web elements, or an empty list if none appear in time.
+        """
+        try:
+            for elements in TimeoutSampler(
+                timeout=timeout, sleep=sleep, func=self.get_elements, locator=locator
+            ):
+                if elements:
+                    logger.info(
+                        f"Found {len(elements)} element(s) for locator {locator}"
+                    )
+                    return elements
+        except TimeoutExpiredError:
+            logger.warning(f"No elements found for locator {locator} in {timeout}s")
+        return []
+
+    def get_local_node_count(self):
+        """
+        Read the node count shown on the local StorageCluster card.
+
+        Returns:
+            int or None: number of nodes, or None if it cannot be parsed.
+        """
+        try:
+            element = self.wait_for_element_to_be_visible(
+                self.external_systems["scale_local_node_count_link"], timeout=30
+            )
+            text = element.text
+        except (TimeoutException, NoSuchElementException):
+            logger.warning("Local node count link not found on Scale dashboard")
+            return None
+        for token in text.split():
+            if token.isdigit():
+                return int(token)
+        logger.warning(f"Could not parse node count from '{text}'")
+        return None
+
+    def open_add_nodes_modal(self, timeout=30):
+        """
+        Open the "Add nodes to local cluster" modal via the node-count edit pencil.
+
+        Args:
+            timeout (int): wait for the modal to become visible.
+
+        Returns:
+            bool: True if the modal opened, False otherwise.
+        """
+        if self.get_elements(self.external_systems["add_nodes_modal_title"]):
+            return True
+        logger.info("Opening 'Add nodes to local cluster' modal")
+        self.do_click(self.external_systems["scale_node_count_edit_pencil"])
+        try:
+            self.wait_for_element_to_be_visible(
+                self.external_systems["add_nodes_modal_title"], timeout=timeout
+            )
+            return True
+        except TimeoutException:
+            logger.warning("'Add nodes to local cluster' modal did not open")
+            return False
+
+    def enable_control_plane_nodes(self):
+        """
+        Tick "Include control plane nodes" so master node rows appear in the
+        "Add nodes to local cluster" modal (TC5).
+        """
+        logger.info("Enabling 'Include control plane nodes'")
+        self.select_checkbox_status(
+            True, self.external_systems["include_control_plane_checkbox"]
+        )
+
+    def get_control_plane_node_names(self):
+        """
+        Read the control plane (master) node names listed in the "Add nodes to
+        local cluster" modal.
+
+        "Include control plane nodes" must be enabled first so the master rows
+        are rendered. Worker rows are already part of the local cluster (their
+        checkboxes are disabled), so only the control plane rows are returned.
+
+        Returns:
+            list: control plane node names present in the modal table.
+        """
+        elements = self._wait_for_scale_elements(
+            self.external_systems["control_plane_node_name_links"]
+        )
+        names = [e.text.strip() for e in elements if e.text.strip()]
+        logger.info(f"Control plane nodes available to add: {names}")
+        return names
+
+    def is_node_selectable(self, node_name):
+        """
+        Whether the node's row checkbox is enabled in the "Add nodes to local
+        cluster" modal. A node already part of the local cluster has a disabled
+        checkbox, so this distinguishes an addable node from one already added.
+
+        Args:
+            node_name (str): node name identifying the row.
+
+        Returns:
+            bool: True if the row checkbox exists and is enabled (node not yet
+                part of the local cluster).
+        """
+        elements = self.get_elements(
+            format_locator(self.external_systems["node_row_checkbox"], node_name)
+        )
+        return bool(elements) and elements[0].is_enabled()
+
+    def select_node(self, node_name, select=True):
+        """
+        Select or deselect a node row checkbox by node name (idempotent).
+
+        Control plane node rows are unchecked by default once "Include control
+        plane nodes" is enabled, so a master node must be explicitly selected
+        before it can be added. Using the checkbox status (rather than a raw
+        click) makes this safe to call again after re-opening the modal without
+        accidentally toggling the row off.
+
+        Args:
+            node_name (str): node name identifying the row.
+            select (bool): True to select the row, False to deselect.
+        """
+        logger.info(f"{'Selecting' if select else 'Deselecting'} node '{node_name}'")
+        self.select_checkbox_status(
+            select,
+            format_locator(self.external_systems["node_row_checkbox"], node_name),
+        )
+
+    def add_nodes_to_local_cluster(
+        self, node_names=None, include_control_plane=False, timeout=60
+    ):
+        """
+        Add nodes to the local cluster (TC1 for worker nodes, TC5 for control
+        plane nodes).
+
+        Args:
+            node_names (list): node names to select; when None the console's
+                default row selection is left untouched.
+            include_control_plane (bool): tick "Include control plane nodes"
+                before selecting rows (TC5).
+            timeout (int): wait for the modal to open.
+
+        Returns:
+            bool: True if the Add button was clicked, False if the modal never
+                opened.
+        """
+        if not self.open_add_nodes_modal(timeout=timeout):
+            return False
+
+        if include_control_plane:
+            self.enable_control_plane_nodes()
+
+        for node in node_names or []:
+            self.select_node(node)
+
+        logger.info("Clicking Add to confirm node selection")
+        self.do_click(
+            self.external_systems["add_nodes_add_button"], enable_screenshot=True
+        )
+        return True
+
+    def cancel_add_nodes_modal(self):
+        """Dismiss the "Add nodes to local cluster" modal without saving."""
+        if self.get_elements(self.external_systems["add_nodes_cancel_button"]):
+            self.do_click(self.external_systems["add_nodes_cancel_button"])
+
+    def is_kernel_devel_verified(self):
+        """
+        Whether the "Add nodes to local cluster" modal reports the kernel-devel
+        packages as verified for the selected node (used by TC5 to decide whether
+        the master MCO still needs to be applied).
+
+        Returns:
+            bool: True if the verified message is present.
+        """
+        return bool(
+            self.get_elements(self.external_systems["wizard_kernel_devel_verified"])
+        )
+
+    def is_kernel_devel_status_shown(self):
+        """
+        Whether the "Add nodes to local cluster" modal shows a kernel-devel
+        validation status for the target nodes (either the verified state or a
+        missing/warning hint). Its presence proves the UI validated kernel-devel
+        packages on the selected nodes.
+
+        Returns:
+            bool: True if any kernel-devel validation status is present.
+        """
+        return bool(
+            self.get_elements(self.external_systems["wizard_kernel_devel_status"])
+        )
+
+    def wait_for_kernel_devel_status(self, timeout=60):
+        """
+        Wait until the modal renders a kernel-devel validation status for the
+        selected node. The status appears asynchronously after a node is
+        selected, so callers must wait for it before reading the specific state
+        (verified vs missing); otherwise "not yet rendered" is misread as
+        "packages missing".
+
+        Args:
+            timeout (int): how long to wait for the status to appear.
+
+        Returns:
+            bool: True if a kernel-devel validation status is shown in time.
+        """
+        return bool(
+            self._wait_for_scale_elements(
+                self.external_systems["wizard_kernel_devel_status"], timeout=timeout
+            )
+        )
+
+    # ---------------------------------------------------------------------- TC3
+
+    def filesystem_capacity_columns_present(self):
+        """
+        Whether the file systems table exposes the Used/Total capacity columns.
+
+        Returns:
+            bool: True only when both column headers are present.
+        """
+        used = self._wait_for_scale_elements(
+            self.external_systems["fs_used_capacity_header"]
+        )
+        total = self._wait_for_scale_elements(
+            self.external_systems["fs_total_capacity_header"]
+        )
+        return bool(used) and bool(total)
+
+    def get_filesystem_capacity(self, fs_name):
+        """
+        Read the Used/Total capacity cells for a given filesystem row (TC3).
+
+        Args:
+            fs_name (str): filesystem name identifying the row.
+
+        Returns:
+            dict: {"used": str or None, "total": str or None}
+        """
+        capacity = {"used": None, "total": None}
+        try:
+            capacity["used"] = self.wait_for_element_to_be_visible(
+                format_locator(self.external_systems["fs_used_capacity_cell"], fs_name),
+                timeout=30,
+            ).text
+        except (TimeoutException, NoSuchElementException):
+            logger.warning(f"Used capacity cell not found for '{fs_name}'")
+        try:
+            capacity["total"] = self.wait_for_element_to_be_visible(
+                format_locator(
+                    self.external_systems["fs_total_capacity_cell"], fs_name
+                ),
+                timeout=30,
+            ).text
+        except (TimeoutException, NoSuchElementException):
+            logger.warning(f"Total capacity cell not found for '{fs_name}'")
+        return capacity
+
+    # ---------------------------------------------------------------------- TC4
+
+    def open_encryption_modal(self, timeout=30):
+        """
+        Open the "Enable data encryption" modal via the encryption edit pencil.
+
+        Args:
+            timeout (int): wait for the modal to become visible.
+
+        Returns:
+            bool: True if the modal opened, False otherwise.
+        """
+        logger.info("Opening 'Enable data encryption' modal")
+        self.do_click(self.external_systems["scale_encryption_edit_pencil"])
+        try:
+            self.wait_for_element_to_be_visible(
+                self.external_systems["encryption_modal_title"], timeout=timeout
+            )
+            return True
+        except TimeoutException:
+            logger.warning("'Enable data encryption' modal did not open")
+            return False
+
+    def enable_data_encryption(self, kms_params, timeout=30):
+        """
+        Enable data encryption backed by an external KMS (TC4).
+
+        Args:
+            kms_params (dict): any subset of the following KMS connection fields
+                is filled if present: ``username``, ``password``, ``port``,
+                ``client``, ``remote_rkm``, ``server_info``, ``tenant_id``,
+                ``ca_cert`` (absolute path to a certificate file to upload).
+            timeout (int): wait for the modal to open.
+
+        Returns:
+            bool: True if Save was clicked, False if the modal never opened.
+        """
+        if not self.open_encryption_modal(timeout=timeout):
+            return False
+
+        logger.info("Enabling the 'Enable data encryption' checkbox")
+        self.select_checkbox_status(
+            True, self.external_systems["enable_encryption_checkbox"]
+        )
+
+        field_locators = {
+            "username": "enc_username",
+            "password": "enc_password",
+            "port": "enc_port",
+            "client": "enc_client",
+            "remote_rkm": "enc_remote_rkm",
+            "server_info": "enc_server_info",
+            "tenant_id": "enc_tenant_id",
+        }
+        for key, locator_key in field_locators.items():
+            value = kms_params.get(key)
+            if value is not None:
+                logger.info(f"Filling encryption field '{key}'")
+                self.do_send_keys(self.external_systems[locator_key], str(value))
+
+        ca_cert = kms_params.get("ca_cert")
+        if ca_cert:
+            logger.info(f"Uploading CA certificate from '{ca_cert}'")
+            self.do_send_keys(self.external_systems["enc_ca_cert_browse"], ca_cert)
+
+        logger.info("Clicking Save to enable data encryption")
+        self.do_click(
+            self.external_systems["encryption_save_button"], enable_screenshot=True
+        )
+        return True
+
+    # ---------------------------------------------------------------------- TC6
+
+    def open_dashboard_actions(self):
+        """Open the Scale Dashboard Actions dropdown (TC6)."""
+        logger.info("Opening Scale dashboard Actions dropdown")
+        self.do_click(self.external_systems["scale_dashboard_actions_button"])
+
+    def is_remove_action_disabled(self):
+        """
+        Whether the Remove/offboard action is disabled because filesystems still
+        exist, and the explanatory subtext is shown (TC6).
+
+        Returns:
+            bool: True when the Remove action is disabled and the
+                "Cannot be removed if file systems exist" subtext is present.
+        """
+        self.open_dashboard_actions()
+        remove_elements = self._wait_for_scale_elements(
+            self.external_systems["dashboard_remove_action"]
+        )
+        if not remove_elements:
+            logger.warning("Remove action not found in Actions dropdown")
+            return False
+
+        remove = remove_elements[0]
+        disabled = (
+            not remove.is_enabled()
+            or remove.get_attribute("aria-disabled") == "true"
+            or remove.get_attribute("disabled") is not None
+        )
+        subtext_present = bool(
+            self.get_elements(self.external_systems["remove_disabled_subtext"])
+        )
+        return disabled and subtext_present
