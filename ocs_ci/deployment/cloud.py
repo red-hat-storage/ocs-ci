@@ -21,6 +21,7 @@ from ocs_ci.utility.ibmcloud import (
     set_target_region,
     configure_ingress_load_balancer_security_group,
 )
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     get_cluster_name,
     get_infra_id,
@@ -30,6 +31,17 @@ from ocs_ci.utility.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Transient errors raised by the cloud provider API during
+# `openshift-install create cluster`. Re-running the installer resumes the
+# deployment, so these are safe to retry.
+INSTALLER_CREATE_CLUSTER_RETRY_ERRORS = (
+    "Gateway Timeout",
+    "Service Unavailable",
+    "Too Many Requests",
+)
+INSTALLER_CREATE_CLUSTER_RETRY_TRIES = 5
+INSTALLER_CREATE_CLUSTER_RETRY_DELAY = 60
 
 
 class CloudDeploymentBase(Deployment):
@@ -118,7 +130,15 @@ class IPIOCPDeployment(BaseOCPDeployment):
             f"and {install_timeout} second timeout"
         )
         try:
-            run_cmd(
+            # Retry the installer on transient cloud provider API errors
+            # (e.g. "Gateway Timeout"); re-running resumes the deployment.
+            retry(
+                exceptions.CommandFailed,
+                tries=INSTALLER_CREATE_CLUSTER_RETRY_TRIES,
+                delay=INSTALLER_CREATE_CLUSTER_RETRY_DELAY,
+                backoff=1,
+                text_in_exception=INSTALLER_CREATE_CLUSTER_RETRY_ERRORS,
+            )(run_cmd)(
                 f"{self.installer} create cluster "
                 f"--dir {self.cluster_path} "
                 f"--log-level {log_cli_level}",
