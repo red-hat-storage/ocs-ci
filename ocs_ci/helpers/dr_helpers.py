@@ -29,6 +29,9 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     UnexpectedDeploymentConfiguration,
     ResourceWrongStatusException,
+    CephHealthException,
+    CephHealthNotRecoveredException,
+    CephHealthRecoveredException,
 )
 from ocs_ci.ocs.managedservice import get_provider_service_type
 from ocs_ci.ocs.ocp import OCP
@@ -4907,5 +4910,61 @@ def configure_submariner_lighthouse_import_namespace_deny_list():
                 "--dry-run=client -o yaml | oc apply -f -",
                 shell=True,
             )
+    finally:
+        config.switch_ctx(restore_index)
+
+
+def run_rdr_cluster_health_check():
+    """
+    Verify cluster health on both managed clusters for an RDR setup.
+
+    Runs the ODF CLI DR cluster validation, then on each managed cluster checks
+    Ceph health and the rbd-mirror daemon status, and finally verifies the
+    overall mirroring health across the managed clusters.
+
+    This is the shared implementation used by both the regional-dr
+    ``rdr_health_check`` autouse fixture and the upgrade-pipeline health check.
+    Callers are responsible for any gating (RDR mode, dev_mode, markers) before
+    invoking this helper.
+
+    The function calls ``pytest.skip`` when a health check does not pass so the
+    requesting test is skipped rather than failing hard.
+
+    """
+    validate_cluster_odf_cli()
+
+    restore_index = config.cur_index
+    try:
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            if not config.RUN.get("cephcluster"):
+                continue
+            cluster_name = config.ENV_DATA.get("cluster_name")
+            logger.info(f"Running RDR health check on managed cluster: {cluster_name}")
+            try:
+                helpers.ceph_health_check_with_toolbox_recovery(
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    tries=5,
+                    delay=10,
+                )
+                logger.info(f"Ceph health check passed on {cluster_name}")
+            except (CephHealthException, CephHealthNotRecoveredException) as e:
+                logger.error(f"Ceph health check failed on {cluster_name}: {e}")
+                pytest.skip(f"Ceph health check failed on {cluster_name}")
+            except CephHealthRecoveredException:
+                logger.warning(
+                    f"Ceph health was not OK but recovered on {cluster_name}. "
+                    "Proceeding with test execution."
+                )
+            try:
+                check_rbd_mirror_running()
+            except UnexpectedDeploymentConfiguration as e:
+                logger.error(f"rbd-mirror daemon check failed on {cluster_name}: {e}")
+                pytest.skip(f"rbd-mirror daemon check failed on {cluster_name}")
+        try:
+            wait_for_mirroring_status_ok(timeout=120)
+        except TimeoutExpiredError:
+            logger.error("Mirroring health is not OK on managed clusters")
+            pytest.skip("Mirroring health is not OK on managed clusters")
     finally:
         config.switch_ctx(restore_index)
