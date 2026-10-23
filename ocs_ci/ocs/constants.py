@@ -442,6 +442,10 @@ HCP_REGISTRY = "quay.io/hypershift/hypershift-operator"
 HCP_REPOSITORY = "https://github.com/openshift/hypershift.git"
 CONTROL_PLANE_AVAILABILITY_POLICY_HA = "HighlyAvailable"
 CONTROL_PLANE_AVAILABILITY_POLICY_SINGLE = "SingleReplica"
+HOSTED_CLUSTERS = "hostedclusters"
+HOSTED_CLUSTERS_CRD_NAME = "hostedclusters.hypershift.openshift.io"
+CLUSTERS_NAMESPACE = "clusters"
+NON_HOSTED_CLUSTER = "non_hosted"
 CONTROL_PLANE_AVAILABILITY_POLICIES = [
     CONTROL_PLANE_AVAILABILITY_POLICY_SINGLE,
     CONTROL_PLANE_AVAILABILITY_POLICY_HA,
@@ -1443,7 +1447,6 @@ ROSA_HCP_ROKS_ICSP_SVC_YAML = os.path.join(
 ROSA_HCP_ROKS_ICSP_MC_CRD_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "rosa-hcp-roks-icsp-machineconfig-crd.yaml"
 )
->>>>>>> 0a48fd607 (Adding support to BM deployment on IBM Cloud VPC BM for this added new lb and dns creation/deletion capablility for AI deployment)
 HCI_BAREMETAL = "hci_baremetal"
 HCI_VSPHERE = "hci_vsphere"
 ACM_OCP_DEPLOYMENT = "acm_ocp_deployment"
