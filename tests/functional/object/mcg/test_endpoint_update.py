@@ -111,9 +111,11 @@ PAUSE_LOG_INTERVAL = 10
 PAUSE_RESUME_SETTLE = 20
 
 # (ULS platform key, cloud-manager client attr, Service name, signature version).
+# v2 on both: core's v4 client addresses a dotted bucket virtual-hosted style,
+# which is not a valid URL on a plain-http IP endpoint ("Invalid URL").
 _DERIVABLE_SERVICES = (
     ("rgw", "rgw_client", constants.RGW_SERVICE_INTERNAL_MODE, "v2"),
-    ("self-ref-mcg", "self_ref_mcg_client", "s3", "v4"),
+    ("self-ref-mcg", "self_ref_mcg_client", "s3", "v2"),
 )
 
 # Plain http keeps pre-validation path-style; DNS and https both fail it.
