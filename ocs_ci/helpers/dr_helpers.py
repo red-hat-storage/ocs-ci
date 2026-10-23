@@ -819,7 +819,7 @@ def is_cg_enabled():
 
     """
     # CG is applicable for Regional-DR mode only
-    if config.MULTICLUSTER["multicluster_mode"] != constants.RDR_MODE:
+    if config.MULTICLUSTER["multicluster_mode"] not in constants.RDR_MODES:
         return False
 
     ocs_version = version.get_semantic_ocs_version_from_config()
@@ -3213,7 +3213,7 @@ def get_cluster_set_name(switch_ctx=None):
     managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
     multicluster_mode = config.MULTICLUSTER.get("multicluster_mode")
     for cluster_name in config.clusters:
-        if multicluster_mode == constants.RDR_MODE:
+        if multicluster_mode in constants.RDR_MODES:
             current_managed_clusters_list.append(
                 cluster_name.ENV_DATA.get("cluster_name")
             )
