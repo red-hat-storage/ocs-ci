@@ -4,7 +4,12 @@ import time
 
 from ocs_ci.framework import config
 from ocs_ci.utility import templating, utils
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import (
+    ResourceNotFoundError,
+    ResourceWrongStatusException,
+    TimeoutExpiredError,
+    UnexpectedBehaviour,
+)
 from datetime import datetime
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
@@ -22,9 +27,11 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     skipif_ocs_version,
     skipif_hci_provider_and_client,
+    skipif_mcg_only,
     brown_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.scc_helpers import get_scc_pinning_errors
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +41,13 @@ class TestSCC:
     @tier2
     @polarion_id("OCS-4483")
     @skipif_hci_provider_and_client
+    @skipif_ocs_version("<4.23")
+    @skipif_mcg_only
     def test_custom_scc_with_pod_respin(self, scc_factory):
         """
-        Test if OCS deployments/pods get affected if custom scc is created
+        Verify pod recovery when another SCC becomes available.
+
+        Verify that replacement pods request and use their expected SCC.
         """
         scc_dict = {
             "allowPrivilegedContainer": True,
@@ -57,38 +68,80 @@ class TestSCC:
             ],
         }
 
-        # Add new scc to system:authenticated
-        OCP().exec_oc_cmd(
+        components = {
+            helpers.get_provisioner_label(
+                constants.CEPHBLOCKPOOL
+            ): constants.SCC_CEPH_CSI_OP,
+            helpers.get_provisioner_label(
+                constants.CEPHFILESYSTEM
+            ): constants.SCC_CEPH_CSI_OP,
+        }
+        if not config.ENV_DATA.get("noobaa_external_pgsql"):
+            components[constants.NOOBAA_DB_LABEL_419_AND_ABOVE] = (
+                constants.SCC_RESTRICTED_V2
+            )
+
+        namespace = config.ENV_DATA["cluster_namespace"]
+        pods_by_label = {}
+        errors = []
+        for label, expected_scc in components.items():
+            pods = get_pods_having_label(label=label, namespace=namespace)
+            if not pods:
+                raise ResourceNotFoundError(
+                    f"No pods found for required component '{label}'"
+                )
+            for pod_data in pods:
+                errors.extend(get_scc_pinning_errors(pod_data, label, expected_scc))
+            pods_by_label[label] = pods
+        if errors:
+            raise UnexpectedBehaviour("Invalid SCC baseline:\n" + "\n".join(errors))
+
+        # Add new scc to system:authenticated after checking the baseline.
+        ocp_obj = OCP()
+        ocp_obj.exec_oc_cmd(
             command=f"adm policy add-scc-to-group {scc_factory(scc_dict=scc_dict).name} system:authenticated"
         )
+        for pods in pods_by_label.values():
+            for pod_data in pods:
+                pod_obj = Pod(**pod_data)
+                pod_obj.delete()
 
-        # Delete csi-provisioner and noobaa db pods
-        labels = [
-            constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-            helpers.get_provisioner_label(constants.CEPHBLOCKPOOL),
-            helpers.get_provisioner_label(constants.CEPHFILESYSTEM),
-        ]
-        pods = list()
-        for label in labels:
-            pods.extend(
-                get_pods_having_label(
-                    label=label, namespace=config.ENV_DATA["cluster_namespace"]
-                )
-            )
-        pods = [Pod(**pod) for pod in pods]
-        for pod in pods:
-            pod.delete()
+        for label, original_pods in pods_by_label.items():
+            original_uids = {pod["metadata"]["uid"] for pod in original_pods}
+            for pods in utils.TimeoutSampler(
+                timeout=600,
+                sleep=10,
+                func=get_pods_having_label,
+                label=label,
+                namespace=namespace,
+            ):
+                pods = [
+                    pod for pod in pods if not pod["metadata"].get("deletionTimestamp")
+                ]
+                if len(pods) < len(original_pods) or any(
+                    pod["metadata"]["uid"] in original_uids for pod in pods
+                ):
+                    continue
+                if not wait_for_pods_to_be_running(
+                    namespace=namespace,
+                    pod_names=[pod["metadata"]["name"] for pod in pods],
+                    raise_pod_not_found_error=True,
+                ):
+                    raise ResourceWrongStatusException(
+                        label, expected="Running replacement pods"
+                    )
+                for pod_data in pods:
+                    errors.extend(
+                        get_scc_pinning_errors(pod_data, label, components[label])
+                    )
+                break
+        logger.info("Replacement pods reached Running state")
 
-        # wait for the pods to reconcile
-        wait_for_pods_to_be_running(pod_names=[pod.name for pod in pods])
-        logger.info("Pods reconciled successfully without any issues!!")
-
-        # cluster sanity health check
-        try:
-            Sanity().health_check()
-        except Exception as ex:
-            logger.error("Failed at cluster health check!!")
-            raise ex
+        if errors:
+            logger.error("SCC pinning failed:\n%s", "\n".join(errors))
+        sanity = Sanity()
+        sanity.health_check()
+        assert not errors, "SCC pinning failed:\n" + "\n".join(errors)
 
     @pytest.fixture()
     def setup(
