@@ -1,0 +1,6 @@
+---
+# Raises the log level of the "Executing command" message emitted by
+# ocs_ci.utility.utils.exec_cmd from the default DEBUG to INFO.
+# Usage: run-ci --ocsci-conf conf/ocsci/cmd_log_level_info.yaml --cluster-path <path> tests/
+RUN:
+  cmd_log_level: "INFO"
