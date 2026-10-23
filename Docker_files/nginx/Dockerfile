@@ -4,7 +4,7 @@ FROM --platform=$BUILDPLATFORM nginx:alpine
 RUN apk update
 RUN apk upgrade
 RUN apk add fio bash
-RUN apk add --no-cache util-linux
+RUN apk add --no-cache util-linux coreutils
 
 
 # Build and Push the multi-architecture Docker image using Docker Buildx:
