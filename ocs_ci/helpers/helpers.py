@@ -3033,42 +3033,50 @@ def get_failure_domin():
                     return steps.get("type")
 
 
-def wait_for_ct_pod_recovery():
+def wait_for_ct_pod_recovery(timeout=900, sleep=10):
     """
     In case the of node failures scenarios, in which the selected node is
-    running the ceph tools pod, we'll want to wait for the pod recovery
+    running the ceph tools pod, we'll want to wait for the pod recovery.
+    The ceph tools pod is looked up again on every iteration, since the old
+    pod may still be reported as Running while its node is NotReady, until
+    the new pod is created on another node.
+
+    Args:
+        timeout (int): Max time in seconds to wait for the pod recovery
+        sleep (int): Time in seconds to wait between the attempts
 
     Returns:
         bool: True in case the ceph tools pod was recovered, False otherwise
 
     """
-    try:
-        _ = get_admin_key()
-    except (CommandFailed, AssertionError) as ex:
-        error_msg = str(ex)
-        logger.info(error_msg)
-        if (
-            "connection timed out" in error_msg
-            or "No running Ceph tools pod found" in error_msg
-        ):
+    recoverable_errors = [
+        "connection timed out",
+        "i/o timeout",
+        "unable to upgrade connection",
+        "No running Ceph tools pod found",
+    ]
+    end_time = time.time() + timeout
+
+    while time.time() < end_time:
+        try:
+            get_admin_key()
+            return True
+        except NoRunningCephToolBoxException as ex:
+            logger.info(f"No running Ceph tools pod yet: {ex}")
+        except (CommandFailed, AssertionError) as ex:
+            error_msg = str(ex)
+            logger.info(error_msg)
+            is_recoverable = any(err in error_msg for err in recoverable_errors)
+            if not is_recoverable:
+                return False
             logger.info(
                 "Ceph tools box was running on the node that had a failure. "
                 "Hence, waiting for a new Ceph tools box pod to spin up"
             )
-            pod_obj = ocp.OCP(
-                kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-            )
-            pod_obj.wait_for_resource(
-                condition=constants.STATUS_RUNNING,
-                selector=constants.TOOL_APP_LABEL,
-                resource_count=1,
-                timeout=120,
-                sleep=10,
-            )
-            return True
-        else:
-            return False
-    return True
+        time.sleep(sleep)
+
+    logger.error(f"Ceph tools pod was not recovered after {timeout} seconds")
+    return False
 
 
 def ceph_health_check_with_toolbox_recovery(
