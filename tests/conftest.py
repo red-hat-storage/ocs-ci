@@ -1416,7 +1416,9 @@ def storageclass_factory_fixture(
 
     def finalizer():
         """
-        Delete the storageclass by deregistering from StorageConsumer first
+        Delete the storageclass by deregistering from StorageConsumer first.
+        Strips StorageClient ownerReferences so the Kubernetes garbage
+        collector does not block deletion.
         Removes any CephFS additional data pools if available.
         """
         from ocs_ci.ocs.resources.storage_cluster import (
@@ -1426,6 +1428,44 @@ def storageclass_factory_fixture(
         teardown_errors = []
         for instance in instances:
             try:
+                # Strip StorageClient ownerReferences so the SC can be
+                # deleted without the garbage collector intervening.
+                # The SC may already have been deleted by the test itself,
+                # so tolerate NotFound from the GET call.
+                try:
+                    sc_data = instance.ocp.get(resource_name=instance.name)
+                except CommandFailed as e:
+                    if "NotFound" in str(e):
+                        log.debug(
+                            f"StorageClass {instance.name} already "
+                            "deleted; skipping ownerRef strip"
+                        )
+                        sc_data = None
+                    else:
+                        raise
+                if sc_data is not None:
+                    owner_refs = sc_data.get("metadata", {}).get("ownerReferences", [])
+                    non_sc_refs = [
+                        ref
+                        for ref in owner_refs
+                        if ref.get("kind") != constants.STORAGECLIENT
+                    ]
+                    if len(non_sc_refs) != len(owner_refs):
+                        patch_data = (
+                            '[{"op": "replace", "path": '
+                            '"/metadata/ownerReferences", "value": '
+                            f"{json.dumps(non_sc_refs)}" + "}"
+                            "]"
+                        )
+                        instance.ocp.patch(
+                            resource_name=instance.name,
+                            params=patch_data,
+                            format_type="json",
+                        )
+                        log.info(
+                            "Stripped StorageClient ownerReferences "
+                            f"from StorageClass {instance.name}"
+                        )
                 delete_storageclass_and_deregister(
                     sc_name=instance.name,
                     sc_ocp=instance.ocp,

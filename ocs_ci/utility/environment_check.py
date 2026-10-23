@@ -13,6 +13,63 @@ from ocs_ci.ocs import ocp, defaults, constants, exceptions
 log = logging.getLogger(__name__)
 
 
+def _pv_or_pvc_storage_provisioner(item):
+    """
+    Extract the CSI driver / provisioner string from a PV or PVC resource.
+
+    For PVs the provisioner is stored in the CSI driver field
+    (``spec.csi.driver``) or, for legacy in-tree volumes, in the
+    ``pv.kubernetes.io/provisioned-by`` annotation.
+
+    For PVCs the provisioner is taken from the
+    ``volume.kubernetes.io/storage-provisioner`` or the legacy
+    ``volume.beta.kubernetes.io/storage-provisioner`` annotation.
+
+    Args:
+        item (dict): A Kubernetes PV or PVC resource dict.
+
+    Returns:
+        str or None: The provisioner / driver string, or *None* when it
+        cannot be determined.
+    """
+    kind = item.get("kind")
+    if kind == constants.PV:
+        # Prefer the CSI driver field
+        driver = item.get("spec", {}).get("csi", {}).get("driver")
+        if driver:
+            return driver
+        # Fallback to the annotation used for in-tree provisioners
+        return (
+            item.get("metadata", {})
+            .get("annotations", {})
+            .get("pv.kubernetes.io/provisioned-by")
+        )
+    if kind == constants.PVC:
+        annotations = item.get("metadata", {}).get("annotations", {})
+        return annotations.get(
+            "volume.kubernetes.io/storage-provisioner"
+        ) or annotations.get("volume.beta.kubernetes.io/storage-provisioner")
+    return None
+
+
+def _is_storageclient_owned(item):
+    """
+    Check whether a resource has a StorageClient ownerReference.
+
+    StorageClasses created by the StorageClient reconciler carry an
+    ownerReference pointing back to the StorageClient.  These are
+    platform-managed and should not be flagged as test leftovers.
+
+    Args:
+        item (dict): A Kubernetes resource dict.
+
+    Returns:
+        bool: True when the resource is owned by a StorageClient.
+    """
+    owner_refs = item.get("metadata", {}).get("ownerReferences", [])
+    return any(ref.get("kind") == constants.STORAGECLIENT for ref in owner_refs)
+
+
 def compare_dicts(before, after):
     """
     Comparing 2 dicts and providing diff list of [added items, removed items]
@@ -135,6 +192,25 @@ def assign_get_values(
             name = item.get("metadata").get("name")
             if name.startswith(defaults.SRE_BUILD_TEST_NAMESPACE):
                 log.debug(f"ignoring item: {constants.NAMESPACE} with name {name}")
+                continue
+        # Skip PVs/PVCs whose provisioner is not an OCS/ODF provisioner
+        # (e.g. AWS EBS, GCE PD, image-registry PVs).
+        if item.get("kind") in (constants.PV, constants.PVC):
+            provisioner = _pv_or_pvc_storage_provisioner(item)
+            if provisioner and provisioner not in constants.OCS_PROVISIONERS:
+                name = item.get("metadata", {}).get("name", "<unknown>")
+                log.debug(
+                    "ignoring non-ODF %s %s (provisioner: %s)",
+                    item.get("kind"),
+                    name,
+                    provisioner,
+                )
+                continue
+        # Skip StorageClasses owned by a StorageClient (platform-managed)
+        if item.get("kind") == constants.STORAGECLASS:
+            if _is_storageclient_owned(item):
+                name = item.get("metadata", {}).get("name", "<unknown>")
+                log.debug("ignoring StorageClient-owned StorageClass: %s", name)
                 continue
         items_filtered.append(item)
 
