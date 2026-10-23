@@ -3282,6 +3282,11 @@ def gracefully_reboot_nodes(disable_eviction=False):
         nodes.restart_nodes([node], wait=False)
         log.info(f"Waiting for {waiting_time} seconds")
         time.sleep(waiting_time)
+        wait_for_nodes_status(
+            node_names=[node_name],
+            status=constants.NODE_READY_SCHEDULING_DISABLED,
+            timeout=1800,
+        )
         schedule_nodes([node_name])
         wait_for_nodes_status(
             node_names=[node_name], status=constants.NODE_READY, timeout=1800
