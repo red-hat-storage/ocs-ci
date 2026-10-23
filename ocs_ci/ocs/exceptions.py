@@ -136,6 +136,14 @@ class VMMaxDisksReachedException(Exception):
     pass
 
 
+class VMIndexNotFoundException(Exception):
+    pass
+
+
+class VolumePathNotFoundException(Exception):
+    pass
+
+
 class SameNamePrefixClusterAlreadyExistsException(Exception):
     pass
 

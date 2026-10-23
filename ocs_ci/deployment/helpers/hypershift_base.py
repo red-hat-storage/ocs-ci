@@ -9,12 +9,13 @@ from ocs_ci.deployment.helpers.icsp_parser import parse_ICSP_json_to_mirrors_fil
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ClusterNotFoundException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 """
 This module contains the base class for HyperShift hosted cluster management.
@@ -39,6 +40,103 @@ def get_hosted_cluster_names():
     logger.info("Getting HyperShift hosted cluster names")
     cmd = "oc get --namespace clusters hostedclusters -o custom-columns=NAME:.metadata.name --no-headers"
     return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip().split()
+
+
+def get_hosted_cluster_namespace(cluster_name=None):
+    """
+    Resolve the namespace that contains the HostedCluster CR. Default value is constants.CLUSTERS_NAMESPACE
+
+    Args:
+        cluster_name (str): Name of the hosted cluster.
+
+    Returns:
+        str: Namespace on the management cluster that owns the HostedCluster CR.
+    """
+    cluster_name = cluster_name or config.ENV_DATA.get("cluster_name")
+
+    # Get the hostedcluster namespace if available in config
+    hc_namespace = config.ENV_DATA.get("hostedcluster_namespace")
+    with config.RunWithProviderConfigContextIfAvailable():
+        # Explicit per-cluster config override
+        hc_namespace = (
+            config.ENV_DATA.get("clusters", {})
+            .get(cluster_name, {})
+            .get("hostedcluster_namespace", hc_namespace)
+        )
+        if hc_namespace:
+            logger.debug(
+                f"Using configured hostedcluster_namespace '{hc_namespace}' for '{cluster_name}'"
+            )
+            return hc_namespace
+
+        # Dynamic discovery — find from the list of HostedClusters across all namespaces
+        # If not available, return the default value constants.CLUSTERS_NAMESPACE because there are usages to identify
+        # if a cluster is hostedcluster or not.
+        try:
+            all_hc = OCP(kind=constants.HOSTED_CLUSTERS).get(all_namespaces=True)
+            for item in all_hc.get("items", []):
+                if item.get("metadata", {}).get("name") == cluster_name:
+                    hc_namespace = item["metadata"]["namespace"]
+                    logger.debug(
+                        f"Discovered hostedcluster_namespace '{hc_namespace}' for '{cluster_name}'"
+                    )
+                    break
+        except CommandFailed as exc:
+            logger.warning(
+                f"Could not list HostedClusters to resolve namespace for '{cluster_name}': {exc}. "
+                f"Use the default value {constants.CLUSTERS_NAMESPACE}"
+            )
+
+    return hc_namespace or constants.CLUSTERS_NAMESPACE
+
+
+def is_hosted_cluster(cluster_name=None):
+    """
+    Check if the cluster is a hosted cluster
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        bool: True, if the cluster is a hosted cluster. False, otherwise.
+
+    """
+
+    cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
+    try:
+        config.switch_to_provider()
+    except ClusterNotFoundException:
+        return False
+    ocp_obj = OCP(
+        kind=constants.HOSTED_CLUSTERS,
+        namespace=get_hosted_cluster_namespace(cluster_name),
+    )
+    return ocp_obj.is_exist(resource_name=cluster_name)
+
+
+@switch_to_orig_index_at_last
+def get_hosted_cluster_type(cluster_name=None):
+    """
+    Get the hosted cluster type
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        str: The hosted cluster type in lowercase
+
+
+    """
+    cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
+    config.switch_to_provider()
+    ocp_hosted_cluster_obj = OCP(
+        kind=constants.HOSTED_CLUSTERS,
+        namespace=get_hosted_cluster_namespace(cluster_name),
+        resource_name=cluster_name,
+    )
+    return ocp_hosted_cluster_obj.get()["spec"]["platform"]["type"].lower()
 
 
 def kubeconfig_exists_decorator(func):

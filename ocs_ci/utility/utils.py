@@ -5370,3 +5370,31 @@ def auto_configure_submariner():
         log.info(
             f"OCP {ocp_version} not in mapping → Submariner: UNRELEASED (safe default)"
         )
+
+
+def get_client_type_by_name(cluster_name):
+    """
+    Get the client type by the cluster name
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        str: The client type in lowercase(e.g. kubevirt, agent, non_hosted, etc.,)
+
+    """
+    from ocs_ci.deployment.helpers.hypershift_base import (
+        is_hosted_cluster,
+        get_hosted_cluster_type,
+    )
+
+    # Store original context index to restore later
+    orig_index = config.cur_index
+    try:
+        config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
+        if not is_hosted_cluster(cluster_name):
+            return constants.NON_HOSTED_CLUSTER
+
+        return get_hosted_cluster_type(cluster_name)
+    finally:
+        config.switch_ctx(orig_index)

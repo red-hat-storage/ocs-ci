@@ -4,17 +4,20 @@ This module implements functionality for deploying OCP cluster via Assisted Inst
 """
 
 from copy import deepcopy
-from datetime import datetime
 import json
 import logging
 import os
 
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     ClusterNotFoundException,
     HostValidationFailed,
+    OpenShiftAPIResponseException,
     SameNameClusterAlreadyExistsException,
 )
 from ocs_ci.utility import assisted_installer as ai
+from ocs_ci.utility.deployment import create_openshift_install_log_file
 from ocs_ci.utility.utils import download_file, TimeoutSampler
 from ocs_ci.utility.retry import retry
 
@@ -38,6 +41,7 @@ class AssistedInstallerCluster(object):
         high_availability_mode="Full",
         image_type="minimal-iso",
         static_network_config=None,
+        platform="baremetal",
     ):
         """
         Args:
@@ -65,6 +69,7 @@ class AssistedInstallerCluster(object):
                 [{"mac_interface_map": [{"logical_nic_name": "string", "mac_address": "string"}],
                     "network_yaml": "string"},
                     ...]
+            platform (str): platform type (none, baremetal or vsphere)
 
         """
         self.api = ai.AssistedInstallerAPI()
@@ -82,11 +87,21 @@ class AssistedInstallerCluster(object):
                 raise ClusterNotFoundException(
                     f"Cluster '{name}' not found in Assisted Installer Console"
                 )
-            self.id = [
-                cl["id"]
-                for cl in clusters
-                if cl["name"] == name and cl["kind"] == "Cluster"
-            ][0]
+            try:
+                self.id = [
+                    cl["id"]
+                    for cl in clusters
+                    if cl["name"] == name and cl["kind"] == "Cluster"
+                ][0]
+            except IndexError:
+                # there might be missing "kind: Cluster" with the name, but still present AddHostsCluster
+                # so we want to delete that as well
+                self.id = [
+                    cl["id"]
+                    for cl in clusters
+                    if cl["name"] == name and cl["kind"] == "AddHostsCluster"
+                ][0]
+
             # load configuration of existing cluster
             self.load_existing_cluster_configuration()
             logger.info(
@@ -119,6 +134,7 @@ class AssistedInstallerCluster(object):
             self.high_availability_mode = high_availability_mode
             self.image_type = image_type
             self.static_network_config = static_network_config
+            self.platform = platform
 
     def load_existing_cluster_configuration(self):
         """
@@ -140,27 +156,34 @@ class AssistedInstallerCluster(object):
         except (KeyError, IndexError):
             self.api_vip = ""
             self.ingress_vip = ""
-        self.ssh_public_key = cl_config["ssh_public_key"]
+        self.ssh_public_key = cl_config.get("ssh_public_key")
         # self.pull_secret = cl_config["pull_secret"]
-        self.cpu_architecture = cl_config["cpu_architecture"]
-        self.high_availability_mode = cl_config["high_availability_mode"]
+        self.cpu_architecture = cl_config.get("cpu_architecture")
+        self.high_availability_mode = cl_config.get("high_availability_mode")
         self.image_type = infra_config["type"]
         self.openshift_cluster_id = cl_config.get("openshift_cluster_id")
         # load records with: 'kind': 'AddHostsCluster'
-        self.add_hosts_clusters = [
-            cl["id"]
-            for cl in self.api.get_clusters()
-            if self.openshift_cluster_id
-            and cl.get("openshift_cluster_id") == self.openshift_cluster_id
-            and cl["kind"] == "AddHostsCluster"
-        ]
+        try:
+            self.add_hosts_clusters = [
+                cl["id"]
+                for cl in self.api.get_clusters()
+                if self.openshift_cluster_id
+                and cl.get("openshift_cluster_id") == self.openshift_cluster_id
+                and cl["kind"] == "AddHostsCluster"
+            ]
+        except OpenShiftAPIResponseException:
+            self.add_hosts_clusters = []
         logger.debug(f"AddHostsClusters: {', '.join(self.add_hosts_clusters)}")
-        self.add_hosts_infra_envs = [
-            infra["id"]
-            for cl_id in self.add_hosts_clusters
-            for infra in self.api.get_infra_envs()
-            if infra["cluster_id"] == cl_id
-        ]
+
+        try:
+            self.add_hosts_infra_envs = [
+                infra["id"]
+                for cl_id in self.add_hosts_clusters
+                for infra in self.api.get_infra_envs()
+                if infra["cluster_id"] == cl_id
+            ]
+        except OpenShiftAPIResponseException:
+            self.add_hosts_infra_envs = []
         logger.debug(
             f"AddHosts Infrastructure Environments: {', '.join(self.add_hosts_infra_envs)}"
         )
@@ -211,19 +234,29 @@ class AssistedInstallerCluster(object):
             "cpu_architecture": self.cpu_architecture,
             "high_availability_mode": self.high_availability_mode,
             "base_dns_domain": self.base_dns_domain,
-            "api_vips": [
-                {
-                    "ip": self.api_vip,
-                }
-            ],
-            "ingress_vips": [
-                {
-                    "ip": self.ingress_vip,
-                }
-            ],
             "ssh_public_key": self.ssh_public_key,
             "pull_secret": self.pull_secret,
         }
+
+        # VPC BM uses external ALBs for VIPs, not VRRP - requires user_managed_networking
+        if (
+            config.ENV_DATA.get("infra_type", constants.CLASSIC_INFRA_TYPE)
+            == constants.VPC_INFRA_TYPE
+        ):
+            cluster_configuration["user_managed_networking"] = True
+            cluster_configuration["vip_dhcp_allocation"] = False
+            cluster_configuration["platform"] = {"type": "none"}
+            logger.info(
+                "Creating cluster with User Managed Networking (VIPs managed externally by ALBs)"
+            )
+        else:
+            # Traditional platforms (vSphere, baremetal) use managed networking with VRRP VIPs
+            cluster_configuration["platform"] = {"type": self.platform}
+            cluster_configuration["api_vips"] = [{"ip": self.api_vip}]
+            cluster_configuration["ingress_vips"] = [{"ip": self.ingress_vip}]
+            logger.info(
+                f"Creating cluster with managed networking (platform: {self.platform})"
+            )
         cl_data = self.api.create_cluster(cluster_configuration)
         self.id = cl_data["id"]
         logger.info(f"Created (defined) new cluster {self.name} (id: {self.id})")
@@ -243,9 +276,9 @@ class AssistedInstallerCluster(object):
         }
 
         if self.static_network_config:
-            infra_env_configuration[
-                "static_network_config"
-            ] = self.static_network_config
+            infra_env_configuration["static_network_config"] = (
+                self.static_network_config
+            )
 
         infra_data = self.api.create_infra_env(infra_env_configuration)
         self.infra_id = infra_data["id"]
@@ -368,6 +401,29 @@ class AssistedInstallerCluster(object):
                     mapping.append((host["id"], interface["mac_address"]))
         return mapping
 
+    def get_ip_list_by_cluster_id(self):
+        """
+        Get list of IP addresses assigned to the hosts in the cluster.
+        """
+        ip_list = []
+        for host in self.api.get_cluster_hosts(self.id):
+            inventory = host.get("inventory")
+            if not inventory:
+                continue
+            if isinstance(inventory, str):
+                try:
+                    inventory = json.loads(inventory)
+                except json.JSONDecodeError:
+                    logger.warning(
+                        "Unable to decode inventory for host %s", host.get("id")
+                    )
+                    continue
+            interfaces = inventory.get("interfaces", [])
+            for interface in interfaces:
+                for ip_cidr in interface.get("ipv4_addresses", []):
+                    ip_list.append(ip_cidr.split("/")[0])
+        return ip_list
+
     def update_hosts_config(self, mac_name_mapping, mac_role_mapping):
         """
         Update host names and roles.
@@ -464,21 +520,8 @@ class AssistedInstallerCluster(object):
         Create .openshift_install.log file containing URL to OpenShift console.
         It is used by our CI jobs to show the console URL in build description.
         """
-        # Create metadata file to store the cluster name
-        installer_log_file = os.path.join(self.cluster_path, ".openshift_install.log")
-        formatted_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         cluster_address = self.api.get_cluster_admin_credentials(self.id)["console_url"]
-        logger.info(f"Cluster URL: {cluster_address}")
-        with open(installer_log_file, "a") as fd:
-            fd.writelines(
-                [
-                    "W/A for our CI to get URL to the cluster in jenkins job. "
-                    "Cluster is deployed via Assisted Installer API!\n"
-                    f'time="{formatted_time}" level=info msg="Access the OpenShift web-console here: '
-                    f"{cluster_address}\"\n'",
-                ]
-            )
-        logger.info("Created .openshift_install.log file")
+        create_openshift_install_log_file(self.cluster_path, cluster_address)
 
     def create_kubeconfig_file(self):
         """
@@ -489,6 +532,7 @@ class AssistedInstallerCluster(object):
         path = os.path.join(auth_path, "kubeconfig")
         with open(path, "w") as fd:
             fd.write(self.api.get_cluster_kubeconfig(self.id))
+        config.RUN["kubeconfig"] = path
         logger.info("Created kubeconfig file")
 
     def create_kubeadmin_password_file(self):
