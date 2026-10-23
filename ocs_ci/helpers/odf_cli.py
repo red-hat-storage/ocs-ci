@@ -583,3 +583,15 @@ def odf_cli_cephfs_snap_setup_helper(**kwargs):
         ODFCLICephfsSnapRunner: The initialized runner.
     """
     return odf_cli_setup_helper(odf_cli_class=ODFCLICephfsSnapRunner, **kwargs)
+
+def list_stale_cephfs_subvolumes(self) -> str:
+    """
+    List stale CephFS subvolumes.
+    """
+    return self.run_command("subvolume ls --stale")
+
+def delete_cephfs_subvolume(self, filesystem, subvol, group) -> str:
+    """
+    Delete a CephFS subvolume.
+    """
+    return self.run_command(f"subvolume delete {filesystem} {subvol} {group}")
