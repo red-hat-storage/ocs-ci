@@ -3318,6 +3318,23 @@ topology = {
     ),
 }
 
+topology_5_0 = {
+    "node_filter_toggle_icon_from_node_filtering_bar": (
+        "//div[contains(@class,'odf-topology-nav')]"
+        "//span[@title='Node']/following-sibling::button",
+        By.XPATH,
+    ),
+    "node_selector_from_node_filtering_bar": (
+        "//button[@role='menuitem'][normalize-space()='{}']",
+        By.XPATH,
+    ),
+    "current_node_from_node_filtering_bar": (
+        "//div[contains(@class,'odf-topology-nav')]"
+        "//span[@title='Node']/following-sibling::button",
+        By.XPATH,
+    ),
+}
+
 alerting = {
     "alerts-tab-link": ("Alerts", By.LINK_TEXT),
     "silences-tab-link": ("Silences", By.LINK_TEXT),
@@ -4382,7 +4399,7 @@ locators = {
         },
         "storageclass": {**storageclass, **storageclass_4_9},
         "bucketclass": bucketclass,
-        "topology": topology,
+        "topology": {**topology, **topology_5_0},
         "mcg_stores": mcg_stores,
         "alerting": alerting,
         "bucket_tab": bucket_tab,
