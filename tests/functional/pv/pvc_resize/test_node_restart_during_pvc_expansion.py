@@ -9,6 +9,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_ceph_cmd_execute_successfully,
     delete_pods,
     get_ocs_operator_pod,
+    get_deployment_name,
 )
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -120,8 +121,8 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
         for pod_obj in self.pods:
             new_pods = get_all_pods(
                 namespace=pod_obj.namespace,
-                selector=[pod_obj.labels.get("deploymentconfig")],
-                selector_label="deploymentconfig",
+                selector=get_deployment_name(pod_obj.name),
+                selector_label="name",
                 wait=wait_to_stabilize,
             )
             for pod_ob in new_pods:
