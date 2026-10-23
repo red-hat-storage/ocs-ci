@@ -42,24 +42,43 @@ class TestConfigurePerformancePageLayout:
         configure_perf_page = storage_cluster_page.click_configure_performance_button()
 
         with test_step("Verify page object loaded"):
+            logger.assertion(f"Page object is not None: actual={configure_perf_page}")
             assert configure_perf_page is not None
 
         with test_step("Verify Core storage section is present"):
-            assert configure_perf_page.is_core_storage_section_present()
+            is_present = configure_perf_page.is_core_storage_section_present()
+            logger.assertion(
+                f"Core storage section present: expected=True, actual={is_present}"
+            )
+            assert is_present
 
         with test_step("Verify Multicloud Object Gateway section is present"):
-            assert configure_perf_page.is_mcg_section_present()
+            is_present = configure_perf_page.is_mcg_section_present()
+            logger.assertion(f"MCG section present: expected=True, actual={is_present}")
+            assert is_present
 
         with test_step(
             "Verify Core storage 'Select options' button is present and clickable"
         ):
-            assert configure_perf_page.is_core_storage_select_button_present()
+            is_present = configure_perf_page.is_core_storage_select_button_present()
+            logger.assertion(
+                f"Core storage select button present: expected=True, actual={is_present}"
+            )
+            assert is_present
 
         with test_step("Verify MCG profile dropdown button is present and clickable"):
-            assert configure_perf_page.is_mcg_select_button_present()
+            is_present = configure_perf_page.is_mcg_select_button_present()
+            logger.assertion(
+                f"MCG select button present: expected=True, actual={is_present}"
+            )
+            assert is_present
 
         with test_step("Verify page integrity with both sections"):
-            assert configure_perf_page.verify_page_integrity()
+            is_intact = configure_perf_page.verify_page_integrity()
+            logger.assertion(
+                f"Page integrity verified: expected=True, actual={is_intact}"
+            )
+            assert is_intact
 
         logger.info("✅ UI-1 PASSED")
 
@@ -95,29 +114,35 @@ class TestMCGProfileSelection:
                CR, reopen the page and verify the UI shows the profile.
             5. Finally restore the profile to "default".
         """
-        with test_step("Navigate to Configure Performance page"):
-            navigator = PageNavigator()
-            storage_cluster_page = navigator.nav_storage_cluster_default_page()
-            configure_perf_page = (
-                storage_cluster_page.click_configure_performance_button()
-            )
-
+        initial_ui_profile = "default"  # fallback
         try:
+            with test_step("Navigate to Configure Performance page"):
+                navigator = PageNavigator()
+                storage_cluster_page = navigator.nav_storage_cluster_default_page()
+                configure_perf_page = (
+                    storage_cluster_page.click_configure_performance_button()
+                )
+
             with test_step("Record initial MCG profile state in UI"):
                 # Until a profile is selected for the first time the button shows
                 # "Select a profile" (None here); afterwards it always shows the
                 # selected profile name.
-                initial_ui_profile = configure_perf_page.get_mcg_profile_from_ui()
+                captured_profile = configure_perf_page.get_mcg_profile_from_ui()
                 logger.info(
                     "Initial MCG profile in UI: %s",
-                    initial_ui_profile or "not selected yet ('Select a profile')",
+                    captured_profile or "not selected yet ('Select a profile')",
                 )
-                assert initial_ui_profile in (
+                logger.assertion(
+                    f"Initial profile '{captured_profile}' is a valid profile option"
+                )
+                assert captured_profile in (
                     None,
                     "default",
                     "mixed-workload",
                     "small-objects",
-                ), f"Unexpected initial MCG profile text in UI: '{initial_ui_profile}'"
+                ), f"Unexpected initial MCG profile text in UI: '{captured_profile}'"
+                if captured_profile:
+                    initial_ui_profile = captured_profile
 
             with test_step("Initialize MCG with default profile"):
                 configure_perf_page.select_mcg_profile("default")
@@ -131,10 +156,16 @@ class TestMCGProfileSelection:
                         storage_cluster_page.click_configure_performance_button()
                     )
                 cr_profile = configure_perf_page.get_mcg_profile_from_cr()
+                logger.assertion(
+                    f"MCG profile from CR: expected='default', actual='{cr_profile}'"
+                )
                 assert (
                     cr_profile == "default"
                 ), f"MCG profile in CR should be 'default', got '{cr_profile}'"
                 ui_profile = configure_perf_page.get_mcg_profile_from_ui()
+                logger.assertion(
+                    f"MCG profile from UI: expected='default', actual='{ui_profile}'"
+                )
                 assert (
                     ui_profile == "default"
                 ), f"MCG profile in UI should be 'default', got '{ui_profile}'"
@@ -153,6 +184,9 @@ class TestMCGProfileSelection:
                 with test_step("Verify CR updated"):
                     try:
                         cr_profile = configure_perf_page.get_mcg_profile_from_cr()
+                        logger.assertion(
+                            f"MCG profile from CR after transition: expected='{target}', actual='{cr_profile}'"
+                        )
                         assert (
                             cr_profile == target
                         ), f"MCG profile in CR should be '{target}', got '{cr_profile}'"
@@ -160,6 +194,9 @@ class TestMCGProfileSelection:
                         logger.warning("CR verification failed, retrying: %s", e)
                         time.sleep(2)
                         cr_profile = configure_perf_page.get_mcg_profile_from_cr()
+                        logger.assertion(
+                            f"MCG profile from CR after transition retry: expected='{target}', actual='{cr_profile}'"
+                        )
                         assert (
                             cr_profile == target
                         ), f"MCG profile in CR should be '{target}', got '{cr_profile}'"
@@ -170,12 +207,19 @@ class TestMCGProfileSelection:
                         storage_cluster_page.click_configure_performance_button()
                     )
                     ui_profile = configure_perf_page.get_mcg_profile_from_ui()
+                    logger.assertion(
+                        f"MCG profile from UI after transition: expected='{target}', actual='{ui_profile}'"
+                    )
                     assert (
                         ui_profile == target
                     ), f"MCG profile in UI should be '{target}', got '{ui_profile}'"
         finally:
-            with test_step("Restore MCG profile to default"):
-                configure_perf_page.select_mcg_profile("default")
+            with test_step(f"Restore MCG profile to initial: {initial_ui_profile}"):
+                storage_cluster_page = navigator.nav_storage_cluster_default_page()
+                configure_perf_page = (
+                    storage_cluster_page.click_configure_performance_button()
+                )
+                configure_perf_page.select_mcg_profile(initial_ui_profile)
                 configure_perf_page.save_configuration()
         logger.info("✅ UI-3 PASSED")
 
@@ -194,27 +238,29 @@ class TestCoreStorageRegression:
     @skipif_ibm_cloud_managed
     def test_core_storage_profile_selection_regression(self, setup_ui_class):
         """UI-2: Verify Core Storage profile selection updates CR and persists in UI."""
-        with test_step("Navigate to Configure Performance page"):
-            navigator = PageNavigator()
-            storage_cluster_page = navigator.nav_storage_cluster_default_page()
-            configure_perf_page = (
-                storage_cluster_page.click_configure_performance_button()
-            )
-
+        initial_profile = "balanced"  # fallback
         try:
-            initial_profile = configure_perf_page.get_core_storage_profile_from_cr()
-        except ValueError:
-            with test_step("Initialize Core Storage with balanced profile"):
-                configure_perf_page.select_core_storage_profile("balanced")
-                configure_perf_page.save_configuration()
-                # save_configuration() navigates away; reopen the page so the
-                # transitions loop starts from the Configure Performance page.
+            with test_step("Navigate to Configure Performance page"):
+                navigator = PageNavigator()
                 storage_cluster_page = navigator.nav_storage_cluster_default_page()
                 configure_perf_page = (
                     storage_cluster_page.click_configure_performance_button()
                 )
-            initial_profile = "balanced"
-        try:
+
+            try:
+                initial_profile = configure_perf_page.get_core_storage_profile_from_cr()
+            except ValueError:
+                with test_step("Initialize Core Storage with balanced profile"):
+                    configure_perf_page.select_core_storage_profile("balanced")
+                    configure_perf_page.save_configuration()
+                    # save_configuration() navigates away; reopen the page so the
+                    # transitions loop starts from the Configure Performance page.
+                    storage_cluster_page = navigator.nav_storage_cluster_default_page()
+                    configure_perf_page = (
+                        storage_cluster_page.click_configure_performance_button()
+                    )
+                initial_profile = "balanced"
+
             transitions = [
                 ("balanced", "lean"),
                 ("lean", "performance"),
@@ -233,6 +279,9 @@ class TestCoreStorageRegression:
                         cr_profile = (
                             configure_perf_page.get_core_storage_profile_from_cr()
                         )
+                        logger.assertion(
+                            f"Core Storage profile from CR: expected='{target}', actual='{cr_profile}'"
+                        )
                         assert (
                             cr_profile == target
                         ), f"Core Storage profile in CR should be '{target}', got '{cr_profile}'"
@@ -241,6 +290,9 @@ class TestCoreStorageRegression:
                         time.sleep(2)
                         cr_profile = (
                             configure_perf_page.get_core_storage_profile_from_cr()
+                        )
+                        logger.assertion(
+                            f"Core Storage profile from CR retry: expected='{target}', actual='{cr_profile}'"
                         )
                         assert (
                             cr_profile == target
@@ -252,11 +304,18 @@ class TestCoreStorageRegression:
                         storage_cluster_page.click_configure_performance_button()
                     )
                     ui_profile = configure_perf_page.get_core_storage_profile_from_ui()
+                    logger.assertion(
+                        f"Core Storage profile from UI: expected='{target}', actual='{ui_profile}'"
+                    )
                     assert (
                         ui_profile == target
                     ), f"Core Storage profile in UI should be '{target}', got '{ui_profile}'"
         finally:
             with test_step(f"Restore initial Core Storage profile: {initial_profile}"):
+                storage_cluster_page = navigator.nav_storage_cluster_default_page()
+                configure_perf_page = (
+                    storage_cluster_page.click_configure_performance_button()
+                )
                 configure_perf_page.select_core_storage_profile(initial_profile)
                 configure_perf_page.save_configuration()
         logger.info("✅ UI-2 PASSED")

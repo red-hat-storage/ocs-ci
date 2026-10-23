@@ -4407,6 +4407,19 @@ configure_performance = {
         ".//input[@type='checkbox' or @type='radio']",
         By.XPATH,
     ),
+    "core_storage_section_fallback": (
+        "//*[contains(text(), 'Core storage')]"
+        "/ancestor::*[contains(@class, 'panel') or contains(@class, 'form')]",
+        By.XPATH,
+    ),
+    "mcg_select_profile_button_fallback": (
+        "//button[contains(@class, 'menu-toggle') and contains(@class, 'toggle')]",
+        By.XPATH,
+    ),
+    "core_storage_select_profile_button_fallback": (
+        "//h2[contains(text(), 'Core storage')]/following::button[contains(@class, 'toggle')]",
+        By.XPATH,
+    ),
 }
 
 storage_cluster_locators = {
