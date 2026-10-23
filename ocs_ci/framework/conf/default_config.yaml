@@ -160,6 +160,12 @@ DEPLOYMENT:
   # Set to true when the FDF catalog was already mirrored externally (e.g. via
   # the fdf-mirror entrypoint), so the deployment doesn't mirror it again
   disconnected_mirror_completed: false
+  # Same as fdf_catalog_image, for the version we upgrade to. When empty it is
+  # built from fdf_upgrade_registry and fdf_upgrade_image_tag.
+  fdf_upgrade_catalog_image: ""
+  # Set to true when the catalog of the version we upgrade to was already
+  # mirrored externally, so the upgrade doesn't mirror it again
+  disconnected_upgrade_mirror_completed: false
   # Standalone FDF (RHSTOR-8840): set true to deploy FDF via its own IBM catalog
   # source instead of the full Fusion Operator stack. All other deployment steps
   # (namespace, OperatorGroup, Subscription, StorageCluster) reuse the ODF path.

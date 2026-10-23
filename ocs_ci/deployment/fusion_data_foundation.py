@@ -127,7 +127,7 @@ class FusionDataFoundationDeployment:
             "disconnected_mirror_completed"
         )
 
-    def get_catalog_image(self):
+    def get_catalog_image(self, upgrade=False):
         """
         Resolve the FDF catalog image to mirror.
 
@@ -136,6 +136,12 @@ class FusionDataFoundationDeployment:
         otherwise builds the reference from ``DEPLOYMENT.fdf_pre_release_registry``
         and ``DEPLOYMENT.fdf_image_tag``.
 
+        Args:
+            upgrade (bool): If True, resolve the catalog image of the version
+                to upgrade to, using the upgrade specific config values
+                (fdf_upgrade_catalog_image, fdf_upgrade_registry and
+                fdf_upgrade_image_tag). Default is False.
+
         Returns:
             str: Full FDF catalog image reference.
 
@@ -143,19 +149,34 @@ class FusionDataFoundationDeployment:
             UnexpectedDeploymentConfiguration: If the catalog image can't be resolved.
 
         """
-        catalog_image = config.DEPLOYMENT.get("fdf_catalog_image")
+        if upgrade:
+            catalog_image = config.DEPLOYMENT.get("fdf_upgrade_catalog_image")
+            registry = config.DEPLOYMENT.get(
+                "fdf_upgrade_registry"
+            ) or config.DEPLOYMENT.get("fdf_pre_release_registry")
+            tag = config.DEPLOYMENT.get(
+                "fdf_upgrade_image_tag"
+            ) or config.DEPLOYMENT.get("fdf_image_tag")
+            config_keys = (
+                "DEPLOYMENT.fdf_upgrade_catalog_image, or both "
+                "DEPLOYMENT.fdf_upgrade_registry and DEPLOYMENT.fdf_upgrade_image_tag"
+            )
+        else:
+            catalog_image = config.DEPLOYMENT.get("fdf_catalog_image")
+            registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
+            tag = config.DEPLOYMENT.get("fdf_image_tag") or config.ENV_DATA.get(
+                "fdf_version"
+            )
+            config_keys = (
+                "DEPLOYMENT.fdf_catalog_image, or both "
+                "DEPLOYMENT.fdf_pre_release_registry and DEPLOYMENT.fdf_image_tag"
+            )
+
         if catalog_image:
             return catalog_image
-
-        registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
-        tag = config.DEPLOYMENT.get("fdf_image_tag") or config.ENV_DATA.get(
-            "fdf_version"
-        )
         if not registry or not tag:
             raise UnexpectedDeploymentConfiguration(
-                "Unable to resolve the FDF catalog image for mirroring. Set "
-                "DEPLOYMENT.fdf_catalog_image, or both DEPLOYMENT.fdf_pre_release_registry "
-                "and DEPLOYMENT.fdf_image_tag."
+                f"Unable to resolve the FDF catalog image for mirroring. Set {config_keys}."
             )
         return f"{registry}/{defaults.FUSION_CATALOG_NAME}:{tag}"
 
@@ -193,7 +214,7 @@ class FusionDataFoundationDeployment:
 
         return mirror_registry
 
-    def ensure_disconnected_mirroring(self):
+    def ensure_disconnected_mirroring(self, upgrade=False):
         """
         Mirror the FDF catalog to the mirror registry when running disconnected
         and the mirroring wasn't done beforehand.
@@ -206,8 +227,19 @@ class FusionDataFoundationDeployment:
         ITMS/IDMS resources created by ``oc-mirror`` are not overwritten later
         in the deployment.
 
-        No-op when the deployment is not disconnected or when mirroring was
-        already completed externally.
+        Mirroring of the deployed version and of the version to upgrade to are
+        tracked separately, so that an upgrade on an already mirrored cluster
+        still mirrors the catalog of the new version:
+
+        * deployment: ``DEPLOYMENT.disconnected_mirror_completed``
+        * upgrade: ``DEPLOYMENT.disconnected_upgrade_mirror_completed``
+
+        No-op when the cluster is not disconnected or when the mirroring of the
+        relevant version was already completed externally.
+
+        Args:
+            upgrade (bool): If True, mirror the catalog of the version to
+                upgrade to instead of the deployed one. Default is False.
 
         Raises:
             UnexpectedDeploymentConfiguration: If the mirror registry or the
@@ -216,13 +248,20 @@ class FusionDataFoundationDeployment:
         """
         if not self.disconnected:
             return
-        if self._is_mirror_already_configured():
+
+        mirror_completed_key = (
+            "disconnected_upgrade_mirror_completed"
+            if upgrade
+            else "disconnected_mirror_completed"
+        )
+        if config.DEPLOYMENT.get(mirror_completed_key):
             logger.info(
-                "Skipping FDF catalog mirroring: disconnected mirror already configured"
+                "Skipping FDF catalog mirroring: %s is already set",
+                mirror_completed_key,
             )
             return
 
-        catalog_image = self.get_catalog_image()
+        catalog_image = self.get_catalog_image(upgrade=upgrade)
         mirror_registry = self.get_mirror_registry()
         configure_registries = config.DEPLOYMENT.get("fdf_configure_registries", False)
 
@@ -244,6 +283,9 @@ class FusionDataFoundationDeployment:
             mirror_registry=mirror_registry,
         )
 
+        config.DEPLOYMENT[mirror_completed_key] = True
+        # The IDMS created by oc-mirror is the authoritative one from now on,
+        # the static ITMS/IDMS shipped with ocs-ci must not overwrite it
         config.DEPLOYMENT["disconnected_mirror_completed"] = True
         logger.info(f"FDF catalog successfully mirrored to: {mirrored_image}")
 
