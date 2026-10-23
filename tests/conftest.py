@@ -11272,6 +11272,19 @@ def pytest_sessionstart(session):
         return
 
     prev_ctx = ocsci_config.cur_index
+    # Update the ODF CLI DR kubeconfig paths before deploying the DR workloads.
+    # This mirrors the update_odf_cli_dr_kubeconfigs fixture, which cannot be
+    # requested from a session hook, so the underlying helpers are called here.
+    try:
+        from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
+
+        log.info("Setting up ODF CLI binary and updating DR kubeconfigs")
+        odf_cli_setup_helper()
+        dr_helpers.update_odf_cli_dr_config_kubeconfigs()
+    except Exception as e:
+        log.warning(
+            f"Failed to update ODF CLI DR kubeconfigs at session start, not failing the run: {e}"
+        )
     log.info("Setting up dr workloads running along the session")
     factory, teardown = create_workload_factory()
     session._dr_workload_teardown = teardown
