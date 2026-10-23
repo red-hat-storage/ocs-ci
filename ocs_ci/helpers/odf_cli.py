@@ -1,13 +1,11 @@
 import os
 import platform
-import shutil
-import tarfile
 import xattr
 from stat import S_IEXEC
 from logging import getLogger
 from typing import Union
 
-from ocs_ci.ocs.exceptions import NotFoundError, NotSupportedException
+from ocs_ci.ocs.exceptions import NotSupportedException
 from ocs_ci.utility.version import (
     get_odf_image_namespace,
     get_semantic_ocs_version_from_config,
@@ -17,7 +15,6 @@ from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.ocs.constants import (
-    CLI_IMAGE_RELEASES_DIR,
     ODF_CLI_DEV_IMAGE_TEMPLATE,
     LOW_RECOVERY_OPS,
     BALANCED,
@@ -192,77 +189,6 @@ class ODFCLIRetriever:
             os.environ["PATH"] = f"{cli_dir}:{current_path}"
         log.info(f"Added {cli_dir} to PATH")
         log.info(f"Current PATH: {os.environ['PATH']}")
-
-
-class NoobaaCLIRetriever(ODFCLIRetriever):
-    """
-    Retrieve the standalone noobaa CLI that ships in the ODF CLI image.
-
-    Unlike the "odf noobaa" wrapper, which is built against a vendored
-    noobaa-operator revision and can lag the operator on the cluster
-    (DFBUGS-11485), this binary is built from the operator sources.
-
-    Version checks, tagging, permissions and the retrieve flow are inherited
-    from :class:`ODFCLIRetriever`; only the binary location and the extraction
-    differ, because the noobaa CLI is shipped as a per-platform tarball.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.local_cli_path = os.path.join(config.RUN["bin_dir"], "noobaa")
-
-    def _get_architecture_path(self):
-        """Get the platform-specific noobaa CLI archive path in the image."""
-        system = platform.system()
-        machine = platform.machine()
-
-        if system == "Windows":
-            archive = "noobaa-windows.tar.gz"
-        else:
-            platform_name = "darwin" if system == "Darwin" else "linux"
-            arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(machine, machine)
-            archive = f"noobaa-{platform_name}-{arch}.tar.gz"
-
-        return os.path.join(CLI_IMAGE_RELEASES_DIR, archive)
-
-    def _extract_cli_binary(self, image):
-        """
-        Pull the noobaa CLI archive out of the image and unpack the binary.
-
-        Args:
-            image (str): The ODF CLI image to extract the archive from.
-
-        """
-        pull_secret_path = download_pull_secret()
-        local_cli_dir = os.path.dirname(self.local_cli_path)
-        archive_path = self._get_architecture_path()
-        os.makedirs(local_cli_dir, exist_ok=True)
-
-        exec_cmd(
-            f"oc image extract --registry-config {pull_secret_path} "
-            f"--filter-by-os=linux/amd64 "
-            f"{image} --confirm "
-            f"--path {archive_path}:{local_cli_dir}"
-        )
-
-        local_archive = os.path.join(local_cli_dir, os.path.basename(archive_path))
-        # The archive holds the binary alone, named after the architecture.
-        try:
-            with tarfile.open(local_archive) as archive:
-                member = next((m for m in archive if m.isfile()), None)
-                if member is None:
-                    raise NotFoundError(
-                        f"No binary inside the CLI archive {archive_path}"
-                    )
-                with open(self.local_cli_path, "wb") as target:
-                    shutil.copyfileobj(archive.extractfile(member), target)
-        finally:
-            # Otherwise a failed extraction leaves the tarball behind and the
-            # next run extracts on top of it.
-            if os.path.exists(local_archive):
-                os.remove(local_archive)
-
-        log.info(f"Extracted the noobaa CLI binary to {self.local_cli_path}")
 
 
 class ODFCliRunner:

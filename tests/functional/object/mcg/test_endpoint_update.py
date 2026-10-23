@@ -29,7 +29,6 @@ the ``odf`` wrapper, which lags the operator by three fixes (DFBUGS-11485).
 
 import json
 import logging
-import os
 import re
 import threading
 import time
@@ -111,9 +110,11 @@ PAUSE_LOG_INTERVAL = 10
 PAUSE_RESUME_SETTLE = 20
 
 # (ULS platform key, cloud-manager client attr, Service name, signature version).
+# v2 on both: core's v4 client addresses a dotted bucket virtual-hosted style,
+# which is not a valid URL on a plain-http IP endpoint ("Invalid URL").
 _DERIVABLE_SERVICES = (
     ("rgw", "rgw_client", constants.RGW_SERVICE_INTERNAL_MODE, "v2"),
-    ("self-ref-mcg", "self_ref_mcg_client", "s3", "v4"),
+    ("self-ref-mcg", "self_ref_mcg_client", "s3", "v2"),
 )
 
 # Plain http keeps pre-validation path-style; DNS and https both fail it.
@@ -165,8 +166,8 @@ def noobaa_cli_path():
     Returns:
         str: Path to the local noobaa binary.
     """
-    retrieve_cli_binary(cli_type="noobaa")
-    return os.path.join(config.RUN["bin_dir"], "noobaa")
+    retrieve_cli_binary(cli_type="mcg", force_mcg=True)
+    return constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
 
 
 def run_noobaa(command, namespace=None, ignore_error=False):
