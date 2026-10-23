@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
     libtest,
@@ -40,6 +41,20 @@ class TestHCIProviderClientMarkers(ManageTest):
         logger.info(
             "The default cluster index is equal to the current cluster index as expected"
         )
+
+    def test_marker_hci_provider_and_client_required(self):
+        """
+        Test that the 'hci_provider_and_client_required' marker work as expected
+        """
+        assert config.hci_provider_exist(), (
+            "The provider cluster is missing, even though we have the marker "
+            "'hci_provider_and_client_required'"
+        )
+        assert config.hci_client_exist(), (
+            "The client cluster is missing, even though we have the marker "
+            "'hci_provider_and_client_required'"
+        )
+        logger.info("Both the provider and the client clusters exist as expected")
 
     @skipif_hci_client
     def test_marker_skipif_hci_client(self):
