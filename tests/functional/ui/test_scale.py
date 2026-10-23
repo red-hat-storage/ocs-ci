@@ -4,7 +4,6 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.framework.pytest_customization.marks import yellow_squad
@@ -139,15 +138,18 @@ class TestScaleConnection(object):
 
         logger.test_step("Open the add-nodes modal and include control plane nodes")
         assert dashboard.open_add_nodes_modal(), "Add nodes modal did not open"
-        dashboard.enable_control_plane_nodes()
+        try:
+            dashboard.enable_control_plane_nodes()
 
-        logger.test_step("Verify a kernel-devel validation status is shown")
-        assert dashboard.wait_for_kernel_devel_status(), (
-            "Expected the modal to show a kernel-devel validation status "
-            "(verified or missing) once control plane nodes are included"
-        )
-
-        dashboard.cancel_add_nodes_modal()
+            logger.test_step("Verify a kernel-devel validation status is shown")
+            assert dashboard.wait_for_kernel_devel_status(), (
+                "Expected the modal to show a kernel-devel validation status "
+                "(verified or missing) once control plane nodes are included"
+            )
+        finally:
+            # Always close the modal so a failed assertion cannot leave an open
+            # overlay that blocks the next test in the shared UI session.
+            dashboard.cancel_add_nodes_modal()
 
     @ui
     @skipif_ibm_cloud_managed
@@ -171,8 +173,8 @@ class TestScaleConnection(object):
         Note: this test mutates shared cluster state (it adds a control plane
         node and may apply a persistent master MachineConfig) and has no teardown
         because removing a node from the Scale local cluster is not supported from
-        the UI. On a re-run the node is already part of the cluster, so the
-        node-count check tolerates "no increase" rather than failing.
+        the UI. It is therefore skipped on a re-run where all control plane nodes
+        are already part of the local cluster (their row checkboxes are disabled).
         """
         logger.test_step("Open the Scale dashboard and read the local node count")
         dashboard = self.nav_to_dashboard()
@@ -181,72 +183,82 @@ class TestScaleConnection(object):
         assert node_count_before is not None, "Could not read local cluster node count"
 
         # Enabling "Include control plane nodes" reveals the master rows and
-        # their kernel-devel validation status; read a master name from the
-        # modal table and select it.
+        # their kernel-devel validation status.
         logger.test_step("Open the add-nodes modal and select a control plane node")
         assert dashboard.open_add_nodes_modal(), "Add nodes modal did not open"
-        dashboard.enable_control_plane_nodes()
-
-        control_plane_nodes = dashboard.get_control_plane_node_names()
-        assert control_plane_nodes, "No control plane nodes available to add"
-        master = control_plane_nodes[0]
-        dashboard.select_node(master)
-
-        # Wait for the kernel-devel validation status to render before reading it;
-        # otherwise "not yet rendered" would be misread as "packages missing" and
-        # trigger an unnecessary, disruptive control-plane reboot.
-        logger.test_step("Apply the master MCO only if kernel-devel is missing")
-        assert (
-            dashboard.wait_for_kernel_devel_status()
-        ), "Kernel-devel validation status was not shown for the selected node"
-
-        # Installing the kernel-devel packages via the master MachineConfig
-        # reboots the control plane, so only apply the MCO when the modal
-        # reports the packages as missing for the selected node; skip it when
-        # they are already verified.
-        if dashboard.is_kernel_devel_verified():
-            logger.info(
-                "Kernel-devel packages already verified on control plane nodes; "
-                "skipping the master MCO"
-            )
-        else:
-            logger.info(
-                "Kernel-devel packages missing on control plane nodes; applying "
-                "the master MCO and waiting for the rollout"
-            )
-            dashboard.cancel_add_nodes_modal()
-            helpers.apply_scale_mco(
-                node_role=constants.MASTER_MACHINE, wait_for_rollout=True
-            )
-            # Re-open the modal after the rollout before adding the node.
-            dashboard = self.nav_to_dashboard()
-            assert dashboard.open_add_nodes_modal(), "Add nodes modal did not reopen"
-
-        logger.test_step(f"Add control plane node '{master}' to the local cluster")
-        assert dashboard.add_nodes_to_local_cluster(
-            node_names=[master], include_control_plane=True
-        ), "Add control plane nodes flow did not complete"
-
-        # Adding a control plane node must increase the local cluster node count.
-        # On a re-run the node is already present and the count cannot grow again,
-        # so a timeout here is treated as "already added" rather than a failure.
-        logger.test_step("Confirm the local cluster node count increased")
-        node_count_after = node_count_before
         try:
-            for node_count_after in TimeoutSampler(
-                timeout=180, sleep=5, func=dashboard.get_local_node_count
-            ):
-                if node_count_after and node_count_after > node_count_before:
-                    break
-            logger.info(
-                f"Local cluster node count increased from {node_count_before} "
-                f"to {node_count_after}"
-            )
-        except TimeoutExpiredError:
-            logger.warning(
-                "Local node count did not increase; the control plane node is "
-                "likely already part of the local cluster from a previous run"
-            )
+            dashboard.enable_control_plane_nodes()
+
+            control_plane_nodes = dashboard.get_control_plane_node_names()
+            assert control_plane_nodes, "No control plane nodes available to add"
+
+            # A node already in the local cluster has a disabled row checkbox.
+            # Pick one that is still addable; if none are, the node was added on a
+            # previous run and the test cannot add it again (no node-removal flow).
+            selectable = [
+                node
+                for node in control_plane_nodes
+                if dashboard.is_node_selectable(node)
+            ]
+            if not selectable:
+                pytest.skip(
+                    "All control plane nodes are already part of the local "
+                    "cluster; test is not idempotent (node removal unsupported)"
+                )
+            master = selectable[0]
+            dashboard.select_node(master)
+
+            # Wait for the kernel-devel validation status to render before reading
+            # it; otherwise "not yet rendered" would be misread as "missing" and
+            # trigger an unnecessary, disruptive control-plane reboot.
+            logger.test_step("Apply the master MCO only if kernel-devel is missing")
+            assert (
+                dashboard.wait_for_kernel_devel_status()
+            ), "Kernel-devel validation status was not shown for the selected node"
+
+            # Installing the kernel-devel packages via the master MachineConfig
+            # reboots the control plane, so only apply the MCO when the modal
+            # reports the packages as missing; skip it when already verified.
+            if dashboard.is_kernel_devel_verified():
+                logger.info(
+                    "Kernel-devel packages already verified on control plane "
+                    "nodes; skipping the master MCO"
+                )
+            else:
+                logger.info(
+                    "Kernel-devel packages missing on control plane nodes; "
+                    "applying the master MCO and waiting for the rollout"
+                )
+                dashboard.cancel_add_nodes_modal()
+                helpers.apply_scale_mco(
+                    node_role=constants.MASTER_MACHINE, wait_for_rollout=True
+                )
+                # The dashboard was reloaded; add_nodes_to_local_cluster below
+                # re-opens the modal, re-enables control plane and re-selects.
+                dashboard = self.nav_to_dashboard()
+
+            logger.test_step(f"Add control plane node '{master}' to the local cluster")
+            assert dashboard.add_nodes_to_local_cluster(
+                node_names=[master], include_control_plane=True
+            ), "Add control plane nodes flow did not complete"
+        finally:
+            # Always close the modal so a failed assertion cannot leave an open
+            # overlay that blocks the next test in the shared UI session.
+            dashboard.cancel_add_nodes_modal()
+
+        # The selected node was addable, so the add must increase the local
+        # cluster node count; a timeout here is a real failure (TimeoutSampler
+        # raises TimeoutExpiredError and fails the test).
+        logger.test_step("Confirm the local cluster node count increased")
+        for node_count_after in TimeoutSampler(
+            timeout=180, sleep=5, func=dashboard.get_local_node_count
+        ):
+            if node_count_after and node_count_after > node_count_before:
+                break
+        logger.info(
+            f"Local cluster node count increased from {node_count_before} "
+            f"to {node_count_after}"
+        )
 
     @ui
     @skipif_ibm_cloud_managed

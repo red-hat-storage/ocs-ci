@@ -81,6 +81,7 @@ class ExternalSystems(ResourceList):
             self.external_systems["scale_local_node_count_link"], timeout=120
         )
         self.page_has_loaded(retries=10)
+        logger.info(f"Scale dashboard for '{scale_name}' loaded")
         return ExternalStorageCluster()
 
     def get_page_title(self):
@@ -458,6 +459,9 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
                 timeout=timeout, sleep=sleep, func=self.get_elements, locator=locator
             ):
                 if elements:
+                    logger.info(
+                        f"Found {len(elements)} element(s) for locator {locator}"
+                    )
                     return elements
         except TimeoutExpiredError:
             logger.warning(f"No elements found for locator {locator} in {timeout}s")
@@ -537,6 +541,24 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
         names = [e.text.strip() for e in elements if e.text.strip()]
         logger.info(f"Control plane nodes available to add: {names}")
         return names
+
+    def is_node_selectable(self, node_name):
+        """
+        Whether the node's row checkbox is enabled in the "Add nodes to local
+        cluster" modal. A node already part of the local cluster has a disabled
+        checkbox, so this distinguishes an addable node from one already added.
+
+        Args:
+            node_name (str): node name identifying the row.
+
+        Returns:
+            bool: True if the row checkbox exists and is enabled (node not yet
+                part of the local cluster).
+        """
+        elements = self.get_elements(
+            format_locator(self.external_systems["node_row_checkbox"], node_name)
+        )
+        return bool(elements) and elements[0].is_enabled()
 
     def select_node(self, node_name, select=True):
         """
