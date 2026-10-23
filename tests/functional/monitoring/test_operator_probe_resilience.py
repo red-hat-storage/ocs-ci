@@ -35,11 +35,19 @@ class TestOperatorProbeResilience(ManageTest):
 
     @pytest.fixture(autouse=True)
     def setup(self, csv_prefix):
+        logger.info(f"Setting up test for CSV prefix: {csv_prefix}")
+
         self.namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+        logger.debug(f"Using namespace: {self.namespace}")
 
         # Using get_csv_name_start_with_prefix logic to resolve the CSV name
+        logger.debug(f"Resolving CSV name with prefix: {csv_prefix}")
         self.csv_name = get_csv_name_start_with_prefix(csv_prefix, self.namespace)
+
         if not self.csv_name:
+            logger.error(
+                f"Could not find CSV with prefix {csv_prefix} in {self.namespace}"
+            )
             pytest.fail(
                 f"Could not find CSV with prefix {csv_prefix} in {self.namespace}"
             )
@@ -51,12 +59,15 @@ class TestOperatorProbeResilience(ManageTest):
             namespace=self.namespace,
             resource_name=self.csv_name,
         )
+        logger.debug(f"Created CSV OCP object for {self.csv_name}")
 
         # Map labels for pod discovery based on the resolved name
         if "ocs-operator" in self.csv_name:
             self.label_key, self.label_value = "name", "ocs-operator"
         else:
             self.label_key, self.label_value = "noobaa-operator", "deployment"
+
+        logger.info(f"Pod discovery labels: {self.label_key}={self.label_value}")
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, probe_type, healthy_path):
@@ -65,16 +76,28 @@ class TestOperatorProbeResilience(ManageTest):
         """
 
         def finalizer():
-            logger.info(f"Finalizer: Restoring {self.csv_name} to {healthy_path}")
+            logger.info(
+                f"Teardown: Restoring {self.csv_name} {probe_type} probe to {healthy_path}"
+            )
+
             # Resetting to healthy state
             self._patch_csv(probe_type, healthy_path)
 
             # Create a POD OCP object to wait for the selector
+            selector = f"{self.label_key}={self.label_value}"
+            logger.info(
+                f"Waiting for pods to reach Running state (selector: {selector}, timeout: 300s)"
+            )
+
             pod_obj = OCP(kind=constants.POD, namespace=self.namespace)
             pod_obj.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
-                selector=f"{self.label_key}={self.label_value}",
+                selector=selector,
                 timeout=300,
+            )
+
+            logger.info(
+                f"Teardown completed: {self.csv_name} restored and pods running"
             )
 
         request.addfinalizer(finalizer)
@@ -94,8 +117,13 @@ class TestOperatorProbeResilience(ManageTest):
             {"op": "replace", "path": f"{base_path}/periodSeconds", "value": 5},
             {"op": "replace", "path": f"{base_path}/failureThreshold", "value": 1},
         ]
-        logger.info(f"Patching {self.csv_name} {probe_type} to: {path_value}")
+        logger.info(
+            f"Patching {self.csv_name} {probe_type}Probe: "
+            f"path={path_value}, initialDelay=5s, period=5s, failureThreshold=1"
+        )
+        logger.debug(f"JSON patch list: {patch_list}")
         self.csv_obj.patch(params=patch_list, format_type="json")
+        logger.debug(f"Patch applied successfully to {self.csv_name}")
 
     def test_probe_resilience(self, probe_type, healthy_path):
         """
@@ -106,12 +134,14 @@ class TestOperatorProbeResilience(ManageTest):
         4. Restores the healthy configuration and ensures stability.
         """
         logger.info(
-            f"Starting {probe_type.upper()} Probe Failure Test for {self.csv_name}"
+            f"Starting test: Verify {probe_type} probe failure resilience for {self.csv_name}"
         )
+        logger.info(f"Healthy probe path: {healthy_path}")
 
         # 1. Trigger and Verify Failure State
         if probe_type == "liveness":
-            logger.info("Verifying Liveness failure: Expecting pod restarts...")
+            logger.test_step("Trigger liveness probe failure and verify pod restarts")
+            logger.info("Patching CSV with invalid liveness probe path: /bad")
             self._patch_csv(probe_type, "/bad")
 
             def check_for_any_restarts():
@@ -120,6 +150,8 @@ class TestOperatorProbeResilience(ManageTest):
                     selector=[self.label_value],
                     selector_label=self.label_key,
                 )
+                logger.debug(f"Checking {len(live_pods)} pods for restarts")
+
                 for p in live_pods:
                     try:
                         status = p.get().get("status", {})
@@ -128,21 +160,34 @@ class TestOperatorProbeResilience(ManageTest):
                             restarts = container_statuses[0].get("restartCount", 0)
                             if restarts > 0:
                                 logger.info(
-                                    f"Confirmed: Pod {p.name} restarted {restarts} times."
+                                    f"Pod restart detected: {p.name} restarted {restarts} times"
                                 )
                                 return True
-                    except (CommandFailed, TypeError, IndexError):
+                            else:
+                                logger.debug(f"Pod {p.name}: no restarts yet (count=0)")
+                    except (CommandFailed, TypeError, IndexError) as e:
+                        logger.debug(f"Error checking pod {p.name}: {e}")
                         continue
                 return False
 
+            logger.info("Waiting for pod restarts (timeout: 450s, interval: 15s)")
             sample = TimeoutSampler(timeout=450, sleep=15, func=check_for_any_restarts)
-            assert sample.wait_for_func_status(
-                result=True
+            restart_detected = sample.wait_for_func_status(result=True)
+
+            logger.assertion(
+                f"Liveness probe failure caused pod restart: expected=True, actual={restart_detected}"
+            )
+            assert (
+                restart_detected
             ), f"Liveness failure: No pod restarts detected for {self.csv_name}."
+            logger.info("Liveness probe failure verified: Pod restarted as expected")
 
         elif probe_type == "readiness":
-            logger.info("Verifying Readiness failure: Expecting NotReady state...")
+            logger.test_step(
+                "Trigger readiness probe failure and verify pod becomes NotReady"
+            )
             bad_path = "/bad-ready" if "ocs-operator" in self.csv_name else "/bad"
+            logger.info(f"Patching CSV with invalid readiness probe path: {bad_path}")
             self._patch_csv(probe_type, bad_path)
 
             def check_for_not_ready():
@@ -151,6 +196,8 @@ class TestOperatorProbeResilience(ManageTest):
                     selector=[self.label_value],
                     selector_label=self.label_key,
                 )
+                logger.debug(f"Checking {len(live_pods)} pods for NotReady state")
+
                 for p in live_pods:
                     try:
                         pod_data = p.get()
@@ -159,20 +206,35 @@ class TestOperatorProbeResilience(ManageTest):
                         statuses = pod_data.get("status", {}).get(
                             "containerStatuses", []
                         )
-                        if statuses and not statuses[0].get("ready"):
-                            logger.info(f"Confirmed: Pod {p.name} status is NotReady.")
-                            return True
-                    except (CommandFailed, TypeError):
+                        if statuses:
+                            is_ready = statuses[0].get("ready", True)
+                            if not is_ready:
+                                logger.info(f"Pod NotReady state detected: {p.name}")
+                                return True
+                            else:
+                                logger.debug(f"Pod {p.name}: still ready")
+                    except (CommandFailed, TypeError) as e:
+                        logger.debug(f"Error checking pod {p.name}: {e}")
                         continue
                 return False
 
+            logger.info("Waiting for pod NotReady state (timeout: 300s, interval: 10s)")
             sample = TimeoutSampler(timeout=300, sleep=10, func=check_for_not_ready)
-            assert sample.wait_for_func_status(
-                result=True
+            not_ready_detected = sample.wait_for_func_status(result=True)
+
+            logger.assertion(
+                f"Readiness probe failure caused NotReady state: expected=True, actual={not_ready_detected}"
+            )
+            assert (
+                not_ready_detected
             ), f"Readiness failure: Pod did not reach NotReady for {self.csv_name}."
+            logger.info(
+                "Readiness probe failure verified: Pod became NotReady as expected"
+            )
 
         # 2. Restore and Verify (Cleanup)
-        logger.info(f"Restoring healthy configuration: {healthy_path}")
+        logger.test_step("Restore healthy probe configuration and verify pod recovery")
+        logger.info(f"Restoring {probe_type} probe to healthy path: {healthy_path}")
         self._patch_csv(probe_type, healthy_path)
 
         def final_sync():
@@ -182,13 +244,33 @@ class TestOperatorProbeResilience(ManageTest):
                 selector_label=self.label_key,
             )
             if not current_pods:
+                logger.debug("No pods found yet during recovery check")
                 return False
+
             names = [p.name for p in current_pods]
-            return pod_helpers.wait_for_pods_to_be_in_statuses(
+            logger.debug(f"Checking {len(names)} pods for Running state: {names}")
+
+            all_running = pod_helpers.wait_for_pods_to_be_in_statuses(
                 [constants.STATUS_RUNNING], pod_names=names, namespace=self.namespace
             )
+            if all_running:
+                logger.info(f"All {len(names)} pods returned to Running state")
+            return all_running
 
+        logger.info(
+            "Waiting for pods to return to Running state (timeout: 300s, interval: 10s)"
+        )
         sample = TimeoutSampler(timeout=300, sleep=10, func=final_sync)
-        assert sample.wait_for_func_status(
-            result=True
+        recovery_successful = sample.wait_for_func_status(result=True)
+
+        logger.assertion(
+            f"Pods recovered to Running state after probe restoration: "
+            f"expected=True, actual={recovery_successful}"
+        )
+        assert (
+            recovery_successful
         ), "Cleanup failed: Pods did not return to healthy Running state."
+
+        logger.info(
+            f"Test passed: {probe_type} probe resilience verified for {self.csv_name}"
+        )
