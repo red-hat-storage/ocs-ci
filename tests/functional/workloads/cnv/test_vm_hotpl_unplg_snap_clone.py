@@ -49,14 +49,39 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         """
         logger.info(f"Hotplugging PVC '{pvc.name}' to VM '{vm_obj.name}'")
         vm_obj.addvolume(volume_name=pvc.name)
-        sample = TimeoutSampler(
-            timeout=600,
+
+        logger.info(
+            f"Waiting for PVC '{pvc.name}' to be attached to VM '{vm_obj.name}'"
+        )
+        volume_sample = TimeoutSampler(
+            timeout=300,
+            sleep=5,
+            func=verifyvolume,
+            vm_name=vm_obj.name,
+            volume_name=pvc.name,
+            namespace=vm_obj.namespace,
+        )
+        assert volume_sample.wait_for_func_value(
+            value=True
+        ), f"PVC '{pvc.name}' was not attached to VM '{vm_obj.name}'"
+
+        logger.info(
+            f"PVC '{pvc.name}' is attached to VM '{vm_obj.name}'. "
+            "Waiting for the disk to become visible inside the guest"
+        )
+
+        hotplug_sample = TimeoutSampler(
+            timeout=300,
             sleep=5,
             func=verify_hotplug,
             vm_obj=vm_obj,
             disks_before_hotplug=before_disks,
         )
-        sample.wait_for_func_value(value=True)
+        assert hotplug_sample.wait_for_func_value(value=True), (
+            f"PVC '{pvc.name}' is attached to VM '{vm_obj.name}', "
+            "but the hotplugged disk was not detected inside the guest"
+        )
+
         logger.info(f"PVC '{pvc.name}' hotplugged successfully to VM '{vm_obj.name}'")
 
         if not cross_pvc:
