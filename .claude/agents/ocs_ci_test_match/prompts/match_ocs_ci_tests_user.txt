@@ -1,0 +1,35 @@
+Find ocs-ci automated tests that best validate this JIRA issue on a fixed z-stream build.
+
+## Issue
+- **Issue ID:** {issue_id}
+- **Summary:** {issue_summary}
+- **Components:** {components}
+- **Labels:** {labels}
+
+## Topology
+- **Type:** {topology_label} ({topology})
+- **Details:** {topology_details}
+- **Footprint:** {footprint} ({cluster_count} cluster(s))
+
+## Environment requirements
+{environment_requirements}
+
+## Reproduction steps
+{reproduction_steps}
+
+## Verification steps (primary — match tests to these)
+{verification_steps}
+
+## Expected result
+{expected_result}
+
+## Linked fix pull requests (if any)
+{fix_pull_requests}
+
+## Instructions
+1. Search `tests/` with Glob/Grep/Read based on the **verification steps** above.
+2. Select up to **{top_n}** tests that most closely automate or cover the same validation.
+3. Explain why each test matches specific verification steps (cite step numbers or text).
+4. Note coverage gaps if no strong automated test exists.
+
+Write your analysis in prose (no JSON in this phase).
