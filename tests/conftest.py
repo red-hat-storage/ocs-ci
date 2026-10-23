@@ -9941,12 +9941,18 @@ def setup_logwriter_rbd_workload(
 
     """
 
-    def factory(zone_aware=True):
+    def factory(zone_aware=True, sc_name=None, access_mode=None):
         """
         Factory function to setup the logwriter rbd workloads
 
         Args:
             zone_aware (bool): True if the workloads are zone aware False otherwise
+            sc_name (str): Name of the storage class to back the sts volumes with.
+                Defaults to the RBD storage class defined in the template. Used by
+                non ODF stretch clusters, for example Fusion Access, where the
+                volumes are backed by an IBM Storage Scale storage class
+            access_mode (str): Access mode for the sts volumes. Defaults to the
+                access mode defined in the template (RWO)
 
         """
         logwriter_sts_path = constants.LOGWRITER_STS_PATH
@@ -9954,6 +9960,14 @@ def setup_logwriter_rbd_workload(
         sts_data["metadata"]["namespace"] = setup_stretch_cluster_project.namespace
         if not zone_aware:
             sts_data["spec"]["template"]["spec"].pop("topologySpreadConstraints")
+        if sc_name:
+            sts_data["spec"]["volumeClaimTemplates"][0]["spec"][
+                "storageClassName"
+            ] = sc_name
+        if access_mode:
+            sts_data["spec"]["volumeClaimTemplates"][0]["spec"]["accessModes"] = [
+                access_mode
+            ]
 
         logwriter_sts = helpers.create_resource(**sts_data)
         teardown_factory(logwriter_sts)
