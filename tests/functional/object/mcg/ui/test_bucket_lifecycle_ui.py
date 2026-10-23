@@ -326,7 +326,9 @@ class TestBucketLifecycleUI:
 
         new_days = 60
         lifecycle_ui.edit_lifecycle_rule(
-            rule_name=initial_rule_name, new_rules={"expiration": {"days": new_days}}
+            rule_name=initial_rule_name,
+            new_rules={"expiration": {"days": new_days}},
+            scope="whole_bucket",
         )
 
         updated_rules = lifecycle_ui.get_lifecycle_rules_list()
