@@ -649,7 +649,9 @@ class KrKnRunner:
                     stdout, stderr = self._monitor_krkn_output(timeout)
                     log.info(f"Krkn stdout:\n{stdout}")
                     if stderr:
-                        log.error(f"Krkn stderr:\n{stderr}")
+                        # Krkn writes its normal log to stderr. A zero exit is
+                        # not a framework failure; non-zero exits are logged below.
+                        log.info(f"Krkn stderr:\n{stderr}")
                 except subprocess.TimeoutExpired:
                     log.error(f"Krkn process timed out after {timeout} seconds")
                     # Kill the process and its children
