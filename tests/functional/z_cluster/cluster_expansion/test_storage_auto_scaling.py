@@ -63,6 +63,7 @@ from ocs_ci.ocs.cluster import (
 )
 from ocs_ci.helpers.ceph_helpers import wait_for_percent_used_capacity_reached
 from ocs_ci.ocs.node import select_osd_node
+from ocs_ci.ocs.benchmark_operator_fio import get_file_size
 
 logger = logging.getLogger(__name__)
 
@@ -82,8 +83,8 @@ class TestStorageAutoscalerBase(ManageTest):
     Abstract base class with fixtures and helpers for the StorageAutoscaler test procedure
     """
 
-    benchmark_workload_storageutilization: any = None
-    benchmark_obj: any = None
+    fill_job_factory: any = None
+    fill_job_objs: list = []
     is_cleanup_cluster: bool = False
     used_capacity: float = None
     old_storage_size: str = None
@@ -108,7 +109,7 @@ class TestStorageAutoscalerBase(ManageTest):
         self,
         request,
         create_pvcs_and_pods,
-        benchmark_workload_storageutilization,
+        fill_job_factory,
         pause_and_resume_cluster_load,
     ):
         """
@@ -116,10 +117,8 @@ class TestStorageAutoscalerBase(ManageTest):
         resize OSD procedure, as the StorageAutoscaler will perform the Resize OSD when it triggers.
 
         """
-        self.benchmark_workload_storageutilization = (
-            benchmark_workload_storageutilization
-        )
-        self.benchmark_obj = None
+        self.fill_job_factory = fill_job_factory
+        self.fill_job_objs = []
         self.is_cleanup_cluster = False
 
         self.used_capacity = get_percent_used_capacity()
@@ -175,56 +174,40 @@ class TestStorageAutoscalerBase(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def fill_up_cluster(
-        self, target_percentage, bs="4096KiB", is_completed=True, fast_fill_up=True
-    ):
+    def fill_up_cluster(self, target_percentage, is_completed=True):
         """
-        Fill up the cluster to a target percentage of total storage capacity using FIO-based load.
+        Fill up the cluster to a target percentage of total storage capacity.
 
-        This method invokes the benchmark operator to prefill the cluster up to a specified
-        usage level. If `fast_fill_up` is enabled, more aggressive FIO settings are applied
-        to increase fill speed, and the `target_percentage` is reduced slightly to compensate
-        for potential overshoot.
+        Uses FillPoolJob with incompressible fio data so Ceph used-raw increases.
 
         Args:
             target_percentage (int): Desired percentage of used cluster storage to reach.
-            bs (str): Block size used for the workload. Default is "4096KiB".
-            is_completed (bool): Whether to wait until the benchmark workload completes.
-            fast_fill_up (bool): If True, use aggressive parameters (higher iodepth, numjobs)
-                                 for faster cluster fill-up. The target percentage is adjusted.
+            is_completed (bool): Whether to wait until the fill workload completes.
+
         """
-        logger.info(
-            f"Fill up the cluster to {target_percentage}% of it's storage capacity "
-            f"(fast_fill_up={fast_fill_up})"
+        storage_to_fill = get_file_size(
+            expected_used_capacity_percent=target_percentage
         )
-
-        numjobs = None
-        iodepth = None
-
-        if fast_fill_up:
-            numjobs = 4
-            iodepth = 64
-            # Reduce the target to compensate for likely overshoot
-            target_percentage = int(target_percentage - target_percentage / 4)
-            logger.info(
-                f"Target percentage adjusted to {target_percentage}% due to fast_fill_up mode"
-            )
-
-        self.benchmark_obj = self.benchmark_workload_storageutilization(
-            target_percentage,
-            bs=bs,
-            is_completed=is_completed,
-            numjobs=numjobs,
-            iodepth=iodepth,
+        logger.info(f"Total storage to fill the cluster: {storage_to_fill}Gi")
+        fill_job_obj = self.fill_job_factory(
+            fill_mode="incompressible",
+            storage=f"{storage_to_fill}Gi",
+            block_size="4M",
         )
+        self.fill_job_objs.append(fill_job_obj)
+
+        if is_completed:
+            for fill_job in self.fill_job_objs:
+                fill_job.wait_for_completion(timeout=3600, sleep=30)
 
     def cleanup_cluster(self):
         """
         Clean up the cluster from the benchmark operator project
 
         """
-        if self.benchmark_obj and not self.is_cleanup_cluster:
-            self.benchmark_obj.cleanup()
+        if self.fill_job_objs and not self.is_cleanup_cluster:
+            for fill_job in self.fill_job_objs:
+                fill_job.cleanup()
             self.is_cleanup_cluster = True
             config.RUN["cleanup_cluster_time"] = time.time()
 
