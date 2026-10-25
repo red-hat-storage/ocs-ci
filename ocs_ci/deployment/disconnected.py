@@ -1349,6 +1349,21 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
                     f"(catalog: {index_image})"
                 )
 
+                # Force Manual subscription approval for pinned installs so that
+                # OLM cannot auto-upgrade if the shared proxy mirror gains a
+                # higher-version bundle (e.g. from a concurrent deployment job).
+                # ocs-ci's upgrade path calls wait_for_install_plan_and_approve()
+                # explicitly, so intentional upgrades are unaffected.
+                # An explicit config override (subscription_plan_approval already
+                # set to "Automatic") is respected and not overwritten.
+                if not config.DEPLOYMENT.get("subscription_plan_approval"):
+                    logger.info(
+                        "disconnected_z_minus_n is set: forcing "
+                        "subscription_plan_approval=Manual to prevent OLM "
+                        "from auto-upgrading beyond the pinned version."
+                    )
+                    config.DEPLOYMENT["subscription_plan_approval"] = "Manual"
+
         mirrored_index_image = mirror_index_image_via_oc_mirror(
             index_image,
             required_packages,
