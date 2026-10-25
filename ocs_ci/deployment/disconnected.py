@@ -429,6 +429,21 @@ def _render_catalog(index_image, packages):
     bundle_channels = {pkg: {} for pkg in wanted}
     default_channels = {}
 
+    # opm render has no --authfile flag; credentials must be supplied via
+    # REGISTRY_AUTH_FILE (same pattern as opm index prune on line ~840).
+    # This is required for registry.redhat.io which rejects anonymous pulls
+    # (quay.io works without it because earlier podman/skopeo calls populate
+    # the ambient container auth store, but registry.redhat.io does not).
+    env = os.environ.copy()
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+    if os.path.exists(pull_secret_path):
+        env["REGISTRY_AUTH_FILE"] = pull_secret_path
+    else:
+        logger.warning(
+            f"Pull secret not found at {pull_secret_path}; "
+            "opm render will rely on existing container auth."
+        )
+
     stderr_file = tempfile.TemporaryFile()
     proc = subprocess.Popen(
         ["opm", "render", index_image, "--output=json"],
@@ -438,6 +453,7 @@ def _render_catalog(index_image, packages):
         # killing only the direct child would leave grandchildren holding the
         # stdout pipe open and the read loop below would still never end
         start_new_session=True,
+        env=env,
     )
     timed_out = threading.Event()
 
