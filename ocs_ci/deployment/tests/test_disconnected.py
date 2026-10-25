@@ -442,3 +442,172 @@ class TestPinnedImageSetConfig:
     def test_without_pinning_no_constraints_are_emitted(self):
         entries = self.build_packages(["odf-operator", "ocs-operator"], None)
         assert entries == [{"name": "odf-operator"}, {"name": "ocs-operator"}]
+
+
+class TestPinnedInstallManualApproval:
+    """
+    When disconnected_z_minus_n is set, prepare_disconnected_ocs_deployment()
+    must force subscription_plan_approval=Manual so OLM cannot auto-upgrade
+    beyond the pinned version due to a shared proxy serving higher bundles.
+    """
+
+    @staticmethod
+    def _run_prepare(z_minus_n, pre_existing_approval=None):
+        """
+        Drive prepare_disconnected_ocs_deployment() just far enough to trigger
+        the subscription_plan_approval side-effect, then capture the config.
+
+        Returns:
+            str or None: value of config.DEPLOYMENT["subscription_plan_approval"]
+                after the call
+        """
+        import unittest.mock as mock
+        from ocs_ci.deployment import disconnected
+
+        deployment_overrides = {
+            "disconnected": True,
+            "disconnected_z_minus_n": z_minus_n,
+        }
+        if pre_existing_approval is not None:
+            deployment_overrides["subscription_plan_approval"] = pre_existing_approval
+
+        fake_catalog = {
+            "odf-operator": {
+                "versions": {f"4.20.{i}-rhodf": {"stable-4.20"} for i in range(5)},
+                "default_channel": "stable-4.20",
+            }
+        }
+
+        with (
+            mock.patch.dict(
+                disconnected.config.DEPLOYMENT,
+                deployment_overrides,
+                clear=False,
+            ),
+            mock.patch.dict(
+                disconnected.config.ENV_DATA,
+                {"ocs_version": "4.20", "cluster_path": "/tmp"},
+                clear=False,
+            ),
+            mock.patch.object(
+                disconnected,
+                "get_semantic_ocs_version_from_config",
+                return_value=mock.MagicMock(
+                    __str__=lambda s: "4.20", __format__=lambda s, f: "4.20"
+                ),
+            ),
+            mock.patch.object(disconnected, "disable_default_sources"),
+            mock.patch.object(disconnected, "login_to_mirror_registry"),
+            mock.patch.object(
+                disconnected, "get_and_apply_idms_from_catalog", return_value=None
+            ),
+            mock.patch.object(
+                disconnected,
+                "_render_catalog",
+                return_value=fake_catalog,
+            ),
+            mock.patch.object(
+                disconnected,
+                "mirror_index_image_via_oc_mirror",
+                return_value="mirror:5000/redhat/redhat-operator-index:v4.20",
+            ),
+            mock.patch.object(
+                disconnected,
+                "get_semantic_ocp_running_version",
+                return_value=mock.MagicMock(__le__=lambda s, o: False),
+            ),
+            mock.patch.dict(
+                disconnected.config.DEPLOYMENT,
+                {
+                    "stage_rh_osbs": False,
+                    "live_deployment": False,
+                    "ocs_registry_image": "quay.io/rhceph-dev/ocs-registry:4.20.4-rhodf",
+                    "mirror_registry": "mirror:5000",
+                },
+                clear=False,
+            ),
+            mock.patch.object(
+                disconnected,
+                "get_semantic_ocp_running_version",
+                return_value=mock.MagicMock(__le__=lambda s, o: False),
+            ),
+        ):
+            try:
+                disconnected.prepare_disconnected_ocs_deployment(upgrade=False)
+            except Exception:
+                pass
+            return disconnected.config.DEPLOYMENT.get("subscription_plan_approval")
+
+    def test_manual_approval_set_when_z_minus_n_configured(self):
+        """z_minus_n set, no prior approval → Manual is forced."""
+        result = self._run_prepare(z_minus_n=2)
+        assert result == "Manual", (
+            f"Expected 'Manual' but got {result!r}. "
+            "Pinned installs must block OLM auto-upgrades."
+        )
+
+    def test_explicit_automatic_not_overwritten(self):
+        """User explicitly set Automatic → their choice is respected."""
+        result = self._run_prepare(z_minus_n=2, pre_existing_approval="Automatic")
+        assert (
+            result == "Automatic"
+        ), "An explicitly configured subscription_plan_approval must not be overwritten."
+
+    def test_no_z_minus_n_no_forced_approval(self):
+        """No z_minus_n → approval stays unset (existing behaviour)."""
+        import unittest.mock as mock
+        from ocs_ci.deployment import disconnected
+
+        with (
+            mock.patch.dict(
+                disconnected.config.DEPLOYMENT,
+                {"disconnected": True, "disconnected_z_minus_n": None},
+                clear=False,
+            ),
+            mock.patch.dict(
+                disconnected.config.ENV_DATA,
+                {"ocs_version": "4.20", "cluster_path": "/tmp"},
+                clear=False,
+            ),
+            mock.patch.object(
+                disconnected,
+                "get_semantic_ocs_version_from_config",
+                return_value=mock.MagicMock(
+                    __str__=lambda s: "4.20", __format__=lambda s, f: "4.20"
+                ),
+            ),
+            mock.patch.object(disconnected, "disable_default_sources"),
+            mock.patch.object(disconnected, "login_to_mirror_registry"),
+            mock.patch.object(
+                disconnected, "get_and_apply_idms_from_catalog", return_value=None
+            ),
+            mock.patch.object(
+                disconnected,
+                "mirror_index_image_via_oc_mirror",
+                return_value="mirror:5000/redhat/redhat-operator-index:v4.20",
+            ),
+            mock.patch.dict(
+                disconnected.config.DEPLOYMENT,
+                {
+                    "stage_rh_osbs": False,
+                    "live_deployment": False,
+                    "ocs_registry_image": "quay.io/rhceph-dev/ocs-registry:4.20.4-rhodf",
+                    "mirror_registry": "mirror:5000",
+                },
+                clear=False,
+            ),
+            mock.patch.object(
+                disconnected,
+                "get_semantic_ocp_running_version",
+                return_value=mock.MagicMock(__le__=lambda s, o: False),
+            ),
+        ):
+            try:
+                disconnected.prepare_disconnected_ocs_deployment(upgrade=False)
+            except Exception:
+                pass
+            result = disconnected.config.DEPLOYMENT.get("subscription_plan_approval")
+        assert result is None, (
+            f"Expected no approval to be set but got {result!r}. "
+            "Without z_minus_n, approval must remain unset."
+        )
