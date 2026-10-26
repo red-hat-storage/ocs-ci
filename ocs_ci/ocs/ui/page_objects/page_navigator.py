@@ -519,6 +519,32 @@ class PageNavigator(BaseUI):
         self.page_has_loaded(retries=30)
         return ExternalSystems()
 
+    def nav_fusion_access_for_san_page(self):
+        """
+        Navigate to Storage → Fusion Access for SAN.
+
+        Expands the Storage section in the left sidebar and clicks the
+        "Fusion Access for SAN" navigation link, landing on either the
+        empty-state "No storage cluster" page or the existing cluster view.
+
+        Returns:
+            PreMigrationFusionAccessUI: Fusion Access for SAN page object
+        """
+        from ocs_ci.ocs.ui.page_objects.premigration_fusion_access_ui import (
+            PreMigrationFusionAccessUI,
+        )
+
+        logger.info("Navigate to Storage > Fusion Access for SAN")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.fusion_access_storage_cluster["fusion_access_for_san_nav"],
+            timeout=60,
+            enable_screenshot=True,
+        )
+        self.page_has_loaded(retries=15)
+        logger.info("Successfully navigated to Fusion Access for SAN page")
+        return PreMigrationFusionAccessUI()
+
     def nav_to_attach_storage_page(self):
         """
         Navigate to Attach Storage Page
