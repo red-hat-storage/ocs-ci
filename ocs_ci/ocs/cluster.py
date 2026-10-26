@@ -1759,12 +1759,25 @@ def get_pool_raw_overhead_factor(pool_name):
     Returns:
         float: raw storage overhead factor for the pool
 
-    """
-    ec_profile_name = get_ceph_pool_property(pool_name, "erasure_code_profile")
-    if not ec_profile_name:
-        return get_ceph_pool_property(pool_name, "size")
+    Raises:
+        PoolNotFound: if the pool does not exist on the cluster
 
-    ec_profile = pod.get_ceph_tools_pod().exec_ceph_cmd(
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    pool_details = ct_pod.exec_ceph_cmd(
+        ceph_cmd="ceph osd pool ls detail", format="json"
+    )
+    pool_info = next(
+        (pool for pool in pool_details if pool.get("pool_name") == pool_name), None
+    )
+    if not pool_info:
+        raise PoolNotFound(f"Pool {pool_name} not found on cluster")
+
+    ec_profile_name = pool_info.get("erasure_code_profile")
+    if not ec_profile_name:
+        return pool_info["size"]
+
+    ec_profile = ct_pod.exec_ceph_cmd(
         ceph_cmd=f"ceph osd erasure-code-profile get {ec_profile_name}"
     )
     data_chunks = int(ec_profile["k"])
