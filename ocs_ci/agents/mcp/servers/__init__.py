@@ -12,10 +12,6 @@ SERVER_TOOLS = {
         "cluster_get_pods",
         "cluster_get_ceph_status",
     ),
-    "reportportal": (
-        "reportportal_get_launch",
-        "reportportal_get_test_log",
-    ),
     "jenkins": (
         "jenkins_find_cluster",
         "jenkins_get_build",

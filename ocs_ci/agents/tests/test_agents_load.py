@@ -10,7 +10,6 @@ from ocs_ci.agents.mcp.servers import (
     cluster,
     jenkins,
     jira,
-    reportportal,
 )
 from ocs_ci.agents.runtime import discover
 
@@ -25,7 +24,6 @@ def test_server_catalog_matches_tool_modules():
     """The package catalog stays aligned with each server module."""
     assert SERVER_TOOLS["jira"] == jira.TOOL_NAMES
     assert SERVER_TOOLS["cluster"] == cluster.TOOL_NAMES
-    assert SERVER_TOOLS["reportportal"] == reportportal.TOOL_NAMES
     assert SERVER_TOOLS["jenkins"] == jenkins.TOOL_NAMES
 
 

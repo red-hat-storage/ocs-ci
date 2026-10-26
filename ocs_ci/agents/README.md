@@ -14,8 +14,7 @@ ocs_ci/agents/
 │   └── servers/            # local tool implementations
 │       ├── jira.py
 │       ├── jenkins.py
-│       ├── cluster.py
-│       └── reportportal.py
+│       └── cluster.py
 ├── _template/              # copy this folder to add an agent
 ├── jira_verification/      # first agent
 ├── workflows/              # parent graphs that call other agents
