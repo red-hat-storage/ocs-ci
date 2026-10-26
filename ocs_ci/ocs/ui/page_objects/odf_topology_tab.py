@@ -23,12 +23,7 @@ from ocs_ci.ocs.node import get_node_names
 from ocs_ci.ocs.ocp import OCP
 from pathlib import Path
 
-from ocs_ci.ocs.ui.base_ui import (
-    BaseUI,
-    logger,
-    _crop_screenshot,
-    wait_for_element_to_be_clickable,
-)
+from ocs_ci.ocs.ui.base_ui import BaseUI, logger, _crop_screenshot
 from ocs_ci.ocs.ui.odf_topology import TopologyUiStr, OdfTopologyHelper
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     DataFoundationDefaultTab,
@@ -1321,11 +1316,9 @@ class OdfTopologyDeploymentsView(TopologyTab):
             node_locator = format_locator(
                 self.topology_loc["node_selector_from_node_filtering_bar"], node_name
             )
-            logger.info(f"Waiting for node '{node_name}' to appear in the filter list")
-            wait_for_element_to_be_clickable(node_locator)
-
             logger.info(f"Selecting node '{node_name}' from the filter list")
             self.do_click(node_locator)
+            logger.info(f"Node '{node_name}' selected from the filter list")
         else:
             raise IncorrectUiOptionRequested(
                 "Topology node filtering exists only on Deployment Topology level"
