@@ -1137,6 +1137,71 @@ SCALE_DASHBOARD_LOCATORS = {
     ),
 }
 
+# ---------------------------------------------------------------------------
+# Fusion Access HA — Stretch Cluster UI locators  (RHSTOR-8877)
+# ---------------------------------------------------------------------------
+# Node-selection wizard table; the LUN table is shared with FDF_SAN_LOCATORS so
+# both keep using @aria-label='LUNs table'.
+_STRETCH_NODE_TABLE = "//table[@aria-label='Nodes table']"
+_STRETCH_LUN_TABLE = "//table[@aria-label='LUNs table']"
+# A node row, matched on the exact text of its name cell so that e.g.
+# 'compute-1' never matches the 'compute-11' row.
+_STRETCH_NODE_ROW_BY_NAME = (
+    f"{_STRETCH_NODE_TABLE}//tbody//tr"
+    "[normalize-space(td[@data-label='Name'])='{node_name}']"
+)
+_STRETCH_ROLE_DROPDOWN = "//button[@data-test='node-role-dropdown']"
+# XPath 1.0 has no lower-case(); translate() is the portable way to compare text
+# case-insensitively.
+_XPATH_UPPER = "'ABCDEFGHIJKLMNOPQRSTUVWXYZ'"
+_XPATH_LOWER = "'abcdefghijklmnopqrstuvwxyz'"
+
+STRETCH_CLUSTER_LOCATORS = {
+    "include_control_plane_toggle": (
+        "//input[@id='include-control-plane-nodes']",
+        By.XPATH,
+    ),
+    "stretch_cluster_toggle": ("//input[@id='stretch-cluster']", By.XPATH),
+    "node_table": (_STRETCH_NODE_TABLE, By.XPATH),
+    "node_table_rows": (f"{_STRETCH_NODE_TABLE}//tbody//tr", By.XPATH),
+    "node_table_name_cell": (
+        f"{_STRETCH_NODE_TABLE}//tbody//tr[{{i}}]//td[@data-label='Name']",
+        By.XPATH,
+    ),
+    "node_table_role_cell": (
+        f"{_STRETCH_NODE_TABLE}//tbody//tr[{{i}}]//td[@data-label='Role']",
+        By.XPATH,
+    ),
+    "node_role_dropdown_by_name": (
+        f"{_STRETCH_NODE_ROW_BY_NAME}{_STRETCH_ROLE_DROPDOWN}",
+        By.XPATH,
+    ),
+    "node_role_dropdown_options": (
+        "//ul[@role='listbox']//li//button",
+        By.XPATH,
+    ),
+    "arbiter_node_role_dropdown": (
+        _STRETCH_NODE_ROW_BY_NAME.replace("{node_name}", "{arbiter_node}")
+        + _STRETCH_ROLE_DROPDOWN,
+        By.XPATH,
+    ),
+    "no_arbiter_alert": (
+        "//*[@role='alert']"
+        f"[contains(translate(., {_XPATH_UPPER}, {_XPATH_LOWER}), 'arbiter')]",
+        By.XPATH,
+    ),
+    "lun_discovery_table": (_STRETCH_LUN_TABLE, By.XPATH),
+    "lun_discovery_rows": (f"{_STRETCH_LUN_TABLE}//tbody//tr", By.XPATH),
+    "lun_discovery_wwid_cell": (
+        f"{_STRETCH_LUN_TABLE}//tbody//tr[{{i}}]//td[2]",
+        By.XPATH,
+    ),
+    "lun_row_by_wwid": (
+        f"{_STRETCH_LUN_TABLE}//tbody//tr[normalize-space(td[2])='{{wwid}}']",
+        By.XPATH,
+    ),
+}
+
 acm_page_nav = {
     "Home": ("//button[text()='Home']", By.XPATH),
     "Welcome_page": ("Welcome", By.LINK_TEXT),
