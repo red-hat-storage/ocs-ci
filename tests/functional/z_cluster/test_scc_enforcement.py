@@ -324,6 +324,56 @@ class TestSCCEnforcement(ManageTest):
                 )
         assert not errors, "Blackbox annotation checks failed:\n" + "\n".join(errors)
 
+    def _get_csi_pod_annotation_errors(
+        self, pods: list[dict], component: str, expected_network: str, phase: str
+    ) -> list[str]:
+        """Return SCC and network annotation errors for one CSI pod snapshot."""
+        errors = []
+        for pod_data in pods:
+            errors.extend(
+                get_scc_pinning_errors(pod_data, component, constants.SCC_CEPH_CSI_OP)
+            )
+            if (
+                pod_data["metadata"]
+                .get("annotations", {})
+                .get("k8s.v1.cni.cncf.io/networks")
+                != expected_network
+            ):
+                errors.append(
+                    f"Pod '{pod_data['metadata']['name']}' lost its network "
+                    f"attachment {phase} reconciliation"
+                )
+        return errors
+
+    def _reconcile_csi_workload(
+        self, workload_ocp: OCP, name: str, original_delay: int, request
+    ) -> dict:
+        """Trigger reconciliation and register cleanup before changing the workload."""
+        request.addfinalizer(
+            partial(
+                workload_ocp.patch,
+                resource_name=name,
+                params=json.dumps({"spec": {"minReadySeconds": original_delay}}),
+                format_type="merge",
+            )
+        )
+        if not workload_ocp.patch(
+            resource_name=name,
+            params=json.dumps({"spec": {"minReadySeconds": 1}}),
+            format_type="merge",
+        ):
+            raise UnexpectedBehaviour(
+                f"Failed to trigger reconciliation of {workload_ocp.kind} '{name}'"
+            )
+        for workload in TimeoutSampler(
+            timeout=120,
+            sleep=3,
+            func=workload_ocp.get,
+            resource_name=name,
+        ):
+            if workload["spec"].get("minReadySeconds", 0) == original_delay:
+                return workload
+
     @tier2
     @skipif_mcg_only
     def test_csi_annotations_survive_reconciliation(self, request):
@@ -396,35 +446,9 @@ class TestSCCEnforcement(ManageTest):
                         if phase == "after":
                             if len(errors) > baseline_error_count:
                                 continue
-                            request.addfinalizer(
-                                partial(
-                                    workload_ocp.patch,
-                                    resource_name=name,
-                                    params=json.dumps(
-                                        {"spec": {"minReadySeconds": original_delay}}
-                                    ),
-                                    format_type="merge",
-                                )
+                            workload = self._reconcile_csi_workload(
+                                workload_ocp, name, original_delay, request
                             )
-                            if not workload_ocp.patch(
-                                resource_name=name,
-                                params=json.dumps({"spec": {"minReadySeconds": 1}}),
-                                format_type="merge",
-                            ):
-                                raise UnexpectedBehaviour(
-                                    f"Failed to trigger reconciliation of {kind} '{name}'"
-                                )
-                            for workload in TimeoutSampler(
-                                timeout=120,
-                                sleep=3,
-                                func=workload_ocp.get,
-                                resource_name=name,
-                            ):
-                                if (
-                                    workload["spec"].get("minReadySeconds", 0)
-                                    == original_delay
-                                ):
-                                    break
 
                         template_annotations = (
                             workload["spec"]["template"]["metadata"].get("annotations")
@@ -451,22 +475,11 @@ class TestSCCEnforcement(ManageTest):
                             raise ResourceNotFoundError(
                                 f"No pods for {kind} '{name}' {phase} reconciliation"
                             )
-                        for pod_data in pods:
-                            errors.extend(
-                                get_scc_pinning_errors(
-                                    pod_data, name, constants.SCC_CEPH_CSI_OP
-                                )
+                        errors.extend(
+                            self._get_csi_pod_annotation_errors(
+                                pods, name, expected_network, phase
                             )
-                            if (
-                                pod_data["metadata"]
-                                .get("annotations", {})
-                                .get(network_annotation)
-                                != expected_network
-                            ):
-                                errors.append(
-                                    f"Pod '{pod_data['metadata']['name']}' lost its network "
-                                    f"attachment {phase} reconciliation"
-                                )
+                        )
                     checked_count += 1
 
         if not checked_count:

@@ -6,7 +6,6 @@ from ocs_ci.framework import config
 from ocs_ci.utility import templating, utils
 from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
-    ResourceWrongStatusException,
     TimeoutExpiredError,
     UnexpectedBehaviour,
 )
@@ -17,7 +16,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     Pod,
     get_pods_having_label,
-    wait_for_pods_to_be_running,
+    check_pods_in_running_state,
     get_pod_node,
     get_deployments_having_label,
 )
@@ -86,9 +85,26 @@ class TestSCC:
         errors = []
         for label, expected_scc in components.items():
             pods = get_pods_having_label(label=label, namespace=namespace)
+            pods = [pod for pod in pods if not pod["metadata"].get("deletionTimestamp")]
             if not pods:
                 raise ResourceNotFoundError(
                     f"No pods found for required component '{label}'"
+                )
+            if label == constants.NOOBAA_DB_LABEL_419_AND_ABOVE:
+                ocp_db = OCP(kind=constants.CNPG_CLUSTER_KIND, namespace=namespace)
+                db = ocp_db.get(resource_name=constants.NB_DB_CNPG_CLUSTER_NAME)
+                expected_count = db["spec"]["instances"]
+            else:
+                deployments = get_deployments_having_label(label, namespace)
+                if len(deployments) != 1:
+                    raise UnexpectedBehaviour(
+                        f"Expected one Deployment for '{label}', found {len(deployments)}"
+                    )
+                expected_count = deployments[0]["spec"].get("replicas", 1)
+            if len(pods) != expected_count:
+                raise UnexpectedBehaviour(
+                    f"Unstable pod baseline for '{label}': expected {expected_count} "
+                    f"pods, found {len(pods)}. Let the workload settle before retrying."
                 )
             for pod_data in pods:
                 errors.extend(get_scc_pinning_errors(pod_data, label, expected_scc))
@@ -122,14 +138,12 @@ class TestSCC:
                     pod["metadata"]["uid"] in original_uids for pod in pods
                 ):
                     continue
-                if not wait_for_pods_to_be_running(
+                if not check_pods_in_running_state(
                     namespace=namespace,
                     pod_names=[pod["metadata"]["name"] for pod in pods],
                     raise_pod_not_found_error=True,
                 ):
-                    raise ResourceWrongStatusException(
-                        label, expected="Running replacement pods"
-                    )
+                    continue
                 for pod_data in pods:
                     errors.extend(
                         get_scc_pinning_errors(pod_data, label, components[label])
