@@ -199,7 +199,6 @@ class BaseUI:
         self.storage_cluster_loc = self.deep_get(
             locators_for_current_ocp_version(), "storage_cluster"
         )
-        )
         self._locator_fallback = None
 
     @property

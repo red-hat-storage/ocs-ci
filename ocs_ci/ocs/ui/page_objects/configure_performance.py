@@ -510,7 +510,11 @@ class ConfigurePerformancePage(BaseUI):
         except Exception as e:
             raise ValueError(f"Failed to read MCG profile from UI: {e}")
         profile_text = profile_text.strip().lower()
-        if profile_text == MCG_PROFILE_PLACEHOLDER:
+        if (
+            profile_text == MCG_PROFILE_PLACEHOLDER
+            or profile_text.startswith(MCG_PROFILE_PLACEHOLDER)
+            or "select a profile" in profile_text
+        ):
             logger.info("MCG profile from UI: not selected yet (placeholder shown)")
             return None
         profile = profile_text.replace(" ", "-")

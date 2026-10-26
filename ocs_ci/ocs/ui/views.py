@@ -4341,15 +4341,15 @@ external_systems = {
 
 configure_performance = {
     "core_storage_section": (
-        "//*[contains(text(), 'Core storage')]"
+        "//*[self::h2 or self::h3][contains(text(), 'Core storage')]"
         "/ancestor::*[contains(@class, 'panel') or contains(@class, 'form') "
-        "or contains(@class, 'Section') or self::section]",
+        "or contains(@class, 'Section') or self::section or contains(@class, 'u-mb-')][1]",
         By.XPATH,
     ),
     "mcg_section": (
-        "//*[contains(text(), 'Multicloud Object Gateway')]"
+        "//*[self::h2 or self::h3][contains(text(), 'Multicloud Object Gateway')]"
         "/ancestor::*[contains(@class, 'panel') or contains(@class, 'form') "
-        "or contains(@class, 'Section') or self::section]",
+        "or contains(@class, 'Section') or self::section or contains(@class, 'u-mb-')][1]",
         By.XPATH,
     ),
     "mcg_select_profile_button": (
@@ -4408,16 +4408,18 @@ configure_performance = {
         By.XPATH,
     ),
     "core_storage_section_fallback": (
-        "//*[contains(text(), 'Core storage')]"
+        "//*[self::h2 or self::h3][contains(text(), 'Core storage')]"
         "/ancestor::*[contains(@class, 'panel') or contains(@class, 'form')]",
         By.XPATH,
     ),
     "mcg_select_profile_button_fallback": (
-        "//button[contains(@class, 'menu-toggle') and contains(@class, 'toggle')]",
+        "//h3[contains(text(), 'Multicloud Object Gateway')]"
+        "/following::button[contains(@class, 'c-menu-toggle') or contains(@class, 'menu-toggle')][1]",
         By.XPATH,
     ),
     "core_storage_select_profile_button_fallback": (
-        "//h2[contains(text(), 'Core storage')]/following::button[contains(@class, 'toggle')]",
+        "//h3[contains(text(), 'Core storage')]"
+        "/following::button[contains(@class, 'c-menu-toggle') or contains(@class, 'menu-toggle')][1]",
         By.XPATH,
     ),
 }

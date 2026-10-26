@@ -149,7 +149,7 @@ class TestMCGProfileSelection:
                 configure_perf_page.save_configuration()
 
             with test_step("Verify default profile is set in CR and UI"):
-                if initial_ui_profile != "default":
+                if captured_profile != "default":
                     # A change was saved: reopen the page to read the persisted state
                     storage_cluster_page = navigator.nav_storage_cluster_default_page()
                     configure_perf_page = (
