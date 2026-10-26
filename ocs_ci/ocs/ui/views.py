@@ -2068,8 +2068,8 @@ add_capacity_5_0 = {
         By.XPATH,
     ),
     "confirm_add_capacity": (
-        "//button[@data-test='confirm-action'] | //button[@data-test-id='confirm-action']",
-        By.XPATH,
+        'button[data-test="confirm-action"]',
+        By.CSS_SELECTOR,
     ),
 }
 

@@ -1,5 +1,4 @@
 import logging
-import time
 
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.views import ODF_OPERATOR
@@ -40,7 +39,6 @@ class AddReplaceDeviceUI(PageNavigator):
             else:
                 self.do_click(self.add_capacity_ui_loc["ocs_operator"])
                 self.do_click(self.add_capacity_ui_loc["storage_cluster_tab"])
-            time.sleep(1)
             logger.info("Click on kebab menu of Storage Systems")
             self.do_click(self.add_capacity_ui_loc["kebab_storage_cluster"])
         self.take_screenshot()
