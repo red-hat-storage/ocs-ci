@@ -15,16 +15,31 @@ Requirements:
     - RBD CSI controller pods running the snapshot-metadata sidecar
 """
 
+import base64
 import logging
+from datetime import datetime, timedelta, timezone
+
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import (
+    get_containers_names_by_pod,
+    get_pod_ip,
+    get_rbdfsplugin_provisioner_pods,
+)
 from ocs_ci.helpers import helpers
 from ocs_ci.utility.templating import load_yaml
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
+
+# Name of the CBT sidecar container in the RBD CSI controller pods
+SNAPSHOT_METADATA_CONTAINER = "csi-snapshot-metadata"
 
 
 # ---- Module-level RBAC helpers ------------------------------------
@@ -259,12 +274,39 @@ def _delete_tracked_resources(resources):
     resources.clear()
 
 
-def validate_snapshot_metadata_sidecar(pod):
+# ---- RBD CSI controller pod helpers -------------------------------
+
+
+def is_snapshot_metadata_sidecar_ready(pod_obj):
+    """
+    Check whether a pod has a ready csi-snapshot-metadata container.
+
+    Args:
+        pod_obj (Pod): RBD CSI controller pod object
+
+    Returns:
+        bool: True if the sidecar container is present and ready
+    """
+    if SNAPSHOT_METADATA_CONTAINER not in get_containers_names_by_pod(pod_obj):
+        return False
+
+    sidecar_status = next(
+        (
+            status
+            for status in pod_obj.data.get("status", {}).get("containerStatuses", [])
+            if status["name"] == SNAPSHOT_METADATA_CONTAINER
+        ),
+        None,
+    )
+    return bool(sidecar_status and sidecar_status.get("ready"))
+
+
+def validate_snapshot_metadata_sidecar(pod_obj):
     """
     Validate that a pod has a ready csi-snapshot-metadata container.
 
     Args:
-        pod (dict): Pod resource dictionary
+        pod_obj (Pod): RBD CSI controller pod object
 
     Returns:
         tuple: (pod_name, pod_ip) if validation succeeds
@@ -273,34 +315,307 @@ def validate_snapshot_metadata_sidecar(pod):
         AssertionError: If the pod does not have the sidecar or
             if the sidecar is not ready
     """
-    pod_name = pod["metadata"]["name"]
-    pod_ip = pod["status"]["podIP"]
-
-    containers = pod["spec"]["containers"]
-    container_names = [c["name"] for c in containers]
-    assert "csi-snapshot-metadata" in container_names, (
-        f"Pod {pod_name} does not have a csi-snapshot-metadata "
-        f"container. Found containers: {container_names}"
+    container_names = get_containers_names_by_pod(pod_obj)
+    assert SNAPSHOT_METADATA_CONTAINER in container_names, (
+        f"Pod {pod_obj.name} does not have a {SNAPSHOT_METADATA_CONTAINER} "
+        f"container. Found containers: {sorted(container_names)}"
+    )
+    assert is_snapshot_metadata_sidecar_ready(pod_obj), (
+        f"Pod {pod_obj.name} {SNAPSHOT_METADATA_CONTAINER} container is not "
+        f"ready: {pod_obj.data.get('status', {}).get('containerStatuses')}"
     )
 
-    container_statuses = pod["status"].get("containerStatuses", [])
-    sidecar_status = next(
-        (cs for cs in container_statuses if cs["name"] == "csi-snapshot-metadata"),
-        None,
-    )
-    assert (
-        sidecar_status is not None
-    ), f"Pod {pod_name} has no containerStatus for csi-snapshot-metadata"
-    assert (
-        sidecar_status["ready"] is True
-    ), f"Pod {pod_name} sidecar container is not ready: {sidecar_status}"
+    pod_ip = pod_obj.data["status"]["podIP"]
     logger.info(
-        "Pod %s has csi-snapshot-metadata container ready (IP: %s)",
-        pod_name,
+        "Pod %s has %s container ready (IP: %s)",
+        pod_obj.name,
+        SNAPSHOT_METADATA_CONTAINER,
         pod_ip,
     )
+    return pod_obj.name, pod_ip
 
-    return pod_name, pod_ip
+
+def get_ready_cbt_sidecar_pod_ips():
+    """
+    Get the IPs of the controller pods with a ready CBT sidecar.
+
+    Returns:
+        list: Sorted IPs of the RBD CSI controller pods whose
+            csi-snapshot-metadata container is ready
+    """
+    ready_ips = []
+    for pod_obj in get_rbdfsplugin_provisioner_pods():
+        if not is_snapshot_metadata_sidecar_ready(pod_obj):
+            continue
+        pod_ip = get_pod_ip(pod_obj)
+        if pod_ip:
+            ready_ips.append(pod_ip)
+
+    ready_ips.sort()
+    logger.info(
+        "%d RBD CSI controller pod(s) have a ready CBT sidecar: %s",
+        len(ready_ips),
+        ready_ips,
+    )
+    return ready_ips
+
+
+def wait_for_ready_cbt_sidecar_pods(expected_count, timeout=900, sleep=20):
+    """
+    Wait for a number of controller pods with a ready CBT sidecar.
+
+    The replacement of a controller pod whose node went down is not
+    guaranteed to land on the same node, so the wait only looks at
+    how many controller pods serve the CBT sidecar, not at where
+    they run.
+
+    Args:
+        expected_count (int): Number of controller pods that must
+            have a ready CBT sidecar
+        timeout (int): Time to wait in seconds
+        sleep (int): Time to wait between iterations in seconds
+
+    Returns:
+        list: Sorted IPs of the pods with a ready CBT sidecar
+
+    Raises:
+        TimeoutExpiredError: If the pods do not become ready in time
+    """
+    for sample in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=get_ready_cbt_sidecar_pod_ips,
+    ):
+        if len(sample) >= expected_count:
+            return sample
+
+
+# ---- CBT service endpoint helpers ---------------------------------
+
+
+def get_cbt_service_endpoint_ips():
+    """
+    Get the ready endpoint IPs of the CBT metadata service.
+
+    Returns:
+        list: Ready endpoint IP addresses of the Service
+            openshift-storage-rbd-snapshot-metadata
+    """
+    ep_ocp = OCP(
+        kind=constants.ENDPOINTS,
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    )
+    endpoints = ep_ocp.get(resource_name=constants.CBT_SERVICE_NAME)
+    return [
+        address["ip"]
+        for subset in endpoints.get("subsets", [])
+        for address in subset.get("addresses", [])
+    ]
+
+
+def get_matching_cbt_service_endpoint_ips(
+    present_ips=(), absent_ips=(), exact_ips=None
+):
+    """
+    Get the CBT service endpoint IPs if they match the expectation.
+
+    Args:
+        present_ips (iterable): IPs that must all be listed as ready
+            endpoints
+        absent_ips (iterable): IPs that must not be listed as ready
+            endpoints
+        exact_ips (iterable): The complete set of IPs the ready
+            endpoints must consist of, with no extra IP listed
+
+    Returns:
+        list: The sorted ready endpoint IPs, or None if they do not
+            match the expectation
+    """
+    present_ips = set(present_ips)
+    absent_ips = set(absent_ips)
+    endpoint_ips = set(get_cbt_service_endpoint_ips())
+    logger.info(
+        "CBT service endpoint IPs: %s (expecting present=%s absent=%s exact=%s)",
+        sorted(endpoint_ips),
+        sorted(present_ips),
+        sorted(absent_ips),
+        sorted(exact_ips) if exact_ips is not None else None,
+    )
+    if present_ips - endpoint_ips or endpoint_ips & absent_ips:
+        return None
+    if exact_ips is not None and endpoint_ips != set(exact_ips):
+        return None
+    return sorted(endpoint_ips)
+
+
+def wait_for_cbt_service_endpoints(
+    present_ips=(),
+    absent_ips=(),
+    exact_ips=None,
+    timeout=600,
+    sleep=15,
+):
+    """
+    Wait until the CBT service Endpoints reach the expected state.
+
+    Args:
+        present_ips (iterable): IPs that must all be listed as ready
+            endpoints
+        absent_ips (iterable): IPs that must not be listed as ready
+            endpoints
+        exact_ips (iterable): The complete set of IPs the ready
+            endpoints must consist of, with no extra IP listed
+        timeout (int): Time to wait in seconds
+        sleep (int): Time to wait between iterations in seconds
+
+    Returns:
+        list: The ready endpoint IPs once the condition is met
+
+    Raises:
+        TimeoutExpiredError: If the condition is not met in time
+    """
+    for sample in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=get_matching_cbt_service_endpoint_ips,
+        present_ips=present_ips,
+        absent_ips=absent_ips,
+        exact_ips=exact_ips,
+    ):
+        if sample is not None:
+            return sample
+
+
+# ---- Untrusted CA certificate -------------------------------------
+
+
+def generate_untrusted_ca_cert(
+    common_name="cbt-untrusted-ca",
+    backdate_minutes=5,
+    valid_days=1,
+):
+    """
+    Generate a self-signed CA certificate the CBT service does not use.
+
+    The certificate is valid in itself, but it has nothing to do
+    with the OpenShift service CA that signed the serving
+    certificate of the CBT metadata service. A client that trusts
+    only this certificate therefore cannot complete a TLS handshake
+    with the service, which is what the negative TLS test needs.
+
+    Args:
+        common_name (str): Common name of the generated CA
+        backdate_minutes (int): How many minutes before now the
+            certificate becomes valid, to tolerate clock skew
+            between the test runner and the cluster
+        valid_days (int): How many days from now the certificate
+            stays valid
+
+    Returns:
+        str: PEM-encoded certificate
+    """
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name)])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=backdate_minutes))
+        .not_valid_after(now + timedelta(days=valid_days))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(key, hashes.SHA256())
+    )
+    logger.info(
+        "Generated an untrusted self-signed CA certificate CN=%s valid for %d day(s)",
+        common_name,
+        valid_days,
+    )
+    return cert.public_bytes(serialization.Encoding.PEM).decode()
+
+
+# ---- Lister error output checks -----------------------------------
+
+
+def verify_lister_error_markers(output, markers, context):
+    """
+    Verify that a CBT tool output reports an expected error.
+
+    Args:
+        output (str): Merged stdout and stderr of the CBT tool
+        markers (tuple): Lower case substrings, any of which marks
+            the expected error
+        context (str): What the output was expected to report, used
+            in the assertion message
+
+    Raises:
+        AssertionError: If none of the markers is present
+    """
+    lowered = output.lower()
+    matched = [marker for marker in markers if marker in lowered]
+    assert matched, (
+        f"The CBT tool output does not report {context}. Expected one of "
+        f"{list(markers)}. Output:\n{output}"
+    )
+    logger.info("The CBT tool output reports %s (matched %s)", context, matched)
+
+
+def verify_lister_authentication_error_markers(output):
+    """
+    Verify that a CBT tool output reports an authentication error.
+
+    The sidecar answers a failed TokenReview with a gRPC
+    Unauthenticated status, but the exact wording differs between
+    the sidecar and the gRPC runtime, so any of the markers counts
+    as a hit.
+
+    Args:
+        output (str): Merged stdout and stderr of the CBT tool
+
+    Raises:
+        AssertionError: If no authentication error is reported
+    """
+    authentication_error_markers = (
+        "unauthenticated",
+        "authentication",
+        "unauthorized",
+        "audience",
+        "permission denied",
+        "invalid token",
+    )
+    verify_lister_error_markers(
+        output,
+        authentication_error_markers,
+        "an authentication error",
+    )
+
+
+def verify_lister_tls_error_markers(output):
+    """
+    Verify that a CBT tool output reports a TLS handshake failure.
+
+    Args:
+        output (str): Merged stdout and stderr of the CBT tool
+
+    Raises:
+        AssertionError: If no TLS handshake failure is reported
+    """
+    tls_error_markers = (
+        "x509",
+        "certificate signed by unknown authority",
+        "tls",
+        "handshake",
+    )
+    verify_lister_error_markers(
+        output,
+        tls_error_markers,
+        "a TLS handshake failure",
+    )
 
 
 # ---- Lister entry range helpers -----------------------------------
@@ -438,6 +753,10 @@ class ListerTool:
         lister.cleanup()
     """
 
+    # Marker appended to a captured in-pod command so its exit code
+    # can be read back from the merged stdout/stderr output
+    exit_code_marker = "CBT_EXIT_CODE="
+
     def __init__(self, namespace):
         """
         Args:
@@ -453,6 +772,7 @@ class ListerTool:
         self.golang_image = "golang:1.26"
         self.service_account = "cbt-client"
         self.ca_cert_cm_name = "cbt-ca-cert"
+        self.ca_cert_path = "/certs/ca.crt"
         self.build_dir = "/tmp"
         self._ca_cert = None
         self._lister_pod_name = None
@@ -482,6 +802,11 @@ class ListerTool:
             logger.error("CBT setup failed, cleaning up")
             self.cleanup()
             raise
+
+    @property
+    def lister_pod_name(self):
+        """str: Name of the persistent pod holding the lister binary."""
+        return self._lister_pod_name
 
     # ---- ConfigMap ------------------------------------------------
 
@@ -612,12 +937,24 @@ class ListerTool:
 
     # ---- Lister (exec in lister pod) ------------------------------
 
-    def _common_flags(self):
-        """Return the common CLI flags for the CBT tools."""
+    def _common_flags(self, audience=None, ca_cert_file=None):
+        """
+        Return the common CLI flags for the CBT tools.
+
+        Args:
+            audience (str): Audience to use instead of the one read
+                from the CBT ConfigMap. Used by negative tests.
+            ca_cert_file (str): In-pod path of the CA certificate to
+                use instead of the real service CA. Used by negative
+                tests.
+
+        Returns:
+            str: The common CLI flags
+        """
         return (
-            f"--ca-cert-file /certs/ca.crt "
+            f"--ca-cert-file {ca_cert_file or self.ca_cert_path} "
             f"--address {self.address} "
-            f"--audience {self.audience}"
+            f"--audience {audience or self.audience}"
         )
 
     @staticmethod
@@ -728,6 +1065,72 @@ class ListerTool:
         logger.info("Lister delta output:\n%s", output)
         return self.parse_lister_output(output)
 
+    def run_lister_expecting_failure(
+        self,
+        snapshot_name,
+        base_snap_name=None,
+        audience=None,
+        ca_cert_file=None,
+    ):
+        """
+        Run the lister and return its exit code instead of raising.
+
+        Used by the negative tests, where the lister is expected to
+        be rejected by the CBT metadata service. The returned output
+        holds the merged stdout and stderr of the lister, so the
+        caller can assert on the error message.
+
+        Args:
+            snapshot_name (str): Target VolumeSnapshot name
+            base_snap_name (str): Base VolumeSnapshot name. Omit for
+                allocated mode.
+            audience (str): Audience to use instead of the one read
+                from the CBT ConfigMap
+            ca_cert_file (str): In-pod path of the CA certificate to
+                use instead of the real service CA
+
+        Returns:
+            tuple: (exit_code, output) where exit_code is an int and
+                output is the merged stdout and stderr as a string
+        """
+        cmd = (
+            f"{self.build_dir}/snapshot-metadata-lister "
+            f"-n {self.namespace} "
+            f"-s {snapshot_name} "
+            f"{self._common_flags(audience=audience, ca_cert_file=ca_cert_file)} "
+            f"-o table"
+        )
+        if base_snap_name:
+            cmd += f" -p {base_snap_name}"
+
+        exit_code, output = self._exec_in_lister_pod_capture(cmd)
+        logger.info(
+            "Lister exited with code %d. Output:\n%s",
+            exit_code,
+            output,
+        )
+        return exit_code, output
+
+    def write_file_in_lister_pod(self, path, content):
+        """
+        Write a text file inside the lister pod.
+
+        The content is base64 encoded on the way in so that newlines
+        and PEM delimiters survive the shell.
+
+        Args:
+            path (str): Absolute in-pod path to write to. It has to
+                be under a writable directory such as /tmp.
+            content (str): File content
+
+        Returns:
+            str: The in-pod path that was written
+        """
+        encoded = base64.b64encode(content.encode()).decode()
+        self._exec_in_lister_pod(f'sh -c "echo {encoded} | base64 -d > {path}"')
+        logger.info("Wrote %d byte(s) to %s in the lister pod", len(content), path)
+        return path
+
     def _exec_in_lister_pod(self, cmd, timeout=300):
         """Exec a command inside the lister pod and return stdout."""
         ocp_pod = OCP(kind=constants.POD, namespace=self.namespace)
@@ -736,6 +1139,37 @@ class ListerTool:
             out_yaml_format=False,
             timeout=timeout,
         )
+
+    def _exec_in_lister_pod_capture(self, cmd, timeout=300):
+        """
+        Exec a command in the lister pod and capture its exit code.
+
+        Unlike _exec_in_lister_pod, a non-zero exit code of the inner
+        command does not raise, and stderr is merged into stdout, so
+        the error message of a rejected CBT call reaches the caller.
+
+        Args:
+            cmd (str): Command to run inside the pod
+            timeout (int): Timeout in seconds
+
+        Returns:
+            tuple: (exit_code, output)
+
+        Raises:
+            CommandFailed: If the exit code marker is missing from
+                the output, meaning the wrapper shell itself failed
+        """
+        wrapped = f'sh -c "{cmd} 2>&1; echo {self.exit_code_marker}$?"'
+        output = str(self._exec_in_lister_pod(wrapped, timeout=timeout))
+
+        marker_index = output.rfind(self.exit_code_marker)
+        if marker_index < 0:
+            raise CommandFailed(
+                f"Lister pod output has no {self.exit_code_marker} marker. "
+                f"Output:\n{output}"
+            )
+        exit_code = int(output[marker_index + len(self.exit_code_marker) :].split()[0])
+        return exit_code, output[:marker_index]
 
     # ---- Output parsing -------------------------------------------
 
