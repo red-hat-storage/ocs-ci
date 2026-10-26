@@ -1115,6 +1115,22 @@ FDF_SAN_LOCATORS = {
         "and contains(@href, '/odf/external-systems/scale.spectrum.ibm.com')]",
         By.XPATH,
     ),
+    "san_actions_button": (
+        "//button[@data-test='kebab-button']",
+        By.XPATH,
+    ),
+    "san_add_lun_group_menu_item": (
+        "//button[@id='ADD_LUN_GROUP']",
+        By.XPATH,
+    ),
+    "lun_popup_path_cells": (
+        "//table[@aria-label='LUNs table']//tbody//tr//td[not(@class[contains(.,'check')])][1]",
+        By.XPATH,
+    ),
+    "lun_group_popup_cancel_button": (
+        "//button[contains(@class, 'm-link') and normalize-space(.)='Cancel']",
+        By.XPATH,
+    ),
 }
 
 SCALE_DASHBOARD_LOCATORS = {
