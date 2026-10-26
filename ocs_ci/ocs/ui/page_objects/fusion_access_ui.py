@@ -229,3 +229,61 @@ class FusionAccessUI(PageNavigator, BaseUI):
                 False
             ), f"LUN group '{lun_group_name}' is not in Healthy/OK/Connected state"
         logger.info(f"LUN group {lun_group_name} health status is OK/Healthy/Connected")
+
+    def open_add_lun_group_popup(self):
+        """
+        On the SAN-based storage detail page, click the Actions button and then
+        select "Add LUN group" from the dropdown menu to open the Create LUN group
+        popup which displays the LUN table.
+
+        """
+        wait_for_element_to_be_clickable(
+            locator=FDF_SAN_LOCATORS["san_actions_button"], timeout=30
+        )
+        self.do_click(FDF_SAN_LOCATORS["san_actions_button"], enable_screenshot=True)
+        logger.info("Clicked Actions button on SAN-based storage detail page")
+
+        wait_for_element_to_be_clickable(
+            locator=FDF_SAN_LOCATORS["san_add_lun_group_menu_item"], timeout=15
+        )
+        self.do_click(
+            FDF_SAN_LOCATORS["san_add_lun_group_menu_item"], enable_screenshot=True
+        )
+        logger.info("Clicked 'Add LUN group' option — Create LUN group popup opened")
+
+    def get_lun_paths_from_popup(self):
+        """
+        Read and return all device paths visible in the LUN table inside the
+        Create LUN group popup (e.g. ['/dev/sdc', '/dev/sdd', ...]).
+
+        Returns:
+            list[str]: Sorted list of device path strings shown in the Path column.
+
+        Raises:
+            TimeoutExpiredError: If the LUN table is not found within 30 seconds.
+        """
+        path, by = FDF_SAN_LOCATORS["lun_popup_path_cells"]
+        try:
+            WebDriverWait(self.driver, 30).until(
+                EC.presence_of_element_located((by, path))
+            )
+        except Exception as err:
+            self.take_screenshot("lun_popup_table_not_found")
+            raise TimeoutExpiredError(
+                "LUN table did not appear in the Create LUN group popup"
+            ) from err
+
+        cells = self.get_elements(FDF_SAN_LOCATORS["lun_popup_path_cells"])
+        paths = [cell.text.strip() for cell in cells if cell.text.strip()]
+        logger.info(f"LUN paths visible in popup table: {paths}")
+        return paths
+
+    def close_lun_group_popup(self):
+        """
+        Close the Create LUN group popup by clicking the Cancel button.
+
+        """
+        self.do_click(
+            FDF_SAN_LOCATORS["lun_group_popup_cancel_button"], enable_screenshot=True
+        )
+        logger.info("Closed Create LUN group popup via Cancel button")
