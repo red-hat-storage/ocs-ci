@@ -156,7 +156,6 @@ deployment = {
     "enable_nfs": ('input[id="enable-nfs"]', By.CSS_SELECTOR),
     "configure_odf": ('button[data-test="configure-data-foundation"]', By.CSS_SELECTOR),
     "setup_storage_cluster": ("#setup-storage-cluster", By.CSS_SELECTOR),
-    # External PostgreSQL configuration form fields
     "external_pgsql_checkbox": (
         "input#use-external-postgress",
         By.CSS_SELECTOR,

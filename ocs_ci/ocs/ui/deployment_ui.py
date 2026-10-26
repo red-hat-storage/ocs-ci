@@ -383,6 +383,10 @@ class DeploymentUI(PageNavigator):
         if config.ENV_DATA.get("mcg_only_deployment", False):
             return
 
+        if config.ENV_DATA.get("noobaa_external_pgsql"):
+            logger.info("Configuring external PostgreSQL for NooBaa")
+            self.configure_external_pgsql_ui()
+
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
@@ -488,13 +492,12 @@ class DeploymentUI(PageNavigator):
         if self.operator_name == ODF_OPERATOR:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
 
-        # Configure external PostgreSQL if enabled (now on Step 2 with checkbox visible)
+        if ocs_version >= version.VERSION_4_21:
+            self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
+
         if config.ENV_DATA.get("noobaa_external_pgsql"):
             logger.info("Configuring external PostgreSQL for NooBaa")
             self.configure_external_pgsql_ui()
-
-        if ocs_version >= version.VERSION_4_21:
-            self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
 
         self.configure_osd_size()
 
@@ -604,17 +607,20 @@ class DeploymentUI(PageNavigator):
            - Database
 
         Credentials are retrieved from config.AUTH['pgsql'].
+
+        Raises:
+            ConfigurationError: If PostgreSQL credentials are missing or form
+                configuration fails.
         """
         logger.info("=" * 80)
         logger.info("STEP: Configure External PostgreSQL for NooBaa")
         logger.info("=" * 80)
 
-        # Get PostgreSQL credentials from config
         pgsql_data = config.AUTH.get("pgsql", {})
         if not pgsql_data:
-            logger.error("PostgreSQL credentials not found in config.AUTH['pgsql']")
-            logger.error("Skipping external PostgreSQL configuration")
-            return
+            raise ConfigurationError(
+                "PostgreSQL credentials not found in config.AUTH['pgsql']"
+            )
 
         pgsql_host = pgsql_data.get("host")
         pgsql_port = str(pgsql_data.get("port", 5432))
@@ -624,93 +630,55 @@ class DeploymentUI(PageNavigator):
         pgsql_database = f"nbcore_{cluster_name}"
 
         if not all([pgsql_host, pgsql_username, pgsql_password]):
-            logger.error("Missing required PostgreSQL credentials (host, username, or password)")
-            logger.error("Skipping external PostgreSQL configuration")
-            return
+            raise ConfigurationError(
+                "Missing required PostgreSQL credentials (host, username, or password)"
+            )
 
-        logger.info(f"PostgreSQL Configuration:")
+        logger.info("PostgreSQL Configuration:")
         logger.info(f"  Server: {pgsql_host}")
         logger.info(f"  Port: {pgsql_port}")
-        logger.info(f"  Username: {pgsql_username}")
         logger.info(f"  Database: {pgsql_database}")
 
-        # Step 1: Click the "Use external PostgreSQL" checkbox
-        try:
-            self.do_click(
-                locator=self.dep_loc["external_pgsql_checkbox"],
-                enable_screenshot=True,
-                timeout=30
-            )
-            logger.info("✓ Clicked 'Use external PostgreSQL' checkbox")
-            time.sleep(1)
-        except Exception as e:
-            logger.error(f"Could not find/click external PostgreSQL checkbox: {e}")
-            logger.error("Skipping external PostgreSQL configuration")
-            return
+        logger.info("Clicking 'Use external PostgreSQL' checkbox")
+        self.do_click(
+            locator=self.dep_loc["external_pgsql_checkbox"],
+            enable_screenshot=True,
+            timeout=30,
+        )
+        self.wait_for_element_to_be_visible(
+            locator=self.dep_loc["pgsql_server"], timeout=10
+        )
 
-        # Step 2: Fill in PostgreSQL server (host)
-        try:
-            self.do_send_keys(
-                locator=self.dep_loc["pgsql_server"],
-                text=pgsql_host,
-                timeout=30,
-                enable_screenshot=False
-            )
-            logger.info("✓ Server filled in")
-        except Exception as e:
-            logger.warning(f"Could not fill PostgreSQL server field: {e}")
+        logger.info("Filling PostgreSQL server field")
+        self.do_send_keys(
+            locator=self.dep_loc["pgsql_server"], text=pgsql_host, timeout=30
+        )
 
-        # Step 3: Fill in PostgreSQL port
-        try:
-            self.do_send_keys(
-                locator=self.dep_loc["pgsql_port"],
-                text=pgsql_port,
-                timeout=30,
-                enable_screenshot=False
-            )
-            logger.info("✓ Port filled in")
-        except Exception as e:
-            logger.warning(f"Could not fill PostgreSQL port field: {e}")
+        logger.info("Filling PostgreSQL port field")
+        self.do_send_keys(
+            locator=self.dep_loc["pgsql_port"], text=pgsql_port, timeout=30
+        )
 
-        # Step 4: Fill in PostgreSQL username
-        try:
-            self.do_send_keys(
-                locator=self.dep_loc["pgsql_username"],
-                text=pgsql_username,
-                timeout=30,
-                enable_screenshot=False
-            )
-            logger.info("✓ Username filled in")
-        except Exception as e:
-            logger.warning(f"Could not fill PostgreSQL username field: {e}")
+        logger.info("Filling PostgreSQL username field")
+        self.do_send_keys(
+            locator=self.dep_loc["pgsql_username"], text=pgsql_username, timeout=30
+        )
 
-        # Step 5: Fill in PostgreSQL password
-        try:
-            self.do_send_keys(
-                locator=self.dep_loc["pgsql_password"],
-                text=pgsql_password,
-                timeout=30,
-                enable_screenshot=False
-            )
-            logger.info("✓ Password filled in")
-        except Exception as e:
-            logger.warning(f"Could not fill PostgreSQL password field: {e}")
+        logger.info("Filling PostgreSQL password field")
+        self.do_send_keys(
+            locator=self.dep_loc["pgsql_password"], text=pgsql_password, timeout=30
+        )
 
-        # Step 6: Fill in PostgreSQL database
-        try:
-            self.do_send_keys(
-                locator=self.dep_loc["pgsql_database"],
-                text=pgsql_database,
-                timeout=30,
-                enable_screenshot=True
-            )
-            logger.info("✓ Database filled in")
-        except Exception as e:
-            logger.warning(f"Could not fill PostgreSQL database field: {e}")
+        logger.info("Filling PostgreSQL database field")
+        self.do_send_keys(
+            locator=self.dep_loc["pgsql_database"], text=pgsql_database, timeout=30
+        )
+        self.take_screenshot("external_pgsql_configured")
 
         logger.info("=" * 80)
         logger.info("✅ External PostgreSQL configuration completed")
         logger.info("=" * 80)
+        return self
 
     def create_storage_cluster(self):
         """
