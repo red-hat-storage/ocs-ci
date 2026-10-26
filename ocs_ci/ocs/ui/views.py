@@ -3325,7 +3325,7 @@ topology_5_0 = {
         By.XPATH,
     ),
     "node_selector_from_node_filtering_bar": (
-        "//button[@role='menuitem'][normalize-space()='{}']",
+        "//button[@role='option'][@id='{}']",
         By.XPATH,
     ),
     "current_node_from_node_filtering_bar": (
