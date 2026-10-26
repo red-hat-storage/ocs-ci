@@ -1173,7 +1173,7 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
 
         The test writes data below and above the midpoint of a 1 GiB volume.
         Offset zero must match the default result, while the midpoint response
-        contains only upper ranges; both worker partitions cover all ranges.
+        contains the expected allocated bytes at and above the requested offset.
 
         Steps:
         1. Create a Block PVC and write data at offsets 0 MiB and 768 MiB.
@@ -1182,8 +1182,8 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         4. List allocated ranges with a starting offset of zero and verify it
            matches the default result.
         5. List allocated ranges with a starting offset of 512 MiB.
-        6. Verify that the lower and upper ranges together cover the complete
-           allocated result without overlap or omission.
+        6. Verify that the midpoint response covers the expected allocated
+           bytes at and above the requested offset.
         """
         midpoint = 512 * 1024 * 1024
 
