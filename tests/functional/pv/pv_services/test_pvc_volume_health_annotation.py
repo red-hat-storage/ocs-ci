@@ -12,6 +12,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_ocs_version,
+    skipif_cephfs_disabled,
     skipif_mcg_only,
     skipif_managed_service,
     skipif_rosa_hcp,
@@ -60,7 +61,10 @@ MAX_LAST_CHECKED_AGE_SECONDS = 120
     argvalues=[
         pytest.param(
             constants.CEPHFILESYSTEM,
-            marks=pytest.mark.polarion_id("OCS-8219"),
+            marks=[
+                pytest.mark.polarion_id("OCS-8219"),
+                skipif_cephfs_disabled,
+            ],
         ),
         pytest.param(
             constants.CEPHBLOCKPOOL,
@@ -372,6 +376,7 @@ class PVCVolumeHealthTestHelpers:
 @green_squad
 @skipif_ocs_version("<4.23")
 @skipif_mcg_only
+@skipif_cephfs_disabled
 class TestPVCVolumeHealthUnhealthy(PVCVolumeHealthTestHelpers, ManageTest):
     """
     Test PVC volume health annotation transitions to unhealthy state
@@ -541,6 +546,7 @@ class TestPVCVolumeHealthUnhealthy(PVCVolumeHealthTestHelpers, ManageTest):
     @skipif_managed_service
     @skipif_rosa_hcp
     @skipif_external_mode
+    @skipif_cephfs_disabled
     @pytest.mark.polarion_id("OCS-8261")
     def test_pvc_health_unhealthy_via_mds_scaledown(
         self, pvc_factory, pod_factory, request, setup_ui_class_factory
@@ -1046,6 +1052,7 @@ class TestPVCVolumeHealthUnhealthy(PVCVolumeHealthTestHelpers, ManageTest):
 @skipif_managed_service
 @skipif_rosa_hcp
 @skipif_external_mode
+@skipif_cephfs_disabled
 @skipif_mcg_only
 class TestPVCVolumeHealthStaleAnnotation(PVCVolumeHealthTestHelpers, ManageTest):
     """
