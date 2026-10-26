@@ -546,7 +546,6 @@ class TestPVCVolumeHealthUnhealthy(PVCVolumeHealthTestHelpers, ManageTest):
     @skipif_managed_service
     @skipif_rosa_hcp
     @skipif_external_mode
-    @skipif_cephfs_disabled
     @pytest.mark.polarion_id("OCS-8261")
     def test_pvc_health_unhealthy_via_mds_scaledown(
         self, pvc_factory, pod_factory, request, setup_ui_class_factory
