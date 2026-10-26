@@ -328,13 +328,19 @@ def get_hosted_cluster_type(cluster_name=None):
 @catch_exceptions((CommandFailed, TimeoutExpiredError))
 def get_current_nodepool_size(name):
     """
-    Get existing nodepool of HyperShift hosted cluster
+    Get the number of ready nodes across all nodepools for a HyperShift hosted
+    cluster.
+
+    Uses ``status.nodesInfo.nodeVersions[*].readyNodeCount`` rather than
+    ``status.replicas`` so that the count reflects only nodes that are
+    actually ready, and is not inflated by surge nodes created during a
+    RollingUpdate (``maxSurge > 0``).
 
     Args:
         name (str): name of the cluster
 
     Returns:
-         str: total number of current nodes across all nodepools for the cluster
+        int: total number of ready nodes across all nodepools for the cluster
 
     """
 
@@ -342,22 +348,26 @@ def get_current_nodepool_size(name):
     with config.RunWithProviderConfigContextIfAvailable():
         nodepools = OCP(kind="nodepools").get(all_namespaces=True)
     total = sum(
-        item.get("status", {}).get("replicas", 0)
+        sum(
+            v.get("readyNodeCount", 0)
+            for v in item.get("status", {}).get("nodesInfo", {}).get("nodeVersions", [])
+        )
         for item in nodepools.get("items", [])
         if item.get("spec", {}).get("clusterName") == name
     )
-    return str(total)
+    return total
 
 
 def get_desired_nodepool_size(name: str):
     """
-    Get desired nodepool of HyperShift hosted cluster
+    Get the desired number of nodes across all nodepools for a HyperShift
+    hosted cluster.
 
     Args:
-        name (str): of the cluster
+        name (str): name of the cluster
 
     Returns:
-        str: total number of desired nodes across all nodepools for the cluster
+        int: total number of desired nodes across all nodepools for the cluster
 
     """
 
@@ -369,23 +379,32 @@ def get_desired_nodepool_size(name: str):
         for item in nodepools.get("items", [])
         if item.get("spec", {}).get("clusterName") == name
     )
-    return str(total)
+    return total
 
 
 def worker_nodes_deployed(name: str):
     """
-    Check if worker nodes are deployed for HyperShift hosted cluster
+    Check if worker nodes are deployed for a HyperShift hosted cluster.
+
+    Returns True when the number of ready nodes is at least the desired
+    replica count.  Using >= (rather than ==) handles the case where
+    HyperShift's RollingUpdate strategy temporarily creates a surge node
+    (maxSurge: 1), causing status.replicas to exceed spec.replicas while all
+    nodes are healthy.  Such a pool should be treated as ready.
 
     Args:
         name (str): name of the cluster
 
     Returns:
-         bool: True if worker nodes are deployed, False otherwise
+        bool: True if worker nodes are deployed, False otherwise
 
     """
 
     logger.info(f"Checking if worker nodes are deployed for cluster {name}")
-    return get_current_nodepool_size(name) == get_desired_nodepool_size(name)
+    current = get_current_nodepool_size(name)
+    desired = get_desired_nodepool_size(name)
+    logger.info(f"Cluster {name}: ready nodes={current}, desired replicas={desired}")
+    return current >= desired
 
 
 def wait_for_worker_nodes_to_be_ready(name: str, timeout: int = 2400):
