@@ -911,7 +911,6 @@ class Deployment(object):
             "Fusion Access storage cluster creation via UI completed successfully"
         )
 
-
     def do_deploy_hosted_spoke_clusters(self):
         """
         Deploy Hosted cluster(s)
@@ -1046,7 +1045,6 @@ class Deployment(object):
         self.do_deploy_metallb()
         self.do_deploy_fusion_access()
         self.do_deploy_fusion_access_storage_cluster()
-
 
         self.do_deploy_hosted_spoke_clusters()
         self.do_deploy_external_spoke_clusters()

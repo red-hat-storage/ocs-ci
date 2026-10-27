@@ -163,7 +163,6 @@ class FusionAccessOperator(Operator):
 
         self.create_pull_secret()
 
-
         cr_ocp = OCP(kind="FusionAccess", namespace=self.namespace)
         if cr_ocp.is_exist(resource_name="fusionaccess-object"):
             logger.info("FusionAccess CR already exists, verifying status")
