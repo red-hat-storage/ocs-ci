@@ -4337,6 +4337,113 @@ external_systems = {
         "//td[@data-label='Name']//a[normalize-space()='{}']",
         By.XPATH,
     ),
+    "scale_local_node_count_link": (
+        "a[data-test='inventory-nodes']",
+        By.CSS_SELECTOR,
+    ),
+    "scale_node_count_edit_pencil": (
+        "button[aria-label='Edit node inventory']",
+        By.CSS_SELECTOR,
+    ),
+    "scale_encryption_edit_pencil": (
+        "button[aria-label='Edit encryption']",
+        By.CSS_SELECTOR,
+    ),
+    "add_nodes_modal_title": (
+        "div[role='dialog'][class*='modal-box']",
+        By.CSS_SELECTOR,
+    ),
+    "include_control_plane_checkbox": (
+        "input#include-control-plane-nodes",
+        By.CSS_SELECTOR,
+    ),
+    "node_row_checkbox": (
+        "//tr[.//td[@data-label='Name']//a[normalize-space()='{}']]"
+        "//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "control_plane_node_name_links": (
+        "//tr[.//td[@data-label='Role' and contains(normalize-space(),'control-plane')]]"
+        "//td[@data-label='Name']//a",
+        By.XPATH,
+    ),
+    "add_nodes_add_button": (
+        "//div[@role='dialog']//button[normalize-space()='Add']",
+        By.XPATH,
+    ),
+    "add_nodes_cancel_button": (
+        "//div[@role='dialog']//button[normalize-space()='Cancel']",
+        By.XPATH,
+    ),
+    "wizard_kernel_devel_verified": (
+        "div[data-test='kernel-devel-status-success']",
+        By.CSS_SELECTOR,
+    ),
+    "wizard_kernel_devel_status": (
+        "div[data-test^='kernel-devel-status']",
+        By.CSS_SELECTOR,
+    ),
+    "encryption_modal_title": (
+        "//*[@role='dialog']//*[normalize-space()='Enable data encryption']",
+        By.XPATH,
+    ),
+    "enable_encryption_checkbox": (
+        "//label[contains(normalize-space(.),'Enable data encryption')]"
+        "//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "enc_username": ("//input[@id='username']", By.XPATH),
+    "enc_password": ("//input[@id='password']", By.XPATH),
+    "enc_port": ("//input[@id='port']", By.XPATH),
+    "enc_client": ("//input[@id='client']", By.XPATH),
+    "enc_remote_rkm": (
+        "//input[@id='remoteRKM']",
+        By.XPATH,
+    ),
+    "enc_ca_cert_browse": (
+        "//*[@role='dialog']//input[@type='file']",
+        By.XPATH,
+    ),
+    "enc_server_info": (
+        "//input[@id='serverInformation']",
+        By.XPATH,
+    ),
+    "enc_tenant_id": (
+        "//input[@id='tenantId']",
+        By.XPATH,
+    ),
+    "encryption_save_button": (
+        "//footer//button[normalize-space()='Save']",
+        By.XPATH,
+    ),
+    "fs_used_capacity_header": (
+        "//th[normalize-space()='Used capacity']",
+        By.XPATH,
+    ),
+    "fs_total_capacity_header": (
+        "//th[normalize-space()='Total capacity']",
+        By.XPATH,
+    ),
+    "fs_used_capacity_cell": (
+        "//tr[.//*[normalize-space()='{}']]//td[@data-label='Used capacity']",
+        By.XPATH,
+    ),
+    "fs_total_capacity_cell": (
+        "//tr[.//*[normalize-space()='{}']]//td[@data-label='Total capacity']",
+        By.XPATH,
+    ),
+    "scale_dashboard_actions_button": (
+        "//div[@data-test-id='details-actions']//button[@data-test='kebab-button']",
+        By.XPATH,
+    ),
+    "dashboard_remove_action": (
+        "button#REMOVE_REMOTE_CLUSTER",
+        By.CSS_SELECTOR,
+    ),
+    "remove_disabled_subtext": (
+        "//*[contains(normalize-space(),'Cannot be removed if file systems exist')]",
+        By.XPATH,
+    ),
 }
 locators = {
     "5.0": {
