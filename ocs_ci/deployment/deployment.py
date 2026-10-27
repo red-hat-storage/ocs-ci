@@ -868,7 +868,7 @@ class Deployment(object):
 
             # creating Namespace and operator group for cert-manager
             logger.info("Creating namespace and operator group for cert-manager")
-            run_cmd(f"oc create -f {constants.CERT_MANAGER_NS_YAML}")
+            run_cmd(f"oc apply -f {constants.CERT_MANAGER_NS_YAML}")
 
             deploy_cert_manager()
             self.wait_for_subscription(cert_manager_operator, cert_manager_namespace)
@@ -1689,7 +1689,7 @@ class Deployment(object):
             templating.dump_data_to_temp_yaml(olm_ns_op_group_data, constants.OLM_YAML)
 
         try:
-            run_cmd(f"oc create -f {constants.OLM_YAML}")
+            run_cmd(f"oc apply -f {constants.OLM_YAML}")
         except CommandFailed as ex:
             if "AlreadyExists" in str(ex):
                 logger.info("OLM resources already exist, calling apply to update!")
@@ -1822,7 +1822,7 @@ class Deployment(object):
                     mode="w+", prefix="multus_public", delete=False
                 )
                 templating.dump_data_to_temp_yaml(public_net_data, public_net_yaml.name)
-                run_cmd(f"oc create -f {public_net_yaml.name}")
+                run_cmd(f"oc apply -f {public_net_yaml.name}")
 
             if create_cluster_net:
                 use_vlan = config.ENV_DATA.get("multus_use_vlan", False)
@@ -1901,7 +1901,7 @@ class Deployment(object):
                 templating.dump_data_to_temp_yaml(
                     cluster_net_data, cluster_net_yaml.name
                 )
-                run_cmd(f"oc create -f {cluster_net_yaml.name}")
+                run_cmd(f"oc apply -f {cluster_net_yaml.name}")
 
         disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
         managed_ibmcloud = (
@@ -1931,7 +1931,7 @@ class Deployment(object):
                 templating.dump_data_to_temp_yaml(
                     cos_secret_data, cos_secret_data_yaml.name
                 )
-                exec_cmd(f"oc create -f {cos_secret_data_yaml.name}")
+                exec_cmd(f"oc apply -f {cos_secret_data_yaml.name}")
         if managed_ibmcloud and live_deployment and not disable_addon:
             log_step("Deploy ODF addon for IBM cloud managed")
             self.deploy_odf_addon()
@@ -2241,14 +2241,12 @@ class Deployment(object):
             cluster_data["metadata"]["name"] = config.ENV_DATA[
                 "external_storage_cluster_name"
             ]
-            exec_cmd(
-                f"oc create -f {constants.MULTI_STORAGECLUSTER_EXTERNAL_NAMESPACE}"
-            )
+            exec_cmd(f"oc apply -f {constants.MULTI_STORAGECLUSTER_EXTERNAL_NAMESPACE}")
             label_pod_security_admission(
                 namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE
             )
             if is_storage_system_needed():
-                exec_cmd(f"oc create -f {constants.STORAGE_SYSTEM_ODF_EXTERNAL}")
+                exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_EXTERNAL}")
         else:
             cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
 
@@ -2715,7 +2713,7 @@ class Deployment(object):
             rolebinding_config_file = os.path.join(
                 constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, "role_rolebinding.yaml"
             )
-            run_cmd(f"oc create -f {rolebinding_config_file} -n default")
+            run_cmd(f"oc apply -f {rolebinding_config_file} -n default")
         # end of workaround
         lvm_bundle_filename = (
             "lvms-bundle.yaml"
@@ -2726,7 +2724,7 @@ class Deployment(object):
         bundle_config_file = os.path.join(
             constants.TEMPLATE_DEPLOYMENT_DIR_LVMO, lvm_bundle_filename
         )
-        run_cmd(f"oc create -f {bundle_config_file} -n {self.namespace}")
+        run_cmd(f"oc apply -f {bundle_config_file} -n {self.namespace}")
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
         assert pod.wait_for_resource(
             condition="Running",
@@ -2737,7 +2735,7 @@ class Deployment(object):
             timeout=300,
         )
         time.sleep(30)
-        run_cmd(f"oc create -f {cluster_config_file} -n {self.namespace}")
+        run_cmd(f"oc apply -f {cluster_config_file} -n {self.namespace}")
         assert pod.wait_for_resource(
             condition="Running",
             selector=label_version[lvmo_version_without_period][
@@ -3266,7 +3264,7 @@ class Deployment(object):
             acm_konflux_catsrc_yaml_data,
             acm_konflux_catsrc_yaml_data_manifest.name,
         )
-        run_cmd(f"oc create -f {acm_konflux_catsrc_yaml_data_manifest.name}")
+        run_cmd(f"oc apply -f {acm_konflux_catsrc_yaml_data_manifest.name}")
 
         acm_operator_catsrc = CatalogSource(
             resource_name="acm-dev-catalog",
@@ -3353,7 +3351,7 @@ class Deployment(object):
             return True
 
         exec_cmd(
-            f"oc create -f {constants.ACM_HUB_MULTICLUSTERHUB_YAML} -n {constants.ACM_HUB_NAMESPACE}"
+            f"oc apply -f {constants.ACM_HUB_MULTICLUSTERHUB_YAML} -n {constants.ACM_HUB_NAMESPACE}"
         )
         try:
             validate_acm_hub_install()
@@ -3819,12 +3817,12 @@ class MultiClusterDROperatorsDeploy(object):
 
         # Create openshift-dr-system namespace
         run_cmd_multicluster(
-            f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML} ",
+            f"oc apply -f {constants.OPENSHIFT_DR_SYSTEM_NAMESPACE_YAML} ",
         )
         self.deploy_dr_multicluster_orchestrator()
         # create this only on ACM
         run_cmd(
-            f"oc create -f {constants.OPENSHIFT_DR_SYSTEM_OPERATORGROUP}",
+            f"oc apply -f {constants.OPENSHIFT_DR_SYSTEM_OPERATORGROUP}",
         )
         # HUB operator will be deployed by multicluster orechestrator
         self.verify_dr_hub_operator()
@@ -3894,7 +3892,7 @@ class MultiClusterDROperatorsDeploy(object):
             odf_multicluster_orchestrator_data,
             odf_multicluster_orchestrator.name,
         )
-        run_cmd(f"oc create -f {odf_multicluster_orchestrator.name}")
+        run_cmd(f"oc apply -f {odf_multicluster_orchestrator.name}")
         orchestrator_controller = ocp.OCP(
             kind="Deployment",
             resource_name=constants.ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER,
@@ -3978,7 +3976,7 @@ class MultiClusterDROperatorsDeploy(object):
                 f"MirrorPeer '{mirror_peer_name}' already exists — skipping creation"
             )
         else:
-            exec_cmd(f"oc create -f {mirror_peer_yaml.name}")
+            exec_cmd(f"oc apply -f {mirror_peer_yaml.name}")
         self.validate_mirror_peer(mirror_peer_data["metadata"]["name"])
 
     def validate_mirror_peer(self, resource_name):
@@ -4294,7 +4292,7 @@ class MultiClusterDROperatorsDeploy(object):
                 f"DRPolicy '{self.dr_policy_name}' already exists — skipping creation"
             )
         else:
-            exec_cmd(f"oc create -f {dr_policy_hub_yaml.name}")
+            exec_cmd(f"oc apply -f {dr_policy_hub_yaml.name}")
 
         # Check the status of DRPolicy and wait for 'Reason' field to be set to 'Succeeded'
         dr_policy_resource = ocp.OCP(
@@ -4857,7 +4855,7 @@ class MultiClusterDROperatorsDeploy(object):
 
             # Create s3 secret on all clusters except ACM
             for secret_yaml in secret_yaml_files:
-                cmd = f"oc create -f {secret_yaml}"
+                cmd = f"oc apply -f {secret_yaml}"
                 run_cmd_multicluster(cmd, skip_index=config.get_active_acm_index())
 
         def get_participating_regions(self):
@@ -5260,7 +5258,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         logger.info(
             f"Creating thanos-object-storage secret with {'ODF' if use_odf_bucket else 'AWS'} bucket"
         )
-        exec_cmd(f"oc create -f {thanos_data_yaml.name}")
+        exec_cmd(f"oc apply -f {thanos_data_yaml.name}")
 
     def enable_acm_observability(self):
         """
@@ -5307,7 +5305,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             multiclusterobservability_data_yaml.name,
         )
 
-        exec_cmd(f"oc create -f {multiclusterobservability_data_yaml.name}")
+        exec_cmd(f"oc apply -f {multiclusterobservability_data_yaml.name}")
 
         logger.info("Thanos secret created, checking observability status")
         self.check_observability_status()
@@ -5319,7 +5317,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         logger.info("Switched to ACM context for configmap and namespace labeling")
 
         logger.info("Whitelist RBD metrics by creating configmap")
-        exec_cmd(f"oc create -f {constants.OBSERVABILITYMETRICSCONFIGMAP_PATH}")
+        exec_cmd(f"oc apply -f {constants.OBSERVABILITYMETRICSCONFIGMAP_PATH}")
 
         logger.info(
             "Add label for cluster-monitoring needed to fire VolumeSyncronizationDelayAlert on the Hub cluster"
