@@ -96,23 +96,13 @@ class TestMCGProfileSelection:
     @skipif_disconnected_cluster
     @skipif_ibm_cloud_managed
     def test_mcg_profile_selection(self, setup_ui_class):
-        """
-        UI-3: Verify MCG profile selection updates CR and persists in UI.
-
-        The test works whether or not an MCG profile was ever selected before:
-        until the first selection the dropdown shows "Select a profile",
-        afterwards it always shows Default / Mixed workload / Small objects.
+        """UI-3: Verify MCG profile selection updates CR and persists in UI.
 
         Steps:
-            1. Open the Configure Performance page and record the initial MCG
-               dropdown text ("Select a profile" or an existing profile).
-            2. Select the "default" profile and save (no-op if already default).
-            3. Verify the CR and the UI (after reopening if a change was saved)
-               show "default".
-            4. For each transition default -> mixed-workload -> default ->
-               small-objects -> default: select, save, verify the StorageCluster
-               CR, reopen the page and verify the UI shows the profile.
-            5. Finally restore the profile to "default".
+            1. Record initial MCG profile state in UI.
+            2. Initialize MCG with 'default' profile and verify CR and UI.
+            3. Perform profile transitions, verifying StorageCluster CR and UI.
+            4. Restore original MCG profile.
         """
         initial_ui_profile = "default"  # fallback
         try:

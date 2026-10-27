@@ -108,11 +108,7 @@ class ConfigurePerformancePage(BaseUI):
         return len(buttons) > 0
 
     def is_mcg_select_button_present(self) -> bool:
-        """Check if the MCG profile dropdown button is present.
-
-        The button is located by its aria-label, so this works both before the
-        first selection (text "Select a profile") and after it (profile name).
-        """
+        """Check if the MCG profile dropdown button is present."""
         logger.info("Checking for MCG profile dropdown button")
         button_loc = self.configure_performance_loc["mcg_select_profile_button"]
         buttons = self.get_elements(button_loc)
@@ -180,29 +176,16 @@ class ConfigurePerformancePage(BaseUI):
         return len(elements) > 0
 
     def select_mcg_profile(self, profile_name: str):
-        """Select MCG profile from menu, retrying if the click does not register.
-
-        Works whether the dropdown button currently shows the "Select a profile"
-        placeholder (no profile selected yet) or an already selected profile.
-
-        The option locator targets the actual clickable menuitem (role="menuitem"
-        or class item/option). A broad locator can match a non-interactive
-        wrapper (e.g. a <li> or <span>) whose click never reaches React's
-        handler, leaving the button text unchanged. For each of up to 3 attempts
-        the dropdown is opened, the menuitem is clicked (native click first, then
-        a JS click) and the button text is polled until it shows the chosen
-        profile.
+        """Select MCG profile from menu, retrying up to 3 times.
 
         Args:
-            profile_name (str): profile in CR format, e.g. "default",
-                "mixed-workload" or "small-objects".
+            profile_name (str): Profile name (e.g. "default", "mixed-workload").
 
         Returns:
             ConfigurePerformancePage: self
 
         Raises:
-            TimeoutException: if the dropdown button or the profile option is
-                not found, or the selection does not register after 3 attempts.
+            TimeoutException: If profile selection fails after 3 attempts.
         """
         from selenium.common.exceptions import TimeoutException
 
@@ -453,11 +436,10 @@ class ConfigurePerformancePage(BaseUI):
         """Get MCG profile from StorageCluster CR.
 
         Returns:
-            str: lower-case profile name, e.g. "mixed-workload".
+            str: Lower-case profile name.
 
         Raises:
-            ValueError: if spec.multiCloudGateway.performanceProfile is not set
-                (e.g. no profile was ever selected).
+            ValueError: If performanceProfile is not set in CR.
         """
         data = self._get_storage_cluster_data()
         profile = self.deep_get(data, "spec", "multiCloudGateway", "performanceProfile")
@@ -494,13 +476,8 @@ class ConfigurePerformancePage(BaseUI):
     def get_mcg_profile_from_ui(self) -> Optional[str]:
         """Get selected MCG profile from UI.
 
-        Until an MCG profile is selected for the first time, the dropdown button
-        shows the placeholder "Select a profile". After the first selection it
-        always shows one of "Default" / "Mixed workload" / "Small objects".
-
         Returns:
-            Optional[str]: profile name in CR format (e.g. "mixed-workload"), or
-                None if no profile was selected yet (placeholder is shown).
+            Optional[str]: Profile name (e.g. "mixed-workload"), or None if unselected.
         """
         logger.info("Reading selected MCG profile from UI")
         try:

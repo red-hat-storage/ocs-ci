@@ -249,13 +249,7 @@ def extract_encryption_status(root_element, svg_path):
 
 @contextmanager
 def test_step(message):
-    """
-    Context manager for logging test steps.
-
-    Usage:
-        with test_step("Create PVC"):
-            # create PVC code
-    """
+    """Context manager for logging test steps."""
     logger.test_step(message)
     try:
         yield
