@@ -193,6 +193,10 @@ version.
 * `hub_cluster_path` - Path to the Management cluster directory to store auth_path, credentials files or cluster related files.
 * `partitioned_disk_primary_affinity` - Configure primaryAffinity for OSDs on partitioned disks, https://access.redhat.com/solutions/5807201 (default: "0.0")
 * `vsphere_vm_start_timeout` - Number of seconds to wait for vsphere vms to start up (default: 900)
+* `fusion_access_deployment` - Enable IBM Fusion Access for SAN operator deployment after OCP is deployed. When `true`, the `openshift-fusion-access-operator` is installed from the `certified-operators` CatalogSource. (Default: false). Use with `conf/ocsci/fusion_access_deployment.yaml`.
+* `fusion_access_channel` - Subscription channel for the Fusion Access operator. (Default: `"stable-v1"`)
+* `fusion_access_skip_cr` - When `true`, skip creation of the `FusionAccess` CR after the operator CSV reaches `Succeeded`. Useful when the CR is managed externally or created manually. (Default: false)
+
 
 #### REPORTING
 
