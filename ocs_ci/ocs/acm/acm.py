@@ -1174,15 +1174,15 @@ def _import_single_cluster_cli(cluster_name, kubeconfig, klusterletconfig_name=N
     log.info(f"Cluster '{cluster_name}' imported successfully")
 
 
-@retry(Exception, tries=3, delay=30, backoff=1)
 def _import_single_cluster_with_cleanup(
     cluster_name, kubeconfig, klusterletconfig_name=None
 ):
     """
     Import a single cluster with cleanup after failures.
 
-    The @retry decorator handles retries. Cleanup happens in the exception path,
-    so it only runs AFTER a failed import attempt, not before the first attempt.
+    Uses @retry decorator with attempt tracking via closure. Cleanup happens after
+    failures EXCEPT on the last attempt, where we preserve the failed state for
+    debugging (ManagedCluster and namespace remain for inspection).
 
     Args:
         cluster_name (str): Name of the cluster to import
@@ -1193,17 +1193,43 @@ def _import_single_cluster_with_cleanup(
         Exception: After all retry attempts are exhausted
 
     """
-    try:
-        _import_single_cluster_cli(cluster_name, kubeconfig, klusterletconfig_name)
-    except Exception as ex:
-        # Cleanup only runs in the exception path (after import failure)
-        log.warning(
-            f"Import failed for cluster '{cluster_name}': {ex}. "
-            f"Cleaning up before retry..."
+    # Track attempt number using closure variable
+    attempt_tracker = {"current": 0, "max_tries": 3}
+
+    @retry(Exception, tries=3, delay=30, backoff=1)
+    def _do_import():
+        # Increment counter at the START of each attempt
+        attempt_tracker["current"] += 1
+        log.info(
+            f"Import attempt {attempt_tracker['current']}/{attempt_tracker['max_tries']} "
+            f"for cluster '{cluster_name}'"
         )
-        _cleanup_failed_cluster_import(cluster_name)
-        # Re-raise for @retry decorator to catch and retry
-        raise
+
+        try:
+            _import_single_cluster_cli(cluster_name, kubeconfig, klusterletconfig_name)
+        except Exception as ex:
+            # Check if this is the last attempt
+            is_last_attempt = attempt_tracker["current"] >= attempt_tracker["max_tries"]
+
+            if not is_last_attempt:
+                # Cleanup before retry (not the last attempt)
+                log.warning(
+                    f"Import failed for cluster '{cluster_name}': {ex}. "
+                    f"Cleaning up before retry..."
+                )
+                _cleanup_failed_cluster_import(cluster_name)
+            else:
+                # Last attempt failed - preserve state for debugging
+                log.error(
+                    f"All {attempt_tracker['max_tries']} import attempts failed for "
+                    f"cluster '{cluster_name}': {ex}. "
+                    f"Preserving failed state for debugging (no cleanup)."
+                )
+            # Re-raise for @retry decorator
+            raise
+
+    # Execute the retry-decorated import
+    _do_import()
 
 
 def import_clusters_via_cli(clusters):
