@@ -32,7 +32,11 @@ from ocs_ci.ocs.resources.storage_cluster import (
     set_deviceset_count,
 )
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.utility.utils import sum_of_two_storage_sizes, TimeoutSampler
+from ocs_ci.utility.utils import (
+    ceph_health_check,
+    sum_of_two_storage_sizes,
+    TimeoutSampler,
+)
 
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.ocp import OCP
@@ -256,31 +260,40 @@ def ensure_storagecluster_ready_for_deviceclass_test(timeout=600, sleep=20):
     )
 
 
-def add_disks_to_nodes_and_wait_for_ready(worker_node_objs, disk_size, ssd=True):
+def add_disks_to_nodes_and_wait_for_ready(
+    worker_node_objs, disk_size, ssd=True, tries=30, delay=30
+):
     """
-    Add a new disk to each of the given nodes and wait for the nodes to reach the Ready status.
+    Add a new disk to each of the given nodes, one node at a time, letting the cluster
+    settle before moving on to the next node.
 
-    Attaching an SSD disk power-cycles the VM, and the platform power-on step only waits for
-    network connectivity. Wait for the nodes to be Ready, so that the LSO diskmaker pods are
-    scheduled again and can discover the new disks.
+    Attaching an SSD disk power-cycles the VM ungracefully, which takes down the OSDs
+    running on that node. After each node, wait for it to reach the Ready status, so the
+    LSO diskmaker pods are scheduled again and can discover the new disk, and then wait
+    for the Ceph health to recover. Without the health wait, every OSD host can be
+    power-cycled before the first one recovered, which leaves the PGs inactive.
 
     Args:
         worker_node_objs (list): The node objects to add the new disks to
         disk_size (int): The size in GB of the new disk to attach to each node
         ssd (bool): if True, mark disk as SSD
+        tries (int): Number of retries when waiting for the Ceph health after each node
+        delay (int): Seconds between the Ceph health retries
 
     Raises:
-        ResourceWrongStatusException: In case one or more nodes didn't reach the Ready status
+        ResourceWrongStatusException: In case one of the nodes didn't reach the Ready status
+        CephHealthException: In case the Ceph health didn't recover after a node was
+            power-cycled
 
     """
     for n in worker_node_objs:
         add_disk_to_node(n, disk_size=disk_size, ssd=ssd)
-
-    node_names = [n.name for n in worker_node_objs]
-    log.info(
-        f"Wait for the nodes {node_names} to reach the {constants.NODE_READY} status"
-    )
-    wait_for_nodes_status(node_names, constants.NODE_READY)
+        log.info(
+            f"Wait for the node {n.name} to reach the {constants.NODE_READY} status"
+        )
+        wait_for_nodes_status([n.name], constants.NODE_READY)
+        log.info(f"Wait for the Ceph health to be OK after power-cycling {n.name}")
+        ceph_health_check(tries=tries, delay=delay)
 
 
 def create_new_lvs_for_new_deviceclass(
