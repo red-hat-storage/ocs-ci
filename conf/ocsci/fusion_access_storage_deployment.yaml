@@ -1,6 +1,4 @@
 ---
-# Provision Fusion Access SAN storage after the operator is installed, by creating
-# a LUN group through the OpenShift console. The Fusion Access operator creates the
-# Cluster, Daemon, LocalDisk and Filesystem resources in response.
+# Provision Fusion Access SAN storage by creating a LUN group through the console.
 DEPLOYMENT:
   fusion_access_storage: true

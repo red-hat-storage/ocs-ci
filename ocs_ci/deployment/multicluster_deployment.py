@@ -50,8 +50,7 @@ class OCPDeployWithACM(Deployment):
             )
             return
         if self.multicluster_mode in (constants.RDR_MODE, constants.MDR_MODE):
-            # OCP cluster deployment through ACM is identical for both DR modes,
-            # they only diverge once the DR operators are deployed on top.
+            # OCP deployment through ACM is identical for both DR modes.
             self.do_dr_acm_ocp_deploy()
             self.post_deploy_ops()
 
