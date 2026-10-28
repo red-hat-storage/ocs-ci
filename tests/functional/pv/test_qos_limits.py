@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     post_upgrade,
     pre_upgrade,
+    skipif_ocp_version,
     skipif_ocs_version,
     tier1,
     tier2,
@@ -118,6 +119,13 @@ UNTHROTTLED_LIMITS = {
     "riops": "max",
     "wiops": "max",
 }
+
+
+def get_rbd_storageclass():
+    """Returns the default RBD storage class name for the current deployment mode."""
+    if helpers.storagecluster_independent_check():
+        return helpers.default_storage_class(constants.CEPHBLOCKPOOL).name
+    return constants.DEFAULT_STORAGECLASS_RBD
 
 
 def build_vac_manifest(name, limits):
@@ -278,6 +286,7 @@ def check_node_cgroup_limits(
 
 
 @green_squad
+@skipif_ocp_version("<4.21")
 @skipif_ocs_version("<4.21")
 class TestVolumeAttributesClassQoS(ManageTest):
 
@@ -449,7 +458,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
 
         logger.test_step(f"[{test_id}] Provision {access_mode}/{volume_mode} PVC")
         pvc_obj = helpers.create_pvc(
-            sc_name=constants.DEFAULT_STORAGECLASS_RBD,
+            sc_name=get_rbd_storageclass(),
             size="10Gi",
             namespace=proj.namespace,
             access_mode=access_mode,
@@ -596,7 +605,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
 
         logger.test_step(f"[{test_id}] Provision source PVC and bind Silver VAC")
         source_pvc_obj = helpers.create_pvc(
-            sc_name=constants.DEFAULT_STORAGECLASS_RBD,
+            sc_name=get_rbd_storageclass(),
             size="10Gi",
             namespace=proj.namespace,
             access_mode=constants.ACCESS_MODE_RWO,
@@ -629,7 +638,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 "accessModes": [constants.ACCESS_MODE_RWO],
                 "volumeMode": constants.VOLUME_MODE_FILESYSTEM,
                 "resources": {"requests": {"storage": "10Gi"}},
-                "storageClassName": constants.DEFAULT_STORAGECLASS_RBD,
+                "storageClassName": get_rbd_storageclass(),
                 "dataSource": {
                     "kind": "PersistentVolumeClaim",
                     "name": source_pvc_obj.name,
@@ -701,7 +710,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
 
         logger.test_step(f"[{test_id}] Provision PVC and bind Silver VAC")
         pvc_obj = helpers.create_pvc(
-            sc_name=constants.DEFAULT_STORAGECLASS_RBD,
+            sc_name=get_rbd_storageclass(),
             size="10Gi",
             namespace=proj.namespace,
             access_mode=constants.ACCESS_MODE_RWO,
@@ -774,7 +783,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
 
         logger.test_step(f"[{test_id}] Provision source PVC")
         source_pvc_obj = helpers.create_pvc(
-            sc_name=constants.DEFAULT_STORAGECLASS_RBD,
+            sc_name=get_rbd_storageclass(),
             size="10Gi",
             namespace=proj.namespace,
             access_mode=constants.ACCESS_MODE_RWO,
@@ -875,6 +884,7 @@ QOS_UPGRADE_DATA_MARKER = "pre-upgrade-qos-data"
 
 
 @green_squad
+@skipif_ocp_version("<4.21")
 class TestQoSPreExistingPVCAfterUpgrade(ManageTest):
     """QoS throttling applied to a PVC that pre-existed an ODF upgrade.
 
@@ -918,7 +928,7 @@ class TestQoSPreExistingPVCAfterUpgrade(ManageTest):
             f"[{test_id}] Provision pre-existing PVC {QOS_UPGRADE_PVC_NAME} (no VAC)"
         )
         pvc_obj = helpers.create_pvc(
-            sc_name=constants.DEFAULT_STORAGECLASS_RBD,
+            sc_name=get_rbd_storageclass(),
             pvc_name=QOS_UPGRADE_PVC_NAME,
             namespace=ns,
             size="10Gi",
