@@ -4341,11 +4341,11 @@ external_systems = {
 
 configure_performance = {
     "core_storage_section": (
-        "//h2[normalize-space()='Core storage']/ancestor::section[1]",
+        "//h3[normalize-space()='Core storage']/ancestor::div[contains(@class, 'pf-v6-u-mb-2xl')][1]",
         By.XPATH,
     ),
     "mcg_section": (
-        "//h2[normalize-space()='Multicloud Object Gateway']/ancestor::section[1]",
+        "//h3[normalize-space()='Multicloud Object Gateway']/ancestor::div[contains(@class, 'pf-v6-u-mb-2xl')][1]",
         By.XPATH,
     ),
     "mcg_select_profile_button": (
@@ -4395,7 +4395,8 @@ configure_performance = {
         By.XPATH,
     ),
     "core_storage_section_fallback": (
-        "//h3[normalize-space()='Core storage']/ancestor::section[1]",
+        "//h3[normalize-space()='Core storage']"
+        "/ancestor::div[contains(@class, 'configure-performance-profile__content')][1]",
         By.XPATH,
     ),
     "mcg_select_profile_button_fallback": (
