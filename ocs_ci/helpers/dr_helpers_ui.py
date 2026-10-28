@@ -1838,3 +1838,96 @@ def navigate_using_fleet_virtualization(acm_obj):
             acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
 
     return True
+
+
+def navigate_to_protected_applications_page(acm_obj, timeout=120):
+    """
+    Navigate to Data Services -> Disaster recovery -> Protected applications tab.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        timeout (int): Timeout for UI operations
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    acm_obj.navigate_data_services()
+    log.info("Clicking on 'Protected applications' tab")
+    acm_obj.do_click(
+        acm_loc["protected-applications-tab"],
+        avoid_stale=True,
+        enable_screenshot=True,
+        timeout=timeout,
+    )
+    acm_obj.page_has_loaded(retries=5, sleep_time=3)
+    log.info("Successfully navigated to Protected Applications page")
+
+
+def select_all_protected_applications(acm_obj, expected_count=None, timeout=60):
+    """
+    Select all applications on the Protected Applications page using the header checkbox.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        expected_count (int): When set, verify the bulk selection count label
+            (e.g. "4 selected") after clicking select all
+        timeout (int): Timeout for UI operations
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    log.info("Selecting all applications on Protected Applications page")
+    acm_obj.do_click(acm_loc["protected-app-select-all-checkbox"], timeout=timeout)
+    if expected_count is not None:
+        expected_text = f"{expected_count} selected"
+        assert acm_obj.wait_until_expected_text_is_found(
+            acm_loc["protected-app-selected-count"],
+            expected_text=expected_text,
+            timeout=timeout,
+        ), (
+            f"Expected '{expected_text}' in bulk selection label, "
+            f"but it was not found on Protected Applications page"
+        )
+        log.info(f"Verified bulk selection count: {expected_text}")
+    acm_obj.take_screenshot("protected_apps_select_all")
+
+
+def batch_failover_relocate_protected_applications(acm_obj, action, timeout=120):
+    """
+    Perform batch Failover or Relocate for selected applications on Protected Apps page.
+
+    Prerequisites: applications must already be selected via checkbox.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        action (str): constants.ACTION_FAILOVER or constants.ACTION_RELOCATE
+        timeout (int): Timeout for UI operations
+
+    Returns:
+        bool: True when the batch action is initiated successfully
+
+    Raises:
+        AssertionError: If the Failover/Relocate button or modal action fails
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+
+    log.info(f"Initiating batch {action} from Protected Applications page")
+    acm_obj.do_click(acm_loc["protected-app-failover-relocate-btn"], timeout=timeout)
+
+    acm_obj.wait_for_element_to_be_visible(
+        acm_loc["batch-failover-relocate-modal"], timeout=timeout
+    )
+    acm_obj.take_screenshot(f"batch_{action.lower()}_modal")
+
+    if action == constants.ACTION_FAILOVER:
+        acm_obj.do_click(acm_loc["batch-failover-option"], timeout=timeout)
+        log.info("Selected Failover option in batch modal")
+    elif action == constants.ACTION_RELOCATE:
+        acm_obj.do_click(acm_loc["batch-relocate-option"], timeout=timeout)
+        log.info("Selected Relocate option in batch modal")
+    else:
+        raise AssertionError(
+            f"Unsupported batch action '{action}'. "
+            f"Use {constants.ACTION_FAILOVER} or {constants.ACTION_RELOCATE}."
+        )
+
+    acm_obj.do_click(acm_loc["batch-action-initiate-btn"], timeout=timeout)
+    log.info(f"Batch {action} initiated from Protected Applications page")
+    acm_obj.take_screenshot(f"batch_{action.lower()}_initiated")
+    return True
