@@ -30,7 +30,10 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.helpers.scc_helpers import get_scc_pinning_errors
+from ocs_ci.helpers.scc_helpers import (
+    get_scc_pinning_errors,
+    pod_matches_scc_label,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +98,12 @@ class TestSCC:
                 db = ocp_db.get(resource_name=constants.NB_DB_CNPG_CLUSTER_NAME)
                 expected_count = db["spec"]["instances"]
             else:
-                deployments = get_deployments_having_label(label, namespace)
+                ocp_deployment = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+                deployments = [
+                    deployment
+                    for deployment in ocp_deployment.get()["items"]
+                    if pod_matches_scc_label(deployment["spec"]["template"], label)
+                ]
                 if len(deployments) != 1:
                     raise UnexpectedBehaviour(
                         f"Expected one Deployment for '{label}', found {len(deployments)}"
