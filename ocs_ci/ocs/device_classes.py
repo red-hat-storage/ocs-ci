@@ -131,6 +131,10 @@ def heal_inflated_default_deviceset_count(timeout=600, sleep=20):
     Returns:
         bool: True if a heal was applied, False if no heal was needed.
 
+    Raises:
+        TimeoutExpiredError: If the heal was applied but the deviceset count and
+            the Bound deviceset PVCs didn't settle within the timeout.
+
     """
     first_deviceset = get_first_deviceset_by_sc_name()
     if not first_deviceset:
@@ -213,7 +217,6 @@ def heal_inflated_default_deviceset_count(timeout=600, sleep=20):
                 target_count * replica,
             )
             return True
-    return False
 
 
 def ensure_storagecluster_ready_for_deviceclass_test(timeout=600, sleep=20):
