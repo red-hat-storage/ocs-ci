@@ -30,11 +30,8 @@ Deployment flow:
 """
 
 import base64
-import json
 import logging
-import os
 import re
-import tempfile
 
 from time import sleep
 
@@ -47,11 +44,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
 )
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import (
-    TimeoutSampler,
-    exec_cmd,
-    wait_for_machineconfigpool_status,
-)
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +53,10 @@ logger = logging.getLogger(__name__)
 # cluster.
 SCALE_CLUSTER_TIMEOUT = 3600
 FILESYSTEM_TIMEOUT = 2400
+# FSRD creation trails Filesystem readiness, and the export itself happens on a
+# reconcile after the operator restart.
+FSRD_PRESENT_TIMEOUT = 600
+FSRD_EXPORT_TIMEOUT = 900
 
 
 class FusionAccessStorage(object):
@@ -233,11 +230,13 @@ class FusionAccessStorage(object):
         logger.info("Starting iSCSI LUN discovery on all worker nodes")
         ocp_obj = ocp.OCP()
         ocp_obj.exec_oc_cmd(
+            # '&&' rather than ';' so a failed discovery is not masked by a
+            # successful login, and stderr is kept so the failure is diagnosable.
             f"get nodes -l node-role.kubernetes.io/worker --no-headers -o name "
             f"| xargs -I {{}} -- oc debug {{}} -- bash -c "
-            f'\'chroot /host iscsiadm -m discovery -t st -p "{iscsi_ip}"; '
+            f'\'chroot /host iscsiadm -m discovery -t st -p "{iscsi_ip}" && '
             f'chroot /host iscsiadm --mode node --target "{iscsi_iqn}" '
-            f'--portal "{iscsi_ip}" -l\' 2> /dev/null',
+            f'--portal "{iscsi_ip}" -l\'',
             shell=True,
             out_yaml_format=False,
             secrets=[iscsi_ip, iscsi_iqn],
@@ -346,25 +345,32 @@ class FusionAccessStorage(object):
             namespace=self.namespace,
             resource_name=constants.IBM_STORAGE_SCALE_CLUSTER_NAME,
         )
-        logger.info("Waiting for the Scale Cluster CR to reach Success=True")
-        for conditions in TimeoutSampler(
-            timeout=SCALE_CLUSTER_TIMEOUT,
-            sleep=30,
-            func=self._get_conditions,
-            resource=cluster_ocp,
-        ):
-            if conditions.get("Success") == "True":
-                logger.info(f"Scale Cluster is ready: {conditions}")
-                break
-            logger.info(f"Scale Cluster not ready yet: {conditions}")
-
-        # KMMModulesReady is the condition that actually tells us the GPFS kmod
-        # built, signed and loaded. Without it the daemon never starts.
-        conditions = self._get_conditions(cluster_ocp)
-        if conditions.get("KMMModulesReady") != "True":
+        # Success on its own does not mean the GPFS kmod built, signed and
+        # loaded, KMMModulesReady is what reports that, and without it the
+        # daemon never starts. Both are waited on in the same loop so a kmod
+        # build still in progress gets the rest of SCALE_CLUSTER_TIMEOUT
+        # instead of failing the deployment immediately.
+        logger.info("Waiting for the Scale Cluster CR to be ready")
+        conditions = {}
+        try:
+            for conditions in TimeoutSampler(
+                timeout=SCALE_CLUSTER_TIMEOUT,
+                sleep=30,
+                func=self._get_conditions,
+                resource=cluster_ocp,
+            ):
+                if all(
+                    conditions.get(condition) == "True"
+                    for condition in ("Success", "KMMModulesReady")
+                ):
+                    logger.info(f"Scale Cluster is ready: {conditions}")
+                    break
+                logger.info(f"Scale Cluster not ready yet: {conditions}")
+        except TimeoutExpiredError as ex:
             raise ResourceWrongStatusException(
-                f"GPFS kernel modules are not loaded. Cluster conditions: {conditions}"
-            )
+                f"Scale Cluster did not become ready within "
+                f"{SCALE_CLUSTER_TIMEOUT}s. Last conditions: {conditions}"
+            ) from ex
         logger.info("GPFS kernel modules are loaded")
 
     def get_gpfs_cluster_id(self):
@@ -425,19 +431,33 @@ class FusionAccessStorage(object):
             resource_name=filesystem_name,
         )
         logger.info(f"Waiting for filesystem '{filesystem_name}' to be mounted")
-        for conditions in TimeoutSampler(
-            timeout=FILESYSTEM_TIMEOUT,
-            sleep=30,
-            func=self._get_conditions,
-            resource=filesystem_ocp,
-        ):
-            if all(
-                conditions.get(condition) == "True"
-                for condition in ("Success", "Healthy", "Mounted")
+        conditions = {}
+        try:
+            for conditions in TimeoutSampler(
+                timeout=FILESYSTEM_TIMEOUT,
+                sleep=30,
+                func=self._get_conditions,
+                resource=filesystem_ocp,
             ):
-                logger.info(f"Filesystem '{filesystem_name}' is ready: {conditions}")
-                return
-            logger.info(f"Filesystem '{filesystem_name}' not ready yet: {conditions}")
+                if all(
+                    conditions.get(condition) == "True"
+                    for condition in ("Success", "Healthy", "Mounted")
+                ):
+                    logger.info(
+                        f"Filesystem '{filesystem_name}' is ready: {conditions}"
+                    )
+                    return
+                logger.info(
+                    f"Filesystem '{filesystem_name}' not ready yet: {conditions}"
+                )
+        except TimeoutExpiredError as ex:
+            # TimeoutSampler raises TimeoutExpiredError, but this method
+            # documents ResourceWrongStatusException. Translate it and keep the
+            # last sampled conditions for diagnostics.
+            raise ResourceWrongStatusException(
+                f"Filesystem '{filesystem_name}' was not ready within "
+                f"{FILESYSTEM_TIMEOUT}s. Last conditions: {conditions}"
+            ) from ex
 
     def verify_recovery_data_exported(self, filesystem_names, cluster_id):
         """
@@ -458,6 +478,16 @@ class FusionAccessStorage(object):
             ResourceWrongStatusException: If an FSRD is still unexported after
                 repair.
         """
+        unexported = self._get_unexported_fsrds(filesystem_names)
+        if not unexported:
+            logger.info("All FilesystemRecoveryData resources are exported")
+            return
+
+        # FSRD creation can lag behind Filesystem readiness, and labelling one
+        # that does not exist yet fails the whole deployment. Wait for them to
+        # appear first, then recompute, since some may export on their own once
+        # created.
+        self._wait_for_fsrds_present(filesystem_names)
         unexported = self._get_unexported_fsrds(filesystem_names)
         if not unexported:
             logger.info("All FilesystemRecoveryData resources are exported")
@@ -484,13 +514,60 @@ class FusionAccessStorage(object):
             )
         self._restart_scale_operator()
 
-        unexported = self._get_unexported_fsrds(filesystem_names)
-        if unexported:
+        # The export is driven by a reconcile, so poll rather than checking
+        # once, an export that takes longer than the fixed post-restart sleep
+        # is not a failure.
+        logger.info("Waiting for the FilesystemRecoveryData resources to export")
+        try:
+            for unexported in TimeoutSampler(
+                timeout=FSRD_EXPORT_TIMEOUT,
+                sleep=30,
+                func=self._get_unexported_fsrds,
+                filesystem_names=filesystem_names,
+            ):
+                if not unexported:
+                    break
+                logger.info(f"Still waiting on FilesystemRecoveryData: {unexported}")
+        except TimeoutExpiredError as ex:
             raise ResourceWrongStatusException(
                 f"FilesystemRecoveryData still not exported after repair: {unexported}. "
                 "These filesystems cannot be recovered on the DR peer."
-            )
+            ) from ex
         logger.info("All FilesystemRecoveryData resources are exported")
+
+    def _wait_for_fsrds_present(self, filesystem_names):
+        """
+        Wait until a FilesystemRecoveryData exists for every filesystem.
+
+        Args:
+            filesystem_names (list): Filesystems whose FSRDs should exist.
+
+        Raises:
+            ResourceWrongStatusException: If an FSRD is never created.
+        """
+        fsrd_ocp = ocp.OCP(
+            kind=constants.IBM_STORAGE_SCALE_FSRD_KIND, namespace=self.namespace
+        )
+        missing = []
+        try:
+            for missing in TimeoutSampler(
+                timeout=FSRD_PRESENT_TIMEOUT,
+                sleep=15,
+                func=lambda: [
+                    name
+                    for name in filesystem_names
+                    if not fsrd_ocp.get(resource_name=name, dont_raise=True)
+                ],
+            ):
+                if not missing:
+                    break
+                logger.info(
+                    f"Waiting for FilesystemRecoveryData to be created: {missing}"
+                )
+        except TimeoutExpiredError as ex:
+            raise ResourceWrongStatusException(
+                f"FilesystemRecoveryData was never created for {missing}"
+            ) from ex
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -568,72 +645,3 @@ class FusionAccessStorage(object):
         """
         data = resource.get(dont_raise=True) or {}
         return data.get("status", {}).get("clusterID")
-
-
-def add_entitlement_to_pull_secret():
-    """
-    Add the IBM registry credentials to the cluster wide pull secret.
-
-    IBM Storage Scale pulls its pre release images from ``preprod.icr.io``,
-    which is not part of the stock pull secret. Without the entry the Scale
-    daemon pods sit in ImagePullBackOff.
-
-    The credentials are the IBM entitlement key, the same one the
-    ``ibm-entitlement-key`` secret carries, under the fixed ``cp`` username.
-    No-op when ``config.AUTH["ibm_entitlement_key"]`` is not set.
-
-    Config keys:
-
-    * ``AUTH.ibm_entitlement_key`` (str): the IBM entitlement key.
-    * ``ENV_DATA.ibm_registries`` (list): registries to add. Defaults to
-      ``["preprod.icr.io"]``.
-
-    """
-    ent_key = config.AUTH.get("ibm_entitlement_key")
-    if not ent_key:
-        logger.info(
-            "ibm_entitlement_key is not set, leaving the cluster pull secret alone"
-        )
-        return
-
-    registries = config.ENV_DATA.get("ibm_registries", [constants.IBM_PREPROD_REGISTRY])
-    auth = base64.b64encode(f"cp:{ent_key}".encode()).decode()
-
-    ocp_obj = ocp.OCP(
-        kind=constants.SECRET, namespace=constants.OPENSHIFT_CONFIG_NAMESPACE
-    )
-    pull_secret = ocp_obj.get(resource_name="pull-secret")
-    secret_data = json.loads(
-        base64.b64decode(pull_secret["data"][".dockerconfigjson"]).decode()
-    )
-    auths = secret_data.setdefault("auths", {})
-
-    missing = [r for r in registries if auths.get(r, {}).get("auth") != auth]
-    if not missing:
-        logger.info(
-            f"Pull secret already carries credentials for {registries}, nothing to do"
-        )
-        return
-
-    for registry in missing:
-        logger.info(f"Adding '{registry}' credentials to the cluster pull secret")
-        auths[registry] = {"auth": auth}  # pragma: allowlist secret
-
-    # NamedTemporaryFile rather than a plain path, the file holds every
-    # registry credential the cluster has.
-    with tempfile.NamedTemporaryFile(
-        mode="w+", prefix="pull-secret", suffix=".json"
-    ) as secret_file:
-        json.dump(secret_data, secret_file)
-        secret_file.flush()
-        os.chmod(secret_file.name, 0o600)
-        exec_cmd(
-            f"oc set data secret/pull-secret "
-            f"-n {constants.OPENSHIFT_CONFIG_NAMESPACE} "
-            f"--from-file=.dockerconfigjson={secret_file.name}"
-        )
-
-    # Updating the pull secret restarts the kubelet on every node, so the
-    # rollout has to finish before anything tries to pull from the new registry.
-    logger.info("Waiting for the node rollout triggered by the pull secret update")
-    wait_for_machineconfigpool_status(node_type="all")
