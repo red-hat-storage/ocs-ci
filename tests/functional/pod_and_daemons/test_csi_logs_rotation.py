@@ -7,7 +7,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import BaseTest
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
-    brown_squad,
+    green_squad,
     tier2,
     post_upgrade,
     skipif_ocs_version,
@@ -23,7 +23,7 @@ WAIT_FOR_ROTATION_TIME = 1500  # seconds
 SLEEP_BETWEEN_TRIES = 300  # seconds
 
 
-@brown_squad
+@green_squad
 @post_upgrade
 @skipif_ocs_version("<4.17")
 @tier2
