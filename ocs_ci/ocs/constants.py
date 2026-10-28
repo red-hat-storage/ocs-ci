@@ -4120,6 +4120,8 @@ ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML = "catalog-source.yaml.j2"
 ISF_OPERATOR_IDMS_YAML = "image-digest-mirror-set.yaml.j2"
 FDF_IMAGE_DIGEST_MIRROR_SET_FILENAME = "idms.yaml"
 FDF_SERVICE_NAME = "odfmanager"
+FDF_SERVICE_DEFINITION_NAME = "data-foundation-service"
+SPECTRUM_FUSION_NAME = "spectrumfusion"
 
 # Standalone FDF deployment (RHSTOR-8840)
 # CatalogSource name matches the example YAML from the RHSTOR-8840 analysis doc.

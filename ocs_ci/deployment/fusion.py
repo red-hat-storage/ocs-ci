@@ -252,7 +252,7 @@ class FusionDeployment:
                     logger.warning(f"Webhook '{name}' already gone, skipping")
 
         sf_ocp = OCP(kind="SpectrumFusion", namespace=self.namespace)
-        if sf_ocp.is_exist(resource_name="spectrumfusion"):
+        if sf_ocp.is_exist(resource_name=constants.SPECTRUM_FUSION_NAME):
             logger.info("SpectrumFusion CR already exists, skipping creation")
             spectrum_fusion_status_check()
             return

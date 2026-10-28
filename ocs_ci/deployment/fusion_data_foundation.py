@@ -43,6 +43,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
     get_running_ocp_version,
     mute_mon_netsplit,
+    TimeoutSampler,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 
@@ -94,6 +95,7 @@ class FusionDataFoundationDeployment:
             self.create_image_digest_mirror_set()
             self.setup_fdf_pre_release_deployment()
 
+        self.verify_fusion_prerequisites()
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
         self.ensure_install_plan_approval()
@@ -338,6 +340,86 @@ class FusionDataFoundationDeployment:
             silent=True,
         )
         os.remove(image_digest_mirror_set)
+
+    def verify_fusion_prerequisites(self, timeout=300):
+        """
+        Verify IBM Spectrum Fusion is installed, has a SpectrumFusion CR and
+        lists the Data Foundation service, before the service instance
+        (odfmanager) is created.
+
+        The SpectrumFusion CR is created when it is missing: Fusion onboards
+        its services (and therefore lists the Data Foundation one) only once
+        the CR exists.
+
+        Creating the FusionServiceInstance while Fusion is not installed, or
+        while its service definition is not listed yet, leaves the instance
+        without anything reconciling it. The deployment would then only fail
+        much later, while waiting for the instance to become Healthy.
+
+        Fusion itself is verified with
+        :meth:`ocs_ci.deployment.fusion.FusionDeployment.verify`, the same
+        check the deploy-fusion entrypoint uses.
+
+        Args:
+            timeout (int): Seconds to wait for the Data Foundation service
+                definition to be listed.
+
+        Raises:
+            UnexpectedDeploymentConfiguration: If IBM Spectrum Fusion is not
+                installed, or the Data Foundation service is not listed within
+                the timeout.
+
+        """
+        from ocs_ci.deployment.fusion import FusionDeployment
+
+        fusion = FusionDeployment()
+        try:
+            fusion.verify(sleep=0)
+        except (CommandFailed, TimeoutExpiredError) as ex:
+            raise UnexpectedDeploymentConfiguration(
+                "IBM Spectrum Fusion is not installed on this cluster "
+                f"({ex}). Deploy Fusion before deploying Fusion Data Foundation."
+            )
+
+        spectrum_fusion = OCP(kind="SpectrumFusion", namespace=constants.FDF_NAMESPACE)
+        if spectrum_fusion.is_exist(resource_name=constants.SPECTRUM_FUSION_NAME):
+            logger.info(
+                "SpectrumFusion %s already exists", constants.SPECTRUM_FUSION_NAME
+            )
+        else:
+            logger.info(
+                "No SpectrumFusion found, creating %s", constants.SPECTRUM_FUSION_NAME
+            )
+            fusion.create_spectrum_fusion_cr()
+
+        service_definition = OCP(
+            kind="FusionServiceDefinition", namespace=constants.FDF_NAMESPACE
+        )
+        logger.info(
+            "Waiting for the %s service definition to be listed",
+            constants.FDF_SERVICE_DEFINITION_NAME,
+        )
+        try:
+            for listed in TimeoutSampler(
+                timeout,
+                15,
+                service_definition.is_exist,
+                resource_name=constants.FDF_SERVICE_DEFINITION_NAME,
+            ):
+                if listed:
+                    break
+        except TimeoutExpiredError:
+            raise UnexpectedDeploymentConfiguration(
+                f"The {constants.FDF_SERVICE_DEFINITION_NAME} service definition "
+                f"is not listed in {constants.FDF_NAMESPACE} after {timeout} "
+                "seconds. IBM Spectrum Fusion doesn't offer the Data Foundation "
+                "service on this cluster, check the Fusion installation and, on "
+                "a disconnected cluster, that the Fusion catalog is mirrored."
+            )
+        logger.info(
+            "IBM Spectrum Fusion is installed and the %s service is listed",
+            constants.FDF_SERVICE_DEFINITION_NAME,
+        )
 
     def create_fdf_service_cr(self):
         """
