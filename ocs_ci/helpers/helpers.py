@@ -1883,9 +1883,22 @@ def get_provision_time(interface, pvc_name, status="start"):
     logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
 
     logs = logs.split("\n")
+    ocs_version = version.get_semantic_ocs_version_from_config()
     # Extract the time for the one PVC provisioning
     if isinstance(pvc_name, str):
-        stat = [i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)]
+        stat = [
+            i
+            for i in logs
+            if (
+                re.search(f"provision.*{pvc_name}.*{operation}", i)
+                and ocs_version <= version.VERSION_4_16
+            )
+            or (
+                re.search(f'Started.*PVC="[^"]*/{re.escape(pvc_name)}"', i)
+                if operation == "started"
+                else re.search(f"Succeeded.*{re.escape(pvc_name)}", i, re.IGNORECASE)
+            )
+        ]
         mon_day = " ".join(stat[0].split(" ")[0:2])
         stat = f"{this_year} {mon_day}"
     # Extract the time for the list of PVCs provisioning
@@ -1893,7 +1906,19 @@ def get_provision_time(interface, pvc_name, status="start"):
         all_stats = []
         for i in range(0, len(pvc_name)):
             name = pvc_name[i].name
-            stat = [i for i in logs if re.search(f"provision.*{name}.*{operation}", i)]
+            stat = [
+                i
+                for i in logs
+                if (
+                    re.search(f"provision.*{name}.*{operation}", i)
+                    and ocs_version <= version.VERSION_4_16
+                )
+                or (
+                    re.search(f'Started.*PVC="[^"]*/{re.escape(name)}"', i)
+                    if operation == "started"
+                    else re.search(f"Succeeded.*{re.escape(name)}", i, re.IGNORECASE)
+                )
+            ]
             mon_day = " ".join(stat[0].split(" ")[0:2])
             stat = f"{this_year} {mon_day}"
             all_stats.append(stat)
@@ -1918,6 +1943,7 @@ def get_start_creation_time(interface, pvc_name):
 
     """
     this_year = str(datetime.datetime.now().year)
+    ocs_version = version.get_semantic_ocs_version_from_config()
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
     # get the logs from the csi-provisioner containers
@@ -1926,7 +1952,15 @@ def get_start_creation_time(interface, pvc_name):
 
     logs = logs.split("\n")
     # Extract the starting time for the PVC provisioning
-    start = [i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)]
+    start = [
+        i
+        for i in logs
+        if (
+            re.search(f"provision.*{pvc_name}.*started", i)
+            and ocs_version <= version.VERSION_4_16
+        )
+        or re.search(f'Started.*PVC="[^"]*/{re.escape(pvc_name)}"', i)
+    ]
     mon_day = " ".join(start[0].split(" ")[0:2])
     start = f"{this_year} {mon_day}"
     return datetime.datetime.strptime(start, DATE_TIME_FORMAT)
@@ -1945,6 +1979,7 @@ def get_end_creation_time(interface, pvc_name):
 
     """
     this_year = str(datetime.datetime.now().year)
+    ocs_version = version.get_semantic_ocs_version_from_config()
     # Get the correct provisioner pod based on the interface
     pod_name = pod.get_csi_provisioner_pod(interface)
     # get the logs from the csi-provisioner containers
@@ -1953,7 +1988,15 @@ def get_end_creation_time(interface, pvc_name):
 
     logs = logs.split("\n")
     # Extract the starting time for the PVC provisioning
-    end = [i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)]
+    end = [
+        i
+        for i in logs
+        if (
+            re.search(f"provision.*{pvc_name}.*succeeded", i)
+            and ocs_version <= version.VERSION_4_16
+        )
+        or re.search(f"Succeeded.*{re.escape(pvc_name)}", i, re.IGNORECASE)
+    ]
     # End provisioning string may appear in logs several times, take here the latest one
     mon_day = " ".join(end[-1].split(" ")[0:2])
     end = f"{this_year} {mon_day}"
@@ -1998,13 +2041,31 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
     logs += pod.get_pod_logs(pod_name[1], "csi-provisioner")
     logs = logs.split("\n")
 
+    ocs_version = version.get_semantic_ocs_version_from_config()
+
     loop_counter = 0
     while True:
         no_data_list = list()
         for name in pvc_name_list:
             # check if PV data present in CSI logs
-            start = [i for i in logs if re.search(f"provision.*{name}.*started", i)]
-            end = [i for i in logs if re.search(f"provision.*{name}.*succeeded", i)]
+            start = [
+                i
+                for i in logs
+                if (
+                    re.search(f"provision.*{name}.*started", i)
+                    and ocs_version <= version.VERSION_4_16
+                )
+                or re.search(f'Started.*PVC="[^"]*/{re.escape(name)}"', i)
+            ]
+            end = [
+                i
+                for i in logs
+                if (
+                    re.search(f"provision.*{name}.*succeeded", i)
+                    and ocs_version <= version.VERSION_4_16
+                )
+                or re.search(f"Succeeded.*{re.escape(name)}", i, re.IGNORECASE)
+            ]
             if not start or not end:
                 no_data_list.append(name)
 
@@ -2030,12 +2091,28 @@ def measure_pvc_creation_time_bulk(interface, pvc_name_list, wait_time=60):
     this_year = str(datetime.datetime.now().year)
     for pvc_name in pvc_name_list:
         # Extract the starting time for the PVC provisioning
-        start = [i for i in logs if re.search(f"provision.*{pvc_name}.*started", i)]
+        start = [
+            i
+            for i in logs
+            if (
+                re.search(f"provision.*{pvc_name}.*started", i)
+                and ocs_version <= version.VERSION_4_16
+            )
+            or re.search(f'Started.*PVC="[^"]*/{re.escape(pvc_name)}"', i)
+        ]
         mon_day = " ".join(start[0].split(" ")[0:2])
         start = f"{this_year} {mon_day}"
         start_time = datetime.datetime.strptime(start, DATE_TIME_FORMAT)
         # Extract the end time for the PVC provisioning
-        end = [i for i in logs if re.search(f"provision.*{pvc_name}.*succeeded", i)]
+        end = [
+            i
+            for i in logs
+            if (
+                re.search(f"provision.*{pvc_name}.*succeeded", i)
+                and ocs_version <= version.VERSION_4_16
+            )
+            or re.search(f"Succeeded.*{re.escape(pvc_name)}", i, re.IGNORECASE)
+        ]
         mon_day = " ".join(end[0].split(" ")[0:2])
         end = f"{this_year} {mon_day}"
         end_time = datetime.datetime.strptime(end, DATE_TIME_FORMAT)
@@ -2084,11 +2161,28 @@ def measure_pv_deletion_time_bulk(
         no_data_list = list()
         for pv in pv_name_list:
             # check if PV data present in CSI logs
-            start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
+            start = [
+                i
+                for i in logs
+                if (
+                    re.search(f'delete "{pv}": started', i)
+                    and ocs_version <= version.VERSION_4_16
+                )
+                or re.search(f'"shouldDelete is true".*PV="{re.escape(pv)}"', i)
+                or re.search(f'"Started".*PV="{re.escape(pv)}"', i)
+            ]
             end = [
                 i
                 for i in logs
-                if re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
+                if (
+                    re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
+                    and ocs_version <= version.VERSION_4_13
+                )
+                or re.search(f'deleted succeeded.*PV="{re.escape(pv)}"', i)
+                or re.search(
+                    f'"PersistentVolume deleted succeeded".*PV="{re.escape(pv)}"',
+                    i,
+                )
             ]
             if not start or not end:
                 no_data_list.append(pv)
@@ -2115,7 +2209,16 @@ def measure_pv_deletion_time_bulk(
     this_year = str(datetime.datetime.now().year)
     for pv_name in pv_name_list:
         # Extract the deletion start time for the PV
-        start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
+        start = [
+            i
+            for i in logs
+            if (
+                re.search(f'delete "{pv_name}": started', i)
+                and ocs_version <= version.VERSION_4_16
+            )
+            or re.search(f'"shouldDelete is true".*PV="{re.escape(pv_name)}"', i)
+            or re.search(f'"Started".*PV="{re.escape(pv_name)}"', i)
+        ]
         mon_day = " ".join(start[0].split(" ")[0:2])
         start_tm = f"{this_year} {mon_day}"
         start_time = datetime.datetime.strptime(start_tm, DATE_TIME_FORMAT)
@@ -2123,7 +2226,15 @@ def measure_pv_deletion_time_bulk(
         end = [
             i
             for i in logs
-            if re.search(f'delete "{pv_name}": {delete_suffix_to_search}', i)
+            if (
+                re.search(f'delete "{pv_name}": {delete_suffix_to_search}', i)
+                and ocs_version <= version.VERSION_4_13
+            )
+            or re.search(f'deleted succeeded.*PV="{re.escape(pv_name)}"', i)
+            or re.search(
+                f'"PersistentVolume deleted succeeded".*PV="{re.escape(pv_name)}"',
+                i,
+            )
         ]
         mon_day = " ".join(end[0].split(" ")[0:2])
         end_tm = f"{this_year} {mon_day}"
