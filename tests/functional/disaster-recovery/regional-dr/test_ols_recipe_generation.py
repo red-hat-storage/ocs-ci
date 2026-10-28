@@ -245,7 +245,7 @@ class TestOLSRecipeGeneration:
             "consists of one Deployment labeled app: postgres-app and one PVC "
             "labeled app: postgres-app. Before backup, run an exec hook in "
             "container postgres that executes the command "
-            '["psql","-U","postgres","-c","CHECKPOINT"]. '
+            "'psql -U postgres -c CHECKPOINT' as a plain string. "
             "The Deployment name is postgres-deployment. Generate the complete Recipe."
         )
         result = ols_client.query(prompt)
@@ -578,6 +578,7 @@ class TestOLSRecipeFailoverAndRelocate:
         nodes_multicluster,
         node_restart_teardown,
         ols,
+        setup_acm_ui,
         request,
     ):
         """

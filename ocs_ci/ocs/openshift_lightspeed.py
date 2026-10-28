@@ -19,6 +19,7 @@ import requests
 import urllib3
 
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
@@ -36,17 +37,31 @@ def is_ols_available(namespace=None, route_name=None):
     not for pod readiness or API reachability.  Use it as a fast pre-check
     before constructing an :class:`OpenShiftLightspeed` client.
 
+    A ``CommandFailed`` error whose message contains ``"not found"`` is
+    treated as a confirmed absence and returns ``False``.  Any other
+    ``CommandFailed`` (e.g. RBAC / connectivity) is re-raised so the caller
+    can decide how to handle it.
+
     Args:
         namespace (str): OLS namespace.  Defaults to ``constants.OLS_NAMESPACE``.
         route_name (str): OLS route name.  Defaults to ``constants.OLS_ROUTE_NAME``.
 
     Returns:
-        bool: ``True`` if the OLS route exists, ``False`` if not found.
+        bool: ``True`` if the OLS route exists, ``False`` if confirmed absent.
+
+    Raises:
+        CommandFailed: For non-404 failures such as RBAC or connectivity errors.
     """
     ns = namespace or constants.OLS_NAMESPACE
     rname = route_name or constants.OLS_ROUTE_NAME
     route_ocp = OCP(kind=constants.ROUTE, namespace=ns)
-    return route_ocp.is_exist(resource_name=rname)
+    try:
+        route_ocp.get(resource_name=rname, silent=True)
+        return True
+    except CommandFailed as exc:
+        if "not found" in str(exc).lower():
+            return False
+        raise
 
 
 class OpenShiftLightspeed:
@@ -727,18 +742,25 @@ def extract_yaml_from_ols_response(response_text):
     # an untagged ``` fence.  Accept any block whose content parses as a dict.
     # Skip blocks whose first token is a known non-yaml language tag.
     _SKIP_TAGS = {"python", "json", "bash", "sh", "text", "markdown"}
+    _YAML_TAGS = {"yaml", "yml"}
     if "```" in response_text:
         for block in response_text.split("```"):
             block = block.strip()
             if not block:
                 continue
-            # Strip a leading language tag (word chars only, no whitespace)
             first_line, _, rest = block.partition("\n")
             tag = first_line.strip().lower()
             if tag and " " not in tag:
+                # Known non-YAML language tag — skip this fence entirely.
                 if tag in _SKIP_TAGS:
                     continue
-                content = rest.strip()
+                # Recognised YAML tag — strip the tag line, use the rest.
+                if tag in _YAML_TAGS:
+                    content = rest.strip()
+                else:
+                    # Unknown first line (could be YAML content like
+                    # "apiVersion:" or "metadata:") — keep the full block.
+                    content = block
             else:
                 content = block
             if not content:

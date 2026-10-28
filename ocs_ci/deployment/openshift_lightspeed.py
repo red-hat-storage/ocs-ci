@@ -310,11 +310,14 @@ class OLSInstaller:
                 f"provide AUTH.ols.api_token in your conf file."
             )
         logger.info(f"Creating LLM credentials Secret '{secret_name}'")
+        # Pass the token via stdin so it never appears in the command string
+        # or in DEBUG logs.  `oc create secret generic --from-file` reads
+        # the named key from a file descriptor when the path is /dev/stdin.
         exec_cmd(
             f"oc create secret generic {secret_name}"
-            f" --from-literal=apitoken={api_token}"
+            f" --from-file=apitoken=/dev/stdin"
             f" -n {self.namespace}",
-            secrets=[api_token],
+            input=api_token.encode(),
         )
 
     # ------------------------------------------------------------------

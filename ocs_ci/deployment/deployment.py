@@ -5425,7 +5425,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             self.enable_managed_serviceaccount()
 
         # Deploy OLS on the ACM hub for ODF >= 4.23 (RHSTOR-8222).
-        # Enabled by default — set skip_ols_deployment: true in ENV_DATA to opt out.
+        # Opt-in: set skip_ols_deployment: false in ENV_DATA to enable.
         #
         # Provider settings default to the hardcoded constants and are
         # overridable via ENV_DATA keys of the same name.
@@ -5436,7 +5436,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         #     ols:
         #       api_token: "<litemaas-or-other-token>"
         api_token = config.AUTH.get("ols", {}).get("api_token")
-        if not config.ENV_DATA.get("skip_ols_deployment", False) and (
+        if not config.ENV_DATA.get("skip_ols_deployment", True) and (
             version.get_semantic_ocs_version_from_config() >= version.VERSION_4_23
         ):
             from ocs_ci.deployment.openshift_lightspeed import OLSInstaller

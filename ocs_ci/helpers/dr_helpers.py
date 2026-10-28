@@ -4941,6 +4941,9 @@ def assert_recipe_structure(recipe_yaml):
         "Recipe metadata must include 'name', got: " f"{recipe_yaml['metadata']!r}"
     )
     spec = recipe_yaml.get("spec", {})
+    assert isinstance(spec, dict), (
+        "Recipe spec must be a mapping, got: " f"{type(spec).__name__!r}"
+    )
     assert "groups" in spec, "Recipe spec must contain 'groups'"
     assert "workflows" in spec, "Recipe spec must contain 'workflows'"
 
@@ -5006,6 +5009,10 @@ def assert_recipe_structure(recipe_yaml):
             assert "chks" in hook, (
                 f"Recipe spec.hooks[{hi}] (type: check) must contain a 'chks' key, "
                 f"got keys: {list(hook.keys())}"
+            )
+            assert isinstance(hook["chks"], list), (
+                f"Recipe spec.hooks[{hi}].chks must be a list, "
+                f"got: {type(hook['chks']).__name__!r}"
             )
             for ci, chk in enumerate(hook["chks"]):
                 assert isinstance(
