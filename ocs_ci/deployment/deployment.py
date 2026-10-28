@@ -1198,11 +1198,7 @@ class Deployment(object):
         self.do_gitops_deploy()
         self.do_deploy_oadp()
         self.do_deploy_ocs()
-        # Fusion Access has to come before the DR operators. On a Fusion Access
-        # deployment it is what provides the storage, so deploying DR first would
-        # leave deploy_dr_policy() waiting on a DRPolicy that has no storage behind
-        # it. The step is self gated on DEPLOYMENT["fusion_access_deployment"], so
-        # for every other deployment this ordering makes no difference.
+        # Must precede the DR operators, it provides the storage the DRPolicy needs.
         self.do_deploy_fusion_access()
         self.do_deploy_rdr()
         self.do_deploy_mce()
@@ -4673,7 +4669,6 @@ class MultiClusterDROperatorsDeploy(object):
             logger.info("Using ODF ObjectBucketClaim for backup storage")
             return self.create_odf_bucket_and_get_credentials(bucket_name)
 
-        # Default AWS S3 bucket behavior
         region = region or constants.AWS_REGION
         logger.info(f"Using AWS S3 bucket for backup storage in {region}")
         client = boto3.resource(
@@ -4684,8 +4679,7 @@ class MultiClusterDROperatorsDeploy(object):
             aws_secret_access_key=secret_key,
         )
         kwargs = {"Bucket": bucket_name}
-        # us-east-1 is the API default and passing it as a LocationConstraint
-        # is rejected with InvalidLocationConstraint.
+        # us-east-1 as a LocationConstraint is rejected with InvalidLocationConstraint.
         if region != "us-east-1":
             kwargs["CreateBucketConfiguration"] = {"LocationConstraint": region}
         try:
@@ -4693,10 +4687,7 @@ class MultiClusterDROperatorsDeploy(object):
             logger.info(f"Successfully created backup bucket: {bucket_name}")
         except ClientError as e:
             error_code = e.response["Error"]["Code"]
-            # BucketAlreadyOwnedByYou means the bucket is ours and a re-run can
-            # carry on. BucketAlreadyExists means another account owns the
-            # globally unique name, so we would be registering a bucket this
-            # deployment cannot access.
+            # Only tolerate a bucket we already own, BucketAlreadyExists is someone else's.
             if error_code == "BucketAlreadyOwnedByYou":
                 logger.warning(
                     f"S3 bucket '{bucket_name}' already exists — skipping creation"
@@ -4770,8 +4761,7 @@ class MultiClusterDROperatorsDeploy(object):
                 }
             )
 
-        # Both the hub and the cluster Ramen instances resolve the secret ref,
-        # so it has to exist on every cluster taking part in the DR setup.
+        # Hub and cluster Ramen both resolve the secret ref, so every cluster needs it.
         self.create_ramen_s3_secrets(profiles, access_key, secret_key)
 
         logger.info("Adding s3StoreProfiles to the Ramen hub ConfigMap")
@@ -4841,11 +4831,7 @@ class MultiClusterDROperatorsDeploy(object):
                         "type": "Opaque",
                         "data": encoded,
                     }
-                    # Applied from a 0600 file rather than passed with
-                    # --from-literal, which would put the keys in the oc
-                    # argument list where any local process can read them from
-                    # /proc. apply() also refreshes an existing secret, so
-                    # rotated credentials actually reach Ramen on a re-run.
+                    # A 0600 file, not --from-literal, which leaks the keys via /proc.
                     secret_file = tempfile.NamedTemporaryFile(
                         mode="w+",
                         prefix=f"{secret_name}-",
@@ -5799,14 +5785,9 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         super().__init__()
 
     def deploy(self):
-        # Fusion Access replicates at the SAN layer rather than through Ceph, so the
-        # Ceph-specific parts of the MDR flow do not apply to it.
         fusion_access = config.DEPLOYMENT.get("fusion_access")
 
-        # Every cluster in the DR setup has to trust the others' ingress CA,
-        # Ramen and the ACM agents talk to each other over those endpoints.
-        # This patches the cluster wide proxy trustedCA and therefore rolls
-        # every node, so it is done first rather than in the middle of the flow.
+        # Patches the cluster wide proxy trustedCA, which rolls every node.
         if not config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
             create_ingress_cert_dr()
 
@@ -5830,9 +5811,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                 "Fusion Access deployment, skipping MirrorPeer: mirroring is "
                 "handled by the SAN, not by Ceph RBD"
             )
-            # No ODF on the managed clusters means no NooBaa and therefore no
-            # Multicluster Orchestrator provisioned metadata buckets, so the
-            # Ramen s3 store has to be set up before the DRPolicy is created.
+            # No NooBaa to provision the metadata buckets, so set the store up here.
             config.switch_ctx(get_active_acm_index())
             self.configure_ramen_s3_store_profiles()
         else:
@@ -5841,10 +5820,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Deploy dr policy
         self.deploy_dr_policy()
         if fusion_access:
-            # Ramen sets volSyncDisabled itself once it sees both DRClusters in
-            # one region, and a SAN replicated deployment has nothing for
-            # VolSync to do anyway, so the operator is never installed and
-            # there is no volsync ManagedClusterAddOn to retune.
+            # VolSync is never installed here, so there is no addon to retune.
             logger.info("Fusion Access deployment, skipping VolSync channel update")
         elif not config.is_provider_exist():
             update_volsync_channel()
@@ -5895,9 +5871,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         config.switch_acm_ctx()
         acm_version = get_acm_version()
         if fusion_access:
-            # The s3 secrets were created directly by
-            # configure_ramen_s3_store_profiles(), there is no Multicluster
-            # Orchestrator policy distributing them to validate against.
+            # Secrets came from configure_ramen_s3_store_profiles(), not from a policy.
             logger.info(
                 "Fusion Access deployment, skipping S3 secret policy compliance check"
             )

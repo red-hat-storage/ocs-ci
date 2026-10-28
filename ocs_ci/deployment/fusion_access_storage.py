@@ -48,13 +48,9 @@ from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
-# How long to let the operator build the GPFS kmod and bring the daemon up. The
-# kmod build plus sign plus load is the long pole here, several minutes on a cold
-# cluster.
+# Dominated by the GPFS kmod build/sign/load, minutes on a cold cluster.
 SCALE_CLUSTER_TIMEOUT = 3600
 FILESYSTEM_TIMEOUT = 2400
-# FSRD creation trails Filesystem readiness, and the export itself happens on a
-# reconcile after the operator restart.
 FSRD_PRESENT_TIMEOUT = 600
 FSRD_EXPORT_TIMEOUT = 900
 
@@ -221,7 +217,6 @@ class FusionAccessStorage(object):
         iscsi_ip = config.ENV_DATA.get("san_iscsi_ip")
         iscsi_iqn = config.ENV_DATA.get("san_iscsi_iqn")
 
-        # Validate before interpolating into a shell command.
         if not re.fullmatch(r"[\d]{1,3}(\.[\d]{1,3}){3}", iscsi_ip or ""):
             raise ValueError(f"san_iscsi_ip '{iscsi_ip}' is not a valid IPv4 address")
         if not re.fullmatch(r"iqn\.\d{4}-\d{2}\.[a-zA-Z0-9.\-:]+", iscsi_iqn or ""):
@@ -230,8 +225,7 @@ class FusionAccessStorage(object):
         logger.info("Starting iSCSI LUN discovery on all worker nodes")
         ocp_obj = ocp.OCP()
         ocp_obj.exec_oc_cmd(
-            # '&&' rather than ';' so a failed discovery is not masked by a
-            # successful login, and stderr is kept so the failure is diagnosable.
+            # '&&' so a failed discovery is not masked by a successful login.
             f"get nodes -l node-role.kubernetes.io/worker --no-headers -o name "
             f"| xargs -I {{}} -- oc debug {{}} -- bash -c "
             f'\'chroot /host iscsiadm -m discovery -t st -p "{iscsi_ip}" && '
@@ -293,8 +287,7 @@ class FusionAccessStorage(object):
             fusion_access.click_connect_and_create()
             fusion_access.take_screenshot("lun_group_creation_initiated")
 
-            # Give the backend a moment before navigating away, otherwise the
-            # request can be dropped mid-flight.
+            # Navigating away too early drops the request mid-flight.
             sleep(60)
             fusion_access.refresh_page()
             fusion_access.page_has_loaded()
@@ -345,11 +338,7 @@ class FusionAccessStorage(object):
             namespace=self.namespace,
             resource_name=constants.IBM_STORAGE_SCALE_CLUSTER_NAME,
         )
-        # Success on its own does not mean the GPFS kmod built, signed and
-        # loaded, KMMModulesReady is what reports that, and without it the
-        # daemon never starts. Both are waited on in the same loop so a kmod
-        # build still in progress gets the rest of SCALE_CLUSTER_TIMEOUT
-        # instead of failing the deployment immediately.
+        # Success alone does not mean the kmod loaded, KMMModulesReady reports that.
         logger.info("Waiting for the Scale Cluster CR to be ready")
         conditions = {}
         try:
@@ -451,9 +440,6 @@ class FusionAccessStorage(object):
                     f"Filesystem '{filesystem_name}' not ready yet: {conditions}"
                 )
         except TimeoutExpiredError as ex:
-            # TimeoutSampler raises TimeoutExpiredError, but this method
-            # documents ResourceWrongStatusException. Translate it and keep the
-            # last sampled conditions for diagnostics.
             raise ResourceWrongStatusException(
                 f"Filesystem '{filesystem_name}' was not ready within "
                 f"{FILESYSTEM_TIMEOUT}s. Last conditions: {conditions}"
@@ -483,20 +469,14 @@ class FusionAccessStorage(object):
             logger.info("All FilesystemRecoveryData resources are exported")
             return
 
-        # FSRD creation can lag behind Filesystem readiness, and labelling one
-        # that does not exist yet fails the whole deployment. Wait for them to
-        # appear first, then recompute, since some may export on their own once
-        # created.
+        # FSRDs lag Filesystem readiness, labelling one that does not exist yet fails.
         self._wait_for_fsrds_present(filesystem_names)
         unexported = self._get_unexported_fsrds(filesystem_names)
         if not unexported:
             logger.info("All FilesystemRecoveryData resources are exported")
             return
 
-        # An FSRD reconciled before the Daemon CR exists gets an empty dr-primary
-        # label and is then skipped forever, with no event and no error. Setting the
-        # label is not enough on its own, the controller only re-reads it when its
-        # cache starts, so the operator has to be restarted too.
+        # An empty dr-primary label is skipped forever, and only re-read on restart.
         logger.warning(
             f"FilesystemRecoveryData not exported for {unexported}. "
             f"Setting the dr-primary label to {cluster_id} and restarting the operator."
@@ -514,9 +494,6 @@ class FusionAccessStorage(object):
             )
         self._restart_scale_operator()
 
-        # The export is driven by a reconcile, so poll rather than checking
-        # once, an export that takes longer than the fixed post-restart sleep
-        # is not a failure.
         logger.info("Waiting for the FilesystemRecoveryData resources to export")
         try:
             for unexported in TimeoutSampler(
@@ -611,8 +588,7 @@ class FusionAccessStorage(object):
             "--timeout=300s",
             out_yaml_format=False,
         )
-        # The export happens a couple of seconds after the controller starts, but
-        # give the reconcile loop room to work through every filesystem.
+        # Room for the reconcile loop to work through every filesystem.
         sleep(60)
 
     @staticmethod
