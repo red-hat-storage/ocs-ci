@@ -1087,7 +1087,7 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         argvalues=[
             pytest.param(
                 constants.VOLUME_MODE_BLOCK,
-                marks=pytest.mark.polarion_id("OCS-XXXX"),
+                marks=pytest.mark.polarion_id("OCS-8381"),
             ),
         ],
     )
@@ -1100,12 +1100,17 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         resume point, trimming the first range if it crosses the offset.
 
         Steps:
-        1. Create a Block PVC, write initial data, and take snap-1.
-        2. Write 10 MiB at offset 100 MiB and take snap-2.
-        3. List the complete delta from snap-1 to snap-2.
-        4. List the same delta with a starting offset of 102 MiB.
-        5. Verify that no bytes below the offset are returned and that the
-           result covers a strict subset of the full delta.
+        1. Create a Block PVC, attach a writer pod, and write 10 MiB from
+           offset 0.
+        2. Take snap-1 and wait for it to become ready.
+        3. Write 10 MiB at offset 100 MiB and take snap-2.
+        4. List the complete delta from snap-1 to snap-2 with no starting
+           offset.
+        5. List the same delta with a starting offset of 102 MiB.
+        6. Verify that the resumed coverage equals the full coverage trimmed
+           at the offset, with no bytes reported below it.
+        7. Verify that the resumed result covers strictly fewer bytes than
+           the full delta.
         """
         starting_offset = 102 * 1024 * 1024
 
@@ -1163,7 +1168,7 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         argvalues=[
             pytest.param(
                 constants.VOLUME_MODE_BLOCK,
-                marks=pytest.mark.polarion_id("OCS-XXXX"),
+                marks=pytest.mark.polarion_id("OCS-8382"),
             ),
         ],
     )
@@ -1238,7 +1243,7 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         argvalues=[
             pytest.param(
                 constants.VOLUME_MODE_BLOCK,
-                marks=pytest.mark.polarion_id("OCS-XXXX"),
+                marks=pytest.mark.polarion_id("OCS-8383"),
             ),
         ],
     )
