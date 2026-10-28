@@ -1748,6 +1748,47 @@ def calculate_compression_ratio(pool_name):
     return None
 
 
+def get_pool_raw_overhead_factor(pool_name):
+    """
+    Get the raw storage overhead multiplier for a pool, i.e. how many times
+    the logical (stored) bytes are actually written to raw storage before
+    compression. For replicated pools this is the replica size. Erasure
+    coded pools report "size" as data_chunks + coding_chunks, which is not
+    the raw overhead factor - that is (data_chunks + coding_chunks) /
+    data_chunks instead.
+
+    Args:
+        pool_name (str): name of the pool
+
+    Returns:
+        float: raw storage overhead factor for the pool
+
+    Raises:
+        PoolNotFound: if the pool does not exist on the cluster
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    pool_details = ct_pod.exec_ceph_cmd(
+        ceph_cmd="ceph osd pool ls detail", format="json"
+    )
+    pool_info = next(
+        (pool for pool in pool_details if pool.get("pool_name") == pool_name), None
+    )
+    if not pool_info:
+        raise PoolNotFound(f"Pool {pool_name} not found on cluster")
+
+    ec_profile_name = pool_info.get("erasure_code_profile")
+    if not ec_profile_name:
+        return pool_info["size"]
+
+    ec_profile = ct_pod.exec_ceph_cmd(
+        ceph_cmd=f"ceph osd erasure-code-profile get {ec_profile_name}"
+    )
+    data_chunks = int(ec_profile["k"])
+    coding_chunks = int(ec_profile["m"])
+    return (data_chunks + coding_chunks) / data_chunks
+
+
 def validate_compression(pool_name):
     """
     Check if data was compressed
@@ -1759,14 +1800,14 @@ def validate_compression(pool_name):
         bool: True if compression works. False if not
 
     """
-    pool_replica = get_ceph_pool_property(pool_name, "size")
+    pool_raw_overhead_factor = get_pool_raw_overhead_factor(pool_name)
     ceph_df_detail_output = get_ceph_df_detail()
     pool_list = ceph_df_detail_output.get("pools")
     for pool in pool_list:
         if pool.get("name") == pool_name:
             logger.info(f"{pool_name}")
             stored = pool["stats"]["stored"]
-            used_without_compression = stored * pool_replica
+            used_without_compression = stored * pool_raw_overhead_factor
             compress_under_bytes = pool["stats"]["compress_under_bytes"]
             compression_ratio = compress_under_bytes / used_without_compression
             logger.info(f"this is the comp_ratio {compression_ratio}")
