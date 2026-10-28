@@ -300,7 +300,7 @@ class ODFCliRunner:
             raise UnexpectedBehaviour(
                 f"ODF CLI returned no value for `ceph config {subcommand} {who} {option}`"
             )
-        return output.split()[-1]
+        return output
 
     def get_osd_running_iops(self, osd_id: Union[str, int], key: str) -> float:
         """
