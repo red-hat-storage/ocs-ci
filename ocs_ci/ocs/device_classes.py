@@ -8,6 +8,7 @@ from ocs_ci.ocs.node import (
     add_disk_to_node,
     get_node_objs,
     get_osd_running_nodes,
+    wait_for_nodes_status,
 )
 from ocs_ci.ocs.resources.pv import (
     get_pv_in_status,
@@ -252,6 +253,33 @@ def ensure_storagecluster_ready_for_deviceclass_test(timeout=600, sleep=20):
     )
 
 
+def add_disks_to_nodes_and_wait_for_ready(worker_node_objs, disk_size, ssd=True):
+    """
+    Add a new disk to each of the given nodes and wait for the nodes to reach the Ready status.
+
+    Attaching an SSD disk power-cycles the VM, and the platform power-on step only waits for
+    network connectivity. Wait for the nodes to be Ready, so that the LSO diskmaker pods are
+    scheduled again and can discover the new disks.
+
+    Args:
+        worker_node_objs (list): The node objects to add the new disks to
+        disk_size (int): The size in GB of the new disk to attach to each node
+        ssd (bool): if True, mark disk as SSD
+
+    Raises:
+        ResourceWrongStatusException: In case one or more nodes didn't reach the Ready status
+
+    """
+    for n in worker_node_objs:
+        add_disk_to_node(n, disk_size=disk_size, ssd=ssd)
+
+    node_names = [n.name for n in worker_node_objs]
+    log.info(
+        f"Wait for the nodes {node_names} to reach the {constants.NODE_READY} status"
+    )
+    wait_for_nodes_status(node_names, constants.NODE_READY)
+
+
 def create_new_lvs_for_new_deviceclass(
     worker_nodes, create_disks_for_lvs=True, ssd=True
 ):
@@ -325,8 +353,7 @@ def create_new_lvs_for_new_deviceclass(
         disk_size_in_gb = sum_of_two_storage_sizes(min_size, "10Gi")
         disk_size = int(disk_size_in_gb[:-2])
         worker_node_objs = get_node_objs(worker_nodes)
-        for n in worker_node_objs:
-            add_disk_to_node(n, disk_size=disk_size, ssd=ssd)
+        add_disks_to_nodes_and_wait_for_ready(worker_node_objs, disk_size, ssd=ssd)
 
     return lvs_obj
 
@@ -370,8 +397,7 @@ def add_disks_matching_lvs_size(worker_nodes, ssd=True):
     disk_size_in_gb = osd_size
     disk_size = int(disk_size_in_gb[:-2])
     worker_node_objs = get_node_objs(worker_nodes)
-    for n in worker_node_objs:
-        add_disk_to_node(n, disk_size=disk_size, ssd=ssd)
+    add_disks_to_nodes_and_wait_for_ready(worker_node_objs, disk_size, ssd=ssd)
 
 
 def check_ceph_state_post_add_deviceclass():

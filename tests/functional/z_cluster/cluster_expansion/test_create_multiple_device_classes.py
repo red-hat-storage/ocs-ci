@@ -114,7 +114,7 @@ class TestMultipleDeviceClasses(ManageTest):
             f"Wait for the PVs in the LocalVolumeSet {lvs_obj.name} to be available"
         )
         wait_for_pvs_in_lvs_to_reach_status(
-            lvs_obj.name, num_of_new_pvs, constants.STATUS_AVAILABLE
+            lvs_obj.name, num_of_new_pvs, constants.STATUS_AVAILABLE, timeout=360
         )
 
         log.info(
@@ -207,6 +207,7 @@ class TestMultipleDeviceClasses(ManageTest):
             sc_name=lvs_obj.name,
             expected_status=constants.STATUS_AVAILABLE,
             num_of_new_pvs=num_of_new_pvs,
+            timeout=360,
         )
 
         suffix = "".join(random.choices("0123456789", k=5))
