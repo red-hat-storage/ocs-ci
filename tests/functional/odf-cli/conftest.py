@@ -70,13 +70,12 @@ def mclock_config_cleanup(mclock_iops_context, request):
     logger.info(f"Saved the original mClock IOPS entries: {original_entries}")
 
     def clear_entries():
+        logger.test_step("Clear mClock IOPS entries")
         for iops_key in MCLOCK_IOPS_KEYS:
             for who, _ in odf_cli.get_ceph_config_dump_entries(iops_key):
-                logger.info(f"Clearing {who} {iops_key}")
                 odf_cli.run_ceph_config(f"rm {who} {iops_key}")
 
     def restore_entry(who, iops_key, value):
-        logger.info(f"Restoring {who} {iops_key} = {value}")
         odf_cli.run_ceph_config(f"set {who} {iops_key} {value}")
 
     for (who, iops_key), value in reversed(original_entries.items()):

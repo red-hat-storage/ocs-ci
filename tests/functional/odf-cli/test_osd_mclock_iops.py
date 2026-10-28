@@ -32,6 +32,10 @@ def assert_osd_iops(odf_cli, osd_ids, key, expected, context):
     """
     for osd_id in osd_ids:
         value = odf_cli.get_osd_running_iops(osd_id, key)
+        logger.assertion(
+            f"osd.{osd_id} {key}: expected={expected}, actual={value}, "
+            f"context={context}"
+        )
         assert (
             value == expected
         ), f"osd.{osd_id} {key} is {value}, expected {expected} ({context})"
@@ -64,16 +68,17 @@ class TestOSDMclockMaxCapacityIOPS:
         """
         odf_cli, osd_ids, key = mclock_iops_context
 
+        logger.test_step(f"Read and validate cluster-wide and per-OSD {key}")
         cluster_value = float(odf_cli.get_ceph_config_value("osd", key))
+        logger.assertion(f"Cluster-wide {key}: expected>0, actual={cluster_value}")
         assert cluster_value > 0, f"{key} is {cluster_value}, expected a positive value"
-        logger.info(f"Cluster-wide {key} = {cluster_value}")
 
         for osd_id in osd_ids:
             value = odf_cli.get_osd_running_iops(osd_id, key)
+            logger.assertion(f"osd.{osd_id} {key}: expected>0, actual={value}")
             assert (
                 value > 0
             ), f"osd.{osd_id} {key} is {value}, expected a positive value"
-            logger.info(f"osd.{osd_id} is running with {key} = {value}")
 
     @tier1
     @polarion_id("OCS-8257")
@@ -91,7 +96,9 @@ class TestOSDMclockMaxCapacityIOPS:
         target_osd, other_osds = osd_ids[0], osd_ids[1:]
 
         baseline = odf_cli.get_settled_osd_iops(osd_ids, key)
-        logger.info(f"Baseline {key} on every OSD = {baseline}")
+        logger.assertion(
+            f"Baseline {key}: expected!={self.CUSTOM_IOPS_VALUE}, actual={baseline}"
+        )
         assert baseline != self.CUSTOM_IOPS_VALUE, (
             f"Baseline {key} already equals the test value "
             f"{self.CUSTOM_IOPS_VALUE}; pick a different value"
@@ -108,6 +115,9 @@ class TestOSDMclockMaxCapacityIOPS:
         )
 
         entries = odf_cli.get_ceph_config_dump_entries(key)
+        logger.assertion(
+            f"{key} config entries: expected only osd.{target_osd}, actual={entries}"
+        )
         assert [who for who, _ in entries] == [f"osd.{target_osd}"], (
             f"Expected a single osd.{target_osd} entry in `ceph config dump`, "
             f"found {entries}"
@@ -120,6 +130,9 @@ class TestOSDMclockMaxCapacityIOPS:
         assert_osd_iops(odf_cli, [target_osd], key, baseline, "after override removal")
 
         entries = odf_cli.get_ceph_config_dump_entries(key)
+        logger.assertion(
+            f"{key} config entries after removal: expected=[], actual={entries}"
+        )
         assert not entries, f"{key} still present in `ceph config dump`: {entries}"
 
     @tier2
@@ -160,6 +173,10 @@ class TestOSDMclockMaxCapacityIOPS:
         )
 
         entries = odf_cli.get_ceph_config_dump_entries(key)
+        logger.assertion(
+            f"{key} config entries: expected=[global, osd.{target_osd}], "
+            f"actual={entries}"
+        )
         assert {who for who, _ in entries} == {"global", f"osd.{target_osd}"}, (
             f"Expected global and osd.{target_osd} entries in "
             f"`ceph config dump`, found {entries}"
@@ -180,19 +197,24 @@ class TestOSDMclockMaxCapacityIOPS:
         odf_cli, osd_ids, key = mclock_config_cleanup
 
         baseline = odf_cli.get_settled_osd_iops(osd_ids, key)
-        logger.info(f"Baseline {key} on every OSD = {baseline}")
+        logger.assertion(
+            f"Baseline {key}: expected!={self.CUSTOM_IOPS_VALUE}, actual={baseline}"
+        )
         assert baseline != self.CUSTOM_IOPS_VALUE, (
             f"Baseline {key} already equals the test value "
             f"{self.CUSTOM_IOPS_VALUE}; pick a different value"
         )
 
-        logger.info(f"Setting global {key} = {self.CUSTOM_IOPS_VALUE}")
+        logger.test_step(f"Setting global {key} = {self.CUSTOM_IOPS_VALUE}")
         odf_cli.run_ceph_config(f"set global {key} {self.CUSTOM_IOPS_VALUE}")
         assert_osd_iops(
             odf_cli, osd_ids, key, self.CUSTOM_IOPS_VALUE, "global override"
         )
 
         entries = odf_cli.get_ceph_config_dump_entries(key)
+        logger.assertion(
+            f"{key} config entries: expected global entry, actual={entries}"
+        )
         assert any(
             who == "global" for who, _ in entries
         ), f"No global {key} entry in `ceph config dump`: {entries}"
@@ -204,4 +226,7 @@ class TestOSDMclockMaxCapacityIOPS:
         )
 
         entries = odf_cli.get_ceph_config_dump_entries(key)
+        logger.assertion(
+            f"{key} config entries after removal: expected=[], actual={entries}"
+        )
         assert not entries, f"{key} still present in `ceph config dump`: {entries}"
