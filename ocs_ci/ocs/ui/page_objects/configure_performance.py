@@ -26,22 +26,33 @@ class ConfigurePerformancePage(BaseUI):
     def is_core_storage_section_present(self) -> bool:
         """Check if Core Storage section is present."""
         logger.info("Checking if Core Storage section is present")
-        elements = self.get_elements(
-            self.configure_performance_loc["core_storage_section"]
-        )
-        if len(elements) > 0:
+        try:
+            self.wait_for_element_to_be_visible(
+                self.configure_performance_loc["core_storage_section"], timeout=15
+            )
             return True
-        logger.warning(
-            "Core storage section not found with primary locator, trying fallback"
-        )
-        fallback_elements = self.get_elements(
-            self.configure_performance_loc["core_storage_section_fallback"]
-        )
-        return len(fallback_elements) > 0
+        except Exception:
+            logger.warning(
+                "Core storage section not found with primary locator, trying fallback"
+            )
+            fallback_elements = self.get_elements(
+                self.configure_performance_loc["core_storage_section_fallback"]
+            )
+            return len(fallback_elements) > 0
 
     def is_mcg_section_present(self) -> bool:
         """Check if MCG section is present."""
-        return len(self.get_elements(self.configure_performance_loc["mcg_section"])) > 0
+        logger.info("Checking if MCG section is present")
+        try:
+            self.wait_for_element_to_be_visible(
+                self.configure_performance_loc["mcg_section"], timeout=15
+            )
+            return True
+        except Exception:
+            elements = self.get_elements(
+                self.configure_performance_loc["mcg_select_profile_button"]
+            )
+            return len(elements) > 0
 
     def verify_sections_separated(self) -> bool:
         """Verify sections are visually separated."""
