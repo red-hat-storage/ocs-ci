@@ -4341,15 +4341,11 @@ external_systems = {
 
 configure_performance = {
     "core_storage_section": (
-        "//*[self::h2 or self::h3][contains(text(), 'Core storage')]"
-        "/ancestor::*[contains(@class, 'panel') or contains(@class, 'form') "
-        "or contains(@class, 'Section') or self::section or contains(@class, 'u-mb-')][1]",
+        "//h2[normalize-space()='Core storage']/ancestor::section[1]",
         By.XPATH,
     ),
     "mcg_section": (
-        "//*[self::h2 or self::h3][contains(text(), 'Multicloud Object Gateway')]"
-        "/ancestor::*[contains(@class, 'panel') or contains(@class, 'form') "
-        "or contains(@class, 'Section') or self::section or contains(@class, 'u-mb-')][1]",
+        "//h2[normalize-space()='Multicloud Object Gateway']/ancestor::section[1]",
         By.XPATH,
     ),
     "mcg_select_profile_button": (
@@ -4357,20 +4353,14 @@ configure_performance = {
         By.XPATH,
     ),
     "mcg_profile_option": (
-        "//*[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
-        "'abcdefghijklmnopqrstuvwxyz'), translate('{}', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
-        "'abcdefghijklmnopqrstuvwxyz'))]"
-        "[ancestor::*[contains(@class, 'dropdown') or contains(@class, 'menu') "
-        "or contains(@class, 'popover') or contains(@class, 'modal') "
-        "or contains(@role, 'listbox') or contains(@role, 'menu')]]",
+        "//li[contains(@class, 'c-menu__list-item')]"
+        "//button[contains(translate(normalize-space(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+        "'abcdefghijklmnopqrstuvwxyz'), '{}')]",
         By.XPATH,
     ),
     "mcg_profile_menuitem": (
-        "//*[contains(@class, 'dropdown') or contains(@class, 'menu') "
-        "or contains(@class, 'popover') or contains(@class, 'modal') "
-        "or contains(@role, 'listbox') or contains(@role, 'menu')]"
-        "//*[@role='menuitem' or contains(@class, 'item') or contains(@class, 'option')]"
-        "[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+        "//li[contains(@class, 'c-menu__list-item')]"
+        "//button[contains(translate(normalize-space(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
         "'abcdefghijklmnopqrstuvwxyz'), '{}')]",
         By.XPATH,
     ),
@@ -4379,12 +4369,9 @@ configure_performance = {
         By.XPATH,
     ),
     "core_storage_profile_option": (
-        "//div[contains(@class, 'dropdown') or contains(@class, 'menu') "
-        "or contains(@class, 'popover') or contains(@role, 'listbox')]"
-        "//*/text()[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
-        "'abcdefghijklmnopqrstuvwxyz'), translate('{}', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
-        "'abcdefghijklmnopqrstuvwxyz'))]/ancestor::*[contains(@class, 'item') "
-        "or contains(@class, 'option') or @role='option' or @role='menuitem']",
+        "//li[contains(@class, 'c-menu__list-item')]"
+        "//button[contains(translate(normalize-space(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+        "'abcdefghijklmnopqrstuvwxyz'), '{}')]",
         By.XPATH,
     ),
     "save_button": (
@@ -4404,22 +4391,21 @@ configure_performance = {
         By.XPATH,
     ),
     "node_selection_option": (
-        ".//input[@type='checkbox' or @type='radio']",
+        ".//input[@type='checkbox']",
         By.XPATH,
     ),
     "core_storage_section_fallback": (
-        "//*[self::h2 or self::h3][contains(text(), 'Core storage')]"
-        "/ancestor::*[contains(@class, 'panel') or contains(@class, 'form')]",
+        "//h3[normalize-space()='Core storage']/ancestor::section[1]",
         By.XPATH,
     ),
     "mcg_select_profile_button_fallback": (
-        "//h3[contains(text(), 'Multicloud Object Gateway')]"
-        "/following::button[contains(@class, 'c-menu-toggle') or contains(@class, 'menu-toggle')][1]",
+        "//h3[normalize-space()='Multicloud Object Gateway']"
+        "/following::button[contains(@class, 'c-menu-toggle')][1]",
         By.XPATH,
     ),
     "core_storage_select_profile_button_fallback": (
-        "//h3[contains(text(), 'Core storage')]"
-        "/following::button[contains(@class, 'c-menu-toggle') or contains(@class, 'menu-toggle')][1]",
+        "//h3[normalize-space()='Core storage']"
+        "/following::button[contains(@class, 'c-menu-toggle')][1]",
         By.XPATH,
     ),
 }
