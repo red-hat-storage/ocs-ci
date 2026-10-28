@@ -993,11 +993,8 @@ class Deployment(object):
             return
 
         from ocs_ci.deployment.fusion_access import FusionAccessOperator
-        from ocs_ci.deployment.fusion_access_storage import (
-            FusionAccessStorage,
-            add_entitlement_to_pull_secret,
-        )
-        from ocs_ci.utility.operators import KernelModuleManagementOperator
+        from ocs_ci.deployment.fusion_access_storage import FusionAccessStorage
+        from ocs_ci.deployment.kmm import KMMInstaller
 
         if config.multicluster:
             indexes = [
@@ -1015,94 +1012,13 @@ class Deployment(object):
                     f"Deploying Fusion Access on {config.ENV_DATA['cluster_name']}"
                 )
                 if config.DEPLOYMENT.get("kmm_deployment", True):
-                    KernelModuleManagementOperator().deploy()
-                add_entitlement_to_pull_secret()
+                    KMMInstaller().deploy_kmm_operator(
+                        check_kmm_deployed=True, check_kmm_ready=True
+                    )
                 FusionAccessOperator().deploy()
 
                 if config.DEPLOYMENT.get("fusion_access_storage"):
                     FusionAccessStorage().deploy()
-        finally:
-            config.switch_ctx(old_ctx)
-
-    def apply_acm_idms(self):
-        """
-        Apply the ACM ImageDigestMirrorSet on every cluster.
-
-        An unreleased ACM hub pulls its klusterlet images from the brew
-        registry, so the managed clusters need the mirror set before they can
-        be imported. Only relevant from ACM 2.14 onwards, and never on a
-        disconnected cluster, which carries its own mirror configuration.
-
-        """
-        if not version.compare_versions(
-            f"{config.ENV_DATA.get('acm_version', '2.13')} >= 2.14"
-        ):
-            return
-        if not config.ENV_DATA.get("acm_hub_unreleased"):
-            return
-
-        old_ctx = config.cur_index
-        patched_indexes = []
-        try:
-            for cluster in config.clusters:
-                index = cluster.MULTICLUSTER["multicluster_index"]
-                cluster_name = cluster.ENV_DATA.get("cluster_name", f"cluster-{index}")
-                if cluster.DEPLOYMENT.get("disconnected", False):
-                    logger.info(f"{cluster_name} is disconnected, skipping IDMS")
-                    continue
-                config.switch_ctx(index)
-                idms_obj = ocp.OCP(
-                    kind=constants.IMAGEDIGESTMIRRORSET, resource_name="acm-idms"
-                )
-                if idms_obj.check_resource_existence(
-                    timeout=10, should_exist=True, resource_name="acm-idms"
-                ):
-                    logger.info(
-                        f"ImageDigestMirrorSet 'acm-idms' already present on "
-                        f"{cluster_name}, skipping creation"
-                    )
-                    continue
-                logger.info(f"Applying IDMS on {cluster_name}")
-                exec_cmd(f"oc apply -f {constants.ACM_BREW_IDMS_YAML}")
-                patched_indexes.append(index)
-            # An IDMS rewrites the container runtime config on every node, so
-            # wait for the rollout, but only where we actually changed something.
-            for index in patched_indexes:
-                config.switch_ctx(index)
-                logger.info(
-                    f"Waiting for MachineConfigPool update on "
-                    f"{config.ENV_DATA['cluster_name']}"
-                )
-                wait_for_machineconfigpool_status(node_type="all")
-        finally:
-            config.switch_ctx(old_ctx)
-
-    def do_deploy_acm_import(self):
-        """
-        Import the managed clusters into the ACM hub.
-
-        Has to run before anything that addresses the managed clusters through
-        ACM, submariner, GitOps and the DR operators all resolve ManagedCluster
-        resources. Both this and import_clusters_with_acm() are idempotent, so
-        a cluster that is already imported is left alone.
-
-        """
-        if not config.multicluster:
-            return
-        if not config.ENV_DATA.get("import_clusters_to_acm"):
-            return
-        if config.ENV_DATA.get("skip_acm_import", False):
-            logger.info("skip_acm_import is set, not importing clusters into ACM")
-            return
-
-        from ocs_ci.ocs.acm.acm import import_clusters_with_acm
-
-        self.apply_acm_idms()
-
-        old_ctx = config.cur_index
-        try:
-            config.switch_ctx(get_active_acm_index())
-            import_clusters_with_acm()
         finally:
             config.switch_ctx(old_ctx)
 
@@ -1249,11 +1165,6 @@ class Deployment(object):
             and ocp_version >= version.VERSION_4_9
         ):
             self.deploy_acm_hub()
-
-        # The hub has to know about the managed clusters before submariner,
-        # GitOps or the DR operators, all of them resolve ManagedCluster
-        # resources.
-        self.do_deploy_acm_import()
 
         perform_lso_standalone_deployment = config.DEPLOYMENT.get(
             "lso_standalone_deployment", False
@@ -4732,7 +4643,9 @@ class MultiClusterDROperatorsDeploy(object):
                 return True
         return False
 
-    def create_s3_bucket(self, access_key, secret_key, bucket_name):
+    def create_s3_bucket(
+        self, access_key, secret_key, bucket_name, region=None, allow_odf_bucket=True
+    ):
         """
         Create s3 bucket using AWS S3 or ODF ObjectBucketClaim.
 
@@ -4745,77 +4658,24 @@ class MultiClusterDROperatorsDeploy(object):
             access_key (str): S3 access key (not used when use_internal_s3=True)
             secret_key (str): S3 secret key (not used when use_internal_s3=True)
             bucket_name (str): Name of the bucket to create
+            region (str): AWS region to create the bucket in. Defaults to
+                constants.AWS_REGION.
+            allow_odf_bucket (bool): Whether an ODF ObjectBucketClaim may be used
+                instead of AWS S3. The Ramen metadata buckets have to live
+                outside the clusters they protect, so those pass False.
 
         Returns:
-            tuple: (bucket_name, endpoint, access_key, secret_key) when use_internal_s3=True
-                   None when using AWS S3 (credentials passed as parameters)
+            tuple: (bucket_name, endpoint, access_key, secret_key) when an ODF
+                   bucket was created, None when using AWS S3 (credentials
+                   passed as parameters)
         """
-        use_odf_bucket = self.should_use_odf_bucket()
-
-        if use_odf_bucket:
+        if allow_odf_bucket and self.should_use_odf_bucket():
             logger.info("Using ODF ObjectBucketClaim for backup storage")
             return self.create_odf_bucket_and_get_credentials(bucket_name)
-        else:
-            # Default AWS S3 bucket behavior
-            logger.info("Using AWS S3 bucket for backup storage")
-            client = boto3.resource(
-                "s3",
-                verify=True,
-                endpoint_url="https://s3.amazonaws.com",
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-            )
-            try:
-                client.create_bucket(
-                    Bucket=bucket_name,
-                    CreateBucketConfiguration={
-                        "LocationConstraint": constants.AWS_REGION
-                    },
-                )
-                logger.info(f"Successfully created backup bucket: {bucket_name}")
-            except ClientError as e:
-                # BucketAlreadyOwnedByYou: bucket exists and belongs to this account
-                # BucketAlreadyExists: bucket exists under a different account
-                # Both are safe to treat as success on a re-run.
-                error_code = e.response["Error"]["Code"]
-                if error_code in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
-                    logger.warning(
-                        f"S3 bucket '{bucket_name}' already exists — skipping creation"
-                    )
-                else:
-                    logger.error(f"Failed to create s3 bucket: {e}")
-                    raise
-            except BotoCoreError as e:
-                logger.error(f"Failed to create s3 bucket: {e}")
-                raise
-            return None
 
-    def build_bucket_name(self, acm_indexes):
-        """
-        Create backupname from cluster names
-        Args:
-            acm_indexes (list): List of acm indexes
-        """
-        bucket_name = "dr-"
-        for index in acm_indexes:
-            bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
-        return bucket_name
-
-    def create_s3_bucket_in_region(self, access_key, secret_key, bucket_name, region):
-        """
-        Create an AWS S3 bucket in an explicit region.
-
-        Unlike create_s3_bucket() this never falls back to an ODF
-        ObjectBucketClaim, the Ramen metadata buckets have to live outside the
-        clusters they are protecting.
-
-        Args:
-            access_key (str): S3 access key
-            secret_key (str): S3 secret key
-            bucket_name (str): Name of the bucket to create
-            region (str): AWS region to create the bucket in
-
-        """
+        # Default AWS S3 bucket behavior
+        region = region or constants.AWS_REGION
+        logger.info(f"Using AWS S3 bucket for backup storage in {region}")
         client = boto3.resource(
             "s3",
             verify=True,
@@ -4830,19 +4690,35 @@ class MultiClusterDROperatorsDeploy(object):
             kwargs["CreateBucketConfiguration"] = {"LocationConstraint": region}
         try:
             client.create_bucket(**kwargs)
-            logger.info(f"Created S3 bucket '{bucket_name}' in {region}")
+            logger.info(f"Successfully created backup bucket: {bucket_name}")
         except ClientError as e:
             error_code = e.response["Error"]["Code"]
-            if error_code in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
+            # BucketAlreadyOwnedByYou means the bucket is ours and a re-run can
+            # carry on. BucketAlreadyExists means another account owns the
+            # globally unique name, so we would be registering a bucket this
+            # deployment cannot access.
+            if error_code == "BucketAlreadyOwnedByYou":
                 logger.warning(
                     f"S3 bucket '{bucket_name}' already exists — skipping creation"
                 )
             else:
-                logger.error(f"Failed to create s3 bucket '{bucket_name}': {e}")
+                logger.error(f"Failed to create s3 bucket: {e}")
                 raise
         except BotoCoreError as e:
-            logger.error(f"Failed to create s3 bucket '{bucket_name}': {e}")
+            logger.error(f"Failed to create s3 bucket: {e}")
             raise
+        return None
+
+    def build_bucket_name(self, acm_indexes):
+        """
+        Create backupname from cluster names
+        Args:
+            acm_indexes (list): List of acm indexes
+        """
+        bucket_name = "dr-"
+        for index in acm_indexes:
+            bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
+        return bucket_name
 
     def configure_ramen_s3_store_profiles(self):
         """
@@ -4874,7 +4750,13 @@ class MultiClusterDROperatorsDeploy(object):
         for cluster in get_non_acm_cluster_config():
             cluster_name = cluster.ENV_DATA["cluster_name"]
             bucket_name = f"{prefix}-{cluster_name}"
-            self.create_s3_bucket_in_region(access_key, secret_key, bucket_name, region)
+            self.create_s3_bucket(
+                access_key,
+                secret_key,
+                bucket_name,
+                region=region,
+                allow_odf_bucket=False,
+            )
             profiles.append(
                 {
                     "s3ProfileName": self.ramen_s3_profile_name(cluster_name),
@@ -4942,26 +4824,49 @@ class MultiClusterDROperatorsDeploy(object):
             cluster.MULTICLUSTER["multicluster_index"]
             for cluster in get_non_acm_cluster_config()
         ]
+        encoded = {
+            "AWS_ACCESS_KEY_ID": base64.b64encode(access_key.encode()).decode(),
+            "AWS_SECRET_ACCESS_KEY": base64.b64encode(secret_key.encode()).decode(),
+        }
         try:
             for index in indexes:
                 config.switch_ctx(index)
                 for profile in profiles:
                     secret_name = profile["s3SecretRef"]["name"]
                     namespace = profile["s3SecretRef"]["namespace"]
-                    secret_ocp = ocp.OCP(kind=constants.SECRET, namespace=namespace)
-                    if secret_ocp.is_exist(resource_name=secret_name):
-                        logger.info(
-                            f"Secret '{secret_name}' already exists in "
-                            f"{namespace} on {config.ENV_DATA['cluster_name']}"
-                        )
-                        continue
-                    exec_cmd(
-                        f"oc create secret generic {secret_name} -n {namespace} "
-                        f"--from-literal=AWS_ACCESS_KEY_ID={access_key} "
-                        f"--from-literal=AWS_SECRET_ACCESS_KEY={secret_key}",
-                        secrets=[access_key, secret_key],
+                    manifest = {
+                        "apiVersion": "v1",
+                        "kind": "Secret",
+                        "metadata": {"name": secret_name, "namespace": namespace},
+                        "type": "Opaque",
+                        "data": encoded,
+                    }
+                    # Applied from a 0600 file rather than passed with
+                    # --from-literal, which would put the keys in the oc
+                    # argument list where any local process can read them from
+                    # /proc. apply() also refreshes an existing secret, so
+                    # rotated credentials actually reach Ramen on a re-run.
+                    secret_file = tempfile.NamedTemporaryFile(
+                        mode="w+",
+                        prefix=f"{secret_name}-",
+                        suffix=".yaml",
+                        delete=False,
                     )
-                    logger.info(f"Created secret '{secret_name}' in {namespace}")
+                    try:
+                        os.chmod(secret_file.name, 0o600)
+                        templating.dump_data_to_temp_yaml(
+                            manifest, secret_file.name, log=False
+                        )
+                        ocp.OCP(kind=constants.SECRET, namespace=namespace).apply(
+                            secret_file.name
+                        )
+                    finally:
+                        secret_file.close()
+                        os.remove(secret_file.name)
+                    logger.info(
+                        f"Applied secret '{secret_name}' in {namespace} on "
+                        f"{config.ENV_DATA['cluster_name']}"
+                    )
         finally:
             config.switch_ctx(old_index)
 
