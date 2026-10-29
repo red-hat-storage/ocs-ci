@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 
 import pytest
@@ -118,9 +119,9 @@ class TestCephMonHealthCheck(ManageTest):
         2. Wait until the mon healthcheck in StorageCluster and CephCluster are consistent
         3. Cordon a mon node and wait for the cephcluster to settle
         4. Delete the mon pod on that node and wait for the mon to go down
-        5. Verify mon healthcheck timeout value in logs
-        6. Wait for the mon failover and verify it took at least the mon timeout
-        7. Schedule the mon node back
+        5. Wait for the mon failover and check its timing
+        6. Schedule the mon node back
+        7. Verify the mon healthcheck timeout value in the operator logs
         8. Wait for mons to be in quorum
         9. Check cluster health
 
@@ -139,22 +140,22 @@ class TestCephMonHealthCheck(ManageTest):
         unschedule_nodes([node_name])
         wait_for_cephcluster_to_settle()
 
+        disruption_start = time.monotonic()
         delete_mon_pod(mon_id)
         wait_for_mon_status(
             mon_id=mon_id, status=constants.MON_STATUS_DOWN, timeout=180
         )
-        mon_down_time = time.time()
-        res = verify_mon_healthcheck_timeout_value_in_logs(
-            mon_id, mon_timeout_seconds, timeout=720
-        )
-        assert res, "Mon healthcheck timeout value not found in logs"
+        mon_down_time = time.monotonic()
         # Add a small gap to the timeout to account for any delays
         timeout_gap = 180
         # Calculate the expected mon failover timeout (in seconds). In the rook-ceph-operator,
         # the mon failover may happen after 2 times the mon timeout value.
         mon_failover_timeout = mon_timeout_seconds * 2 + timeout_gap
-        new_mon_id = wait_for_mon_failover(mon_ids_before, timeout=mon_failover_timeout)
-        failover_seconds = time.time() - mon_down_time
+        min_failover_seconds = mon_timeout_seconds * 0.8
+        new_mon_id = wait_for_mon_failover(
+            mon_ids_before, timeout=mon_failover_timeout, min_wait=min_failover_seconds
+        )
+        failover_seconds = time.monotonic() - mon_down_time
         log.info(
             f"The mon '{mon_id}' failed over to the new mon '{new_mon_id}' "
             f"after {failover_seconds:.0f} seconds"
@@ -164,14 +165,12 @@ class TestCephMonHealthCheck(ManageTest):
         # can start and the cluster is not left degraded during the checks below
         schedule_nodes([node_name])
 
-        # The mon is detected as down by polling, so the measured time can be
-        # slightly shorter than the configured mon healthcheck timeout
-        min_failover_seconds = mon_timeout_seconds * 0.8
-        assert failover_seconds >= min_failover_seconds, (
-            f"The mon '{mon_id}' failed over after {failover_seconds:.0f} seconds, which is less "
-            f"than the minimum of {min_failover_seconds:.0f} seconds expected for the mon "
-            f"healthcheck timeout {mon_timeout}"
+        # Include logs since before the pod was deleted, even after the failover wait.
+        log_window = math.ceil(time.monotonic() - disruption_start) + 2
+        res = verify_mon_healthcheck_timeout_value_in_logs(
+            mon_id, mon_timeout_seconds, since=f"{log_window}s", timeout=720
         )
+        assert res, "Mon healthcheck timeout value not found in logs"
 
         wait_for_mons_in_quorum(expected_mon_count=self.mon_count)
         self.check_cluster_health()

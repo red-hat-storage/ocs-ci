@@ -2,6 +2,7 @@ import json
 import logging
 import random
 import re
+import time
 
 from ocs_ci.ocs.node import get_mon_running_nodes, get_node_mon_ids
 from ocs_ci.ocs.resources.storage_cluster import get_default_storagecluster
@@ -447,7 +448,7 @@ def delete_mon_pod(mon_id, wait=True) -> None:
     mon_pod.delete(wait=wait)
 
 
-def wait_for_mon_failover(mon_ids_before, timeout=600, sleep=20) -> str:
+def wait_for_mon_failover(mon_ids_before, timeout=600, sleep=20, min_wait=0) -> str:
     """
     Wait until the rook-ceph-operator fails the mon over by creating a new mon.
 
@@ -459,25 +460,49 @@ def wait_for_mon_failover(mon_ids_before, timeout=600, sleep=20) -> str:
         mon_ids_before (set): The mon ids from before the mon went down.
         timeout (int): Maximum time to wait in seconds. Defaults to 600 seconds.
         sleep (int): Time to wait between checks in seconds. Defaults to 20 seconds.
+        min_wait (float): Minimum time for which no new mon may appear.
 
     Returns:
         str: The mon id of the new mon
 
     Raises:
         TimeoutExpiredError: If the mon does not fail over within the timeout.
+        AssertionError: If the minimum wait cannot be established.
 
     """
     logger.info(
         f"Waiting up to {timeout} seconds for the mon failover. The mon ids "
         f"before the failover: {sorted(mon_ids_before)}"
     )
+    start = time.monotonic()
+    last_absent = 0
+
+    def sample_mon_ids():
+        sample_start = time.monotonic()
+        return get_mon_ids(), sample_start
+
     try:
-        for mon_ids in TimeoutSampler(timeout=timeout, sleep=sleep, func=get_mon_ids):
+        for mon_ids, sample_start in TimeoutSampler(
+            timeout=timeout, sleep=sleep, func=sample_mon_ids
+        ):
+            elapsed = time.monotonic() - start
             new_mon_ids = mon_ids - set(mon_ids_before)
             if new_mon_ids:
                 new_mon_id = sorted(new_mon_ids)[0]
+                if elapsed > timeout:
+                    raise TimeoutExpiredError(
+                        f"The new mon '{new_mon_id}' was observed after {elapsed:.0f} "
+                        f"seconds, exceeding the {timeout}-second failover timeout."
+                    )
+                if last_absent < min_wait:
+                    raise AssertionError(
+                        f"The new mon '{new_mon_id}' appeared before the minimum "
+                        f"wait of {min_wait:.0f} seconds could be confirmed; "
+                        f"it was last absent at {last_absent:.0f} seconds."
+                    )
                 logger.info(f"The operator created the new mon '{new_mon_id}'")
                 return new_mon_id
+            last_absent = sample_start - start
             logger.info(
                 f"The mon did not fail over yet. Current mon ids: {sorted(mon_ids)}"
             )
