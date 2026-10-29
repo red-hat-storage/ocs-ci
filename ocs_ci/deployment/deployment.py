@@ -866,6 +866,51 @@ class Deployment(object):
 
             FusionAccessOperator().deploy()
 
+    def do_deploy_fusion_access_storage_cluster(self):
+        """
+        Create the Fusion Access for SAN storage cluster via the OpenShift Console UI.
+
+        Runs only when ``DEPLOYMENT.fusion_access_deployment`` is ``True`` in the
+        active config and UI deployment conditions are met.  Navigation starts from
+        :class:`~ocs_ci.ocs.ui.page_objects.page_navigator.PageNavigator`; the
+        storage cluster wizard is driven by
+        :class:`~ocs_ci.ocs.ui.page_objects.premigration_fusion_access_ui.PreMigrationFusionAccessUI`:
+
+        1. Navigate to Storage → Fusion Access for SAN.
+        2. Click "Create storage cluster" and select all worker nodes.
+        3. Submit the storage cluster creation form.
+        """
+        if not config.DEPLOYMENT.get("fusion_access_deployment"):
+            return
+
+        if not ui_deployment_conditions():
+            logger.warning(
+                "Skipping Fusion Access storage cluster UI creation — "
+                "UI deployment conditions are not met"
+            )
+            return
+
+        logger.info(
+            "fusion_access_deployment=True — starting Fusion Access storage "
+            "cluster creation via UI"
+        )
+        from ocs_ci.ocs.ui.helpers_ui import login_ui, close_browser
+        from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+
+        login_ui()
+        try:
+            (
+                PageNavigator()
+                .nav_fusion_access_for_san_page()
+                .create_fusion_access_storage_cluster()
+            )
+        finally:
+            close_browser()
+
+        logger.info(
+            "Fusion Access storage cluster creation via UI completed successfully"
+        )
+
     def do_deploy_hosted_spoke_clusters(self):
         """
         Deploy Hosted cluster(s)
@@ -999,6 +1044,8 @@ class Deployment(object):
         self.do_deploy_hyperconverged()
         self.do_deploy_metallb()
         self.do_deploy_fusion_access()
+        self.do_deploy_fusion_access_storage_cluster()
+
         self.do_deploy_hosted_spoke_clusters()
         self.do_deploy_external_spoke_clusters()
 
