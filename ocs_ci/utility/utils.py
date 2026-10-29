@@ -7625,7 +7625,7 @@ def apply_oadp_workaround(namespace):
         oadp_wa_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="oadp_wa", delete=False
         )
-        templating.dump_data_to_temp_yaml(oadp_csv_dict, oadp_wa_yaml.name)
+        templating.dump_data_to_temp_yaml(oadp_csv_dict, oadp_wa_yaml.name, log=False)
         run_cmd(f"oc apply -f {oadp_wa_yaml.name}")
     except IndexError:
         log.error(f"OADP not found in given Namespace {namespace}")
