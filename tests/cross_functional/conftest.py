@@ -58,6 +58,7 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.ocp import OCP, get_all_resource_of_kind_containing_string
 from ocs_ci.utility.utils import (
     clone_notify,
+    convert_device_size,
     TimeoutSampler,
 )
 
@@ -87,6 +88,54 @@ def start_noobaa_services(noobaa_endpoint_dc, noobaa_operator_dc):
         noobaa_operator_dc.scale(replicas=1)
     modify_statefulset_replica_count(
         statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=1
+    )
+
+
+def align_db_min_volume_size(snapshot_name):
+    """
+    Raise the declared NooBaa DB volume size to fit a backup snapshot.
+
+    Args:
+        snapshot_name (str): VolumeSnapshot the recovery restores from
+
+    """
+    namespace = config.ENV_DATA["cluster_namespace"]
+    snapshot = OCP(kind=constants.VOLUMESNAPSHOT, namespace=namespace).get(
+        resource_name=snapshot_name
+    )
+    snapshot_size = snapshot.get("status", {}).get("restoreSize")
+    noobaa_obj = OCP(
+        kind="noobaa", namespace=namespace, resource_name=constants.NOOBAA_RESOURCE_NAME
+    )
+    declared_size = (
+        noobaa_obj.get(constants.NOOBAA_RESOURCE_NAME)["spec"]
+        .get("dbSpec", {})
+        .get("dbMinVolumeSize")
+    )
+    if not snapshot_size or not declared_size:
+        logger.warning(
+            f"Could not compare the {snapshot_name} snapshot size "
+            f"({snapshot_size}) with the declared DB volume size "
+            f"({declared_size}), leaving the declared size alone"
+        )
+        return
+    if convert_device_size(snapshot_size, "GB", 1024) <= convert_device_size(
+        declared_size, "GB", 1024
+    ):
+        logger.info(
+            f"The {snapshot_name} snapshot is {snapshot_size} and the NooBaa DB "
+            f"volume is declared as {declared_size}, which fits it"
+        )
+        return
+    logger.info(
+        f"The {snapshot_name} snapshot is {snapshot_size} but the NooBaa DB "
+        f"volume is only declared as {declared_size}, which the restore would "
+        f"refuse. Raising dbMinVolumeSize to {snapshot_size}"
+    )
+    noobaa_obj.patch(
+        resource_name=constants.NOOBAA_RESOURCE_NAME,
+        params=f'{{"spec": {{"dbSpec": {{"dbMinVolumeSize": "{snapshot_size}"}}}}}}',
+        format_type="merge",
     )
 
 
@@ -127,7 +176,18 @@ def noobaa_db_backup_and_recovery_locally(
         test_directory_setup=test_directory_setup,
         noobaa_db_recovery_patch=noobaa_db_recovery_patch,
         noobaa_pods_running_timeout=900,
+        align_db_volume_size=False,
     ):
+        """
+        Args:
+            noobaa_pods_running_timeout (int): Seconds to wait for the NooBaa
+                pods to come back after the recovery
+            align_db_volume_size (bool): Raise the declared DB volume size to
+                the snapshot size before triggering the recovery. Only needed
+                by tests that resize a DB PVC out of band, so it is off by
+                default and leaves every other caller unchanged
+
+        """
 
         # Create OBC and write data
         obj_download_path = test_directory_setup.result_dir
@@ -199,6 +259,9 @@ def noobaa_db_backup_and_recovery_locally(
         ), "Mismatch in dbRecovery info between ocs-storagecluster and noobaa CR"
 
         logger.info("DB recovery configuration added to OCS Storage cluster CR")
+
+        if align_db_volume_size:
+            align_db_min_volume_size(backup_name)
 
         # Delete Cluster CR and check automatic recovery is getting triggered
         db_cluster_name = get_all_resource_of_kind_containing_string(

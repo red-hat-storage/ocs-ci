@@ -233,6 +233,7 @@ from ocs_ci.helpers.helpers import (
     setup_pod_directories,
     get_current_test_name,
     modify_deployment_replica_count,
+    modify_statefulset_replica_count,
     create_resource,
     create_network_fence_class,
     wait_for_resource_state,
@@ -10588,7 +10589,8 @@ def md_blow_factory(request):
 def scale_noobaa_db_pv(request):
     """
     This fixtue helps to scale the noobaa db pv size.
-    follows KCS: https://access.redhat.com/solutions/6976547
+    follows KCS: https://access.redhat.com/solutions/6976547 on ODF < 4.19 and
+    below, and KCS: https://access.redhat.com/solutions/7132127 from ODF 4.19,
     Note: Once the noobaa db pv is scaled it can't be reverted back to the
     original size
 
@@ -10605,7 +10607,105 @@ def scale_noobaa_db_pv(request):
         constants.NOOBAA_OPERATOR_POD_LABEL,
         constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
     ]
+    noobaa_services = [
+        constants.NOOBAA_OPERATOR_DEPLOYMENT,
+        constants.NOOBAA_ENDPOINT_DEPLOYMENT,
+    ]
     nb_pvcs = get_all_pvc_objs(selector=constants.NOOBAA_DB_LABEL_419_AND_ABOVE)
+
+    def resize_pre_419(pvcs_to_resize, pv_size):
+        """
+        Resize the NooBaa DB PVCs for ODF < 4.19.
+
+        Args:
+            pvcs_to_resize (list): PVC objects to resize
+            pv_size (int): Size in GB
+
+        """
+        for operator in operators:
+            modify_deployment_replica_count(deployment_name=operator, replica_count=0)
+        log.info(f"Scaled down operators: {operators}")
+
+        for nb_pvc in pvcs_to_resize:
+            # verify, so that a resize the CSI driver cannot finish surfaces
+            # here rather than leaving the caller to act on a size the volume
+            # never reached
+            nb_pvc.resize_pvc(new_size=pv_size, verify=True, timeout=600)
+            log.info(f"{nb_pvc.name} is resized to {pv_size}")
+
+        for operator in operators:
+            modify_deployment_replica_count(deployment_name=operator, replica_count=1)
+        log.info(f"Scaled up operators: {operators}")
+
+    def resize_419_and_above(pvcs_to_resize, pv_size, resize_all):
+        """
+        Resize the NooBaa DB PVCs for 4.19 and above.
+
+        Args:
+            pvcs_to_resize (list): PVC objects to resize, used only when
+                resize_all is False
+            pv_size (int): Size in GB
+            resize_all (bool): Set the size on the storagecluster, which resizes every instance.
+            When False the PVCs are patched one by one instead.
+
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+        deployment_obj = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+        sts_obj = OCP(kind=constants.STATEFULSET, namespace=namespace)
+        replicas = {
+            nb_deployment: deployment_obj.get(nb_deployment)["spec"]["replicas"]
+            for nb_deployment in noobaa_services
+        }
+        core_replicas = sts_obj.get(constants.NOOBAA_CORE_STATEFULSET)["spec"][
+            "replicas"
+        ]
+
+        for nb_deployment in noobaa_services:
+            modify_deployment_replica_count(
+                deployment_name=nb_deployment, replica_count=0
+            )
+        modify_statefulset_replica_count(
+            statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=0
+        )
+        log.info("Scaled down the NooBaa services")
+
+        for label in (
+            constants.NOOBAA_OPERATOR_POD_LABEL,
+            constants.NOOBAA_ENDPOINT_POD_LABEL,
+            constants.NOOBAA_CORE_POD_LABEL,
+        ):
+            wait_for_pods_by_label_count(label=label, expected_count=0, timeout=600)
+
+        if resize_all:
+            params = json.dumps(
+                {
+                    "spec": {
+                        "resources": {
+                            "noobaa-db-vol": {"requests": {"storage": f"{pv_size}Gi"}}
+                        }
+                    }
+                }
+            )
+            OCP(kind=constants.STORAGECLUSTER, namespace=namespace).patch(
+                resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+                params=params,
+                format_type="merge",
+            )
+            log.info(f"storagecluster noobaa-db-vol is set to {pv_size}Gi")
+        else:
+            for nb_pvc in pvcs_to_resize:
+                nb_pvc.resize_pvc(new_size=pv_size, verify=True, timeout=600)
+                log.info(f"{nb_pvc.name} is resized to {pv_size}")
+
+        for nb_deployment, replica_count in replicas.items():
+            modify_deployment_replica_count(
+                deployment_name=nb_deployment, replica_count=replica_count
+            )
+        modify_statefulset_replica_count(
+            statefulset_name=constants.NOOBAA_CORE_STATEFULSET,
+            replica_count=core_replicas,
+        )
+        log.info("Scaled the NooBaa services back up")
 
     def factory(pv_size="50", pvc_names=None):
         """
@@ -10627,17 +10727,10 @@ def scale_noobaa_db_pv(request):
                 f"Available PVCs: {[nb_pvc.name for nb_pvc in nb_pvcs]}"
             )
 
-        for operator in operators:
-            modify_deployment_replica_count(deployment_name=operator, replica_count=0)
-        log.info(f"Scaled down operators: {operators}")
-
-        for nb_pvc in pvcs_to_resize:
-            nb_pvc.resize_pvc(new_size=pv_size)
-            log.info(f"{nb_pvc.name} is resized to {pv_size}")
-
-        for operator in operators:
-            modify_deployment_replica_count(deployment_name=operator, replica_count=1)
-        log.info(f"Scaled up operators: {operators}")
+        if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19:
+            resize_419_and_above(pvcs_to_resize, pv_size, not pvc_names)
+        else:
+            resize_pre_419(pvcs_to_resize, pv_size)
 
         for label in labels:
             pods.extend(
