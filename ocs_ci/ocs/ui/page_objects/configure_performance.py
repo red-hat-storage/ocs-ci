@@ -315,6 +315,7 @@ class ConfigurePerformancePage(BaseUI):
             last_button_text,
         )
         self.take_screenshot("mcg_profile_selection_failed")
+        self.copy_dom("mcg_profile_selection_failed")
         raise TimeoutException(
             f"MCG profile '{profile_name}' did not register after 3 attempts"
         )
@@ -345,6 +346,7 @@ class ConfigurePerformancePage(BaseUI):
             except TimeoutException as e:
                 logger.error("Core Storage dropdown button not found after 25 seconds")
                 self.take_screenshot("core_storage_dropdown_button_timeout")
+                self.copy_dom("core_storage_dropdown_button_timeout")
                 raise TimeoutException(
                     "Core Storage dropdown button not found on page"
                 ) from e

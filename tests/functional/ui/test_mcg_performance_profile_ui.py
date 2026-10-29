@@ -46,6 +46,8 @@ class TestConfigurePerformancePageLayout:
             assert configure_perf_page is not None
 
         with test_step("Verify Core storage section is present"):
+            configure_perf_page.take_screenshot("verify_core_storage_section")
+            configure_perf_page.copy_dom("verify_core_storage_section")
             is_present = configure_perf_page.is_core_storage_section_present()
             logger.assertion(
                 f"Core storage section present: expected=True, actual={is_present}"
@@ -53,6 +55,8 @@ class TestConfigurePerformancePageLayout:
             assert is_present
 
         with test_step("Verify Multicloud Object Gateway section is present"):
+            configure_perf_page.take_screenshot("verify_mcg_section")
+            configure_perf_page.copy_dom("verify_mcg_section")
             is_present = configure_perf_page.is_mcg_section_present()
             logger.assertion(f"MCG section present: expected=True, actual={is_present}")
             assert is_present
