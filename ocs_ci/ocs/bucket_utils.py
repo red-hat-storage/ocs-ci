@@ -3945,18 +3945,39 @@ def get_noobaa_bucket_replication_metrics_in_prometheus(
     query = f"{metric_name} {{bucket_name='{bucket_name}'}}"
     api = PrometheusAPI(threading_lock=threading_lock)
     logger.info(f"Prometheus query: {query}")
-    resp = api.get("query", payload={"query": query}, timeout=1200)
 
-    if resp.ok:
+    def _query_metric():
+        """
+        Query Prometheus API and extract metric results.
+
+        Returns:
+            list: The result list from Prometheus response (may be empty)
+
+        Raises:
+            Exception: If the Prometheus query fails (non-200 response)
+        """
+        resp = api.get("query", payload={"query": query}, timeout=1200)
+        if not resp.ok:
+            raise Exception(
+                f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
+            )
         logger.info(f"Prometheus response: {resp.text}")
-        metrics_output = json.loads(resp.text)
-        got_metrics_value = int(metrics_output["data"]["result"][0]["value"][1])
-        logger.info(f"Metrics {metric_name} : {got_metrics_value}")
-        return got_metrics_value
-    else:
-        raise Exception(
-            f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
+        return json.loads(resp.text)["data"]["result"]
+
+    # Prometheus returns an empty result until it scrapes the bucket's series
+    try:
+        for result in TimeoutSampler(timeout=300, sleep=15, func=_query_metric):
+            if result:
+                break
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"Prometheus returned no data for metric {metric_name} "
+            f"of bucket {bucket_name}"
         )
+
+    got_metrics_value = int(result[0]["value"][1])
+    logger.info(f"Metrics {metric_name} : {got_metrics_value}")
+    return got_metrics_value
 
 
 def get_bucket_mode(mcg_obj, bucket_name):
