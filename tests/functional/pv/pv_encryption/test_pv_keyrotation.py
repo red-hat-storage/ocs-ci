@@ -12,7 +12,6 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
-    config,
     vault_kms_deployment_required,
 )
 from ocs_ci.ocs import constants
@@ -21,46 +20,17 @@ from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 
 log = logging.getLogger(__name__)
 
-# Set the arg values based on KMS provider.
-if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
-    kmsprovider = constants.HPCS_KMS_PROVIDER
-    argnames = ["kv_version", "kms_provider"]
-    argvalues = [
-        pytest.param("v1", kmsprovider),
-    ]
-else:
-    kmsprovider = constants.VAULT_KMS_PROVIDER
-    argnames = ["kv_version", "kms_provider", "use_vault_namespace"]
-    if config.ENV_DATA.get("vault_hcp"):
-        argvalues = [
-            pytest.param(
-                "v1",
-                kmsprovider,
-                True,
-                marks=[tier2, pytest.mark.polarion_id("OCS-6179")],
-            ),
-            pytest.param(
-                "v2",
-                kmsprovider,
-                True,
-                marks=[tier1, pytest.mark.polarion_id("OCS-6180")],
-            ),
-        ]
-    else:
-        argvalues = [
-            pytest.param(
-                "v1",
-                kmsprovider,
-                False,
-                marks=[tier2, pytest.mark.polarion_id("OCS-6181")],
-            ),
-            pytest.param(
-                "v2",
-                kmsprovider,
-                False,
-                marks=[tier1, pytest.mark.polarion_id("OCS-6182")],
-            ),
-        ]
+argnames = ["kv_version"]
+argvalues = [
+    pytest.param(
+        "v1",
+        marks=[tier2, pytest.mark.polarion_id("OCS-6181")],
+    ),
+    pytest.param(
+        "v2",
+        marks=[tier1, pytest.mark.polarion_id("OCS-6182")],
+    ),
+]
 
 
 @green_squad
@@ -81,7 +51,6 @@ class TestPVKeyRotationWithVaultKMS(ManageTest):
     def setup(
         self,
         kv_version,
-        use_vault_namespace,
         pv_encryption_kms_setup_factory,
     ):
         """
@@ -89,7 +58,7 @@ class TestPVKeyRotationWithVaultKMS(ManageTest):
 
         """
         log.info("Setting up csi-kms-connection-details configmap")
-        self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
+        self.kms = pv_encryption_kms_setup_factory(kv_version)
         log.info("csi-kms-connection-details setup successful")
 
     @pytest.mark.parametrize(
@@ -98,7 +67,6 @@ class TestPVKeyRotationWithVaultKMS(ManageTest):
     )
     def test_encrypted_pvc_key_rotation(
         self,
-        kms_provider,
         project_factory,
         storageclass_factory,
         pvc_factory,
@@ -131,10 +99,9 @@ class TestPVKeyRotationWithVaultKMS(ManageTest):
             allow_volume_expansion=False,
         )
 
-        if kms_provider == constants.VAULT_KMS_PROVIDER:
-            # Create ceph-csi-kms-token in the tenant namespace
-            self.kms.vault_path_token = self.kms.generate_vault_token()
-            self.kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
+        # Create ceph-csi-kms-token in the tenant namespace
+        self.kms.vault_path_token = self.kms.generate_vault_token()
+        self.kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
 
         # Annotate Storageclass for keyrotation.
         pvk_obj = PVKeyrotation(sc_obj)
