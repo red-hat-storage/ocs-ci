@@ -813,19 +813,18 @@ def get_installed_odf_versions(namespace=None):
     Query the running cluster for currently installed ODF operator CSVs and
     their associated subscription channels.
 
-    WHY this helper is needed:
-        During a disconnected upgrade, OLM requires the currently installed
-        bundle version (the 'from' version) to exist in the new mirrored catalog
-        in order to construct a valid upgrade edge to the target version ('to').
-        Without the installed version in the catalog, OLM resolution fails with
-        `ConstraintsNotSatisfiable`.
-        Querying the live cluster allows ocs-ci to automatically detect what is
-        currently running when `upgrade_pinned_from_version` is not explicitly
-        configured in the test parameters.
+    During a disconnected upgrade, OLM requires the currently installed
+    bundle version (the 'from' version) to exist in the new mirrored catalog
+    in order to construct a valid upgrade edge to the target version ('to').
+    Without the installed version in the catalog, OLM resolution fails with
+    ``ConstraintsNotSatisfiable``.
+    Querying the live cluster allows ocs-ci to automatically detect what is
+    currently running when ``upgrade_pinned_from_version`` is not explicitly
+    configured in the test parameters.
 
     Args:
         namespace (str, optional): Storage namespace to query. Defaults to
-            `config.ENV_DATA["cluster_namespace"]` (e.g. "openshift-storage").
+            ``config.ENV_DATA["cluster_namespace"]`` (e.g. "openshift-storage").
 
     Returns:
         dict: Mapping of package name to version and channel dict, e.g.::
@@ -916,42 +915,44 @@ def resolve_pinned_upgrade_versions(
     Build the per-package upgrade pin map containing both the currently installed
     version ('from') and target version ('to') for disconnected ODF upgrade.
 
-    WHY both 'from' and 'to' must be present in the ImageSetConfiguration:
-        In a disconnected environment, `oc-mirror` builds a local catalog based on
-        the constraints defined in the ImageSetConfiguration (ISC).
-        When OLM evaluates an upgrade, it inspects the cluster's currently installed
-        CSV bundle and attempts to find a valid graph traversal path from the
-        installed bundle to the new target bundle.
-        - If the installed bundle ('from') is MISSING from the catalog, OLM cannot
-          anchor the current cluster state and fails immediately with
-          `ConstraintsNotSatisfiable`.
-        - If the installed bundle ('from') IS PRESENT in the catalog, OLM finds the
-          anchor. For Y-stream upgrades, the target bundle in the next minor has an
-          `olm.skipRange` covering the entire prior minor (e.g. '>=4.20.0 <4.21.11'),
-          allowing OLM to jump directly to the target bundle in a single step without
-          requiring any intermediate Z-stream builds in the catalog.
+    In a disconnected environment, ``oc-mirror`` builds a local catalog based on
+    the constraints defined in the ImageSetConfiguration (ISC).
+    When OLM evaluates an upgrade, it inspects the cluster's currently installed
+    CSV bundle and attempts to find a valid graph traversal path from the
+    installed bundle to the new target bundle.
 
-    SCENARIOS HANDLED:
-        1. Y-stream upgrade from non-latest z-stream to target y-stream:
-           e.g. 4.20.z-n (4.20.10) -> 4.21.latest (4.21.11)
-           - 'from': channel 'stable-4.20', minVersion=4.20.10-rhodf, maxVersion=4.20.10-rhodf
-           - 'to':   channel 'stable-4.21', minVersion=4.21.11-rhodf, maxVersion=4.21.11-rhodf
-           ISC generates TWO separate channel entries per package with exact pins.
+    * If the installed bundle ('from') is MISSING from the catalog, OLM cannot
+      anchor the current cluster state and fails immediately with
+      ``ConstraintsNotSatisfiable``.
+    * If the installed bundle ('from') IS PRESENT in the catalog, OLM finds the
+      anchor. For Y-stream upgrades, the target bundle in the next minor has an
+      ``olm.skipRange`` covering the entire prior minor (e.g. '>=4.20.0 <4.21.11'),
+      allowing OLM to jump directly to the target bundle in a single step without
+      requiring any intermediate Z-stream builds in the catalog.
 
-        2. Z-stream upgrade across non-consecutive z-streams in the same minor:
-           e.g. 4.20.1 -> 4.20.3 on channel 'stable-4.20'
-           - 'from': channel 'stable-4.20', version 4.20.1-rhodf
-           - 'to':   channel 'stable-4.20', version 4.20.3-rhodf
-           ISC generates ONE channel entry with minVersion=4.20.1-rhodf, maxVersion=4.20.3-rhodf,
-           enabling oc-mirror to mirror the range and OLM to resolve the intermediate graph.
+    Scenarios handled:
 
-        3. Packages new to the target minor:
-           e.g. 'ceph-volsync-plugin-operator' or 'cnsa-dependencies' introduced in newer ODF:
-           These have no 'from' build in the old minor, so only the 'to' entry is emitted.
+    1. Y-stream upgrade from non-latest z-stream to target y-stream (e.g. 4.20.z-n to 4.21.latest):
 
-        4. Non-ODF or unpinned packages:
-           e.g. 'elasticsearch-operator', 'cluster-logging':
-           Packages with independent version schemes are mirrored unpinned (all versions).
+       * 'from': channel 'stable-4.20', minVersion=4.20.10-rhodf, maxVersion=4.20.10-rhodf
+       * 'to':   channel 'stable-4.21', minVersion=4.21.11-rhodf, maxVersion=4.21.11-rhodf
+
+       ISC generates TWO separate channel entries per package with exact pins.
+
+    2. Z-stream upgrade across non-consecutive z-streams in the same minor (e.g. 4.20.1 to 4.20.3):
+
+       * 'from': channel 'stable-4.20', version 4.20.1-rhodf
+       * 'to':   channel 'stable-4.20', version 4.20.3-rhodf
+
+       ISC generates ONE channel entry with minVersion=4.20.1-rhodf, maxVersion=4.20.3-rhodf.
+
+    3. Packages new to the target minor:
+
+       * Only the 'to' entry is emitted.
+
+    4. Non-ODF or unpinned packages:
+
+       * Packages with independent version schemes are mirrored unpinned (all versions).
 
     Args:
         index_image (str): Target catalog index image URL, e.g.
@@ -970,13 +971,14 @@ def resolve_pinned_upgrade_versions(
 
     Returns:
         tuple(dict, str, str): (pinned_versions, from_anchor_version, to_anchor_version)
-            where pinned_versions is:
-            {
-                package_name: {
-                    "from": {"channel": str, "version": str},  # optional if new package
-                    "to":   {"channel": str, "version": str},  # optional if removed package
+            where pinned_versions is::
+
+                {
+                    package_name: {
+                        "from": {"channel": str, "version": str},  # optional if new package
+                        "to":   {"channel": str, "version": str},  # optional if removed package
+                    }
                 }
-            }
     """
     catalog = _render_catalog(index_image, set(packages) | {anchor_package})
 
