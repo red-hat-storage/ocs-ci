@@ -913,7 +913,8 @@ class OCP(object):
 
         while (time.time() - start_time) < timeout:
             try:
-                res = self.exec_oc_cmd(command)
+                # Pass timeout so exec_oc_cmd does not default to 600s for longer waits
+                res = self.exec_oc_cmd(command, timeout=timeout)
             except CommandFailed as ex:
                 res = ex.args[0] if ex.args else str(ex)
                 elapsed_time = time.time() - start_time

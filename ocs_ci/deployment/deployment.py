@@ -3113,6 +3113,15 @@ class Deployment(object):
                 namespace=constants.MCE_NAMESPACE,
                 resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG,
             )
+            if not addon_deployment_config.check_resource_existence(
+                should_exist=True,
+                timeout=900,
+                resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG,
+            ):
+                raise ResourceNotFoundError(
+                    f"Resource {constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG} "
+                    f"of kind {constants.ADDONDEPLOYMENTCONFIG} not found in namespace {constants.MCE_NAMESPACE}"
+                )
             existing_spec = addon_deployment_config.get()
             existing_vars = existing_spec.get("spec", {}).get("customizedVariables", [])
 
@@ -3179,7 +3188,7 @@ class Deployment(object):
                     label=pod_label,
                     expected_count=1,
                     namespace=constants.ACM_ADDONS_NAMESPACE_DISCOVERY,
-                    timeout=400,
+                    timeout=900,
                     sleep=10,
                 ):
                     raise ResourceNotFoundError(
@@ -3202,14 +3211,20 @@ class Deployment(object):
         )
         addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
 
-        addon_deployment_config.add_label(
-            label=backup_label,
-            resource_name=constants.ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME,
-        )
-        addon_deployment_config.add_label(
-            resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG,
-            label=backup_label,
-        )
+        if addon_deployment_config.is_exist(
+            resource_name=constants.ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME
+        ):
+            addon_deployment_config.add_label(
+                label=backup_label,
+                resource_name=constants.ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME,
+            )
+        if addon_deployment_config.is_exist(
+            resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG
+        ):
+            addon_deployment_config.add_label(
+                resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG,
+                label=backup_label,
+            )
 
         for management_addon in [
             "work-manager",
@@ -3217,11 +3232,15 @@ class Deployment(object):
             "cluster-proxy",
             "application-manager",
         ]:
-            addon_obj.add_label(resource_name=management_addon, label=backup_label)
-        klusterlet_config.add_label(
-            label=backup_label,
-            resource_name=constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME,
-        )
+            if addon_obj.is_exist(resource_name=management_addon):
+                addon_obj.add_label(resource_name=management_addon, label=backup_label)
+        if klusterlet_config.is_exist(
+            resource_name=constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME
+        ):
+            klusterlet_config.add_label(
+                label=backup_label,
+                resource_name=constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME,
+            )
 
     def deploy_acm_hub_unreleased(self):
         """
