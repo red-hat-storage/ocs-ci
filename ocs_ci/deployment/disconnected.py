@@ -808,6 +808,316 @@ def resolve_pinned_versions(
     return pinned_versions, anchor_version
 
 
+def get_installed_odf_versions(namespace=None):
+    """
+    Query the running cluster for currently installed ODF operator CSVs and
+    their associated subscription channels.
+
+    WHY this helper is needed:
+        During a disconnected upgrade, OLM requires the currently installed
+        bundle version (the 'from' version) to exist in the new mirrored catalog
+        in order to construct a valid upgrade edge to the target version ('to').
+        Without the installed version in the catalog, OLM resolution fails with
+        `ConstraintsNotSatisfiable`.
+        Querying the live cluster allows ocs-ci to automatically detect what is
+        currently running when `upgrade_pinned_from_version` is not explicitly
+        configured in the test parameters.
+
+    Args:
+        namespace (str, optional): Storage namespace to query. Defaults to
+            `config.ENV_DATA["cluster_namespace"]` (e.g. "openshift-storage").
+
+    Returns:
+        dict: Mapping of package name to version and channel dict, e.g.::
+
+            {
+                "odf-operator": {
+                    "version": "4.20.10-rhodf",
+                    "channel": "stable-4.20",
+                },
+                "ocs-operator": {
+                    "version": "4.20.10-rhodf",
+                    "channel": "stable-4.20",
+                },
+                ...
+            }
+
+        Returns an empty dict if the cluster cannot be queried (e.g. in unit tests
+        or when running before cluster connectivity is established).
+    """
+    if namespace is None:
+        namespace = config.ENV_DATA.get(
+            "cluster_namespace", constants.DEFAULT_NAMESPACE
+        )
+    installed = {}
+    try:
+        from ocs_ci.ocs.resources.csv import CSV
+        from ocs_ci.ocs.ocp import OCP
+
+        csv_list = CSV(namespace=namespace).get().get("items", [])
+        sub_list = (
+            OCP(kind="subscription.operators.coreos.com", namespace=namespace)
+            .get()
+            .get("items", [])
+        )
+
+        # Build a mapping from package name to subscription channel.
+        # Subscriptions in openshift-storage specify `spec.name` (package name)
+        # and `spec.channel` (e.g. "stable-4.20").
+        sub_channels = {}
+        for sub in sub_list:
+            pkg = sub.get("spec", {}).get("name") or sub.get("metadata", {}).get("name")
+            channel = sub.get("spec", {}).get("channel")
+            if pkg and channel:
+                sub_channels[pkg] = channel
+
+        for csv in csv_list:
+            csv_name = csv.get("metadata", {}).get("name", "")
+            if "." in csv_name:
+                pkg_candidate = csv_name.split(".", 1)[0]
+                version = _version_from_bundle_name(pkg_candidate, csv_name)
+                if version:
+                    channel = sub_channels.get(pkg_candidate) or _channel_from_version(
+                        version
+                    )
+                    installed[pkg_candidate] = {
+                        "version": version,
+                        "channel": channel,
+                    }
+        logger.info(
+            "Discovered %s installed operator CSV(s) from namespace '%s': %s",
+            len(installed),
+            namespace,
+            ", ".join(
+                f"{pkg}={data['version']}@{data['channel']}"
+                for pkg, data in sorted(installed.items())
+            ),
+        )
+    except Exception as err:
+        logger.debug("Could not retrieve installed ODF versions from cluster: %s", err)
+    return installed
+
+
+def resolve_pinned_upgrade_versions(
+    index_image,
+    packages,
+    from_minor,
+    target_minor,
+    from_version=None,
+    to_version=None,
+    from_channel=None,
+    to_channel=None,
+    z_minus_n=None,
+    from_z_minus_n=None,
+    anchor_package="odf-operator",
+    installed_versions=None,
+):
+    """
+    Build the per-package upgrade pin map containing both the currently installed
+    version ('from') and target version ('to') for disconnected ODF upgrade.
+
+    WHY both 'from' and 'to' must be present in the ImageSetConfiguration:
+        In a disconnected environment, `oc-mirror` builds a local catalog based on
+        the constraints defined in the ImageSetConfiguration (ISC).
+        When OLM evaluates an upgrade, it inspects the cluster's currently installed
+        CSV bundle and attempts to find a valid graph traversal path from the
+        installed bundle to the new target bundle.
+        - If the installed bundle ('from') is MISSING from the catalog, OLM cannot
+          anchor the current cluster state and fails immediately with
+          `ConstraintsNotSatisfiable`.
+        - If the installed bundle ('from') IS PRESENT in the catalog, OLM finds the
+          anchor. For Y-stream upgrades, the target bundle in the next minor has an
+          `olm.skipRange` covering the entire prior minor (e.g. '>=4.20.0 <4.21.11'),
+          allowing OLM to jump directly to the target bundle in a single step without
+          requiring any intermediate Z-stream builds in the catalog.
+
+    SCENARIOS HANDLED:
+        1. Y-stream upgrade from non-latest z-stream to target y-stream:
+           e.g. 4.20.z-n (4.20.10) -> 4.21.latest (4.21.11)
+           - 'from': channel 'stable-4.20', minVersion=4.20.10-rhodf, maxVersion=4.20.10-rhodf
+           - 'to':   channel 'stable-4.21', minVersion=4.21.11-rhodf, maxVersion=4.21.11-rhodf
+           ISC generates TWO separate channel entries per package with exact pins.
+
+        2. Z-stream upgrade across non-consecutive z-streams in the same minor:
+           e.g. 4.20.1 -> 4.20.3 on channel 'stable-4.20'
+           - 'from': channel 'stable-4.20', version 4.20.1-rhodf
+           - 'to':   channel 'stable-4.20', version 4.20.3-rhodf
+           ISC generates ONE channel entry with minVersion=4.20.1-rhodf, maxVersion=4.20.3-rhodf,
+           enabling oc-mirror to mirror the range and OLM to resolve the intermediate graph.
+
+        3. Packages new to the target minor:
+           e.g. 'ceph-volsync-plugin-operator' or 'cnsa-dependencies' introduced in newer ODF:
+           These have no 'from' build in the old minor, so only the 'to' entry is emitted.
+
+        4. Non-ODF or unpinned packages:
+           e.g. 'elasticsearch-operator', 'cluster-logging':
+           Packages with independent version schemes are mirrored unpinned (all versions).
+
+    Args:
+        index_image (str): Target catalog index image URL, e.g.
+            "registry.redhat.io/redhat/redhat-operator-index:v4.21"
+        packages (list): OLM package names to mirror
+        from_minor (str): major.minor of current installation, e.g. "4.20"
+        target_minor (str): major.minor of target upgrade, e.g. "4.21"
+        from_version (str, optional): Explicit from version, e.g. "4.20.10-rhodf"
+        to_version (str, optional): Explicit to version, e.g. "4.21.11-rhodf"
+        from_channel (str, optional): Explicit from channel, e.g. "stable-4.20"
+        to_channel (str, optional): Explicit to channel, e.g. "stable-4.21"
+        z_minus_n (int or str, optional): Target builds behind latest (0 = latest target)
+        from_z_minus_n (int or str, optional): Source builds behind latest
+        anchor_package (str): Package used as version anchor (default: "odf-operator")
+        installed_versions (dict, optional): Pre-discovered installed versions from cluster
+
+    Returns:
+        tuple(dict, str, str): (pinned_versions, from_anchor_version, to_anchor_version)
+            where pinned_versions is:
+            {
+                package_name: {
+                    "from": {"channel": str, "version": str},  # optional if new package
+                    "to":   {"channel": str, "version": str},  # optional if removed package
+                }
+            }
+    """
+    catalog = _render_catalog(index_image, set(packages) | {anchor_package})
+
+    # Step 1: Resolve target ('to') anchor version
+    if to_version and ("-" in to_version or len(to_version.split(".")) > 2):
+        to_anchor_version = to_version
+    elif z_minus_n is not None:
+        to_anchor_version = resolve_z_minus_n_version(
+            index_image,
+            z_minus_n,
+            target_minor,
+            package=anchor_package,
+            catalog=catalog,
+        )
+    else:
+        target_versions = get_catalog_package_versions(
+            index_image, anchor_package, target_minor, catalog=catalog
+        )
+        to_anchor_version = target_versions[-1]
+
+    to_numeric = to_anchor_version.split("-")[0]
+
+    # Step 2: Resolve current ('from') anchor version
+    from_anchor_version = None
+    if from_version and ("-" in from_version or len(from_version.split(".")) > 2):
+        from_anchor_version = from_version
+    elif installed_versions and anchor_package in installed_versions:
+        from_anchor_version = installed_versions[anchor_package]["version"]
+    elif from_minor:
+        try:
+            if from_z_minus_n is not None:
+                from_anchor_version = resolve_z_minus_n_version(
+                    index_image,
+                    from_z_minus_n,
+                    from_minor,
+                    package=anchor_package,
+                    catalog=catalog,
+                )
+            else:
+                from_versions = get_catalog_package_versions(
+                    index_image, anchor_package, from_minor, catalog=catalog
+                )
+                from_anchor_version = from_versions[-1]
+        except (NotFoundError, CommandFailed) as err:
+            logger.warning(
+                f"Could not resolve 'from' anchor version for {from_minor} in catalog: {err}"
+            )
+            from_anchor_version = None
+
+    from_numeric = from_anchor_version.split("-")[0] if from_anchor_version else None
+
+    pinned_versions = {}
+    unpinned = []
+
+    for package in packages:
+        package_data = catalog.get(package) or {"versions": {}}
+        pin = {}
+
+        # Resolve 'from' entry: prefer live cluster data, then catalog version matching anchor
+        from_pkg_ver = None
+        from_pkg_channel = None
+        if installed_versions and package in installed_versions:
+            inst_ver = installed_versions[package]["version"]
+            if inst_ver in package_data["versions"]:
+                from_pkg_ver = inst_ver
+                from_pkg_channel = (
+                    from_channel
+                    or installed_versions[package].get("channel")
+                    or _pick_channel(package_data, inst_ver)
+                )
+
+        if not from_pkg_ver and from_anchor_version:
+            if from_anchor_version in package_data["versions"]:
+                from_pkg_ver = from_anchor_version
+            elif from_numeric:
+                candidates = [
+                    v
+                    for v in package_data["versions"]
+                    if v.split("-")[0] == from_numeric
+                ]
+                if candidates:
+                    from_pkg_ver = _sort_versions(candidates)[-1]
+            if from_pkg_ver:
+                from_pkg_channel = from_channel or _pick_channel(
+                    package_data, from_pkg_ver
+                )
+
+        if from_pkg_ver and from_pkg_channel:
+            pin["from"] = {
+                "channel": from_pkg_channel,
+                "version": from_pkg_ver,
+            }
+
+        # Resolve 'to' entry: target build in target minor
+        to_pkg_ver = None
+        to_pkg_channel = None
+        if to_anchor_version in package_data["versions"]:
+            to_pkg_ver = to_anchor_version
+        elif to_numeric:
+            candidates = [
+                v for v in package_data["versions"] if v.split("-")[0] == to_numeric
+            ]
+            if candidates:
+                to_pkg_ver = _sort_versions(candidates)[-1]
+
+        if to_pkg_ver:
+            to_pkg_channel = to_channel or _pick_channel(package_data, to_pkg_ver)
+
+        if to_pkg_ver and to_pkg_channel:
+            pin["to"] = {"channel": to_pkg_channel, "version": to_pkg_ver}
+
+        if pin:
+            pinned_versions[package] = pin
+        else:
+            unpinned.append(package)
+
+    pin_summary = []
+    for pkg, p in sorted(pinned_versions.items()):
+        f_str = (
+            f"{p['from']['version']}@{p['from']['channel']}" if "from" in p else "None"
+        )
+        t_str = f"{p['to']['version']}@{p['to']['channel']}" if "to" in p else "None"
+        pin_summary.append(f"{pkg}=({f_str} -> {t_str})")
+
+    logger.info(
+        "Pinned %s package(s) for disconnected upgrade (%s -> %s): %s",
+        len(pinned_versions),
+        from_anchor_version,
+        to_anchor_version,
+        ", ".join(pin_summary),
+    )
+    if unpinned:
+        logger.warning(
+            "No matching builds available for: %s. These packages will be mirrored "
+            "unpinned (all catalog versions).",
+            ", ".join(unpinned),
+        )
+
+    return pinned_versions, from_anchor_version, to_anchor_version
+
+
 def prune_and_mirror_index_image(
     index_image,
     mirrored_index_image,
@@ -1046,33 +1356,85 @@ def mirror_index_image_via_oc_mirror(
                     _packages.append({"name": pkg})
                     continue
 
-                # Target version: the build we want OLM to install.
-                # minVersion == maxVersion pins oc-mirror to exactly one build,
-                # so the disconnected catalog has no other resolvable version.
-                to_entry = pin["to"]
-                _packages.append(
-                    {
-                        "name": pkg,
-                        "channels": [
+                # Build channel constraints:
+                # 1. Y-stream upgrade (different channels):
+                #    Emits both the 'from' channel (for OLM graph continuity) and
+                #    the 'to' channel (upgrade target), each with minVersion == maxVersion.
+                # 2. Z-stream upgrade (same channel):
+                #    Emits a single channel entry covering the range [from_ver, to_ver].
+                # 3. Target-only or fresh install:
+                #    Emits a single channel entry with minVersion == maxVersion.
+                from_entry = pin.get("from")
+                to_entry = pin.get("to")
+                channels = []
+
+                if from_entry and to_entry:
+                    if from_entry["channel"] == to_entry["channel"]:
+                        # Z-stream upgrade within same minor (e.g. 4.20.1 -> 4.20.3)
+                        v_min, v_max = _sort_versions(
+                            [from_entry["version"], to_entry["version"]]
+                        )
+                        channels.append(
+                            {
+                                "name": to_entry["channel"],
+                                "minVersion": v_min,
+                                "maxVersion": v_max,
+                            }
+                        )
+                    else:
+                        # Y-stream upgrade across minors (e.g. stable-4.20 -> stable-4.21)
+                        # Both channels must exist so OLM can resolve the upgrade edge.
+                        channels.append(
+                            {
+                                "name": from_entry["channel"],
+                                "minVersion": from_entry["version"],
+                                "maxVersion": from_entry["version"],
+                            }
+                        )
+                        channels.append(
                             {
                                 "name": to_entry["channel"],
                                 "minVersion": to_entry["version"],
                                 "maxVersion": to_entry["version"],
                             }
-                        ],
-                    }
-                )
+                        )
+                elif to_entry:
+                    # Target only (e.g. fresh install or new operator package in target minor)
+                    channels.append(
+                        {
+                            "name": to_entry["channel"],
+                            "minVersion": to_entry["version"],
+                            "maxVersion": to_entry["version"],
+                        }
+                    )
+                elif from_entry:
+                    channels.append(
+                        {
+                            "name": from_entry["channel"],
+                            "minVersion": from_entry["version"],
+                            "maxVersion": from_entry["version"],
+                        }
+                    )
 
-            logger.info(
-                "Pinned ISC entries: %s",
-                ", ".join(
-                    f"{pkg}={pinned_versions[pkg]['to']['version']}"
-                    for pkg in packages
-                    if pkg in pinned_versions
-                ),
-            )
+                if channels:
+                    _packages.append({"name": pkg, "channels": channels})
+                else:
+                    _packages.append({"name": pkg})
+
+            summary = []
+            for pkg in packages:
+                if pkg in pinned_versions:
+                    p = pinned_versions[pkg]
+                    f_v = p.get("from", {}).get("version")
+                    t_v = p.get("to", {}).get("version")
+                    if f_v and t_v and f_v != t_v:
+                        summary.append(f"{pkg}={f_v}->{t_v}")
+                    else:
+                        summary.append(f"{pkg}={t_v or f_v}")
+            logger.info("Pinned ISC entries: %s", ", ".join(summary))
         else:
-            # No pinning — mirror all available versions for each package.
+            # Full (unpinned) disconnected upgrade/install:
+            # Mirror all available versions for each package without channel constraints.
             # OLM will resolve to the latest version in the catalog.
             _packages = [{"name": pkg} for pkg in packages]
 
@@ -1314,27 +1676,116 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
             with open(idms_file) as f:
                 idms = yaml.safe_load(f)
 
-        # z-n pinning applies to fresh installs only.
-        # For upgrades the existing behaviour is retained: oc-mirror mirrors all
-        # available versions of each package and OLM resolves to the latest,
-        # which is the correct "upgrade to latest" semantics for disconnected.
-        #
-        # To enable pinned install, set in your conf yaml or YAML_TEXT_CONFIG:
-        #
-        #   DEPLOYMENT:
-        #     disconnected_z_minus_n: 2   # install the build 2 behind latest
-        #
-        # The minor version to pin within comes from ENV_DATA.ocs_version, which
-        # the run already sets via --ocs-version / --ocs-registry-image.
-        #
-        # z-0 pins to the latest available build (same result as no pinning but
-        # explicit). If n exceeds available builds, oldest available is used
-        # and a warning is logged.
-        required_packages = constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
-            f"{ocs_version}"
-        ]
+        # Determine packages and versions for upgrade vs fresh install.
+        # For upgrades, the required package list is the union of packages from
+        # both the current minor and target minor to ensure no operators are missed
+        # (e.g. newly added operators in the target minor or deprecated operators).
+        target_ocs_version = (
+            config.UPGRADE.get("upgrade_ocs_version") or ocs_version
+            if upgrade
+            else ocs_version
+        )
+        current_minor = ".".join(str(ocs_version).split(".")[:2])
+        target_minor = ".".join(str(target_ocs_version).split(".")[:2])
+
+        if upgrade:
+            curr_pkgs = constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION.get(
+                current_minor, []
+            )
+            target_pkgs = constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION.get(
+                target_minor, []
+            )
+            required_packages = list(dict.fromkeys(curr_pkgs + target_pkgs))
+            if not required_packages:
+                required_packages = (
+                    constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION.get(
+                        f"{target_ocs_version}",
+                        constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION.get(
+                            f"{ocs_version}", constants.DISCON_CL_REQUIRED_PACKAGES
+                        ),
+                    )
+                )
+        else:
+            required_packages = (
+                constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION.get(
+                    f"{ocs_version}", constants.DISCON_CL_REQUIRED_PACKAGES
+                )
+            )
+
         pinned_versions = None
-        if not upgrade:
+        if upgrade:
+            # Differentiate PINNED disconnected upgrade VS FULL (unpinned) disconnected upgrade:
+            #
+            # 1. PINNED UPGRADE:
+            #    Triggered when explicit version/channel pins are specified in UPGRADE
+            #    (upgrade_pinned_from_version, upgrade_pinned_to_version, etc.) or when
+            #    z-minus-n pinning is configured (upgrade_disconnected_z_minus_n or
+            #    disconnected_z_minus_n).
+            #    In this mode, oc-mirror builds an ISC with exact channel & version
+            #    constraints for both the starting version (anchor for OLM graph continuity)
+            #    and target version.
+            #
+            # 2. FULL (UNPINNED) UPGRADE:
+            #    When no pinning parameters are configured, pinned_versions remains None.
+            #    oc-mirror mirrors all available versions for each package, and OLM resolves
+            #    to the latest version in the target catalog.
+            upgrade_pinned_from_ver = config.UPGRADE.get("upgrade_pinned_from_version")
+            upgrade_pinned_from_chan = config.UPGRADE.get("upgrade_pinned_from_channel")
+            upgrade_pinned_to_ver = config.UPGRADE.get("upgrade_pinned_to_version")
+            upgrade_pinned_to_chan = config.UPGRADE.get("upgrade_pinned_to_channel")
+            upgrade_z_minus_n = config.UPGRADE.get("upgrade_disconnected_z_minus_n")
+            if upgrade_z_minus_n is None:
+                upgrade_z_minus_n = config.DEPLOYMENT.get("disconnected_z_minus_n")
+
+            # If user explicitly configured pinned upgrade or if z_minus_n is set
+            is_pinned_upgrade = (
+                upgrade_pinned_to_ver is not None
+                or upgrade_pinned_from_ver is not None
+                or upgrade_z_minus_n is not None
+                or config.UPGRADE.get("pinned_upgrade", False)
+            )
+
+            # Deduce target and source versions from upgrade_ocs_version / pre_upgrade_ocs_version if not explicit
+            if is_pinned_upgrade:
+                if upgrade_pinned_to_ver is None:
+                    upgrade_pinned_to_ver = config.UPGRADE.get("upgrade_ocs_version")
+                if upgrade_pinned_from_ver is None:
+                    upgrade_pinned_from_ver = config.UPGRADE.get(
+                        "pre_upgrade_ocs_version"
+                    )
+
+            if is_pinned_upgrade:
+                logger.info(
+                    "Starting PINNED disconnected upgrade path (resolving exact version pins)..."
+                )
+                installed_versions = get_installed_odf_versions()
+                pinned_versions, from_ver, to_ver = resolve_pinned_upgrade_versions(
+                    index_image=index_image,
+                    packages=required_packages,
+                    from_minor=current_minor,
+                    target_minor=target_minor,
+                    from_version=upgrade_pinned_from_ver,
+                    to_version=upgrade_pinned_to_ver,
+                    from_channel=upgrade_pinned_from_chan,
+                    to_channel=upgrade_pinned_to_chan,
+                    z_minus_n=upgrade_z_minus_n,
+                    installed_versions=installed_versions,
+                )
+                logger.info(
+                    f"Pinned disconnected upgrade resolved: {from_ver} -> {to_ver} "
+                    f"(catalog: {index_image})"
+                )
+                if not config.DEPLOYMENT.get("subscription_plan_approval"):
+                    logger.info(
+                        "Pinned upgrade active: forcing subscription_plan_approval=Manual "
+                        "to prevent premature OLM auto-upgrades."
+                    )
+                    config.DEPLOYMENT["subscription_plan_approval"] = "Manual"
+            else:
+                logger.info(
+                    "Starting FULL (unpinned) disconnected upgrade path (mirroring all package versions)..."
+                )
+        else:
             z_minus_n = config.DEPLOYMENT.get("disconnected_z_minus_n")
             if z_minus_n is not None:
                 # minor_version is the X.Y part of ocs_version (e.g. "4.20").

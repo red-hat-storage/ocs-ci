@@ -443,6 +443,207 @@ class TestPinnedImageSetConfig:
         entries = self.build_packages(["odf-operator", "ocs-operator"], None)
         assert entries == [{"name": "odf-operator"}, {"name": "ocs-operator"}]
 
+    def test_pinned_upgrade_ystream(self):
+        """
+        Y-stream upgrade: from_channel != to_channel.
+        ISC must contain both channels with exact pins for OLM graph continuity.
+        """
+        entries = self.build_packages(
+            ["odf-operator"],
+            {
+                "odf-operator": {
+                    "from": {
+                        "channel": "stable-4.20",
+                        "version": "4.20.10-rhodf",
+                    },
+                    "to": {
+                        "channel": "stable-4.21",
+                        "version": "4.21.11-rhodf",
+                    },
+                }
+            },
+        )
+        assert entries == [
+            {
+                "name": "odf-operator",
+                "channels": [
+                    {
+                        "name": "stable-4.20",
+                        "minVersion": "4.20.10-rhodf",
+                        "maxVersion": "4.20.10-rhodf",
+                    },
+                    {
+                        "name": "stable-4.21",
+                        "minVersion": "4.21.11-rhodf",
+                        "maxVersion": "4.21.11-rhodf",
+                    },
+                ],
+            }
+        ]
+
+    def test_pinned_upgrade_zstream_non_consecutive(self):
+        """
+        Z-stream upgrade across non-consecutive builds: from_channel == to_channel.
+        ISC must contain single channel entry with [from_version, to_version] range.
+        """
+        entries = self.build_packages(
+            ["odf-operator"],
+            {
+                "odf-operator": {
+                    "from": {
+                        "channel": "stable-4.20",
+                        "version": "4.20.1-rhodf",
+                    },
+                    "to": {
+                        "channel": "stable-4.20",
+                        "version": "4.20.3-rhodf",
+                    },
+                }
+            },
+        )
+        assert entries == [
+            {
+                "name": "odf-operator",
+                "channels": [
+                    {
+                        "name": "stable-4.20",
+                        "minVersion": "4.20.1-rhodf",
+                        "maxVersion": "4.20.3-rhodf",
+                    }
+                ],
+            }
+        ]
+
+    def test_pinned_upgrade_new_package_in_target(self):
+        """
+        Package newly introduced in target minor (only has 'to' pin).
+        ISC must contain single channel entry with target pin.
+        """
+        entries = self.build_packages(
+            ["ceph-volsync-plugin-operator"],
+            {
+                "ceph-volsync-plugin-operator": {
+                    "to": {
+                        "channel": "stable-4.22",
+                        "version": "4.22.0-10.konflux",
+                    }
+                }
+            },
+        )
+        assert entries == [
+            {
+                "name": "ceph-volsync-plugin-operator",
+                "channels": [
+                    {
+                        "name": "stable-4.22",
+                        "minVersion": "4.22.0-10.konflux",
+                        "maxVersion": "4.22.0-10.konflux",
+                    }
+                ],
+            }
+        ]
+
+
+class TestResolvePinnedUpgradeVersions:
+    """
+    Unit tests for resolve_pinned_upgrade_versions resolving both 'from' and 'to'
+    channel and version pins across packages.
+    """
+
+    def test_resolve_ystream_upgrade(self, render):
+        # Catalog has 4.20 builds and 4.21 builds
+        docs_420 = build_catalog_documents(
+            "odf-operator",
+            ["4.20.10-rhodf", "4.20.11-rhodf"],
+            "stable-4.20",
+        )
+        docs_421 = build_catalog_documents(
+            "odf-operator",
+            ["4.21.10-rhodf", "4.21.11-rhodf"],
+            "stable-4.21",
+        )
+        docs_ocs = build_catalog_documents(
+            "ocs-operator",
+            ["4.20.10-rhodf", "4.21.11-rhodf"],
+            "stable-4.21",
+        )
+        # merge all docs
+        all_docs = docs_420 + docs_421 + docs_ocs
+        catalog = render(all_docs, ["odf-operator", "ocs-operator"])
+
+        import unittest.mock as mock
+
+        with mock.patch.object(disconnected, "_render_catalog", return_value=catalog):
+            pinned, from_anchor, to_anchor = (
+                disconnected.resolve_pinned_upgrade_versions(
+                    index_image="index:v4.21",
+                    packages=["odf-operator", "ocs-operator"],
+                    from_minor="4.20",
+                    target_minor="4.21",
+                    from_version="4.20.10-rhodf",
+                    to_version="4.21.11-rhodf",
+                )
+            )
+
+        assert from_anchor == "4.20.10-rhodf"
+        assert to_anchor == "4.21.11-rhodf"
+        assert pinned["odf-operator"]["from"]["version"] == "4.20.10-rhodf"
+        assert pinned["odf-operator"]["from"]["channel"] == "stable-4.20"
+        assert pinned["odf-operator"]["to"]["version"] == "4.21.11-rhodf"
+        assert pinned["odf-operator"]["to"]["channel"] == "stable-4.21"
+
+    def test_resolve_zstream_upgrade(self, render):
+        docs = build_catalog_documents(
+            "odf-operator",
+            ["4.20.1-rhodf", "4.20.2-rhodf", "4.20.3-rhodf"],
+            "stable-4.20",
+        )
+        catalog = render(docs, ["odf-operator"])
+
+        import unittest.mock as mock
+
+        with mock.patch.object(disconnected, "_render_catalog", return_value=catalog):
+            pinned, from_anchor, to_anchor = (
+                disconnected.resolve_pinned_upgrade_versions(
+                    index_image="index:v4.20",
+                    packages=["odf-operator"],
+                    from_minor="4.20",
+                    target_minor="4.20",
+                    from_version="4.20.1-rhodf",
+                    to_version="4.20.3-rhodf",
+                )
+            )
+
+        assert from_anchor == "4.20.1-rhodf"
+        assert to_anchor == "4.20.3-rhodf"
+        assert pinned["odf-operator"]["from"]["channel"] == "stable-4.20"
+        assert pinned["odf-operator"]["to"]["channel"] == "stable-4.20"
+
+    def test_default_z_minus_n_resolves_latest(self, render):
+        docs = build_catalog_documents(
+            "odf-operator",
+            ["4.21.0-rhodf", "4.21.1-rhodf", "4.21.2-rhodf"],
+            "stable-4.21",
+        )
+        catalog = render(docs, ["odf-operator"])
+
+        import unittest.mock as mock
+
+        with mock.patch.object(disconnected, "_render_catalog", return_value=catalog):
+            pinned, from_anchor, to_anchor = (
+                disconnected.resolve_pinned_upgrade_versions(
+                    index_image="index:v4.21",
+                    packages=["odf-operator"],
+                    from_minor="4.20",
+                    target_minor="4.21",
+                    from_version="4.20.0-rhodf",
+                    # to_version and z_minus_n omitted -> should default to latest target
+                )
+            )
+
+        assert to_anchor == "4.21.2-rhodf"
+        assert pinned["odf-operator"]["to"]["version"] == "4.21.2-rhodf"
+
 
 class TestPinnedInstallManualApproval:
     """
@@ -611,3 +812,138 @@ class TestPinnedInstallManualApproval:
             f"Expected no approval to be set but got {result!r}. "
             "Without z_minus_n, approval must remain unset."
         )
+
+
+class TestPrepareDisconnectedOcsDeploymentUpgrade:
+    """
+    Unit tests for prepare_disconnected_ocs_deployment when upgrade=True.
+    Differentiates PINNED upgrade vs FULL (unpinned) upgrade.
+    """
+
+    @staticmethod
+    def _run_upgrade_prepare(upgrade_overrides, deployment_overrides=None):
+        import unittest.mock as mock
+        from ocs_ci.deployment import disconnected
+
+        dep_dict = {
+            "disconnected": True,
+            "stage_rh_osbs": False,
+            "live_deployment": False,
+            "mirror_registry": "mirror:5000",
+        }
+        if deployment_overrides:
+            dep_dict.update(deployment_overrides)
+
+        upg_dict = {"upgrade": True}
+        if upgrade_overrides:
+            upg_dict.update(upgrade_overrides)
+
+        fake_catalog = {
+            "odf-operator": {
+                "versions": {
+                    "4.20.10-rhodf": {"stable-4.20"},
+                    "4.21.11-rhodf": {"stable-4.21"},
+                },
+                "default_channel": "stable-4.21",
+            }
+        }
+
+        captured_kwargs = {}
+
+        def fake_mirror(index_image, packages, **kwargs):
+            captured_kwargs["index_image"] = index_image
+            captured_kwargs["packages"] = packages
+            captured_kwargs["pinned_versions"] = kwargs.get("pinned_versions")
+            return f"mirror:5000/{index_image}"
+
+        with (
+            mock.patch.dict(disconnected.config.DEPLOYMENT, dep_dict, clear=False),
+            mock.patch.dict(disconnected.config.UPGRADE, upg_dict, clear=False),
+            mock.patch.dict(
+                disconnected.config.ENV_DATA,
+                {"ocs_version": "4.20", "cluster_path": "/tmp"},
+                clear=False,
+            ),
+            mock.patch.object(
+                disconnected,
+                "get_semantic_ocs_version_from_config",
+                return_value=mock.MagicMock(
+                    __str__=lambda s: "4.20", __format__=lambda s, f: "4.20"
+                ),
+            ),
+            mock.patch.object(disconnected, "disable_default_sources"),
+            mock.patch.object(disconnected, "login_to_mirror_registry"),
+            mock.patch.object(
+                disconnected, "get_and_apply_idms_from_catalog", return_value=None
+            ),
+            mock.patch.object(
+                disconnected, "get_installed_odf_versions", return_value={}
+            ),
+            mock.patch.object(
+                disconnected,
+                "_render_catalog",
+                return_value=fake_catalog,
+            ),
+            mock.patch.object(
+                disconnected,
+                "mirror_index_image_via_oc_mirror",
+                side_effect=fake_mirror,
+            ),
+            mock.patch.object(
+                disconnected,
+                "get_semantic_ocp_running_version",
+                return_value=mock.MagicMock(__le__=lambda s, o: False),
+            ),
+            mock.patch.object(
+                disconnected,
+                "get_latest_ds_olm_tag",
+                return_value="latest-stable-4.21",
+            ),
+        ):
+            try:
+                disconnected.prepare_disconnected_ocs_deployment(upgrade=True)
+            except Exception:
+                pass
+            return captured_kwargs, disconnected.config.DEPLOYMENT.get(
+                "subscription_plan_approval"
+            )
+
+    def test_full_unpinned_upgrade_passes_no_pins(self):
+        """Full (unpinned) upgrade: pinned_versions must be None."""
+        kwargs, approval = self._run_upgrade_prepare(
+            upgrade_overrides={"upgrade_ocs_version": "4.21"}
+        )
+        assert kwargs.get("pinned_versions") is None
+        assert approval is None
+
+    def test_pinned_upgrade_with_explicit_versions(self):
+        """Pinned upgrade with explicit from/to versions: pinned_versions populated & Manual approval."""
+        kwargs, approval = self._run_upgrade_prepare(
+            upgrade_overrides={
+                "upgrade_pinned_from_version": "4.20.10-rhodf",
+                "upgrade_pinned_from_channel": "stable-4.20",
+                "upgrade_pinned_to_version": "4.21.11-rhodf",
+                "upgrade_pinned_to_channel": "stable-4.21",
+                "upgrade_ocs_version": "4.21",
+            }
+        )
+        pins = kwargs.get("pinned_versions")
+        assert pins is not None
+        assert "odf-operator" in pins
+        assert pins["odf-operator"]["from"]["version"] == "4.20.10-rhodf"
+        assert pins["odf-operator"]["to"]["version"] == "4.21.11-rhodf"
+        assert approval == "Manual"
+
+    def test_pinned_upgrade_with_z_minus_n(self):
+        """Pinned upgrade with upgrade_disconnected_z_minus_n: resolves target pin and Manual approval."""
+        kwargs, approval = self._run_upgrade_prepare(
+            upgrade_overrides={
+                "upgrade_disconnected_z_minus_n": 0,
+                "upgrade_ocs_version": "4.21",
+                "upgrade_pinned_from_version": "4.20.10-rhodf",
+            }
+        )
+        pins = kwargs.get("pinned_versions")
+        assert pins is not None
+        assert pins["odf-operator"]["to"]["version"] == "4.21.11-rhodf"
+        assert approval == "Manual"
