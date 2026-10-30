@@ -2430,15 +2430,80 @@ def ceph_health_resolve_mon_slow_ops(health_status):
     Fix ceph health issue with mon slow ops
     """
     log.warning("Trying to fix the issue with mon slow ops by restarting mon pod")
-    mon_pattern = r"mon\.([a-z]) has slow ops"
-    match = re.search(mon_pattern, health_status)
-    mon_id = None
-    if match:
-        mon_id = match.group(1)
-        log.warning(f"Problematic MON ID with slow ops: {mon_id} will be restarted")
-    if mon_id:
-        from ocs_ci.ocs import ocp
+    # Extract ALL MON IDs appearing in the string
+    # Matches mon.e → captures "e"
 
+    mon_ids = re.findall(r"mon\.([a-z])", health_status)
+
+    if not mon_ids:
+        log.warning("No MON IDs found in health status. Cannot resolve slow ops.")
+        return
+
+    log.warning(f"Detected problematic MON IDs with slow ops: {mon_ids}")
+
+    restart_mon_pods(mon_ids)
+
+
+def mute_mon_netsplit(namespace=None):
+    """
+    Mute MON_NETSPLIT health warning in Ceph cluster.
+    This is useful for arbiter deployments where network splits are expected.
+
+    Args:
+        namespace (str): Namespace of OCS
+            (default: config.ENV_DATA['cluster_namespace'])
+    """
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    log.info("Muting MON_NETSPLIT health warning for arbiter deployment")
+    try:
+        ct_pod = get_ceph_tools_pod(namespace=namespace)
+        ct_pod.exec_ceph_cmd(
+            ceph_cmd="ceph health mute MON_NETSPLIT --sticky",
+            format=None,
+            out_yaml_format=False,
+            timeout=120,
+        )
+        log.info("Successfully muted MON_NETSPLIT health warning")
+    except Exception as ex:
+        log.warning(f"Failed to mute MON_NETSPLIT: {ex}")
+
+
+def ceph_health_resolve_network_partition(health_status):
+    """
+    Fix Ceph health issue with mon network partition.
+    """
+    log.warning("Trying to fix the issue with mon slow ops by restarting MON pod(s)")
+
+    # Extract ALL MON IDs appearing in the string
+    # Matches mon.e → captures "e"
+    mon_ids = re.findall(r"mon\.([a-z])", health_status)
+
+    if not mon_ids:
+        log.warning(
+            "No MON IDs found in health status. Cannot resolve network partition detected issue."
+        )
+        return
+
+    log.warning(
+        f"Detected problematic MON IDs with network partition detected: {mon_ids}"
+    )
+
+    mute_mon_netsplit()
+
+
+def restart_mon_pods(mon_ids):
+    """
+    Restart the MON pods.
+
+    Args:
+        mon_ids (list): List of MON IDs
+    """
+    from ocs_ci.ocs import ocp
+
+    for mon_id in mon_ids:
+        log.warning(f"Restarting MON '{mon_id}' ...")
         ocp.OCP().exec_oc_cmd(
             f"delete pod -n {config.ENV_DATA['cluster_namespace']} -l ceph_daemon_id={mon_id}"
         )
@@ -2481,6 +2546,20 @@ def ceph_health_recover(health_status, namespace=None):
             "func_kwargs": {},
             "ceph_health_tries": 6,
             "ceph_health_delay": 30,
+        },
+        {
+            "pattern": r"HEALTH_WARN\s+\d+\s+network partition detected",
+            "func": ceph_health_resolve_network_partition,
+            "func_args": [health_status],
+            "func_kwargs": {},
+            "ceph_health_tries": 6,
+            "ceph_health_delay": 30,
+            "known_issues": [
+                {
+                    "issue": "DFBUGS-4521",
+                    "pattern": r"Netsplit detected between mon",
+                },
+            ],
         },
         # TODO: Add more patterns and fix functions
     ]
@@ -2564,8 +2643,11 @@ def ceph_health_check_base(namespace=None, fix_ceph_health=False):
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     health = run_ceph_health_cmd(namespace)
 
-    if health.strip() == "HEALTH_OK":
-        log.info("Ceph cluster health is HEALTH_OK.")
+    if health.strip().startswith("HEALTH_OK"):
+        if health.strip() != "HEALTH_OK":
+            log.warning(f"Ceph cluster health: {health}")
+        else:
+            log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
         if fix_ceph_health:
