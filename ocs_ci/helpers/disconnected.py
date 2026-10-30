@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import platform
+import shutil
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -102,7 +103,7 @@ def get_oc_mirror_tool():
         clone_repo(url=oc_mirror_repo, location=oc_mirror_dir, branch=oc_mirror_branch)
         # build oc-mirror tool
         exec_cmd("make build", cwd=oc_mirror_dir)
-        os.rename(
+        shutil.move(
             os.path.join(oc_mirror_dir, "bin/oc-mirror"),
             os.path.join(bin_dir, "oc-mirror"),
         )
