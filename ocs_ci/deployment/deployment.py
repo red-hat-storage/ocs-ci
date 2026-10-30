@@ -146,6 +146,7 @@ from ocs_ci.utility.utils import (
     get_oadp_version,
     ceph_health_check_multi_storagecluster_external,
     get_acm_version,
+    mute_mon_netsplit,
 )
 from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
@@ -2135,6 +2136,10 @@ class Deployment(object):
         if not config.DEPLOYMENT["external_mode"]:
             validate_pdb_creation()
 
+        # Mute MON_NETSPLIT for arbiter deployments to avoid:
+        # https://issues.redhat.com/browse/DFBUGS-4521
+        if config.DEPLOYMENT.get("arbiter_deployment"):
+            mute_mon_netsplit(namespace=self.namespace)
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
         try:
