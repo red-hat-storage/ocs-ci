@@ -146,6 +146,12 @@ class FusionDataFoundationDeployment:
             if platform in local_platforms:
                 backing_storage_type = "Local"
 
+        if backing_storage_type == "Local":
+            logger.info("backingStorageType is Local, ensuring LSO is installed")
+            self.lso_enabled = True
+            config.DEPLOYMENT["local_storage"] = True
+            self.ensure_lso_installed()
+
         if backing_storage_type:
             logger.info(f"Setting backingStorageType to: {backing_storage_type}")
             for param in fdf_service_data["spec"]["parameters"]:
