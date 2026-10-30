@@ -352,8 +352,10 @@ class OpenShiftLightspeed:
                     "creating ols-test-user SA and minting a token"
                 )
                 sa_name = self._ensure_test_sa()
+                # Request a 24-hour token so it outlives even the longest test
+                # session (default is ~1 hour which causes 403s mid-session).
                 self._token = ocp.exec_oc_cmd(
-                    f"create token {sa_name} -n {self.namespace}",
+                    f"create token {sa_name} -n {self.namespace} --duration=24h",
                     out_yaml_format=False,
                 ).strip()
                 logger.info(f"Retrieved OLS bearer token via oc create token {sa_name}")
@@ -502,7 +504,19 @@ class OpenShiftLightspeed:
                     f"OLS query failed — HTTP {response.status_code} "
                     f"(attempt {attempt}/{max_retries}): {response.text[:2000]}"
                 )
-                # 4xx = bad request, no point retrying
+                # 401/403 means the SA token expired.  Clear the cached token
+                # so _headers() mints a fresh one on the next attempt, then
+                # retry — don't raise immediately like other 4xx errors.
+                if response.status_code in (401, 403):
+                    self._token = None
+                    if attempt < max_retries:
+                        logger.info(
+                            f"Token expired (HTTP {response.status_code}) — "
+                            f"re-minting and retrying (attempt {attempt}/{max_retries})..."
+                        )
+                        continue
+                    response.raise_for_status()
+                # Other 4xx = bad request, no point retrying
                 if response.status_code < 500:
                     response.raise_for_status()
                 last_exc = None

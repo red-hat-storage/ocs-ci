@@ -1036,11 +1036,13 @@ def verify_pending_cleanup_alert_resolved(
         alert_locator = acm_loc["pending-cleanup-alert"]
         expected_text = constants.ALERT_APPLICATION_CLEANUP_PENDING
 
-    # use_fallback=False as this is intentional negative check (alert should NOT exist)
+    # use_fallback=False as this is intentional negative check (alert should NOT exist).
+    # The Prometheus alert rule has a 'for: 1m' grace period before it resolves;
+    # allow up to 3 minutes for the UI to reflect that the alert has cleared.
     alert_still_present = acm_obj.wait_until_expected_text_is_found(
         locator=alert_locator,
         expected_text=expected_text,
-        timeout=60,
+        timeout=180,
         use_fallback=False,
     )
 
