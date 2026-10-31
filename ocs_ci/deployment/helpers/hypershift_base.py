@@ -115,6 +115,59 @@ def get_hosted_cluster_namespace(cluster_name=None):
     return hc_namespace or constants.CLUSTERS_NAMESPACE
 
 
+def get_hcp_agent_namespace(cluster_name=None):
+    """
+    Get the agent namespace for an agent-based hosted cluster by querying
+    the HostedCluster CR and extracting spec.platform.agent.agentNamespace.
+
+    Args:
+        cluster_name (str): Name of the hosted cluster. If None, uses current cluster.
+
+    Returns:
+        str: The agent namespace where Agent resources are located, or None if not found.
+
+    Raises:
+        CommandFailed: If unable to query the HostedCluster resource
+    """
+    cluster_name = cluster_name or config.ENV_DATA.get("cluster_name")
+    hc_namespace = get_hosted_cluster_namespace(cluster_name)
+
+    with config.RunWithProviderConfigContextIfAvailable():
+        try:
+            hc_ocp = OCP(
+                kind=constants.HOSTED_CLUSTERS,
+                namespace=hc_namespace,
+                resource_name=cluster_name,
+            )
+            hc_data = hc_ocp.get()
+
+            # Extract the agent namespace from spec.platform.agent.agentNamespace
+            agent_namespace = (
+                hc_data.get("spec", {})
+                .get("platform", {})
+                .get("agent", {})
+                .get("agentNamespace")
+            )
+
+            if agent_namespace:
+                logger.info(
+                    f"Found agent namespace '{agent_namespace}' for hosted cluster '{cluster_name}'"
+                )
+            else:
+                logger.warning(
+                    f"No agent namespace found in HostedCluster '{cluster_name}' "
+                    f"spec.platform.agent.agentNamespace. This may not be an agent-based cluster."
+                )
+
+            return agent_namespace
+
+        except CommandFailed as exc:
+            logger.error(
+                f"Failed to get agent namespace for hosted cluster '{cluster_name}': {exc}"
+            )
+            raise
+
+
 @catch_exceptions((CommandFailed, TimeoutExpiredError))
 def get_available_hosted_clusters_to_ocp_ver_dict():
     """
