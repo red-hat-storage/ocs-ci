@@ -18,6 +18,21 @@ from ocs_ci.ocs.exceptions import OpenShiftAPIResponseException, ConfigurationEr
 logger = logging.getLogger(__name__)
 
 
+def redact_iso_url(iso_url):
+    """
+    Hide Assisted Installer bytoken JWT from logs.
+
+    Args:
+        iso_url (str): discovery ISO URL, may contain /bytoken/<jwt>/
+
+    Returns:
+        str: url with token replaced by <redacted>, or the original value
+    """
+    if not iso_url:
+        return iso_url
+    return re.sub(r"(bytoken/)[^/]+", r"\1<redacted>", iso_url)
+
+
 class OpenShiftAPI(object):
     """
     Common class for interaction with various OpenShift APIs

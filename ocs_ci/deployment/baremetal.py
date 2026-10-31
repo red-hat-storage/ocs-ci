@@ -25,6 +25,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound, TimeoutExpi
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility import ibmcloud_bm
+from ocs_ci.utility import redfish as redfish_util
 from ocs_ci.utility.baremetal import update_uefi_boot_order
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
@@ -571,11 +572,17 @@ class BAREMETALUPI(BAREMETALBASE):
                         apps_record_ip_list.append(self.srv_details[machine]["ip"])
                         worker_count += 1
 
-            logger.info("Configuring DNS records")
             zone_id = self.aws.create_hosted_zone(cluster_name=cluster_name)
 
             if config.ENV_DATA["worker_replicas"] == 0:
                 apps_record_ip_list = api_record_ip_list
+            logger.info(
+                "Configuring Route53 DNS for cluster %s "
+                "(api/api-int A -> %s, *.apps A -> %s, NS delegation)",
+                cluster_name,
+                api_record_ip_list,
+                apps_record_ip_list,
+            )
             for ip in api_record_ip_list:
                 response_list.append(
                     self.aws.update_hosted_zone_record(
@@ -626,9 +633,16 @@ class BAREMETALUPI(BAREMETALBASE):
                     raw_data=True,
                 )
             )
-            logger.info("Waiting for Record Response")
+            logger.info(
+                "Waiting for Route53 to confirm DNS records for cluster %s",
+                cluster_name,
+            )
             self.aws.wait_for_record_set(response_list=response_list)
-            logger.info("Records Created Successfully")
+            logger.info(
+                "Route53 DNS records ready for cluster %s "
+                "(api/api-int, *.apps, NS delegation)",
+                cluster_name,
+            )
             logger.info("waiting for bootstrap to complete")
             try:
                 run_cmd(
@@ -882,6 +896,83 @@ class BAREMETALAI(BAREMETALBASE):
         def __init__(self):
             super(BAREMETALAI.OCPDeployment, self).__init__()
             self.handled_pending_user_actions = {}
+            self.discovery_iso_url = None
+
+        def _boot_method(self):
+            """Return discovery boot method: 'iso' or 'ipxe' (default)."""
+            return self.bm_config.get("boot_method", "ipxe")
+
+        def _mgmt_username(self, machine):
+            """Per-server mgmt_username, else common baremetal.mgmt_username.
+
+            Used by the Redfish ISO path (via _servers_subset). Empty/missing
+            per-server values fall back to the farm-level default.
+            """
+            username = self.srv_details[machine].get("mgmt_username")
+            if not username:
+                username = self.bm_config.get("mgmt_username")
+            return username
+
+        def _mgmt_password(self, machine):
+            """Per-server mgmt_password, else common baremetal.mgmt_password.
+
+            Used by the Redfish ISO path (via _servers_subset). Empty/missing
+            per-server values fall back to the farm-level default.
+            """
+            password = self.srv_details[machine].get("mgmt_password")
+            if not password:
+                password = self.bm_config.get("mgmt_password")
+            return password
+
+        def _servers_subset(self, machines):
+            """
+            Return srv_details subset for the given machine names.
+
+            Fills mgmt_username/mgmt_password from common baremetal defaults when
+            omitted on the server entry; per-server values still win.
+            """
+            out = {}
+            for name in machines:
+                details = dict(self.srv_details[name])
+                username = self._mgmt_username(name)
+                password = self._mgmt_password(name)
+                if not username or not password:
+                    raise ValueError(
+                        f"Missing BMC credentials for '{name}'. Set per-server "
+                        "mgmt_username/mgmt_password or common "
+                        "ENV_DATA.baremetal.mgmt_username/mgmt_password."
+                    )
+                details["mgmt_username"] = username
+                details["mgmt_password"] = password
+                out[name] = details
+            return out
+
+        def _eject_discovery_isos(self, machines, restart=False):
+            """Eject discovery ISOs from Redfish VirtualMedia on given machines."""
+            # Filter to Redfish BMCs before credential resolution so destroy
+            # (all srv_details) does not fail on non-Redfish / missing-cred nodes.
+            redfish_machines = [
+                name
+                for name in machines
+                if self.srv_details.get(name, {}).get("mgmt_provider") == "redfish"
+            ]
+            if not redfish_machines:
+                logger.warning(
+                    "No Redfish mgmt_provider machines among %s node(s); "
+                    "skipping discovery ISO eject (check server config)",
+                    len(machines),
+                )
+                return
+            redfish_servers = self._servers_subset(redfish_machines)
+            logger.info(
+                "Ejecting discovery ISOs via Redfish on %s node(s) (restart=%s)",
+                len(redfish_servers),
+                restart,
+            )
+            redfish_util.eject_iso_nodes(
+                redfish_servers,
+                restart=restart,
+            )
 
         def deploy_prereq(self):
             """
@@ -1002,6 +1093,12 @@ class BAREMETALAI(BAREMETALBASE):
             self.api_vip = config.ENV_DATA["api_vip"]
             self.ingress_vip = config.ENV_DATA["ingress_vip"]
 
+            if self._boot_method() == "iso":
+                logger.info(
+                    "ISO boot method selected; skipping iPXE/dnsmasq helper setup"
+                )
+                return
+
             # prepare required dnsmasq configuration (for PXE boot)
             self.configure_dnsmasq_on_helper_vm()
 
@@ -1059,10 +1156,10 @@ class BAREMETALAI(BAREMETALBASE):
                 ):
                     master_nodes.append(machine)
                     mac_name_mapping[
-                        self.srv_details[machine][f"{provisioning_network}_mac"]
+                        self.srv_details[machine][f"{provisioning_network}_mac"].lower()
                     ] = machine
                     mac_role_mapping[
-                        self.srv_details[machine][f"{provisioning_network}_mac"]
+                        self.srv_details[machine][f"{provisioning_network}_mac"].lower()
                     ] = "master"
                     master_count += 1
                 elif (
@@ -1071,10 +1168,10 @@ class BAREMETALAI(BAREMETALBASE):
                 ):
                     worker_nodes.append(machine)
                     mac_name_mapping[
-                        self.srv_details[machine][f"{provisioning_network}_mac"]
+                        self.srv_details[machine][f"{provisioning_network}_mac"].lower()
                     ] = machine
                     mac_role_mapping[
-                        self.srv_details[machine][f"{provisioning_network}_mac"]
+                        self.srv_details[machine][f"{provisioning_network}_mac"].lower()
                     ] = "worker"
                     worker_count += 1
 
@@ -1129,254 +1226,142 @@ class BAREMETALAI(BAREMETALBASE):
 
             # create Infrastructure Environment in Assisted Installer console
             self.ai_cluster.create_infrastructure_environment()
+            logger.info(
+                "Assisted Installer cluster_id=%s infra_env_id=%s",
+                self.ai_cluster.id,
+                self.ai_cluster.infra_id,
+            )
 
             # configure DNS records for API and Ingress
             self.create_dns_records()
 
-            # download discovery ipxe config
-            ipxe_config_file = self.ai_cluster.download_ipxe_config(self.cluster_path)
-            with open(ipxe_config_file) as ipxe_config_content:
-                ipxe_content = ipxe_config_content.read()
-
-            # IBM Cloud VPC Bare Metal: Use direct iPXE boot with AI script
-            if is_vpc_infra():
-                logger.info(
-                    "IBM Cloud VPC BM detected - using direct iPXE boot from AI service"
-                )
-
-                # Initialize VPC BM manager
-                vpc_bm_manager = ibmcloud_bm.IBMCloudVPCBM(
-                    region=config.ENV_DATA.get("region", "us-south")
-                )
-
-                # Generate inline iPXE script by appending DHCP retry loop to AI script
-                ipxe_script = vpc_bm_manager.generate_rhcos_ipxe_script(ipxe_content)
-                logger.info(
-                    f"Generated iPXE script for VPC BM ({len(ipxe_script)} bytes)"
-                )
-
-                # Prepare all server data for parallel reinitialization
-                servers_to_reinitialize = []
-                for machine in master_nodes + worker_nodes:
-                    server_id = self.srv_details[machine]["server_id"]
-                    servers_to_reinitialize.append((server_id, ipxe_script, machine))
-
-                # Reinitialize all servers in parallel (max 3 concurrent operations)
-                logger.info(
-                    f"Reinitializing {len(servers_to_reinitialize)} servers in parallel"
-                )
-                with ThreadPoolExecutor(max_workers=3) as executor:
-                    future_to_server = {
-                        executor.submit(
-                            vpc_bm_manager.reinitialize_with_ipxe,
-                            server_id,
-                            ipxe_script,
-                        ): machine
-                        for server_id, ipxe_script, machine in servers_to_reinitialize
-                    }
-
-                    for future in as_completed(future_to_server):
-                        machine = future_to_server[future]
-                        try:
-                            future.result()
-                            logger.info(f"Server {machine} reinitialized successfully")
-                        except Exception as e:
-                            logger.error(
-                                f"Server {machine} reinitialization failed: {e}"
-                            )
-                            raise
-
-                logger.info("All servers reinitialized and running with iPXE boot")
-
-                # Verify all servers are running before adding to ALB (no blind wait needed)
-                logger.info("Verifying all servers are in running state")
-                for machine in master_nodes + worker_nodes:
-                    server_id = self.srv_details[machine]["server_id"]
-                    vpc_bm_manager.wait_for_server_status(
-                        server_id, "running", timeout=1800
-                    )
-                    logger.info(f"Server {machine} ({server_id}) is running")
-
-                # Add servers as members to ALB pools now that they are running
-                if hasattr(self, "api_lb_id") and hasattr(self, "ingress_lb_id"):
-                    logger.info("Adding servers to ALB pools")
-                    master_ips = [
-                        self.srv_details[machine]["private_ip"]
-                        for machine in master_nodes
-                    ]
-                    worker_ips = [
-                        self.srv_details[machine]["private_ip"]
-                        for machine in worker_nodes
-                    ]
-
-                    # API ALBs (Internal & Public) always point to master nodes (6443: API, 22623: MCS)
-                    api_ips = master_ips
-
-                    # Ingress ALB points to worker nodes; fallback to master nodes in compact mode
-                    ingress_ips = worker_ips if worker_ips else master_ips
-
-                    logger.info(f"API ALB backend targets (master nodes): {api_ips}")
-                    logger.info(
-                        "Ingress ALB backend targets"
-                        f"({'worker nodes' if worker_ips else 'master nodes (compact mode)'}): {ingress_ips}"
-                    )
-
-                    # Add members to Internal API ALB (ports 6443 and 22623)
-                    vpc_bm_manager.add_alb_pool_members(
-                        self.api_lb_id, api_ips, [6443, 22623]
-                    )
-
-                    # Add members to Public API ALB (port 6443)
-                    if hasattr(self, "public_api_lb_id") and self.public_api_lb_id:
-                        vpc_bm_manager.add_alb_pool_members(
-                            self.public_api_lb_id, api_ips, [6443]
-                        )
-
-                    # Add members to Ingress ALB (ports 80 and 443)
-                    vpc_bm_manager.add_alb_pool_members(
-                        self.ingress_lb_id, ingress_ips, [80, 443]
-                    )
-
-                    logger.info("Successfully added all servers to ALB pools")
-
-            # Traditional baremetal only: parse and download iPXE resources
-            if not is_vpc_infra():
-                # Parse iPXE script for initrd, kernel and rootfs urls
-                initrd_url = re.search(
-                    r"\ninitrd --name initrd (.*)\n", ipxe_content
-                ).group(1)
-                kernel_url, rootfs_url = re.search(
-                    r"\nkernel ([^ ]*) initrd=initrd coreos.live.rootfs_url=([^ ]*)",
-                    ipxe_content,
-                ).groups()
-
-                # Download initrd, kernel and rootfs to httpd server
-                dest_dir = f"{self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
-                cmd = f"wget --no-verbose -O {dest_dir}/initrd '{initrd_url}'"
-                assert (
-                    self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
-                ), "Failed to download initrd"
-                cmd = f"wget --no-verbose -O {dest_dir}/kernel '{kernel_url}'"
-                assert (
-                    self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
-                ), "Failed to download kernel"
-                cmd = f"wget --no-verbose -O {dest_dir}/rootfs '{rootfs_url}'"
-                assert (
-                    self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
-                ), "Failed to download rootfs"
-
-                # Update ipxe_config_file to point to downloaded files
-                base_dest_url = (
-                    f"http://{self.bm_config['bm_httpd_provision_server']}/ipxe/"
-                    f"{self.bm_config['env_name']}"
-                )
-                replace_content_in_file(
-                    ipxe_config_file, initrd_url, f"{base_dest_url}/initrd"
-                )
-                replace_content_in_file(
-                    ipxe_config_file, kernel_url, f"{base_dest_url}/kernel"
-                )
-                replace_content_in_file(
-                    ipxe_config_file, rootfs_url, f"{base_dest_url}/rootfs"
-                )
-
-                # Upload ipxe config to httpd server (helper_node)
-                discovery_ipxe_file_dest = (
-                    f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
-                    f"{self.bm_config['env_name']}/discovery.ipxe"
-                )
-                self.helper_node_handler.upload_file(
-                    ipxe_config_file,
-                    discovery_ipxe_file_dest,
-                )
-                ipxe_file_url = (
-                    f"http://{self.bm_config['bm_httpd_provision_server']}/ipxe/"
-                    f"{self.bm_config['env_name']}/discovery.ipxe"
-                )
-
-                # Configure pxelinux.cfg files for discovery boot
-                pxelinux_cfg_file = self.create_pxe_file(ipxe_file_url=ipxe_file_url)
-                for machine in master_nodes + worker_nodes:
-                    mac = self.srv_details[machine][f"{provisioning_network}_mac"]
-                    dest_cfg_file_name = f"01-{mac.replace(':', '-')}"
-                    self.helper_node_handler.upload_file(
-                        pxelinux_cfg_file,
-                        f"{self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg/{dest_cfg_file_name}",
-                    )
-
-                # Reboot all servers and boot them from PXE
-                for machine in master_nodes + worker_nodes:
-                    self.set_pxe_boot_and_reboot(machine)
-
-            # Wait for discovering all nodes (common for both VPC and classic)
+            target_nodes = master_nodes + worker_nodes
             expected_node_num = (
                 config.ENV_DATA["master_replicas"] + config.ENV_DATA["worker_replicas"]
             )
+
+            # Boot discovery: ISO (Redfish) | VPC BM (direct iPXE) | classic (helper iPXE/PXE)
+            discovery_ipxe_file_dest = None
+            if self._boot_method() == "iso":
+                self._boot_nodes_with_discovery_iso(target_nodes)
+            elif is_vpc_infra():
+                self._boot_nodes_with_vpc_ipxe(master_nodes, worker_nodes)
+            else:
+                discovery_ipxe_file_dest = self._boot_nodes_with_ipxe(target_nodes)
+
+            # wait for discovering all nodes
             try:
                 self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
             except TimeoutExpiredError:
-                discovered_hosts = [
-                    host["requested_hostname"]
-                    for host in self.ai_cluster.get_infra_env_hosts()
-                ]
-                for machine in master_nodes + worker_nodes:
-                    if machine not in discovered_hosts:
-                        if is_vpc_infra():
-                            # VPC recovery: restart via IBM Cloud API
-                            server_id = self.srv_details[machine]["server_id"]
-                            logger.warning(
-                                f"Node {machine} not discovered, restarting server {server_id}"
+                if self._boot_method() == "iso":
+                    # Use MACs to identify missing nodes (requested_hostname not set yet)
+                    provisioning_network = self.bm_config["bm_provisioning_network"]
+                    discovered_macs = self.ai_cluster.get_discovered_macs()
+                    missing = [
+                        machine
+                        for machine in target_nodes
+                        if self.srv_details[machine][
+                            f"{provisioning_network}_mac"
+                        ].lower()
+                        not in discovered_macs
+                    ]
+                    logger.warning(
+                        "Discovery timeout; retrying boot for missing nodes: %s "
+                        "(already discovered MACs: %s)",
+                        missing,
+                        sorted(discovered_macs),
+                    )
+                    if not missing:
+                        raise
+                    self._boot_nodes_with_discovery_iso(missing)
+                elif is_vpc_infra():
+                    # VPC path: use requested_hostname (pre-existing logic)
+                    discovered_hosts = [
+                        host["requested_hostname"]
+                        for host in self.ai_cluster.get_infra_env_hosts()
+                    ]
+                    missing = [m for m in target_nodes if m not in discovered_hosts]
+                    logger.warning(
+                        "Discovery timeout; retrying boot for missing nodes: %s",
+                        missing,
+                    )
+                    vpc_bm_manager = ibmcloud_bm.IBMCloudVPCBM(
+                        region=config.ENV_DATA.get("region", "us-south")
+                    )
+                    for machine in missing:
+                        server_id = self.srv_details[machine]["server_id"]
+                        logger.warning(
+                            "Node %s not discovered, restarting server %s",
+                            machine,
+                            server_id,
+                        )
+                        vpc_bm_manager.stop_server(server_id, stop_type="hard")
+                        try:
+                            vpc_bm_manager.wait_for_server_status(
+                                server_id, "stopped", timeout=300
                             )
-                            vpc_bm_manager.stop_server(server_id, stop_type="hard")
-                            try:
-                                vpc_bm_manager.wait_for_server_status(
-                                    server_id, "stopped", timeout=300
-                                )
-                            except Exception as e:
-                                logger.warning(
-                                    f"Wait for server {server_id} stopped failed: {e}, proceeding to start"
-                                )
-                            vpc_bm_manager.start_server(server_id)
-                        else:
-                            # Classic recovery: restart via PXE boot
-                            self.set_pxe_boot_and_reboot(machine)
+                        except Exception as e:
+                            logger.warning(
+                                "Wait for server %s stopped failed: %s, proceeding to start",
+                                server_id,
+                                e,
+                            )
+                        vpc_bm_manager.start_server(server_id)
+                else:
+                    # Classic path: use requested_hostname (pre-existing logic)
+                    discovered_hosts = [
+                        host["requested_hostname"]
+                        for host in self.ai_cluster.get_infra_env_hosts()
+                    ]
+                    missing = [m for m in target_nodes if m not in discovered_hosts]
+                    logger.warning(
+                        "Discovery timeout; retrying boot for missing nodes: %s",
+                        missing,
+                    )
+                    for machine in missing:
+                        self.set_pxe_boot_and_reboot(machine)
                 self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
 
-            # Verify validations info
+            # verify validations info
             self.ai_cluster.verify_validations_info_for_discovered_nodes()
 
-            # Classic baremetal only: Configure disk boot for after discovery
-            if not is_vpc_infra():
+            if self._boot_method() == "iso":
+                # Eject ISO so later reboots hit disk; do not restart here.
+                self._eject_discovery_isos(target_nodes, restart=False)
+                # Verify all expected MACs were discovered
+                self._verify_discovered_macs(mac_name_mapping)
+            elif not is_vpc_infra():
+                # Classic only: configure pxelinux.cfg for disk boot after discovery
+                # (without this, PXE-first servers can get stuck in a boot loop)
                 pxelinux_cfg_file = self.create_pxe_file(
                     template=constants.PXELINUX_CFG_DISK0_TEMPLATE
                 )
-                for machine in master_nodes + worker_nodes:
+                provisioning_network = self.bm_config["bm_provisioning_network"]
+                for machine in target_nodes:
                     mac = self.srv_details[machine][f"{provisioning_network}_mac"]
                     dest_cfg_file_name = f"01-{mac.replace(':', '-')}"
                     self.helper_node_handler.upload_file(
                         pxelinux_cfg_file,
                         f"{self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg/{dest_cfg_file_name}",
                     )
-                discovery_ipxe_file_dest = (
-                    f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
-                    f"{self.bm_config['env_name']}/discovery.ipxe"
-                )
+                # rename the discovery.ipxe file to continue boot from disk on UEFI boot mode systems
                 cmd = f"mv {discovery_ipxe_file_dest} {discovery_ipxe_file_dest}.backup"
                 assert (
                     self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
                 ), "Failed to rename discovery.ipxe file"
 
-            # Update discovered hosts (configure hostname and role) - common
+            # update discovered hosts (configure hostname and role)
             self.ai_cluster.update_hosts_config(
                 mac_name_mapping=mac_name_mapping, mac_role_mapping=mac_role_mapping
             )
 
-            # Install the OCP cluster - common
+            # install the OCP cluster
             self.ai_cluster.install_cluster(
                 pending_user_action_handler=self.pending_user_action_handler
             )
 
-            for machine in master_nodes + worker_nodes:
+            # workaround for UEFI boot order issue (make sure that PXE boot is on first place)
+            for machine in target_nodes:
                 if self.srv_details[machine].get("fix_uefi_boot_order_first_option"):
                     update_uefi_boot_order(
                         first_option_string=self.srv_details[machine].get(
@@ -1386,17 +1371,243 @@ class BAREMETALAI(BAREMETALBASE):
                         ignore_error=True,
                     )
 
-            # Verify cluster health - common
             self.test_cluster()
-
-            # Clean disks on worker nodes - common
             if config.ENV_DATA.get("skip_disks_cleanup", False):
                 logger.info("Skipping disks cleanup")
             else:
-                logger.info("Performing Disk cleanup on worker nodes")
+                logger.info("Performing Disk cleanup")
                 workers = get_nodes(node_type="worker")
                 for worker in workers:
                     clean_disks(worker)
+
+        def _verify_discovered_macs(self, mac_name_mapping):
+            """
+            Fail fast if conf provisioning MAC values are not present on discovered hosts.
+
+            Args:
+                mac_name_mapping (dict): lowercase MAC -> hostname mapping from conf
+            """
+            expected = {mac.lower() for mac in mac_name_mapping}
+            seen = self.ai_cluster.get_discovered_macs()
+            missing = expected - seen
+            unexpected = seen - expected
+            logger.info(
+                "MAC audit: expected=%s seen=%s missing=%s",
+                sorted(expected),
+                sorted(seen),
+                sorted(missing),
+            )
+            logger.debug("MAC audit unexpected=%s", sorted(unexpected))
+            if missing:
+                raise exceptions.HostValidationFailed(
+                    "Discovered hosts are missing expected MAC(s) from conf "
+                    f"(bm_provisioning_network mapping): {sorted(missing)}"
+                )
+
+        def _boot_nodes_with_discovery_iso(self, machines):
+            """
+            Attach Assisted Installer discovery ISO via Redfish and boot nodes once from CD.
+
+            Args:
+                machines (list): machine names to boot
+            """
+            if not machines:
+                return
+            if not self.discovery_iso_url:
+                self.discovery_iso_url = self.ai_cluster.get_discovery_iso_url()
+            logger.info(
+                "Booting %s node(s) from discovery ISO via Redfish: %s",
+                len(machines),
+                machines,
+            )
+            redfish_util.attach_iso_and_boot_nodes(
+                self._servers_subset(machines),
+                self.discovery_iso_url,
+            )
+            logger.info(
+                "BMC discovery boot done for %s node(s); waiting for hosts in "
+                "Assisted Installer (UI: Host inventory)",
+                len(machines),
+            )
+
+        def _boot_nodes_with_ipxe(self, machines):
+            """
+            Existing iPXE discovery boot path (helper httpd/tftp + IPMI/IBM Cloud).
+
+            Args:
+                machines (list): machine names to configure/boot
+
+            Returns:
+                str: destination path of discovery.ipxe on the helper node
+            """
+            # download discovery ipxe config
+            ipxe_config_file = self.ai_cluster.download_ipxe_config(self.cluster_path)
+            # parse ipxe_config_file for initrd, kernel and rootfs urls
+            with open(ipxe_config_file) as ipxe_config_content:
+                content = ipxe_config_content.read()
+            initrd_url = re.search(r"\ninitrd --name initrd (.*)\n", content).group(1)
+            kernel_url, rootfs_url = re.search(
+                r"\nkernel ([^ ]*) initrd=initrd coreos.live.rootfs_url=([^ ]*)",
+                content,
+            ).groups()
+
+            # download initrd, kernel and rootfs to httpd server
+            dest_dir = (
+                f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
+                f"{self.bm_config['env_name']}"
+            )
+            cmd = f"wget --no-verbose -O {dest_dir}/initrd '{initrd_url}'"
+            assert (
+                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
+            ), "Failed to download initrd"
+            cmd = f"wget --no-verbose -O {dest_dir}/kernel '{kernel_url}'"
+            assert (
+                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
+            ), "Failed to download kernel"
+            cmd = f"wget --no-verbose -O {dest_dir}/rootfs '{rootfs_url}'"
+            assert (
+                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
+            ), "Failed to download rootfs"
+
+            # update ipxe_config_file to point initrd, kernel and rootfs to the downloaded files
+            base_dest_url = (
+                f"http://{self.bm_config['bm_httpd_provision_server']}/ipxe/"
+                f"{self.bm_config['env_name']}"
+            )
+            replace_content_in_file(
+                ipxe_config_file, initrd_url, f"{base_dest_url}/initrd"
+            )
+            replace_content_in_file(
+                ipxe_config_file, kernel_url, f"{base_dest_url}/kernel"
+            )
+            replace_content_in_file(
+                ipxe_config_file, rootfs_url, f"{base_dest_url}/rootfs"
+            )
+
+            # upload ipxe config to httpd server (helper_node)
+            discovery_ipxe_file_dest = (
+                f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
+                f"{self.bm_config['env_name']}/discovery.ipxe"
+            )
+            self.helper_node_handler.upload_file(
+                ipxe_config_file,
+                discovery_ipxe_file_dest,
+            )
+            ipxe_file_url = (
+                f"http://{self.bm_config['bm_httpd_provision_server']}/ipxe/"
+                f"{self.bm_config['env_name']}/discovery.ipxe"
+            )
+
+            # configure pxelinux.cfg files for each server (named based on MAC address)
+            # to boot from the ipxe configuration file
+            pxelinux_cfg_file = self.create_pxe_file(ipxe_file_url=ipxe_file_url)
+            provisioning_network = self.bm_config["bm_provisioning_network"]
+            for machine in machines:
+                mac = self.srv_details[machine][f"{provisioning_network}_mac"]
+                dest_cfg_file_name = f"01-{mac.replace(':', '-')}"
+                self.helper_node_handler.upload_file(
+                    pxelinux_cfg_file,
+                    f"{self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg/{dest_cfg_file_name}",
+                )
+
+            # reboot all servers and boot them from PXE
+            for machine in machines:
+                self.set_pxe_boot_and_reboot(machine)
+
+            return discovery_ipxe_file_dest
+
+        def _boot_nodes_with_vpc_ipxe(self, master_nodes, worker_nodes):
+            """
+            IBM Cloud VPC Bare Metal: direct iPXE boot via AI script + ALB membership.
+
+            Args:
+                master_nodes (list): master machine names
+                worker_nodes (list): worker machine names
+            """
+            logger.info(
+                "IBM Cloud VPC BM detected - using direct iPXE boot from AI service"
+            )
+
+            ipxe_config_file = self.ai_cluster.download_ipxe_config(self.cluster_path)
+            with open(ipxe_config_file) as ipxe_config_content:
+                ipxe_content = ipxe_config_content.read()
+
+            vpc_bm_manager = ibmcloud_bm.IBMCloudVPCBM(
+                region=config.ENV_DATA.get("region", "us-south")
+            )
+
+            # Generate inline iPXE script by appending DHCP retry loop to AI script
+            ipxe_script = vpc_bm_manager.generate_rhcos_ipxe_script(ipxe_content)
+            logger.info(f"Generated iPXE script for VPC BM ({len(ipxe_script)} bytes)")
+
+            target_nodes = master_nodes + worker_nodes
+            servers_to_reinitialize = []
+            for machine in target_nodes:
+                server_id = self.srv_details[machine]["server_id"]
+                servers_to_reinitialize.append((server_id, ipxe_script, machine))
+
+            logger.info(
+                f"Reinitializing {len(servers_to_reinitialize)} servers in parallel"
+            )
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                future_to_server = {
+                    executor.submit(
+                        vpc_bm_manager.reinitialize_with_ipxe,
+                        server_id,
+                        ipxe_script,
+                    ): machine
+                    for server_id, ipxe_script, machine in servers_to_reinitialize
+                }
+
+                for future in as_completed(future_to_server):
+                    machine = future_to_server[future]
+                    try:
+                        future.result()
+                        logger.info(f"Server {machine} reinitialized successfully")
+                    except Exception as e:
+                        logger.error(f"Server {machine} reinitialization failed: {e}")
+                        raise
+
+            logger.info("All servers reinitialized and running with iPXE boot")
+
+            logger.info("Verifying all servers are in running state")
+            for machine in target_nodes:
+                server_id = self.srv_details[machine]["server_id"]
+                vpc_bm_manager.wait_for_server_status(
+                    server_id, "running", timeout=1800
+                )
+                logger.info(f"Server {machine} ({server_id}) is running")
+
+            # Add servers as members to ALB pools now that they are running
+            if hasattr(self, "api_lb_id") and hasattr(self, "ingress_lb_id"):
+                logger.info("Adding servers to ALB pools")
+                master_ips = [
+                    self.srv_details[machine]["private_ip"] for machine in master_nodes
+                ]
+                worker_ips = [
+                    self.srv_details[machine]["private_ip"] for machine in worker_nodes
+                ]
+                api_ips = master_ips
+                ingress_ips = worker_ips if worker_ips else master_ips
+
+                logger.info(f"API ALB backend targets (master nodes): {api_ips}")
+                logger.info(
+                    "Ingress ALB backend targets"
+                    f"({'worker nodes' if worker_ips else 'master nodes (compact mode)'}): "
+                    f"{ingress_ips}"
+                )
+
+                vpc_bm_manager.add_alb_pool_members(
+                    self.api_lb_id, api_ips, [6443, 22623]
+                )
+                if hasattr(self, "public_api_lb_id") and self.public_api_lb_id:
+                    vpc_bm_manager.add_alb_pool_members(
+                        self.public_api_lb_id, api_ips, [6443]
+                    )
+                vpc_bm_manager.add_alb_pool_members(
+                    self.ingress_lb_id, ingress_ips, [80, 443]
+                )
+                logger.info("Successfully added all servers to ALB pools")
 
         def pending_user_action_handler(self, host):
             """
@@ -1453,6 +1664,19 @@ class BAREMETALAI(BAREMETALBASE):
                 time.sleep(5)
                 ibmcloud.start_machines(m)
 
+            elif self.srv_details[machine].get("mgmt_provider") == "redfish":
+                details = self._servers_subset([machine])[machine]
+                logger.info(
+                    "Handling pending user action for %s via Redfish "
+                    "(eject discovery ISO and restart)",
+                    machine,
+                )
+                redfish_util.eject_iso_and_restart(
+                    details["mgmt_console"],
+                    details["mgmt_username"],
+                    details["mgmt_password"],
+                )
+
             elif self.srv_details[machine].get("mgmt_provider") == "vpc-bm":
                 server_id = self.srv_details[machine].get("server_id")
                 if not server_id:
@@ -1494,10 +1718,19 @@ class BAREMETALAI(BAREMETALBASE):
                 # Use AWS Route53 for other platforms
                 response_list = []
                 zone_id = self.aws.get_hosted_zone_id_for_domain()
+                api_fqdn = f"api.{self.cluster_name}"
+                apps_fqdn = f"*.apps.{self.cluster_name}"
+                logger.info(
+                    "Creating Route53 DNS A records: %s -> %s, %s -> %s",
+                    api_fqdn,
+                    self.api_vip,
+                    apps_fqdn,
+                    self.ingress_vip,
+                )
                 response_list.append(
                     self.aws.update_hosted_zone_record(
                         zone_id=zone_id,
-                        record_name=f"api.{self.cluster_name}",
+                        record_name=api_fqdn,
                         data=self.api_vip,
                         type="A",
                         operation_type="Add",
@@ -1506,15 +1739,25 @@ class BAREMETALAI(BAREMETALBASE):
                 response_list.append(
                     self.aws.update_hosted_zone_record(
                         zone_id=zone_id,
-                        record_name=f"*.apps.{self.cluster_name}",
+                        record_name=apps_fqdn,
                         data=self.ingress_vip,
                         type="A",
                         operation_type="Add",
                     )
                 )
-                logger.info("Waiting for Record Response")
+                logger.info(
+                    "Waiting for Route53 to confirm DNS records for %s and %s",
+                    api_fqdn,
+                    apps_fqdn,
+                )
                 self.aws.wait_for_record_set(response_list=response_list)
-                logger.info("Records Created Successfully")
+                logger.info(
+                    "Route53 DNS records ready: %s -> %s, %s -> %s",
+                    api_fqdn,
+                    self.api_vip,
+                    apps_fqdn,
+                    self.ingress_vip,
+                )
 
         def configure_ipxe_on_helper(self):
             """
@@ -1623,6 +1866,19 @@ class BAREMETALAI(BAREMETALBASE):
                 # run the power-on command second time to make sure the host is powered on
                 time.sleep(5)
                 ibmcloud.start_machines(m)
+
+            elif self.srv_details[machine].get("mgmt_provider") == "redfish":
+                if not self.discovery_iso_url:
+                    raise ValueError(
+                        "discovery_iso_url is not set; cannot retry Redfish ISO boot"
+                    )
+                details = self._servers_subset([machine])[machine]
+                redfish_util.attach_iso_and_boot(
+                    details["mgmt_console"],
+                    details["mgmt_username"],
+                    details["mgmt_password"],
+                    self.discovery_iso_url,
+                )
 
         def destroy(self):
             """
@@ -1758,9 +2014,20 @@ class BAREMETALAI(BAREMETALBASE):
                     if record["Name"] in records_to_delete:
                         logger.info(f"Deleting DNS record: {record}")
                         self.aws.delete_record(record, hosted_zone_id)
-                # cleanup ipxe provisioning files (skip for VPC BM - no helper node)
-                cmd = f"rm -rf {self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
-                logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
+                if self._boot_method() == "iso":
+                    # Best-effort eject of any leftover discovery ISOs on BMCs
+                    try:
+                        self._eject_discovery_isos(
+                            list(self.srv_details.keys()), restart=False
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to eject discovery ISOs during destroy: %s", exc
+                        )
+                else:
+                    # cleanup ipxe provisioning files
+                    cmd = f"rm -rf {self.bm_config['bm_httpd_document_root']}/ipxe/{self.bm_config['env_name']}"
+                    logger.info(self.helper_node_handler.exec_cmd(cmd=cmd))
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
