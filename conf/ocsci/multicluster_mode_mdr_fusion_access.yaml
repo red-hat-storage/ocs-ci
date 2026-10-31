@@ -1,0 +1,14 @@
+---
+# Metro DR on top of IBM Fusion Access for SAN. Same DR layer as a regular
+# metro-dr deployment, without the Ceph specific steps (MirrorPeer, fencing).
+MULTICLUSTER:
+  multicluster_mode: "metro-dr"
+DEPLOYMENT:
+  fusion_access: true
+ENV_DATA:
+  dr_metadata_store: "awss3"
+  skip_submariner_deployment: true
+  # Does not perform the import, that is the 'acm_import' stage.
+  import_clusters_to_acm: true
+  dr_s3_region: "us-east-1"
+  dr_s3_bucket_prefix: "dnd"

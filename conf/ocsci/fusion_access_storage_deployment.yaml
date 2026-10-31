@@ -1,0 +1,4 @@
+---
+# Provision Fusion Access SAN storage by creating a LUN group through the console.
+DEPLOYMENT:
+  fusion_access_storage: true

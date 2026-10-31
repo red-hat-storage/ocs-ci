@@ -49,8 +49,9 @@ class OCPDeployWithACM(Deployment):
                 "has been specified"
             )
             return
-        if self.multicluster_mode == constants.RDR_MODE:
-            self.do_rdr_acm_ocp_deploy()
+        if self.multicluster_mode in (constants.RDR_MODE, constants.MDR_MODE):
+            # OCP deployment through ACM is identical for both DR modes.
+            self.do_dr_acm_ocp_deploy()
             self.post_deploy_ops()
 
     def post_deploy_ops(self):
@@ -73,20 +74,20 @@ class OCPDeployWithACM(Deployment):
             self.post_ocp_deploy()
         config.switch_ctx(prev)
 
-    def do_rdr_acm_ocp_deploy(self):
+    def do_dr_acm_ocp_deploy(self):
         """
-        Specific to regional DR OCP cluster deployments
+        Deploy the managed OCP clusters through ACM, for both regional and metro DR
 
         """
         self.ui_driver = acm.login_to_acm()
 
         if self.deploy_sync_mode == "async":
-            rdr_clusters = get_non_acm_cluster_config()
-            for c in rdr_clusters:
+            dr_clusters = get_non_acm_cluster_config()
+            for c in dr_clusters:
                 logger.info(f"{c.ENV_DATA['cluster_name']}")
                 logger.info(f"{c.ENV_DATA['platform']}")
                 logger.info(f"{c.ENV_DATA['deployment_type']}")
-            for cluster_conf in rdr_clusters:
+            for cluster_conf in dr_clusters:
                 deployer = self.factory.get_platform_instance(
                     self.ui_driver, cluster_conf
                 )
