@@ -1,15 +1,21 @@
+import json
 import logging
+from functools import partial
+from uuid import uuid4
 
 import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import ResourceNotFoundError, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csv import CSV
 from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.helpers.scc_helpers import (
     REQUIRED_PREFIXES_BY_CSV,
     SCC_BY_CATEGORY,
+    SCC_BY_POD_PREFIX,
     get_active_scc_pods,
     get_expected_scc_for_label,
     get_matching_scc_components,
@@ -17,7 +23,6 @@ from ocs_ci.helpers.scc_helpers import (
     get_required_scc_labels,
     get_scc_pinning_errors,
     pod_matches_scc_label,
-    verify_pod_scc_pinning,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
@@ -30,6 +35,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier2,
 )
 from ocs_ci.framework.testlib import ManageTest
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -65,11 +71,12 @@ class TestSCCEnforcement(ManageTest):
             for pod in selected:
                 expected_scc = get_expected_scc_for_label(pod, selector, default_scc)
                 errors.extend(get_scc_pinning_errors(pod, selector, expected_scc))
-            # Count each checked pod so the final assertion rejects an empty category.
+            # Count each checked pod to reject an empty category.
             checked_count += len(selected)
 
+        if not checked_count:
+            raise ResourceNotFoundError(f"No {category_name} pods found in {namespace}")
         assert not errors, "SCC pinning failed:\n" + "\n".join(errors)
-        assert checked_count > 0, f"No {category_name} pods found in {namespace}"
 
     # --- Category tests ---
     # Values follow the merged RHSTOR-8757 operator changes. NooBaa only sets
@@ -146,23 +153,21 @@ class TestSCCEnforcement(ManageTest):
         """
         Verify blackbox exporter pod has correct SCC on a non-Multus cluster.
 
-        Specifically validates the code path where the blackbox-exporter
-        reconciler operates without Multus NetworkAttachmentDefinitions.
-        On non-Multus clusters the podAnnotations map in the Go reconciler
-        is initialized without Multus entries, and the required-scc annotation
-        must still be written without error.
-
-        Skips on Multus-enabled clusters since the non-Multus code path is
-        not exercised there.
+        Checks requested and admitted SCC values on existing exporter pods.
+        Skips when the StorageCluster uses Multus networking.
 
         """
-        if config.ENV_DATA.get("multus_create_public_net"):
-            pytest.skip(
-                "Cluster has Multus enabled. This test targets "
-                "the non-Multus reconciler code path."
-            )
-
         namespace = config.ENV_DATA["cluster_namespace"]
+        ocp_sc = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+        storage_clusters = ocp_sc.get()["items"]
+        if not storage_clusters:
+            raise ResourceNotFoundError(f"No StorageCluster found in {namespace}")
+        if any(
+            sc.get("spec", {}).get("network", {}).get("provider") == "multus"
+            for sc in storage_clusters
+        ):
+            pytest.skip("StorageCluster uses Multus networking")
+
         pods = get_pods_having_label(
             label=constants.BLACKBOX_POD_LABEL_422_AND_ABOVE,
             namespace=namespace,
@@ -177,33 +182,24 @@ class TestSCCEnforcement(ManageTest):
             "Checking blackbox exporter SCC on non-Multus cluster " "(%d pod(s) found)",
             len(pods),
         )
+        errors = []
         for pod_data in pods:
-            result = verify_pod_scc_pinning(pod_data, constants.SCC_ODF_BLACKBOX)
-            assert result["required_match"], (
-                f"Blackbox pod '{result['pod_name']}': "
-                f"{constants.SCC_REQUIRED_ANNOTATION}="
-                f"'{result['required_scc']}', "
-                f"expected '{constants.SCC_ODF_BLACKBOX}'. "
-                f"Possible nil-map panic in reconciler on "
-                f"non-Multus cluster."
+            errors.extend(
+                get_scc_pinning_errors(
+                    pod_data, "blackbox exporter", constants.SCC_ODF_BLACKBOX
+                )
             )
-            assert result["admission_match"], (
-                f"Blackbox pod '{result['pod_name']}': admission SCC "
-                f"'{result['admission_scc']}' does not match required "
-                f"SCC '{result['required_scc']}'"
-            )
+        assert not errors, "SCC pinning failed:\n" + "\n".join(errors)
 
     @tier2
     @skipif_mcg_only
     @polarion_id("OCS-8074")
     def test_daemonset_scc_annotation_every_node(self):
         """
-        Verify DaemonSet-managed CSI pods carry the required-scc annotation
-        on every worker node.
+        Verify requested and admitted SCCs on all existing CSI node pods.
 
-        Checks CSI nodeplugin DaemonSets (CephFS and RBD) to confirm that
-        every pod instance across all nodes has the required-scc annotation,
-        not just a single representative pod.
+        Checks CephFS and RBD pods. DaemonSet scheduling and expected node
+        coverage are outside this test's scope.
 
         """
         namespace = config.ENV_DATA["cluster_namespace"]
@@ -220,78 +216,444 @@ class TestSCCEnforcement(ManageTest):
             ),
         ]
 
+        errors = []
         for label, ds_name, expected_scc in daemonset_labels:
             pods = get_pods_having_label(label=label, namespace=namespace)
-            assert pods, (
-                f"No pods found for DaemonSet '{ds_name}' " f"with label '{label}'"
-            )
+            if not pods:
+                raise ResourceNotFoundError(
+                    f"No pods found for DaemonSet '{ds_name}' with label '{label}'"
+                )
             logger.info(
                 "Checking required-scc on %d %s pod(s) across nodes",
                 len(pods),
                 ds_name,
             )
             for pod_data in pods:
-                result = verify_pod_scc_pinning(pod_data, expected_scc)
-                assert result["required_match"], (
-                    f"DaemonSet pod '{result['pod_name']}' ({ds_name}) "
-                    f"has {constants.SCC_REQUIRED_ANNOTATION}="
-                    f"'{result['required_scc']}', "
-                    f"expected '{expected_scc}'"
+                errors.extend(get_scc_pinning_errors(pod_data, ds_name, expected_scc))
+        assert not errors, "SCC pinning failed:\n" + "\n".join(errors)
+
+    @tier2
+    def test_devicefinder_scc_annotations(self):
+        """Check SCC and management annotations when discovery is deployed."""
+        namespace = config.ENV_DATA["cluster_namespace"]
+        ocp_daemonset = OCP(kind=constants.DAEMONSET, namespace=namespace)
+        daemonsets = ocp_daemonset.get(selector="app=devicefinder-discovery")["items"]
+        if not daemonsets:
+            pytest.skip("Device discovery DaemonSet is not deployed")
+
+        pods = get_pods_having_label(
+            label="app=devicefinder-discovery", namespace=namespace
+        )
+        if not pods:
+            raise ResourceNotFoundError("Device discovery is deployed but has no pods")
+        management_annotation = "target.workload.openshift.io/management"
+        errors = []
+        for pod_data in pods:
+            pod_name = pod_data["metadata"]["name"]
+            errors.extend(
+                get_scc_pinning_errors(
+                    pod_data, "devicefinder-discovery", constants.PRIVILEGED
                 )
+            )
+            annotations = pod_data["metadata"].get("annotations") or {}
+            try:
+                management_value = json.loads(
+                    annotations.get(management_annotation, "{}")
+                )
+            except json.JSONDecodeError as ex:
+                errors.append(
+                    f"Discovery pod '{pod_name}' has an invalid management annotation: {ex}"
+                )
+                continue
+            if management_value != {"effect": "PreferredDuringScheduling"}:
+                errors.append(
+                    f"Discovery pod '{pod_name}' has an incorrect management annotation"
+                )
+        assert not errors, "Discovery annotation checks failed:\n" + "\n".join(errors)
+
+    @tier2
+    @skipif_mcg_only
+    def test_blackbox_exporter_preserves_multus_annotations(self):
+        """Check SCC and configured Multus annotations on blackbox pods."""
+        namespace = config.ENV_DATA["cluster_namespace"]
+        ocp_sc = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+        storage_clusters = ocp_sc.get()["items"]
+        if not storage_clusters:
+            raise ResourceNotFoundError(f"No StorageCluster found in {namespace}")
+        if not any(
+            sc.get("spec", {}).get("network", {}).get("selectors", {}).get("cluster")
+            for sc in storage_clusters
+        ):
+            pytest.skip("No Ceph cluster network attachment is configured")
+
+        ocp_deployment = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+        deployments = ocp_deployment.get(
+            selector=constants.BLACKBOX_POD_LABEL_422_AND_ABOVE
+        )["items"]
+        if len(deployments) != 1:
+            raise UnexpectedBehaviour(
+                f"Expected one blackbox exporter Deployment, found {len(deployments)}"
+            )
+        network_annotation = "k8s.v1.cni.cncf.io/networks"
+        template = deployments[0]["spec"]["template"]
+        expected_network = (template["metadata"].get("annotations") or {}).get(
+            network_annotation
+        )
+        errors = []
+        if not expected_network:
+            errors.append("Blackbox template lost its configured network attachment")
+        pods = get_pods_having_label(
+            label=constants.BLACKBOX_POD_LABEL_422_AND_ABOVE, namespace=namespace
+        )
+        if not pods:
+            raise ResourceNotFoundError(
+                "No blackbox exporter pods on a cluster with a network attachment"
+            )
+        for pod_data in pods:
+            errors.extend(
+                get_scc_pinning_errors(
+                    pod_data, "blackbox exporter", constants.SCC_ODF_BLACKBOX
+                )
+            )
+            actual_network = (
+                pod_data["metadata"].get("annotations", {}).get(network_annotation)
+            )
+            if not actual_network or actual_network != expected_network:
+                errors.append(
+                    f"Blackbox pod '{pod_data['metadata']['name']}' lost its network attachment"
+                )
+        assert not errors, "Blackbox annotation checks failed:\n" + "\n".join(errors)
+
+    def _get_csi_pod_annotation_errors(
+        self, pods: list[dict], component: str, expected_network: str, phase: str
+    ) -> list[str]:
+        """Return SCC and network annotation errors for one CSI pod snapshot."""
+        errors = []
+        for pod_data in pods:
+            errors.extend(
+                get_scc_pinning_errors(pod_data, component, constants.SCC_CEPH_CSI_OP)
+            )
+            if (
+                pod_data["metadata"]
+                .get("annotations", {})
+                .get("k8s.v1.cni.cncf.io/networks")
+                != expected_network
+            ):
+                errors.append(
+                    f"Pod '{pod_data['metadata']['name']}' lost its network "
+                    f"attachment {phase} reconciliation"
+                )
+        return errors
+
+    def _reconcile_csi_workload(
+        self, workload_ocp: OCP, name: str, original_delay: int, request
+    ) -> dict:
+        """Trigger reconciliation and register cleanup before changing the workload."""
+        request.addfinalizer(
+            partial(
+                workload_ocp.patch,
+                resource_name=name,
+                params=json.dumps({"spec": {"minReadySeconds": original_delay}}),
+                format_type="merge",
+            )
+        )
+        if not workload_ocp.patch(
+            resource_name=name,
+            params=json.dumps({"spec": {"minReadySeconds": 1}}),
+            format_type="merge",
+        ):
+            raise UnexpectedBehaviour(
+                f"Failed to trigger reconciliation of {workload_ocp.kind} '{name}'"
+            )
+        for workload in TimeoutSampler(
+            timeout=120,
+            sleep=3,
+            func=workload_ocp.get,
+            resource_name=name,
+        ):
+            if workload["spec"].get("minReadySeconds", 0) == original_delay:
+                return workload
+
+    @tier2
+    @skipif_mcg_only
+    def test_csi_annotations_survive_reconciliation(self, request):
+        """Check configured SCC/CNI annotations before and after CSI reconciliation.
+
+        Requires CNI annotations in a Driver or its OperatorConfig defaults.
+        Temporarily change minReadySeconds on each applicable workload. The
+        CSI controller rebuilds the spec and restores this field to zero.
+        This triggers an observable reconciliation without a pod rollout.
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+        ocp_driver = OCP(kind=constants.CEPH_DRIVER_CSI, namespace=namespace)
+        drivers = ocp_driver.get()["items"]
+        if not drivers:
+            raise ResourceNotFoundError("No Ceph CSI Driver resources found")
+        ocp_operator_config = OCP(
+            kind="operatorconfigs.csi.ceph.io", namespace=namespace
+        )
+        operator_configs = ocp_operator_config.get()["items"]
+        if len(operator_configs) != 1:
+            raise UnexpectedBehaviour(
+                f"Expected one Ceph CSI OperatorConfig, found {len(operator_configs)}"
+            )
+        defaults = operator_configs[0]["spec"].get("driverSpecDefaults") or {}
+        network_annotation = "k8s.v1.cni.cncf.io/networks"
+        checked_count = 0
+        errors = []
+
+        for plugin, kind in (
+            ("controllerPlugin", constants.DEPLOYMENT),
+            ("nodePlugin", constants.DAEMONSET),
+        ):
+            workload_ocp = OCP(kind=kind, namespace=namespace)
+            workloads = workload_ocp.get()["items"]
+            for driver in drivers:
+                annotations = (driver["spec"].get(plugin) or {}).get("annotations")
+                if annotations is None:
+                    annotations = (defaults.get(plugin) or {}).get("annotations") or {}
+                expected_network = annotations.get(network_annotation)
+                if not expected_network:
+                    continue
+
+                selected = [
+                    workload
+                    for workload in workloads
+                    if any(
+                        ref.get("kind") == "Driver"
+                        and ref.get("uid") == driver["metadata"]["uid"]
+                        for ref in workload["metadata"].get("ownerReferences", [])
+                    )
+                ]
+                if not selected:
+                    raise ResourceNotFoundError(
+                        f"No {kind} for Driver '{driver['metadata']['name']}'"
+                    )
+                for workload in selected:
+                    name = workload["metadata"]["name"]
+                    original_delay = workload["spec"].get("minReadySeconds", 0)
+                    if original_delay != 0:
+                        raise UnexpectedBehaviour(
+                            f"{kind} '{name}' has not reconciled minReadySeconds to zero"
+                        )
+                    labels = workload["spec"]["selector"]["matchLabels"]
+                    selector = ",".join(
+                        f"{key}={value}" for key, value in labels.items()
+                    )
+                    # Check both snapshots and report their mismatches together.
+                    baseline_error_count = len(errors)
+                    for phase in ("before", "after"):
+                        if phase == "after":
+                            if len(errors) > baseline_error_count:
+                                continue
+                            workload = self._reconcile_csi_workload(
+                                workload_ocp, name, original_delay, request
+                            )
+
+                        template_annotations = (
+                            workload["spec"]["template"]["metadata"].get("annotations")
+                            or {}
+                        )
+                        if (
+                            template_annotations.get(network_annotation)
+                            != expected_network
+                        ):
+                            errors.append(
+                                f"{kind} '{name}' lost its network attachment {phase} reconciliation"
+                            )
+                        if (
+                            template_annotations.get(constants.SCC_REQUIRED_ANNOTATION)
+                            != constants.SCC_CEPH_CSI_OP
+                        ):
+                            errors.append(
+                                f"{kind} '{name}' lost its SCC pin {phase} reconciliation"
+                            )
+                        pods = get_pods_having_label(
+                            label=selector, namespace=namespace
+                        )
+                        if not pods:
+                            raise ResourceNotFoundError(
+                                f"No pods for {kind} '{name}' {phase} reconciliation"
+                            )
+                        errors.extend(
+                            self._get_csi_pod_annotation_errors(
+                                pods, name, expected_network, phase
+                            )
+                        )
+                    checked_count += 1
+
+        if not checked_count:
+            pytest.skip(
+                "No CNI attachment is configured for CSI controller or node plugins"
+            )
+        assert not errors, "CSI annotation checks failed:\n" + "\n".join(errors)
+
+    @tier2
+    def test_spoke_token_exchange_agent_scc(self):
+        """Require the expected SCC on token exchange agents on DR spokes."""
+        if (
+            not config.multicluster
+            or config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE
+        ):
+            pytest.skip("Requires a configured regional DR topology")
+
+        spokes = get_non_acm_cluster_config()
+        if not spokes:
+            raise ResourceNotFoundError("Regional DR topology has no managed clusters")
+        errors = []
+        for spoke in spokes:
+            with config.RunWithConfigContext(spoke.MULTICLUSTER["multicluster_index"]):
+                namespace = config.ENV_DATA["cluster_namespace"]
+                pods = get_pods_having_label(
+                    label=constants.TOKEN_EXCHANGE_AGENT_LABEL, namespace=namespace
+                )
+                if not pods:
+                    raise ResourceNotFoundError(
+                        "No token-exchange-agent pod on spoke "
+                        f"'{config.ENV_DATA['cluster_name']}'"
+                    )
+                for pod_data in pods:
+                    errors.extend(
+                        get_scc_pinning_errors(
+                            pod_data,
+                            "token-exchange-agent",
+                            constants.SCC_RESTRICTED_V2,
+                        )
+                    )
+        assert not errors, "Spoke SCC pinning failed:\n" + "\n".join(errors)
+
+    @tier2
+    @skipif_mcg_only
+    @pytest.mark.parametrize("job_prefix", ["ocs-extend-cluster", "ocs-osd-removal"])
+    def test_job_pods_carry_scc_annotation(self, job_prefix):
+        """Check explicitly selected Jobs and their pods, including completed pods.
+
+        Trigger expansion/removal in their normal workflows first. Set
+        RUN.scc_jobs in the run configuration to a mapping from job prefix
+        to the resulting current Job name. This test does not trigger
+        storage changes or select historical Jobs automatically.
+        """
+        configured_jobs = config.RUN.get("scc_jobs", {})
+        if not isinstance(configured_jobs, dict):
+            raise ValueError("RUN.scc_jobs must be a mapping")
+        job_name = configured_jobs.get(job_prefix)
+        if not job_name:
+            pytest.skip(f"Set RUN.scc_jobs['{job_prefix}'] to a current Job name")
+        if not isinstance(job_name, str) or not job_name.startswith(job_prefix):
+            raise ValueError(
+                f"Expected a Job name starting with '{job_prefix}', got {job_name!r}"
+            )
+
+        namespace = config.ENV_DATA["cluster_namespace"]
+        ocp_job = OCP(kind=constants.JOB, namespace=namespace)
+        job = ocp_job.get(resource_name=job_name)
+        expected_scc = SCC_BY_POD_PREFIX[job_prefix]
+        required_scc, _ = get_pod_scc_annotations(job["spec"]["template"])
+        errors = []
+        if required_scc != expected_scc:
+            errors.append(
+                f"Job '{job_name}' template requests '{required_scc}', "
+                f"expected '{expected_scc}'"
+            )
+        pods = get_pods_having_label(label=f"job-name={job_name}", namespace=namespace)
+        pods = [
+            pod
+            for pod in pods
+            if any(
+                ref.get("kind") == "Job" and ref.get("uid") == job["metadata"]["uid"]
+                for ref in pod["metadata"].get("ownerReferences", [])
+            )
+        ]
+        if not pods:
+            raise ResourceNotFoundError(
+                f"No pods retained for current Job '{job_name}'"
+            )
+        for pod_data in pods:
+            errors.extend(get_scc_pinning_errors(pod_data, job_name, expected_scc))
+        assert not errors, "Job SCC pinning failed:\n" + "\n".join(errors)
 
     @tier2
     @polarion_id("OCS-8075")
-    def test_cronjob_pods_carry_scc_annotation(self):
+    def test_cronjob_pods_carry_scc_annotation(self, request):
         """
-        Verify CronJob-spawned pods carry the required-scc annotation.
+        Verify status-reporter templates and one generated Job per CronJob.
 
-        Checks for reclaimspace and key-rotation CronJob resources and
-        inspects any pods owned by their child Jobs. Skips if no CronJob
-        pods exist at test execution time.
-
+        Requires a configured storage client. Checks requested and admitted
+        SCCs on newly generated pods, including completed pods. Generated
+        Jobs are deleted by the test finalizer.
         """
         namespace = config.ENV_DATA["cluster_namespace"]
         ocp_cronjob = OCP(kind=constants.CRONJOB, namespace=namespace)
-        cronjobs = ocp_cronjob.get().get("items", [])
-
+        cronjobs = [
+            cj
+            for cj in ocp_cronjob.get()["items"]
+            if cj["metadata"]["name"].endswith("-status-reporter")
+        ]
         if not cronjobs:
-            pytest.skip(f"No CronJobs found in namespace '{namespace}'")
+            csv_obj = CSV(namespace=namespace)
+            csvs = csv_obj.get()["items"]
+            if not any(
+                csv["metadata"]["name"].startswith("ocs-client-operator")
+                for csv in csvs
+            ):
+                pytest.skip("Storage client operator is not installed")
+            ocp_client = OCP(kind=constants.STORAGECLIENT, namespace=namespace)
+            clients = ocp_client.get()["items"]
+            if clients:
+                raise ResourceNotFoundError(
+                    "Storage client exists but has no status-reporter CronJob"
+                )
+            pytest.skip(
+                "No storage client with a status-reporter CronJob is configured"
+            )
 
         ocp_job = OCP(kind=constants.JOB, namespace=namespace)
-        all_jobs = ocp_job.get().get("items", [])
-        checked_count = 0
-
+        errors = []
         for cj in cronjobs:
-            cj_name = cj.get("metadata", {}).get("name", "unknown")
-            cj_jobs = [
-                j
-                for j in all_jobs
-                if any(
-                    ref.get("kind") == "CronJob" and ref.get("name") == cj_name
-                    for ref in j.get("metadata", {}).get("ownerReferences", [])
+            cj_name = cj["metadata"]["name"]
+            template = cj["spec"]["jobTemplate"]["spec"]["template"]
+            required_scc, _ = get_pod_scc_annotations(template)
+            if required_scc != constants.SCC_RESTRICTED_V2:
+                errors.append(
+                    f"CronJob '{cj_name}' template requests '{required_scc}', "
+                    f"expected '{constants.SCC_RESTRICTED_V2}'"
                 )
-            ]
-            for job in cj_jobs:
-                job_name = job.get("metadata", {}).get("name", "unknown")
-                job_pods = get_pods_having_label(
-                    label=f"job-name={job_name}", namespace=namespace
+                continue
+            job_name = f"scc-status-reporter-{uuid4().hex[:8]}"
+            request.addfinalizer(
+                partial(
+                    ocp_job.exec_oc_cmd,
+                    command=f"delete job {job_name} --ignore-not-found=true",
                 )
-                for pod_data in job_pods:
-                    pod_name = pod_data.get("metadata", {}).get("name", "unknown")
-                    required_scc, _ = get_pod_scc_annotations(pod_data)
-                    assert required_scc, (
-                        f"CronJob pod '{pod_name}' "
-                        f"(from CronJob '{cj_name}') is missing the "
-                        f"{constants.SCC_REQUIRED_ANNOTATION} annotation"
+            )
+            job = ocp_job.exec_oc_cmd(
+                command=f"create job {job_name} --from=cronjob/{cj_name} -o yaml"
+            )
+            for pods in TimeoutSampler(
+                timeout=120,
+                sleep=3,
+                func=get_pods_having_label,
+                label=f"job-name={job_name}",
+                namespace=namespace,
+            ):
+                job_pods = [
+                    pod
+                    for pod in pods
+                    if any(
+                        ref.get("kind") == "Job"
+                        and ref.get("uid") == job["metadata"]["uid"]
+                        for ref in pod["metadata"].get("ownerReferences", [])
                     )
-                    checked_count += 1
-
-        if checked_count == 0:
-            pytest.skip("CronJobs exist but no child Job pods are currently " "present")
-        logger.info(
-            "Verified required-scc on %d CronJob-spawned pod(s)",
-            checked_count,
-        )
+                ]
+                if job_pods:
+                    for pod_data in job_pods:
+                        errors.extend(
+                            get_scc_pinning_errors(
+                                pod_data, cj_name, constants.SCC_RESTRICTED_V2
+                            )
+                        )
+                    break
+        assert not errors, "CronJob SCC pinning failed:\n" + "\n".join(errors)
 
     @tier1
     @polarion_id("OCS-8076")
