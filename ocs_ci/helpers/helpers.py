@@ -5344,12 +5344,14 @@ def _extract_cli_image(pull_secret_path, image, remote_path, local_cli_dir):
     )
 
 
-def retrieve_cli_binary(cli_type="mcg"):
+def retrieve_cli_binary(cli_type="mcg", force_mcg=False):
     """
     Download the MCG-CLI/ODF-CLI binary and store it locally.
 
     Args:
-        cli_type (str): choose which bin file you want to download ["odf" -> odf-cli , "mcg" -> mcg-cli]
+        cli_type (str): choose which bin file you want to download
+            ["odf" -> odf-cli , "mcg" -> mcg-cli]
+        force_mcg (bool): If True, bypass the >= 4.20 redirect to odf-cli (see DFBUGS-11485).
 
     Raises:
         AssertionError: In the case the CLI binary is not executable.
@@ -5360,7 +5362,7 @@ def retrieve_cli_binary(cli_type="mcg"):
     original_cli_type = cli_type
 
     # For OCS >= 4.20, mcg-cli is no longer available, redirect to odf-cli
-    if semantic_version >= version.VERSION_4_20 and cli_type == "mcg":
+    if semantic_version >= version.VERSION_4_20 and cli_type == "mcg" and not force_mcg:
         logger.info(
             f"OCS {semantic_version} >= 4.20 detected. MCG CLI is now part of ODF CLI. "
             "Redirecting to download odf-cli instead."
@@ -5386,7 +5388,7 @@ def retrieve_cli_binary(cli_type="mcg"):
             )
         return
 
-    # Continue with original mcg-cli download logic for OCS < 4.20
+    # mcg-cli download (OCS < 4.20, or force_mcg=True)
     remote_path = get_architecture_path(cli_type)
     remote_cli_basename = os.path.basename(remote_path)
 
@@ -5404,7 +5406,7 @@ def retrieve_cli_binary(cli_type="mcg"):
         namespace=odf_namespace
     )
     if live_deployment and semantic_version >= version.VERSION_4_13:
-        if semantic_version >= version.VERSION_4_15:
+        if semantic_version >= version.VERSION_4_15 and not force_mcg:
             odf_cli_official_image = constants.ODF_CLI_OFFICIAL_IMAGE_TEMPLATE.format(
                 namespace=odf_namespace
             )
@@ -5413,14 +5415,14 @@ def retrieve_cli_binary(cli_type="mcg"):
             image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
     else:
         # Development builds
-        if semantic_version >= version.VERSION_4_20:
+        if semantic_version >= version.VERSION_4_20 and not force_mcg:
             # For 4.20+ dev builds, always use ODF CLI
             image = f"{odf_cli_dev_image}:{ocs_build}"
         elif cli_type == "odf" and semantic_version >= version.VERSION_4_15:
             # For 4.15+ dev builds requesting odf-cli
             image = f"{odf_cli_dev_image}:{ocs_build}"
         else:
-            # For older versions or mcg-cli requests in dev
+            # For older versions, odf-cli requests, or force_mcg
             image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
     pull_secret_path = download_pull_secret()
