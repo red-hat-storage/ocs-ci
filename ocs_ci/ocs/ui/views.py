@@ -156,6 +156,30 @@ deployment = {
     "enable_nfs": ('input[id="enable-nfs"]', By.CSS_SELECTOR),
     "configure_odf": ('button[data-test="configure-data-foundation"]', By.CSS_SELECTOR),
     "setup_storage_cluster": ("#setup-storage-cluster", By.CSS_SELECTOR),
+    "external_pgsql_checkbox": (
+        "input#use-external-postgress",
+        By.CSS_SELECTOR,
+    ),
+    "pgsql_server": (
+        "input#external-postgres-server-input",
+        By.CSS_SELECTOR,
+    ),
+    "pgsql_port": (
+        "input#external-postgres-port-input",
+        By.CSS_SELECTOR,
+    ),
+    "pgsql_username": (
+        "input#external-postgres-username-input",
+        By.CSS_SELECTOR,
+    ),
+    "pgsql_password": (
+        "input#external-postgres-password-input",
+        By.CSS_SELECTOR,
+    ),
+    "pgsql_database": (
+        "input#external-postgres-database-input",
+        By.CSS_SELECTOR,
+    ),
 }
 
 deployment_4_6 = {

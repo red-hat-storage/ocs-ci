@@ -383,6 +383,10 @@ class DeploymentUI(PageNavigator):
         if config.ENV_DATA.get("mcg_only_deployment", False):
             return
 
+        if config.ENV_DATA.get("noobaa_external_pgsql"):
+            logger.info("Configuring external PostgreSQL for NooBaa")
+            self.configure_external_pgsql_ui()
+
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
@@ -491,6 +495,10 @@ class DeploymentUI(PageNavigator):
         if ocs_version >= version.VERSION_4_21:
             self.do_click(locator=self.dep_loc["next"], enable_screenshot=True)
 
+        if config.ENV_DATA.get("noobaa_external_pgsql"):
+            logger.info("Configuring external PostgreSQL for NooBaa")
+            self.configure_external_pgsql_ui()
+
         self.configure_osd_size()
 
         self.configure_performance()
@@ -585,6 +593,92 @@ class DeploymentUI(PageNavigator):
                 self.do_click(locator=self.dep_loc["lean_mode"])
             elif mode == "performance":
                 self.do_click(locator=self.dep_loc["performance_mode"])
+
+    def configure_external_pgsql_ui(self):
+        """
+        Configure external PostgreSQL database for NooBaa on the UI form.
+
+        1. Clicks "Use external PostgreSQL" checkbox to reveal fields
+        2. Fills in PostgreSQL connection details:
+           - Server (host)
+           - Port
+           - Username
+           - Password
+           - Database
+
+        Credentials are retrieved from config.AUTH['pgsql'].
+
+        Raises:
+            ConfigurationError: If PostgreSQL credentials are missing or form
+                configuration fails.
+        """
+        logger.info("=" * 80)
+        logger.info("STEP: Configure External PostgreSQL for NooBaa")
+        logger.info("=" * 80)
+
+        pgsql_data = config.AUTH.get("pgsql", {})
+        if not pgsql_data:
+            raise ConfigurationError(
+                "PostgreSQL credentials not found in config.AUTH['pgsql']"
+            )
+
+        pgsql_host = pgsql_data.get("host")
+        pgsql_port = str(pgsql_data.get("port", 5432))
+        pgsql_username = pgsql_data.get("username")
+        pgsql_password = pgsql_data.get("password")
+        cluster_name = config.ENV_DATA.get("cluster_name", "").replace("-", "_")
+        pgsql_database = f"nbcore_{cluster_name}"
+
+        if not all([pgsql_host, pgsql_username, pgsql_password]):
+            raise ConfigurationError(
+                "Missing required PostgreSQL credentials (host, username, or password)"
+            )
+
+        logger.info("PostgreSQL Configuration:")
+        logger.info(f"  Server: {pgsql_host}")
+        logger.info(f"  Port: {pgsql_port}")
+        logger.info(f"  Database: {pgsql_database}")
+
+        logger.info("Clicking 'Use external PostgreSQL' checkbox")
+        self.do_click(
+            locator=self.dep_loc["external_pgsql_checkbox"],
+            enable_screenshot=True,
+            timeout=30,
+        )
+        self.wait_for_element_to_be_visible(
+            locator=self.dep_loc["pgsql_server"], timeout=10
+        )
+
+        logger.info("Filling PostgreSQL server field")
+        self.do_send_keys(
+            locator=self.dep_loc["pgsql_server"], text=pgsql_host, timeout=30
+        )
+
+        logger.info("Filling PostgreSQL port field")
+        self.do_send_keys(
+            locator=self.dep_loc["pgsql_port"], text=pgsql_port, timeout=30
+        )
+
+        logger.info("Filling PostgreSQL username field")
+        self.do_send_keys(
+            locator=self.dep_loc["pgsql_username"], text=pgsql_username, timeout=30
+        )
+
+        logger.info("Filling PostgreSQL password field")
+        self.do_send_keys(
+            locator=self.dep_loc["pgsql_password"], text=pgsql_password, timeout=30
+        )
+
+        logger.info("Filling PostgreSQL database field")
+        self.do_send_keys(
+            locator=self.dep_loc["pgsql_database"], text=pgsql_database, timeout=30
+        )
+        self.take_screenshot("external_pgsql_configured")
+
+        logger.info("=" * 80)
+        logger.info("✅ External PostgreSQL configuration completed")
+        logger.info("=" * 80)
+        return self
 
     def create_storage_cluster(self):
         """
