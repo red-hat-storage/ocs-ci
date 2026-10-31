@@ -1306,18 +1306,19 @@ class OdfTopologyDeploymentsView(TopologyTab):
 
         """
         if len(self.get_elements(self.topology_loc["back_btn"])):
+            from ocs_ci.ocs.ui.helpers_ui import format_locator
+
+            logger.info(f"Filtering topology deployments by node '{node_name}'")
             self.do_click(
                 self.topology_loc["node_filter_toggle_icon_from_node_filtering_bar"]
             )
-            time.sleep(0.5)
-            from ocs_ci.ocs.ui.helpers_ui import format_locator
 
-            self.do_click(
-                format_locator(
-                    self.topology_loc["node_selector_from_node_filtering_bar"],
-                    node_name,
-                )
+            node_locator = format_locator(
+                self.topology_loc["node_selector_from_node_filtering_bar"], node_name
             )
+            logger.info(f"Selecting node '{node_name}' from the filter list")
+            self.do_click(node_locator)
+            logger.info(f"Node '{node_name}' selected from the filter list")
         else:
             raise IncorrectUiOptionRequested(
                 "Topology node filtering exists only on Deployment Topology level"
