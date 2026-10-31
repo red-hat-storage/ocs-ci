@@ -1,0 +1,3 @@
+# Issue verification workflow run outputs (logs, issue JSON per run)
+workflow/issue_verification_workflow/run_record/*
+!workflow/issue_verification_workflow/run_record/.gitkeep
