@@ -76,6 +76,18 @@ class IBMCloudOCPDeployment(BaseOCPDeployment):
         ibmcloud.get_kubeconfig(self.cluster_name, kubeconfig_path)
         self.test_cluster()
 
+    @retry(Exception, tries=20, delay=30, backoff=1)
+    def test_cluster(self):
+        """
+        Test if OCP cluster installed successfully.
+
+        IBM Cloud ROKS clusters may report as "normal" before IAM authentication
+        is fully initialized. Retry the cluster access test to allow time for
+        the authentication components to settle.
+        """
+        logger.info("Testing cluster API accessibility")
+        super(IBMCloudOCPDeployment, self).test_cluster()
+
     def destroy(self, log_level="DEBUG"):
         """
         Destroy OCP cluster specific
