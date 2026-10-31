@@ -8,13 +8,25 @@ from ocs_ci.ocs.cluster import (
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.node import get_osd_running_nodes
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+from ocs_ci.ocs.resources.pod import (
+    get_ceph_tools_pod,
+    get_operator_pods,
+    search_pattern_in_pod_logs,
+    wait_for_matching_pattern_in_pod_logs,
+)
 from ocs_ci.helpers.helpers import get_failure_domain
 from ocs_ci.utility.decorators import switch_to_provider_for_function
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
+
+# The rook-ceph operator logs this line when the Ceph daemon 'ok-to-stop' check fails,
+# and it retries the check before updating the daemon deployment
+OK_TO_STOP_RETRY_LOG_PATTERN = "retrying after .*cannot be stopped"
+# The rook-ceph operator logs this line when it keeps retrying the 'ok-to-stop' check
+# with a canceled context. See the bug DFBUGS-10987 for more details.
+CANCELED_CONTEXT_RETRY_LOG_PATTERN = "retrying after .*context canceled"
 
 
 def wait_for_percent_used_capacity_reached(
@@ -283,3 +295,116 @@ def wait_for_mons_in_quorum(expected_mon_count, timeout=300, sleep=20) -> None:
             f"Failed to reach the expected number of monitors {expected_mon_count} "
             f"in quorum within the given timeout {timeout}."
         ) from ex
+
+
+def wait_for_mon_quorum_count(expected_mon_count, timeout=300, sleep=20) -> None:
+    """
+    Wait until the number of monitors in quorum is equal to the expected count.
+    Unlike the function 'wait_for_mons_in_quorum', this function waits for the exact
+    number of monitors in quorum, so it can also be used when waiting for the number
+    of monitors in quorum to decrease.
+
+    Args:
+        expected_mon_count (int): The expected number of monitors in quorum.
+        timeout (int): Maximum time to wait in seconds.
+        sleep (int): Time to wait between checks in seconds.
+
+    Raises:
+        TimeoutExpiredError: If the expected number of monitors in quorum is not reached
+            within the timeout.
+
+    """
+    logger.info(f"Waiting for exactly {expected_mon_count} monitors to be in quorum")
+
+    try:
+        for current_count in TimeoutSampler(
+            timeout=timeout,
+            sleep=sleep,
+            func=get_mon_quorum_count,
+        ):
+            logger.info(f"Current monitors in quorum: {current_count}")
+            if current_count == expected_mon_count:
+                logger.info(
+                    f"The expected number of monitors {expected_mon_count} in quorum reached"
+                )
+                break
+    except TimeoutExpiredError as ex:
+        raise TimeoutExpiredError(
+            f"The number of monitors in quorum didn't reach the expected count "
+            f"{expected_mon_count} within the given timeout {timeout}."
+        ) from ex
+
+
+def get_rook_operator_log_lines(pattern, since=None):
+    """
+    Get the rook-ceph operator log lines matching the given pattern
+
+    Args:
+        pattern (str): The regex pattern to search for in the operator logs.
+        since (str): Only return logs newer than a relative duration like 5s, 2m, or 3h.
+            If None, it will search in all the operator logs.
+
+    Returns:
+        list: The operator log lines matching the given pattern
+
+    """
+    operator_pod = get_operator_pods()[0]
+    return search_pattern_in_pod_logs(
+        pod_name=operator_pod.name, pattern=pattern, since=since
+    )
+
+
+def wait_for_ok_to_stop_retry_in_operator_log(since=None, timeout=600, sleep=20):
+    """
+    Wait for the rook-ceph operator to enter the Ceph daemon 'ok-to-stop' retry loop
+
+    Args:
+        since (str): Only search in logs newer than a relative duration like 5s, 2m, or 3h.
+            If None, it will search in all the operator logs.
+        timeout (int): Maximum time to wait in seconds.
+        sleep (int): Time to wait between checks in seconds.
+
+    Returns:
+        bool: True, if the operator entered the 'ok-to-stop' retry loop within the given
+            timeout. False, otherwise.
+
+    """
+    logger.info(
+        "Waiting for the rook-ceph operator to enter the 'ok-to-stop' retry loop"
+    )
+    operator_pod = get_operator_pods()[0]
+    try:
+        log_lines = wait_for_matching_pattern_in_pod_logs(
+            pod_name=operator_pod.name,
+            pattern=OK_TO_STOP_RETRY_LOG_PATTERN,
+            since=since,
+            timeout=timeout,
+            sleep=sleep,
+        )
+    except TimeoutExpiredError:
+        logger.warning(
+            f"The rook-ceph operator didn't enter the 'ok-to-stop' retry loop within "
+            f"the given timeout {timeout}"
+        )
+        return False
+
+    logger.info(
+        f"The rook-ceph operator entered the 'ok-to-stop' retry loop: {log_lines}"
+    )
+    return True
+
+
+def get_canceled_context_retry_lines_in_operator_log(since=None):
+    """
+    Get the rook-ceph operator log lines that indicate that the operator keeps retrying
+    an operation with a canceled context, as described in the bug DFBUGS-10987.
+
+    Args:
+        since (str): Only search in logs newer than a relative duration like 5s, 2m, or 3h.
+            If None, it will search in all the operator logs.
+
+    Returns:
+        list: The operator log lines of the retries with a canceled context
+
+    """
+    return get_rook_operator_log_lines(CANCELED_CONTEXT_RETRY_LOG_PATTERN, since=since)
