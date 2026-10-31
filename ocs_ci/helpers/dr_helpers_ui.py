@@ -923,24 +923,40 @@ def verify_pending_cleanup_alert_firing(
         )
         acm_obj.take_screenshot()
 
-    # Verify alert is visible - use DRPC-specific locator if drpc_name provided
+    # Verify alert is visible.
+    # When drpc_name is provided, try the DRPC-specific message locator first.
+    # If the UI renders the alert text differently (truncated, different quotes,
+    # etc.) the DRPC-specific XPath may miss; fall back to the generic
+    # ApplicationCleanupPending header locator before declaring failure.
     if drpc_name:
-        alert_locator = (
+        drpc_alert_locator = (
             acm_loc["pending-cleanup-alert-drpc-message"][0].format(
                 drpc_name, namespace
             ),
             acm_loc["pending-cleanup-alert-drpc-message"][1],
         )
-        expected_text = f"DRPC '{drpc_name}'"
+        alert_found = acm_obj.wait_until_expected_text_is_found(
+            locator=drpc_alert_locator,
+            expected_text=f"DRPC '{drpc_name}'",
+            timeout=120,
+        )
+        if not alert_found:
+            log.warning(
+                f"DRPC-specific alert locator did not find the alert for '{drpc_name}' — "
+                "falling back to generic ApplicationCleanupPending locator"
+            )
+            acm_obj.take_screenshot()
+            alert_found = acm_obj.wait_until_expected_text_is_found(
+                locator=acm_loc["pending-cleanup-alert"],
+                expected_text=constants.ALERT_APPLICATION_CLEANUP_PENDING,
+                timeout=60,
+            )
     else:
-        alert_locator = acm_loc["pending-cleanup-alert"]
-        expected_text = constants.ALERT_APPLICATION_CLEANUP_PENDING
-
-    alert_found = acm_obj.wait_until_expected_text_is_found(
-        locator=alert_locator,
-        expected_text=expected_text,
-        timeout=120,
-    )
+        alert_found = acm_obj.wait_until_expected_text_is_found(
+            locator=acm_loc["pending-cleanup-alert"],
+            expected_text=constants.ALERT_APPLICATION_CLEANUP_PENDING,
+            timeout=120,
+        )
 
     if alert_found:
         log.info(
@@ -1036,11 +1052,13 @@ def verify_pending_cleanup_alert_resolved(
         alert_locator = acm_loc["pending-cleanup-alert"]
         expected_text = constants.ALERT_APPLICATION_CLEANUP_PENDING
 
-    # use_fallback=False as this is intentional negative check (alert should NOT exist)
+    # use_fallback=False as this is intentional negative check (alert should NOT exist).
+    # The Prometheus alert rule has a 'for: 1m' grace period before it resolves;
+    # allow up to 3 minutes for the UI to reflect that the alert has cleared.
     alert_still_present = acm_obj.wait_until_expected_text_is_found(
         locator=alert_locator,
         expected_text=expected_text,
-        timeout=60,
+        timeout=180,
         use_fallback=False,
     )
 

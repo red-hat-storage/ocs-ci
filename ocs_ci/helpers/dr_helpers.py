@@ -4909,3 +4909,352 @@ def configure_submariner_lighthouse_import_namespace_deny_list():
             )
     finally:
         config.switch_ctx(restore_index)
+
+
+def assert_recipe_structure(recipe_yaml):
+    """
+    Assert that a parsed Recipe YAML has the minimum required structure.
+
+    Validates apiVersion, kind, metadata, spec.groups, spec.workflows,
+    spec.volumes shape, spec.hooks correctness (exec/scale use 'ops';
+    check hooks use 'chks'), and slash notation in workflow sequences.
+
+    Can be reused from any test that generates or applies a DR Recipe.
+
+    Args:
+        recipe_yaml (dict): Parsed Recipe manifest.
+
+    Raises:
+        AssertionError: When the Recipe does not satisfy CRD requirements.
+    """
+    assert recipe_yaml is not None, "OLS response did not contain valid YAML"
+    assert (
+        recipe_yaml.get("apiVersion") == "ramendr.openshift.io/v1alpha1"
+    ), f"Unexpected apiVersion: {recipe_yaml.get('apiVersion')}"
+    assert (
+        recipe_yaml.get("kind") == "Recipe"
+    ), f"Expected kind 'Recipe', got: {recipe_yaml.get('kind')}"
+    assert isinstance(recipe_yaml.get("metadata"), dict), (
+        "Recipe must have a metadata mapping, got: " f"{recipe_yaml.get('metadata')!r}"
+    )
+    assert "name" in recipe_yaml["metadata"], (
+        "Recipe metadata must include 'name', got: " f"{recipe_yaml['metadata']!r}"
+    )
+    spec = recipe_yaml.get("spec", {})
+    assert isinstance(spec, dict), (
+        "Recipe spec must be a mapping, got: " f"{type(spec).__name__!r}"
+    )
+    assert "groups" in spec, "Recipe spec must contain 'groups'"
+    assert "workflows" in spec, "Recipe spec must contain 'workflows'"
+
+    workflows = spec["workflows"]
+    assert isinstance(
+        workflows, list
+    ), f"Recipe spec.workflows must be a list, got: {type(workflows).__name__!r}"
+    for i, workflow in enumerate(workflows):
+        assert isinstance(workflow, dict), (
+            f"Recipe spec.workflows[{i}] must be a mapping, got: "
+            f"{type(workflow).__name__!r}"
+        )
+        assert (
+            "name" in workflow
+        ), f"Recipe spec.workflows[{i}] must contain a 'name' key, got: {workflow!r}"
+    workflow_names = [w["name"] for w in workflows]
+    assert "backup" in workflow_names, "Recipe must have a 'backup' workflow"
+    assert "restore" in workflow_names, "Recipe must have a 'restore' workflow"
+
+    # Validate spec.volumes: the CRD requires a single object (mapping), not a list.
+    if "volumes" in spec:
+        if not isinstance(spec["volumes"], dict):
+            logger.error(
+                "Recipe spec.volumes was generated as %s instead of a mapping object: %r",
+                type(spec["volumes"]).__name__,
+                spec["volumes"],
+            )
+        assert isinstance(spec["volumes"], dict), (
+            "Recipe spec.volumes must be a single mapping object, not a list. "
+            "Generated an invalid volumes structure: "
+            f"{type(spec['volumes']).__name__!r}"
+        )
+
+    # Validate spec.hooks per hook type:
+    #   - type: exec / scale  -> 'ops' list; command must be a string
+    #   - type: check         -> 'chks' list; condition must be a string
+    for hi, hook in enumerate(spec.get("hooks", [])):
+        assert isinstance(hook, dict), (
+            f"Recipe spec.hooks[{hi}] must be a mapping, got: "
+            f"{type(hook).__name__!r}"
+        )
+        hook_type = hook.get("type", "")
+
+        if hook_type == "check":
+            # check hooks must use 'chks', not 'ops'
+            if "ops" in hook:
+                logger.error(
+                    "Check hook '%s' generated with 'ops' instead of 'chks'. "
+                    "Hook keys: %s",
+                    hook.get("name"),
+                    list(hook.keys()),
+                )
+            assert "ops" not in hook, (
+                f"Recipe spec.hooks[{hi}] (type: check) must not use 'ops'; "
+                f"use 'chks' instead."
+            )
+            if "chks" not in hook:
+                logger.error(
+                    "Check hook '%s' generated without 'chks'. Hook keys: %s",
+                    hook.get("name"),
+                    list(hook.keys()),
+                )
+            assert "chks" in hook, (
+                f"Recipe spec.hooks[{hi}] (type: check) must contain a 'chks' key, "
+                f"got keys: {list(hook.keys())}"
+            )
+            assert isinstance(hook["chks"], list), (
+                f"Recipe spec.hooks[{hi}].chks must be a list, "
+                f"got: {type(hook['chks']).__name__!r}"
+            )
+            for ci, chk in enumerate(hook["chks"]):
+                assert isinstance(
+                    chk, dict
+                ), f"Recipe spec.hooks[{hi}].chks[{ci}] must be a mapping"
+                assert "condition" in chk, (
+                    f"Recipe spec.hooks[{hi}].chks[{ci}] must contain a 'condition' key, "
+                    f"got: {chk!r}"
+                )
+                assert isinstance(chk["condition"], str), (
+                    f"Recipe spec.hooks[{hi}].chks[{ci}].condition must be a string, "
+                    f"got: {type(chk['condition']).__name__!r}"
+                )
+        else:
+            # exec / scale hooks use 'ops'; command must be a string
+            for oi, op in enumerate(hook.get("ops", [])):
+                assert isinstance(
+                    op, dict
+                ), f"Recipe spec.hooks[{hi}].ops[{oi}] must be a mapping"
+                if "command" in op:
+                    if not isinstance(op["command"], str):
+                        logger.error(
+                            "hooks[%d].ops[%d].command generated as %s "
+                            "instead of a string: %r",
+                            hi,
+                            oi,
+                            type(op["command"]).__name__,
+                            op["command"],
+                        )
+                    assert isinstance(op["command"], str), (
+                        f"Recipe spec.hooks[{hi}].ops[{oi}].command must be a plain "
+                        f"string, not a list. Generated: {op['command']!r}"
+                    )
+
+    # Validate workflow sequence entries use slash notation for hook references
+    # (hook: <hook-name>/<op-or-chk-name>) — required by the Recipe CRD.
+    for workflow in spec.get("workflows", []):
+        for step in workflow.get("sequence", []):
+            if "hook" in step:
+                hook_ref = step["hook"]
+                if "/" not in str(hook_ref):
+                    logger.error(
+                        "Workflow '%s' generated with bare hook reference '%s' "
+                        "(expected '<hook-name>/<op-or-chk-name>'). "
+                        "Full sequence: %s",
+                        workflow.get("name"),
+                        hook_ref,
+                        workflow.get("sequence"),
+                    )
+                assert "/" in str(hook_ref), (
+                    f"Workflow '{workflow.get('name')}' hook reference '{hook_ref}' "
+                    f"must use slash notation '<hook-name>/<op-or-chk-name>'."
+                )
+
+
+def generate_and_apply_ols_recipe(workload, ols_client):
+    """
+    Ask OLS to generate a DR Recipe for the given workload, validate the
+    returned YAML, apply it to both managed clusters, and return the recipe name.
+
+    The cluster-selection logic mirrors ``BusyboxDiscoveredApps.deploy_workload``:
+    uses ``get_non_acm_cluster_and_non_provider_cluster_config`` when
+    ``dr_cluster_relations`` is set (standard RDR), otherwise falls back to
+    ``get_non_acm_cluster_config``.
+
+    Can be called from any DR test that needs an OLS-generated Recipe applied
+    across clusters.
+
+    Args:
+        workload: A :class:`~ocs_ci.ocs.dr.dr_workload.BusyboxDiscoveredApps`
+            instance that has already been deployed (namespace and labels known).
+        ols_client: An authenticated
+            :class:`~ocs_ci.ocs.openshift_lightspeed.OpenShiftLightspeed` instance.
+
+    Returns:
+        str: Name of the applied Recipe.
+    """
+    import re
+    import tempfile
+
+    import yaml
+
+    from ocs_ci.ocs.openshift_lightspeed import (
+        build_ols_recipe_prompt,
+        extract_yaml_from_ols_response,
+    )
+    from ocs_ci.ocs.utils import (
+        get_non_acm_cluster_and_non_provider_cluster_config,
+        get_non_acm_cluster_config,
+    )
+
+    namespace = workload.workload_namespace
+    pvc_key = workload.discovered_apps_pvc_selector_key
+    pvc_value = workload.discovered_apps_pvc_selector_value
+    pod_key = workload.discovered_apps_pod_selector_key
+    pod_value = workload.discovered_apps_pod_selector_value
+    app_name = workload.workload_name
+    pvc_count = workload.workload_pvc_count
+    # name_selector comes from dr_workload_app_recipe_name_selector_value in the
+    # workload config (e.g. "busybox-*").  Fall back to "<app_name>-*" if unset.
+    name_selector = workload.discovered_apps_name_selector_value or f"{app_name}-*"
+
+    logger.info(
+        f"Generating OLS Recipe for workload — namespace: {namespace}, "
+        f"pvc_selector: {pvc_key}={pvc_value}, "
+        f"pod_selector: {pod_key}={pod_value}, "
+        f"name_selector: {name_selector}"
+    )
+
+    prompt = build_ols_recipe_prompt(
+        f"Generate an ODF Disaster Recovery Recipe for an application named "
+        f"{app_name} deployed in the {namespace} namespace. "
+        f"The application has one Deployment with pods labeled "
+        f"{pod_key}: {pod_value}. "
+        f"It has {pvc_count} PVC(s) labeled {pvc_key}: {pvc_value}. "
+        f"Include a spec.volumes section (single object, NOT a list) with "
+        f"labelSelector matchLabels {pvc_key}: {pvc_value} targeting the "
+        f"{namespace} namespace. "
+        f"Include a check hook named check-{app_name}-ready of type check. "
+        f"The check hook must have selectResource: deployment and "
+        f"nameSelector: {name_selector} (NOT labelSelector). "
+        f"The check hook must use a 'chks' list (NOT 'ops') with one entry "
+        f"named check-deployment-ready, timeout: 300, onError: fail, "
+        f"and condition: '{{$.spec.replicas}} == {{$.status.readyReplicas}}'. "
+        f"In both the backup and restore workflow sequences, reference the "
+        f"check hook using slash notation: "
+        f"hook: check-{app_name}-ready/check-deployment-ready. "
+        f"Place the check hook before the resource group in backup and "
+        f"after the resource group in restore. "
+        f"Generate the complete Recipe."
+    )
+
+    result = ols_client.query(prompt)
+    response_text = result.get("response", "")
+    logger.info(f"OLS response:\n{response_text}")
+
+    recipe = extract_yaml_from_ols_response(response_text)
+    assert_recipe_structure(recipe)
+
+    spec = recipe["spec"]
+    recipe_name = recipe["metadata"]["name"]
+    recipe_namespace = namespace
+    # Ensure the serialised manifest carries the correct namespace so that
+    # apply, delete, and validation all operate on the same namespace.
+    recipe["metadata"]["namespace"] = recipe_namespace
+
+    # Validate that OLS returned a legal k8s name (RFC-1123 label) for both
+    # the Recipe name and its namespace before we use them in oc commands.
+    _k8s_name_re = re.compile(r"^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?$")
+    for field, value in (
+        ("metadata.name", recipe_name),
+        ("metadata.namespace", recipe_namespace),
+    ):
+        assert _k8s_name_re.match(value), (
+            f"OLS Recipe field '{field}' is not a valid Kubernetes identifier: "
+            f"{value!r}. Must match [a-z0-9][a-z0-9-]{{0,61}}[a-z0-9]."
+        )
+
+    # Assert namespace is in resource groups
+    groups = spec.get("groups", [])
+    all_namespaces = []
+    for g in groups:
+        all_namespaces.extend(g.get("includedNamespaces", []))
+    assert namespace in all_namespaces, (
+        f"OLS Recipe groups must target namespace '{namespace}', "
+        f"got: {all_namespaces}"
+    )
+
+    # Assert volumes section is present and targets the correct namespace.
+    # Both fields are required by the CRD — fail the test if OLS omitted either.
+    assert (
+        "volumes" in spec
+    ), "OLS Recipe must contain a volumes section for a workload with PVCs"
+    volumes = spec["volumes"]
+    if not volumes.get("includedNamespaces"):
+        logger.error(
+            "OLS omitted volumes.includedNamespaces for namespace '%s'. "
+            "Full volumes section: %r",
+            namespace,
+            volumes,
+        )
+    assert volumes.get("includedNamespaces"), (
+        "OLS Recipe spec.volumes must include 'includedNamespaces'. "
+        "OLS omitted the field."
+    )
+    if namespace not in volumes["includedNamespaces"]:
+        logger.error(
+            "OLS volumes.includedNamespaces %r does not contain expected namespace '%s'",
+            volumes["includedNamespaces"],
+            namespace,
+        )
+    assert namespace in volumes["includedNamespaces"], (
+        f"OLS Recipe volumes.includedNamespaces must contain '{namespace}', "
+        f"got: {volumes['includedNamespaces']}"
+    )
+
+    # Assert check hooks use selectResource + nameSelector (not labelSelector)
+    # and that nameSelector matches the expected wildcard value.
+    check_hooks = [h for h in spec.get("hooks", []) if h.get("type") == "check"]
+    assert check_hooks, "OLS Recipe must contain at least one check hook"
+    for ch in check_hooks:
+        assert "selectResource" in ch, (
+            f"Check hook '{ch.get('name')}' must have 'selectResource', "
+            f"got keys: {list(ch.keys())}"
+        )
+        assert "nameSelector" in ch, (
+            f"Check hook '{ch.get('name')}' must have 'nameSelector', "
+            f"got keys: {list(ch.keys())}"
+        )
+        assert ch["nameSelector"] == name_selector, (
+            f"Check hook '{ch.get('name')}' nameSelector must be "
+            f"'{name_selector}', got: {ch['nameSelector']!r}"
+        )
+
+    # Serialise Recipe to a temp file — namespace is now set in the manifest.
+    recipe_yaml_str = yaml.dump(recipe)
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".yaml", delete=False, prefix="ols-recipe-"
+    ) as tmp:
+        tmp.write(recipe_yaml_str)
+        tmp_path = tmp.name
+
+    # Mirror the cluster-selection logic from BusyboxDiscoveredApps.deploy_workload:
+    # use the provider-aware variant when dr_cluster_relations is configured.
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        managed_clusters = get_non_acm_cluster_and_non_provider_cluster_config()
+    else:
+        managed_clusters = get_non_acm_cluster_config()
+
+    for cluster in managed_clusters:
+        cluster_index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(cluster_index)
+        cluster_name = config.ENV_DATA.get("cluster_name", "unknown")
+        logger.info(
+            f"Applying OLS Recipe '{recipe_name}' to cluster "
+            f"'{cluster_name}' in namespace '{namespace}'"
+        )
+        exec_cmd(["oc", "apply", "-f", tmp_path, "-n", namespace])
+        logger.info(f"Recipe '{recipe_name}' applied to '{cluster_name}'")
+
+    # Leave context on ACM hub for the caller
+    config.switch_acm_ctx()
+    logger.info(f"OLS Recipe '{recipe_name}' applied to all managed clusters")
+    return recipe_name
