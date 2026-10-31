@@ -27,6 +27,7 @@ from ocs_ci.ocs.upgrade import BaseUpgrade
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     exec_cmd,
+    get_running_ocp_version,
     load_config_file,
     TimeoutSampler,
     wait_for_machineconfigpool_status,
@@ -57,6 +58,7 @@ class FDFUpgrade(BaseUpgrade):
         super().__init__(namespace, version_before_upgrade)
         self.fdf_deployment = FusionDataFoundationDeployment()
         self.kubeconfig = config.RUN.get("kubeconfig")
+        self.disconnected = config.DEPLOYMENT.get("disconnected", False)
         self._fdf_upgrade_version = None
 
     @property
@@ -246,7 +248,14 @@ class FDFUpgrade(BaseUpgrade):
 
         self.validate_upgrade_versions()
         self.load_version_config_file(self.fdf_upgrade_version)
-        if not self.upgrade_in_current_source:
+        if self.disconnected:
+            # Mirroring the catalog of the version we upgrade to already
+            # creates the ITMS/IDMS, so only the image tag in the
+            # FusionServiceDefinition has to be updated. Everything that
+            # follows is the same as in a regular upgrade.
+            self.fdf_deployment.ensure_disconnected_mirroring(upgrade=True)
+            self.patch_fusion_service_definition_disconnected()
+        elif not self.upgrade_in_current_source:
             self.fdf_deployment.create_image_tag_mirror_set()
             self.fdf_deployment.create_image_digest_mirror_set(upgrade=True)
             wait_for_machineconfigpool_status(node_type="all")
@@ -272,6 +281,62 @@ class FDFUpgrade(BaseUpgrade):
 
         version = self.fdf_deployment.get_installed_version()
         logger.info(f"FDF upgraded to version {version} successfully")
+
+    def patch_fusion_service_definition_disconnected(self):
+        """
+        Patch the FusionServiceDefinition with the image tag of the version we
+        upgrade to.
+
+        Unlike the deployment flow, which resolves the imageDigest of the build
+        from the registry, the disconnected upgrade patches the definition with
+        the configured tag as it is. The catalog is already mirrored at this
+        point and the ITMS/IDMS created while mirroring take care of
+        redirecting the pulls to the mirror registry, so there is no need (nor
+        a reachable registry) to inspect the image digest.
+
+        Only the image tag is patched. The registryPath already in the
+        definition is the one the ImageTagMirrorSet created while mirroring
+        redirects to the mirror registry — overwriting it with the registry
+        the catalog was mirrored *from* would leave the catalog pod pulling
+        by tag from a registry the cluster cannot reach.
+
+        Raises:
+            ConfigurationError: If the image tag of the version to upgrade to
+                is not configured.
+
+        """
+        fdf_image_tag = config.DEPLOYMENT.get(
+            "fdf_upgrade_image_tag"
+        ) or config.DEPLOYMENT.get("fdf_image_tag")
+        if not fdf_image_tag:
+            raise ConfigurationError(
+                "DEPLOYMENT.fdf_upgrade_image_tag is required to patch the "
+                "FusionServiceDefinition for a disconnected upgrade."
+            )
+
+        ocp_version = f"ocp{get_running_ocp_version().replace('.', '')}-t"
+        logger.info(
+            f"Updating FusionServiceDefinition for {ocp_version} with image tag "
+            f"{fdf_image_tag}"
+        )
+        params_dict = {
+            "spec": {
+                "onboarding": {
+                    "serviceOperatorSubscription": {
+                        "multiVersionCatSrcDetails": {
+                            ocp_version: {"imageTag": fdf_image_tag}
+                        }
+                    }
+                }
+            }
+        }
+        params = json.dumps(params_dict)
+        cmd = (
+            f"oc --kubeconfig {self.kubeconfig} -n {constants.FDF_NAMESPACE} "
+            f"patch FusionServiceDefinition data-foundation-service "
+            f"-p '{params}' --type merge"
+        )
+        run_patch_cmd(cmd)
 
     def update_subscription_channel(self):
         """
