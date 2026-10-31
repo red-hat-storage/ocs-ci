@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 @tier2
 @turquoise_squad
 @dr_hub_recovery
-@pytest.mark.order("last")
+@pytest.mark.order("last-1")
 class TestNeutralHubFailureAndRecovery:
     """
     Perform hub failure where active hub is at a neutral site and then perform hub recovery
