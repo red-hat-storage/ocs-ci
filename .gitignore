@@ -23,3 +23,5 @@ external/
 apidoc/*
 _build/*
 bugzilla.cfg
+.bob/
+.worktrees/

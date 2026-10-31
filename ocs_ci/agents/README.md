@@ -51,9 +51,7 @@ Install the agent runtime in the job environment before the first run. The
 packages are the `agents` dependency group in `pyproject.toml`:
 
 ```bash
-uv pip install --python python3 \
-  "langgraph>=1.0" "langchain>=1.0" \
-  "langchain-openai>=1.0" "langchain-mcp-adapters>=0.1"
+uv sync --inexact --no-dev --group agents
 ```
 
 The chat model is OpenAI. Put the key in `data/auth.yaml`:
