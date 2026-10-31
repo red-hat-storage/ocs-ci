@@ -4009,6 +4009,41 @@ LOGWRITER_CEPHFS_NAME = "logwriter-cephfs"
 LOGWRITER_RBD_NAME = "logwriter-rbd"
 LOGREADER_CEPHFS_NAME = "logreader-cephfs"
 
+# Fusion Access stretch cluster
+# Zone labels used by a Fusion Access stretch cluster. Unlike the ODF arbiter
+# stretch cluster the data zones are not named 'data-1'/'data-2', so the data
+# zones are discovered at runtime and only the arbiter label is fixed here.
+FUSION_ACCESS_ARBITER_ZONE_LABEL = "arbiter"
+
+# Default storage class backed by the IBM Storage Scale (CNSA) filesystem.
+# Overridable through ENV_DATA['fusion_access_storageclass'].
+FUSION_ACCESS_SC = "san-fs1"
+
+# Name of the IBM Storage Scale filesystem the storage class is backed by.
+# Overridable through ENV_DATA['fusion_access_filesystem'].
+FUSION_ACCESS_FILESYSTEM = "fs1"
+
+# Label of the IBM Storage Scale core pods, one per node of the Scale cluster.
+# They carry the GPFS daemon and are where the 'mm*' commands are run from
+IBM_STORAGE_SCALE_CORE_LABEL = "app.kubernetes.io/name=core"
+
+# Fusion Access workload templates
+FUSION_ACCESS_WORKLOAD_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fusion_access")
+BUSYBOX_FUSION_PATH = os.path.join(FUSION_ACCESS_WORKLOAD_DIR, "busybox.fusion.yaml")
+FILE_UPLOADER_FUSION_PATH = os.path.join(
+    FUSION_ACCESS_WORKLOAD_DIR, "file-uploader.fusion.yaml"
+)
+
+# Fusion Access workload labels and names
+BUSYBOX_FUSION_LABEL = "workload=busybox-fusion"
+FILE_UPLOADER_FUSION_LABEL = "workload=file-uploader-fusion"
+BUSYBOX_FUSION_NAME = "busybox-fusion"
+FILE_UPLOADER_FUSION_NAME = "file-uploader-fusion"
+
+# File written into every workload volume before a failure is induced, used to
+# assert data integrity once the workloads have moved to the surviving zone
+FUSION_ACCESS_BASELINE_FILE = "zonetest-baseline.txt"
+
 # prometheus metrics queries
 PVC_NAMESPACES_BY_USED = (
     "sum by (namespace, persistentvolumeclaim) "
