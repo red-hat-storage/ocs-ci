@@ -36,6 +36,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 from ocs_ci.ocs.exceptions import (
     NotSupportedProxyConfiguration,
+    TimeoutExpiredError,
 )
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs.ui.views import locators_for_current_ocp_version, login as login_view
@@ -533,6 +534,35 @@ class BaseUI:
             list: The list of WebElements
         """
         return self.driver.find_elements(by=locator[1], value=locator[0])
+
+    def wait_for_elements(self, locator, timeout=60, sleep=3):
+        """
+        Poll until elements matching the locator are present, tolerating absence.
+
+        This polls ``get_elements`` (which does not wait) rather than
+        ``wait_for_element_to_be_visible`` so the AI locator fallback is not
+        triggered for checks that may legitimately find nothing.
+
+        Args:
+            locator (tuple): (selector, By) to look for.
+            timeout (int): how long to poll before giving up.
+            sleep (int): seconds between polls.
+
+        Returns:
+            list: matching web elements, or an empty list if none appear in time.
+        """
+        try:
+            for elements in TimeoutSampler(
+                timeout=timeout, sleep=sleep, func=self.get_elements, locator=locator
+            ):
+                if elements:
+                    logger.debug(
+                        f"Found {len(elements)} element(s) for locator {locator}"
+                    )
+                    return elements
+        except TimeoutExpiredError:
+            logger.warning(f"No elements found for locator {locator} in {timeout}s")
+        return []
 
     def wait_for_element_to_be_visible(
         self, locator, timeout=30, ignored_exceptions=None
