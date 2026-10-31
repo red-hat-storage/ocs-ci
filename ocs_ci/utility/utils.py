@@ -764,7 +764,7 @@ def exec_cmd(
     cluster_config=None,
     lock_timeout=7200,
     output_file=None,
-    cmd_log_level=logging.DEBUG,
+    cmd_log_level=None,
     **kwargs,
 ):
     """
@@ -788,8 +788,10 @@ def exec_cmd(
                 will be non-null
         lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
         output_file (str): path where to write output of stderr from command - apply only when silent mode is True
-        cmd_log_level (int): Log level for the "Executing command" message.
-            Defaults to logging.DEBUG. Use logging.INFO, logging.WARNING, etc. to override.
+        cmd_log_level (int or str): Log level for the "Executing command" message.
+            Accepts a logging level int (logging.INFO) or a level name (``"INFO"``).
+            When None (default), the level is read from the ``RUN["cmd_log_level"]``
+            config value, which can be overridden via ``--ocsci-conf`` yaml files.
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -803,6 +805,14 @@ def exec_cmd(
         stderr     (str): The standard error (None if not captured).
 
     """
+    if cmd_log_level is None:
+        cmd_log_level = config.RUN.get("cmd_log_level", "DEBUG")
+    if isinstance(cmd_log_level, str):
+        resolved_level = logging.getLevelName(cmd_log_level.upper())
+        # getLevelName returns a "Level X" string for unknown names
+        cmd_log_level = (
+            resolved_level if isinstance(resolved_level, int) else logging.DEBUG
+        )
     _env = kwargs.pop("env", os.environ.copy())
     kubeconfig_path = config.RUN.get("kubeconfig")
     if kubeconfig_path:
