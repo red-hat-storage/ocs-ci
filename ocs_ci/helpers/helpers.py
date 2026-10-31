@@ -817,7 +817,8 @@ def create_ceph_block_pool(
 
     Args:
         pool_name (str): The pool name to create (optional).
-        replica (int): The replica size for the pool.
+        replica (int): The replica size for the pool. On stretch (arbiter)
+            clusters this is overridden to 4, which Rook requires.
         compression (str): Compression type for the pool (optional).
         failure_domain (str): Failure domain name (optional).
         verify (bool): True to verify the pool exists after creation, False otherwise.
@@ -860,6 +861,14 @@ def create_ceph_block_pool(
     cbp_data["metadata"]["namespace"] = (
         namespace or config.ENV_DATA["cluster_namespace"]
     )
+
+    # Stretch clusters require replica size 4
+    if config.DEPLOYMENT.get("arbiter_deployment"):
+        if replica != 4:
+            logger.warning(
+                f"Overriding replica size from {replica} to 4 for stretch cluster"
+            )
+            replica = 4
 
     if not erasure_coded:
         cbp_data["spec"]["replicated"]["size"] = replica
