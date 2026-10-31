@@ -1,0 +1,18 @@
+# FDF Standalone Regional Disaster Recovery Configuration (RHSTOR-8840 / TC-12)
+#
+# Overlay for running RDR (Regional DR) tests on FDF standalone clusters.
+# Stack with the standard DR workload and multicluster configs:
+#
+#   run-ci ... --ocsci-conf conf/ocsci/fdf_standalone_deployment.yaml \
+#              --ocsci-conf conf/ocsci/fdf_standalone_dr_rdr.yaml \
+#              --ocsci-conf conf/ocsci/multicluster_mode_rdr.yaml \
+#              --ocsci-conf conf/ocsci/dr_workload.yaml \
+#              tests/functional/disaster-recovery/regional-dr/
+#
+# Both FDF clusters in the DR pair must use fdf_standalone_deployment.
+# The existing DR test suite is architecture-agnostic (same Ceph mirroring).
+---
+DEPLOYMENT:
+  fdf_standalone_deployment: true
+MULTICLUSTER:
+  multicluster_mode: "regional-dr"
