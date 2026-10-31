@@ -336,7 +336,10 @@ class TestCephFSSubvolumeTop10Ranking(ManageTest):
         workloads = create_cephfs_subvolume_workloads(
             count=constants.CEPHFS_SUBVOLUME_TOP_10_WORKLOAD_COUNT,
             project_name_prefix="cephfs-top10-test",
-            pvc_size="1Gi",
+            # PVC must be larger than fio_size so FIO cannot fill it to 100%.
+            # A full PVC stalls FIO, IOPS drops to 0, and the top-10 non-zero
+            # Prometheus wait times out.
+            pvc_size="5Gi",
             fio_size="1GB",
             fio_runtime=900,
         )
@@ -517,7 +520,8 @@ class TestCephFSSubvolumeDrillDown(ManageTest):
         single_pvc = create_pvc(
             sc_name=constants.CEPHFILESYSTEM_SC,
             namespace=single_project.namespace,
-            size="1Gi",
+            # larger than the 1GB FIO file so the PVC cannot fill and stall IO
+            size="5Gi",
             access_mode=constants.ACCESS_MODE_RWX,
         )
         single_pod = create_pod(
@@ -543,7 +547,8 @@ class TestCephFSSubvolumeDrillDown(ManageTest):
         multi_pvc = create_pvc(
             sc_name=constants.CEPHFILESYSTEM_SC,
             namespace=multi_project.namespace,
-            size="1Gi",
+            # larger than the 1GB FIO file so the PVC cannot fill and stall IO
+            size="5Gi",
             access_mode=constants.ACCESS_MODE_RWX,
         )
         multi_pods = []
