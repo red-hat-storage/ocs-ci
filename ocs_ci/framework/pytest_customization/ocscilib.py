@@ -517,8 +517,13 @@ def gather_version_info_for_report(config):
         clusterversion = get_cluster_version()
         config._metadata["Cluster Version"] = clusterversion
 
+        # Skip ODF version gathering if ODF is not deployed
+        skip_ocs = ocsci_config.ENV_DATA.get(
+            "skip_ocs_deployment", False
+        ) or ocsci_config.DEPLOYMENT.get("ocp_only_upgrade", False)
+
         # add ceph version
-        if not ocsci_config.ENV_DATA["mcg_only_deployment"]:
+        if not ocsci_config.ENV_DATA["mcg_only_deployment"] and not skip_ocs:
 
             managed_or_hcp_platform = (
                 ocsci_config.multicluster
@@ -540,14 +545,17 @@ def gather_version_info_for_report(config):
             config._metadata["cephfsplugin"] = csi_versions.get("csi-cephfsplugin")
             config._metadata["rbdplugin"] = csi_versions.get("csi-rbdplugin")
 
-        # add ocs operator version
-        config._metadata["OCS operator"] = get_ocs_build_number()
-        mods = {}
-        mods = get_version_info(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
-        skip_list = ["ocs-operator"]
-        for key, val in mods.items():
-            if key not in skip_list:
-                config._metadata[key] = val.rsplit("/")[-1]
+        if not skip_ocs:
+            # add ocs operator version
+            config._metadata["OCS operator"] = get_ocs_build_number()
+            mods = {}
+            mods = get_version_info(
+                namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+            )
+            skip_list = ["ocs-operator"]
+            for key, val in mods.items():
+                if key not in skip_list:
+                    config._metadata[key] = val.rsplit("/")[-1]
         gather_version_completed = True
     except ResourceNotFoundError:
         log.exception("Problem occurred when looking for some resource!")
