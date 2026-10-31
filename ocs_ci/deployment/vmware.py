@@ -180,9 +180,20 @@ class VSPHEREBASE(Deployment):
             include_masters (bool): if True, also add disks to control-plane VMs
 
         """
-        vms = self.vsphere.get_all_vms_in_pool(
-            config.ENV_DATA.get("cluster_name"), self.datacenter, self.cluster
-        )
+        deployment_type = config.ENV_DATA.get("deployment_type", "").lower()
+        cluster_name = config.ENV_DATA.get("cluster_name")
+
+        if deployment_type == "ipi":
+            # IPI deployments create VMs directly in datacenter without resource pools
+            # Use infra_id for precise filtering to avoid matching other clusters
+            infra_id = get_infra_id(self.cluster_path)
+            vms = self.vsphere.get_vms_by_string(infra_id)
+        else:
+            # UPI deployments use resource pools
+            vms = self.vsphere.get_all_vms_in_pool(
+                cluster_name, self.datacenter, self.cluster
+            )
+
         for vm in vms:
             if "compute" in vm.name or (include_masters and "control-plane" in vm.name):
                 self.vsphere.add_disks_with_same_size(
@@ -285,12 +296,22 @@ class VSPHEREBASE(Deployment):
         if config.ENV_DATA.get("sno"):
             vms = self.get_vms_by_string(self.datacenter, self.cluster, "sno")
         else:
+            deployment_type = config.ENV_DATA.get("deployment_type", "").lower()
+            cluster_name = config.ENV_DATA.get("cluster_name")
             include_masters = config.DEPLOYMENT.get(
                 "ec_default_pools"
             ) and config.ENV_DATA.get("mark_masters_schedulable", True)
-            all_vms = self.vsphere.get_all_vms_in_pool(
-                config.ENV_DATA.get("cluster_name"), self.datacenter, self.cluster
-            )
+
+            if deployment_type == "ipi":
+                # IPI deployments create VMs directly in datacenter without resource pools
+                infra_id = get_infra_id(self.cluster_path)
+                all_vms = self.vsphere.get_vms_by_string(infra_id)
+            else:
+                # UPI deployments use resource pools
+                all_vms = self.vsphere.get_all_vms_in_pool(
+                    cluster_name, self.datacenter, self.cluster
+                )
+
             vms = [
                 vm
                 for vm in all_vms
@@ -305,7 +326,7 @@ class VSPHEREBASE(Deployment):
 
     def get_compute_vms(self, dc, cluster):
         """
-        Gets the compute VM's from resource pool
+        Gets the compute VM's from resource pool (UPI) or datacenter (IPI)
 
         Args:
             dc (str): Datacenter name
@@ -315,17 +336,25 @@ class VSPHEREBASE(Deployment):
             list: VM instance
 
         """
-        if self.vsphere.is_resource_pool_exist(
-            config.ENV_DATA["cluster_name"], self.datacenter, self.cluster
+        deployment_type = config.ENV_DATA.get("deployment_type", "").lower()
+        cluster_name = config.ENV_DATA.get("cluster_name")
+
+        if deployment_type == "ipi":
+            # IPI deployments create VMs directly in datacenter without resource pools
+            infra_id = get_infra_id(self.cluster_path)
+            all_vms = self.vsphere.get_vms_by_string(infra_id)
+            return [vm for vm in all_vms if "compute" in vm.name or "rhel" in vm.name]
+        elif self.vsphere.is_resource_pool_exist(
+            cluster_name, self.datacenter, self.cluster
         ):
-            vms = self.vsphere.get_all_vms_in_pool(
-                config.ENV_DATA.get("cluster_name"), dc, cluster
-            )
+            # UPI deployments use resource pools
+            vms = self.vsphere.get_all_vms_in_pool(cluster_name, dc, cluster)
             return [vm for vm in vms if "compute" in vm.name or "rhel" in vm.name]
+        return []
 
     def get_vms_by_string(self, dc, cluster, vm_string_to_match):
         """
-        Gets the sno VM's from resource pool
+        Gets the VM's from resource pool (UPI) or datacenter (IPI) matching a string
 
         Args:
             dc (str): Datacenter name
@@ -336,13 +365,21 @@ class VSPHEREBASE(Deployment):
             list: VM instance
 
         """
-        if self.vsphere.is_resource_pool_exist(
-            config.ENV_DATA["cluster_name"], self.datacenter, self.cluster
+        deployment_type = config.ENV_DATA.get("deployment_type", "").lower()
+        cluster_name = config.ENV_DATA.get("cluster_name")
+
+        if deployment_type == "ipi":
+            # IPI deployments create VMs directly in datacenter without resource pools
+            infra_id = get_infra_id(self.cluster_path)
+            all_vms = self.vsphere.get_vms_by_string(infra_id)
+            return [vm for vm in all_vms if vm_string_to_match in vm.name]
+        elif self.vsphere.is_resource_pool_exist(
+            cluster_name, self.datacenter, self.cluster
         ):
-            vms = self.vsphere.get_all_vms_in_pool(
-                config.ENV_DATA.get("cluster_name"), dc, cluster
-            )
+            # UPI deployments use resource pools
+            vms = self.vsphere.get_all_vms_in_pool(cluster_name, dc, cluster)
             return [vm for vm in vms if vm_string_to_match in vm.name]
+        return []
 
     def add_rdm_disks(self):
         """
