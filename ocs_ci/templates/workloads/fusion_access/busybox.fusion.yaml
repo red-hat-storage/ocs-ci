@@ -1,0 +1,53 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: busybox-fusion-pvc
+  labels:
+    appname: busybox-fusion
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: san-fs1
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: busybox-fusion
+  labels:
+    appname: busybox-fusion
+spec:
+  selector:
+    matchLabels:
+      workload: busybox-fusion
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        workload: busybox-fusion
+    spec:
+      containers:
+      - name: busybox
+        image: quay.io/ocsci/rdr-ocs-workload
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c"]
+        args:
+          # Pinned to a commit so every run gets the same script. Fetching
+          # from 'master' would make the workload change under the test, and
+          # the pod would fail outright on a disconnected cluster
+          - wget https://raw.githubusercontent.com/red-hat-storage/ocs-workloads/f71217d57fc184e4343aaa9133cce2673dafc8d4/rdr/busybox/scripts/simple_io.sh -O /mnt/test/simple_io.sh;
+            wget https://raw.githubusercontent.com/red-hat-storage/ocs-workloads/f71217d57fc184e4343aaa9133cce2673dafc8d4/rdr/busybox/scripts/simple_io_integrity_check.sh -O /mnt/test/simple_io_integrity_check.sh;
+            chmod +x /mnt/test/simple_io.sh; chmod +x /mnt/test/simple_io_integrity_check.sh;
+            /mnt/test/simple_io.sh
+        volumeMounts:
+        - mountPath: /mnt/test
+          name: mypvc
+      volumes:
+      - name: mypvc
+        persistentVolumeClaim:
+          claimName: busybox-fusion-pvc
+          readOnly: false
