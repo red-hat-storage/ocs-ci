@@ -621,6 +621,19 @@ def verify_lister_tls_error_markers(output):
 # ---- Lister entry range helpers -----------------------------------
 
 
+def lister_block_ranges(entries):
+    """
+    Return Lister block ranges as sorted offset/length pairs.
+
+    Args:
+        entries (list): Parsed Lister metadata entries.
+
+    Returns:
+        list: Sorted ``(byte_offset, size_bytes)`` pairs.
+    """
+    return sorted((entry["ByteOffset"], entry["SizeBytes"]) for entry in entries)
+
+
 def get_merged_lister_entries_byte_ranges(entries):
     """
     Merge lister entries into non-overlapping byte ranges.
