@@ -150,6 +150,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_send_keys(self.bucket_tab["s3_bucket_name_input"], name_generator)
         self.do_click(self.bucket_tab["submit_button_obc"])
 
+        self.wait_for_endswith_url(f"buckets/{name_generator}", timeout=60)
+        self.page_has_loaded()
+
         if return_name:
             return ObjectStorage(), name_generator
         return ObjectStorage()

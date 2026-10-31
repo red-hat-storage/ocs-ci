@@ -217,6 +217,7 @@ class BaseUI:
         copy_dom=False,
         avoid_stale=False,
         use_fallback=True,
+        wait_for_page_load=False,
     ):
         """
         Click on Button/link on OpenShift Console
@@ -229,6 +230,7 @@ class BaseUI:
         refresh the page once and try click again
         * don't use when refreshed page expected to be different from initial page, or loose input values
         use_fallback (bool): if True, attempt AI locator fallback on TimeoutException
+        wait_for_page_load (bool): if True, call page_has_loaded() after a successful click
         """
 
         def _do_click(_locator, _timeout=30, _enable_screenshot=False, _copy_dom=False):
@@ -286,6 +288,8 @@ class BaseUI:
             self.copy_dom()
             time.sleep(5)
             _do_click(locator, timeout, enable_screenshot, copy_dom)
+        if wait_for_page_load:
+            self.page_has_loaded()
 
     def click_with_script(self, locator):
         """
