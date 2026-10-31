@@ -3,7 +3,7 @@ import pytest
 from itertools import cycle
 
 from ocs_ci.ocs import constants, node
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, skipif_no_nvmeof
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -29,16 +29,51 @@ class TestCloneWithDifferentAccessMode(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory, pvc_clone_factory, create_pvcs_and_pods):
+    def setup(
+        self,
+        project_factory,
+        pvc_clone_factory,
+        create_pvcs_and_pods,
+        block_storageclass,
+    ):
         """
         Create PVCs and pods
 
-        """
-        self.pvcs, self.pods = create_pvcs_and_pods(pvc_size=3)
+        Args:
+            block_storageclass (OCS): Block-backed StorageClass to use for the
+                RBD PVCs. ``None`` selects the create_pvcs_and_pods default
+                (Ceph RBD, plus CephFS PVCs). When the NVMe-oF StorageClass is
+                passed, only block-mode PVCs on that StorageClass are created.
 
+        """
+        if block_storageclass is None:
+            self.pvcs, self.pods = create_pvcs_and_pods(pvc_size=3)
+        else:
+            # NVMe-oF variant: block-only PVCs on the NVMe-oF StorageClass
+            self.pvcs, self.pods = create_pvcs_and_pods(
+                pvc_size=3,
+                sc_rbd=block_storageclass,
+                num_of_cephfs_pvc=0,
+                access_modes_rbd=[
+                    f"{constants.ACCESS_MODE_RWO}-Block",
+                    f"{constants.ACCESS_MODE_RWX}-Block",
+                ],
+            )
+
+    @pytest.mark.parametrize(
+        argnames=["block_storageclass"],
+        argvalues=[
+            pytest.param(None),
+            pytest.param(constants.CEPH_NVMEOF_SC, marks=skipif_no_nvmeof),
+        ],
+        indirect=True,
+    )
     def test_clone_with_different_access_mode(self, pvc_clone_factory, pod_factory):
         """
         Create clone of a PVC with an access mode different than parent PVC
+
+        Runs against the default Ceph RBD/CephFS StorageClasses and, when
+        NVMe-oF is enabled, against block-mode PVCs on the NVMe-oF StorageClass.
 
         """
         file_name = "fio_test"

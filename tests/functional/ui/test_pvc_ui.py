@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     runs_on_provider,
     skipif_cephfs_disabled,
+    skipif_no_nvmeof,
 )
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, get_pvc_objs
 from ocs_ci.ocs.ocp import OCP
@@ -67,6 +68,13 @@ class TestPvcUserInterface(object):
                 "13",
                 "Filesystem",
                 marks=pytest.mark.polarion_id("OCS-5207"),
+            ),
+            pytest.param(
+                constants.CEPH_NVMEOF_SC,
+                "ReadWriteOnce",
+                "11",
+                "Block",
+                marks=skipif_no_nvmeof,
             ),
         ],
     )
@@ -147,7 +155,11 @@ class TestPvcUserInterface(object):
 
         # Creating Pod via CLI
         logger.info("Creating Pod")
-        if sc_name in constants.DEFAULT_STORAGECLASS_RBD:
+        if (
+            sc_name in constants.DEFAULT_STORAGECLASS_RBD
+            or sc_name == constants.CEPH_NVMEOF_SC
+        ):
+            # NVMe-oF StorageClass is RBD (block) backed
             interface_type = constants.CEPHBLOCKPOOL
         elif sc_name in constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD:
             interface_type = constants.CEPHBLOCKPOOL
@@ -244,6 +256,12 @@ class TestPvcUserInterface(object):
                 constants.ACCESS_MODE_RWX,
                 constants.ACCESS_MODE_RWO,
                 marks=[pytest.mark.polarion_id("OCS-5209"), skipif_cephfs_disabled],
+            ),
+            pytest.param(
+                constants.CEPH_NVMEOF_SC,
+                constants.ACCESS_MODE_RWO,
+                constants.ACCESS_MODE_RWO,
+                marks=skipif_no_nvmeof,
             ),
         ],
     )
