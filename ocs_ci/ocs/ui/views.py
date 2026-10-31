@@ -2145,6 +2145,17 @@ add_capacity_4_12 = {
     "confirm_add_capacity": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
 }
 
+add_capacity_5_0 = {
+    "add_capacity_button": (
+        "//button[@role='menuitem'][normalize-space()='Add Capacity']",
+        By.XPATH,
+    ),
+    "confirm_add_capacity": (
+        'button[data-test="confirm-action"]',
+        By.CSS_SELECTOR,
+    ),
+}
+
 block_pool_4_12 = {
     "actions_inside_pool": (
         "//button[@data-test='storage-pool-kebab-button'] | //button[@data-test='kebab-button']",
@@ -4399,7 +4410,12 @@ locators = {
         "login_client_oauth": login_client_oauth,
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_20},
         "generic": {**generic_locators, **generic_locators_4_19},
-        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "add_capacity": {
+            **add_capacity,
+            **add_capacity_4_11,
+            **add_capacity_4_12,
+            **add_capacity_5_0,
+        },
         "deployment": {
             **deployment,
             **deployment_4_7,
