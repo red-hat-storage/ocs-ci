@@ -1401,7 +1401,10 @@ def _collect_ocs_logs(
     # Collect ACM logs only from ACM
     # Collect this only once, with parallel ocp/ocs log collection, we want to collect acm logs only once
     if ocs:
-        if cluster_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr":
+        if (
+            cluster_config.MULTICLUSTER.get("multicluster_mode", None)
+            in constants.RDR_MODES
+        ):
             if cluster_config.MULTICLUSTER.get("acm_cluster", False):
                 log.info("Collecting ACM logs")
                 image_prefix = '"acm_must_gather"'
@@ -2233,10 +2236,7 @@ def is_dr_scenario():
         bool: return True if it is rdr or mdr setup otherwise False
 
     """
-    return ocsci_config.MULTICLUSTER.get("multicluster_mode") in (
-        "metro-dr",
-        "regional-dr",
-    )
+    return ocsci_config.MULTICLUSTER.get("multicluster_mode") in constants.DR_MODES
 
 
 def get_dr_operator_versions():
