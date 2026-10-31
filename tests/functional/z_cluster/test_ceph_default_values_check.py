@@ -5,6 +5,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_ec_pools_disabled,
     skipif_ocs_version,
+    ignore_leftover_label,
     brown_squad,
     polarion_id,
 )
@@ -40,6 +41,7 @@ log = logging.getLogger(__name__)
 @brown_squad
 @tier1
 @skipif_external_mode
+@ignore_leftover_label(constants.MON_APP_LABEL)
 @pytest.mark.polarion_id("OCS-2231")
 class TestCephDefaultValuesCheck(ManageTest):
     def test_ceph_default_values_check(self):
