@@ -13,7 +13,7 @@ spec:
   elasticsearch:
     # v This is debug server v
     # server: 10.0.144.103
-    server: 10.0.78.167
+    server: 10.0.146.27
     port: 9200
     scheme: http
   es_index: ripsaw-smallfile
