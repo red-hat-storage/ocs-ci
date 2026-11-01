@@ -60,7 +60,6 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.bucketclass import BucketClass
 from ocs_ci.ocs.resources.pod import (
     get_noobaa_operator_pod,
     search_pattern_in_pod_logs,
@@ -166,8 +165,7 @@ def noobaa_cli_path():
     Returns:
         str: Path to the local noobaa binary.
     """
-    retrieve_cli_binary(cli_type="mcg", force_mcg=True)
-    return constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+    return retrieve_cli_binary(cli_type="mcg", force_mcg=True)
 
 
 def run_noobaa(command, namespace=None, ignore_error=False):
@@ -262,21 +260,6 @@ def _search_int(pattern, text):
     return int(match.group(1)) if match else None
 
 
-def _failed_stores(text):
-    """
-    Pull the per-store lines out of a "Pre-validation failed" report.
-
-    Args:
-        text (str): Combined CLI output.
-
-    Returns:
-        list: One ``(kind, name, bucket, status)`` tuple per failing store.
-    """
-    return re.findall(
-        r"- (\w+)/([\w.-]+) \(bucket \"([^\"]+)\"\): status=([A-Z_]+)", text
-    )
-
-
 def parse_connection_update_output(result):
     """
     Parse the ``connection update`` output into a structured dict.
@@ -323,7 +306,11 @@ def parse_connection_update_output(result):
             "admissionwebhook.noobaa.io" in out and "denied the request" in out
         ),
         "conflict": ("Conflict:" in out or "the object has been modified" in out),
-        "failed_stores": _failed_stores(out),
+        # One (kind, name, bucket, status) tuple per store line of a
+        # "Pre-validation failed" report.
+        "failed_stores": re.findall(
+            r"- (\w+)/([\w.-]+) \(bucket \"([^\"]+)\"\): status=([A-Z_]+)", out
+        ),
     }
 
 
@@ -953,12 +940,13 @@ def make_store(store_factory, conf, endpoint, bucket=None, kind=None, **kwargs):
 
 
 @pytest.fixture
-def bucketclass_over_store(request, mcg_obj):
+def bucketclass_over_store(bucket_class_factory):
     """
     Factory that wraps a single store in a BucketClass, so a bucket created on
     it drives its I/O through that one store.
 
-    A BackingStore gets a single-tier Spread placement policy, a
+    Creation and teardown are delegated to the shared ``bucket_class_factory``
+    fixture. A BackingStore gets a single-tier Spread placement policy, a
     NamespaceStore a Single namespace policy; the kind is read off the store.
 
     Usage::
@@ -967,43 +955,33 @@ def bucketclass_over_store(request, mcg_obj):
             interface="OC", bucketclass=bucketclass_over_store(store)
         )[0]
     """
-    created = []
-
-    def _finalizer():
-        for bucketclass in reversed(created):
-            try:
-                bucketclass.delete()
-            except Exception as ex:  # noqa - best-effort teardown
-                logger.warning(
-                    f"Teardown of BucketClass/{bucketclass.name} failed: {ex}"
-                )
-
-    # Registered before the factory can create anything (docs/fixture_usage.md).
-    request.addfinalizer(_finalizer)
 
     def _factory(store):
-        name = create_unique_resource_name("eps-bc", "bucketclass")
         # Case-insensitive: the CR says "NamespaceStore", the constant
         # "Namespacestore", and an exact compare silently builds a placement
         # policy the operator rejects with MissingBackingStore.
         if store.kind.lower() == constants.NAMESPACESTORE.lower():
-            namespace_policy = {
-                "type": constants.NAMESPACE_POLICY_TYPE_SINGLE,
-                "write_resource": store.name,
+            bucketclass_dict = {
+                "interface": "OC",
+                "namespace_policy_dict": {
+                    "type": constants.NAMESPACE_POLICY_TYPE_SINGLE,
+                    "namespacestores": [store],
+                },
             }
-            mcg_obj.oc_create_bucketclass(name, None, None, namespace_policy, None)
-            bucketclass = BucketClass(name, None, [store], None, None, namespace_policy)
         else:
-            mcg_obj.oc_create_bucketclass(name, [store], "Spread", None, None)
-            bucketclass = BucketClass(name, [store], None, "Spread", None, None)
-        created.append(bucketclass)
+            bucketclass_dict = {
+                "interface": "OC",
+                "backingstores": [store],
+                "placement_policy": "Spread",
+            }
+        bucketclass = bucket_class_factory(bucketclass_dict)
         # The OBC only reports "BucketClassNotReady", so wait here. status.phase
         # is read directly: wait_for_resource sees a Bucketclass PHASE column as
         # unpopulated even once it says Ready.
         bc_ocp = OCP(
             kind=constants.BUCKETCLASS,
             namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=name,
+            resource_name=bucketclass.name,
         )
         for ready in TimeoutSampler(
             BUCKETCLASS_READY_TIMEOUT,

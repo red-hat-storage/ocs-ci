@@ -5353,6 +5353,9 @@ def retrieve_cli_binary(cli_type="mcg", force_mcg=False):
             ["odf" -> odf-cli , "mcg" -> mcg-cli]
         force_mcg (bool): If True, bypass the >= 4.20 redirect to odf-cli (see DFBUGS-11485).
 
+    Returns:
+        str: Local path of the downloaded CLI binary.
+
     Raises:
         AssertionError: In the case the CLI binary is not executable.
 
@@ -5386,7 +5389,8 @@ def retrieve_cli_binary(cli_type="mcg", force_mcg=False):
             logger.info(
                 f"Created symlink from {mcg_cli_path} to {odf_cli_path} for backward compatibility"
             )
-        return
+            return mcg_cli_path
+        return odf_retriever.local_cli_path
 
     # mcg-cli download (OCS < 4.20, or force_mcg=True)
     remote_path = get_architecture_path(cli_type)
@@ -5446,6 +5450,7 @@ def retrieve_cli_binary(cli_type="mcg", force_mcg=False):
     assert os.access(
         local_cli_path, os.X_OK
     ), f"The {cli_type} CLI binary does not have execution permissions"
+    return local_cli_path
 
 
 def get_architecture_path(cli_type):
