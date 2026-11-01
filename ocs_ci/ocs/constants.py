@@ -3035,6 +3035,12 @@ IBM_STORAGE_SCALE_CLUSTER_NAME = "ibm-spectrum-scale"
 IBM_STORAGE_SCALE_CLUSTER_KIND = "Cluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_REMOTECLUSTER_KIND = "RemoteCluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_FILESYSTEM_KIND = "Filesystem.scale.spectrum.ibm.com"
+# Pinned commit URL for the IBM Storage Scale MCO (Machine Config Operator)
+# manifest. The URL is not stable and is expected to change over time.
+IBM_STORAGE_SCALE_MCO_URL = (
+    "https://raw.githubusercontent.com/IBM/ibm-spectrum-scale-container-native/"
+    "502fbcbe968651d2c94bd6b8419958c835383696/generated/scale/mco/mco.yaml"
+)
 IBM_ENTITLEMENT_SECRET_NAME = "ibm-entitlement-key"
 IBM_QUAYIO_SECRET_NAME = "quayio-secret"
 REMOTE_CLUSTER = "RemoteCluster"
