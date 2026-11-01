@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad, polarion_id
 from ocs_ci.framework.testlib import (
     ManageTest,
     hci_provider_and_client_required,
+    skipif_ocs_version,
     tier1,
     tier2,
 )
@@ -37,6 +38,7 @@ log = logging.getLogger(__name__)
 
 
 @green_squad
+@skipif_ocs_version("<4.22")
 class TestCephFSOrphanedSnapshotAlert(ManageTest):
     """
     Verify that orphaning CephFS snapshots — by deleting their Kubernetes
