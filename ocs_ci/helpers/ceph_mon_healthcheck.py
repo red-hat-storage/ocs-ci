@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import random
 import re
 import time
@@ -11,6 +12,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.resources.deployment import get_mon_deployments
 from ocs_ci.ocs.resources.pod import (
     wait_for_matching_pattern_in_pod_logs,
+    search_pattern_in_pod_logs,
     get_operator_pods,
     get_pod_node,
 )
@@ -275,11 +277,20 @@ def wait_for_mon_healthcheck_consistency(
         )
 
 
+def _search_since_start(pod_name, pattern, since_start):
+    """Search pod logs using a lookback measured from a monotonic start time."""
+    elapsed = max(0, time.monotonic() - since_start)
+    return search_pattern_in_pod_logs(
+        pod_name, pattern, since=f"{math.ceil(elapsed) + 2}s"
+    )
+
+
 def wait_for_mon_healthcheck_timeout_in_logs(
     mon_id,
     since="1m",
     timeout=300,
     sleep=20,
+    since_start=None,
 ) -> list:
     """
     Wait for expected mon healthcheck timeout patterns to appear in the
@@ -290,6 +301,8 @@ def wait_for_mon_healthcheck_timeout_in_logs(
         since (str): Time duration to look back in the logs (e.g., '1m', '5m').
         timeout (int): Maximum time in seconds to wait for the patterns to appear.
         sleep (int): Interval in seconds to wait between log polling attempts.
+        since_start (float | None): Monotonic start time for an expanding log window;
+            overrides ``since`` when provided.
 
     Returns:
         list: A list of matched log lines containing the timeout message.
@@ -313,6 +326,24 @@ def wait_for_mon_healthcheck_timeout_in_logs(
     rook_operator_pod = rook_operator_pods[0]
     # Note: Using double quotes " as seen in rook-ceph logs
     pattern = rf'(?i)mon\s+"{re.escape(mon_id)}".*(not found in|lost|loose)\s+quorum.*waiting for timeout'
+
+    if since_start is not None:
+        try:
+            for matched_lines in TimeoutSampler(
+                timeout,
+                sleep,
+                _search_since_start,
+                pod_name=rook_operator_pod.name,
+                pattern=pattern,
+                since_start=since_start,
+            ):
+                if matched_lines:
+                    return matched_lines
+        except TimeoutExpiredError as ex:
+            raise TimeoutExpiredError(
+                f"Mon '{mon_id}' healthcheck timeout message was not found "
+                f"within {timeout} seconds."
+            ) from ex
 
     return wait_for_matching_pattern_in_pod_logs(
         rook_operator_pod.name,
@@ -347,6 +378,7 @@ def verify_mon_healthcheck_timeout_value_in_logs(
     since="1m",
     timeout=300,
     sleep=20,
+    since_start=None,
 ) -> bool:
     """
     Verify that the expected mon healthcheck timeout value appears in the
@@ -359,6 +391,8 @@ def verify_mon_healthcheck_timeout_value_in_logs(
         since (str): Time duration to look back in the logs.
         timeout (int): Maximum time to wait for the patterns.
         sleep (int): Time to wait between log checks.
+        since_start (float | None): Monotonic start time for an expanding log window;
+            overrides ``since`` when provided.
 
     Returns:
         bool: True if the timeout value is found, False otherwise.
@@ -366,7 +400,7 @@ def verify_mon_healthcheck_timeout_value_in_logs(
     """
     try:
         mon_timeout_lines = wait_for_mon_healthcheck_timeout_in_logs(
-            mon_id, since, timeout, sleep
+            mon_id, since, timeout, sleep, since_start=since_start
         )
     except TimeoutExpiredError as ex:
         logger.warning(

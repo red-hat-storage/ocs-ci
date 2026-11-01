@@ -1,5 +1,4 @@
 import logging
-import math
 import time
 
 import pytest
@@ -171,10 +170,9 @@ class TestCephMonHealthCheck(ManageTest):
             f"after {failover_seconds:.0f} seconds"
         )
 
-        # Include logs since before the deployment was scaled down.
-        log_window = math.ceil(time.monotonic() - disruption_start) + 2
+        # Keep the disruption in every log polling window.
         res = verify_mon_healthcheck_timeout_value_in_logs(
-            mon_id, mon_timeout_seconds, since=f"{log_window}s", timeout=720
+            mon_id, mon_timeout_seconds, timeout=720, since_start=disruption_start
         )
         assert res, "Mon healthcheck timeout value not found in logs"
 
