@@ -42,6 +42,7 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2231")
 class TestCephDefaultValuesCheck(ManageTest):
+    @runs_on_provider
     def test_ceph_default_values_check(self):
         """
         This test checks ceph default values taken from OCS 4.3 with the
@@ -97,11 +98,17 @@ class TestCephDefaultValuesCheck(ManageTest):
         assert get_pg_balancer_status(), "PG balancer is not active"
 
         # Validates the default value of mon_max_pg_per_osd, BZ1908414.
-        if float(config.ENV_DATA["ocs_version"]) >= 4.7:
-            max_pg_per_osd = get_mon_config_value(key="mon_max_pg_per_osd")
-            assert (
-                max_pg_per_osd == 600
-            ), f"Failed, actual value:{max_pg_per_osd} not matching expected value: 600"
+        ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
+        expected_max_pg_per_osd = 600
+        if ocs_version >= version.VERSION_4_19:
+            expected_max_pg_per_osd = int(
+                constants.ROOK_CEPH_CONFIG_VALUES_420["global"]["mon_max_pg_per_osd"]
+            )
+        max_pg_per_osd = get_mon_config_value(key="mon_max_pg_per_osd")
+        assert max_pg_per_osd == expected_max_pg_per_osd, (
+            f"Failed, actual value:{max_pg_per_osd} not matching "
+            f"expected value: {expected_max_pg_per_osd}"
+        )
 
     def _validate_config_pre_420(self, ocs_version) -> None:
         """
