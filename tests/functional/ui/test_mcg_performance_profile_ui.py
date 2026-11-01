@@ -42,6 +42,8 @@ class TestConfigurePerformancePageLayout:
         configure_perf_page = storage_cluster_page.click_configure_performance_button()
 
         with test_step("Verify page object loaded"):
+            configure_perf_page.take_screenshot("verify_page_object_loaded")
+            configure_perf_page.copy_dom("verify_page_object_loaded")
             logger.assertion(f"Page object is not None: actual={configure_perf_page}")
             assert configure_perf_page is not None
 
@@ -64,6 +66,8 @@ class TestConfigurePerformancePageLayout:
         with test_step(
             "Verify Core storage 'Select options' button is present and clickable"
         ):
+            configure_perf_page.take_screenshot("verify_core_storage_select_button")
+            configure_perf_page.copy_dom("verify_core_storage_select_button")
             is_present = configure_perf_page.is_core_storage_select_button_present()
             logger.assertion(
                 f"Core storage select button present: expected=True, actual={is_present}"
@@ -71,6 +75,8 @@ class TestConfigurePerformancePageLayout:
             assert is_present
 
         with test_step("Verify MCG profile dropdown button is present and clickable"):
+            configure_perf_page.take_screenshot("verify_mcg_select_button")
+            configure_perf_page.copy_dom("verify_mcg_select_button")
             is_present = configure_perf_page.is_mcg_select_button_present()
             logger.assertion(
                 f"MCG select button present: expected=True, actual={is_present}"
@@ -78,6 +84,8 @@ class TestConfigurePerformancePageLayout:
             assert is_present
 
         with test_step("Verify page integrity with both sections"):
+            configure_perf_page.take_screenshot("verify_page_integrity")
+            configure_perf_page.copy_dom("verify_page_integrity")
             is_intact = configure_perf_page.verify_page_integrity()
             logger.assertion(
                 f"Page integrity verified: expected=True, actual={is_intact}"
@@ -121,6 +129,8 @@ class TestMCGProfileSelection:
                 # Until a profile is selected for the first time the button shows
                 # "Select a profile" (None here); afterwards it always shows the
                 # selected profile name.
+                configure_perf_page.take_screenshot("record_initial_mcg_profile")
+                configure_perf_page.copy_dom("record_initial_mcg_profile")
                 captured_profile = configure_perf_page.get_mcg_profile_from_ui()
                 logger.info(
                     "Initial MCG profile in UI: %s",
@@ -149,6 +159,8 @@ class TestMCGProfileSelection:
                     configure_perf_page = (
                         storage_cluster_page.click_configure_performance_button()
                     )
+                configure_perf_page.take_screenshot("verify_default_mcg_profile")
+                configure_perf_page.copy_dom("verify_default_mcg_profile")
                 cr_profile = configure_perf_page.get_mcg_profile_from_cr()
                 logger.assertion(
                     f"MCG profile from CR: expected='default', actual='{cr_profile}'"
@@ -176,6 +188,10 @@ class TestMCGProfileSelection:
                     configure_perf_page.save_configuration()
 
                 with test_step("Verify CR updated"):
+                    configure_perf_page.take_screenshot(
+                        f"verify_mcg_cr_transition_{target}"
+                    )
+                    configure_perf_page.copy_dom(f"verify_mcg_cr_transition_{target}")
                     try:
                         cr_profile = configure_perf_page.get_mcg_profile_from_cr()
                         logger.assertion(
@@ -200,6 +216,10 @@ class TestMCGProfileSelection:
                     configure_perf_page = (
                         storage_cluster_page.click_configure_performance_button()
                     )
+                    configure_perf_page.take_screenshot(
+                        f"verify_mcg_ui_transition_{target}"
+                    )
+                    configure_perf_page.copy_dom(f"verify_mcg_ui_transition_{target}")
                     ui_profile = configure_perf_page.get_mcg_profile_from_ui()
                     logger.assertion(
                         f"MCG profile from UI after transition: expected='{target}', actual='{ui_profile}'"
@@ -269,6 +289,12 @@ class TestCoreStorageRegression:
                     configure_perf_page.save_configuration()
 
                 with test_step("Verify CR updated"):
+                    configure_perf_page.take_screenshot(
+                        f"verify_core_storage_cr_transition_{target}"
+                    )
+                    configure_perf_page.copy_dom(
+                        f"verify_core_storage_cr_transition_{target}"
+                    )
                     try:
                         cr_profile = (
                             configure_perf_page.get_core_storage_profile_from_cr()
@@ -296,6 +322,12 @@ class TestCoreStorageRegression:
                     storage_cluster_page = navigator.nav_storage_cluster_default_page()
                     configure_perf_page = (
                         storage_cluster_page.click_configure_performance_button()
+                    )
+                    configure_perf_page.take_screenshot(
+                        f"verify_core_storage_ui_transition_{target}"
+                    )
+                    configure_perf_page.copy_dom(
+                        f"verify_core_storage_ui_transition_{target}"
                     )
                     ui_profile = configure_perf_page.get_core_storage_profile_from_ui()
                     logger.assertion(

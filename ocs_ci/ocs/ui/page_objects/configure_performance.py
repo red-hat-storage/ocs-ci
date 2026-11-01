@@ -243,6 +243,7 @@ class ConfigurePerformancePage(BaseUI):
                 except TimeoutException:
                     logger.error("MCG dropdown button not found on attempt %s", attempt)
                     self.take_screenshot("mcg_dropdown_button_timeout")
+                    self.copy_dom("mcg_dropdown_button_timeout")
                     if attempt == 3:
                         raise TimeoutException("MCG dropdown button not found on page")
                     continue
@@ -273,6 +274,7 @@ class ConfigurePerformancePage(BaseUI):
                         attempt,
                     )
                     self.take_screenshot("mcg_profile_option_timeout")
+                    self.copy_dom("mcg_profile_option_timeout")
                     registered = False
                     break
 
@@ -370,6 +372,7 @@ class ConfigurePerformancePage(BaseUI):
                 profile_name,
             )
             self.take_screenshot("core_storage_profile_option_timeout")
+            self.copy_dom("core_storage_profile_option_timeout")
             raise TimeoutException(
                 f"Core Storage profile '{profile_name}' not found in dropdown menu"
             ) from e
