@@ -6,11 +6,11 @@ from typing import Optional
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.base_ui import (
-    BaseUI,
     SeleniumDriver,
     wait_for_element_to_be_clickable,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ui.page_objects.storage_cluster import StorageClusterPage
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 
 
@@ -20,8 +20,11 @@ logger = logging.getLogger(__name__)
 MCG_PROFILE_PLACEHOLDER = "select a profile"
 
 
-class ConfigurePerformancePage(BaseUI):
+class ConfigurePerformancePage(StorageClusterPage):
     """Configure Performance page with Core Storage and MCG sections."""
+
+    def __init__(self):
+        super().__init__()
 
     def is_core_storage_section_present(self) -> bool:
         """Check if Core Storage section is present."""
