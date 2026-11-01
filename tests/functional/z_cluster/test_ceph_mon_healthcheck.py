@@ -24,16 +24,10 @@ from ocs_ci.helpers.ceph_mon_healthcheck import (
     get_storagecluster_mon_healthcheck,
     wait_for_cephcluster_to_settle,
     get_mon_ids,
-    delete_mon_pod,
     wait_for_mon_failover,
     select_mon_id_and_node,
 )
-from ocs_ci.ocs.node import (
-    unschedule_nodes,
-    schedule_nodes,
-    get_node_objs,
-    recover_node_to_ready_state,
-)
+from ocs_ci.ocs.resources.deployment import get_mon_deployments
 from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
@@ -88,10 +82,6 @@ class TestCephMonHealthCheck(ManageTest):
                 log.info("Removing mon healthcheck from StorageCluster")
                 delete_storagecluster_mon_healthcheck()
 
-            ocp_nodes = get_node_objs()
-            for n in ocp_nodes:
-                recover_node_to_ready_state(n)
-
         request.addfinalizer(finalizer)
 
     @tier4a
@@ -110,38 +100,57 @@ class TestCephMonHealthCheck(ManageTest):
             ),
         ],
     )
-    def test_patch_and_verify_mon_healthcheck(self, mon_timeout, mon_interval):
+    def test_patch_and_verify_mon_healthcheck(self, mon_timeout, mon_interval, request):
         """
         Test patch and verify ceph mon healthcheck and verify the new values are respected.
 
         Steps:
         1. Patch mon healthcheck values in StorageCluster
         2. Wait until the mon healthcheck in StorageCluster and CephCluster are consistent
-        3. Cordon a mon node and wait for the cephcluster to settle
-        4. Delete the mon pod on that node and wait for the mon to go down
+        3. Wait for the cephcluster to settle
+        4. Scale down a mon deployment and wait for the mon to go down
         5. Wait for the mon failover and check its timing
-        6. Schedule the mon node back
-        7. Verify the mon healthcheck timeout value in the operator logs
-        8. Wait for mons to be in quorum
-        9. Check cluster health
+        6. Verify the mon healthcheck timeout value in the operator logs
+        7. Wait for mons to be in quorum
+        8. Check cluster health
 
         """
         mon_timeout_seconds = int(mon_timeout[:-1]) * 60
         patch_storagecluster_mon_healthcheck(mon_timeout, mon_interval)
         wait_for_mon_healthcheck_consistency()
 
-        mon_id, node_name = select_mon_id_and_node()
-        mon_ids_before = get_mon_ids()
-        # Cordon the node before taking the mon down, and let the resulting
-        # orchestration finish. The operator stops the mon health check while a
-        # cephcluster orchestration runs, and an orchestration that starts when
-        # a mon is already down cannot update the remaining mons ("not enough
-        # monitors would be available"), so the health check never resumes.
-        unschedule_nodes([node_name])
+        # The operator pauses the mon health check during orchestration.
         wait_for_cephcluster_to_settle()
+        mon_id, _ = select_mon_id_and_node()
+        deployments = get_mon_deployments()
+        matching = [
+            deployment
+            for deployment in deployments
+            if deployment.data.get("metadata", {}).get("labels", {}).get("mon")
+            == mon_id
+        ]
+        assert len(matching) == 1, f"Expected one deployment for mon '{mon_id}'"
+        mon_deployment = matching[0]
+        original_uid = mon_deployment.data["metadata"]["uid"]
+        original_replicas = mon_deployment.replicas
+        assert original_replicas == 1, f"Mon '{mon_id}' is not scaled to one replica"
+        failover_observed = False
+
+        def restore_mon_deployment():
+            if failover_observed or not mon_deployment.ocp.is_exist(
+                resource_name=mon_deployment.name
+            ):
+                return
+            current = mon_deployment.ocp.get(resource_name=mon_deployment.name)
+            if current["metadata"]["uid"] == original_uid:
+                mon_deployment.scale(original_replicas)
+
+        request.addfinalizer(restore_mon_deployment)
+        mon_ids_before = get_mon_ids()
+        assert mon_id in mon_ids_before, f"Selected mon '{mon_id}' is no longer present"
 
         disruption_start = time.monotonic()
-        delete_mon_pod(mon_id)
+        mon_deployment.scale(0)
         wait_for_mon_status(
             mon_id=mon_id, status=constants.MON_STATUS_DOWN, timeout=180
         )
@@ -155,17 +164,14 @@ class TestCephMonHealthCheck(ManageTest):
         new_mon_id = wait_for_mon_failover(
             mon_ids_before, timeout=mon_failover_timeout, min_wait=min_failover_seconds
         )
+        failover_observed = True
         failover_seconds = time.monotonic() - mon_down_time
         log.info(
             f"The mon '{mon_id}' failed over to the new mon '{new_mon_id}' "
             f"after {failover_seconds:.0f} seconds"
         )
 
-        # Schedule the node back as soon as the failover is seen, so the new mon
-        # can start and the cluster is not left degraded during the checks below
-        schedule_nodes([node_name])
-
-        # Include logs since before the pod was deleted, even after the failover wait.
+        # Include logs since before the deployment was scaled down.
         log_window = math.ceil(time.monotonic() - disruption_start) + 2
         res = verify_mon_healthcheck_timeout_value_in_logs(
             mon_id, mon_timeout_seconds, since=f"{log_window}s", timeout=720

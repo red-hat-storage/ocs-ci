@@ -12,7 +12,6 @@ from ocs_ci.ocs.resources.deployment import get_mon_deployments
 from ocs_ci.ocs.resources.pod import (
     wait_for_matching_pattern_in_pod_logs,
     get_operator_pods,
-    get_mon_pod_by_id,
     get_pod_node,
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -428,33 +427,12 @@ def get_mon_ids() -> set:
     return mon_ids
 
 
-def delete_mon_pod(mon_id, wait=True) -> None:
-    """
-    Delete the mon pod of a specified monitor ID to take the mon down.
-
-    When the mon node is unschedulable, the mon pod created in its place stays
-    Pending, so the mon stays out of quorum until the mon healthcheck times out.
-
-    Args:
-        mon_id (str): The monitor ID (e.g., 'a', 'b', 'c') to take down.
-        wait (bool): Wait for the mon pod to be deleted. True by default.
-
-    Raises:
-        ValueError: If the mon pod is not found.
-
-    """
-    mon_pod = get_mon_pod_by_id(mon_id)
-    logger.info(f"Deleting the pod {mon_pod.name} to take the mon '{mon_id}' down")
-    mon_pod.delete(wait=wait)
-
-
 def wait_for_mon_failover(mon_ids_before, timeout=600, sleep=20, min_wait=0) -> str:
     """
     Wait until the rook-ceph-operator fails the mon over by creating a new mon.
 
     The new mon deployment is the signal of the failover. The new mon pod
-    itself can stay Pending until the mon node is schedulable again, as the
-    mons have an anti affinity that keeps two mons from sharing a node.
+    itself can remain Pending while the cluster schedules it.
 
     Args:
         mon_ids_before (set): The mon ids from before the mon went down.
@@ -490,10 +468,7 @@ def wait_for_mon_failover(mon_ids_before, timeout=600, sleep=20, min_wait=0) -> 
             if new_mon_ids:
                 new_mon_id = sorted(new_mon_ids)[0]
                 if elapsed > timeout:
-                    raise TimeoutExpiredError(
-                        f"The new mon '{new_mon_id}' was observed after {elapsed:.0f} "
-                        f"seconds, exceeding the {timeout}-second failover timeout."
-                    )
+                    break
                 if last_absent < min_wait:
                     raise AssertionError(
                         f"The new mon '{new_mon_id}' appeared before the minimum "
@@ -508,10 +483,14 @@ def wait_for_mon_failover(mon_ids_before, timeout=600, sleep=20, min_wait=0) -> 
             )
     except TimeoutExpiredError as ex:
         raise TimeoutExpiredError(
-            f"The mon did not fail over within {timeout} seconds. The mon ids "
-            f"are still {sorted(mon_ids_before)}. Check the rook-ceph-operator "
-            f"log for the mon health check messages."
+            f"No new mon was observed within {timeout} seconds. The initial mon "
+            f"ids were {sorted(mon_ids_before)}. Check the rook-ceph-operator "
+            "log for the mon health check messages."
         ) from ex
+    raise TimeoutExpiredError(
+        f"The new mon '{new_mon_id}' was observed after {elapsed:.0f} "
+        f"seconds, exceeding the {timeout}-second failover timeout."
+    )
 
 
 def select_mon_id_and_node() -> tuple[str, str]:
