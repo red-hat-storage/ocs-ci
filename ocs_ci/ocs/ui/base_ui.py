@@ -288,20 +288,25 @@ class BaseUI:
             )
             take_screenshot("ElementClickInterceptedException")
             self.copy_dom()
-            time.sleep(2)
             try:
-                element = self.driver.find_element(locator[1], locator[0])
-                self.driver.execute_script(
+                element = wait_for_element_to_be_clickable(locator, timeout)
+                SeleniumDriver().execute_script(
                     "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});",
                     element,
                 )
-                time.sleep(1)
                 element.click()
-            except Exception:
-                try:
-                    self.click_with_script(locator)
-                except Exception:
-                    _do_click(locator, timeout, enable_screenshot, copy_dom)
+                logger.info("Click succeeded after scrolling the element into view")
+            except (
+                ElementClickInterceptedException,
+                StaleElementReferenceException,
+                TimeoutException,
+            ) as ex:
+                logger.warning(
+                    f"Click after scrolling failed ({type(ex).__name__}), "
+                    "falling back to JavaScript click"
+                )
+                self.click_with_script(locator)
+                logger.info("Click succeeded using the JavaScript fallback")
 
     def click_with_script(self, locator):
         """
