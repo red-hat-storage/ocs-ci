@@ -727,9 +727,21 @@ def verify_network_mapping_configmap_content(
         unmapped_ip (str): Optional IP that should NOT appear in the ConfigMap content.
 
     Raises:
+        ValueError: If expected_method is not a supported translation method.
         AssertionError: If validation checks fail.
     """
     import yaml as _yaml
+
+    supported_methods = (
+        DRPOLICY_NM_METHOD_PATTERN,
+        DRPOLICY_NM_METHOD_EXPLICIT,
+        DRPOLICY_NM_METHOD_PATTERN_OVERRIDES,
+    )
+    if expected_method not in supported_methods:
+        raise ValueError(
+            f"Unsupported expected_method '{expected_method}'; "
+            f"expected one of {supported_methods}"
+        )
 
     config.switch_acm_ctx()
     logger.info(
