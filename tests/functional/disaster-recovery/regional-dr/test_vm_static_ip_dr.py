@@ -234,9 +234,7 @@ class TestVMIPTranslationConfigMap:
             f"Step c: Deploy static-IP VMs in both namespaces on primary '{primary_cluster}'"
         )
         config.switch_to_cluster_by_name(primary_cluster)
-        wl_all = cnv_workload_with_static_ip(
-            pvc_vm=2, dr_protect=False, shared_drpc_protection=False
-        )
+        wl_all = cnv_workload_with_static_ip(pvc_vm=2, shared_drpc_protection=False)
         assert len(wl_all) >= 2, "Expected two workloads (one per namespace)"
         workload = wl_all[0]  # vm-ip-translation-test (ns1)
         workload2 = wl_all[1]  # test-vm-static-ip (ns2)
@@ -782,9 +780,7 @@ class TestVMIPTranslationConfigMap:
             "the ConfigMap is in place"
         )
         config.switch_to_cluster_by_name(primary_cluster_name)
-        wl1 = cnv_workload_with_static_ip(
-            pvc_vm=1, dr_protect=False, shared_drpc_protection=False
-        )
+        wl1 = cnv_workload_with_static_ip(pvc_vm=1, shared_drpc_protection=False)
         assert wl1, "VM-1 workload deployment failed"
         workload1 = wl1[0]
 
@@ -1074,9 +1070,7 @@ class TestVMIPTranslationConfigMap:
 
         logger.test_step("Deploy VM-1 without DR protection")
         config.switch_to_cluster_by_name(primary_cluster)
-        wl1 = cnv_workload_with_static_ip(
-            pvc_vm=1, dr_protect=False, shared_drpc_protection=False
-        )
+        wl1 = cnv_workload_with_static_ip(pvc_vm=1, shared_drpc_protection=False)
         assert wl1, "VM-1 workload deployment failed"
         workload1 = wl1[0]
 
@@ -1646,9 +1640,7 @@ class TestVMIPTranslationMiscellaneous:
 
         logger.test_step("Deploy the static-IP CNV workload without DR protection")
         config.switch_to_cluster_by_name(primary_cluster)
-        wl_list = cnv_workload_with_static_ip(
-            pvc_vm=1, dr_protect=False, shared_drpc_protection=False
-        )
+        wl_list = cnv_workload_with_static_ip(pvc_vm=1, shared_drpc_protection=False)
         assert wl_list, "Static-IP CNV workload deployment failed"
         workload = wl_list[0]
         namespace = workload.workload_namespace
@@ -1923,7 +1915,6 @@ class TestVMIPTranslationMixedNamespace:
         config.switch_to_cluster_by_name(primary_cluster_name)
         wl1 = cnv_workload_with_static_ip(
             pvc_vm=1,
-            dr_protect=False,
             shared_drpc_protection=False,
         )
         assert wl1, "VM-1 static-IP workload deployment failed"
@@ -1939,7 +1930,6 @@ class TestVMIPTranslationMixedNamespace:
         # pvc_vm=2 deploys shared[0]=VM-2 and shared[1]=VM-3 in one call
         wl_shared = cnv_workload_with_static_ip(
             pvc_vm=2,
-            dr_protect=False,
             shared_drpc_protection=True,
         )
         # factory() accumulates all instances across calls; after the VM-1 call

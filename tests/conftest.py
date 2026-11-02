@@ -8788,20 +8788,19 @@ def cnv_workload_with_static_ip(request):
 
     def factory(
         pvc_vm=1,
-        dr_protect=False,
         shared_drpc_protection=False,
         dr_policy_name=None,
-        skip_validate=False,
     ):
         """
+        Deploys the workloads without DR-protecting them. The test is expected to
+        create the NetworkMapping ConfigMap first and then DR-protect the workload
+        (Placement + DRPC via CLI, or via UI).
+
         Args:
             pvc_vm (int): Number of workload instances to create
-            dr_protect (bool): When True, DR-protects via CLI immediately after deploy
             shared_drpc_protection (bool): When True, additional instances share the
                 namespace and DRPC of the first instance
             dr_policy_name (str): DRPolicy name override; if None uses the default
-            skip_validate (bool): When True, skip the post-deploy odf-cli validate step.
-                Use when a NetworkMapping ConfigMap will be applied later in the test.
 
         Returns:
             list: objects of workload class
@@ -8850,13 +8849,8 @@ def cnv_workload_with_static_ip(request):
             shared_flags.append(shared_drpc_protection)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload(
-                dr_protect=dr_protect, shared_drpc_protection=shared_drpc_protection
+                dr_protect=False, shared_drpc_protection=shared_drpc_protection
             )
-            if dr_protect and not skip_validate:
-                dr_helpers.validate_application_odf_cli(
-                    drpc_name=workload.discovered_apps_placement_name,
-                    namespace=constants.DR_OPS_NAMESPACE,
-                )
 
         return instances
 
