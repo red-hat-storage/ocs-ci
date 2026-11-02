@@ -123,6 +123,79 @@ SECONDARY_SUBNET_NS2 = "192.168.20.0/24"
 # ---------------------------------------------------------------------------
 
 
+def _build_mapping_entry(
+    nad_namespace,
+    nad_name,
+    cluster1_name,
+    cluster2_name,
+    cluster1_cidr,
+    cluster2_cidr,
+    explicit_mappings=None,
+    regex_mappings=None,
+):
+    """
+    Build one entry of the networkMappings list.
+
+    This is the single place that decides when regex rules are generated, so
+    the single-network and the multi-network paths of
+    build_network_mapping_cm_data behave identically:
+
+    - regex_mappings is None: a host-preserving bidirectional regex is
+      generated from the cluster CIDRs (explicit mappings, if any, still take
+      precedence over it)
+    - regex_mappings is an empty dict: no regex rules are written
+    - regex_mappings is a non-empty dict: used as given
+
+    Args:
+        nad_namespace (str): namespace of the NAD
+        nad_name (str): name of the NAD / VM interface
+        cluster1_name (str): first cluster name
+        cluster2_name (str): second cluster name
+        cluster1_cidr (str): subnet on cluster1 (e.g. "192.168.1.0/24")
+        cluster2_cidr (str): subnet on cluster2 (e.g. "192.168.2.0/24")
+        explicit_mappings (list[dict]): optional pinned IP pairs
+        regex_mappings (dict): optional {direction_key: [{pattern, replacement}]}
+
+    Returns:
+        dict: one networkMappings entry
+    """
+    entry = {
+        "networkRef": {
+            "nadNamespace": nad_namespace,
+            "nadName": nad_name,
+        },
+        "cidr": {
+            cluster1_name: cluster1_cidr,
+            cluster2_name: cluster2_cidr,
+        },
+    }
+    if explicit_mappings:
+        entry["explicitMappings"] = explicit_mappings
+
+    if regex_mappings is None:
+        c1_prefix = cluster1_cidr.rsplit(".", 1)[0]  # e.g. "192.168.10"
+        c2_prefix = cluster2_cidr.rsplit(".", 1)[0]  # e.g. "192.168.20"
+        c1_escaped = c1_prefix.replace(".", "\\.")
+        c2_escaped = c2_prefix.replace(".", "\\.")
+        entry["regexMappings"] = {
+            f"{cluster1_name}-to-{cluster2_name}": [
+                {
+                    "pattern": f"^{c1_escaped}\\.(\\d+)$",
+                    "replacement": f"{c2_prefix}.$1",
+                }
+            ],
+            f"{cluster2_name}-to-{cluster1_name}": [
+                {
+                    "pattern": f"^{c2_escaped}\\.(\\d+)$",
+                    "replacement": f"{c1_prefix}.$1",
+                }
+            ],
+        }
+    elif regex_mappings:
+        entry["regexMappings"] = regex_mappings
+    return entry
+
+
 def build_network_mapping_cm_data(
     cluster1_name=None,
     cluster2_name=None,
@@ -185,93 +258,33 @@ def build_network_mapping_cm_data(
     Returns:
         dict: ConfigMap.data contents with a single key "mappings.yaml"
     """
-    mapping_entries = []
-
     if network_mappings:
-        for net in network_mappings:
-            c1_name = net.get("cluster1_name", cluster1_name)
-            c2_name = net.get("cluster2_name", cluster2_name)
-            ns = net.get("nad_namespace") or net.get("namespace")
-            name = net.get("nad_name") or net.get("name", VM_NETWORK_NAD_NAME)
-            c1_cidr = net.get("cluster1_cidr")
-            c2_cidr = net.get("cluster2_cidr")
-            exp_maps = net.get("explicit_mappings")
-            reg_maps = net.get("regex_mappings")
-
-            entry = {
-                "networkRef": {
-                    "nadNamespace": ns,
-                    "nadName": name,
-                },
-                "cidr": {
-                    c1_name: c1_cidr,
-                    c2_name: c2_cidr,
-                },
-            }
-            if exp_maps:
-                entry["explicitMappings"] = exp_maps
-
-            if reg_maps is not None:
-                if reg_maps:
-                    entry["regexMappings"] = reg_maps
-            elif not exp_maps:
-                c1_prefix = c1_cidr.rsplit(".", 1)[0]
-                c2_prefix = c2_cidr.rsplit(".", 1)[0]
-                c1_escaped = c1_prefix.replace(".", "\\.")
-                c2_escaped = c2_prefix.replace(".", "\\.")
-                entry["regexMappings"] = {
-                    f"{c1_name}-to-{c2_name}": [
-                        {
-                            "pattern": f"^{c1_escaped}\\.(\\d+)$",
-                            "replacement": f"{c2_prefix}.$1",
-                        }
-                    ],
-                    f"{c2_name}-to-{c1_name}": [
-                        {
-                            "pattern": f"^{c2_escaped}\\.(\\d+)$",
-                            "replacement": f"{c1_prefix}.$1",
-                        }
-                    ],
-                }
-            mapping_entries.append(entry)
+        mapping_entries = [
+            _build_mapping_entry(
+                nad_namespace=net.get("nad_namespace") or net.get("namespace"),
+                nad_name=net.get("nad_name") or net.get("name", VM_NETWORK_NAD_NAME),
+                cluster1_name=net.get("cluster1_name", cluster1_name),
+                cluster2_name=net.get("cluster2_name", cluster2_name),
+                cluster1_cidr=net.get("cluster1_cidr"),
+                cluster2_cidr=net.get("cluster2_cidr"),
+                explicit_mappings=net.get("explicit_mappings"),
+                regex_mappings=net.get("regex_mappings"),
+            )
+            for net in network_mappings
+        ]
     else:
-        mapping_entry = {
-            "networkRef": {
-                "nadNamespace": nad_namespace,
-                "nadName": nad_name,
-            },
-            "cidr": {
-                cluster1_name: cluster1_cidr,
-                cluster2_name: cluster2_cidr,
-            },
-        }
-        if explicit_mappings:
-            mapping_entry["explicitMappings"] = explicit_mappings
-
-        if regex_mappings is not None:
-            if regex_mappings:
-                mapping_entry["regexMappings"] = regex_mappings
-        else:
-            # Auto-generate simple host-preserving bidirectional regex rules
-            c1_prefix = cluster1_cidr.rsplit(".", 1)[0]  # e.g. "192.168.10"
-            c2_prefix = cluster2_cidr.rsplit(".", 1)[0]  # e.g. "192.168.20"
-            c1_escaped = c1_prefix.replace(".", "\\.")
-            c2_escaped = c2_prefix.replace(".", "\\.")
-            mapping_entry["regexMappings"] = {
-                f"{cluster1_name}-to-{cluster2_name}": [
-                    {
-                        "pattern": f"^{c1_escaped}\\.(\\d+)$",
-                        "replacement": f"{c2_prefix}.$1",
-                    }
-                ],
-                f"{cluster2_name}-to-{cluster1_name}": [
-                    {
-                        "pattern": f"^{c2_escaped}\\.(\\d+)$",
-                        "replacement": f"{c1_prefix}.$1",
-                    }
-                ],
-            }
-        mapping_entries.append(mapping_entry)
+        mapping_entries = [
+            _build_mapping_entry(
+                nad_namespace=nad_namespace,
+                nad_name=nad_name,
+                cluster1_name=cluster1_name,
+                cluster2_name=cluster2_name,
+                cluster1_cidr=cluster1_cidr,
+                cluster2_cidr=cluster2_cidr,
+                explicit_mappings=explicit_mappings,
+                regex_mappings=regex_mappings,
+            )
+        ]
 
     document = {
         "version": "v1",
