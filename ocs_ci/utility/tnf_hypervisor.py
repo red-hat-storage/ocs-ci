@@ -7,6 +7,7 @@ import base64
 import json
 import logging
 import os
+import socket
 import tempfile
 
 import boto3
@@ -287,6 +288,7 @@ class TNFHypervisor:
             self._wait_and_delete_resource(
                 lambda: self.ec2_client.delete_vpc(VpcId=stack["vpc_id"]),
                 f"VPC {stack['vpc_id']}",
+                retries=20,
             )
 
         logger.info("VPC networking stack cleanup complete")
@@ -447,6 +449,15 @@ class TNFHypervisor:
                 return
 
     def _try_ssh_connect(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(15)
+        try:
+            if sock.connect_ex((self.public_ip, 22)) != 0:
+                logger.info(f"Port 22 not reachable yet on {self.public_ip}")
+                return False
+        finally:
+            sock.close()
+
         try:
             conn = Connection(
                 host=self.public_ip,
@@ -459,7 +470,7 @@ class TNFHypervisor:
                 logger.info(f"SSH ready, hostname: {stdout.strip()}")
                 return True
         except Exception as e:
-            logger.debug(f"SSH not ready yet: {e}")
+            logger.info(f"SSH not ready yet on {self.public_ip}: {e}")
         return False
 
     def terminate_instance(self):
@@ -473,11 +484,17 @@ class TNFHypervisor:
         logger.info(f"Terminating EC2 instance: {self.instance_id}")
         self.ec2_client.terminate_instances(InstanceIds=[self.instance_id])
         waiter = self.ec2_client.get_waiter("instance_terminated")
-        waiter.wait(
-            InstanceIds=[self.instance_id],
-            WaiterConfig={"Delay": 30, "MaxAttempts": 40},
-        )
-        logger.info(f"EC2 instance terminated: {self.instance_id}")
+        try:
+            waiter.wait(
+                InstanceIds=[self.instance_id],
+                WaiterConfig={"Delay": 30, "MaxAttempts": 60},
+            )
+            logger.info(f"EC2 instance terminated: {self.instance_id}")
+        except Exception as e:
+            logger.warning(
+                f"Timed out waiting for {self.instance_id} to terminate: {e}. "
+                "Continuing with networking cleanup."
+            )
 
         if self._created_vpc_stack:
             self._delete_vpc_stack()

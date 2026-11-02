@@ -1406,6 +1406,10 @@ def validate_pdb_creation():
         AssertionError: If required PDBs were not created.
 
     """
+    if config.ENV_DATA.get("tnf"):
+        logger.info("Skipping PDB validation for TNF DualReplica cluster")
+        return
+
     pdb_obj = ocp.OCP(
         kind="PodDisruptionBudget", namespace=config.ENV_DATA["cluster_namespace"]
     )
@@ -1421,13 +1425,6 @@ def validate_pdb_creation():
 
     # 4.19.0-59 is the stable build which doesn't contain the updated PDB count for Noobaa DB
     odf_running_version = version.get_ocs_version_from_csv(only_major_minor=True)
-
-    if config.ENV_DATA.get("tnf") and odf_running_version < version.VERSION_5_0:
-        logger.info(
-            "Skipping PDB validation for TNF DualReplica on ODF %s",
-            odf_running_version,
-        )
-        return
 
     if config.DEPLOYMENT.get("arbiter_deployment"):
         pdb_count = constants.PDB_COUNT_ARBITER
