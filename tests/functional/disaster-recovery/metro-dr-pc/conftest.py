@@ -13,7 +13,7 @@ def pytest_collection_modifyitems(items):
         items: list of collected tests
 
     """
-    client_cluster_present = config.hci_client_exist()
+    client_cluster_present = config.client_cluster_exist()
     if config.MULTICLUSTER.get("multicluster_mode") != constants.MDR_MODE:
         for item in items.copy():
             if "disaster-recovery/metro-dr-pc" in str(item.fspath):
