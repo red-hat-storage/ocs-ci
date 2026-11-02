@@ -264,7 +264,7 @@ class TestPvcMultiClonePerformance(PASTest):
 
         # Analyse the results and log the results
         for i, val in enumerate(self.cloned_obj_list):
-            log.info(f"The Results for clone number {i+1} ({val}) :")
+            log.info(f"The Results for clone number {i + 1} ({val}) :")
             log.info(f"  Creation time is     : {creation_time_list[i]:,.3f} secs.")
             log.info(f"  Csi Creation time is : {csi_creation_time_list[i]:,.3f} secs.")
             log.info(f"  Creation speed is    : {creation_speed_list[i]:,.3f} MB/sec.")
