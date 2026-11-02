@@ -38,6 +38,33 @@ from ocs_ci.utility.utils import get_running_acm_version
 log = logging.getLogger(__name__)
 
 
+def _exception_chain_names(exc):
+    """
+    Collect the class names of an exception and everything chained to it.
+
+    Follows both __cause__ (raise ... from ...) and __context__ (exception
+    raised while handling another one), at any depth, without looping on
+    cyclic chains.
+
+    Args:
+        exc (BaseException): the exception to inspect
+
+    Returns:
+        list: exception class names, starting with exc itself
+    """
+    names = []
+    seen = set()
+    pending = [exc]
+    while pending:
+        current = pending.pop(0)
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        names.append(type(current).__name__)
+        pending.extend([current.__cause__, current.__context__])
+    return names
+
+
 def get_managed_clusters_not_eligible_for_dr_topology():
     """
     Return ACM managed cluster names that are not registered as DRClusters on the hub.
@@ -1827,10 +1854,7 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
         try:
             acm_obj.driver.get(vm_detail_url)
         except Exception as exc:
-            exc_chain = [
-                type(e).__name__
-                for e in [exc] + list(exc.__context__ and [exc.__context__] or [])
-            ]
+            exc_chain = _exception_chain_names(exc)
             is_browser_crash = isinstance(exc, WebDriverException) or any(
                 "ReadTimeoutError" in n or "ConnectionError" in n for n in exc_chain
             )
@@ -1841,8 +1865,10 @@ def check_or_assign_drpolicy_for_discovered_vms_via_ui(
                 )
                 try:
                     acm_obj.driver.quit()
-                except Exception:
-                    pass
+                except Exception as quit_exc:
+                    log.warning(
+                        f"Ignoring error while quitting the crashed browser: {quit_exc!r}"
+                    )
                 SeleniumDriver.remove_instance()
                 login_ui()
                 acm_obj.driver = SeleniumDriver()
