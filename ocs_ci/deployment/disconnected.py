@@ -586,7 +586,6 @@ def mirror_index_image_via_oc_mirror(
         # the first one holding the requested tag, which - thanks to the
         # adjacent version tags - can be an older build.
         itms_name = "isf-fdf-itms"
-        delete_stale_fdf_itms(keep=itms_name)
         itms_content = {
             "apiVersion": "config.openshift.io/v1",
             "kind": "ImageTagMirrorSet",
@@ -609,6 +608,10 @@ def mirror_index_image_via_oc_mirror(
             yaml.dump(itms_content, f)
         logger.info(f"ImageTagMirrorSet written to {itms_file}")
         exec_cmd(f"oc apply -f {itms_file}")
+        # Drop the rules of the previous runs once the new one is in place, so
+        # that the nodes are never left without a mirror for the catalog. Both
+        # changes are rendered by the MCO before the rollout waited for below.
+        delete_stale_fdf_itms(keep=itms_name)
 
     wait_for_machineconfigpool_status("all")
 

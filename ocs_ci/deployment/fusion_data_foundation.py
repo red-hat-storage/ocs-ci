@@ -163,7 +163,14 @@ class FusionDataFoundationDeployment:
             )
         else:
             catalog_image = config.DEPLOYMENT.get("fdf_catalog_image")
-            registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
+            if config.DEPLOYMENT.get("live_deployment"):
+                # Released build: it is pulled from, and mirrored out of, the
+                # same registry the upgrade uses for a released version
+                registry = config.DEPLOYMENT.get(
+                    "fdf_upgrade_registry"
+                ) or config.DEPLOYMENT.get("fdf_pre_release_registry")
+            else:
+                registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
             tag = config.DEPLOYMENT.get("fdf_image_tag") or config.ENV_DATA.get(
                 "fdf_version"
             )
