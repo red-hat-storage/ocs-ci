@@ -149,7 +149,9 @@ DEPLOYMENT:
   # Erasure Coding: deploy ODF with EC as default pool type instead of replication
   ec_default_pools: False
   # FDF
-  fdf_upgrade_registry: "preprod.icr.io/cpopen"
+  # Registry of the released FDF catalog images, used when only the version to
+  # upgrade to is given. Set it explicitly to upgrade to a pre-release build.
+  fdf_upgrade_registry: "icr.io/cpopen"
   # Full FDF catalog image reference used when mirroring during a disconnected
   # FDF deployment (equivalent of the fdf-mirror --catalog-image argument).
   # When empty it is built from fdf_pre_release_registry and fdf_image_tag.
