@@ -1720,6 +1720,11 @@ def get_all_drpolicy():
     return return_drpolicy_list
 
 
+# Guard flag: bounce the ramen-hub-operator pod at most once per process
+# across all retry attempts of validate_drpolicy_grouping.
+_ramen_hub_pod_bounced = False
+
+
 @retry(UnexpectedBehaviour, tries=10, delay=30, backoff=2, max_delay=120)
 def validate_drpolicy_grouping(drpolicy_name=None):
     """
