@@ -4341,11 +4341,11 @@ external_systems = {
 
 configure_performance = {
     "core_storage_section": (
-        "//h3[normalize-space()='Core storage']/ancestor::div[contains(@class, 'u-mb-2xl')][1]",
+        "//small[@id='core-storage-desc']/parent::div",
         By.XPATH,
     ),
     "mcg_section": (
-        "//h3[normalize-space()='Multicloud Object Gateway']/ancestor::div[contains(@class, 'u-mb-2xl')][1]",
+        "//small[@id='mcg-performance-desc']/parent::div",
         By.XPATH,
     ),
     "mcg_select_profile_button": (
