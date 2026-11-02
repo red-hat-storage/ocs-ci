@@ -7,6 +7,7 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ui.base_ui import (
@@ -14,6 +15,8 @@ from ocs_ci.ocs.ui.base_ui import (
     wait_for_element_to_be_clickable,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import wait_for_noobaa_db_ready
+from ocs_ci.ocs.resources.storage_cluster import get_noobaa_phase
 from ocs_ci.ocs.ui.page_objects.storage_cluster import StorageClusterPage
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import TimeoutSampler
@@ -492,6 +495,43 @@ class ConfigurePerformancePage(StorageClusterPage):
                 sampler.last_result,
                 timeout,
                 expected_profile,
+            )
+        return sampler.last_result
+
+    def wait_for_noobaa_ready(self, timeout: int = 900) -> Optional[str]:
+        """Wait for NooBaa to settle after a performance profile change.
+
+        Changing a profile resizes the NooBaa DB, which makes CNPG roll the
+        DB pods and drives the NooBaa CR out of Ready. Tests that run later
+        in the session are gated on that phase, so a test that changes a
+        profile must leave NooBaa settled behind it.
+
+        Args:
+            timeout (int): Seconds to wait for the NooBaa CR to report Ready.
+
+        Returns:
+            Optional[str]: Last NooBaa phase observed. It differs from
+                "Ready" when the wait times out.
+        """
+        logger.info("Waiting for the NooBaa DB pods to stabilize")
+        try:
+            wait_for_noobaa_db_ready()
+        except TimeoutExpiredError as e:
+            logger.warning("NooBaa DB pods did not stabilize: %s", e)
+
+        namespace = config.ENV_DATA["cluster_namespace"]
+        logger.info("Waiting up to %ss for NooBaa to report Ready", timeout)
+        sampler = TimeoutSampler(timeout, 10, get_noobaa_phase, namespace)
+        try:
+            for phase in sampler:
+                if phase == constants.STATUS_READY:
+                    logger.info("NooBaa is Ready")
+                    return phase
+        except TimeoutExpiredError:
+            logger.warning(
+                "NooBaa is still in phase '%s' after %ss",
+                sampler.last_result,
+                timeout,
             )
         return sampler.last_result
 

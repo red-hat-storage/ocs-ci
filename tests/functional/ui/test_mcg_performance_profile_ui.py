@@ -220,6 +220,11 @@ class TestMCGProfileSelection:
             )
             configure_perf_page.select_mcg_profile(initial_ui_profile)
             configure_perf_page.save_configuration()
+            # The profile change rolls the NooBaa DB pods. Later tests are
+            # gated on the NooBaa phase, so settle before handing over.
+            logger.test_step("Wait for NooBaa to become Ready after the profile change")
+            noobaa_phase = configure_perf_page.wait_for_noobaa_ready()
+            logger.info("NooBaa phase after restore: %s", noobaa_phase)
         logger.info("✅ UI-3 PASSED")
 
 
@@ -316,4 +321,8 @@ class TestCoreStorageRegression:
             )
             configure_perf_page.select_core_storage_profile(initial_profile)
             configure_perf_page.save_configuration()
+            # resourceProfile resizes NooBaa too, so settle before handing over.
+            logger.test_step("Wait for NooBaa to become Ready after the profile change")
+            noobaa_phase = configure_perf_page.wait_for_noobaa_ready()
+            logger.info("NooBaa phase after restore: %s", noobaa_phase)
         logger.info("✅ UI-2 PASSED")
