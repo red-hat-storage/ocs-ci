@@ -221,7 +221,7 @@ class DeploymentUI(PageNavigator):
             self.page_has_loaded(retries=15)
             logger.info("Click Configure ODF")
             self.do_click(locator=self.dep_loc["configure_odf"], enable_screenshot=True)
-            if mcg_only:
+            if mcg_only and ocs_version >= version.VERSION_4_23:
                 logger.info(
                     "MCG-only deployment: clicking 'Setup Multicloud Object Gateway' card"
                 )
@@ -304,7 +304,7 @@ class DeploymentUI(PageNavigator):
         """
         logger.info("Install MCG ONLY cluster via UI")
         ocs_version = version.get_semantic_ocs_version_from_config()
-        if ocs_version >= version.VERSION_4_20:
+        if ocs_version >= version.VERSION_4_23:
             if config.DEPLOYMENT.get("local_storage"):
                 raise ConfigurationError(
                     "MCG-only + LSO is not verified on ODF >= 5.0. "
