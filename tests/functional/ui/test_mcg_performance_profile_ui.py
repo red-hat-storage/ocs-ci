@@ -1,7 +1,6 @@
 """UI tests for MCG Performance Profiles (RHSTOR-8629)."""
 
 import logging
-import time
 
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_disconnected_cluster,
@@ -158,7 +157,7 @@ class TestMCGProfileSelection:
                 )
             configure_perf_page.take_screenshot("verify_default_mcg_profile")
             configure_perf_page.copy_dom("verify_default_mcg_profile")
-            cr_profile = configure_perf_page.get_mcg_profile_from_cr()
+            cr_profile = configure_perf_page.wait_for_mcg_profile_in_cr("default")
             logger.assertion(
                 f"MCG profile from CR: expected='default', actual='{cr_profile}'"
             )
@@ -189,24 +188,13 @@ class TestMCGProfileSelection:
                     f"verify_mcg_cr_transition_{target}"
                 )
                 configure_perf_page.copy_dom(f"verify_mcg_cr_transition_{target}")
-                try:
-                    cr_profile = configure_perf_page.get_mcg_profile_from_cr()
-                    logger.assertion(
-                        f"MCG profile from CR after transition: expected='{target}', actual='{cr_profile}'"
-                    )
-                    assert (
-                        cr_profile == target
-                    ), f"MCG profile in CR should be '{target}', got '{cr_profile}'"
-                except ValueError as e:
-                    logger.warning("CR verification failed, retrying: %s", e)
-                    time.sleep(2)
-                    cr_profile = configure_perf_page.get_mcg_profile_from_cr()
-                    logger.assertion(
-                        f"MCG profile from CR after transition retry: expected='{target}', actual='{cr_profile}'"
-                    )
-                    assert (
-                        cr_profile == target
-                    ), f"MCG profile in CR should be '{target}', got '{cr_profile}'"
+                cr_profile = configure_perf_page.wait_for_mcg_profile_in_cr(target)
+                logger.assertion(
+                    f"MCG profile from CR after transition: expected='{target}', actual='{cr_profile}'"
+                )
+                assert (
+                    cr_profile == target
+                ), f"MCG profile in CR should be '{target}', got '{cr_profile}'"
 
                 logger.test_step("Reopen page and verify UI shows profile")
                 storage_cluster_page = navigator.nav_storage_cluster_default_page()
@@ -292,24 +280,15 @@ class TestCoreStorageRegression:
                 configure_perf_page.copy_dom(
                     f"verify_core_storage_cr_transition_{target}"
                 )
-                try:
-                    cr_profile = configure_perf_page.get_core_storage_profile_from_cr()
-                    logger.assertion(
-                        f"Core Storage profile from CR: expected='{target}', actual='{cr_profile}'"
-                    )
-                    assert (
-                        cr_profile == target
-                    ), f"Core Storage profile in CR should be '{target}', got '{cr_profile}'"
-                except ValueError as e:
-                    logger.warning("CR verification failed, retrying: %s", e)
-                    time.sleep(2)
-                    cr_profile = configure_perf_page.get_core_storage_profile_from_cr()
-                    logger.assertion(
-                        f"Core Storage profile from CR retry: expected='{target}', actual='{cr_profile}'"
-                    )
-                    assert (
-                        cr_profile == target
-                    ), f"Core Storage profile in CR should be '{target}', got '{cr_profile}'"
+                cr_profile = configure_perf_page.wait_for_core_storage_profile_in_cr(
+                    target
+                )
+                logger.assertion(
+                    f"Core Storage profile from CR: expected='{target}', actual='{cr_profile}'"
+                )
+                assert (
+                    cr_profile == target
+                ), f"Core Storage profile in CR should be '{target}', got '{cr_profile}'"
 
                 logger.test_step("Reopen page and verify UI shows profile")
                 storage_cluster_page = navigator.nav_storage_cluster_default_page()

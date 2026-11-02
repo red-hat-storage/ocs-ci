@@ -1,10 +1,14 @@
 """Page object for Configure Performance page (RHSTOR-8629)."""
 
 import logging
-import time
 from typing import Optional
 
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.support.ui import WebDriverWait
+
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ui.base_ui import (
     SeleniumDriver,
     wait_for_element_to_be_clickable,
@@ -12,6 +16,7 @@ from ocs_ci.ocs.ui.base_ui import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.page_objects.storage_cluster import StorageClusterPage
 from ocs_ci.ocs.ui.helpers_ui import format_locator
+from ocs_ci.utility.utils import TimeoutSampler
 
 
 logger = logging.getLogger(__name__)
@@ -27,71 +32,48 @@ class ConfigurePerformancePage(StorageClusterPage):
         super().__init__()
 
     def is_core_storage_section_present(self) -> bool:
-        """Check if Core Storage section is present."""
+        """Check if Core Storage section is present.
+
+        Returns:
+            bool: True if the Core Storage section is rendered on the page.
+        """
         logger.info("Checking if Core Storage section is present")
-        try:
-            self.wait_for_element_to_be_visible(
-                self.configure_performance_loc["core_storage_section"], timeout=15
-            )
-            return True
-        except Exception:
-            logger.warning(
-                "Core storage section not found with primary locator, trying fallback"
-            )
-            fallback_elements = self.get_elements(
-                self.configure_performance_loc["core_storage_section_fallback"]
-            )
-            return len(fallback_elements) > 0
+        return bool(
+            self.get_elements(self.configure_performance_loc["core_storage_section"])
+        )
 
     def is_mcg_section_present(self) -> bool:
-        """Check if MCG section is present."""
+        """Check if MCG section is present.
+
+        Returns:
+            bool: True if the Multicloud Object Gateway section is rendered.
+        """
         logger.info("Checking if MCG section is present")
-        try:
-            self.wait_for_element_to_be_visible(
-                self.configure_performance_loc["mcg_section"], timeout=15
-            )
-            return True
-        except Exception:
-            elements = self.get_elements(
-                self.configure_performance_loc["mcg_select_profile_button"]
-            )
-            return len(elements) > 0
+        return bool(self.get_elements(self.configure_performance_loc["mcg_section"]))
 
     def verify_sections_separated(self) -> bool:
-        """Verify sections are visually separated."""
+        """Verify the Core Storage and MCG sections are rendered separately.
+
+        Returns:
+            bool: True when both sections resolve to distinct elements placed
+                at different positions on the page.
+        """
         logger.info("Verifying sections are visually separated")
         core_elements = self.get_elements(
             self.configure_performance_loc["core_storage_section"]
         )
         mcg_elements = self.get_elements(self.configure_performance_loc["mcg_section"])
-        if not core_elements:
+        if not core_elements or not mcg_elements:
             logger.warning(
-                "Core Storage section not found, trying to verify they exist instead"
+                "Core Storage present: %s, MCG present: %s",
+                bool(core_elements),
+                bool(mcg_elements),
             )
-            return (
-                self.is_core_storage_section_present() and self.is_mcg_section_present()
-            )
-        if not mcg_elements:
-            logger.warning("MCG section not found, trying to verify they exist instead")
-            return (
-                self.is_core_storage_section_present() and self.is_mcg_section_present()
-            )
+            return False
 
         core = core_elements[0]
         mcg = mcg_elements[0]
-
-        # Check if sections are actually different elements
-        if core == mcg:
-            logger.warning(
-                "Both sections resolved to same element, but both are present"
-            )
-            return True
-
-        # Sections are separated if they have different positions
-        separated = (
-            core.location["y"] != mcg.location["y"]
-            or core.location["x"] != mcg.location["x"]
-        )
+        separated = core.location != mcg.location
         logger.info(
             "Sections separated: %s (Core: %s, MCG: %s)",
             separated,
@@ -101,7 +83,11 @@ class ConfigurePerformancePage(StorageClusterPage):
         return separated
 
     def is_core_storage_inline(self) -> bool:
-        """Verify Core Storage displays inline (not modal)."""
+        """Verify Core Storage displays inline (not modal).
+
+        Returns:
+            bool: True when the section is not rendered inside a modal/dialog.
+        """
         logger.info("Checking if Core Storage section is inline")
         core_elements = self.get_elements(
             self.configure_performance_loc["core_storage_section"]
@@ -113,63 +99,87 @@ class ConfigurePerformancePage(StorageClusterPage):
         return "modal" not in classes and "dialog" not in classes
 
     def is_core_storage_select_button_present(self) -> bool:
-        """Check if Core Storage 'Select options' button is present and clickable."""
+        """Check if Core Storage 'Select options' button is present.
+
+        Returns:
+            bool: True if the Core Storage profile dropdown button is rendered.
+        """
         logger.info("Checking for Core Storage 'Select options' button")
-        button_loc = self.configure_performance_loc[
-            "core_storage_select_profile_button"
-        ]
-        buttons = self.get_elements(button_loc)
-        return len(buttons) > 0
+        return bool(
+            self.get_elements(
+                self.configure_performance_loc["core_storage_select_profile_button"]
+            )
+        )
 
     def is_mcg_select_button_present(self) -> bool:
-        """Check if the MCG profile dropdown button is present."""
+        """Check if the MCG profile dropdown button is present.
+
+        Returns:
+            bool: True if the MCG profile dropdown button is rendered.
+        """
         logger.info("Checking for MCG profile dropdown button")
-        button_loc = self.configure_performance_loc["mcg_select_profile_button"]
-        buttons = self.get_elements(button_loc)
-        return len(buttons) > 0
+        return bool(
+            self.get_elements(
+                self.configure_performance_loc["mcg_select_profile_button"]
+            )
+        )
 
     def get_core_storage_nodes(self) -> list[dict]:
-        """Get nodes from Core Storage section."""
+        """Get nodes from Core Storage section.
+
+        Returns:
+            list: Dicts with the node name, labels and WebElement.
+        """
         logger.info("Fetching Core Storage nodes")
         core_elements = self.get_elements(
             self.configure_performance_loc["core_storage_section"]
         )
         if not core_elements:
             raise ValueError("Core Storage section not found on page")
-        core = core_elements[0]
-        node_item = self.configure_performance_loc["node_item"]
-        node_name = self.configure_performance_loc["node_name"]
-        nodes = core.find_elements(node_item[1], node_item[0])
-        return [
-            {
-                "name": n.find_element(node_name[1], node_name[0]).text,
-                "labels": n.get_attribute("data-labels") or "",
-                "element": n,
-            }
-            for n in nodes
-        ]
+        return self._collect_nodes(core_elements[0])
 
     def get_mcg_nodes(self) -> list[dict]:
-        """Get nodes from MCG section."""
+        """Get nodes from MCG section.
+
+        Returns:
+            list: Dicts with the node name, labels and WebElement.
+        """
         logger.info("Fetching MCG nodes")
         mcg_elements = self.get_elements(self.configure_performance_loc["mcg_section"])
         if not mcg_elements:
             raise ValueError("MCG section not found on page")
-        mcg = mcg_elements[0]
+        return self._collect_nodes(mcg_elements[0])
+
+    def _collect_nodes(self, section) -> list[dict]:
+        """Collect the node entries rendered inside a page section.
+
+        Args:
+            section (WebElement): Section element to search within.
+
+        Returns:
+            list: Dicts with the node name, labels and WebElement.
+        """
         node_item = self.configure_performance_loc["node_item"]
         node_name = self.configure_performance_loc["node_name"]
-        nodes = mcg.find_elements(node_item[1], node_item[0])
+        nodes = section.find_elements(node_item[1], node_item[0])
         return [
             {
-                "name": n.find_element(node_name[1], node_name[0]).text,
-                "labels": n.get_attribute("data-labels") or "",
-                "element": n,
+                "name": node.find_element(node_name[1], node_name[0]).text,
+                "labels": node.get_attribute("data-labels") or "",
+                "element": node,
             }
-            for n in nodes
+            for node in nodes
         ]
 
     def verify_all_nodes_have_ocs_label(self, nodes: list[dict]) -> bool:
-        """Verify all nodes have OCS label."""
+        """Verify all nodes have OCS label.
+
+        Args:
+            nodes (list): Node dicts as returned by get_core_storage_nodes().
+
+        Returns:
+            bool: True when every node carries an OCS/openshift-storage label.
+        """
         for node in nodes:
             labels = (node.get("labels") or "").lower()
             if "ocs" not in labels and "openshift-storage" not in labels:
@@ -177,7 +187,11 @@ class ConfigurePerformancePage(StorageClusterPage):
         return True
 
     def has_node_selection_option(self) -> bool:
-        """Check if Core Storage has node selection option."""
+        """Check if Core Storage has node selection option.
+
+        Returns:
+            bool: True when the Core Storage section exposes node checkboxes.
+        """
         logger.info("Checking for node selection options in Core Storage")
         core_elements = self.get_elements(
             self.configure_performance_loc["core_storage_section"]
@@ -186,11 +200,60 @@ class ConfigurePerformancePage(StorageClusterPage):
             raise ValueError("Core Storage section not found on page")
         core = core_elements[0]
         node_selection = self.configure_performance_loc["node_selection_option"]
-        elements = core.find_elements(node_selection[1], node_selection[0])
-        return len(elements) > 0
+        return bool(core.find_elements(node_selection[1], node_selection[0]))
+
+    def _profile_option_locator(self, profile_name: str) -> tuple:
+        """Build the dropdown option locator for a profile name.
+
+        The UI renders profile names with spaces ("Mixed workload") while the
+        CR and the tests use hyphenated names ("mixed-workload").
+
+        Args:
+            profile_name (str): Hyphenated or spaced profile name.
+
+        Returns:
+            tuple: Formatted locator for the profile menu option.
+        """
+        return format_locator(
+            self.configure_performance_loc["profile_menu_option"],
+            profile_name.replace("-", " ").lower(),
+        )
+
+    def _get_selected_profile_text(self, button_loc: tuple) -> str:
+        """Read a profile dropdown button label as a hyphenated profile name.
+
+        Args:
+            button_loc (tuple): Locator of the profile dropdown button.
+
+        Returns:
+            str: Lower-case, hyphenated button label.
+        """
+        return self.get_element_text(button_loc).strip().lower().replace(" ", "-")
+
+    def _wait_for_selected_profile(
+        self, button_loc: tuple, expected_profile: str, timeout: int = 30
+    ) -> bool:
+        """Wait until a profile dropdown button reflects the selected profile.
+
+        Args:
+            button_loc (tuple): Locator of the profile dropdown button.
+            expected_profile (str): Hyphenated profile name to wait for.
+            timeout (int): Seconds to wait for the button label to update.
+
+        Returns:
+            bool: True when the button label matches, False when it times out.
+        """
+        try:
+            WebDriverWait(SeleniumDriver(), timeout).until(
+                lambda _: self._get_selected_profile_text(button_loc)
+                == expected_profile
+            )
+            return True
+        except TimeoutException:
+            return False
 
     def select_mcg_profile(self, profile_name: str):
-        """Select MCG profile from menu, retrying up to 3 times.
+        """Select MCG profile from the dropdown menu.
 
         Args:
             profile_name (str): Profile name (e.g. "default", "mixed-workload").
@@ -199,254 +262,120 @@ class ConfigurePerformancePage(StorageClusterPage):
             ConfigurePerformancePage: self
 
         Raises:
-            TimeoutException: If profile selection fails after 3 attempts.
+            TimeoutException: If the selection does not register in the UI.
         """
-        from selenium.common.exceptions import TimeoutException
-
         logger.info("Selecting MCG profile: %s", profile_name)
-
         button_loc = self.configure_performance_loc["mcg_select_profile_button"]
-        # UI displays profile names with spaces (e.g. "Mixed workload"), while the
-        # test/CR uses hyphenated names (e.g. "mixed-workload"). Normalize so the
-        # case-insensitive contains() XPath matches the rendered option text.
-        profile_display = profile_name.replace("-", " ")
-        expected_ui_profile = profile_name.strip().lower().replace(" ", "-")
+        option_loc = self._profile_option_locator(profile_name)
+        expected_profile = profile_name.strip().lower().replace(" ", "-")
 
-        # Resolve the dynamic menuitem locator from views.py using format_locator
-        # so no inline XPath lives in the POM file.
-        menuitem_loc = format_locator(
-            self.configure_performance_loc["mcg_profile_menuitem"],
-            profile_display.lower(),
-        )
+        logger.info("Opening the MCG profile dropdown")
+        wait_for_element_to_be_clickable(button_loc).click()
 
-        last_button_text = ""
-        for attempt in range(1, 4):
+        # A native click comes first; the JS click is the second attempt, for
+        # the case where a transient overlay intercepts the pointer event.
+        for js_click in (False, True):
+            option = wait_for_element_to_be_clickable(option_loc)
             logger.info(
-                "MCG profile selection attempt %s/3 for %s", attempt, profile_name
+                "Clicking MCG profile option '%s' (js_click=%s)", profile_name, js_click
             )
-            # Open the dropdown.
-            try:
-                button = wait_for_element_to_be_clickable(button_loc, timeout=15)
-                logger.info("Clicking MCG dropdown button")
-                button.click()
-                time.sleep(2)
-                logger.info("Waited for dropdown menu to appear and overlays to clear")
-            except TimeoutException:
-                logger.warning(
-                    "Primary locator failed on attempt %s, trying fallback", attempt
-                )
-                fallback_loc = self.configure_performance_loc[
-                    "mcg_select_profile_button_fallback"
-                ]
-                try:
-                    button = wait_for_element_to_be_clickable(fallback_loc, timeout=15)
-                    logger.info("Found MCG button with fallback locator")
-                    button.click()
-                    time.sleep(2)
-                except TimeoutException:
-                    logger.error("MCG dropdown button not found on attempt %s", attempt)
-                    self.take_screenshot("mcg_dropdown_button_timeout")
-                    self.copy_dom("mcg_dropdown_button_timeout")
-                    if attempt == 3:
-                        raise TimeoutException("MCG dropdown button not found on page")
-                    continue
+            if js_click:
+                self.click_with_script(option_loc)
+            else:
+                option.click()
 
-            # Click the profile menuitem. Native click first (dropdown is open,
-            # so no overlay should intercept); fall back to a JS click.
-            registered = False
-            for click_kind in ("native", "js"):
-                try:
-                    menuitem = wait_for_element_to_be_clickable(
-                        menuitem_loc, timeout=15
-                    )
-                    if click_kind == "native":
-                        logger.info(
-                            "Clicking MCG profile menuitem: %s (native)", profile_name
-                        )
-                        menuitem.click()
-                    else:
-                        logger.info(
-                            "Clicking MCG profile menuitem: %s (JS click)",
-                            profile_name,
-                        )
-                        self.click_with_script(menuitem_loc)
-                except TimeoutException:
-                    logger.error(
-                        "MCG profile option '%s' did not appear on attempt %s",
-                        profile_name,
-                        attempt,
-                    )
-                    self.take_screenshot("mcg_profile_option_timeout")
-                    self.copy_dom("mcg_profile_option_timeout")
-                    registered = False
-                    break
-
-                # Wait for the button text to reflect the new profile, confirming
-                # the selection registered in the UI form before we save.
-                button_text = ""
-                for _ in range(5):
-                    time.sleep(1)
-                    try:
-                        button_text = (
-                            self.get_element_text(button_loc)
-                            .strip()
-                            .lower()
-                            .replace(" ", "-")
-                        )
-                    except Exception:
-                        button_text = ""
-                    if button_text == expected_ui_profile:
-                        break
-                last_button_text = button_text
-                if button_text == expected_ui_profile:
-                    logger.info(
-                        "MCG profile '%s' selected and registered (button text: %s)",
-                        profile_name,
-                        button_text,
-                    )
-                    registered = True
-                    break
-                logger.warning(
-                    "MCG profile option click did not register; button text still '%s'",
-                    button_text,
-                )
-
-            if registered:
+            if self._wait_for_selected_profile(button_loc, expected_profile):
+                logger.info("MCG profile '%s' is selected in the UI", profile_name)
                 return self
+            logger.warning(
+                "MCG profile '%s' did not register in the UI, button still shows '%s'",
+                profile_name,
+                self._get_selected_profile_text(button_loc),
+            )
 
-        logger.error(
-            "Failed to select MCG profile '%s' after 3 attempts (last button text: %s)",
-            profile_name,
-            last_button_text,
-        )
         self.take_screenshot("mcg_profile_selection_failed")
         self.copy_dom("mcg_profile_selection_failed")
         raise TimeoutException(
-            f"MCG profile '{profile_name}' did not register after 3 attempts"
+            f"MCG profile '{profile_name}' did not register in the UI"
         )
 
     def select_core_storage_profile(self, profile_name: str):
-        """Select Core Storage profile from menu."""
-        logger.info("Selecting Core Storage profile: %s", profile_name)
+        """Select Core Storage profile from the dropdown menu.
 
+        Args:
+            profile_name (str): Profile name (e.g. "balanced", "lean").
+
+        Returns:
+            ConfigurePerformancePage: self
+
+        Raises:
+            TimeoutException: If the dropdown or the option does not appear.
+        """
+        logger.info("Selecting Core Storage profile: %s", profile_name)
         button_loc = self.configure_performance_loc[
             "core_storage_select_profile_button"
         ]
-        logger.info("Waiting for Core Storage dropdown button to be clickable")
-        from selenium.common.exceptions import TimeoutException
+        option_loc = self._profile_option_locator(profile_name)
 
-        try:
-            button = wait_for_element_to_be_clickable(button_loc, timeout=15)
-            logger.info("Clicking Core Storage dropdown button")
-            button.click()
-        except TimeoutException:
-            logger.warning("Primary locator failed, trying fallback")
-            fallback_loc = self.configure_performance_loc[
-                "core_storage_select_profile_button_fallback"
-            ]
-            try:
-                button = wait_for_element_to_be_clickable(fallback_loc, timeout=10)
-                logger.info("Found Core Storage button with fallback locator")
-                button.click()
-            except TimeoutException as e:
-                logger.error("Core Storage dropdown button not found after 25 seconds")
-                self.take_screenshot("core_storage_dropdown_button_timeout")
-                self.copy_dom("core_storage_dropdown_button_timeout")
-                raise TimeoutException(
-                    "Core Storage dropdown button not found on page"
-                ) from e
+        logger.info("Opening the Core Storage profile dropdown")
+        wait_for_element_to_be_clickable(button_loc).click()
 
-        profile_option_loc = self.configure_performance_loc[
-            "core_storage_profile_option"
-        ]
-        profile_xpath = profile_option_loc[0].format(profile_name)
-        profile_locator = (profile_xpath, profile_option_loc[1])
-        logger.info(
-            "Waiting for Core Storage profile option '%s' to be clickable", profile_name
-        )
-
-        try:
-            option = wait_for_element_to_be_clickable(profile_locator, timeout=15)
-            logger.info("Clicking Core Storage profile option: %s", profile_name)
-            option.click()
-        except TimeoutException as e:
-            logger.error(
-                "Core Storage profile option '%s' did not appear after 15 seconds",
-                profile_name,
-            )
-            self.take_screenshot("core_storage_profile_option_timeout")
-            self.copy_dom("core_storage_profile_option_timeout")
-            raise TimeoutException(
-                f"Core Storage profile '{profile_name}' not found in dropdown menu"
-            ) from e
-        logger.info("Selected Core Storage profile: %s", profile_name)
+        logger.info("Clicking Core Storage profile option: %s", profile_name)
+        wait_for_element_to_be_clickable(option_loc).click()
         return self
 
     def save_configuration(self):
-        """Save configuration and wait for page navigation to storage cluster."""
+        """Save configuration and wait for the page to navigate away.
+
+        Returns:
+            ConfigurePerformancePage: self
+        """
         logger.info("Saving configuration")
         save_button = self.configure_performance_loc["save_button"]
 
-        # Let the page/React settle so the form dirty-state and save-button
-        # enablement catch up with the profile selection.
-        self.page_has_loaded(retries=3, sleep_time=2)
-
-        from selenium.common.exceptions import TimeoutException
-
-        save_btn = None
-        for attempt in range(1, 4):
-            try:
-                save_btn = wait_for_element_to_be_clickable(save_button, timeout=10)
-                logger.info("Save button is enabled, clicking it")
-                break
-            except TimeoutException:
-                logger.warning(
-                    "Save button not clickable on attempt %s, waiting for page to settle",
-                    attempt,
-                )
-                self.page_has_loaded(retries=2, sleep_time=2)
-        if save_btn is None:
-            logger.warning("Save button did not become enabled; checking state")
-            save_btns = self.get_elements(save_button)
-            if not save_btns:
+        try:
+            save_btn = wait_for_element_to_be_clickable(save_button, timeout=60)
+        except TimeoutException:
+            if not self.get_elements(save_button):
                 logger.error("Save button not found on page")
-                return self
-            save_btn = save_btns[0]
-            if not save_btn.is_enabled():
-                logger.info("Save button is disabled, no changes to save")
-                return self
+            else:
+                logger.info("Save button stayed disabled, no changes to save")
+            return self
 
         original_url = SeleniumDriver().current_url
+        logger.info("Clicking Save button, waiting for page navigation")
         save_btn.click()
-        logger.info("Clicked Save button, waiting for page navigation")
-
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
 
         try:
-            WebDriverWait(SeleniumDriver(), 15).until(EC.url_changes(original_url))
+            WebDriverWait(SeleniumDriver(), 30).until(ec.url_changes(original_url))
             logger.info("Page navigated away from Configure Performance page")
-        except TimeoutException as e:
-            logger.warning("Page did not navigate after save: %s", e)
+        except TimeoutException:
+            logger.warning("Page did not navigate after save")
 
         logger.info("Configuration saved successfully")
         return self
 
     def cancel_changes(self):
-        """Cancel changes."""
+        """Cancel changes.
+
+        Returns:
+            ConfigurePerformancePage: self
+        """
         logger.info("Cancelling configuration changes")
-        cancel_button = self.configure_performance_loc["cancel_button"]
-        cancel_btns = self.get_elements(cancel_button)
-        cancel_btns[0].click()
+        self.do_click(self.configure_performance_loc["cancel_button"])
         logger.info("Configuration changes cancelled")
         return self
 
     def _get_storage_cluster_data(self) -> dict:
-        """Get StorageCluster resource YAML."""
+        """Get StorageCluster resource YAML.
+
+        Returns:
+            dict: StorageCluster CR content.
+        """
         sc = OCP(
-            kind="StorageCluster",
+            kind=constants.STORAGECLUSTER,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-            resource_name="ocs-storagecluster",
+            resource_name=constants.DEFAULT_CLUSTERNAME,
         )
         logger.info("Fetching StorageCluster CR")
         return sc.get()
@@ -469,12 +398,19 @@ class ConfigurePerformancePage(StorageClusterPage):
             )
             logger.error(msg)
             raise ValueError(msg)
-        profile = profile.lower() if profile else profile
+        profile = profile.lower()
         logger.info("Read MCG profile from CR: %s", profile)
         return profile
 
     def get_core_storage_profile_from_cr(self) -> str:
-        """Get Core Storage profile from StorageCluster CR."""
+        """Get Core Storage profile from StorageCluster CR.
+
+        Returns:
+            str: Lower-case profile name.
+
+        Raises:
+            ValueError: If resourceProfile is not set in CR.
+        """
         data = self._get_storage_cluster_data()
         profile = self.deep_get(data, "spec", "resourceProfile")
         if profile is None:
@@ -484,12 +420,87 @@ class ConfigurePerformancePage(StorageClusterPage):
             )
             logger.error(msg)
             raise ValueError(msg)
-        profile = profile.lower() if profile else profile
+        profile = profile.lower()
         logger.info("Read Core Storage profile from CR: %s", profile)
         return profile
 
+    def wait_for_mcg_profile_in_cr(
+        self, expected_profile: str, timeout: int = 120
+    ) -> Optional[str]:
+        """Wait until the StorageCluster CR reports the expected MCG profile.
+
+        Args:
+            expected_profile (str): Profile name expected in the CR.
+            timeout (int): Seconds to wait for the CR to be reconciled.
+
+        Returns:
+            Optional[str]: Last profile read from the CR. It differs from the
+                expected one when the wait times out.
+        """
+        return self._wait_for_profile_in_cr(
+            self.get_mcg_profile_from_cr, expected_profile, timeout
+        )
+
+    def wait_for_core_storage_profile_in_cr(
+        self, expected_profile: str, timeout: int = 120
+    ) -> Optional[str]:
+        """Wait until the StorageCluster CR reports the expected Core profile.
+
+        Args:
+            expected_profile (str): Profile name expected in the CR.
+            timeout (int): Seconds to wait for the CR to be reconciled.
+
+        Returns:
+            Optional[str]: Last profile read from the CR. It differs from the
+                expected one when the wait times out.
+        """
+        return self._wait_for_profile_in_cr(
+            self.get_core_storage_profile_from_cr, expected_profile, timeout
+        )
+
+    @staticmethod
+    def _wait_for_profile_in_cr(
+        getter, expected_profile: str, timeout: int
+    ) -> Optional[str]:
+        """Poll a StorageCluster CR getter until it returns the expected value.
+
+        The page object only reports what the CR holds; the assertion on the
+        returned value belongs to the test.
+
+        Args:
+            getter (callable): Function reading a profile name from the CR.
+            expected_profile (str): Profile name to wait for.
+            timeout (int): Seconds to wait for the CR to be reconciled.
+
+        Returns:
+            Optional[str]: Last profile read from the CR, or None if the CR
+                never exposed the profile within the timeout.
+        """
+        logger.info(
+            "Waiting up to %ss for StorageCluster CR to report profile '%s'",
+            timeout,
+            expected_profile,
+        )
+        sampler = TimeoutSampler(timeout, 5, getter)
+        try:
+            for profile in sampler:
+                if profile == expected_profile:
+                    return profile
+        except TimeoutExpiredError:
+            logger.warning(
+                "StorageCluster CR still reports '%s' after %ss, expected '%s'",
+                sampler.last_result,
+                timeout,
+                expected_profile,
+            )
+        return sampler.last_result
+
     def verify_page_integrity(self) -> bool:
-        """Verify page has both sections."""
+        """Verify page has both sections.
+
+        Returns:
+            bool: True when both the Core Storage and MCG sections are present.
+        """
         return self.is_core_storage_section_present() and self.is_mcg_section_present()
 
     def get_mcg_profile_from_ui(self) -> Optional[str]:
@@ -499,34 +510,31 @@ class ConfigurePerformancePage(StorageClusterPage):
             Optional[str]: Profile name (e.g. "mixed-workload"), or None if unselected.
         """
         logger.info("Reading selected MCG profile from UI")
+        button_loc = self.configure_performance_loc["mcg_select_profile_button"]
         try:
-            profile_text = self.get_element_text(
-                self.configure_performance_loc["mcg_select_profile_button"]
-            )
+            profile = self._get_selected_profile_text(button_loc)
         except Exception as e:
             raise ValueError(f"Failed to read MCG profile from UI: {e}")
-        profile_text = profile_text.strip().lower()
-        if (
-            profile_text == MCG_PROFILE_PLACEHOLDER
-            or profile_text.startswith(MCG_PROFILE_PLACEHOLDER)
-            or "select a profile" in profile_text
-        ):
+        if MCG_PROFILE_PLACEHOLDER.replace(" ", "-") in profile:
             logger.info("MCG profile from UI: not selected yet (placeholder shown)")
             return None
-        profile = profile_text.replace(" ", "-")
         logger.info("MCG profile from UI: %s", profile)
         return profile
 
     def get_core_storage_profile_from_ui(self) -> str:
-        """Get selected Core Storage profile from UI."""
+        """Get selected Core Storage profile from UI.
+
+        Returns:
+            str: Lower-case profile name.
+        """
         logger.info("Reading selected Core Storage profile from UI")
+        button_loc = self.configure_performance_loc[
+            "core_storage_select_profile_button"
+        ]
         try:
-            profile_text = self.get_element_text(
-                self.configure_performance_loc["core_storage_select_profile_button"]
-            )
-            profile = profile_text.strip().lower()
-            profile = profile.split()[0] if profile else profile
-            logger.info("Core Storage profile from UI: %s", profile)
-            return profile
+            profile_text = self.get_element_text(button_loc).strip().lower()
         except Exception as e:
             raise ValueError(f"Failed to read Core Storage profile from UI: {e}")
+        profile = profile_text.split()[0] if profile_text else profile_text
+        logger.info("Core Storage profile from UI: %s", profile)
+        return profile

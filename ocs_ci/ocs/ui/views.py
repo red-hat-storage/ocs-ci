@@ -4341,34 +4341,22 @@ external_systems = {
 
 configure_performance = {
     "core_storage_section": (
-        "//h3[normalize-space()='Core storage']/ancestor::div[contains(@class, 'pf-v6-u-mb-2xl')][1]",
+        "//h3[normalize-space()='Core storage']/ancestor::div[contains(@class, 'u-mb-2xl')][1]",
         By.XPATH,
     ),
     "mcg_section": (
-        "//h3[normalize-space()='Multicloud Object Gateway']/ancestor::div[contains(@class, 'pf-v6-u-mb-2xl')][1]",
+        "//h3[normalize-space()='Multicloud Object Gateway']/ancestor::div[contains(@class, 'u-mb-2xl')][1]",
         By.XPATH,
     ),
     "mcg_select_profile_button": (
         "//button[contains(@class, 'c-menu-toggle') and contains(@aria-label, 'Object Gateway profile')]",
         By.XPATH,
     ),
-    "mcg_profile_option": (
-        "//li[contains(@class, 'c-menu__list-item')]"
-        "//button[contains(translate(normalize-space(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
-        "'abcdefghijklmnopqrstuvwxyz'), '{}')]",
-        By.XPATH,
-    ),
-    "mcg_profile_menuitem": (
-        "//li[contains(@class, 'c-menu__list-item')]"
-        "//button[contains(translate(normalize-space(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
-        "'abcdefghijklmnopqrstuvwxyz'), '{}')]",
-        By.XPATH,
-    ),
     "core_storage_select_profile_button": (
         "//button[contains(@class, 'c-menu-toggle') and contains(@aria-label, 'performance mode from the list')]",
         By.XPATH,
     ),
-    "core_storage_profile_option": (
+    "profile_menu_option": (
         "//li[contains(@class, 'c-menu__list-item')]"
         "//button[contains(translate(normalize-space(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
         "'abcdefghijklmnopqrstuvwxyz'), '{}')]",
@@ -4392,21 +4380,6 @@ configure_performance = {
     ),
     "node_selection_option": (
         ".//input[@type='checkbox']",
-        By.XPATH,
-    ),
-    "core_storage_section_fallback": (
-        "//h3[normalize-space()='Core storage']"
-        "/ancestor::div[contains(@class, 'configure-performance-profile__content')][1]",
-        By.XPATH,
-    ),
-    "mcg_select_profile_button_fallback": (
-        "//h3[normalize-space()='Multicloud Object Gateway']"
-        "/following::button[contains(@class, 'c-menu-toggle')][1]",
-        By.XPATH,
-    ),
-    "core_storage_select_profile_button_fallback": (
-        "//h3[normalize-space()='Core storage']"
-        "/following::button[contains(@class, 'c-menu-toggle')][1]",
         By.XPATH,
     ),
 }

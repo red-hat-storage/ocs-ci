@@ -206,19 +206,19 @@ class StorageClusterPage(
         return compression_status_blockpools_tab, compression_status_blockpools_details
 
     def click_configure_performance_button(self):
-        """Click Configure Performance button from Actions menu."""
-        from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
+        """Open the Configure Performance page from the Actions menu.
+
+        Returns:
+            ConfigurePerformancePage: Page object of the opened page.
+        """
         from ocs_ci.ocs.ui.page_objects.configure_performance import (
             ConfigurePerformancePage,
         )
 
         logger.info("Opening Actions menu")
-        locators = locators_for_current_ocp_version()
-        kebab_loc = locators["storage_cluster"]["kebab_storage_cluster"]
-        self.do_click(kebab_loc)
+        self.do_click(self.storage_cluster_loc["kebab_storage_cluster"])
 
-        logger.info("Clicking 'Configure Performance Profiles' menu item")
-        button_loc = locators["storage_cluster"]["configure_performance_button"]
-        self.do_click(button_loc)
+        logger.info("Clicking 'Configure performance profiles' menu item")
+        self.do_click(self.storage_cluster_loc["configure_performance_button"])
         self.page_has_loaded(retries=10, sleep_time=2)
         return ConfigurePerformancePage()
