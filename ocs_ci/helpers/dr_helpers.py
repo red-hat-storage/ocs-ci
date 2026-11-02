@@ -1428,24 +1428,6 @@ def wait_for_all_resources_deletion(
 
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
         if workload_cleanup or "cephfs" not in namespace:
-            # PVs with a Retain reclaim policy are left in Released state after
-            # their PVC is deleted — Kubernetes will not reclaim them
-            # automatically.  Explicitly delete them so the count reaches 0.
-            pv_obj = ocp.OCP(kind=constants.PV)
-            released_pvs = [
-                item["metadata"]["name"]
-                for item in pv_obj.get().get("items", [])
-                if item.get("spec", {}).get("claimRef", {}).get("namespace")
-                == namespace
-                and item.get("status", {}).get("phase") == "Released"
-            ]
-            for pv_name in released_pvs:
-                logger.info(
-                    f"Deleting Released PV '{pv_name}' (Retain policy, "
-                    f"claimRef.namespace={namespace})"
-                )
-                pv_obj.delete(resource_name=pv_name)
-
             logger.info("Waiting for all PVs to be deleted")
             wait_for_resource_count(
                 kind=constants.PV,
