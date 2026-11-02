@@ -312,6 +312,27 @@ def get_drpolicy_name():
     return existing_policies[0]["metadata"]["name"]
 
 
+def get_drpolicy_clusters():
+    """
+    Return the DRCluster names of the first DRPolicy on the hub cluster.
+
+    Raises:
+        AssertionError: if no DRPolicy exists on the hub or it does not list
+            exactly two DRClusters
+
+    Returns:
+        list: the two DRCluster names in spec.drClusters
+    """
+    config.switch_acm_ctx()
+    existing_policies = dr_helpers.get_all_drpolicy()
+    assert existing_policies, "No DRPolicy found on hub"
+    dr_clusters = existing_policies[0]["spec"]["drClusters"]
+    assert (
+        len(dr_clusters) == 2
+    ), f"Expected exactly 2 DRClusters in the DRPolicy, found: {dr_clusters}"
+    return dr_clusters
+
+
 def verify_vm_ip_and_ipamclaim(cluster_name, namespace, vm_name, interface_name):
     """
     Read the VMI IP and IPAMClaim IP for a VM and assert they match.
@@ -1414,7 +1435,7 @@ def verify_vrg_static_ip_translation(
 
 
 @pytest.fixture
-def setup_udn_nad():
+def setup_udn_nad(request):
     """
     Prerequisite fixture: creates the workload namespace and a Primary
     UserDefinedNetwork (with persistent IPAM) on each managed cluster, then
@@ -1441,9 +1462,27 @@ def setup_udn_nad():
     """
     created_resources = []  # list of (cluster_name, kind, namespace, name)
 
+    def _teardown():
+        # Delete in reverse creation order: UDN, Secret, then Namespace
+        for cluster_name, kind, namespace, name in reversed(created_resources):
+            try:
+                config.switch_to_cluster_by_name(cluster_name)
+                ns_flag = f"-n {namespace}" if namespace else ""
+                exec_cmd(f"oc delete {kind} {name} {ns_flag} --ignore-not-found")
+                logger.info(f"Deleted {kind}/{name} on {cluster_name}")
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to delete {kind}/{name} on {cluster_name}: {exc}"
+                )
+
+    # Registered before any resource is created so that a failure part-way
+    # through setup still cleans up what was already created.
+    request.addfinalizer(_teardown)
+
     config.switch_acm_ctx()
-    # get_all_drclusters() returns the DRCluster names, not the objects
-    managed_cluster_names = dr_helpers.get_all_drclusters()
+    # Only the two clusters of the active DRPolicy take part; the hub may have
+    # more DRClusters registered than this DR pair.
+    managed_cluster_names = list(get_drpolicy_clusters())
 
     # Per-cluster subnets, assigned by DR role rather than by drcluster list
     # order. The static-IP VM workloads hardcode an address in PRIMARY_SUBNET
@@ -1563,16 +1602,6 @@ def setup_udn_nad():
             secondary_cluster_name: SECONDARY_SUBNET_NS2,
         },
     }
-
-    # Teardown: delete UDN then namespace on each managed cluster
-    for cluster_name, kind, namespace, name in reversed(created_resources):
-        try:
-            config.switch_to_cluster_by_name(cluster_name)
-            ns_flag = f"-n {namespace}" if namespace else ""
-            exec_cmd(f"oc delete {kind} {name} {ns_flag} --ignore-not-found")
-            logger.info(f"Deleted {kind}/{name} on {cluster_name}")
-        except Exception as exc:
-            logger.warning(f"Failed to delete {kind}/{name} on {cluster_name}: {exc}")
 
 
 @pytest.fixture
