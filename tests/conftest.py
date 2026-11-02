@@ -8782,6 +8782,9 @@ def cnv_workload_with_static_ip(request):
     """
 
     instances = []
+    # Parallel to ``instances``: True when the instance was deployed with
+    # shared_drpc_protection=True. Teardown uses this instead of the test node ID.
+    shared_flags = []
 
     def factory(
         pvc_vm=1,
@@ -8844,6 +8847,7 @@ def cnv_workload_with_static_ip(request):
             workload = CnvWorkloadDiscoveredApps(**wl_kwargs)
 
             instances.append(workload)
+            shared_flags.append(shared_drpc_protection)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload(
                 dr_protect=dr_protect, shared_drpc_protection=shared_drpc_protection
@@ -8857,9 +8861,16 @@ def cnv_workload_with_static_ip(request):
         return instances
 
     def teardown():
-        if "shared" in request.node.nodeid:
+        if len(instances) > 1 and all(shared_flags):
+            # All instances share one namespace and DRPC: the first deletes the
+            # DRPC, only the last verifies resource deletion and drops the project.
             instances[0].delete_workload(skip_resource_deletion_verification=True)
-            instances[1].delete_workload(shared_drpc_protection=True)
+            for instance in instances[1:-1]:
+                instance.delete_workload(
+                    shared_drpc_protection=True,
+                    skip_resource_deletion_verification=True,
+                )
+            instances[-1].delete_workload(shared_drpc_protection=True)
         else:
             for instance in instances:
                 try:
