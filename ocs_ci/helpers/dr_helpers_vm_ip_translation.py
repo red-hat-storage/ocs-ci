@@ -51,11 +51,6 @@ CM_KEY_MAPPINGS = "mappings.yaml"
 # DRPolicy status condition names (confirmed)
 DRPOLICY_NADS_SYNCED_CONDITION = "NetworkAttachmentsValidated"
 
-# DRPolicy status path for network mapping
-# TODO: confirm exact field name once status schema is finalized by developer
-DRPOLICY_NM_FIELD = "networkMapping"
-DRPOLICY_NM_STATUS_VALID = "Valid"
-DRPOLICY_NM_STATUS_INVALID = "Invalid"
 DRPOLICY_NM_METHOD_PATTERN = "pattern"
 DRPOLICY_NM_METHOD_EXPLICIT = "explicit"
 DRPOLICY_NM_METHOD_PATTERN_OVERRIDES = "pattern-with-overrides"
@@ -852,21 +847,6 @@ def create_raw_network_mapping_configmap(
     )
 
 
-def get_drpolicy_network_mapping_status(drpolicy_name):
-    """
-    Return the networkMapping sub-dict from DRPolicy.status.
-
-    Args:
-        drpolicy_name (str): name of the DRPolicy resource on the hub cluster
-
-    Returns:
-        dict: contents of status.networkMapping, or {} if absent
-    """
-    config.switch_acm_ctx()
-    drpolicy_ocp = ocp.OCP(kind=constants.DRPOLICY, resource_name=drpolicy_name)
-    return drpolicy_ocp.get().get("status", {}).get(DRPOLICY_NM_FIELD, {})
-
-
 def get_ipamclaim_ip(cluster_name, namespace, vm_name, interface_name):
     """
     Return the IP address recorded in the IPAMClaim for the given VM interface.
@@ -977,37 +957,6 @@ def set_drpolicy_network_mapping_ref(drpolicy_name, configmap_name):
     logger.info(
         f"Patched DRPolicy {drpolicy_name} networkMappingRef → {configmap_name}"
     )
-
-
-def wait_for_drpolicy_network_mapping_status(
-    drpolicy_name, expected_status, timeout=120
-):
-    """
-    Poll until DRPolicy networkMapping.status matches expected_status.
-
-    Args:
-        drpolicy_name (str): name of the DRPolicy resource
-        expected_status (str): one of DRPOLICY_NM_STATUS_VALID / _INVALID
-        timeout (int): seconds to wait before raising AssertionError
-
-    Raises:
-        AssertionError: if expected_status is not reached within timeout
-    """
-    try:
-        for sample in TimeoutSampler(
-            timeout=timeout,
-            sleep=5,
-            func=lambda: get_drpolicy_network_mapping_status(drpolicy_name).get(
-                "status", ""
-            ),
-        ):
-            if sample == expected_status:
-                return
-    except TimeoutExpiredError as exc:
-        raise AssertionError(
-            f"DRPolicy {drpolicy_name} networkMapping.status did not reach "
-            f"'{expected_status}' within {timeout}s"
-        ) from exc
 
 
 def wait_for_drpc_network_mapping_loaded(
