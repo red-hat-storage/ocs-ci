@@ -519,8 +519,9 @@ generic_locators = {
     ),
     "confirm_dilog_input": ("//input[@placeholder='{}']", By.XPATH),
     "confirm_delete_resource": (
-        'button[data-test="delete-action"]',
-        By.CSS_SELECTOR,
+        "//button[@data-test='delete-action'] | "
+        "//*[@role='dialog']//button[normalize-space(.)='Delete']",
+        By.XPATH,
     ),
     "cancel_delete_resource": (
         'button[data-test="cancel-action"]',
@@ -3747,8 +3748,8 @@ bucket_tab = {
         By.XPATH,
     ),
     "lifecycle_rules_list": (
-        "//table[@data-label='Lifecycle rules table']//tbody/tr",
-        By.XPATH,
+        '[aria-label="Lifecycle rules list page"] tbody tr',
+        By.CSS_SELECTOR,
     ),
     "rule_name_by_text": (
         "//td[@data-label='Name' and text()='{}']",

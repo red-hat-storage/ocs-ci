@@ -117,11 +117,14 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             NoSuchElementException: If bucket not found in search results or UI elements not found
             TimeoutException: If page elements fail to load within timeout period
         """
+        from re import escape
+
         logger.info(f"Navigating to lifecycle rules for bucket: {bucket_name}")
 
         self.navigate_buckets_page()
 
         self.do_send_keys(self.generic_locators["search_resource_field"], bucket_name)
+        self.wait_for_endswith_url(rf"[?&]name={escape(bucket_name)}(?:[&#]|$)")
 
         self.do_click((f"//tr//a[contains(text(), '{bucket_name}')]", By.XPATH))
 
