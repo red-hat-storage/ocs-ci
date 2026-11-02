@@ -2518,6 +2518,10 @@ def wait_for_noobaa_pods_running(timeout=300, sleep=10):
     Args:
         timeout (int): Timeout in seconds
 
+    Returns:
+        bool: True if all the noobaa pods reached Running state within the
+            timeout, False otherwise
+
     """
 
     def _check_nb_pods_status():
@@ -2538,7 +2542,7 @@ def wait_for_noobaa_pods_running(timeout=300, sleep=10):
         return set(nb_pod_labels) == set(nb_pods_running)
 
     sampler = TimeoutSampler(timeout=timeout, sleep=10, func=_check_nb_pods_status)
-    sampler.wait_for_func_status(True)
+    return sampler.wait_for_func_status(True)
 
 
 @config.run_with_provider_context_if_available

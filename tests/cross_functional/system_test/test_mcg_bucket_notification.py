@@ -72,6 +72,47 @@ class TestBucketNotificationSystemTest:
         notif_manager.setup_kafka()
         return notif_manager
 
+    def ensure_noobaa_pods_running(self, timeout):
+        """
+        Wait for all NooBaa pods to be Running. If they are not, log the
+        Running/non-Running pods summary, describe the non-Running pods and
+        fail the test immediately.
+
+        Args:
+            timeout (int): Timeout in seconds to wait for NooBaa pods
+
+        """
+        if wait_for_noobaa_pods_running(timeout=timeout):
+            return
+
+        running, not_running = [], []
+        try:
+            for pod_info in get_pods_having_label(constants.NOOBAA_APP_LABEL):
+                pod_obj = Pod(**pod_info)
+                phase = pod_info.get("status", {}).get("phase")
+                if phase == constants.STATUS_RUNNING:
+                    running.append(pod_obj)
+                else:
+                    not_running.append((pod_obj, phase))
+        except Exception as e:
+            logger.error(f"Failed to collect NooBaa pods status: {e}")
+
+        logger.error(
+            f"NooBaa pods summary: total={len(running) + len(not_running)}, "
+            f"running={len(running)} {[p.name for p in running]}, "
+            f"not running={len(not_running)} {[(p.name, s) for p, s in not_running]}"
+        )
+        for pod_obj, phase in not_running:
+            try:
+                logger.error(
+                    f"Describe of NooBaa pod {pod_obj.name} (status: {phase}):\n"
+                    f"{pod_obj.describe()}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to describe pod {pod_obj.name}: {e}")
+
+        pytest.fail(f"NooBaa pods did not reach Running state within {timeout}s")
+
     def verify_events(
         self, notify_manager, topic, bucket_names, event_name, timeout=120, sleep=5
     ):
@@ -211,7 +252,7 @@ class TestBucketNotificationSystemTest:
             )
             # Ensure all NooBaa pods are running before selecting a node for disruption
             logger.info("Ensuring all NooBaa pods are running prior to node disruption")
-            wait_for_noobaa_pods_running(timeout=600)
+            self.ensure_noobaa_pods_running(timeout=1200)
 
             # Collect all NooBaa pods safely
             noobaa_pods = []
@@ -307,7 +348,7 @@ class TestBucketNotificationSystemTest:
                 status=constants.NODE_READY,
                 timeout=300,
             )
-            wait_for_noobaa_pods_running(timeout=1200)
+            self.ensure_noobaa_pods_running(timeout=1200)
             logger.info("NooBaa pod node started, all NooBaa pods running")
 
             logger.info("Waiting for NooBaa to stabilize after disruptions...")
