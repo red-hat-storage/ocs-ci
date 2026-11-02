@@ -210,6 +210,23 @@ class DeploymentUI(PageNavigator):
 
         mcg_only = config.ENV_DATA.get("mcg_only_deployment", False)
         ocs_version = version.get_semantic_ocs_version_from_config()
+        mcg_only_new_flow = mcg_only and ocs_version >= version.VERSION_4_23
+        if mcg_only_new_flow:
+            if config.DEPLOYMENT.get("local_storage"):
+                raise ConfigurationError(
+                    "MCG-only + LSO is not verified on ODF >= 5.0. "
+                    "The LOCAL_DEVICES step list differs from EXISTING and has "
+                    "not been exercised. Aborting to avoid silent mis-deployment."
+                )
+
+            missing = {"mcg_only_deployment_entry", "next_button_element"} - set(
+                self.dep_loc
+            )
+            if missing:
+                raise ConfigurationError(
+                    f"ODF {ocs_version} MCG-only UI deploy needs {missing}, "
+                    f"absent for OCP {self.ocp_version}"
+                )
         if ocs_version >= version.VERSION_4_20:
             logger.info("Navigate to Storage Cluster page")
 
@@ -221,7 +238,7 @@ class DeploymentUI(PageNavigator):
             self.page_has_loaded(retries=15)
             logger.info("Click Configure ODF")
             self.do_click(locator=self.dep_loc["configure_odf"], enable_screenshot=True)
-            if mcg_only and ocs_version >= version.VERSION_4_23:
+            if mcg_only_new_flow:
                 logger.info(
                     "MCG-only deployment: clicking 'Setup Multicloud Object Gateway' card"
                 )
@@ -305,22 +322,6 @@ class DeploymentUI(PageNavigator):
         logger.info("Install MCG ONLY cluster via UI")
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_23:
-            if config.DEPLOYMENT.get("local_storage"):
-                raise ConfigurationError(
-                    "MCG-only + LSO is not verified on ODF >= 5.0. "
-                    "The LOCAL_DEVICES step list differs from EXISTING and has "
-                    "not been exercised. Aborting to avoid silent mis-deployment."
-                )
-
-            missing = {"mcg_only_deployment_entry", "next_button_element"} - set(
-                self.dep_loc
-            )
-            if missing:
-                raise ConfigurationError(
-                    f"ODF {ocs_version} MCG-only UI deploy needs {missing}, "
-                    f"absent for OCP {self.ocp_version}"
-                )
-
             # Wait for SPA navigation to settle before inspecting the DOM.
             self.page_has_loaded(retries=10)
 
