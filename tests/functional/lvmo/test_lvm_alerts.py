@@ -109,26 +109,26 @@ class TestLvmCapacityAlerts(ManageTest):
         log.info(
             f"Lvm thin-pool sizePrecent is {self.lvm.get_lvm_thin_pool_config_size_percent()}"
         )
-        size_to_70 = f"{int(float(self.thin_pool_size)*0.7)}Gi"
-        size_to_76 = f"{int(float(self.thin_pool_size)*0.06)}Gi"
-        size_to_86 = f"{int(float(self.thin_pool_size)*0.1)}Gi"
+        size_to_70 = f"{int(float(self.thin_pool_size) * 0.7)}Gi"
+        size_to_76 = f"{int(float(self.thin_pool_size) * 0.06)}Gi"
+        size_to_86 = f"{int(float(self.thin_pool_size) * 0.1)}Gi"
         sizes_list = [
             {
                 "size_to_fill": size_to_70,
                 "file_name": "run-to-70",
-                "pvc_expected_size": f"{float(self.pvc_size)*0.7}",
+                "pvc_expected_size": f"{float(self.pvc_size) * 0.7}",
                 "alert": None,
             },
             {
                 "size_to_fill": size_to_76,
                 "file_name": "run-to-76",
-                "pvc_expected_size": f"{float(self.pvc_size)*0.06}",
+                "pvc_expected_size": f"{float(self.pvc_size) * 0.06}",
                 "alert": constants.TOPOLVM_ALERTS.get("tp_data_75_precent"),
             },
             {
                 "size_to_fill": size_to_86,
                 "file_name": "run-to-86",
-                "pvc_expected_size": f"{float(self.pvc_size)*0.1}",
+                "pvc_expected_size": f"{float(self.pvc_size) * 0.1}",
                 "alert": constants.TOPOLVM_ALERTS.get("tp_data_85_precent"),
             },
         ]

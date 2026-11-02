@@ -119,7 +119,7 @@ def upload_objs_to_buckets(
                         sync_object_directory_with_retry,
                         pod_obj,
                         src_path,
-                        f"s3://{bucket.name}/{current_iteration}/{index+1}/",
+                        f"s3://{bucket.name}/{current_iteration}/{index + 1}/",
                         s3_obj,
                         timeout=base_timeout * multiplier,
                     )
@@ -133,7 +133,7 @@ def upload_objs_to_buckets(
     finally:
         if event:
             logger.info(
-                f"OBJECT UPLOAD: Total of {total_num_buckets*multiplier*1000000} objects got uploaded or "
+                f"OBJECT UPLOAD: Total of {total_num_buckets * multiplier * 1000000} objects got uploaded or "
                 f"was getting uploaded to {total_num_buckets} different types of buckets in this "
                 f"iteration {current_iteration}"
             )
@@ -347,7 +347,7 @@ def delete_objs_from_bucket(pod_obj, bucket, prev_iteration, event=None, multipl
         timeout=timeout,
     )
     logger.info(
-        f"DELETE OP: Total of {(multiplier-1)*1000000} objects got deleted "
+        f"DELETE OP: Total of {(multiplier - 1) * 1000000} objects got deleted "
         f"in the current iteration {current_iteration}"
     )
     logger.info(
@@ -383,7 +383,7 @@ def list_objs_from_bucket(bucket, prev_iteration, event=None):
 
         if event.is_set():
             logger.info(
-                f"LIST OP: Total of {current_iteration*1000000} objects got listed "
+                f"LIST OP: Total of {current_iteration * 1000000} objects got listed "
                 f"in the current iteration {current_iteration}"
             )
             logger.info(
@@ -438,7 +438,7 @@ def download_objs_from_bucket(
 
         if event.is_set():
             logger.info(
-                f"DOWNLOAD OP: Total of {(multiplier-1)*1000000} objects got "
+                f"DOWNLOAD OP: Total of {(multiplier - 1) * 1000000} objects got "
                 f"downloaded in the current iteration {current_iteration}"
             )
             logger.info(
