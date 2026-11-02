@@ -439,6 +439,77 @@ def fill_noobaa_db(blow_io, bucket_name, expanded_pod_name, default_pod_name):
             logger.info(message)
 
 
+def get_firing_alerts(api, alert_name, pod_name):
+    """
+    Return the firing instances of one alert for one pod.
+
+    Args:
+        api (PrometheusAPI): Prometheus API instance
+        alert_name (str): Alert to look for
+        pod_name (str): Pod the alert has to name
+
+    Returns:
+        list: The matching firing alerts
+
+    """
+    response = api.get("alerts", payload={"silenced": False, "inhibited": False})
+    return [
+        alert
+        for alert in response.json().get("data", {}).get("alerts", [])
+        if alert.get("labels", {}).get("alertname") == alert_name
+        and alert.get("labels", {}).get("pod") == pod_name
+        and alert.get("state") == "firing"
+    ]
+
+
+def wait_for_db_capacity_alert(
+    api,
+    alert_name,
+    pod_name,
+    severity,
+    alert_msg,
+    alert_description,
+    threshold_pct,
+    timeout,
+):
+    """
+    Wait for one capacity alert to fire for one pod, then check its content.
+
+    Args:
+        api (PrometheusAPI): Prometheus API instance
+        alert_name (str): Alert to wait for
+        pod_name (str): Pod the alert has to name
+        severity (str): Expected severity
+        alert_msg (str): Expected message, with a {pod} placeholder
+        alert_description (str): Expected description, with a {pod} placeholder
+        threshold_pct (int): Threshold the alert fires at, used in log messages
+        timeout (int): Time in seconds to wait for the alert
+
+    Raises:
+        TimeoutExpiredError: If the alert does not fire in time
+
+    """
+    logger.info(f"Waiting for the {alert_name} alert to fire for pod {pod_name}")
+    for pod_alerts in TimeoutSampler(
+        timeout, 15, get_firing_alerts, api, alert_name, pod_name
+    ):
+        if pod_alerts:
+            break
+
+    check_alert_list(
+        label=alert_name,
+        msg=alert_msg.format(pod=pod_name),
+        description=alert_description.format(pod=pod_name),
+        states=["firing"],
+        severity=severity,
+        alerts=pod_alerts,
+    )
+    logger.info(
+        f"{alert_name} ({severity}) alert verified for pod {pod_name} "
+        f"at {threshold_pct}%"
+    )
+
+
 def verify_db_capacity_alerts(
     api, expanded_pod_name, default_pod_name, phase, timeout=900
 ):
@@ -488,38 +559,70 @@ def verify_db_capacity_alerts(
         alert_msg,
         alert_description,
     ) in expected_alerts:
-        logger.info(f"Waiting for the {alert_name} alert to fire for pod {pod_name}")
-        for response in TimeoutSampler(
-            timeout,
-            15,
-            api.get,
-            "alerts",
-            payload={"silenced": False, "inhibited": False},
-        ):
-            pod_alerts = [
-                alert
-                for alert in response.json().get("data", {}).get("alerts", [])
-                if alert.get("labels", {}).get("alertname") == alert_name
-                and alert.get("labels", {}).get("pod") == pod_name
-                and alert.get("state") == "firing"
-            ]
-            if pod_alerts:
-                break
-
-        check_alert_list(
-            label=alert_name,
-            msg=alert_msg.format(pod=pod_name),
-            description=alert_description.format(pod=pod_name),
-            states=["firing"],
+        wait_for_db_capacity_alert(
+            api=api,
+            alert_name=alert_name,
+            pod_name=pod_name,
             severity=severity,
-            alerts=pod_alerts,
-        )
-        logger.info(
-            f"{alert_name} ({severity}) alert verified for pod {pod_name} "
-            f"at {threshold_pct}%"
+            alert_msg=alert_msg,
+            alert_description=alert_description,
+            threshold_pct=threshold_pct,
+            timeout=timeout,
         )
 
     logger.info(f"Both NooBaa DB capacity alerts verified {phase}")
+
+
+def verify_db_capacity_alerts_after_recovery(
+    api, expanded_pod_name, default_pod_name, timeout=1200
+):
+    """
+    Verify the capacity alerts once the recovery has rebuilt both instances.
+
+    Args:
+        api (PrometheusAPI): Prometheus API instance
+        expanded_pod_name (str): NooBaa DB pod whose PVC the test expanded
+        default_pod_name (str): NooBaa DB pod that kept its default PVC size
+        timeout (int): Time in seconds to wait for each warning alert
+
+    Raises:
+        TimeoutExpiredError: If a warning alert does not fire for its pod
+        UnexpectedBehaviour: If the critical alert is still firing
+
+    """
+    logger.info(
+        "NooBaa DB CNPG roles after backup and recovery: "
+        f"primary={get_primary_nb_db_pod().name}, "
+        f"secondary={get_secondary_nb_db_pod().name}"
+    )
+
+    for pod_name in (expanded_pod_name, default_pod_name):
+        wait_for_db_capacity_alert(
+            api=api,
+            alert_name=constants.ALERT_NOOBAA_DATABASE_REACHING_CAPACITY,
+            pod_name=pod_name,
+            severity="warning",
+            alert_msg=WARNING_ALERT_MSG,
+            alert_description=WARNING_ALERT_DESCRIPTION,
+            threshold_pct=DB_CAPACITY_WARNING_THRESHOLD,
+            timeout=timeout,
+        )
+
+    critical_alerts = get_firing_alerts(
+        api, constants.ALERT_NOOBAA_DATABASE_STORAGE_FULL, default_pod_name
+    )
+    if critical_alerts:
+        raise UnexpectedBehaviour(
+            f"{constants.ALERT_NOOBAA_DATABASE_STORAGE_FULL} is still firing "
+            f"for {default_pod_name} after the recovery. The recovery brings "
+            "every instance back at the declared PVC size, which leaves the "
+            f"restored data under the {DB_CAPACITY_CRITICAL_THRESHOLD}% "
+            "threshold"
+        )
+    logger.info(
+        f"{constants.ALERT_NOOBAA_DATABASE_STORAGE_FULL} is not firing for "
+        f"{default_pod_name}, as expected after the recovery"
+    )
 
 
 @magenta_squad
@@ -566,7 +669,7 @@ class TestMCGRecovery(E2ETest):
            - Default PVC pod: NooBaaDatabaseStorageFull (90%, critical)
         5. Back up and recover the DB from that backup
         6. Verify the object count is preserved after the recovery
-        7. Verify the same two capacity alerts still fire after the recovery
+        7. Verify the 80% critical alerts should not disappear and 90% critical disappears for secondary
         8. Verify the default backingstore is Ready and validate the MCG
            background features
 
@@ -586,15 +689,15 @@ class TestMCGRecovery(E2ETest):
         api = PrometheusAPI(threading_lock=threading_lock)
 
         logger.test_step("Expand the PVC of the primary NooBaa DB instance")
-        expanded_pvc_name = get_primary_nb_db_pod().name
-        default_pvc_name = get_secondary_nb_db_pod().name
+        primary_nb_pvc = get_primary_nb_db_pod().name
+        secondary_nb_pvc = get_secondary_nb_db_pod().name
         logger.info(
-            f"Primary NooBaa DB instance is {expanded_pvc_name}, "
-            f"secondary instance is {default_pvc_name}"
+            f"Primary NooBaa DB instance is {primary_nb_pvc}, "
+            f"secondary instance is {secondary_nb_pvc}"
         )
 
         default_pvc_capacity = get_pvc_size(
-            get_pvc_objs(pvc_names=[default_pvc_name])[0]
+            get_pvc_objs(pvc_names=[secondary_nb_pvc])[0]
         )
         logger.info(f"Current NooBaa DB PVC capacity is {default_pvc_capacity}GB")
 
@@ -608,33 +711,31 @@ class TestMCGRecovery(E2ETest):
             f"PVC, which cannot raise the {DB_CAPACITY_CRITICAL_THRESHOLD}% alert"
         )
         logger.info(
-            f"Expanding {expanded_pvc_name} to {expanded_pvc_size}GB, where a "
+            f"Expanding {primary_nb_pvc} to {expanded_pvc_size}GB, where a "
             f"{DB_FILL_TARGET_PCT}% fill is {fill_pct_of_default:.1f}% of "
-            f"{default_pvc_name}"
+            f"{secondary_nb_pvc}"
         )
 
         scale_noobaa_db_pod_pv_size(
             pv_size=expanded_pvc_size,
-            pvc_names=[expanded_pvc_name],
+            pvc_names=[primary_nb_pvc],
         )
 
-        current_pvc_capacity = get_pvc_size(
-            get_pvc_objs(pvc_names=[expanded_pvc_name])[0]
-        )
+        current_pvc_capacity = get_pvc_size(get_pvc_objs(pvc_names=[primary_nb_pvc])[0])
         assert current_pvc_capacity == expanded_pvc_size, (
-            f"Failed to expand {expanded_pvc_name} to {expanded_pvc_size}GB, "
+            f"Failed to expand {primary_nb_pvc} to {expanded_pvc_size}GB, "
             f"current size: {current_pvc_capacity}GB"
         )
-        logger.info(f"{expanded_pvc_name} PVC size is now {expanded_pvc_size}GB")
+        logger.info(f"{primary_nb_pvc} PVC size is now {expanded_pvc_size}GB")
 
         current_default_capacity = get_pvc_size(
-            get_pvc_objs(pvc_names=[default_pvc_name])[0]
+            get_pvc_objs(pvc_names=[secondary_nb_pvc])[0]
         )
         assert current_default_capacity == default_pvc_capacity, (
-            f"{default_pvc_name} size changed unexpectedly: expected "
+            f"{secondary_nb_pvc} size changed unexpectedly: expected "
             f"{default_pvc_capacity}GB, found {current_default_capacity}GB"
         )
-        logger.info(f"{default_pvc_name} PVC size remains {default_pvc_capacity}GB")
+        logger.info(f"{secondary_nb_pvc} PVC size remains {default_pvc_capacity}GB")
 
         logger.test_step(
             f"Fill the primary NooBaa DB to {DB_FILL_TARGET_PCT}% of its "
@@ -688,8 +789,8 @@ class TestMCGRecovery(E2ETest):
         fill_noobaa_db(
             blow_io=md_blow_factory,
             bucket_name=fill_bucket,
-            expanded_pod_name=expanded_pvc_name,
-            default_pod_name=default_pvc_name,
+            expanded_pod_name=primary_nb_pvc,
+            default_pod_name=secondary_nb_pvc,
         )
 
         obj_count_pre_recovery = len(
@@ -709,8 +810,8 @@ class TestMCGRecovery(E2ETest):
         )
         verify_db_capacity_alerts(
             api=api,
-            expanded_pod_name=expanded_pvc_name,
-            default_pod_name=default_pvc_name,
+            expanded_pod_name=primary_nb_pvc,
+            default_pod_name=secondary_nb_pvc,
             phase="before backup and recovery",
         )
 
@@ -741,11 +842,10 @@ class TestMCGRecovery(E2ETest):
             "Verify both NooBaa DB capacity alerts after backup and recovery"
         )
 
-        verify_db_capacity_alerts(
+        verify_db_capacity_alerts_after_recovery(
             api=api,
-            expanded_pod_name=expanded_pvc_name,
-            default_pod_name=default_pvc_name,
-            phase="after backup and recovery",
+            expanded_pod_name=primary_nb_pvc,
+            default_pod_name=secondary_nb_pvc,
             timeout=1200,
         )
 
