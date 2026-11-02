@@ -276,7 +276,7 @@ class TestAddCapacity(ManageTest):
         number_of_osds_added = len(osd_pods_after) - len(osd_pods_before)
         logger.info(
             f"### number_of_osds_added = {number_of_osds_added}, "
-            f"before = {len(osd_pods_before)}, after = {len(osd_pods_after) }"
+            f"before = {len(osd_pods_before)}, after = {len(osd_pods_after)}"
         )
         # If the difference b/w updated count of osds and old osd count is not
         # 3 then expansion failed
