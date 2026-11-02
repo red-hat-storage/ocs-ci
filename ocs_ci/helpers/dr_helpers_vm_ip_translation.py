@@ -30,6 +30,7 @@ import yaml
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.utils import get_primary_cluster_config
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
@@ -475,15 +476,17 @@ def wait_for_vm_ssh_via_udn_pod(
             pass
         return False
 
-    for sample in TimeoutSampler(
-        timeout=timeout, sleep=sleep_interval, func=_check_ssh
-    ):
-        if sample:
-            logger.info(f"SSH to VM {vm_ip} via helper pod '{pod_name}' is ready.")
-            return True
-    raise TimeoutError(
-        f"Timed out waiting for SSH connectivity to VM {vm_ip} via UDN helper pod '{pod_name}'"
-    )
+    try:
+        for sample in TimeoutSampler(
+            timeout=timeout, sleep=sleep_interval, func=_check_ssh
+        ):
+            if sample:
+                logger.info(f"SSH to VM {vm_ip} via helper pod '{pod_name}' is ready.")
+                return True
+    except TimeoutExpiredError as exc:
+        raise TimeoutError(
+            f"Timed out waiting for SSH connectivity to VM {vm_ip} via UDN helper pod '{pod_name}'"
+        ) from exc
 
 
 def run_vm_cmd_via_udn_pod(
@@ -918,17 +921,19 @@ def wait_for_drpolicy_network_peers(drpolicy_name, timeout=120):
     Raises:
         AssertionError: if networkPeers is not populated within timeout
     """
-    for sample in TimeoutSampler(
-        timeout=timeout,
-        sleep=5,
-        func=lambda: get_drpolicy_network_peers(drpolicy_name),
-    ):
-        if sample:
-            return sample
-    raise AssertionError(
-        f"DRPolicy {drpolicy_name} status.networkPeers did not populate "
-        f"within {timeout}s"
-    )
+    try:
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=lambda: get_drpolicy_network_peers(drpolicy_name),
+        ):
+            if sample:
+                return sample
+    except TimeoutExpiredError as exc:
+        raise AssertionError(
+            f"DRPolicy {drpolicy_name} status.networkPeers did not populate "
+            f"within {timeout}s"
+        ) from exc
 
 
 def set_drpolicy_network_mapping_ref(drpolicy_name, configmap_name):
@@ -963,19 +968,21 @@ def wait_for_drpolicy_network_mapping_status(
     Raises:
         AssertionError: if expected_status is not reached within timeout
     """
-    for sample in TimeoutSampler(
-        timeout=timeout,
-        sleep=5,
-        func=lambda: get_drpolicy_network_mapping_status(drpolicy_name).get(
-            "status", ""
-        ),
-    ):
-        if sample == expected_status:
-            return
-    raise AssertionError(
-        f"DRPolicy {drpolicy_name} networkMapping.status did not reach "
-        f"'{expected_status}' within {timeout}s"
-    )
+    try:
+        for sample in TimeoutSampler(
+            timeout=timeout,
+            sleep=5,
+            func=lambda: get_drpolicy_network_mapping_status(drpolicy_name).get(
+                "status", ""
+            ),
+        ):
+            if sample == expected_status:
+                return
+    except TimeoutExpiredError as exc:
+        raise AssertionError(
+            f"DRPolicy {drpolicy_name} networkMapping.status did not reach "
+            f"'{expected_status}' within {timeout}s"
+        ) from exc
 
 
 def wait_for_drpc_network_mapping_loaded(
@@ -1027,12 +1034,13 @@ def wait_for_drpc_network_mapping_loaded(
         f"Waiting for DRPC '{drpc_name}' condition {DRPC_CONDITION_NM_LOADED}={expected_status}"
         f"{msg_info} (timeout {timeout}s)"
     )
-    for sample in TimeoutSampler(
-        timeout=timeout, sleep=5, func=_get_drpc_nm_loaded_matched
-    ):
-        if sample:
-            break
-    else:
+    try:
+        for sample in TimeoutSampler(
+            timeout=timeout, sleep=5, func=_get_drpc_nm_loaded_matched
+        ):
+            if sample:
+                break
+    except TimeoutExpiredError as exc:
         config.switch_acm_ctx()
         drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESPACE, resource_name=drpc_name)
         actual_conditions = drpc_obj.get().get("status", {}).get("conditions", [])
@@ -1040,7 +1048,7 @@ def wait_for_drpc_network_mapping_loaded(
             f"Timeout: DRPC '{drpc_name}' condition '{DRPC_CONDITION_NM_LOADED}' did not reach expected status '{expected_status}'"  # noqa: E501
             f"{msg_info} within {timeout}s. "
             f"Actual DRPC conditions are: {actual_conditions}"
-        )
+        ) from exc
 
     config.switch_acm_ctx()
     drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESPACE, resource_name=drpc_name)
@@ -1104,24 +1112,25 @@ def verify_drpolicy_network_attachments_validated(drpolicy_name, timeout=300):
     logger.info(
         f"Waiting for DRPolicy '{drpolicy_name}' NetworkAttachmentsValidated=True (timeout {timeout}s)"
     )
-    for sample in TimeoutSampler(
-        timeout=timeout, sleep=5, func=_get_validated_condition
-    ):
-        if (
-            sample
-            and sample.get("status") == "True"
-            and sample.get("reason") == "Validated"
+    try:
+        for sample in TimeoutSampler(
+            timeout=timeout, sleep=5, func=_get_validated_condition
         ):
-            if "symmetric" in sample.get("message", "").lower():
-                break
-    else:
+            if (
+                sample
+                and sample.get("status") == "True"
+                and sample.get("reason") == "Validated"
+            ):
+                if "symmetric" in sample.get("message", "").lower():
+                    break
+    except TimeoutExpiredError as exc:
         config.switch_acm_ctx()
         drpolicy_ocp = ocp.OCP(kind=constants.DRPOLICY, resource_name=drpolicy_name)
         actual_conditions = drpolicy_ocp.get().get("status", {}).get("conditions", [])
         raise AssertionError(
             f"Timeout: DRPolicy '{drpolicy_name}' condition 'NetworkAttachmentsValidated' did not reach status='True' with reason='Validated' within {timeout}s. "  # noqa: E501
             f"Actual DRPolicy conditions are: {actual_conditions}"
-        )
+        ) from exc
 
     # Double check and assert the values
     cond = _get_validated_condition()
@@ -1204,16 +1213,20 @@ def wait_for_drclusterconfig_nad_discovery(cluster_name, timeout=120):
         f"NAD '{VM_NETWORK_NAD_NAME}' in status.{DRCLUSTERCONFIG_NAD_STATUS_FIELD} "
         f"(timeout {timeout}s)"
     )
-    for sample in TimeoutSampler(timeout=timeout, sleep=5, func=_get_net_attachments):
-        if sample:
-            logger.info(
-                f"DRClusterConfig on '{cluster_name}' discovered NADs: {sample}"
-            )
-            return sample
-    raise AssertionError(
-        f"DRClusterConfig on '{cluster_name}' did not discover any NADs in "
-        f"status.{DRCLUSTERCONFIG_NAD_STATUS_FIELD} within {timeout}s"
-    )
+    try:
+        for sample in TimeoutSampler(
+            timeout=timeout, sleep=5, func=_get_net_attachments
+        ):
+            if sample:
+                logger.info(
+                    f"DRClusterConfig on '{cluster_name}' discovered NADs: {sample}"
+                )
+                return sample
+    except TimeoutExpiredError as exc:
+        raise AssertionError(
+            f"DRClusterConfig on '{cluster_name}' did not discover any NADs in "
+            f"status.{DRCLUSTERCONFIG_NAD_STATUS_FIELD} within {timeout}s"
+        ) from exc
 
 
 def verify_vrg_static_ip_discovery(
@@ -1265,13 +1278,14 @@ def verify_vrg_static_ip_discovery(
             .get(VRG_STATIC_IP_DISCOVERY_RESOURCES_KEY, [])
         )
 
-    for sample in TimeoutSampler(timeout=timeout, sleep=5, func=_get_vrg_discovery):
-        if sample:
-            break
-    else:
+    try:
+        for sample in TimeoutSampler(timeout=timeout, sleep=5, func=_get_vrg_discovery):
+            if sample:
+                break
+    except TimeoutExpiredError as exc:
         raise AssertionError(
             f"Timeout: VRG '{vrg_name}' on '{cluster_name}' staticIPDiscovery was not populated within {timeout}s."
-        )
+        ) from exc
 
     discovery_resources = _get_vrg_discovery()
     assert (
@@ -1362,13 +1376,16 @@ def verify_vrg_static_ip_translation(
             return None
         return trans_spec.get(VRG_STATIC_IP_TRANSLATION_KEY, [])
 
-    for sample in TimeoutSampler(timeout=timeout, sleep=5, func=_get_vrg_translation):
-        if sample:
-            break
-    else:
+    try:
+        for sample in TimeoutSampler(
+            timeout=timeout, sleep=5, func=_get_vrg_translation
+        ):
+            if sample:
+                break
+    except TimeoutExpiredError as exc:
         raise AssertionError(
             f"Timeout: VRG '{vrg_name}' on '{cluster_name}' staticIPTranslationSpec was not populated within {timeout}s."  # noqa: E501
-        )
+        ) from exc
 
     translations = _get_vrg_translation()
     assert (
