@@ -239,7 +239,7 @@ class IPIOCPDeployment(BaseOCPDeployment):
                         created_at = cos_instance.get("created_at", "unknown")
 
                         logger.info(
-                            f"Found COS instance {idx+1}/{len(cos_instances_sorted)}: "
+                            f"Found COS instance {idx + 1}/{len(cos_instances_sorted)}: "
                             f"{cos_name} (GUID: {cos_guid}, created: {created_at})"
                         )
 
