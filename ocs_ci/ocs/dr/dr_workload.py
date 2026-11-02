@@ -1858,7 +1858,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         )
         templating.dump_data_to_temp_yaml(placement_yaml_data, placement_yaml.name)
         log.info(f"Creating Placement for workload {self.workload_name}")
-        run_cmd(f"oc create -f {placement_yaml.name}")
+        run_cmd(f"oc apply -f {placement_yaml.name}")  # IgnoreDeprecation
 
     def create_drpc(
         self,
@@ -2151,8 +2151,15 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             "discovered_apps_pod_selector_value"
         )
         self.kubeobject_capture_interval_int = generate_kubeobject_capture_interval()
+        # Value of the ramendr.openshift.io/k8s-resource-selector label carried by
+        # the VM (and its PVC); used for the vm-recipe DRPC parameters
+        self.vm_recipe_selector_value = kwargs.get(
+            "vm_recipe_selector_value", "kubevirt"
+        )
 
-    def deploy_workload(self, shared_drpc_protection=False, dr_protect=True):
+    def deploy_workload(
+        self, shared_drpc_protection=False, dr_protect=True, use_vm_recipe=False
+    ):
         """
 
         Args:
@@ -2160,6 +2167,8 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                             will share the DRPC and DR protect it using Shared Protection type via UI
             dr_protect (bool): True by default where workload will be DR protected via CLI,
                                 else test case should handle it (via UI)
+            use_vm_recipe (bool): False by default. When True, and dr_protect is True, the DRPC is
+                                created with the vm-recipe (see create_drpc)
 
         Deployment specific to CNV workload for Discovered/Imperative Apps
 
@@ -2170,14 +2179,16 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self.manage_dr_vm_secrets(shared_drpc_protection=shared_drpc_protection)
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         self.workload_path = self.target_clone_dir + "/" + self.workload_dir
-        run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
+        run_cmd(  # IgnoreDeprecation
+            f"oc apply -k {self.workload_path} -n {self.workload_namespace} "
+        )
         self.check_pod_pvc_status(skip_replication_resources=True)
         # Wait for temporary resources to be cleaned up before DRPC creation
         time.sleep(10)
         config.switch_acm_ctx()
         if dr_protect:
             self.create_placement()
-            self.create_drpc()
+            self.create_drpc(use_vm_recipe=use_vm_recipe)
             self.verify_workload_deployment()
         self.vm_obj = VirtualMachine(
             vm_name=self.vm_name, namespace=self.workload_namespace
@@ -2289,11 +2300,20 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         )
         templating.dump_data_to_temp_yaml(placement_yaml_data, placement_yaml.name)
         log.info(f"Creating Placement for workload {self.workload_name}")
-        run_cmd(f"oc create -f {placement_yaml.name}")
+        run_cmd(f"oc apply -f {placement_yaml.name}")  # IgnoreDeprecation
 
-    def create_drpc(self):
+    def create_drpc(self, use_vm_recipe=False):
         """
         Create DRPC for discovered Apps
+
+        Args:
+            use_vm_recipe (bool): False by default. When True the DRPC is created the
+                same way the ACM UI protects a VM: kubeObjectProtection references the
+                ``vm-recipe`` Recipe with recipeParameters naming the protected VM, and
+                pvcSelector is left empty. This is required for Ramen to discover the
+                VM static IPs (VRG status.staticIPDiscovery). The VM and its PVC must
+                carry the ramendr.openshift.io/k8s-resource-selector label whose value
+                is ``self.vm_recipe_selector_value``.
 
         """
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
@@ -2338,12 +2358,29 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         drpc_yaml_data["spec"]["kubeObjectProtection"]["kubeObjectSelector"][
             "matchExpressions"
         ][0]["values"][0] = self.discovered_apps_pod_selector_value
+        if use_vm_recipe:
+            drpc_yaml_data["metadata"].setdefault("annotations", {})[
+                "drplacementcontrol.ramendr.openshift.io/app-namespace"
+            ] = constants.DR_OPS_NAMESPACE
+            kube_object_protection = drpc_yaml_data["spec"]["kubeObjectProtection"]
+            kube_object_protection.pop("kubeObjectSelector", None)
+            kube_object_protection["recipeRef"] = {
+                "name": constants.VM_RECIPE_NAME,
+                "namespace": constants.DR_OPS_NAMESPACE,
+            }
+            kube_object_protection["recipeParameters"] = {
+                "PROTECTED_VMS": [self.vm_name],
+                "VM_NAMESPACE": [self.workload_namespace],
+                "K8S_RESOURCE_SELECTOR": [self.vm_recipe_selector_value],
+                "PVC_RESOURCE_SELECTOR": [self.vm_recipe_selector_value],
+            }
+            drpc_yaml_data["spec"]["pvcSelector"] = {}
         drcp_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="drpc", delete=False
         )
         templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
         log.info("Creating DRPC")
-        run_cmd(f"oc create -f {drcp_data_yaml.name}")
+        run_cmd(f"oc apply -f {drcp_data_yaml.name}")  # IgnoreDeprecation
 
     def verify_workload_deployment(self):
         """
@@ -2404,10 +2441,13 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             except CommandFailed:
                 # This is needed when DRPolicy is applied via UI, where DRPC which is created has suffix -drpc
                 # hence deletion fails
-                run_cmd(
-                    f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}-drpc"
-                )
-                log.info("DRPC deleted")
+                try:
+                    run_cmd(  # IgnoreDeprecation
+                        f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}-drpc"
+                    )
+                    log.info("DRPC deleted")
+                except CommandFailed:
+                    log.info("DRPC already deleted or not found")
             log.info("Deleting Placement")
             try:
                 run_cmd(
@@ -2417,10 +2457,13 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 # When the VMs are protected from UI, placement created does not contain suffix "-plmnt-1",
                 # hence this is needed for deletion
                 placement_name = f"{self.discovered_apps_placement_name}-placement-1"
-                run_cmd(
-                    f"oc delete placement -n {constants.DR_OPS_NAMESPACE} "
-                    f"{placement_name}"
-                )
+                try:
+                    run_cmd(  # IgnoreDeprecation
+                        f"oc delete placement -n {constants.DR_OPS_NAMESPACE} "
+                        f"{placement_name}"
+                    )
+                except CommandFailed:
+                    log.info("Placement already deleted or not found")
 
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])

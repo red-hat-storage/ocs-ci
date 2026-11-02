@@ -256,6 +256,7 @@ def failover(
     discovered_apps=False,
     old_primary=None,
     skip_odf_cli_validation=False,
+    timeout=360,
 ):
     """
     Initiates Failover action to the specified cluster
@@ -302,7 +303,7 @@ def failover(
         f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_FAILEDOVER} phase"
     )
 
-    drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER, timeout=360, sleep=10)
+    drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER, timeout=timeout, sleep=10)
 
     config.switch_ctx(restore_index)
 
@@ -1073,6 +1074,7 @@ def wait_for_replication_resources_creation(
     vrg_name="",
     skip_vrg_check=False,
     performed_dr_action=False,
+    vr_count=None,
 ):
     """
     Wait for replication resources to be created
@@ -1085,6 +1087,10 @@ def wait_for_replication_resources_creation(
         discovered_apps (bool): If true then deployed workload is discovered_apps
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
+        vr_count (int): Override for the expected VolumeReplication count in the namespace.
+            When multiple DRPCs share a namespace with CG enabled, pass the total number of
+            DRPCs in that namespace so the per-namespace VR count check uses the correct value
+            instead of the hardcoded 1-per-DRPC default. <to do>
 
     Raises:
         TimeoutExpiredError: In case replication resources not created
@@ -1416,6 +1422,24 @@ def wait_for_all_resources_deletion(
 
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
         if workload_cleanup or "cephfs" not in namespace:
+            # PVs with a Retain reclaim policy are left in Released state after
+            # their PVC is deleted — Kubernetes will not reclaim them
+            # automatically.  Explicitly delete them so the count reaches 0.
+            pv_obj = ocp.OCP(kind=constants.PV)
+            released_pvs = [
+                item["metadata"]["name"]
+                for item in pv_obj.get().get("items", [])
+                if item.get("spec", {}).get("claimRef", {}).get("namespace")
+                == namespace
+                and item.get("status", {}).get("phase") == "Released"
+            ]
+            for pv_name in released_pvs:
+                logger.info(
+                    f"Deleting Released PV '{pv_name}' (Retain policy, "
+                    f"claimRef.namespace={namespace})"
+                )
+                pv_obj.delete(resource_name=pv_name)
+
             logger.info("Waiting for all PVs to be deleted")
             wait_for_resource_count(
                 kind=constants.PV,
@@ -1694,11 +1718,6 @@ def get_all_drpolicy():
         ):
             return_drpolicy_list.append(drpolicy)
     return return_drpolicy_list
-
-
-# Guard flag: bounce the ramen-hub-operator pod at most once per process
-# across all retry attempts of validate_drpolicy_grouping.
-_ramen_hub_pod_bounced = False
 
 
 @retry(UnexpectedBehaviour, tries=10, delay=30, backoff=2, max_delay=120)
