@@ -86,11 +86,11 @@ def generate_test_vectors_with_metadata(
     for i in range(num_vectors):
         vector_data = [random.uniform(0.0, 2.0) for _ in range(dimension)]
         vector_obj = {
-            "key": f"{key_prefix}_{i+1}",
+            "key": f"{key_prefix}_{i + 1}",
             "data": {"float32": vector_data},
             "metadata": {
                 "genre": genres[i % len(genres)],
-                "source_text": f"i am source text {i+1}",
+                "source_text": f"i am source text {i + 1}",
                 "price": (i + 1) * 10,
             },
         }

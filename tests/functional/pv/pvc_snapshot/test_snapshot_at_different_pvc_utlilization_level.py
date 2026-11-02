@@ -60,7 +60,7 @@ class TestSnapshotAtDifferentPvcUsageLevel(ManageTest):
                     pod_obj.pvc.filename = f"{pod_obj.name}_{usage}"
                     pod_obj.run_io(
                         storage_type="fs",
-                        size=f"{int(self.pvc_size/len(usage_percent))}G",
+                        size=f"{int(self.pvc_size / len(usage_percent))}G",
                         runtime=20,
                         fio_filename=pod_obj.pvc.filename,
                     )
