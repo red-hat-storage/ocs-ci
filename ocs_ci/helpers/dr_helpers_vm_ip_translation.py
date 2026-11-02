@@ -137,7 +137,8 @@ def build_network_mapping_cm_data(
     Build the ConfigMap data dict using the confirmed mappings.yaml schema.
     Supports single or multiple network mapping entries.
 
-    Schema (confirmed from manual testing):
+    Schema (confirmed from manual testing)::
+
         version: "v1"
         networkMappings:
           - networkRef:
@@ -283,7 +284,8 @@ def get_drpolicy_name():
     Return the name of the first DRPolicy found on the hub cluster.
 
     This is the standard 3-line pattern repeated across every test that needs
-    the DRPolicy name:
+    the DRPolicy name::
+
         config.switch_acm_ctx()
         existing_policies = dr_helpers.get_all_drpolicy()
         assert existing_policies, "No DRPolicy found on hub"
