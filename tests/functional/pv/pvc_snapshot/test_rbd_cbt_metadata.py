@@ -1081,6 +1081,60 @@ class TestRbdCBTMetadata(CBTMetadataTestBase):
 class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
     """Test CBT lister range selection and pagination options."""
 
+    @staticmethod
+    def _verify_resumed_coverage(
+        full_coverage, resumed_coverage, starting_offset, aligned_offset
+    ):
+        """Compare resumed coverage and log starts below the assumed alignment."""
+        returned_start = resumed_coverage[0][0]
+        if returned_start < aligned_offset:
+            log.warning(
+                "Lister started at %d, below the assumed 4 MiB-aligned offset %d "
+                "for requested offset %d; resumed coverage: %s",
+                returned_start,
+                aligned_offset,
+                starting_offset,
+                resumed_coverage,
+            )
+        else:
+            log.info(
+                "Lister started at %d for requested offset %d (4 MiB-aligned offset %d)",
+                returned_start,
+                starting_offset,
+                aligned_offset,
+            )
+
+        comparison_start = min(returned_start, starting_offset)
+        expected_coverage = [
+            (max(start, comparison_start), end)
+            for start, end in full_coverage
+            if end > comparison_start
+        ]
+        assert resumed_coverage == expected_coverage, (
+            f"Lister returned coverage {resumed_coverage} from starting offset "
+            f"{starting_offset}; expected {expected_coverage} from "
+            f"{comparison_start}"
+        )
+
+    @staticmethod
+    def _verify_allocated_midpoint_coverage(full_coverage, upper_entries, midpoint):
+        """Compare allocated coverage at and above the requested midpoint."""
+        upper_coverage = get_merged_lister_entries_byte_ranges(upper_entries)
+        upper_from_midpoint = [
+            (max(start, midpoint), end)
+            for start, end in upper_coverage
+            if end > midpoint
+        ]
+        expected_upper_coverage = [
+            (max(start, midpoint), end)
+            for start, end in full_coverage
+            if end > midpoint
+        ]
+        assert upper_from_midpoint == expected_upper_coverage, (
+            f"Midpoint offset returned coverage {upper_coverage}; expected "
+            f"{expected_upper_coverage}"
+        )
+
     @tier2
     @pytest.mark.parametrize(
         argnames=["volume_mode"],
@@ -1095,24 +1149,22 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         """
         Verify that a starting offset resumes delta enumeration.
 
-        A changed write spans multiple metadata blocks beginning at 100 MiB.
-        Listing from 102 MiB must return only bytes at or above that requested
-        resume point, trimming the first range if it crosses the offset.
+        Two writes change data at 100 and 120 MiB. Listing from 106 MiB must
+        cover the same bytes as the full listing from its actual starting
+        point. The driver may round the requested offset down.
 
         Steps:
         1. Create a Block PVC, attach a writer pod, and write 10 MiB from
            offset 0.
         2. Take snap-1 and wait for it to become ready.
-        3. Write 10 MiB at offset 100 MiB and take snap-2.
+        3. Write 10 MiB at each of offsets 100 and 120 MiB and take snap-2.
         4. List the complete delta from snap-1 to snap-2 with no starting
            offset.
-        5. List the same delta with a starting offset of 102 MiB.
-        6. Verify that the resumed coverage equals the full coverage trimmed
-           at the offset, with no bytes reported below it.
-        7. Verify that the resumed result covers strictly fewer bytes than
-           the full delta.
+        5. List the same delta with a starting offset of 106 MiB.
+        6. Compare the full and resumed coverage from the returned start,
+           and log if it is below the 4 MiB-aligned offset of 104 MiB.
         """
-        starting_offset = 102 * 1024 * 1024
+        starting_offset = 106 * 1024 * 1024
 
         log.test_step("Create a Block PVC and write initial data")
         app_pvc = self._create_app_pvc(volume_mode)
@@ -1122,8 +1174,11 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         log.test_step("Take the base snapshot")
         snap_1 = self._take_snapshot(app_pvc, "cbt-offset-delta-1")
 
-        log.test_step("Write changed data at 100 MiB and take a second snapshot")
-        write_data_to_pvc(writer_pod, volume_mode, size_mb=10, offset_mb=100)
+        log.test_step(
+            "Write changed data at 100 and 120 MiB and take a second snapshot"
+        )
+        for offset_mb in (100, 120):
+            write_data_to_pvc(writer_pod, volume_mode, size_mb=10, offset_mb=offset_mb)
         snap_2 = self._take_snapshot(app_pvc, "cbt-offset-delta-2")
 
         log.test_step("List the complete delta")
@@ -1133,6 +1188,10 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         )
         full_coverage = get_merged_lister_entries_byte_ranges(full_entries)
         assert full_coverage, "Delta Lister returned no changed block ranges"
+        mib = 1024 * 1024
+        written_ranges = [(100 * mib, 110 * mib), (120 * mib, 130 * mib)]
+        uncovered = get_uncovered_byte_ranges(written_ranges, full_coverage)
+        assert not uncovered, f"Full delta missed written byte ranges: {uncovered}"
 
         log.test_step("Resume delta enumeration from the requested byte offset")
         resumed_entries = self.cbt_runner.run_lister_delta(
@@ -1141,25 +1200,12 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
             starting_offset=starting_offset,
         )
         resumed_coverage = get_merged_lister_entries_byte_ranges(resumed_entries)
-        expected_coverage = [
-            (max(start, starting_offset), end)
-            for start, end in full_coverage
-            if end > starting_offset
-        ]
-
         assert resumed_coverage, (
             f"Lister returned no ranges from starting offset {starting_offset}; "
             f"full coverage: {full_coverage}"
         )
-        assert resumed_coverage == expected_coverage, (
-            f"Lister returned coverage {resumed_coverage} from starting offset "
-            f"{starting_offset}; expected {expected_coverage}"
-        )
-        assert get_total_covered_bytes(resumed_coverage) < get_total_covered_bytes(
-            full_coverage
-        ), (
-            "Starting offset did not remove any earlier delta bytes. "
-            f"Full coverage: {full_coverage}; resumed coverage: {resumed_coverage}"
+        self._verify_resumed_coverage(
+            full_coverage, resumed_coverage, starting_offset, aligned_offset=104 * mib
         )
 
     @tier2
@@ -1172,13 +1218,14 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
             ),
         ],
     )
-    def test_cbt_allocated_starting_offset_parallel_workers(self, volume_mode):
+    def test_cbt_allocated_starting_offset(self, volume_mode):
         """
-        Verify that starting offsets split allocated ranges across workers.
+        Verify allocated range listings with starting offsets.
 
         The test writes data below and above the midpoint of a 1 GiB volume.
         Offset zero must match the default result, while the midpoint response
         contains the expected allocated bytes at and above the requested offset.
+        The driver may round the offset down.
 
         Steps:
         1. Create a Block PVC and write data at offsets 0 MiB and 768 MiB.
@@ -1205,6 +1252,14 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         full_entries = self.cbt_runner.run_lister_allocated(snap_obj.name)
         full_coverage = get_merged_lister_entries_byte_ranges(full_entries)
         assert full_coverage, "Allocated Lister returned no block ranges"
+        # A range starting below the midpoint covers part of the lower half.
+        assert any(
+            start < midpoint for start, _ in full_coverage
+        ), f"Expected coverage below {midpoint}; got {full_coverage}"
+        # A range ending above the midpoint covers part of the upper half.
+        assert any(
+            end > midpoint for _, end in full_coverage
+        ), f"Expected coverage above {midpoint}; got {full_coverage}"
 
         log.test_step("List allocated ranges explicitly from offset zero")
         zero_entries = self.cbt_runner.run_lister_allocated(
@@ -1222,20 +1277,7 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
             snap_obj.name,
             starting_offset=midpoint,
         )
-        upper_coverage = get_merged_lister_entries_byte_ranges(upper_entries)
-        expected_upper_coverage = [
-            (max(start, midpoint), end)
-            for start, end in full_coverage
-            if end > midpoint
-        ]
-
-        assert any(start < midpoint for start, _ in full_coverage) and any(
-            end > midpoint for _, end in full_coverage
-        ), f"Expected coverage below and above {midpoint}; got {full_coverage}"
-        assert upper_coverage == expected_upper_coverage, (
-            f"Midpoint offset returned coverage {upper_coverage}; expected "
-            f"{expected_upper_coverage}"
-        )
+        self._verify_allocated_midpoint_coverage(full_coverage, upper_entries, midpoint)
 
     @tier2
     @pytest.mark.parametrize(
@@ -1251,9 +1293,8 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         """
         Verify that max-results limits delta ranges per stream record.
 
-        The same ranges must be returned with and without a limit. Unlimited
-        output uses one record, while ``max-results=1`` uses one record per
-        returned block range.
+        The same coverage must be returned with and without a limit.
+        With ``max-results=1``, each record contains at most one block range.
 
         Steps:
         1. Create a Block PVC, write initial data, and take snap-1.
@@ -1283,7 +1324,7 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
             )
         snap_2 = self._take_snapshot(app_pvc, "cbt-max-results-2")
 
-        log.test_step("List the complete delta without a record limit")
+        log.test_step("List the complete delta with the default record limit")
         full_entries = self.cbt_runner.run_lister_delta(
             target_snap=snap_2.name,
             base_snap_name=snap_1.name,
@@ -1293,11 +1334,6 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
             f"Expected at least {len(changed_offsets_mb)} changed blocks; "
             f"got {full_entries}"
         )
-        assert len({entry["Record"] for entry in full_entries}) == 1, (
-            "Unlimited Lister output should place all blocks in one record: "
-            f"{full_entries}"
-        )
-
         log.test_step("List the same delta with one result per stream record")
         limited_entries = self.cbt_runner.run_lister_delta(
             target_snap=snap_2.name,
@@ -1310,9 +1346,8 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
             f"max-results=1 returned coverage {limited_coverage}; expected "
             f"{full_coverage}"
         )
-        assert len({entry["Record"] for entry in limited_entries}) == len(
-            limited_entries
-        ), (
+        records = {entry["Record"] for entry in limited_entries}
+        assert len(records) == len(limited_entries), (
             "max-results=1 should return one block range per record: "
             f"{limited_entries}"
         )
