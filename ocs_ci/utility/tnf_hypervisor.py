@@ -64,6 +64,9 @@ class TNFHypervisor:
             "ssh_user", constants.TNF_HYPERVISOR_DEFAULT_SSH_USER
         )
         self.ssh_key, self.ssh_pub_key = self._resolve_ssh_keys()
+        self.jump_host = config.DEPLOYMENT.get("ssh_jump_host")
+        if self.jump_host and not self.jump_host.get("private_key"):
+            self.jump_host["private_key"] = self.ssh_key
         self._created_sg_id = None
         self._created_vpc_stack = {}
         self._disk_resize_map = {}
@@ -449,20 +452,22 @@ class TNFHypervisor:
                 return
 
     def _try_ssh_connect(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(15)
-        try:
-            if sock.connect_ex((self.public_ip, 22)) != 0:
-                logger.info(f"Port 22 not reachable yet on {self.public_ip}")
-                return False
-        finally:
-            sock.close()
+        if not self.jump_host:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(15)
+            try:
+                if sock.connect_ex((self.public_ip, 22)) != 0:
+                    logger.info(f"Port 22 not reachable yet on {self.public_ip}")
+                    return False
+            finally:
+                sock.close()
 
         try:
             conn = Connection(
                 host=self.public_ip,
                 user=self.ssh_user,
                 private_key=self.ssh_key,
+                jump_host=self.jump_host,
             )
             retcode, stdout, _ = conn.exec_cmd("hostname")
             if retcode == 0:
@@ -897,6 +902,7 @@ class TNFHypervisor:
             host=self.public_ip,
             user=self.ssh_user,
             private_key=self.ssh_key,
+            jump_host=self.jump_host,
         )
 
     def _check_dev_scripts_done(self, completion_marker):
