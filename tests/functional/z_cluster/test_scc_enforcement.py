@@ -6,11 +6,16 @@ from uuid import uuid4
 import pytest
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import create_serviceaccount
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import ResourceNotFoundError, UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceNotFoundError,
+    UnexpectedBehaviour,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csv import CSV
-from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.ocs.resources.pod import Pod, get_pods_having_label
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.helpers.scc_helpers import (
     REQUIRED_PREFIXES_BY_CSV,
@@ -705,3 +710,101 @@ class TestSCCEnforcement(ManageTest):
 
         assert not errors, "SCC mapping failed:\n" + "\n".join(errors)
         logger.info("Verified SCC pinning for all %d active pods", len(all_pods))
+
+    @tier2
+    def test_noobaa_core_scc_survives_respin(self):
+        """Verify SCC pinning on a replacement NooBaa core pod."""
+        namespace = config.ENV_DATA["cluster_namespace"]
+        ocp_statefulset = OCP(kind=constants.STATEFULSET, namespace=namespace)
+        statefulset = ocp_statefulset.get(
+            resource_name=constants.NOOBAA_CORE_STATEFULSET
+        )
+        expected_count = statefulset["spec"].get("replicas", 1)
+        pods = get_pods_having_label(
+            label=constants.NOOBAA_CORE_POD_LABEL, namespace=namespace
+        )
+        if (
+            not pods
+            or len(pods) != expected_count
+            or any(
+                pod["metadata"].get("deletionTimestamp")
+                or pod.get("status", {}).get("phase") != constants.STATUS_RUNNING
+                for pod in pods
+            )
+        ):
+            raise UnexpectedBehaviour("NooBaa core pod baseline is not stable")
+
+        errors = []
+        for pod_data in pods:
+            errors.extend(
+                get_scc_pinning_errors(
+                    pod_data, "noobaa-core", constants.SCC_NOOBAA_CORE
+                )
+            )
+        if errors:
+            raise UnexpectedBehaviour("Invalid SCC baseline:\n" + "\n".join(errors))
+
+        original_pod = pods[0]
+        pod_obj = Pod(**original_pod)
+        pod_obj.delete()
+
+        for pods in TimeoutSampler(
+            timeout=600,
+            sleep=10,
+            func=get_pods_having_label,
+            label=constants.NOOBAA_CORE_POD_LABEL,
+            namespace=namespace,
+        ):
+            if len(pods) != expected_count or any(
+                pod["metadata"].get("deletionTimestamp")
+                or pod.get("status", {}).get("phase") != constants.STATUS_RUNNING
+                for pod in pods
+            ):
+                continue
+            if not any(
+                pod["metadata"]["name"] == original_pod["metadata"]["name"]
+                and pod["metadata"]["uid"] != original_pod["metadata"]["uid"]
+                for pod in pods
+            ):
+                continue
+            for pod_data in pods:
+                errors.extend(
+                    get_scc_pinning_errors(
+                        pod_data, "noobaa-core", constants.SCC_NOOBAA_CORE
+                    )
+                )
+            break
+
+        assert not errors, "SCC pinning failed after respin:\n" + "\n".join(errors)
+
+    @tier2
+    def test_pod_creation_rejects_nonexistent_scc(self, project_factory):
+        """Reject a pod pinned to an SCC that does not exist."""
+        project = project_factory()
+        service_account = create_serviceaccount(namespace=project.namespace)
+        scc_name = f"nonexistent-scc-{uuid4().hex}"
+        pod_obj = Pod(
+            apiVersion="v1",
+            kind=constants.POD,
+            metadata={
+                "name": "scc-probe",
+                "namespace": project.namespace,
+                "annotations": {constants.SCC_REQUIRED_ANNOTATION: scc_name},
+            },
+            spec={
+                "serviceAccountName": service_account.name,
+                "containers": [
+                    {
+                        "name": "probe",
+                        "image": constants.FEDORA_FIO_IMAGE,
+                        "command": ["sleep", "3600"],
+                    }
+                ],
+            },
+        )
+
+        with pytest.raises(
+            CommandFailed,
+            match=(f'failed to retrieve the required SCC "{scc_name}".*not found'),
+        ):
+            pod_obj.create()
