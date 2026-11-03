@@ -31,6 +31,7 @@ from ocs_ci.ocs.ui.base_ui import (
 from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import get_running_acm_version
 
 log = logging.getLogger(__name__)
@@ -868,6 +869,21 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
     )
 
 
+@retry(SeleniumTimeoutException, tries=3, delay=10, backoff=1)
+def _refresh_and_navigate_data_services(acm_obj):
+    """
+    Refresh the ACM console and navigate to the Data Services > Disaster recovery
+    page. Retried on Selenium timeouts, as the 'Disaster recovery' menu link may not
+    be clickable right after a page refresh.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+
+    """
+    acm_obj.refresh_page()
+    acm_obj.navigate_data_services()
+
+
 def verify_pending_cleanup_alert_firing(
     acm_obj, operation="Failover", drpc_name=None, namespace=None
 ):
@@ -892,8 +908,7 @@ def verify_pending_cleanup_alert_firing(
         f"alert is firing on DR Dashboard after {operation}"
         + (f" for DRPC '{drpc_name}'" if drpc_name else "")
     )
-    acm_obj.refresh_page()
-    acm_obj.navigate_data_services()
+    _refresh_and_navigate_data_services(acm_obj)
 
     # Navigate to Disaster Recovery Overview page where alerts are shown
     acm_obj.do_click(
@@ -1005,8 +1020,7 @@ def verify_pending_cleanup_alert_resolved(
     )
 
     # Navigate to DR Dashboard Overview page
-    acm_obj.refresh_page()
-    acm_obj.navigate_data_services()
+    _refresh_and_navigate_data_services(acm_obj)
     acm_obj.do_click(
         acm_loc["disaster-recovery-overview"],
         avoid_stale=True,

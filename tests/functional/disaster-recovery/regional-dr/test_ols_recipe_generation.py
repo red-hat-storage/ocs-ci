@@ -696,6 +696,25 @@ class TestOLSRecipeFailoverAndRelocate:
             skip_odf_cli_validation=True,
             discovered_apps=True,
         )
+        # ------------------------------------------------------------------ #
+        # Step 8: Power primary cluster back on if it was stopped. This must  #
+        # happen before the cleanup/alert verification below: cleanup deletes #
+        # the workload on the old primary, which needs the cluster reachable. #
+        # ------------------------------------------------------------------ #
+        if primary_cluster_down:
+            logger.info(
+                f"Waiting {wait_time}m before starting nodes of primary cluster"
+            )
+            sleep(wait_time * 60)
+            nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
+            wait_for_nodes_status([node.name for node in primary_cluster_nodes])
+            logger.info("Wait for all pods in openshift-storage to be in running state")
+            assert wait_for_pods_to_be_running(
+                timeout=720
+            ), "Not all the pods reached running state"
+            logger.info("Checking for Ceph Health OK")
+            ceph_health_check()
+
         # Verify ApplicationCleanupPending alert fire/resolve around cleanup (OCS 4.22+)
         if get_semantic_ocs_version_from_config() >= Version("4.22", partial=True):
             wait_time_for_alert = (
@@ -759,23 +778,6 @@ class TestOLSRecipeFailoverAndRelocate:
             dr_helpers.wait_for_replication_destinations_creation(
                 workload.workload_pvc_count, workload.workload_namespace
             )
-
-        # ------------------------------------------------------------------ #
-        # Step 8: Power primary cluster back on if it was stopped             #
-        # ------------------------------------------------------------------ #
-        if primary_cluster_down:
-            logger.info(
-                f"Waiting {wait_time}m before starting nodes of primary cluster"
-            )
-            sleep(wait_time * 60)
-            nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
-            wait_for_nodes_status([node.name for node in primary_cluster_nodes])
-            logger.info("Wait for all pods in openshift-storage to be in running state")
-            assert wait_for_pods_to_be_running(
-                timeout=720
-            ), "Not all the pods reached running state"
-            logger.info("Checking for Ceph Health OK")
-            ceph_health_check()
 
         logger.info(f"Waiting {wait_time}m before relocate")
         sleep(wait_time * 60)
