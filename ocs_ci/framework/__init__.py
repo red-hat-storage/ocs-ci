@@ -148,8 +148,8 @@ class MultiClusterConfig:
         self.clusters = list()
         # This member always points to current cluster's Config() object
         self.nclusters = 1
-        # Index for current cluster in context
-        self.cur_index = 0
+        # Index for current cluster in context (see the 'cur_index' property)
+        self._cur_index = 0
         self.multicluster = False
         # A list of lists which holds CLI args clusterwise
         self.multicluster_args = list()
@@ -166,6 +166,29 @@ class MultiClusterConfig:
                 self.thread_local_data, "config_index", self.cur_index
             )
             return getattr(self.clusters[config_index], attr)
+
+    @property
+    def cur_index(self):
+        """
+        Index of the cluster in the current context.
+
+        In a thread started via ConfigSafeThread / config_safe_thread_pool_task
+        this is the thread's own index, so that helpers which switch context and
+        restore it (e.g. 'config.switch_acm_ctx()', 'restore_index = config.cur_index')
+        do not affect other threads. Elsewhere it is the global index.
+
+        Returns:
+            int: The cluster index of the current context
+
+        """
+        return getattr(self.thread_local_data, "config_index", self._cur_index)
+
+    @cur_index.setter
+    def cur_index(self, index):
+        if hasattr(self.thread_local_data, "config_index"):
+            self.thread_local_data.config_index = index
+        else:
+            self._cur_index = index
 
     @property
     def cluster_ctx(self):
@@ -739,7 +762,7 @@ class ConfigSafeThread(Thread):
         try:
             super(ConfigSafeThread, self).run()
         finally:
-            if hasattr(self.thread_local_data, "config_index"):
+            if hasattr(config.thread_local_data, "config_index"):
                 del config.thread_local_data.config_index
 
 
