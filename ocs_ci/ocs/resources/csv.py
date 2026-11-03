@@ -5,7 +5,6 @@ CSV related functionalities
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME, ODF_OPERATOR_NAME
 from ocs_ci.utility.utils import TimeoutSampler
@@ -263,8 +262,9 @@ def verify_scale_operator_subscription_and_csv(
         sleep (int): Interval in seconds between status checks.
 
     Raises:
-        AssertionError: If no matching Subscription is found in the namespace.
-        TimeoutExpiredError: If CSV is not found or fails to reach Succeeded phase.
+        TimeoutExpiredError: If no matching Subscription is found within 180
+            seconds, if the Subscription does not report a currentCSV, or if
+            that CSV fails to reach Succeeded phase.
 
     Returns:
         str: Name of the verified CSV.
@@ -295,25 +295,23 @@ def verify_scale_operator_subscription_and_csv(
     log.info(f"Found Scale operator subscription: '{sub_name}'")
 
     log.info(
-        f"Waiting for CSV starting with '{operator_prefix}' in namespace '{namespace}'"
+        f"Waiting for Subscription '{sub_name}' in namespace '{namespace}' "
+        "to report its currentCSV"
     )
-    csv_obj = None
-    for csv_list in TimeoutSampler(
+    csv_name = None
+    for current_csv in TimeoutSampler(
         timeout=timeout,
         sleep=sleep,
-        func=get_csvs_start_with_prefix,
-        csv_prefix=operator_prefix,
-        namespace=namespace,
+        func=lambda: sub_ocp.get(resource_name=sub_name)
+        .get("status", {})
+        .get("currentCSV"),
     ):
-        if csv_list:
-            csv_name = csv_list[0]["metadata"]["name"]
-            csv_obj = CSV(resource_name=csv_name, namespace=namespace)
+        if current_csv:
+            csv_name = current_csv
             break
 
-    if not csv_obj:
-        raise TimeoutExpiredError(
-            f"Timed out waiting for CSV with prefix '{operator_prefix}' in '{namespace}'"
-        )
+    log.info(f"Subscription '{sub_name}' currentCSV is '{csv_name}'")
+    csv_obj = CSV(resource_name=csv_name, namespace=namespace)
 
     log.info(f"Waiting for CSV '{csv_obj.resource_name}' to reach phase 'Succeeded'")
     csv_obj.wait_for_phase(phase="Succeeded", timeout=timeout, sleep=sleep)

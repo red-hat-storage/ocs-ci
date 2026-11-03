@@ -1646,6 +1646,16 @@ class Deployment(object):
         if ui_deployment and ui_deployment_conditions():
             log_step("Start ODF deployment with UI")
             self.deployment_with_ui()
+            if fdf_standalone or config.DEPLOYMENT.get("fdf_deployment", False):
+                from ocs_ci.ocs.resources.csv import (
+                    verify_scale_operator_subscription_and_csv,
+                )
+
+                scale_ns = constants.IBM_STORAGE_SCALE_NAMESPACE
+                logger.info(
+                    f"FDF deployment detected: verifying Scale operator Subscription and CSV in '{scale_ns}'"
+                )
+                verify_scale_operator_subscription_and_csv(namespace=scale_ns)
             # Skip the rest of the deployment when deploy via UI
             return
         else:
