@@ -161,16 +161,29 @@ class FusionDataFoundationDeployment:
                 "DEPLOYMENT.fdf_upgrade_catalog_image, or both "
                 "DEPLOYMENT.fdf_upgrade_registry and DEPLOYMENT.fdf_upgrade_image_tag"
             )
+        elif config.DEPLOYMENT.get("live_deployment"):
+            # Released build: the catalog is always the released one, built
+            # from the same registry the upgrade uses for a released version.
+            # A pre-release catalog image configured for the pipeline is not
+            # what we want to mirror here, so it is ignored.
+            configured_image = config.DEPLOYMENT.get("fdf_catalog_image")
+            if configured_image:
+                logger.info(
+                    "Live deployment, ignoring the configured catalog image %s "
+                    "and using the released one",
+                    configured_image,
+                )
+            catalog_image = None
+            registry = config.DEPLOYMENT.get(
+                "fdf_upgrade_registry"
+            ) or config.DEPLOYMENT.get("fdf_pre_release_registry")
+            tag = config.DEPLOYMENT.get("fdf_image_tag") or config.ENV_DATA.get(
+                "fdf_version"
+            )
+            config_keys = "DEPLOYMENT.fdf_upgrade_registry and DEPLOYMENT.fdf_image_tag"
         else:
             catalog_image = config.DEPLOYMENT.get("fdf_catalog_image")
-            if config.DEPLOYMENT.get("live_deployment"):
-                # Released build: it is pulled from, and mirrored out of, the
-                # same registry the upgrade uses for a released version
-                registry = config.DEPLOYMENT.get(
-                    "fdf_upgrade_registry"
-                ) or config.DEPLOYMENT.get("fdf_pre_release_registry")
-            else:
-                registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
+            registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
             tag = config.DEPLOYMENT.get("fdf_image_tag") or config.ENV_DATA.get(
                 "fdf_version"
             )
