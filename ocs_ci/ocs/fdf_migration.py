@@ -127,6 +127,16 @@ class FDFMigration(FDFUpgrade):
             "Succeeded state."
         )
 
+        scale_ns = constants.IBM_STORAGE_SCALE_NAMESPACE
+        logger.test_step(
+            f"Post-migration: verifying Scale operator Subscription and CSV in '{scale_ns}'"
+        )
+        from ocs_ci.ocs.resources.csv import (
+            verify_scale_operator_subscription_and_csv,
+        )
+
+        verify_scale_operator_subscription_and_csv(namespace=scale_ns)
+
         logger.info("ODF to FDF migration completed and verified successfully.")
 
     def _create_migration_catalog_source(self, fdf_registry_image):

@@ -300,6 +300,13 @@ class FusionDataFoundationDeployment:
         logger.info("Verifying FDF installation")
         fusion_service_instance_health_check()
         self.get_installed_version()
+        scale_ns = constants.IBM_STORAGE_SCALE_NAMESPACE
+        logger.info(f"Verifying Scale operator subscription and CSV in '{scale_ns}'")
+        from ocs_ci.ocs.resources.csv import (
+            verify_scale_operator_subscription_and_csv,
+        )
+
+        verify_scale_operator_subscription_and_csv(namespace=scale_ns)
         logger.info("FDF successfully installed")
 
     def ensure_install_plan_approval(self):

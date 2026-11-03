@@ -75,6 +75,22 @@ class TestMultiStorageCoexistence(ManageTest):
         )
 
     @tier1
+    def test_scale_operator_subscription_and_csv(self):
+        """
+        Validates that the IBM Spectrum Scale operator Subscription and CSV
+        exist and are in the Succeeded phase in the ibm-spectrum-scale namespace.
+        """
+        from ocs_ci.ocs.resources.csv import (
+            verify_scale_operator_subscription_and_csv,
+        )
+
+        ns = constants.IBM_STORAGE_SCALE_NAMESPACE
+        csv_name = verify_scale_operator_subscription_and_csv(namespace=ns)
+        log.info(
+            f"Scale operator Subscription and CSV '{csv_name}' are healthy in namespace '{ns}'"
+        )
+
+    @tier1
     def test_pvc_pod_coexistence_ceph_and_scale(self, project_factory):
         """
         Validates the coexistence and multi-storage capabilities of an FDF cluster

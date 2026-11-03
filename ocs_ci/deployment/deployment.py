@@ -2089,6 +2089,17 @@ class Deployment(object):
                             replace_to=csv_change_to,
                         )
 
+        if fdf_standalone or config.DEPLOYMENT.get("fdf_deployment", False):
+            from ocs_ci.ocs.resources.csv import (
+                verify_scale_operator_subscription_and_csv,
+            )
+
+            scale_ns = constants.IBM_STORAGE_SCALE_NAMESPACE
+            logger.info(
+                f"FDF deployment detected: verifying Scale operator Subscription and CSV in '{scale_ns}'"
+            )
+            verify_scale_operator_subscription_and_csv(namespace=scale_ns)
+
         # Create custom storage class early for Azure Performance Plus feature
         # This needs to be done before StorageSystem/StorageCluster creation
         if self.custom_storage_class_path is not None:
