@@ -3816,6 +3816,14 @@ bucket_tab = {
         "//input[@id='incomplete-multiparts-delete-days']",
         By.XPATH,
     ),
+    "lifecycle_actions_step": (
+        "//nav//button[normalize-space(.)='Lifecycle rule actions']",
+        By.XPATH,
+    ),
+    "lifecycle_review_step": (
+        "//nav//button[normalize-space(.)='Review']",
+        By.XPATH,
+    ),
     "wizard_next_button": (
         "//button[normalize-space()='Next']",
         By.XPATH,
