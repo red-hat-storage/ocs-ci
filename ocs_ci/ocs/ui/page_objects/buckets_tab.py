@@ -121,10 +121,10 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             raise
 
         logger.info("Clicking submit button to create OBC")
-        time.sleep(2)  # This sleep is needed to make sure the OBC is created
         self.do_click(self.bucket_tab["submit_button_obc"])
 
-        logger.info("Waiting for OBC to be created")
+        logger.info(f"Waiting for bucket '{name_generator}' details page to load")
+        self.wait_for_endswith_url(f"buckets/{name_generator}", timeout=60)
 
         if return_name:
             return ObjectStorage(), name_generator
@@ -150,8 +150,11 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_send_keys(self.bucket_tab["s3_bucket_name_input"], name_generator)
         self.do_click(self.bucket_tab["submit_button_obc"])
 
+        logger.info(f"Waiting for bucket '{name_generator}' details page to load")
         self.wait_for_endswith_url(f"buckets/{name_generator}", timeout=60)
-        self.page_has_loaded()
+        self.wait_for_element_to_be_visible(
+            self.bucket_tab["management_tab"], timeout=60
+        )
 
         if return_name:
             return ObjectStorage(), name_generator

@@ -125,9 +125,7 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
         self.do_click((f"//tr//a[contains(text(), '{bucket_name}')]", By.XPATH))
 
-        self.do_click(
-            self.bucket_tab["management_tab"], timeout=60, wait_for_page_load=True
-        )
+        self.do_click(self.bucket_tab["management_tab"], timeout=60)
 
         logger.info("Navigated to lifecycle rules page")
 
@@ -214,13 +212,10 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
         # Click Create on the Review step
         self.scroll_into_view(self.bucket_tab["lifecycle_create_button"])
-        self.do_click(
-            self.bucket_tab["lifecycle_create_button"], wait_for_page_load=True
-        )
+        logger.info("Clicking 'Create' to submit the lifecycle rule")
+        self.do_click(self.bucket_tab["lifecycle_create_button"])
 
-        self.do_click(
-            self.bucket_tab["management_tab"], timeout=60, wait_for_page_load=True
-        )
+        self.do_click(self.bucket_tab["management_tab"], timeout=60)
 
         logger.info(f"Successfully created lifecycle rule: {rule_name}")
 
@@ -307,13 +302,10 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                     logger.warning(f"Unknown rule type: {rule_type}")
 
             self.scroll_into_view(self.bucket_tab["lifecycle_save_button"])
-            self.do_click(
-                self.bucket_tab["lifecycle_save_button"], wait_for_page_load=True
-            )
+            logger.info("Clicking 'Save' to submit the edited lifecycle rule")
+            self.do_click(self.bucket_tab["lifecycle_save_button"])
 
-            self.do_click(
-                self.bucket_tab["management_tab"], timeout=60, wait_for_page_load=True
-            )
+            self.do_click(self.bucket_tab["management_tab"], timeout=60)
 
             logger.info(f"Successfully edited lifecycle rule: {rule_name}")
 
