@@ -124,7 +124,9 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
         self.navigate_buckets_page()
 
         self.do_send_keys(self.generic_locators["search_resource_field"], bucket_name)
+        logger.info(f"Waiting for bucket name filter in URL: name={bucket_name}")
         self.wait_for_endswith_url(rf"[?&]name={escape(bucket_name)}(?:[&#]|$)")
+        logger.info(f"Bucket name filter applied in URL: name={bucket_name}")
 
         self.do_click((f"//tr//a[contains(text(), '{bucket_name}')]", By.XPATH))
 

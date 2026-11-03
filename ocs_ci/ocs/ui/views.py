@@ -519,7 +519,6 @@ generic_locators = {
     ),
     "confirm_dilog_input": ("//input[@placeholder='{}']", By.XPATH),
     "confirm_delete_resource": (
-        "//button[@data-test='delete-action'] | "
         "//*[@role='dialog']//button[normalize-space(.)='Delete']",
         By.XPATH,
     ),
