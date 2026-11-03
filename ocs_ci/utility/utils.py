@@ -7515,10 +7515,18 @@ def create_kubeconfig(kubeconfig_path):
         if ":6443" not in ocp_api_url:
             ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
 
+        kubeconfig_dir = os.path.dirname(kubeconfig_path)
+        os.makedirs(kubeconfig_dir, exist_ok=True)
+
+        # `oc login` creates a token-based kubeconfig directly at
+        # kubeconfig_path. This token expires after 24h, but it's a known
+        # working fallback in case the permanent kubeconfig creation below
+        # fails.
         cmd = (
             f"oc login --username {config.RUN['username']} "
             f"--password {config.RUN['kubeadmin_password']} "
             f"{ocp_api_url} "
+            f"--kubeconfig {kubeconfig_path} "
             "--insecure-skip-tls-verify=true"
         )
         secrets = (config.RUN["kubeadmin_password"],)
@@ -7531,21 +7539,38 @@ def create_kubeconfig(kubeconfig_path):
             log.warning(f"stdout: {mask_secrets(result.stdout.decode(), secrets)}")
             log.warning(f"stderr: {mask_secrets(result.stderr.decode(), secrets)}")
             raise AuthError(f"Failed to login to OCP cluster at {ocp_api_url}")
+        log.info(f"Kubeconfig file was created: {kubeconfig_path}.")
 
-        kubeconfig_dir = os.path.dirname(kubeconfig_path)
-        os.makedirs(kubeconfig_dir, exist_ok=True)
-        cmd = f"oc config new-admin-kubeconfig > {kubeconfig_path}"
+        # Try to upgrade the token-based kubeconfig to a permanent
+        # (certificate-based) one that never expires. `oc config
+        # new-admin-kubeconfig` doesn't actually honor its own --kubeconfig
+        # flag, only the KUBECONFIG env var, and exec_cmd always overwrites
+        # KUBECONFIG from the global config.RUN["kubeconfig"], which in a
+        # multicluster run may not be the cluster this function was called
+        # for. Prefix KUBECONFIG inline in the shell command instead, which
+        # overrides the inherited env var for this one invocation only.
+        # Capture the output in Python instead of shell-redirecting it
+        # (`> {kubeconfig_path}`) directly to kubeconfig_path: the shell
+        # truncates the redirection target before `oc` starts, and since
+        # KUBECONFIG also points at kubeconfig_path, `oc` would read an
+        # already-emptied file and silently fall back to the in-cluster
+        # service account instead of the intended cluster.
+        cmd = f"KUBECONFIG={kubeconfig_path} oc config new-admin-kubeconfig"
         result = exec_cmd(cmd, shell=True, ignore_error=True)
         if result.returncode:
             log.warning(f"executed command: {cmd}")
             log.warning(f"returncode: {result.returncode}")
             log.warning(f"stdout: {result.stdout.decode()}")
             log.warning(f"stderr: {result.stderr.decode()}")
-            raise CommandFailed(
-                f"Failed to create permanent kubeconfig at {kubeconfig_path}"
+            log.warning(
+                "Failed to create permanent kubeconfig via 'oc config "
+                "new-admin-kubeconfig', falling back to the token-based "
+                f"kubeconfig created by 'oc login' at {kubeconfig_path}."
             )
         else:
-            log.info(f"Kubeconfig file was created: {kubeconfig_path}.")
+            with open(kubeconfig_path, "wb") as fd:
+                fd.write(result.stdout)
+            log.info(f"Permanent kubeconfig file was created: {kubeconfig_path}.")
         update_kubeconfig_with_proxy_url_for_client(kubeconfig_path)
 
         kubeadmin_password_file = os.path.join(
