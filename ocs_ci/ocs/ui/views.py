@@ -360,6 +360,10 @@ deployment_5_0 = {
         "#setup-object-storage button[class*='c-card__clickable-action']",
         By.CSS_SELECTOR,
     ),
+    "mcg_wizard_backing_storage_step": (
+        "//*[normalize-space()='Backing storage']",
+        By.XPATH,
+    ),
 }
 
 deployment_4_21 = {

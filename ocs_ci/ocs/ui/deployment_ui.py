@@ -2,6 +2,7 @@ import logging
 import re
 import time
 
+from ocs_ci.ocs.ui.base_ui import SeleniumDriver
 from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR, LOCAL_STORAGE
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
@@ -306,11 +307,7 @@ class DeploymentUI(PageNavigator):
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_23:
             if config.DEPLOYMENT.get("local_storage"):
-                raise ConfigurationError(
-                    "MCG-only + LSO is not verified on ODF >= 5.0. "
-                    "The LOCAL_DEVICES step list differs from EXISTING and has "
-                    "not been exercised. Aborting to avoid silent mis-deployment."
-                )
+                self.install_lso_cluster()
 
             missing = {"mcg_only_deployment_entry", "next_button_element"} - set(
                 self.dep_loc
@@ -323,6 +320,13 @@ class DeploymentUI(PageNavigator):
 
             # Wait for SPA navigation to settle before inspecting the DOM.
             self.page_has_loaded(retries=10)
+            logger.info("Waiting for the 'Backing storage' wizard step to appear")
+            self.wait_until_expected_text_is_found(
+                locator=self.dep_loc["mcg_wizard_backing_storage_step"],
+                expected_text="Backing storage",
+                timeout=30,
+                use_fallback=False,
+            )
 
             # Assert MCG mode via two independent signals.
             if self.check_element_text("Capacity and nodes"):
@@ -334,12 +338,13 @@ class DeploymentUI(PageNavigator):
                     "(Backing storage → Optional settings → Security → "
                     "Review and create). Locator: mcg_only_deployment_entry"
                 )
-            if "mode=object-storage" not in self.driver.current_url:
+            current_url = SeleniumDriver().current_url
+            if "mode=object-storage" not in current_url:
                 self.take_screenshot("mcg_only_url_check")
                 self.copy_dom("mcg_only_url_check")
                 raise UnexpectedBehaviour(
                     f"URL does not contain 'mode=object-storage' — MCG mode was NOT "
-                    f"selected. Current URL: {self.driver.current_url}. "
+                    f"selected. Current URL: {current_url}. "
                     f"Locator: mcg_only_deployment_entry"
                 )
             logger.info(
