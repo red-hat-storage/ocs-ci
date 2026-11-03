@@ -803,8 +803,10 @@ class TestSCCEnforcement(ManageTest):
             },
         )
 
-        with pytest.raises(
-            CommandFailed,
-            match=(f'failed to retrieve the required SCC "{scc_name}".*not found'),
-        ):
+        try:
             pod_obj.create()
+            assert False, f"Pod creation succeeded with nonexistent SCC '{scc_name}'"
+        except CommandFailed as ex:
+            assert f'failed to retrieve the required SCC "{scc_name}"' in str(
+                ex
+            ) and "not found" in str(ex), f"Unexpected pod creation error: {ex}"
