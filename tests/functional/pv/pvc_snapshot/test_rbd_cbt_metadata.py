@@ -1082,57 +1082,53 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
     """Test CBT lister range selection and pagination options."""
 
     @staticmethod
-    def _verify_resumed_coverage(
-        full_coverage, resumed_coverage, starting_offset, aligned_offset
+    def _verify_lister_coverage_from_offset(
+        full_coverage, resumed_entries, starting_offset
     ):
-        """Compare resumed coverage and log starts below the assumed alignment."""
-        returned_start = resumed_coverage[0][0]
-        if returned_start < aligned_offset:
-            log.warning(
-                "Lister started at %d, below the assumed 4 MiB-aligned offset %d "
-                "for requested offset %d; resumed coverage: %s",
-                returned_start,
-                aligned_offset,
-                starting_offset,
-                resumed_coverage,
-            )
-        else:
-            log.info(
-                "Lister started at %d for requested offset %d (4 MiB-aligned offset %d)",
-                returned_start,
-                starting_offset,
-                aligned_offset,
-            )
+        """
+        Verify offset filtering and completeness of an allocated or delta listing.
 
-        comparison_start = min(returned_start, starting_offset)
-        expected_coverage = [
-            (max(start, comparison_start), end)
-            for start, end in full_coverage
-            if end > comparison_start
+        Steps:
+        1. Reject original entries ending at or before starting_offset, before
+           merging can hide them. Entries overlapping the offset are allowed.
+        2. Merge adjacent or overlapping returned ranges into byte coverage.
+        3. Clip both the returned and full-listing coverage to starting_offset.
+        4. Assert equality to detect missing or extra coverage from that offset.
+
+        Args:
+            full_coverage (list): Merged (start, end) byte ranges from the full
+                listing without an offset; end positions are exclusive.
+            resumed_entries (list): Original lister entries returned for the
+                requested offset, with ByteOffset and SizeBytes keys.
+            starting_offset (int): Requested starting byte offset.
+        """
+        # CSI v1.12.0 allows ranges overlapping starting_offset, but each
+        # returned range must end strictly after it. Check before merging so
+        # an invalid earlier range cannot be hidden by an adjacent valid one.
+        invalid_entries = [
+            entry
+            for entry in resumed_entries
+            if entry["ByteOffset"] + entry["SizeBytes"] <= starting_offset
         ]
-        assert resumed_coverage == expected_coverage, (
-            f"Lister returned coverage {resumed_coverage} from starting offset "
-            f"{starting_offset}; expected {expected_coverage} from "
-            f"{comparison_start}"
+        assert not invalid_entries, (
+            f"Returned ranges ending at or before starting_offset "
+            f"{starting_offset}: {invalid_entries}"
         )
 
-    @staticmethod
-    def _verify_allocated_midpoint_coverage(full_coverage, upper_entries, midpoint):
-        """Compare allocated coverage at and above the requested midpoint."""
-        upper_coverage = get_merged_lister_entries_byte_ranges(upper_entries)
-        upper_from_midpoint = [
-            (max(start, midpoint), end)
-            for start, end in upper_coverage
-            if end > midpoint
+        resumed_coverage = get_merged_lister_entries_byte_ranges(resumed_entries)
+        resumed_from_offset = [
+            (max(start, starting_offset), end)
+            for start, end in resumed_coverage
+            if end > starting_offset
         ]
-        expected_upper_coverage = [
-            (max(start, midpoint), end)
+        expected_coverage = [
+            (max(start, starting_offset), end)
             for start, end in full_coverage
-            if end > midpoint
+            if end > starting_offset
         ]
-        assert upper_from_midpoint == expected_upper_coverage, (
-            f"Midpoint offset returned coverage {upper_coverage}; expected "
-            f"{expected_upper_coverage}"
+        assert resumed_from_offset == expected_coverage, (
+            f"Lister returned coverage {resumed_coverage} from starting offset "
+            f"{starting_offset}; expected {expected_coverage} at and above the offset"
         )
 
     @tier2
@@ -1150,8 +1146,10 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         Verify that a starting offset resumes delta enumeration.
 
         Two writes change data at 100 and 120 MiB. Listing from 106 MiB must
-        cover the same bytes as the full listing from its actual starting
-        point. The driver may round the requested offset down.
+        cover the same bytes as the full listing at and above that offset.
+        A second request at the end of the first full-listing range must
+        exclude that range while preserving later coverage. Returned ranges
+        may start earlier than the requested offset, but must end after it.
 
         Steps:
         1. Create a Block PVC, attach a writer pod, and write 10 MiB from
@@ -1161,8 +1159,10 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         4. List the complete delta from snap-1 to snap-2 with no starting
            offset.
         5. List the same delta with a starting offset of 106 MiB.
-        6. Compare the full and resumed coverage from the returned start,
-           and log if it is below the 4 MiB-aligned offset of 104 MiB.
+        6. Reject ranges ending at or before the offset, and compare the
+           full and resumed coverage at and above it.
+        7. Repeat from the end of the first full-listing range, ensuring
+           that the earlier range is excluded and later coverage remains.
         """
         starting_offset = 106 * 1024 * 1024
 
@@ -1188,6 +1188,9 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         )
         full_coverage = get_merged_lister_entries_byte_ranges(full_entries)
         assert full_coverage, "Delta Lister returned no changed block ranges"
+        # Convert the two 10 MiB writes to byte ranges with exclusive ends.
+        # The full delta must cover every written byte before we use it as
+        # the reference for offset checks. Extra block-aligned coverage is OK.
         mib = 1024 * 1024
         written_ranges = [(100 * mib, 110 * mib), (120 * mib, 130 * mib)]
         uncovered = get_uncovered_byte_ranges(written_ranges, full_coverage)
@@ -1199,13 +1202,26 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
             base_snap_name=snap_1.name,
             starting_offset=starting_offset,
         )
-        resumed_coverage = get_merged_lister_entries_byte_ranges(resumed_entries)
-        assert resumed_coverage, (
-            f"Lister returned no ranges from starting offset {starting_offset}; "
-            f"full coverage: {full_coverage}"
+        self._verify_lister_coverage_from_offset(
+            full_coverage, resumed_entries, starting_offset
         )
-        self._verify_resumed_coverage(
-            full_coverage, resumed_coverage, starting_offset, aligned_offset=104 * mib
+
+        log.test_step("Resume delta enumeration after the first changed range")
+        assert len(full_coverage) > 1, (
+            "Expected separate changed ranges to verify offset filtering; "
+            f"got {full_coverage}"
+        )
+        # Start at the exclusive end of the first merged changed range.
+        # The response must omit that range and preserve later coverage,
+        # so returning the full listing would fail the offset check.
+        boundary_offset = full_coverage[0][1]
+        boundary_entries = self.cbt_runner.run_lister_delta(
+            target_snap=snap_2.name,
+            base_snap_name=snap_1.name,
+            starting_offset=boundary_offset,
+        )
+        self._verify_lister_coverage_from_offset(
+            full_coverage, boundary_entries, boundary_offset
         )
 
     @tier2
@@ -1225,7 +1241,7 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         The test writes data below and above the midpoint of a 1 GiB volume.
         Offset zero must match the default result, while the midpoint response
         contains the expected allocated bytes at and above the requested offset.
-        The driver may round the offset down.
+        Returned ranges may overlap the offset but must end after it.
 
         Steps:
         1. Create a Block PVC and write data at offsets 0 MiB and 768 MiB.
@@ -1235,7 +1251,8 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
            matches the default result.
         5. List allocated ranges with a starting offset of 512 MiB.
         6. Verify that the midpoint response covers the expected allocated
-           bytes at and above the requested offset.
+           bytes at and above the requested offset and excludes ranges
+           ending at or before it.
         """
         midpoint = 512 * 1024 * 1024
 
@@ -1252,10 +1269,12 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         full_entries = self.cbt_runner.run_lister_allocated(snap_obj.name)
         full_coverage = get_merged_lister_entries_byte_ranges(full_entries)
         assert full_coverage, "Allocated Lister returned no block ranges"
-        # A range starting below the midpoint covers part of the lower half.
+        # Require an earlier range that an unfiltered midpoint response
+        # would incorrectly include. A range that only starts below the
+        # midpoint could overlap it and therefore be valid in the response.
         assert any(
-            start < midpoint for start, _ in full_coverage
-        ), f"Expected coverage below {midpoint}; got {full_coverage}"
+            end <= midpoint for _, end in full_coverage
+        ), f"Expected a range ending at or before {midpoint}; got {full_coverage}"
         # A range ending above the midpoint covers part of the upper half.
         assert any(
             end > midpoint for _, end in full_coverage
@@ -1277,7 +1296,7 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
             snap_obj.name,
             starting_offset=midpoint,
         )
-        self._verify_allocated_midpoint_coverage(full_coverage, upper_entries, midpoint)
+        self._verify_lister_coverage_from_offset(full_coverage, upper_entries, midpoint)
 
     @tier2
     @pytest.mark.parametrize(
