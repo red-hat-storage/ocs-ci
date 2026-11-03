@@ -1246,7 +1246,8 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         Steps:
         1. Create a Block PVC and write data at offsets 0 MiB and 768 MiB.
         2. Take a VolumeSnapshot.
-        3. List allocated ranges without a starting offset.
+        3. List allocated ranges without a starting offset and verify that
+           they cover both 10 MiB writes completely.
         4. List allocated ranges with a starting offset of zero and verify it
            matches the default result.
         5. List allocated ranges with a starting offset of 512 MiB.
@@ -1272,13 +1273,18 @@ class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
         # Require an earlier range that an unfiltered midpoint response
         # would incorrectly include. A range that only starts below the
         # midpoint could overlap it and therefore be valid in the response.
-        assert any(
-            end <= midpoint for _, end in full_coverage
+        # Sorted, merged ranges have increasing ends, so check the first one.
+        assert (
+            full_coverage[0][1] <= midpoint
         ), f"Expected a range ending at or before {midpoint}; got {full_coverage}"
-        # A range ending above the midpoint covers part of the upper half.
-        assert any(
-            end > midpoint for _, end in full_coverage
-        ), f"Expected coverage above {midpoint}; got {full_coverage}"
+        # Verify both 10 MiB writes are fully covered before using the full
+        # listing as the reference for offset checks. Extra coverage is OK.
+        mib = 1024 * 1024
+        written_ranges = [(0, 10 * mib), (768 * mib, 778 * mib)]
+        uncovered = get_uncovered_byte_ranges(written_ranges, full_coverage)
+        assert (
+            not uncovered
+        ), f"Full allocated listing missed written byte ranges: {uncovered}"
 
         log.test_step("List allocated ranges explicitly from offset zero")
         zero_entries = self.cbt_runner.run_lister_allocated(
