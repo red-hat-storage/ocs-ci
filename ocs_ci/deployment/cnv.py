@@ -32,6 +32,8 @@ from ocs_ci.utility.utils import (
     run_cmd,
     exec_cmd,
     get_running_ocp_version,
+    ceph_health_check,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -699,6 +701,66 @@ class CNVInstaller(object):
         archive_file_binary_object.extractall(path=bin_dir)
         logger.info(f"virtctl binary extracted successfully to path:{bin_dir}")
 
+    def wait_for_cluster_stabilization(
+        self, mcp_timeout=1900, ceph_tries=60, ceph_delay=30
+    ):
+        """
+        Wait for the MachineConfig rollout triggered by the CNV installation to
+        finish and for ceph to recover from it.
+
+        Installing CNV on an existing cluster applies new MachineConfigs, so the
+        MCO cordons, drains and reboots the nodes one at a time. While that is in
+        progress mons and OSDs go down and ceph reports HEALTH_WARN with degraded
+        PGs and NOUP/NODOWN/NOIN/NOOUT flags set on the node being serviced.
+        Returning from the installation at that point hands a recovering cluster
+        to the test session, where the autouse `health_checker` fixture fails its
+        ceph health check at setup and skips every subsequent test.
+
+        The ceph health check is skipped on clusters that have no CephCluster
+        (for example a fresh OCP deployment where CNV is installed before ODF, or
+        a Fusion Access cluster).
+
+        Args:
+            mcp_timeout (int): Time in seconds to wait for each machineconfigpool
+                to finish updating and for the nodes to become Ready again.
+            ceph_tries (int): Number of ceph health check attempts.
+            ceph_delay (int): Time in seconds between ceph health check attempts.
+
+        Raises:
+            ResourceWrongStatusException: If the nodes are not Ready within
+                mcp_timeout.
+            CephHealthException: If ceph does not reach HEALTH_OK within
+                ceph_tries * ceph_delay seconds.
+
+        """
+        logger.info(
+            "Waiting for the MachineConfig rollout triggered by the CNV "
+            "installation to complete"
+        )
+        wait_for_machineconfigpool_status(node_type="all", timeout=mcp_timeout)
+        logger.info("MachineConfig rollout completed on all the nodes")
+
+        wait_for_nodes_status(timeout=mcp_timeout)
+        logger.info("All the nodes are back in 'Ready' state")
+
+        if not config.RUN.get("cephcluster"):
+            logger.info(
+                "No CephCluster on this cluster, skipping the ceph health check "
+                "after the CNV installation"
+            )
+            return
+
+        logger.info(
+            f"Waiting up to {ceph_tries * ceph_delay}s for ceph health to recover "
+            "from the node reboots"
+        )
+        ceph_health_check(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            tries=ceph_tries,
+            delay=ceph_delay,
+        )
+        logger.info("Ceph health is OK after the CNV installation")
+
     def deploy_cnv(self, check_cnv_deployed=False, check_cnv_ready=False):
         """
         Installs CNV enabling software emulation.
@@ -740,6 +802,10 @@ class CNVInstaller(object):
         self.enable_software_emulation()
         # Download and extract the virtctl binary to bin_dir
         self.download_and_extract_virtctl_binary()
+        # Wait for the MachineConfig rollout this installation triggered to
+        # finish and for ceph to recover, so that we never hand a cluster that
+        # is still rebooting nodes back to the test session
+        self.wait_for_cluster_stabilization()
 
     def disable_multicluster_engine(self):
         """
