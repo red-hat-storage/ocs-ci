@@ -432,10 +432,11 @@ class OpenShiftLightspeed:
         """
         Send a question to the OLS service (``POST /v1/query``).
 
-        Transient 5xx errors and read timeouts from the LLM backend are
-        retried automatically up to ``max_retries`` times with a
-        ``retry_backoff``-second pause between attempts.  4xx errors are
-        never retried (they indicate a bad request).
+        Transient 5xx errors, read timeouts from the LLM backend and
+        connection errors (e.g. ``ProxyError`` when the corporate proxy drops
+        the connection) are retried automatically up to ``max_retries`` times
+        with a ``retry_backoff``-second pause between attempts.  4xx errors
+        are never retried (they indicate a bad request).
 
         Args:
             query_text (str): The question or prompt to send.
@@ -462,6 +463,8 @@ class OpenShiftLightspeed:
             requests.HTTPError: On HTTP 4xx responses or when all retries
                 are exhausted on 5xx responses.
             requests.ReadTimeout: When all retries are exhausted on timeouts.
+            requests.ConnectionError: When all retries are exhausted on
+                connection errors (including ``requests.exceptions.ProxyError``).
         """
         if max_retries < 1:
             raise ValueError(f"max_retries must be at least 1, got {max_retries!r}")
@@ -490,10 +493,11 @@ class OpenShiftLightspeed:
                     verify=self.verify_tls,
                     timeout=self._REQUEST_TIMEOUT,
                 )
-            except requests.Timeout as exc:
+            except (requests.Timeout, requests.ConnectionError) as exc:
                 last_exc = exc
                 logger.warning(
-                    f"OLS query timed out (attempt {attempt}/{max_retries}): {exc}"
+                    f"OLS query timed out or connection failed "
+                    f"(attempt {attempt}/{max_retries}): {exc}"
                 )
                 if attempt < max_retries:
                     time.sleep(retry_backoff)

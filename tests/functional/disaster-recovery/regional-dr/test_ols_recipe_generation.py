@@ -543,6 +543,32 @@ class TestOLSRecipeFailoverAndRelocate:
         ),
     ]
 
+    @pytest.fixture(autouse=True)
+    def wait_for_ceph_health_teardown(self, request):
+        """
+        Wait for Ceph health to be OK on both managed clusters after each test,
+        so the next parametrization (whose ``rdr_health_check`` fixture skips
+        immediately on a non-OK Ceph health) does not start on a cluster that
+        is still recovering.
+        """
+        from ocs_ci.framework import config
+        from ocs_ci.ocs.utils import get_non_acm_cluster_config
+
+        def finalizer():
+            restore_index = config.cur_index
+            try:
+                for cluster in get_non_acm_cluster_config():
+                    config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                    logger.info(
+                        "Checking for Ceph Health OK on "
+                        f"{config.ENV_DATA['cluster_name']}"
+                    )
+                    ceph_health_check(tries=40, delay=60)
+            finally:
+                config.switch_ctx(restore_index)
+
+        request.addfinalizer(finalizer)
+
     @pytest.fixture(scope="class")
     def ols(self, ols_client):
         """

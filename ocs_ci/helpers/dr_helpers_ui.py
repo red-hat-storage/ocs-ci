@@ -1019,40 +1019,6 @@ def verify_pending_cleanup_alert_resolved(
         + (f" for DRPC '{drpc_name}'" if drpc_name else "")
     )
 
-    # Navigate to DR Dashboard Overview page
-    _refresh_and_navigate_data_services(acm_obj)
-    acm_obj.do_click(
-        acm_loc["disaster-recovery-overview"],
-        avoid_stale=True,
-        enable_screenshot=True,
-        timeout=60,
-    )
-    acm_obj.take_screenshot()
-
-    # Try to expand Critical alerts section if it exists
-    try:
-        critical_alert = acm_obj.find_an_element_by_xpath(
-            acm_loc["critical-alert"][0]
-        ).get_attribute("aria-expanded")
-
-        if critical_alert == "false":
-            critical_alert_elem = wait_for_element_to_be_clickable(
-                acm_loc["critical-alert"]
-            )
-            acm_obj.driver.execute_script("arguments[0].click();", critical_alert_elem)
-            acm_obj.take_screenshot()
-    except (NoSuchElementException, StaleElementReferenceException) as e:
-        log.info(
-            f"Critical alerts section not found or not expandable: {e}. "
-            "This may indicate no critical alerts exist (expected)."
-        )
-        acm_obj.take_screenshot()
-    except Exception as e:
-        acm_obj.take_screenshot()
-        raise UnexpectedBehaviour(
-            f"Unable to verify DR Dashboard critical-alert section after {operation} cleanup."
-        ) from e
-
     # Verify alert is NOT visible - use DRPC-specific locator if drpc_name provided
     if drpc_name:
         alert_locator = (
@@ -1066,15 +1032,74 @@ def verify_pending_cleanup_alert_resolved(
         alert_locator = acm_loc["pending-cleanup-alert"]
         expected_text = constants.ALERT_APPLICATION_CLEANUP_PENDING
 
-    # use_fallback=False as this is intentional negative check (alert should NOT exist).
-    # The Prometheus alert rule has a 'for: 1m' grace period before it resolves;
-    # allow up to 3 minutes for the UI to reflect that the alert has cleared.
-    alert_still_present = acm_obj.wait_until_expected_text_is_found(
-        locator=alert_locator,
-        expected_text=expected_text,
-        timeout=180,
-        use_fallback=False,
-    )
+    def _is_alert_present():
+        """
+        Reload the DR Dashboard Overview page and check whether the alert is shown.
+
+        Returns:
+            bool: True if the alert is still present, False otherwise
+
+        """
+        _refresh_and_navigate_data_services(acm_obj)
+        acm_obj.do_click(
+            acm_loc["disaster-recovery-overview"],
+            avoid_stale=True,
+            enable_screenshot=True,
+            timeout=60,
+        )
+        acm_obj.take_screenshot()
+
+        # Try to expand Critical alerts section if it exists
+        try:
+            critical_alert = acm_obj.find_an_element_by_xpath(
+                acm_loc["critical-alert"][0]
+            ).get_attribute("aria-expanded")
+
+            if critical_alert == "false":
+                critical_alert_elem = wait_for_element_to_be_clickable(
+                    acm_loc["critical-alert"]
+                )
+                acm_obj.driver.execute_script(
+                    "arguments[0].click();", critical_alert_elem
+                )
+                acm_obj.take_screenshot()
+        except (NoSuchElementException, StaleElementReferenceException) as e:
+            log.info(
+                f"Critical alerts section not found or not expandable: {e}. "
+                "This may indicate no critical alerts exist (expected)."
+            )
+            acm_obj.take_screenshot()
+        except Exception as e:
+            acm_obj.take_screenshot()
+            raise UnexpectedBehaviour(
+                f"Unable to verify DR Dashboard critical-alert section after {operation} cleanup."
+            ) from e
+
+        # use_fallback=False as this is intentional negative check (alert should
+        # NOT exist). The text is looked up with a short timeout: the call returns
+        # True as soon as the text is present, so a long timeout would only delay
+        # the "alert is gone" result.
+        return acm_obj.wait_until_expected_text_is_found(
+            locator=alert_locator,
+            expected_text=expected_text,
+            timeout=10,
+            use_fallback=False,
+        )
+
+    # The alert is cleared by Prometheus a while after the cleanup (rule 'for: 1m'
+    # plus scrape/evaluation delay) and the console only reflects it after a page
+    # reload, so reload and re-check until the alert is gone or the timeout expires.
+    alert_still_present = True
+    deadline = time.time() + 300
+    while True:
+        alert_still_present = _is_alert_present()
+        if not alert_still_present or time.time() >= deadline:
+            break
+        log.info(
+            f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' is still present, "
+            "reloading DR Dashboard in 15 seconds"
+        )
+        time.sleep(15)
 
     if alert_still_present:
         log.error(
