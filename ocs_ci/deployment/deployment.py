@@ -3211,15 +3211,28 @@ class Deployment(object):
         )
         addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
 
-        if addon_deployment_config.is_exist(
-            resource_name=constants.ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME
+        def _exists(ocp_obj, resource_name):
+            # Only NotFound means the resource is absent; any other error
+            # (authorization, transient API failure) is propagated.
+            try:
+                ocp_obj.get(resource_name=resource_name, silent=True)
+                return True
+            except CommandFailed as ex:
+                if "NotFound" in str(ex):
+                    return False
+                raise
+
+        if _exists(
+            addon_deployment_config,
+            constants.ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME,
         ):
             addon_deployment_config.add_label(
                 label=backup_label,
                 resource_name=constants.ADDONDEPLOYMENTCONFIG_ADDON_NS_CONFIG_NAME,
             )
-        if addon_deployment_config.is_exist(
-            resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG
+        if _exists(
+            addon_deployment_config,
+            constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG,
         ):
             addon_deployment_config.add_label(
                 resource_name=constants.ADDONDEPLOYMENTCONFIG_HYPERSHIFT_ADDON_DEPLOY_CONFIG,
@@ -3232,11 +3245,9 @@ class Deployment(object):
             "cluster-proxy",
             "application-manager",
         ]:
-            if addon_obj.is_exist(resource_name=management_addon):
+            if _exists(addon_obj, management_addon):
                 addon_obj.add_label(resource_name=management_addon, label=backup_label)
-        if klusterlet_config.is_exist(
-            resource_name=constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME
-        ):
+        if _exists(klusterlet_config, constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME):
             klusterlet_config.add_label(
                 label=backup_label,
                 resource_name=constants.KLUSTERLET_CONFIG_MCE_IMPORT_NAME,
