@@ -118,7 +118,7 @@ def verify_csv_network_policy_rbac(csv_prefix, namespace=None):
     Verify a CSV declares NetworkPolicy RBAC per Conforma requirements.
 
     Looks up the CSV by prefix, then checks that its permissions include
-    networking.k8s.io/networkpolicies with verbs create, delete, and
+    networking.k8s.io/networkpolicies with verbs create and
     update or patch.
 
     Args:
@@ -226,7 +226,7 @@ def verify_sa_can_manage_network_policies(sa_name, namespace=None):
         f"SA {sa_name} cannot {failed_verbs} NetworkPolicies " f"in {namespace}"
     )
     logger.info(
-        f"SA {sa_name} has create/delete/update permissions for "
+        f"SA {sa_name} has create/update permissions for "
         f"NetworkPolicies in {namespace}"
     )
 

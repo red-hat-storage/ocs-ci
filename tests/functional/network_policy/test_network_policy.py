@@ -76,7 +76,7 @@ class TestNetworkPolicyCompliance(ManageTest):
         """
         A-2: Verify each ODF CSV declares NetworkPolicy RBAC per
         Conforma requirement (networking.k8s.io/networkpolicies
-        with create, delete, update/patch).
+        with create and update/patch).
         """
         namespace = config.ENV_DATA["cluster_namespace"]
         csv_prefixes = constants.ODF_CSV_PREFIXES_FOR_NETWORK_POLICY_RBAC
@@ -114,7 +114,7 @@ class TestNetworkPolicyCompliance(ManageTest):
     def test_sa_permissions_for_network_policies(self):
         """
         A-3: Verify operator service accounts have effective permissions
-        to create/delete/update NetworkPolicies.
+        to create/update NetworkPolicies.
         """
         namespace = config.ENV_DATA["cluster_namespace"]
         sa_map = constants.ODF_OPERATOR_SA_FOR_NETWORK_POLICY
@@ -128,7 +128,7 @@ class TestNetworkPolicyCompliance(ManageTest):
         for csv_prefix, sa_name in sa_map.items():
             logger.info(
                 f"Step 2: Verifying SA '{sa_name}' (from {csv_prefix}) "
-                "can create/delete/update networkpolicies.networking.k8s.io"
+                "can create/update networkpolicies.networking.k8s.io"
             )
             try:
                 verify_sa_can_manage_network_policies(sa_name, namespace)
