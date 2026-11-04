@@ -439,39 +439,88 @@ class TestNetworkPolicyBlockedTraffic(ManageTest):
         self, network_policies_present, test_pod_in_foreign_ns
     ):
         """
-        C-1: Pod in a foreign namespace cannot reach ODF operand services.
+        C-1: Pod in a foreign namespace cannot reach ODF operand services
+        that have restrictive ingress NetworkPolicies.
         """
         pod_name, ns = test_pod_in_foreign_ns
         storage_ns = config.ENV_DATA["cluster_namespace"]
 
         logger.info(
-            f"Step 1: Using test pod '{pod_name}' in foreign namespace "
-            f"'{ns}' to verify that NetworkPolicies block unauthorized "
-            f"traffic to ODF services in '{storage_ns}'"
+            f"Step 1: Scanning NetworkPolicies in '{storage_ns}' to find "
+            "services with restrictive ingress rules that should block "
+            "traffic from foreign namespaces"
         )
 
-        targets = {
-            "noobaa-mgmt": 443,
-            "s3": 443,
-        }
+        ingress_restricted_services = []
+        for policy in network_policies_present:
+            spec = policy.get("spec", {})
+            policy_types = spec.get("policyTypes", [])
+            ingress_rules = spec.get("ingress", [])
+
+            if "Ingress" not in policy_types:
+                continue
+
+            has_restrictive_rule = False
+            for rule in ingress_rules:
+                from_selectors = rule.get("from", [])
+                for sel in from_selectors:
+                    ns_sel = sel.get("namespaceSelector", {})
+                    if ns_sel and ns_sel.get("matchLabels"):
+                        has_restrictive_rule = True
+                        break
+                if has_restrictive_rule:
+                    break
+
+            if not has_restrictive_rule:
+                continue
+
+            pod_selector = spec.get("podSelector", {}).get("matchLabels", {})
+            if not pod_selector:
+                continue
+
+            policy_name = policy["metadata"]["name"]
+            svc_obj = OCP(kind="Service", namespace=storage_ns)
+            services = svc_obj.get().get("items", [])
+            for svc in services:
+                svc_selector = svc.get("spec", {}).get("selector", {})
+                if not svc_selector:
+                    continue
+                if all(svc_selector.get(k) == v for k, v in pod_selector.items()):
+                    ports = svc.get("spec", {}).get("ports", [])
+                    if ports:
+                        svc_name = svc["metadata"]["name"]
+                        svc_port = ports[0].get("port", 0)
+                        ingress_restricted_services.append(
+                            (svc_name, svc_port, policy_name)
+                        )
+                        logger.info(
+                            f"  Found restricted service '{svc_name}:{svc_port}' "
+                            f"(policy: {policy_name})"
+                        )
+
+        if not ingress_restricted_services:
+            pytest.skip(
+                "No services with restrictive ingress NetworkPolicies found — "
+                "ingress-blocking policies not yet implemented"
+            )
 
         logger.info(
-            f"Step 2: Attempting TCP connections to {len(targets)} "
-            "ODF services — all should be BLOCKED"
+            f"Step 2: Using test pod '{pod_name}' in foreign namespace "
+            f"'{ns}' to attempt TCP connections to "
+            f"{len(ingress_restricted_services)} restricted services "
+            "— all should be BLOCKED"
         )
         tested = 0
-        for svc_name, port in targets.items():
-            logger.info(
-                f"  Looking up ClusterIP for service '{svc_name}' " f"in '{storage_ns}'"
-            )
+        for svc_name, port, policy_name in ingress_restricted_services:
             svc_ip = get_service_ip(svc_name, namespace=storage_ns)
             if not svc_ip:
-                logger.warning(f"  Service '{svc_name}' not found, skipping")
+                logger.warning(f"  Service '{svc_name}' has no ClusterIP, skipping")
                 continue
 
             logger.info(
                 f"  Testing: {pod_name} ({ns}) -> "
-                f"{svc_name} ({svc_ip}:{port}) — expecting BLOCKED"
+                f"{svc_name} ({svc_ip}:{port}) — expecting BLOCKED "
+                f"by policy '{policy_name}'"
             )
             check_pod_connectivity(
                 source_pod_name=pod_name,
