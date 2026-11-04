@@ -18,8 +18,129 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import wait_for_pods_deletion
+from ocs_ci.ocs.resources.pod import Pod, wait_for_pods_deletion
 from ocs_ci.utility.utils import TimeoutSampler
+
+
+def _get_validated_pods(deployment_obj: Deployment, scc_name: str) -> list:
+    """Return stable running pods that require and use the expected SCC."""
+    deployment_obj.wait_for_available_replicas()
+    pods = deployment_obj.pods
+    if (
+        not pods
+        or len(pods) != deployment_obj.replicas
+        or any(
+            pod.data["metadata"].get("deletionTimestamp")
+            or pod.data.get("status", {}).get("phase") != constants.STATUS_RUNNING
+            for pod in pods
+        )
+    ):
+        raise UnexpectedBehaviour(f"{deployment_obj.name} pod baseline is not stable")
+    errors = [
+        error
+        for pod in pods
+        for error in get_scc_pinning_errors(pod.data, deployment_obj.name, scc_name)
+    ]
+    if errors:
+        raise UnexpectedBehaviour("Invalid SCC baseline:\n" + "\n".join(errors))
+    return pods
+
+
+def _get_failed_create_events(
+    original_pod: Pod, namespace: str
+) -> tuple[OCP, dict[str, int]]:
+    """Return the controlling ReplicaSet event query and baseline counts."""
+    replica_set = next(
+        (
+            owner
+            for owner in original_pod.data["metadata"].get("ownerReferences", [])
+            if owner["kind"] == "ReplicaSet" and owner.get("controller")
+        ),
+        None,
+    )
+    if not replica_set:
+        raise UnexpectedBehaviour(
+            f"Pod {original_pod.name} has no ReplicaSet controller"
+        )
+    event_ocp = OCP(
+        kind="Event",
+        namespace=namespace,
+        field_selector=f"involvedObject.uid={replica_set['uid']},reason=FailedCreate",
+    )
+    original_counts = {
+        event["metadata"]["uid"]: event.get("count", 1)
+        for event in event_ocp.get()["items"]
+    }
+    return event_ocp, original_counts
+
+
+def _validate_direct_scc_access(
+    original_pod: Pod, scc_data: dict, namespace: str
+) -> str:
+    """Validate toolbox SCC grants and return its service-account identity."""
+    if original_pod.data["spec"].get("serviceAccountName") != "rook-ceph-default":
+        raise UnexpectedBehaviour("Toolbox does not use rook-ceph-default")
+    service_account = f"system:serviceaccount:{namespace}:rook-ceph-default"
+    users = scc_data.get("users") or []
+    if service_account not in users:
+        raise UnexpectedBehaviour("rook-ceph-default has no direct SCC grant")
+    service_account_groups = [
+        "system:serviceaccounts",
+        f"system:serviceaccounts:{namespace}",
+    ]
+    if set(service_account_groups).intersection(scc_data.get("groups") or []):
+        raise UnexpectedBehaviour("rook-ceph-default also has group SCC access")
+    access_review_obj = OCS(
+        apiVersion="authorization.k8s.io/v1",
+        kind="SubjectAccessReview",
+        metadata={},
+        spec={
+            "user": service_account,
+            "groups": service_account_groups,
+            "resourceAttributes": {
+                "namespace": namespace,
+                "verb": "use",
+                "group": "security.openshift.io",
+                "resource": "securitycontextconstraints",
+                "name": scc_data["metadata"]["name"],
+            },
+        },
+    )
+    access = access_review_obj.create(do_reload=False)["status"]
+    if access.get("evaluationError"):
+        raise UnexpectedBehaviour(
+            f"SCC access review failed: {access['evaluationError']}"
+        )
+    if access["allowed"]:
+        raise UnexpectedBehaviour("rook-ceph-default also has RBAC SCC access")
+    return service_account
+
+
+def _wait_for_scc_rejection(
+    deployment_obj: Deployment,
+    event_ocp: OCP,
+    original_counts: dict[str, int],
+    original_uids: set[str],
+    expected_errors: tuple[str, ...],
+) -> None:
+    """Wait for a new SCC rejection with no active replacement pods."""
+    for snapshot in TimeoutSampler(timeout=180, sleep=5, func=event_ocp.get):
+        rejected = any(
+            event.get("count", 1) > original_counts.get(event["metadata"]["uid"], 0)
+            and all(error in event.get("message", "") for error in expected_errors)
+            for event in snapshot["items"]
+        )
+        replacements = [
+            pod
+            for pod in deployment_obj.pods
+            if pod.data["metadata"]["uid"] not in original_uids
+            and not pod.data["metadata"].get("deletionTimestamp")
+        ]
+        if rejected and not replacements:
+            break
+        # Retry replacements admitted before the SCC change reaches the cache.
+        for pod_obj in replacements:
+            pod_obj.delete(wait=False)
 
 
 @brown_squad
@@ -85,49 +206,11 @@ class TestSCCAdmissionFailures(ManageTest):
         namespace = config.ENV_DATA["cluster_namespace"]
         deployment_ocp = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
         deployment_obj = Deployment(**deployment_ocp.get(resource_name=deployment_name))
-        deployment_obj.wait_for_available_replicas()
-        pods = deployment_obj.pods
-        if (
-            not pods
-            or len(pods) != deployment_obj.replicas
-            or any(
-                pod.data["metadata"].get("deletionTimestamp")
-                or pod.data.get("status", {}).get("phase") != constants.STATUS_RUNNING
-                for pod in pods
-            )
-        ):
-            raise UnexpectedBehaviour(f"{deployment_name} pod baseline is not stable")
-        errors = [
-            error
-            for pod in pods
-            for error in get_scc_pinning_errors(pod.data, deployment_name, scc_name)
-        ]
-        if errors:
-            raise UnexpectedBehaviour("Invalid SCC baseline:\n" + "\n".join(errors))
+        pods = _get_validated_pods(deployment_obj, scc_name)
 
         original_pod = pods[0]
         original_uids = {pod.data["metadata"]["uid"] for pod in pods}
-        replica_set = next(
-            (
-                owner
-                for owner in original_pod.data["metadata"].get("ownerReferences", [])
-                if owner["kind"] == "ReplicaSet" and owner.get("controller")
-            ),
-            None,
-        )
-        if not replica_set:
-            raise UnexpectedBehaviour(
-                f"{deployment_name} pod has no ReplicaSet controller"
-            )
-        event_ocp = OCP(
-            kind="Event",
-            namespace=namespace,
-            field_selector=f"involvedObject.uid={replica_set['uid']},reason=FailedCreate",
-        )
-        original_counts = {
-            event["metadata"]["uid"]: event.get("count", 1)
-            for event in event_ocp.get()["items"]
-        }
+        event_ocp, original_counts = _get_failed_create_events(original_pod, namespace)
 
         scc_ocp = OCP(kind=constants.SCC, namespace=namespace)
         scc_data = scc_ocp.get(resource_name=scc_name)
@@ -142,44 +225,9 @@ class TestSCCAdmissionFailures(ManageTest):
         scc_obj = OCS(**scc_data)
 
         if revoke_access:
-            if (
-                original_pod.data["spec"].get("serviceAccountName")
-                != "rook-ceph-default"
-            ):
-                raise UnexpectedBehaviour("Toolbox does not use rook-ceph-default")
-            service_account = f"system:serviceaccount:{namespace}:rook-ceph-default"
-            users = scc_data.get("users") or []
-            if service_account not in users:
-                raise UnexpectedBehaviour("rook-ceph-default has no direct SCC grant")
-            service_account_groups = [
-                "system:serviceaccounts",
-                f"system:serviceaccounts:{namespace}",
-            ]
-            if set(service_account_groups).intersection(scc_data.get("groups") or []):
-                raise UnexpectedBehaviour("rook-ceph-default also has group SCC access")
-            access_review_obj = OCS(
-                apiVersion="authorization.k8s.io/v1",
-                kind="SubjectAccessReview",
-                metadata={},
-                spec={
-                    "user": service_account,
-                    "groups": service_account_groups,
-                    "resourceAttributes": {
-                        "namespace": namespace,
-                        "verb": "use",
-                        "group": "security.openshift.io",
-                        "resource": "securitycontextconstraints",
-                        "name": scc_name,
-                    },
-                },
+            service_account = _validate_direct_scc_access(
+                original_pod, scc_data, namespace
             )
-            access = access_review_obj.create(do_reload=False)["status"]
-            if access.get("evaluationError"):
-                raise UnexpectedBehaviour(
-                    f"SCC access review failed: {access['evaluationError']}"
-                )
-            if access["allowed"]:
-                raise UnexpectedBehaviour("rook-ceph-default also has RBAC SCC access")
 
         def restore_workload() -> None:
             scc_obj.apply(**scc_data)
@@ -190,7 +238,13 @@ class TestSCCAdmissionFailures(ManageTest):
             if not scc_ocp.patch(
                 resource_name=scc_name,
                 params=json.dumps(
-                    {"users": [user for user in users if user != service_account]}
+                    {
+                        "users": [
+                            user
+                            for user in (scc_data.get("users") or [])
+                            if user != service_account
+                        ]
+                    }
                 ),
                 format_type="merge",
             ):
@@ -208,20 +262,6 @@ class TestSCCAdmissionFailures(ManageTest):
                 "not found",
             )
         original_pod.delete()
-        for snapshot in TimeoutSampler(timeout=180, sleep=5, func=event_ocp.get):
-            rejected = any(
-                event.get("count", 1) > original_counts.get(event["metadata"]["uid"], 0)
-                and all(error in event.get("message", "") for error in expected_errors)
-                for event in snapshot["items"]
-            )
-            replacements = [
-                pod
-                for pod in deployment_obj.pods
-                if pod.data["metadata"]["uid"] not in original_uids
-                and not pod.data["metadata"].get("deletionTimestamp")
-            ]
-            if rejected and not replacements:
-                break
-            # Retry replacements admitted before the SCC change reaches the cache.
-            for pod_obj in replacements:
-                pod_obj.delete(wait=False)
+        _wait_for_scc_rejection(
+            deployment_obj, event_ocp, original_counts, original_uids, expected_errors
+        )
