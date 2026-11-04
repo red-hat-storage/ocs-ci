@@ -34,32 +34,39 @@ logger = logging.getLogger(__name__)
 class TestFailoverAndRelocateWithDiscoveredAppsParallel:
     """
     Failover and relocate of RBD and CephFS Discovered Apps workloads, executed
-    in parallel inside a single test.
+    in parallel but reported as separate tests.
 
     Every PVC interface is an independent unit: when one fails (or skips) in any
-    stage the other one carries on, and the final report lists the outcome per
-    interface. Steps that touch shared resources (stopping/starting the primary
+    stage the other one carries on, and only its own test is reported as
+    failed. Steps that touch shared resources (stopping/starting the primary
     cluster nodes, the single ACM UI session) run once for both interfaces.
 
     """
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down"],
+        argnames=["primary_cluster_down", "pvc_interface"],
         argvalues=[
-            pytest.param(False, marks=acceptance, id="primary_up"),
-            pytest.param(True, id="primary_down"),
+            pytest.param(
+                False, constants.CEPHBLOCKPOOL, marks=acceptance, id="primary_up-rbd"
+            ),
+            pytest.param(
+                False,
+                constants.CEPHFILESYSTEM,
+                marks=acceptance,
+                id="primary_up-cephfs",
+            ),
+            pytest.param(True, constants.CEPHBLOCKPOOL, id="primary_down-rbd"),
+            pytest.param(True, constants.CEPHFILESYSTEM, id="primary_down-cephfs"),
         ],
     )
     def test_failover_and_relocate_discovered_apps_parallel(
-        self,
-        primary_cluster_down,
-        discovered_apps_dr_workload,
-        nodes_multicluster,
-        node_restart_teardown,
-        setup_acm_ui,
-        request,
+        self, primary_cluster_down, pvc_interface, request
     ):
         """
+        The first item of each ``primary_cluster_down`` value runs the flow for
+        RBD and CephFS in parallel; every item reports only the outcome of its
+        own ``pvc_interface`` (see ``run_rbd_cephfs_test``).
+
         Test steps:
             1. Deploy RBD and CephFS discovered-apps workloads.
             2. Wait for the scheduling interval, optionally stop the primary
@@ -71,22 +78,33 @@ class TestFailoverAndRelocateWithDiscoveredAppsParallel:
                the primary cluster.
 
         """
-        run_rbd_cephfs_test(
-            request,
-            lambda runner: self._execute(
+
+        def execute(runner):
+            # Fetched here so that only the item which executes the run sets
+            # them up (including the ACM UI login).
+            self._execute(
                 runner,
-                discovered_apps_dr_workload,
-                nodes_multicluster,
+                request.getfixturevalue("discovered_apps_dr_workload"),
+                request.getfixturevalue("nodes_multicluster"),
                 primary_cluster_down,
-            ),
-        )
+                request,
+            )
+
+        run_rbd_cephfs_test(request, execute)
 
     def _execute(
-        self, runner, discovered_apps_dr_workload, nodes_multicluster, primary_down
+        self,
+        runner,
+        discovered_apps_dr_workload,
+        nodes_multicluster,
+        primary_down,
+        request,
     ):
         """
         Run all the stages. Returns early when no interface is left healthy.
         """
+        request.getfixturevalue("node_restart_teardown")
+        request.getfixturevalue("setup_acm_ui")
         alerts_enabled = get_semantic_ocs_version_from_config() >= Version(
             "4.22", partial=True
         )

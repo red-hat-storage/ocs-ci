@@ -230,19 +230,40 @@ class ParallelWorkloadRunner:
         logger.info(summary)
         return summary
 
-    def add_user_properties(self, request):
+    def add_user_properties(self, request, names=None):
         """
-        Record each workload outcome as a ``user_properties`` entry on the
-        pytest item, so that it is visible in the test report.
+        Record workload outcomes as ``user_properties`` entries on the pytest
+        item, so that they are visible in the test report.
 
         Args:
             request (pytest.FixtureRequest): The test's request fixture
+            names (list): Workloads to record; all of them by default
 
         """
-        for result in self.results.values():
+        for name in names or self.results:
             request.node.user_properties.append(
-                (f"workload_{result.name}", result.status)
+                (f"workload_{name}", self.results[name].status)
             )
+
+    def assert_passed(self, name, owner=None):
+        """
+        Fail (or skip) the current test according to the outcome of one
+        workload.
+
+        Args:
+            name (str): The workload label
+            owner (str): Node ID of the test that executed the run, mentioned
+                in the message so the full log can be found
+
+        """
+        result = self.results[name]
+        where = f" (full run log: {owner})" if owner else ""
+        if result.status == FAIL:
+            pytest.fail(
+                f"{name} failed in '{result.failed_stage}': {result.error!r}{where}"
+            )
+        if result.status == SKIP:
+            pytest.skip(f"{name} skipped in '{result.failed_stage}': {result.error}")
 
     def assert_all_passed(self):
         """
@@ -315,27 +336,122 @@ def run_stage_with_primary_cluster_down(
         runner.fail_all("recover primary cluster", exc)
 
 
+@dataclass
+class _ParallelRun:
+    """
+    The one execution shared by the pytest items of a parallel test.
+
+    Attributes:
+        runner (ParallelWorkloadRunner): The runner that executed the flow
+        owner (str): Node ID of the item which executed it
+        pending (set): Interfaces whose pytest item did not report yet
+
+    """
+
+    runner: ParallelWorkloadRunner
+    owner: str
+    pending: set
+
+
+_PARALLEL_RUNS = {}
+_INTERFACE_LABELS = {
+    constants.CEPHBLOCKPOOL: constants.RBD_INTERFACE,
+    constants.CEPHFILESYSTEM: constants.CEPHFS_INTERFACE,
+}
+
+
+def _run_key(item):
+    """
+    Key which groups the pytest items of one parallel run: same test function
+    and same ``primary_cluster_down`` value, whatever the interface is.
+    """
+    callspec = getattr(item, "callspec", None)
+    if callspec is None:
+        return None
+    return item.nodeid.split("[")[0], callspec.params.get("primary_cluster_down")
+
+
+def _interface_label(item):
+    """
+    Returns:
+        str: 'rbd' or 'cephfs' for the pytest item's ``pvc_interface`` parameter
+
+    """
+    return _INTERFACE_LABELS[item.callspec.params["pvc_interface"]]
+
+
 def run_rbd_cephfs_test(request, execute):
     """
-    Run a parallel RBD + CephFS test body with per-interface reporting.
+    Run a parallel RBD + CephFS test, but report every interface as a separate
+    pytest test.
+
+    The test is parametrized with ``primary_cluster_down`` and ``pvc_interface``
+    so there is one pytest item per interface. The first item of a
+    ``primary_cluster_down`` value executes the flow for all the interfaces
+    selected in the session; the other items only report the outcome of their
+    own interface. A failure of one interface therefore fails only its own
+    item, and each interface appears as a separate result in junit,
+    ReportPortal and the failed/passed test case lists.
 
     Args:
-        request (pytest.FixtureRequest): The test's request fixture
-        execute (callable): Called as ``execute(runner)``; runs all the stages
+        request (pytest.FixtureRequest): The test's request fixture. The test
+            must have the ``primary_cluster_down`` and ``pvc_interface``
+            parameters.
+        execute (callable): Called as ``execute(runner)`` by the first item;
+            runs all the stages. Fixtures that are needed only for the
+            execution should be fetched there with ``request.getfixturevalue``
+            so that the other items do not set them up.
 
     """
-    runner = ParallelWorkloadRunner(
-        {
-            "rbd": InterfaceGroup("rbd", constants.CEPHBLOCKPOOL),
-            "cephfs": InterfaceGroup("cephfs", constants.CEPHFILESYSTEM),
+    item = request.node
+    key = _run_key(item)
+    name = _interface_label(item)
+
+    run = _PARALLEL_RUNS.get(key)
+    if run is None:
+        # Only the items that did not run yet: when an earlier item of this run
+        # was skipped in setup, its interface is not executed again here.
+        items = request.session.items
+        selected = {
+            _interface_label(i): i
+            for i in items[items.index(item) :]
+            if _run_key(i) == key
         }
-    )
-    try:
-        execute(runner)
-    finally:
-        runner.report()
-        runner.add_user_properties(request)
-    runner.assert_all_passed()
+        runner = ParallelWorkloadRunner(
+            {
+                label: InterfaceGroup(label, pvc_interface)
+                for pvc_interface, label in _INTERFACE_LABELS.items()
+                if label in selected
+            }
+        )
+        run = _PARALLEL_RUNS[key] = _ParallelRun(runner, item.nodeid, set(selected))
+        # The other items do nothing on the clusters, so their RDR health
+        # check must not skip (and hide) the result of their interface.
+        for sibling in selected.values():
+            if sibling is not item:
+                sibling.add_marker(pytest.mark.skip_rdr_health_check)
+        logger.info(
+            f"{item.nodeid} executes the parallel run for {sorted(selected)}; "
+            "the other interfaces only report their own result"
+        )
+        try:
+            execute(runner)
+        except (Exception, pytest.fail.Exception, pytest.skip.Exception) as exc:
+            logger.exception("Parallel run stopped unexpectedly")
+            runner.fail_all("parallel run", exc)
+        finally:
+            runner.report()
+    else:
+        logger.info(
+            f"The parallel run for this test was executed by {run.owner}; "
+            f"reporting the result of '{name}'"
+        )
+
+    run.runner.add_user_properties(request, [name])
+    run.pending.discard(name)
+    if not run.pending:
+        _PARALLEL_RUNS.pop(key, None)
+    run.runner.assert_passed(name, run.owner)
 
 
 def collect_dr_details(group, drpc_objs, **name_kwargs):

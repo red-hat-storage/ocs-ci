@@ -26,31 +26,39 @@ logger = logging.getLogger(__name__)
 class TestFailoverAndRelocateAppSetParallel:
     """
     Failover and relocate of RBD and CephFS ApplicationSet workloads, executed
-    in parallel inside a single test.
+    in parallel but reported as separate tests.
 
     Every PVC interface is an independent unit: when one fails in any stage the
-    other one carries on, and the final report lists the outcome per interface.
+    other one carries on, and only its own test is reported as failed.
     Steps on shared resources (stopping/starting the primary cluster nodes, the
     waits for IOs) run once for both interfaces.
 
     """
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down"],
+        argnames=["primary_cluster_down", "pvc_interface"],
         argvalues=[
-            pytest.param(False, marks=acceptance, id="primary_up"),
-            pytest.param(True, id="primary_down"),
+            pytest.param(
+                False, constants.CEPHBLOCKPOOL, marks=acceptance, id="primary_up-rbd"
+            ),
+            pytest.param(
+                False,
+                constants.CEPHFILESYSTEM,
+                marks=acceptance,
+                id="primary_up-cephfs",
+            ),
+            pytest.param(True, constants.CEPHBLOCKPOOL, id="primary_down-rbd"),
+            pytest.param(True, constants.CEPHFILESYSTEM, id="primary_down-cephfs"),
         ],
     )
     def test_failover_and_relocate_appset_parallel(
-        self,
-        primary_cluster_down,
-        dr_workload,
-        nodes_multicluster,
-        node_restart_teardown,
-        request,
+        self, primary_cluster_down, pvc_interface, request
     ):
         """
+        The first item of each ``primary_cluster_down`` value runs the flow for
+        RBD and CephFS in parallel; every item reports only the outcome of its
+        own ``pvc_interface`` (see ``run_rbd_cephfs_test``).
+
         Test steps:
             1. Deploy an RBD and a CephFS ApplicationSet workload.
             2. Wait for IOs, verify lastGroupSyncTime.
@@ -63,17 +71,25 @@ class TestFailoverAndRelocateAppSetParallel:
                and lastGroupSyncTime.
 
         """
-        run_rbd_cephfs_test(
-            request,
-            lambda runner: self._execute(
-                runner, dr_workload, nodes_multicluster, primary_cluster_down
-            ),
-        )
 
-    def _execute(self, runner, dr_workload, nodes_multicluster, primary_down):
+        def execute(runner):
+            # Fetched here so that only the item which executes the run sets
+            # them up.
+            self._execute(
+                runner,
+                request.getfixturevalue("dr_workload"),
+                request.getfixturevalue("nodes_multicluster"),
+                primary_cluster_down,
+                request,
+            )
+
+        run_rbd_cephfs_test(request, execute)
+
+    def _execute(self, runner, dr_workload, nodes_multicluster, primary_down, request):
         """
         Run all the stages. Returns early when no interface is left healthy.
         """
+        request.getfixturevalue("node_restart_teardown")
 
         # The factory returns every workload created so far (including a
         # half-deployed one of an interface that failed), so pick the ones of
