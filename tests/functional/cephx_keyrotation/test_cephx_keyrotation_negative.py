@@ -735,7 +735,7 @@ class TestCephXKeyRotationNegativeEncryptedCSI:
         "rotation is currently enabled"
     )
     def test_cephx_csi_rotation_prior_key_count_zero_with_mounted_volume(
-        self, cephx_keyrotation_setup, deployment_pod_factory
+        self, cephx_keyrotation_setup, dc_pod_factory
     ):
         """
         TC-37: CSI rotation with priorKeyCount 0 while a volume stays mounted.
@@ -752,7 +752,7 @@ class TestCephXKeyRotationNegativeEncryptedCSI:
 
         ceph_health_check(namespace=namespace)
 
-        workload_pod = deployment_pod_factory(
+        workload_pod = dc_pod_factory(
             interface=constants.CEPHBLOCKPOOL,
             size=CSI_WORKLOAD_PVC_SIZE,
         )
@@ -794,7 +794,7 @@ class TestCephXKeyRotationNegativeEncryptedCSI:
         rotator.wait_for_csi_rotation(target_generation, timeout=1500)
         rotator.verify_auth_keys_changed(pre_csi_keys, entities=csi_entities)
 
-        new_pod = deployment_pod_factory(
+        new_pod = dc_pod_factory(
             interface=constants.CEPHBLOCKPOOL,
             size=CSI_POST_ROTATION_PVC_SIZE,
         )
