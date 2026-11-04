@@ -644,9 +644,19 @@ class TestNetworkPolicyDisruption(ManageTest):
             "Result: NetworkPolicies survived operator restart and " "Ceph is healthy"
         )
 
+
+@purple_squad
+@ignore_leftovers
+class TestNetworkPolicyPodRestart(ManageTest):
+    """
+    Category D-2: Pod restart under policies (tier2).
+    Separated into its own class because deleting an OSD pod creates
+    a replacement with a different name, which the environment checker
+    would flag as a leftover.
+    """
+
     @tier2
     @skipif_external_mode
-    @ignore_leftovers
     @pytest.mark.polarion_id("OCS-6912")
     def test_pod_restart_under_policies(self, network_policies_present):
         """
