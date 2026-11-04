@@ -466,7 +466,7 @@ class TestCephXKeyRotationIOContinuity:
     @pytest.mark.polarion_id("OCS-8132")
     @tier1
     def test_cephx_key_rotation_io_continuity(
-        self, cephx_keyrotation_setup, deployment_pod_factory
+        self, cephx_keyrotation_setup, dc_pod_factory
     ):
         """
         Verify cluster health and I/O continuity during daemon CephX key rotation.
@@ -486,11 +486,11 @@ class TestCephXKeyRotationIOContinuity:
         ceph_health_check(namespace=namespace)
 
         log.info("Creating RBD and CephFS deployment pods for continuous I/O")
-        rbd_pod = deployment_pod_factory(
+        rbd_pod = dc_pod_factory(
             interface=constants.CEPHBLOCKPOOL,
             size=WORKLOAD_PVC_SIZE,
         )
-        cephfs_pod = deployment_pod_factory(
+        cephfs_pod = dc_pod_factory(
             interface=constants.CEPHFILESYSTEM,
             size=WORKLOAD_PVC_SIZE,
         )
@@ -530,11 +530,11 @@ class TestCephXKeyRotationIOContinuity:
         rotator.verify_pods_no_auth_bad_key([rbd_pod, cephfs_pod] + daemon_pods)
 
         log.info("Creating new RBD and CephFS workloads after key rotation")
-        new_rbd_pod = deployment_pod_factory(
+        new_rbd_pod = dc_pod_factory(
             interface=constants.CEPHBLOCKPOOL,
             size=POST_ROTATION_PVC_SIZE,
         )
-        new_cephfs_pod = deployment_pod_factory(
+        new_cephfs_pod = dc_pod_factory(
             interface=constants.CEPHFILESYSTEM,
             size=POST_ROTATION_PVC_SIZE,
         )
