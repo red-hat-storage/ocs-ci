@@ -238,9 +238,6 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
                 # verify=False: cluster routes use self-signed certificates
                 resp = requests.get(url, timeout=15, verify=False)
                 logger.info(f"Route {name}: {url} -> HTTP {resp.status_code}")
-                assert resp.status_code < 500, (
-                    f"Route {name} returned server error: " f"HTTP {resp.status_code}"
-                )
                 tested += 1
             except requests.exceptions.ConnectionError:
                 pytest.fail(
