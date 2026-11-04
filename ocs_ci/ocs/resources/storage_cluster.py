@@ -1103,14 +1103,14 @@ def ocs_install_verification(
         provisioner_deployment_and_owner_names = {}
         nodeplugin_daemonset_and_owner_names = {}
         if not disable_cephfs:
-            provisioner_deployment_and_owner_names[
-                "csi-cephfsplugin-provisioner"
-            ] = csi_owner_name
+            provisioner_deployment_and_owner_names["csi-cephfsplugin-provisioner"] = (
+                csi_owner_name
+            )
             nodeplugin_daemonset_and_owner_names["csi-cephfsplugin"] = csi_owner_name
         if not disable_blockpools:
-            provisioner_deployment_and_owner_names[
-                "csi-rbdplugin-provisioner"
-            ] = csi_owner_name
+            provisioner_deployment_and_owner_names["csi-rbdplugin-provisioner"] = (
+                csi_owner_name
+            )
             nodeplugin_daemonset_and_owner_names["csi-rbdplugin"] = csi_owner_name
         csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
 
