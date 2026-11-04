@@ -307,7 +307,8 @@ def verify_dns_from_pod(pod_name, namespace=None, hostname=None):
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     hostname = hostname or "kubernetes.default.svc.cluster.local"
     pod_obj = get_pod_obj(pod_name, namespace=namespace)
-    cmd = f'python3 -c "import socket; ' f"print(socket.gethostbyname('{hostname}'))\""
+    script = f"import socket; print(socket.gethostbyname({hostname!r}))"
+    cmd = f"python3 -c {shlex.quote(script)}"
     try:
         result = pod_obj.exec_cmd_on_pod(cmd, out_yaml_format=False, timeout=30)
         assert result and result.strip(), (
