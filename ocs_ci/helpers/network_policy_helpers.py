@@ -168,7 +168,10 @@ def get_csv_name_by_prefix(csv_prefix, namespace=None):
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_obj = OCP(kind="ClusterServiceVersion", namespace=namespace)
-    csvs = ocp_obj.get().get("items", [])
+    try:
+        csvs = ocp_obj.get().get("items", [])
+    except CommandFailed as ex:
+        raise AssertionError(f"Failed to list CSVs in {namespace}: {ex}") from ex
     for csv in csvs:
         name = csv["metadata"]["name"]
         if name.startswith(csv_prefix):
