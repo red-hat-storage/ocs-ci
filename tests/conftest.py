@@ -11266,7 +11266,7 @@ def pytest_sessionstart(session):
 
     if not (
         ocsci_config.multicluster
-        and ocsci_config.UPGRADE.get("upgrade", False)
+        and ocsci_config.UPGRADE.get("deploy_rdr_workload_at_session_start", False)
         and ocsci_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr"
     ):
         return
