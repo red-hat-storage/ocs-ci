@@ -1240,6 +1240,8 @@ class HyperShiftBase:
                     f"Failed to download kubeconfig for HyperShift hosted cluster {name}\n{e}"
                 )
                 return
+            else:
+                break
 
         if not os.stat(kubeconfig_path).st_size > 0:
             logger.error(
