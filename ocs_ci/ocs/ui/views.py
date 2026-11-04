@@ -4500,6 +4500,60 @@ external_systems = {
         By.XPATH,
     ),
 }
+
+configure_performance = {
+    "core_storage_section": (
+        "//small[@id='core-storage-desc']/parent::div",
+        By.XPATH,
+    ),
+    "mcg_section": (
+        "//small[@id='mcg-performance-desc']/parent::div",
+        By.XPATH,
+    ),
+    "mcg_select_profile_button": (
+        "//button[contains(@class, 'c-menu-toggle') and contains(@aria-label, 'Object Gateway profile')]",
+        By.XPATH,
+    ),
+    "core_storage_select_profile_button": (
+        "//button[contains(@class, 'c-menu-toggle') and contains(@aria-label, 'performance mode from the list')]",
+        By.XPATH,
+    ),
+    "profile_menu_option": (
+        "//li[contains(@class, 'c-menu__list-item')]"
+        "//button[contains(translate(normalize-space(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+        "'abcdefghijklmnopqrstuvwxyz'), '{}')]",
+        By.XPATH,
+    ),
+    "save_button": (
+        "//button[normalize-space()='Save']",
+        By.XPATH,
+    ),
+    "cancel_button": (
+        "//button[normalize-space()='Cancel']",
+        By.XPATH,
+    ),
+    "node_item": (
+        ".//div[contains(@class, 'node')]",
+        By.XPATH,
+    ),
+    "node_name": (
+        ".//*[contains(@class, 'node-name')]",
+        By.XPATH,
+    ),
+    "node_selection_option": (
+        ".//input[@type='checkbox']",
+        By.XPATH,
+    ),
+}
+
+storage_cluster_locators = {
+    "configure_performance_button": (
+        "//button[normalize-space()='Configure performance profiles']",
+        By.XPATH,
+    ),
+    "kebab_storage_cluster": ("//button[@data-test='kebab-button']", By.XPATH),
+}
+
 locators = {
     "5.0": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -4583,6 +4637,8 @@ locators = {
         "attach_storage": attach_storage,
         "virtualmachine": virtualmachine,
         "fusion_access_storage_cluster": fusion_access_storage_cluster,
+        "configure_performance": configure_performance,
+        "storage_cluster": storage_cluster_locators,
     },
     "4.22": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -4663,6 +4719,8 @@ locators = {
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
         "virtualmachine": virtualmachine,
+        "configure_performance": configure_performance,
+        "storage_cluster": storage_cluster_locators,
     },
     "4.21": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
