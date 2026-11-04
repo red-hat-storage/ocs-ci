@@ -519,8 +519,8 @@ generic_locators = {
     ),
     "confirm_dilog_input": ("//input[@placeholder='{}']", By.XPATH),
     "confirm_delete_resource": (
-        'button[data-test="delete-action"]',
-        By.CSS_SELECTOR,
+        "//*[@role='dialog']//button[normalize-space(.)='Delete']",
+        By.XPATH,
     ),
     "cancel_delete_resource": (
         'button[data-test="cancel-action"]',
@@ -3747,8 +3747,8 @@ bucket_tab = {
         By.XPATH,
     ),
     "lifecycle_rules_list": (
-        "//table[@data-label='Lifecycle rules table']//tbody/tr",
-        By.XPATH,
+        '[aria-label="Lifecycle rules list page"] tbody tr',
+        By.CSS_SELECTOR,
     ),
     "rule_name_by_text": (
         "//td[@data-label='Name' and text()='{}']",
@@ -3814,6 +3814,14 @@ bucket_tab = {
     ),
     "incomplete_multipart_days_input": (
         "//input[@id='incomplete-multiparts-delete-days']",
+        By.XPATH,
+    ),
+    "lifecycle_actions_step": (
+        "//nav//button[normalize-space(.)='Lifecycle rule actions']",
+        By.XPATH,
+    ),
+    "lifecycle_review_step": (
+        "//nav//button[normalize-space(.)='Review']",
         By.XPATH,
     ),
     "wizard_next_button": (
