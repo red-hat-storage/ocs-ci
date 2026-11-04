@@ -5,6 +5,7 @@ import requests
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
+    ignore_leftovers,
     purple_squad,
     skipif_external_mode,
 )
@@ -341,7 +342,7 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
                 token_ocp = OCP(namespace="openshift-monitoring")
                 token = token_ocp.exec_oc_cmd(
                     "create token prometheus-k8s "
-                    "-n openshift-monitoring --duration=60s",
+                    "-n openshift-monitoring --duration=600s",
                     out_yaml_format=False,
                 )
                 resp = requests.get(
@@ -538,7 +539,7 @@ class TestNetworkPolicyBlockedTraffic(ManageTest):
                 token_ocp = OCP(namespace="openshift-monitoring")
                 token = token_ocp.exec_oc_cmd(
                     "create token prometheus-k8s "
-                    "-n openshift-monitoring --duration=60s",
+                    "-n openshift-monitoring --duration=600s",
                     out_yaml_format=False,
                 )
                 resp = requests.get(
@@ -645,6 +646,7 @@ class TestNetworkPolicyDisruption(ManageTest):
 
     @tier2
     @skipif_external_mode
+    @ignore_leftovers
     @pytest.mark.polarion_id("OCS-6912")
     def test_pod_restart_under_policies(self, network_policies_present):
         """
