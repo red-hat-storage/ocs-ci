@@ -1208,25 +1208,38 @@ class HyperShiftBase:
         logger.info(
             f"Downloading kubeconfig for HyperShift hosted cluster {name} to {kubeconfig_path}"
         )
-
-        try:
-            with config.RunWithProviderConfigContextIfAvailable():
-                if from_hcp:
-                    exec_cmd(
-                        f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path}",
-                        shell=True,
+        max_retries = 3
+        attempts = 0
+        while attempts < max_retries:
+            try:
+                with config.RunWithProviderConfigContextIfAvailable():
+                    if from_hcp:
+                        exec_cmd(
+                            f"{self.hcp_binary_path} create kubeconfig --name {name} > {kubeconfig_path}",
+                            shell=True,
+                        )
+                    else:
+                        # kubeconfig will be stored with name 'kubeconfig'
+                        OCP().exec_oc_cmd(
+                            f"extract secret/admin-kubeconfig -n clusters-{name} "
+                            f"--to {os.path.dirname(kubeconfig_path)} --confirm"
+                        )
+            except Exception as e:
+                attempts += 1
+                if (
+                    "cluster doesn't report a kubeconfig" in str(e)
+                    and attempts < max_retries
+                ):
+                    logger.warning(
+                        f"Failed to download kubeconfig for HyperShift hosted cluster {name}\n{e}. "
+                        "Retrying after waiting for 60 seconds"
                     )
-                else:
-                    # kubeconfig will be stored with name 'kubeconfig'
-                    OCP().exec_oc_cmd(
-                        f"extract secret/admin-kubeconfig -n clusters-{name} "
-                        f"--to {os.path.dirname(kubeconfig_path)} --confirm"
-                    )
-        except Exception as e:
-            logger.error(
-                f"Failed to download kubeconfig for HyperShift hosted cluster {name}\n{e}"
-            )
-            return
+                    time.sleep(60)
+                    continue
+                logger.error(
+                    f"Failed to download kubeconfig for HyperShift hosted cluster {name}\n{e}"
+                )
+                return
 
         if not os.stat(kubeconfig_path).st_size > 0:
             logger.error(
