@@ -701,6 +701,75 @@ class CNVInstaller(object):
         archive_file_binary_object.extractall(path=bin_dir)
         logger.info(f"virtctl binary extracted successfully to path:{bin_dir}")
 
+    def wait_for_machineconfig_rollout_to_start(self, timeout=300, sleep=10):
+        """
+        Wait for the MachineConfig rollout triggered by the CNV installation to
+        actually start.
+
+        `wait_for_machineconfigpool_status` only compares READYMACHINECOUNT
+        against machineCount. A pool that has not yet been assigned the new
+        MachineConfig has no updating or unavailable machines, so that check
+        passes immediately and we would return before the node reboots begin.
+        Synchronizing on the rollout first closes that window.
+
+        A pool is considered to have started rolling out when it reports the
+        `Updating` condition, or when its desired configuration no longer
+        matches the configuration currently applied to it.
+
+        Not every CNV installation creates a new MachineConfig, so this wait is
+        bounded and a timeout is not an error.
+
+        Args:
+            timeout (int): Time in seconds to wait for a rollout to start.
+            sleep (int): Time in seconds between checks.
+
+        Returns:
+            bool: True if a rollout was observed, False if none started within
+                timeout.
+
+        """
+
+        def _rollout_started():
+            for role in (constants.WORKER_MACHINE, constants.MASTER_MACHINE):
+                mcp = ocp.OCP(
+                    kind=constants.MACHINECONFIGPOOL, resource_name=role
+                ).get()
+                status = mcp.get("status", {})
+                for condition in status.get("conditions", []):
+                    if (
+                        condition.get("type") == "Updating"
+                        and condition.get("status") == "True"
+                    ):
+                        logger.info(f"Machineconfigpool {role} started updating")
+                        return True
+                desired = mcp.get("spec", {}).get("configuration", {}).get("name")
+                current = status.get("configuration", {}).get("name")
+                if desired and current and desired != current:
+                    logger.info(
+                        f"Machineconfigpool {role} has a new desired configuration "
+                        f"{desired}, currently on {current}"
+                    )
+                    return True
+            return False
+
+        logger.info(
+            f"Waiting up to {timeout}s for a MachineConfig rollout to start "
+            "after the CNV installation"
+        )
+        try:
+            for started in TimeoutSampler(
+                timeout=timeout, sleep=sleep, func=_rollout_started
+            ):
+                if started:
+                    return True
+        except TimeoutExpiredError:
+            logger.info(
+                "No MachineConfig rollout started within "
+                f"{timeout}s, the CNV installation did not trigger one on this "
+                "cluster"
+            )
+        return False
+
     def wait_for_cluster_stabilization(
         self, mcp_timeout=1900, ceph_tries=60, ceph_delay=30
     ):
@@ -725,14 +794,18 @@ class CNVInstaller(object):
                 to finish updating and for the nodes to become Ready again.
             ceph_tries (int): Number of ceph health check attempts.
             ceph_delay (int): Time in seconds between ceph health check attempts.
+                Note that ceph_health_check overrides this to 60 seconds on
+                IBM Power.
 
         Raises:
             ResourceWrongStatusException: If the nodes are not Ready within
                 mcp_timeout.
             CephHealthException: If ceph does not reach HEALTH_OK within
-                ceph_tries * ceph_delay seconds.
+                ceph_tries attempts.
 
         """
+        self.wait_for_machineconfig_rollout_to_start()
+
         logger.info(
             "Waiting for the MachineConfig rollout triggered by the CNV "
             "installation to complete"
@@ -750,9 +823,16 @@ class CNVInstaller(object):
             )
             return
 
+        # ceph_health_check overrides the delay to 60s on IBM Power, so derive
+        # the bound we log from the delay it will actually use
+        effective_delay = (
+            60
+            if config.ENV_DATA["platform"].lower() == constants.IBM_POWER_PLATFORM
+            else ceph_delay
+        )
         logger.info(
-            f"Waiting up to {ceph_tries * ceph_delay}s for ceph health to recover "
-            "from the node reboots"
+            f"Waiting up to {ceph_tries * effective_delay}s for ceph health to "
+            "recover from the node reboots"
         )
         ceph_health_check(
             namespace=config.ENV_DATA["cluster_namespace"],
