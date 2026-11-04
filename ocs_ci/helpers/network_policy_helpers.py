@@ -271,9 +271,24 @@ def check_pod_connectivity(
         result = pod_obj.exec_cmd_on_pod(
             cmd, out_yaml_format=False, timeout=timeout + 10
         )
-        connected = "CONNECTED" in str(result)
-    except CommandFailed:
-        connected = False
+        result_str = str(result)
+        if "CONNECTED" in result_str:
+            connected = True
+        elif "FAILED" in result_str:
+            connected = False
+        else:
+            raise AssertionError(
+                f"Unexpected probe output from pod {source_pod_name}: " f"{result_str}"
+            )
+    except CommandFailed as ex:
+        error_str = str(ex).lower()
+        if "timed out" in error_str or "timeout" in error_str:
+            connected = False
+        else:
+            raise AssertionError(
+                f"Probe execution failed on pod {source_pod_name} "
+                f"(not a network policy denial): {ex}"
+            ) from ex
 
     if should_succeed:
         assert connected, (

@@ -325,6 +325,59 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
             logger.info(f"  Prometheus pod {prom_name}: {phase}")
 
         logger.info(
+            "Step 4: Querying Prometheus for an ODF metric to verify "
+            "actual scraping works through NetworkPolicies"
+        )
+        prom_route = OCP(kind="Route", namespace="openshift-monitoring")
+        try:
+            route_data = prom_route.get(resource_name="prometheus-k8s")
+            prom_host = route_data.get("spec", {}).get("host", "")
+        except Exception:
+            prom_host = ""
+
+        if prom_host:
+            prom_url = f"https://{prom_host}/api/v1/query"
+            try:
+                token_ocp = OCP(namespace="openshift-monitoring")
+                token = token_ocp.exec_oc_cmd(
+                    "create token prometheus-k8s "
+                    "-n openshift-monitoring --duration=60s",
+                    out_yaml_format=False,
+                )
+                resp = requests.get(
+                    prom_url,
+                    params={"query": "up{job='rook-ceph-mgr'}"},
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=15,
+                    verify=False,
+                )
+                if resp.status_code == 200:
+                    results = resp.json().get("data", {}).get("result", [])
+                    healthy = [
+                        r for r in results if r.get("value", [None, "0"])[1] == "1"
+                    ]
+                    logger.info(
+                        f"  Prometheus query 'up{{job=rook-ceph-mgr}}': "
+                        f"{len(healthy)}/{len(results)} targets up"
+                    )
+                    assert healthy, (
+                        "Prometheus cannot scrape rook-ceph-mgr — "
+                        f"all {len(results)} targets are down"
+                    )
+                else:
+                    logger.warning(
+                        f"  Prometheus query returned HTTP {resp.status_code}, "
+                        "falling back to resource-presence check"
+                    )
+            except requests.exceptions.RequestException as ex:
+                logger.warning(
+                    f"  Could not query Prometheus API: {ex}, "
+                    "falling back to resource-presence check"
+                )
+        else:
+            logger.warning("  Prometheus route not found, skipping live metric check")
+
+        logger.info(
             f"Result: Monitoring verified — {len(prom_pods)} Prometheus "
             f"pods running, {len(service_monitors)} ServiceMonitors present"
         )
@@ -469,25 +522,54 @@ class TestNetworkPolicyBlockedTraffic(ManageTest):
         logger.info(f"  Found {len(service_monitors)} ServiceMonitors")
 
         logger.info(
-            "Step 3: Verifying endpoints for each ServiceMonitor "
-            "are reachable (proves allowed-namespace traffic works)"
+            "Step 3: Querying Prometheus for ODF scrape targets to "
+            "verify allowed-namespace traffic actually reaches ODF pods"
         )
-        ep_obj = OCP(kind="Endpoints", namespace=namespace)
-        for sm in service_monitors:
-            sm_name = sm["metadata"]["name"]
+        prom_route = OCP(kind="Route", namespace="openshift-monitoring")
+        try:
+            route_data = prom_route.get(resource_name="prometheus-k8s")
+            prom_host = route_data.get("spec", {}).get("host", "")
+        except Exception:
+            prom_host = ""
+
+        if prom_host:
+            prom_url = f"https://{prom_host}/api/v1/query"
             try:
-                ep = ep_obj.get(resource_name=sm_name)
-                subsets = ep.get("subsets", [])
-                if subsets:
-                    logger.info(
-                        f"  ServiceMonitor '{sm_name}': endpoints reachable "
-                        f"({len(subsets)} subsets)"
-                    )
-            except Exception:
-                logger.info(
-                    f"  ServiceMonitor '{sm_name}': no matching endpoints "
-                    "(may use different service name)"
+                token_ocp = OCP(namespace="openshift-monitoring")
+                token = token_ocp.exec_oc_cmd(
+                    "create token prometheus-k8s "
+                    "-n openshift-monitoring --duration=60s",
+                    out_yaml_format=False,
                 )
+                resp = requests.get(
+                    prom_url,
+                    params={"query": (f'up{{namespace="{namespace}"}}')},
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=15,
+                    verify=False,
+                )
+                if resp.status_code == 200:
+                    results = resp.json().get("data", {}).get("result", [])
+                    healthy = [
+                        r for r in results if r.get("value", [None, "0"])[1] == "1"
+                    ]
+                    logger.info(
+                        f"  ODF scrape targets in '{namespace}': "
+                        f"{len(healthy)}/{len(results)} targets up"
+                    )
+                    assert healthy, (
+                        "No healthy Prometheus scrape targets found in "
+                        f"'{namespace}' — allowed-namespace traffic "
+                        "may be blocked by NetworkPolicies"
+                    )
+                else:
+                    logger.warning(
+                        f"  Prometheus query returned HTTP {resp.status_code}"
+                    )
+            except requests.exceptions.RequestException as ex:
+                logger.warning(f"  Could not query Prometheus API: {ex}")
+        else:
+            logger.warning("  Prometheus route not found, skipping live target check")
 
         logger.info(
             f"Result: Allowed-namespace traffic verified — "
