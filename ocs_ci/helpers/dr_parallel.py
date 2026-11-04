@@ -50,20 +50,14 @@ class WorkloadResult:
     """
     Outcome of one workload in a parallel run.
 
-    Attributes:
-        name (str): Workload label, e.g. 'rbd' or 'cephfs'
-        status (str): PASS, FAIL or SKIP
-        failed_stage (str): Name of the stage in which the workload stopped
-        error (BaseException): The exception which stopped the workload
-        stages (dict): Stage name -> (status, duration in seconds)
-
     """
 
-    name: str
-    status: str = PASS
-    failed_stage: str = ""
-    error: BaseException = None
-    stages: dict = field(default_factory=dict)
+    name: str  # Workload label, e.g. 'rbd' or 'cephfs'
+    status: str = PASS  # PASS, FAIL or SKIP
+    failed_stage: str = ""  # Name of the stage in which the workload stopped
+    error: BaseException = None  # The exception which stopped the workload
+    stages: dict = field(default_factory=dict)  # Stage name -> (status, seconds)
+    finished_at: float = 0.0  # Time the workload stopped (failed/skipped)
 
 
 @dataclass
@@ -72,28 +66,17 @@ class InterfaceGroup:
     Workloads of one PVC interface (RBD or CephFS) together with the DR details
     that are looked up once and reused by every stage of a parallel test.
 
-    Attributes:
-        name (str): Label used in logs/report ('rbd' or 'cephfs')
-        pvc_interface (str): constants.CEPHBLOCKPOOL or constants.CEPHFILESYSTEM
-        workloads (list): Deployed workload objects of this interface
-        drpc_objs (list): DRPC object of each workload, same order
-        primary (str): Primary cluster name
-        secondary (str): Secondary cluster name
-        scheduling_interval (int): DRPolicy scheduling interval in minutes
-        cg_cephfs_enabled (bool): Consistency groups enabled for CephFS
-        last_sync_times (list): Last lastGroupSyncTime value of each DRPC
-
     """
 
-    name: str
-    pvc_interface: str
-    workloads: list = field(default_factory=list)
-    drpc_objs: list = field(default_factory=list)
-    primary: str = ""
-    secondary: str = ""
-    scheduling_interval: int = 0
-    cg_cephfs_enabled: bool = False
-    last_sync_times: list = field(default_factory=list)
+    name: str  # Label used in logs/report ('rbd' or 'cephfs')
+    pvc_interface: str  # constants.CEPHBLOCKPOOL or constants.CEPHFILESYSTEM
+    workloads: list = field(default_factory=list)  # Deployed workload objects
+    drpc_objs: list = field(default_factory=list)  # DRPC of each workload, same order
+    primary: str = ""  # Primary cluster name
+    secondary: str = ""  # Secondary cluster name
+    scheduling_interval: int = 0  # DRPolicy scheduling interval in minutes
+    cg_cephfs_enabled: bool = False  # Consistency groups enabled for CephFS
+    last_sync_times: list = field(default_factory=list)  # lastGroupSyncTime per DRPC
 
     @property
     def is_cephfs(self):
@@ -115,6 +98,7 @@ class ParallelWorkloadRunner:
         """
         self.workloads = dict(workloads)
         self.results = {name: WorkloadResult(name) for name in self.workloads}
+        self.started_at = time.time()
 
     @property
     def names(self):
@@ -209,6 +193,20 @@ class ParallelWorkloadRunner:
             result.status = status
             result.failed_stage = stage_name
             result.error = error
+            result.finished_at = time.time()
+
+    def duration(self, name):
+        """
+        Args:
+            name (str): The workload label
+
+        Returns:
+            float: Seconds from the start of the run until the workload
+                stopped (failed/skipped) or, when it did not, until now
+
+        """
+        end = self.results[name].finished_at or time.time()
+        return round(end - self.started_at, 2)
 
     def report(self):
         """
@@ -244,6 +242,22 @@ class ParallelWorkloadRunner:
             request.node.user_properties.append(
                 (f"workload_{name}", self.results[name].status)
             )
+
+    def add_call_duration(self, request, name):
+        """
+        Record the time the workload was running as the call duration of the
+        pytest item, for items which did not execute the run themselves (their
+        own call phase is almost instant). ``pytest_report_teststatus`` in
+        ``reports.py`` uses it for the test time report.
+
+        Args:
+            request (pytest.FixtureRequest): The test's request fixture
+            name (str): The workload label
+
+        """
+        request.node.user_properties.append(
+            (constants.CALL_DURATION_PROPERTY, self.duration(name))
+        )
 
     def assert_passed(self, name, owner=None):
         """
@@ -341,16 +355,11 @@ class _ParallelRun:
     """
     The one execution shared by the pytest items of a parallel test.
 
-    Attributes:
-        runner (ParallelWorkloadRunner): The runner that executed the flow
-        owner (str): Node ID of the item which executed it
-        pending (set): Interfaces whose pytest item did not report yet
-
     """
 
-    runner: ParallelWorkloadRunner
-    owner: str
-    pending: set
+    runner: ParallelWorkloadRunner  # The runner that executed the flow
+    owner: str  # Node ID of the item which executed it
+    pending: set  # Interfaces whose pytest item did not report yet
 
 
 _PARALLEL_RUNS = {}
@@ -448,6 +457,8 @@ def run_rbd_cephfs_test(request, execute):
         )
 
     run.runner.add_user_properties(request, [name])
+    if run.owner != item.nodeid:
+        run.runner.add_call_duration(request, name)
     run.pending.discard(name)
     if not run.pending:
         _PARALLEL_RUNS.pop(key, None)
