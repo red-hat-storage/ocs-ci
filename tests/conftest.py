@@ -1,3 +1,4 @@
+import ast
 import base64
 import copy
 import logging
@@ -6,6 +7,7 @@ import pandas as pd
 import random
 import secrets
 import string
+import subprocess
 import time
 import tempfile
 import threading
@@ -298,14 +300,202 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
+def get_test_signatures(source: str) -> dict[str, tuple[str, ...]]:
+    """
+    Return test syntax and the declarations used by its decorators.
+
+    Args:
+        source (str): Python source from a test module.
+
+    Returns:
+        dict: Test names mapped to syntax and inherited marker context.
+
+    Raises:
+        SyntaxError: If the source is not valid Python.
+
+    """
+
+    def declaration_context(declarations, bindings):
+        pending = {
+            part.id
+            for declaration in declarations
+            for part in ast.walk(declaration)
+            if isinstance(part, ast.Name)
+        }
+        used = {}
+        while pending:
+            name = pending.pop()
+            if name in used or name not in bindings:
+                continue
+            used[name] = tuple(ast.dump(value) for value in bindings[name])
+            pending.update(
+                part.id
+                for value in bindings[name]
+                for part in ast.walk(value)
+                if isinstance(part, ast.Name)
+            )
+        return tuple(f"{name}:{value}" for name in sorted(used) for value in used[name])
+
+    def collect_tests(definitions, prefix, context, bindings):
+        scope_bindings = dict(bindings)
+        markers = []
+        for definition in definitions:
+            if isinstance(definition, (ast.Import, ast.ImportFrom)):
+                for alias in definition.names:
+                    imported = copy.copy(definition)
+                    imported.names = [alias]
+                    name = alias.asname or alias.name.split(".", 1)[0]
+                    scope_bindings[name] = (imported,)
+            elif isinstance(definition, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                targets = (
+                    definition.targets
+                    if isinstance(definition, ast.Assign)
+                    else [definition.target]
+                )
+                names = {
+                    part.id
+                    for target in targets
+                    for part in ast.walk(target)
+                    if isinstance(part, ast.Name) and isinstance(part.ctx, ast.Store)
+                }
+                for name in names:
+                    previous = (
+                        scope_bindings.get(name, ())
+                        if isinstance(definition, ast.AugAssign)
+                        else ()
+                    )
+                    scope_bindings[name] = previous + (definition,)
+                if "pytestmark" in names:
+                    markers.append(definition)
+            elif isinstance(
+                definition, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            ):
+                scope_bindings[definition.name] = (definition,)
+        shared_context = (
+            context
+            + tuple(ast.dump(marker) for marker in markers)
+            + declaration_context(markers, scope_bindings)
+        )
+        signatures = {
+            f"{prefix}{name}": shared_context
+            + tuple(ast.dump(declaration) for declaration in declarations)
+            for name, declarations in scope_bindings.items()
+            if name.startswith(("test", "Test"))
+            and isinstance(declarations[-1], (ast.Import, ast.ImportFrom))
+        }
+        for definition in definitions:
+            if isinstance(definition, ast.ClassDef):
+                class_header = copy.copy(definition)
+                class_header.body = []
+                class_context = (
+                    shared_context
+                    + (ast.dump(class_header),)
+                    + declaration_context([class_header], scope_bindings)
+                )
+                signatures.update(
+                    collect_tests(
+                        definition.body,
+                        f"{prefix}{definition.name}::",
+                        class_context,
+                        scope_bindings,
+                    )
+                )
+            elif isinstance(
+                definition, (ast.FunctionDef, ast.AsyncFunctionDef)
+            ) and definition.name.startswith("test"):
+                signatures[f"{prefix}{definition.name}"] = (
+                    shared_context
+                    + declaration_context(definition.decorator_list, scope_bindings)
+                    + (ast.dump(definition),)
+                )
+        return signatures
+
+    return collect_tests(ast.parse(source).body, "", (), {})
+
+
+def get_changed_test_nodeids(items: list[pytest.Item], base_branch: str) -> set[str]:
+    """
+    Find changed collected tests relative to the target branch's merge base.
+
+    Args:
+        items (list): Collected pytest items, including parameter variants.
+        base_branch (str): Target branch name on the origin remote.
+
+    Returns:
+        set: Node IDs without parameter suffixes for new or changed tests.
+
+    Raises:
+        ValueError: If the target branch name is empty.
+        CalledProcessError: If Git cannot read the comparison history.
+        SyntaxError: If a compared Python file is not valid Python.
+
+    """
+    if not base_branch:
+        raise ValueError("A target branch is required for Polarion validation")
+    if not items:
+        return set()
+    collected_tests = {}
+    for item in items:
+        filename, _, name = item.nodeid.partition("::")
+        collected_tests.setdefault(filename, set()).add(name.split("[", 1)[0])
+    base_ref = f"refs/remotes/origin/{base_branch}"
+    merge_base = subprocess.check_output(
+        ["git", "merge-base", base_ref, "HEAD"], cwd=constants.TOP_DIR, text=True
+    ).strip()
+    changes = subprocess.check_output(
+        [
+            "git",
+            "diff",
+            "--name-status",
+            "--no-renames",
+            "--diff-filter=AM",
+            "-z",
+            merge_base,
+            "--",
+            "tests",
+        ],
+        cwd=constants.TOP_DIR,
+        text=True,
+    ).split("\0")
+    changed_tests = set()
+    for status, filename in zip(changes[::2], changes[1::2]):
+        if filename not in collected_tests or not filename.endswith(".py"):
+            continue
+        with open(
+            os.path.join(constants.TOP_DIR, filename), encoding="utf-8"
+        ) as source_file:
+            current = get_test_signatures(source_file.read())
+        previous = {}
+        if status != "A":
+            source = subprocess.check_output(
+                ["git", "show", f"{merge_base}:{filename}"],
+                cwd=constants.TOP_DIR,
+                text=True,
+            )
+            previous = get_test_signatures(source)
+        for name in collected_tests[filename]:
+            definition_name = name
+            while definition_name not in current and "::" in definition_name:
+                definition_name = definition_name.rsplit("::", 1)[0]
+            if (
+                definition_name not in current
+                or previous.get(definition_name) != current[definition_name]
+            ):
+                changed_tests.add(f"{filename}::{name}")
+    return changed_tests
+
+
 def verify_test_decorators_requirements(items):
     """
-    Verify that collected tests have the required squad and Polarion markers.
+    Validate squad markers and require Polarion markers on changed tests.
 
     Args:
         items: list of collected tests
 
     """
+    changed_tests = get_changed_test_nodeids(
+        items, os.environ.get("GITHUB_BASE_REF") or "master"
+    )
     items_without_squad_marker = {}
     items_without_polarion_marker = []
     red_no_mcg_or_rgw_items = {}
@@ -335,7 +525,10 @@ def verify_test_decorators_requirements(items):
                 log.debug("%s is a red_squad test without @mcg or @rgw", item.name)
                 red_no_mcg_or_rgw_items.update({item.name: item.fspath.strpath})
 
-            if "polarion_id" not in item_markers:
+            if (
+                item.nodeid.split("[", 1)[0] in changed_tests
+                and "polarion_id" not in item_markers
+            ):
                 items_without_polarion_marker.append(item.nodeid)
 
     err_msg = ""
@@ -364,7 +557,8 @@ Red squad tests are required to be decorated with either @mcg or @rgw. Please ad
         err_msg += f"""
 Missing polarion_id decorator for the following test items: {json.dumps(items_without_polarion_marker, indent=4)}
 
-Tests are required to have a polarion_id marker, for example @polarion_id("OCS-4483").
+Every collected case of a new or modified test must have a polarion_id marker.
+For example: @polarion_id("OCS-4483").
 The marker can be imported from `ocs_ci.framework.pytest_customization.marks`.
 
             """
