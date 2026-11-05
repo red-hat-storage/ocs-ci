@@ -47,6 +47,7 @@ from ocs_ci.utility.ocp_upgrade import (
 from ocs_ci.utility.multicluster import (
     get_multicluster_upgrade_parametrizer,
 )
+from ocs_ci.utility.prometheus import alert_collection
 from ocs_ci.utility.version import (
     get_semantic_ocp_running_version,
     VERSION_4_8,
@@ -111,7 +112,13 @@ class TestUpgradeOCP(ManageTest):
             )
 
     def test_upgrade_ocp(
-        self, zone_rank, role_rank, config_index, reduce_and_resume_cluster_load
+        self,
+        zone_rank,
+        role_rank,
+        config_index,
+        reduce_and_resume_cluster_load,
+        upgrade_stats,
+        threading_lock,
     ):
         """
         Tests OCS stability when upgrading OCP
@@ -146,7 +153,18 @@ class TestUpgradeOCP(ManageTest):
             ceph_cluster = CephCluster()
             health_monitor = CephHealthMonitor
 
-        with health_monitor(ceph_cluster):
+        # Collect alerts fired during the upgrade so that they can be checked
+        # by post upgrade test cases.
+        alert_collector = alert_collection(
+            threading_lock=threading_lock,
+            alert_list=upgrade_stats["ocp_upgrade"].setdefault("alerts", []),
+            status=upgrade_stats["ocp_upgrade"].setdefault("alert_collection", {}),
+            pre_existing_alert_list=upgrade_stats["ocp_upgrade"].setdefault(
+                "pre_existing_alerts", []
+            ),
+        )
+
+        with alert_collector, health_monitor(ceph_cluster):
             ocp_channel = config.UPGRADE.get(
                 "ocp_channel", ocp.get_ocp_upgrade_channel()
             )
