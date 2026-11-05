@@ -12,6 +12,7 @@ FIPS 140-2 approved; use the ``skipif_fips_enabled`` pytest mark on tests that
 rely on those algorithms.
 """
 
+import copy
 import csv
 import io
 import json
@@ -989,6 +990,90 @@ class TLSProfile:
                 self.name,
             )
 
+    def apply_rules(self, rules, do_reload=True, metadata=None, spec=None):
+        """
+        Replace spec.rules, creating the TLSProfile if it is absent.
+
+        When recreating a missing CR, ``metadata`` and ``spec`` restore
+        user-managed fields (labels, annotations, and non-rules spec) from a
+        prior snapshot. ``rules`` always wins over ``spec["rules"]``.
+
+        Args:
+            rules (list): spec.rules value to apply.
+            do_reload (bool): Reload OCS object after create when the CR is missing.
+            metadata (dict): Optional user-managed metadata to restore on create
+                or merge-patch (labels, annotations, and other non-system keys).
+            spec (dict): Optional full spec to restore; ``rules`` overwrites
+                ``spec["rules"]``.
+        """
+        rules = copy.deepcopy(list(rules))
+        spec_body = copy.deepcopy(spec) if spec is not None else {}
+        spec_body["rules"] = rules
+        meta = {"name": self.name, "namespace": self.namespace}
+        if metadata:
+            extra_meta = copy.deepcopy(metadata)
+            extra_meta.pop("name", None)
+            extra_meta.pop("namespace", None)
+            meta.update(extra_meta)
+            meta["name"] = self.name
+            meta["namespace"] = self.namespace
+        if not self.is_tls_profile_available(silent=True):
+            tls_resource = {
+                "apiVersion": self.API_VERSION,
+                "kind": self.KIND,
+                "metadata": meta,
+                "spec": spec_body,
+            }
+            log.info(f"Creating {self.KIND} {self.name} in namespace {self.namespace}")
+            OCS(**tls_resource).create(do_reload=do_reload)
+            return
+        patch = {"spec": spec_body}
+        if metadata:
+            patch_meta = copy.deepcopy(metadata)
+            patch_meta.pop("name", None)
+            patch_meta.pop("namespace", None)
+            if patch_meta:
+                patch["metadata"] = patch_meta
+        patched = self._ocp.patch(
+            resource_name=self.name,
+            params=json.dumps(patch),
+            format_type="merge",
+        )
+        if not patched:
+            log.warning(
+                "oc patch for %s did not report success; validating via get",
+                self.name,
+            )
+
+
+_TLS_PROFILE_SYSTEM_METADATA_KEYS = (
+    "uid",
+    "resourceVersion",
+    "generation",
+    "creationTimestamp",
+    "deletionTimestamp",
+    "deletionGracePeriodSeconds",
+    "managedFields",
+    "selfLink",
+    "ownerReferences",
+)
+
+
+def _tlsprofile_user_managed_fields(data):
+    """
+    Return user-managed metadata and spec from a TLSProfile object.
+
+    Drops controller/system metadata so a later create/patch can restore labels,
+    annotations, and the full spec without resourceVersion/uid conflicts.
+    """
+    metadata = copy.deepcopy(data.get("metadata") or {})
+    for key in _TLS_PROFILE_SYSTEM_METADATA_KEYS:
+        metadata.pop(key, None)
+    return {
+        "metadata": metadata,
+        "spec": copy.deepcopy(data.get("spec") or {}),
+    }
+
 
 def tlsprofile_crd_exists():
     """Return True if tlsprofiles.ocs.openshift.io CRD is installed."""
@@ -1106,3 +1191,369 @@ def wait_for_cephobjectstore_security_cleared(
         return len(ciphers) == 0 and len(groups) == 0
 
     TimeoutSampler(timeout, sleep, _cleared).wait_for_func_value(True)
+
+
+# ocs-operator sets this on every successful StorageCluster reconcile.
+# https://github.com/red-hat-storage/ocs-operator/blob/main/api/v1/storagecluster_types.go
+_RECONCILE_COMPLETE_CONDITION = "ReconcileComplete"
+
+
+def _optional_int(value):
+    """Return ``value`` as int, or None when it is missing or not numeric."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _generation_changed(before, after):
+    """
+    Return True when metadata.generation moved because of this patch.
+
+    A missing baseline (the object was created by the patch) counts as a change.
+    A missing current generation does not.
+    """
+    after_generation = _optional_int(after)
+    if after_generation is None:
+        return False
+    before_generation = _optional_int(before)
+    if before_generation is None:
+        return True
+    return after_generation != before_generation
+
+
+def _observed_generation_current(generation, observed):
+    """Return True when status.observedGeneration has caught metadata.generation."""
+    generation_i = _optional_int(generation)
+    observed_i = _optional_int(observed)
+    if generation_i is None or observed_i is None:
+        return False
+    return observed_i >= generation_i
+
+
+def _reconcile_complete_condition(status):
+    """Return the ReconcileComplete heartbeat fields, or None when absent."""
+    for condition in (status or {}).get("conditions") or []:
+        if condition.get("type") == _RECONCILE_COMPLETE_CONDITION:
+            return {
+                "status": condition.get("status"),
+                "lastHeartbeatTime": condition.get("lastHeartbeatTime"),
+                "lastTransitionTime": condition.get("lastTransitionTime"),
+            }
+    return None
+
+
+def _reconcile_complete_updated(before, current):
+    """
+    Return True when ReconcileComplete was written again after ``before``.
+
+    openshift/custom-resource-status documents ``lastHeartbeatTime`` as the
+    last time that condition was updated. ``SetStatusCondition`` refreshes it
+    on every write, including when status, reason, and message stay the same.
+    ocs-operator ``SetCompleteCondition`` sets ReconcileComplete=True at the
+    end of a successful reconcile, and ``Reconcile`` persists that status.
+
+    ``lastTransitionTime`` moves only when the condition status changes. An
+    already Ready StorageCluster stays Ready through a TLSProfile reconcile, so
+    phase and lastTransitionTime are not a reliable signal by themselves.
+    """
+    if not current:
+        return False
+    before = before or {}
+    heartbeat = current.get("lastHeartbeatTime")
+    if heartbeat and heartbeat != before.get("lastHeartbeatTime"):
+        return True
+    transition = current.get("lastTransitionTime")
+    if transition and transition != before.get("lastTransitionTime"):
+        return True
+    return False
+
+
+def _storage_cluster_reconcile_reached(baseline, current):
+    """
+    Return True when ``current`` shows the reconcile started by this patch.
+
+    Use ``status.observedGeneration`` only when the patch changed that object's
+    metadata.generation and the field is present. Neither StorageCluster nor
+    TLSProfile publishes observedGeneration today; then require ReconcileComplete
+    to be written again. A phase change alone is not success.
+    """
+    if (
+        _generation_changed(
+            baseline.get("profile_generation"), current.get("profile_generation")
+        )
+        and current.get("profile_observed_generation") is not None
+    ):
+        return _observed_generation_current(
+            current.get("profile_generation"),
+            current.get("profile_observed_generation"),
+        )
+    if (
+        _generation_changed(
+            baseline.get("cluster_generation"), current.get("cluster_generation")
+        )
+        and current.get("cluster_observed_generation") is not None
+    ):
+        return _observed_generation_current(
+            current.get("cluster_generation"),
+            current.get("cluster_observed_generation"),
+        )
+    return _reconcile_complete_updated(
+        baseline.get("reconcile_complete"), current.get("reconcile_complete")
+    )
+
+
+def _tls_profile_blocked_by_fips(fips_value):
+    """
+    Return True only for boolean True and the string ``\"true\"``.
+
+    Other values, including ``\"false\"``, ``\"True\"``, ``False``, and ``1``,
+    keep the previous behavior and do not block TLSProfile apply.
+    """
+    return fips_value is True or fips_value == "true"
+
+
+def _read_reconcile_snapshot(storage_cluster, tls_profile):
+    """Read StorageCluster and TLSProfile fields used to detect reconcile."""
+    storage_cluster.reload_data()
+    data = storage_cluster.data or {}
+    status = data.get("status") or {}
+    if tls_profile.is_tls_profile_available(silent=True):
+        profile = tls_profile.get_tls_profile() or {}
+        profile_generation = (profile.get("metadata") or {}).get("generation")
+        profile_observed = (profile.get("status") or {}).get("observedGeneration")
+    else:
+        profile_generation = None
+        profile_observed = None
+    return {
+        "cluster_generation": (data.get("metadata") or {}).get("generation"),
+        "cluster_observed_generation": status.get("observedGeneration"),
+        "phase": status.get("phase"),
+        "reconcile_complete": _reconcile_complete_condition(status),
+        "profile_generation": profile_generation,
+        "profile_observed_generation": profile_observed,
+    }
+
+
+def _capture_storage_cluster_reconcile_baseline(storage_cluster, tls_profile):
+    """Snapshot reconcile signals immediately before the TLSProfile patch."""
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    baseline = _read_reconcile_snapshot(storage_cluster, tls_profile)
+    log.info(
+        f"StorageCluster {storage_cluster_name} reconcile baseline before "
+        f"TLSProfile apply: phase={baseline.get('phase')} "
+        f"generation={baseline.get('cluster_generation')} "
+        f"observedGeneration={baseline.get('cluster_observed_generation')} "
+        f"ReconcileComplete={baseline.get('reconcile_complete')} "
+        f"tlsProfileGeneration={baseline.get('profile_generation')} "
+        f"tlsProfileObservedGeneration={baseline.get('profile_observed_generation')}"
+    )
+    return baseline
+
+
+def _wait_for_storage_cluster_reconcile_to_start(
+    baseline, tls_profile, storage_cluster, timeout=300, sleep=10
+):
+    """
+    Wait until a reconcile signal captured before the patch moves.
+
+    When the patch changes TLSProfile or StorageCluster generation and that
+    object reports ``status.observedGeneration``, wait for observedGeneration
+    to catch the new generation. Otherwise wait until the ReconcileComplete
+    condition heartbeat or transition differs from ``baseline``.
+
+    ``status.phase`` is logged and is not a success condition. An already
+    Ready StorageCluster stays Ready for a TLSProfile reconcile. Timeout is a
+    failure.
+
+    Args:
+        baseline (dict): Snapshot from
+            :func:`_capture_storage_cluster_reconcile_baseline`.
+        tls_profile (TLSProfile): Profile that was just applied.
+        storage_cluster (StorageCluster): Cluster whose reconcile is being watched.
+        timeout (int): Seconds to wait for the signal to move.
+        sleep (int): Seconds between reads. Must be smaller than ``timeout``.
+
+    Raises:
+        UnexpectedBehaviour: If the reconcile signal does not move in time.
+    """
+    from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    log.info(
+        f"Waiting up to {timeout}s for StorageCluster {storage_cluster_name} "
+        "to reconcile after TLSProfile apply"
+    )
+    last_summary = {"value": None}
+
+    def _reconcile_started():
+        current = _read_reconcile_snapshot(storage_cluster, tls_profile)
+        summary = (
+            f"phase={current.get('phase')} "
+            f"generation={current.get('cluster_generation')} "
+            f"observedGeneration={current.get('cluster_observed_generation')} "
+            f"ReconcileComplete={current.get('reconcile_complete')} "
+            f"tlsProfileGeneration={current.get('profile_generation')} "
+            f"tlsProfileObservedGeneration="
+            f"{current.get('profile_observed_generation')}"
+        )
+        if summary != last_summary["value"]:
+            log.info(
+                f"StorageCluster {storage_cluster_name} reconcile status: {summary}"
+            )
+            last_summary["value"] = summary
+        return _storage_cluster_reconcile_reached(baseline, current)
+
+    try:
+        for started in TimeoutSampler(timeout, sleep, _reconcile_started):
+            if started:
+                break
+    except TimeoutExpiredError as exc:
+        raise UnexpectedBehaviour(
+            f"StorageCluster {storage_cluster_name} did not record a reconcile "
+            f"within {timeout}s after TLSProfile apply "
+            f"(last status: {last_summary['value']})"
+        ) from exc
+    log.info(
+        f"StorageCluster {storage_cluster_name} reconcile recorded "
+        f"({last_summary['value']})"
+    )
+
+
+def apply_tls_profile_after_deployment():
+    """
+    Apply the configured TLSProfile after a successful ODF deployment.
+
+    No-op unless ``ENV_DATA.enable_tls_profile`` is true. ODF versions older
+    than 4.22, and FIPS-enabled deployments (``fips`` is boolean True or
+    ``\"true\"``), are skipped. Otherwise load
+    ``ENV_DATA.tls_profile_config_path``
+    and apply it with :meth:`TLSProfile.apply_rules`. Wait for that version with
+    :func:`wait_for_tlsprofile_config_version`. Before the patch, snapshot
+    StorageCluster generation, ``status.observedGeneration`` when present, and
+    the ReconcileComplete condition. After the patch, wait for observedGeneration
+    to catch a generation change, or for ReconcileComplete to be written again.
+    Timeout is a failure. Then wait for Ready again with
+    :func:`ocs_ci.ocs.resources.storage_cluster.verify_storage_cluster`. After
+    reconcile, ``oc get`` must still show the TLSProfile at that version.
+    """
+    if not config.ENV_DATA.get("enable_tls_profile"):
+        return
+    if _tls_profile_blocked_by_fips(config.ENV_DATA.get("fips")):
+        log.warning(
+            "Skipping TLSProfile apply: enable_tls_profile is set, but "
+            "TLSProfile is not supported on FIPS-enabled deployments"
+        )
+        return
+
+    from ocs_ci.ocs.exceptions import (
+        CommandFailed,
+        ConfigurationError,
+        ResourceNotFoundError,
+        UnexpectedBehaviour,
+    )
+    from ocs_ci.ocs.resources.storage_cluster import (
+        StorageCluster,
+        verify_storage_cluster,
+    )
+    from ocs_ci.utility import templating, version
+
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version < version.VERSION_4_22:
+        log.warning(
+            "Skipping TLSProfile apply: enable_tls_profile is set, but "
+            f"ODF {ocs_version} is older than 4.22"
+        )
+        return
+
+    config_path = config.ENV_DATA.get("tls_profile_config_path")
+    if not config_path:
+        raise ConfigurationError(
+            "enable_tls_profile is true but ENV_DATA.tls_profile_config_path is not set"
+        )
+    resolved_path = (
+        config_path
+        if os.path.isabs(config_path)
+        else os.path.join(constants.TOP_DIR, config_path)
+    )
+    if not os.path.isfile(resolved_path):
+        raise ConfigurationError(f"TLSProfile config file not found: {resolved_path}")
+    if not tlsprofile_crd_exists():
+        raise ConfigurationError(
+            "enable_tls_profile is true, but CRD tlsprofiles.ocs.openshift.io "
+            "is not installed"
+        )
+
+    tls_data = templating.load_yaml(resolved_path) or {}
+    if tls_data.get("kind") != TLSProfile.KIND:
+        raise ConfigurationError(
+            f"TLSProfile config {resolved_path} has kind {tls_data.get('kind')!r}, "
+            f"expected {TLSProfile.KIND}"
+        )
+    managed = _tlsprofile_user_managed_fields(tls_data)
+    rules = (managed.get("spec") or {}).get("rules") or []
+    if not isinstance(rules, list) or not rules:
+        raise ConfigurationError(f"TLSProfile config {resolved_path} has no spec.rules")
+    expected_version = (rules[0].get("config") or {}).get("version")
+    if not expected_version:
+        raise ConfigurationError(
+            f"TLSProfile config {resolved_path} has no spec.rules[0].config.version"
+        )
+
+    file_namespace = (managed.get("metadata") or {}).get("namespace")
+    namespace = config.ENV_DATA.get("cluster_namespace") or file_namespace
+    if file_namespace and namespace and file_namespace != namespace:
+        log.info(
+            f"TLSProfile manifest namespace {file_namespace} does not match "
+            f"cluster namespace {namespace}; applying in {namespace}"
+        )
+    name = (managed.get("metadata") or {}).get("name") or "ocs-tls-profile"
+    tls_profile = TLSProfile(name=name, namespace=namespace)
+    log.info(
+        f"Applying TLSProfile {tls_profile.name} in namespace "
+        f"{tls_profile.namespace} from {resolved_path}"
+    )
+    storage_cluster = StorageCluster(
+        resource_name=config.ENV_DATA["storage_cluster_name"],
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    reconcile_baseline = _capture_storage_cluster_reconcile_baseline(
+        storage_cluster, tls_profile
+    )
+    tls_profile.apply_rules(
+        rules,
+        metadata=managed.get("metadata"),
+        spec=managed.get("spec"),
+    )
+    wait_for_tlsprofile_config_version(tls_profile, expected_version)
+    log.info(
+        f"TLSProfile {tls_profile.name} is applied with version {expected_version}"
+    )
+    _wait_for_storage_cluster_reconcile_to_start(
+        reconcile_baseline, tls_profile, storage_cluster
+    )
+    log.info("Waiting for StorageCluster to reach Ready after TLSProfile reconcile")
+    verify_storage_cluster()
+    log.info(
+        f"Verifying TLSProfile {tls_profile.name} in namespace "
+        f"{tls_profile.namespace} with oc get"
+    )
+    try:
+        tls_profile.get_tls_profile()
+    except CommandFailed as exc:
+        raise ResourceNotFoundError(
+            f"TLSProfile {tls_profile.name} in namespace {tls_profile.namespace} "
+            "is not showing after StorageCluster reconcile"
+        ) from exc
+    actual_version = tls_profile.get_config_version()
+    if actual_version != expected_version:
+        raise UnexpectedBehaviour(
+            f"TLSProfile {tls_profile.name} get shows version {actual_version!r}, "
+            f"expected {expected_version!r}"
+        )
+    log.info(
+        f"TLSProfile {tls_profile.name} get shows version {actual_version} "
+        "after StorageCluster reconcile"
+    )
