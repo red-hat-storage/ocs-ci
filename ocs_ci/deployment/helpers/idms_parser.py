@@ -178,3 +178,72 @@ def extract_image_content_sources(idms_json_dict):
         seen.add(key)
         deduped.append(entry)
     return deduped
+
+
+def convert_idms_to_registries_conf(idms_json_dict):
+    """
+    Convert ImageDigestMirrorSet to registries.conf format for use with oc mirror.
+
+    This function converts IDMS rules extracted from the ocs-registry image to the
+    TOML format used by containers/image registries.conf files. The generated
+    configuration is used locally by oc mirror to apply mirror redirects during
+    the mirroring process.
+
+    Args:
+        idms_json_dict (dict): Either:
+            - Output of 'oc get imagedigestmirrorsets -o json' parsed as dict (with "items" list)
+            - A single ImageDigestMirrorSet resource dict (without "items" wrapper)
+
+    Returns:
+        str: registries.conf content in TOML format, or empty string if no IDMS provided
+
+    Example output format:
+        # Generated automatically from ImageDigestMirrorSet configuration
+
+        [[registry]]
+        prefix = "registry.redhat.io/ocs4"
+        location = "registry.redhat.io/ocs4"
+        [[registry.mirror]]
+        location = "mirror.example.com:5000/redhat/ocs4"
+    """
+    if not idms_json_dict:
+        logger.warning("No IDMS provided, returning empty registries.conf content")
+        return ""
+
+    # Check if this is a single IDMS resource or a list with "items"
+    if idms_json_dict.get("kind") == "ImageDigestMirrorSet":
+        # Single IDMS resource - wrap it in the expected format
+        idms_json_dict = {"apiVersion": "v1", "kind": "List", "items": [idms_json_dict]}
+    elif not idms_json_dict.get("items"):
+        logger.warning(
+            "IDMS dict has no items, returning empty registries.conf content"
+        )
+        return ""
+
+    idms_obj = parse_image_digest_mirror_set(idms_json_dict)
+
+    # Build registries.conf content in TOML format
+    toml_lines = ["# Generated automatically from ImageDigestMirrorSet configuration\n"]
+
+    for item in idms_obj.items:
+        for mirror_rule in item.spec.imageDigestMirrors:
+            source = mirror_rule.source
+            mirrors = mirror_rule.mirrors
+
+            if not source:
+                continue
+
+            # Format block using valid TOML arrays of tables
+            toml_lines.append("[[registry]]")
+            toml_lines.append(f'prefix = "{source}"')
+            toml_lines.append(f'location = "{source}"')
+
+            for mirror in mirrors:
+                toml_lines.append("[[registry.mirror]]")
+                toml_lines.append(f'location = "{mirror}"')
+
+            toml_lines.append("")  # Spacing between registry blocks
+
+    result = "\n".join(toml_lines)
+    logger.info("Generated registries.conf with mirror configuration from IDMS")
+    return result

@@ -6,12 +6,14 @@ import glob
 import logging
 import os
 from pathlib import Path
+import shutil
 import tempfile
 
 import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.disconnected import get_oc_mirror_tool, get_opm_tool
+from ocs_ci.deployment.helpers.idms_parser import convert_idms_to_registries_conf
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, NotFoundError
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_default_sources
@@ -403,47 +405,48 @@ def mirror_index_image_via_oc_mirror(
         os.makedirs(os.path.expanduser("~/.docker/"), exist_ok=True)
         os.symlink(pull_secret_path, os.path.expanduser(docker_config_file))
 
-    # Configure registries.conf if requested (for FDF internal images)
-    if configure_registries:
+    # Track generated registries.conf file for cleanup
+    generated_registries_conf_file = None
+
+    # Configure registries.conf for mirror redirects
+    # This can be from a static template (FDF) or dynamically generated from IDMS (ODF unreleased)
+    registries_content = None
+    conf_file_name = None
+
+    if (
+        configure_registries
+        and registries_template
+        and os.path.exists(registries_template)
+    ):
+        # Use static template for FDF internal images
         logger.info(
-            "Configuring registry mirrors for internal images using registries.conf.d/"
+            "Configuring registry mirrors from template using registries.conf.d/"
         )
-        if registries_template and os.path.exists(registries_template):
-            try:
-                with open(registries_template, "r") as f:
-                    registries_content = f.read()
+        with open(registries_template, "r") as f:
+            registries_content = f.read()
+        conf_file_name = "ocs-ci-fdf-mirrors.conf"
+    elif idms:
+        # Convert IDMS to registries.conf format for unreleased images
+        logger.info("Configuring registry mirrors from IDMS using registries.conf.d/")
+        registries_content = convert_idms_to_registries_conf(idms)
+        # Use run_id to make filename unique for parallel runs
+        conf_file_name = f"ocs-ci-idms-{config.RUN['run_id']}.conf"
 
-                # Use registries.conf.d/ directory
-                # Define the path cleanly using the / operator
-                registries_dir = (
-                    Path.home() / ".config" / "containers" / "registries.conf.d"
-                )
-                # to ensure the directory exists before using it
-                registries_dir.mkdir(parents=True, exist_ok=True)
+    if registries_content:
+        # Use registries.conf.d/ directory
+        registries_dir = Path.home() / ".config" / "containers" / "registries.conf.d"
+        registries_dir.mkdir(parents=True, exist_ok=True)
 
-                ocs_ci_conf_file = registries_dir / "ocs-ci-fdf-mirrors.conf"
+        ocs_ci_conf_file = registries_dir / conf_file_name
+        generated_registries_conf_file = ocs_ci_conf_file
 
-                # Create temporary file with registry configuration
-                temp_file_path = None
-                try:
-                    with tempfile.NamedTemporaryFile(
-                        mode="w", delete=False, suffix=".conf"
-                    ) as temp_file:
-                        temp_file.write(registries_content)
-                        temp_file_path = temp_file.name
+        # Write registry configuration directly
+        # Don't catch exceptions - fail fast if this critical setup fails
+        with open(ocs_ci_conf_file, "w") as f:
+            f.write(registries_content)
+        os.chmod(ocs_ci_conf_file, 0o644)
 
-                    # Copy to registries.conf.d/ directory and set readable permissions
-                    exec_cmd(f"cp {temp_file_path} {ocs_ci_conf_file}")
-                    exec_cmd(f"chmod 644 {ocs_ci_conf_file}")
-
-                    logger.info(
-                        f"Successfully configured registry mirrors at {ocs_ci_conf_file}"
-                    )
-                finally:
-                    if temp_file_path and os.path.exists(temp_file_path):
-                        os.unlink(temp_file_path)
-            except Exception as e:
-                logger.warning(f"Failed to configure registry mirrors: {e}")
+        logger.info(f"Successfully configured registry mirrors at {ocs_ci_conf_file}")
 
     # prepare imageset-config.yaml file
     imageset_config_data = templating.load_yaml(constants.OC_MIRROR_IMAGESET_CONFIG_V2)
@@ -486,117 +489,107 @@ def mirror_index_image_via_oc_mirror(
     # mirror required images
     logger.info(f"Mirror required images to mirror registry {target_mirror_url}")
 
-    cmd = (
-        f"oc mirror --config {imageset_config_file} "
-        f"docker://{target_mirror_url} "
-        "--workspace file://oc-mirror-workspace/results-files --v2 "
-        "--dest-tls-verify=false --image-timeout 30m "
-    )
+    # Mirror required images
+    # With registries.conf configured, oc mirror will apply IDMS rules automatically
+    # during the mirroring process, eliminating the need for a second dry-run pass
     try:
+        cmd = (
+            f"oc mirror --config {imageset_config_file} "
+            f"docker://{target_mirror_url} "
+            "--workspace file://oc-mirror-workspace/results-files --v2 "
+            "--dest-tls-verify=false --image-timeout 30m "
+        )
         exec_cmd(cmd, timeout=18000)
-    except CommandFailed:
-        # if idms is configured, the oc mirror command might fail (return non 0 rc),
-        # even though we use --continue-on-error and --skip-missing arguments
-        # (not sure if it is because of a bug in oc mirror plugin or because of some other issue),
-        # but we want to continue to try to mirror the images manually with applied the idms rules
-        if not idms:
-            raise
 
-    # look for manifests directory with Image mapping, CatalogSource and IDMS
-    # manifests
-    mirroring_manifests_dir = glob.glob("oc-mirror-workspace/results-*")
-    if not mirroring_manifests_dir:
-        raise NotFoundError(
-            "Manifests directory created by 'oc mirror ...' command not found."
-        )
-    mirroring_manifests_dir.sort(reverse=True)
-    mirroring_manifests_dir = mirroring_manifests_dir[0]
-    logger.debug(f"Mirrored manifests directory: {mirroring_manifests_dir}")
+        # look for manifests directory with Image mapping, CatalogSource and IDMS
+        # manifests
+        mirroring_manifests_dir = glob.glob("oc-mirror-workspace/results-*")
+        if not mirroring_manifests_dir:
+            raise NotFoundError(
+                "Manifests directory created by 'oc mirror ...' command not found."
+            )
+        mirroring_manifests_dir.sort(reverse=True)
+        mirroring_manifests_dir = mirroring_manifests_dir[0]
+        logger.debug(f"Mirrored manifests directory: {mirroring_manifests_dir}")
 
-    if idms:
-        cmd += " --dry-run"
-        # running the command again with --dry-run to get mapping file
-        # so that we can pass it and get the failed mirrors
-        exec_cmd(cmd, timeout=18000)
-        mapping_file = os.path.join(
+        # create ImageDigestMirrorSet
+        idms_file = os.path.join(
             f"{mirroring_manifests_dir}",
-            "working-dir/dry-run/mapping.txt",
-        )
-        with open(mapping_file, "r") as file:
-            lines = file.readlines()
-
-        # Remove 'docker://' from each line
-        updated_lines = [line.replace("docker://", "") for line in lines]
-
-        with open(mapping_file, "w") as file:
-            file.writelines(updated_lines)
-
-        mirror_images_from_mapping_file(mapping_file, idms=idms)
-
-    # create ImageDigestMirrorSet
-    idms_file = os.path.join(
-        f"{mirroring_manifests_dir}",
-        "working-dir/cluster-resources/idms-oc-mirror.yaml",
-    )
-
-    # make idms name unique - append run_id with configurable prefix
-    with open(idms_file) as f:
-        idms_content = yaml.safe_load(f)
-    idms_content["metadata"]["name"] = f"{idms_name_prefix}-{config.RUN['run_id']}"
-    with open(idms_file, "w") as f:
-        yaml.dump(idms_content, f)
-    exec_cmd(f"oc apply -f {idms_file}")
-
-    # create and apply ITMS for FDF catalog image tag resolution
-    if idms_name_prefix == "fdf":
-        itms_file = os.path.join(
-            f"{mirroring_manifests_dir}",
-            "working-dir/cluster-resources/itms-oc-mirror.yaml",
-        )
-        itms_name = (
-            f"isf-fdf-itms-{version_subpath}" if version_subpath else "isf-fdf-itms"
-        )
-        itms_content = {
-            "apiVersion": "config.openshift.io/v1",
-            "kind": "ImageTagMirrorSet",
-            "metadata": {
-                "name": itms_name,
-            },
-            "spec": {
-                "imageTagMirrors": [
-                    {
-                        "mirrors": [
-                            f"{target_mirror_url}/cpopen/isf-data-foundation-catalog"
-                        ],
-                        "source": "icr.io/cpopen/isf-data-foundation-catalog",
-                        "mirrorSourcePolicy": "AllowContactingSource",
-                    }
-                ]
-            },
-        }
-        with open(itms_file, "w") as f:
-            yaml.dump(itms_content, f)
-        logger.info(f"ImageTagMirrorSet written to {itms_file}")
-        exec_cmd(f"oc apply -f {itms_file}")
-
-    wait_for_machineconfigpool_status("all")
-
-    # get mirrored index image url from prepared catalogSource file
-    cs_file = glob.glob(
-        os.path.join(
-            f"{mirroring_manifests_dir}",
-            "working-dir/cluster-resources/cs*.yaml",
-        )
-    )
-    if not cs_file:
-        raise NotFoundError(
-            f"CatalogSource file not found in the '{mirroring_manifests_dir}'."
+            "working-dir/cluster-resources/idms-oc-mirror.yaml",
         )
 
-    with open(cs_file[0]) as f:
-        cs_content = yaml.safe_load(f)
+        # make idms name unique - append run_id with configurable prefix
+        with open(idms_file) as f:
+            idms_content = yaml.safe_load(f)
+        idms_content["metadata"]["name"] = f"{idms_name_prefix}-{config.RUN['run_id']}"
+        with open(idms_file, "w") as f:
+            yaml.dump(idms_content, f)
+        exec_cmd(f"oc apply -f {idms_file}")
 
-    return cs_content["spec"]["image"]
+        # create and apply ITMS for FDF catalog image tag resolution
+        if idms_name_prefix == "fdf":
+            itms_file = os.path.join(
+                f"{mirroring_manifests_dir}",
+                "working-dir/cluster-resources/itms-oc-mirror.yaml",
+            )
+            itms_name = (
+                f"isf-fdf-itms-{version_subpath}" if version_subpath else "isf-fdf-itms"
+            )
+            itms_content = {
+                "apiVersion": "config.openshift.io/v1",
+                "kind": "ImageTagMirrorSet",
+                "metadata": {
+                    "name": itms_name,
+                },
+                "spec": {
+                    "imageTagMirrors": [
+                        {
+                            "mirrors": [
+                                f"{target_mirror_url}/cpopen/isf-data-foundation-catalog"
+                            ],
+                            "source": "icr.io/cpopen/isf-data-foundation-catalog",
+                            "mirrorSourcePolicy": "AllowContactingSource",
+                        }
+                    ]
+                },
+            }
+            with open(itms_file, "w") as f:
+                yaml.dump(itms_content, f)
+            logger.info(f"ImageTagMirrorSet written to {itms_file}")
+            exec_cmd(f"oc apply -f {itms_file}")
+
+        wait_for_machineconfigpool_status("all")
+
+        # get mirrored index image url from prepared catalogSource file
+        cs_file = glob.glob(
+            os.path.join(
+                f"{mirroring_manifests_dir}",
+                "working-dir/cluster-resources/cs*.yaml",
+            )
+        )
+        if not cs_file:
+            raise NotFoundError(
+                f"CatalogSource file not found in the '{mirroring_manifests_dir}'."
+            )
+
+        with open(cs_file[0]) as f:
+            cs_content = yaml.safe_load(f)
+
+        return cs_content["spec"]["image"]
+    finally:
+        # Archive generated registries.conf file to logs directory for debugging/reference
+        if generated_registries_conf_file and os.path.exists(
+            generated_registries_conf_file
+        ):
+            try:
+                log_dir = config.RUN["log_dir"]
+                log_file = os.path.join(
+                    log_dir, os.path.basename(generated_registries_conf_file)
+                )
+                shutil.move(str(generated_registries_conf_file), log_file)
+                logger.info(f"Archived registries.conf to logs: {log_file}")
+            except Exception as e:
+                logger.warning(f"Failed to archive registries.conf file: {e}")
 
 
 def prepare_disconnected_ocs_deployment(upgrade=False):
