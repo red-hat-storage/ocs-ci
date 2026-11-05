@@ -1196,7 +1196,10 @@ def ocs_install_verification(
             f"Verified '{constants.INTERNAL_STORAGE_CONSUMER_NAME}' storage consumer resources"
         )
 
-    if config.DEPLOYMENT.get("network_policy_verification"):
+    if config.DEPLOYMENT.get("network_policy_verification") and not (
+        config.DEPLOYMENT.get("external_mode")
+        or config.ENV_DATA.get("mcg_only_deployment")
+    ):
         from ocs_ci.helpers.network_policy_helpers import (
             get_all_network_policies,
             verify_csv_network_policy_rbac,
