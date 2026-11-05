@@ -1406,6 +1406,10 @@ def validate_pdb_creation():
         AssertionError: If required PDBs were not created.
 
     """
+    if config.ENV_DATA.get("tnf"):
+        logger.info("Skipping PDB validation for TNF DualReplica cluster")
+        return
+
     pdb_obj = ocp.OCP(
         kind="PodDisruptionBudget", namespace=config.ENV_DATA["cluster_namespace"]
     )
