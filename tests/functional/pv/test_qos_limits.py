@@ -3,16 +3,23 @@ import json
 import logging
 import os
 import tempfile
+import time
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     ignore_leftovers,
+    kms_config_required,
     polarion_id,
     post_upgrade,
     pre_upgrade,
+    skipif_disconnected_cluster,
+    skipif_hci_provider_and_client,
+    skipif_managed_service,
     skipif_ocp_version,
     skipif_ocs_version,
+    skipif_proxy_cluster,
     tier1,
     tier2,
 )
@@ -20,8 +27,9 @@ from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
+from ocs_ci.ocs.node import verify_crypt_device_present_onnode
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import Pod, get_pod_obj
+from ocs_ci.ocs.resources.pod import Pod, get_plugin_pods, get_pod_obj
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
@@ -597,8 +605,11 @@ class TestVolumeAttributesClassQoS(ManageTest):
     ):
         """QoS class mapping on PVC-to-PVC volume cloning.
 
-        A cloned PVC must honour the VolumeAttributesClass patched onto the
-        clone itself, overriding whatever tier the source PVC carried.
+        Validates that VAC enforcement works correctly on cloned volumes:
+        1. Clone a PVC and explicitly bind Silver VAC to the cloned PVC.
+           Verify Silver VAC limits are enforced at the pod/node level.
+        2. Override the cloned PVC's VAC to Gold tier and verify the new limits
+           override the source's original limits.
         """
         test_id = "volume-cloning-vac-override"
         proj = project_factory()
@@ -626,7 +637,9 @@ class TestVolumeAttributesClassQoS(ManageTest):
             format_type="merge",
         )
 
-        logger.test_step(f"[{test_id}] Clone the source PVC")
+        logger.test_step(
+            f"[{test_id}] Clone the source PVC and explicitly bind Silver VAC"
+        )
         clone_pvc_dict = {
             "apiVersion": "v1",
             "kind": "PersistentVolumeClaim",
@@ -639,6 +652,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 "volumeMode": constants.VOLUME_MODE_FILESYSTEM,
                 "resources": {"requests": {"storage": "10Gi"}},
                 "storageClassName": get_rbd_storageclass(),
+                "volumeAttributesClassName": self.silver_vac_name,
                 "dataSource": {
                     "kind": "PersistentVolumeClaim",
                     "name": source_pvc_obj.name,
@@ -652,7 +666,59 @@ class TestVolumeAttributesClassQoS(ManageTest):
             cloned_pvc_obj, constants.STATUS_BOUND, timeout=300
         )
 
-        logger.test_step(f"[{test_id}] Override the clone with Gold VAC")
+        logger.test_step(
+            f"[{test_id}] Verify cloned PVC has Silver VAC set in manifest"
+        )
+        cloned_pvc_data = cloned_pvc_obj.get()
+        cloned_vac = cloned_pvc_data.get("spec", {}).get("volumeAttributesClassName")
+        logger.assertion(
+            f"[{test_id}] Cloned PVC VAC: expected={self.silver_vac_name}, actual={cloned_vac}"
+        )
+        assert (
+            cloned_vac == self.silver_vac_name
+        ), f"[{test_id}] Cloned PVC should have Silver VAC set, got {cloned_vac}"
+
+        logger.test_step(
+            f"[{test_id}] Deploy Guaranteed pod on cloned volume to verify Silver limits enforce"
+        )
+        pre_override_pod_dict = self._guaranteed_fs_pod_dict(
+            "cloned-silver-verify-pod", proj.namespace, cloned_pvc_obj.name
+        )
+        pre_override_pod_obj = Pod(**pre_override_pod_dict)
+        pre_override_pod_obj.create()
+        test_resources_cleanup["pods"].append(pre_override_pod_obj)
+        helpers.wait_for_resource_state(
+            pre_override_pod_obj, constants.STATUS_RUNNING, timeout=420
+        )
+
+        logger.test_step(
+            f"[{test_id}] Restart pod to remount and apply Silver VAC limits"
+        )
+        pre_override_pod_obj.delete()
+        pre_override_pod_obj.ocp.wait_for_delete(
+            resource_name=pre_override_pod_obj.name
+        )
+        pre_override_pod_obj = Pod(**pre_override_pod_dict)
+        pre_override_pod_obj.create()
+        test_resources_cleanup["pods"].append(pre_override_pod_obj)
+        helpers.wait_for_resource_state(
+            pre_override_pod_obj, constants.STATUS_RUNNING, timeout=420
+        )
+
+        logger.test_step(
+            f"[{test_id}] Verify Silver VAC limits are enforced on cloned volume"
+        )
+        self.verify_node_cgroup_throttling(pre_override_pod_obj, self.silver_limits)
+
+        logger.test_step(f"[{test_id}] Clean up pre-override pod for VAC transition")
+        pre_override_pod_obj.delete()
+        pre_override_pod_obj.ocp.wait_for_delete(
+            resource_name=pre_override_pod_obj.name
+        )
+
+        logger.test_step(
+            f"[{test_id}] Patch cloned PVC to override Silver VAC with Gold VAC"
+        )
         gold_patch = json.dumps(
             {"spec": {"volumeAttributesClassName": self.gold_vac_name}}
         )
@@ -662,19 +728,25 @@ class TestVolumeAttributesClassQoS(ManageTest):
             format_type="merge",
         )
 
-        logger.test_step(f"[{test_id}] Deploy Guaranteed pod on the cloned volume")
+        logger.test_step(
+            f"[{test_id}] Deploy new Guaranteed pod on the cloned volume with Gold VAC"
+        )
         pod_dict = self._guaranteed_fs_pod_dict(
-            "cloned-qos-pod", proj.namespace, cloned_pvc_obj.name
+            "cloned-gold-pod", proj.namespace, cloned_pvc_obj.name
         )
         pod_obj = Pod(**pod_dict)
         pod_obj.create()
         test_resources_cleanup["pods"].append(pod_obj)
         helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=420)
 
-        logger.test_step(f"[{test_id}] Verify Gold VAC limits govern the clone")
+        logger.test_step(
+            f"[{test_id}] Verify Gold VAC limits now govern the cloned volume, overriding Silver"
+        )
         self.verify_node_cgroup_throttling(pod_obj, self.gold_limits)
 
-        logger.test_step(f"[{test_id}] Validate active I/O on the cloned volume")
+        logger.test_step(
+            f"[{test_id}] Validate active I/O on the cloned volume under Gold limits"
+        )
         self._validate_filesystem_io(pod_obj, test_id)
 
     @tier2
@@ -863,6 +935,474 @@ class TestVolumeAttributesClassQoS(ManageTest):
 
         logger.test_step(f"[{test_id}] Validate active I/O on the restored volume")
         self._validate_filesystem_io(restored_pod_obj, test_id)
+
+    @tier2
+    @kms_config_required
+    @skipif_managed_service
+    @skipif_hci_provider_and_client
+    @skipif_disconnected_cluster
+    @skipif_proxy_cluster
+    @polarion_id("OCS-8344")
+    def test_qos_encrypted_volume_mapping(
+        self,
+        project_factory,
+        storageclass_factory,
+        pv_encryption_kms_setup_factory,
+        test_resources_cleanup,
+    ):
+        """QoS throttling applied to a KMS-encrypted RBD volume.
+
+        Factors (RHSTOR-9207): encrypted, fresh, RWO, filesystem, 1:1 topology,
+        Guaranteed pod QoS class.
+
+        Provisions a PVC from an encryption-enabled StorageClass, binds it to the
+        Silver VAC, runs a Guaranteed pod on it, confirms the per-volume dm-crypt
+        device is present on the hosting node, and asserts the node cgroup io.max
+        reflects the Silver limits for the encrypted volume.
+        """
+        test_id = "encrypted-volume-qos-mapping"
+
+        logger.test_step(f"[{test_id}] Set up the encryption KMS connection")
+        kv_version = "v1"
+        kms_provider = config.ENV_DATA.get("KMS_PROVIDER", "").lower()
+
+        # KMS factory arguments are provider-specific:
+        # - Vault-based providers (vault, vault-hcp): accepts both kv_version and use_vault_namespace
+        # - HPCS: accepts only kv_version
+        # - Azure: accepts no arguments
+        use_vault_namespace = config.ENV_DATA.get("vault_hcp", False)
+        if kms_provider == "azure-kv":
+            # Azure KMS factory accepts no arguments
+            kms = pv_encryption_kms_setup_factory()
+        elif kms_provider == "hpcs":
+            # HPCS accepts only kv_version
+            kms = pv_encryption_kms_setup_factory(kv_version)
+        else:
+            # All other providers (Vault, Vault HCP, and unknown) use Vault-compatible factory
+            kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
+
+        proj = project_factory()
+
+        logger.test_step(f"[{test_id}] Create an encryption-enabled RBD StorageClass")
+        sc_obj = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            encrypted=True,
+            encryption_kms_id=kms.kmsid,
+        )
+
+        if config.ENV_DATA["KMS_PROVIDER"].lower() == constants.VAULT_KMS_PROVIDER:
+            # The encrypted PVC provisioner reads the per-namespace
+            # ceph-csi-kms-token, so it must exist before the PVC is created.
+            kms.vault_path_token = kms.generate_vault_token()
+            kms.create_vault_csi_kms_token(namespace=proj.namespace)
+
+        logger.test_step(f"[{test_id}] Provision encrypted RWO/Filesystem PVC")
+        pvc_obj = helpers.create_pvc(
+            sc_name=sc_obj.name,
+            size="10Gi",
+            namespace=proj.namespace,
+            access_mode=constants.ACCESS_MODE_RWO,
+            volume_mode=constants.VOLUME_MODE_FILESYSTEM,
+        )
+        test_resources_cleanup["pvcs"].append(pvc_obj)
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=180)
+
+        logger.test_step(
+            f"[{test_id}] Bind the encrypted PVC {pvc_obj.name} to the Silver VAC"
+        )
+        silver_patch = json.dumps(
+            {"spec": {"volumeAttributesClassName": self.silver_vac_name}}
+        )
+        pvc_obj.ocp.patch(
+            resource_name=pvc_obj.name, params=silver_patch, format_type="merge"
+        )
+
+        logger.test_step(f"[{test_id}] Deploy Guaranteed pod on the encrypted volume")
+        pod_obj = Pod(
+            **self._guaranteed_fs_pod_dict(
+                "encrypted-qos-pod", proj.namespace, pvc_obj.name
+            )
+        )
+        pod_obj.create()
+        test_resources_cleanup["pods"].append(pod_obj)
+        helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=420)
+
+        logger.test_step(
+            f"[{test_id}] Verify the dm-crypt device is present on the hosting node"
+        )
+        vol_handle = (
+            pvc_obj.backed_pv_obj.get().get("spec").get("csi").get("volumeHandle")
+        )
+        node_name = pod_obj.get().get("spec").get("nodeName")
+        logger.assertion(
+            f"[{test_id}] Crypt device for {vol_handle} expected on node {node_name}"
+        )
+        assert verify_crypt_device_present_onnode(
+            node_name, vol_handle
+        ), f"[{test_id}] Crypt device {vol_handle} not found on node {node_name}"
+
+        logger.test_step(f"[{test_id}] Verify pod QoS class is Guaranteed")
+        actual_qos = pod_obj.get()["status"]["qosClass"]
+        logger.assertion(
+            f"[{test_id}] Pod QoS class: expected=Guaranteed, actual={actual_qos}"
+        )
+        assert (
+            actual_qos == "Guaranteed"
+        ), f"[{test_id}] Pod QoS mismatch: expected Guaranteed, got {actual_qos}"
+
+        logger.test_step(
+            f"[{test_id}] Verify Silver io.max limits on the encrypted volume"
+        )
+        self.verify_node_cgroup_throttling(pod_obj, self.silver_limits)
+
+        logger.test_step(f"[{test_id}] Validate active I/O on the encrypted volume")
+        self._validate_filesystem_io(pod_obj, test_id)
+
+    @tier2
+    @polarion_id("OCS-8398")
+    def test_qos_resilience_csi_nodeplugin_restart(
+        self, project_factory, test_resources_cleanup
+    ):
+        """QoS resilience during a CSI node-plugin (csi-rbdplugin) restart.
+
+        Factors (RHSTOR-9207): unencrypted, fresh, RWO, filesystem, 1:1
+        topology, Guaranteed pod QoS class, CSI disruption.
+
+        Flow: run a Guaranteed pod with continuous background I/O on a Silver
+        VAC-bound PVC, forcefully delete the csi-rbdplugin pod on the same
+        worker node, wait for its replacement to reach Running, and confirm the
+        hosting node's cgroup io.max still carries the Silver limits and that
+        the background I/O never failed.
+        """
+        test_id = "csi-nodeplugin-restart-resilience"
+        io_ok_log = "/tmp/bg_io_ok"
+        io_fail_log = "/tmp/bg_io_fail"
+        proj = project_factory()
+
+        logger.test_step(f"[{test_id}] Provision fresh PVC and bind Silver VAC")
+        pvc_obj = helpers.create_pvc(
+            sc_name=get_rbd_storageclass(),
+            size="10Gi",
+            namespace=proj.namespace,
+            access_mode=constants.ACCESS_MODE_RWO,
+            volume_mode=constants.VOLUME_MODE_FILESYSTEM,
+        )
+        test_resources_cleanup["pvcs"].append(pvc_obj)
+        helpers.wait_for_resource_state(pvc_obj, constants.STATUS_BOUND, timeout=180)
+        silver_patch = json.dumps(
+            {"spec": {"volumeAttributesClassName": self.silver_vac_name}}
+        )
+        pvc_obj.ocp.patch(
+            resource_name=pvc_obj.name, params=silver_patch, format_type="merge"
+        )
+
+        logger.test_step(f"[{test_id}] Attach Guaranteed application pod")
+        pod_obj = Pod(
+            **self._guaranteed_fs_pod_dict(
+                "csi-restart-qos-pod", proj.namespace, pvc_obj.name
+            )
+        )
+        pod_obj.create()
+        test_resources_cleanup["pods"].append(pod_obj)
+        helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=420)
+
+        logger.test_step(f"[{test_id}] Verify baseline Silver io.max limits")
+        self.verify_node_cgroup_throttling(pod_obj, self.silver_limits)
+
+        logger.test_step(f"[{test_id}] Start continuous background I/O in the pod")
+        # Write 10 MiB per iteration with 10-second timeout.
+        # At Silver's 1 MiB/s limit, this takes ~10s and fits within the timeout.
+        # This ensures I/O is in-flight during the CSI plugin restart disruption.
+        pod_obj.exec_cmd_on_pod(
+            "sh -c '(while true; do "
+            "timeout 10 dd if=/dev/zero of=/mnt/storage/bg_io.img bs=1M count=10 conv=fsync "
+            f"2>/dev/null && echo ok >> {io_ok_log} || echo fail >> {io_fail_log}; "
+            "done) >/dev/null 2>&1 &'",
+            out_yaml_format=False,
+        )
+
+        def _count_lines(log_file):
+            out = pod_obj.exec_cmd_on_pod(
+                f"sh -c 'cat {log_file} 2>/dev/null | wc -l'",
+                out_yaml_format=False,
+            )
+            return int(str(out).strip())
+
+        for ok_count in TimeoutSampler(
+            timeout=120, sleep=5, func=_count_lines, log_file=io_ok_log
+        ):
+            if ok_count > 0:
+                break
+        ok_before_restart = ok_count
+
+        # Start timing the full disruption window from this point
+        # This captures the entire period from baseline I/O to recovery
+        disruption_start_time = time.time()
+
+        logger.test_step(
+            f"[{test_id}] Force-delete the csi-rbdplugin pod on the pod's node"
+        )
+        node_name = pod_obj.get()["spec"]["nodeName"]
+        plugin_pods = [
+            p
+            for p in get_plugin_pods(constants.CEPHBLOCKPOOL)
+            if p.pod_data["spec"].get("nodeName") == node_name
+        ]
+        assert (
+            len(plugin_pods) == 1
+        ), f"[{test_id}] Expected one csi-rbdplugin pod on node {node_name}, found {len(plugin_pods)}"
+        old_plugin_name = plugin_pods[0].name
+        logger.info(f"Deleting csi-rbdplugin pod {old_plugin_name} on {node_name}")
+        plugin_pods[0].delete(force=True)
+
+        logger.test_step(
+            f"[{test_id}] Wait for the replacement csi-rbdplugin pod to be Running"
+        )
+
+        def _new_plugin_pod_running():
+            for p in get_plugin_pods(constants.CEPHBLOCKPOOL):
+                if p.name == old_plugin_name:
+                    continue
+                pod_data = p.pod_data
+                if pod_data["spec"].get("nodeName") != node_name:
+                    continue
+                if pod_data["status"].get("phase") != constants.STATUS_RUNNING:
+                    continue
+                # Verify containers are Ready, not just the pod phase
+                container_statuses = pod_data.get("status", {}).get(
+                    "containerStatuses", []
+                )
+                if not container_statuses:
+                    logger.debug(f"Pod {p.name} has no containerStatuses yet")
+                    continue
+                if all(cs.get("ready", False) for cs in container_statuses):
+                    return True
+            return False
+
+        for recovered in TimeoutSampler(
+            timeout=300, sleep=10, func=_new_plugin_pod_running
+        ):
+            if recovered:
+                break
+
+        logger.test_step(f"[{test_id}] Verify Silver io.max limits remain intact")
+        self.verify_node_cgroup_throttling(pod_obj, self.silver_limits)
+
+        logger.test_step(f"[{test_id}] Verify background I/O continued uninterrupted")
+        # Track success count and timing to detect stalled writes
+        # Timer started before plugin deletion captures the full disruption window
+        for ok_after in TimeoutSampler(
+            timeout=120, sleep=5, func=_count_lines, log_file=io_ok_log
+        ):
+            if ok_after > ok_before_restart:
+                elapsed = time.time() - disruption_start_time
+                logger.info(
+                    f"[{test_id}] Background I/O recovered after {elapsed:.1f}s. "
+                    f"Operations before: {ok_before_restart}, after: {ok_after}"
+                )
+                break
+
+        failures = _count_lines(io_fail_log)
+        logger.assertion(f"[{test_id}] Background I/O failures expected 0: {failures}")
+        assert (
+            failures == 0
+        ), f"[{test_id}] Background I/O failed {failures} time(s) during CSI restart"
+
+        # Verify I/O didn't stall for too long
+        # The recovery time includes plugin deletion, replacement wait, and I/O recovery
+        total_disruption_time = time.time() - disruption_start_time
+        max_disruption_time = 300  # seconds (conservative, allows for slow replacement)
+        if total_disruption_time > max_disruption_time:
+            logger.warning(
+                f"[{test_id}] Background I/O disruption lasted {total_disruption_time:.1f}s "
+                f"(threshold: {max_disruption_time}s), indicating potential stall"
+            )
+
+        self._validate_filesystem_io(pod_obj, test_id)
+
+    @tier2
+    @polarion_id("OCS-8399")
+    def test_qos_single_pod_multi_pvc_distinct_vac(
+        self, project_factory, test_resources_cleanup
+    ):
+        """Complex Pod Topologies: Single Pod with Multiple PVCs.
+
+        Factors (RHSTOR-9207): unencrypted, fresh, RWO, filesystem, 1:N
+        topology, Guaranteed pod QoS class.
+
+        Flow:
+        1. Provision two distinct PVCs: PVC-A bound to the silver VAC, and PVC-B
+           bound to the gold VAC.
+        2. Deploy a single Guaranteed Pod that mounts both volumes simultaneously
+           at different paths (/mnt/silver and /mnt/gold).
+        3. Read the host node's container runtime cgroup configuration to verify
+           both Silver and Gold throttling limits are simultaneously active.
+        4. Validate active filesystem I/O on both mounted paths.
+        """
+        test_id = "single-pod-multi-pvc-distinct-vac"
+        proj = project_factory()
+
+        logger.test_step(f"[{test_id}] Provision two distinct PVCs: PVC-A and PVC-B")
+        pvc_a = helpers.create_pvc(
+            sc_name=get_rbd_storageclass(),
+            size="10Gi",
+            namespace=proj.namespace,
+            access_mode=constants.ACCESS_MODE_RWO,
+            volume_mode=constants.VOLUME_MODE_FILESYSTEM,
+        )
+        test_resources_cleanup["pvcs"].append(pvc_a)
+
+        pvc_b = helpers.create_pvc(
+            sc_name=get_rbd_storageclass(),
+            size="10Gi",
+            namespace=proj.namespace,
+            access_mode=constants.ACCESS_MODE_RWO,
+            volume_mode=constants.VOLUME_MODE_FILESYSTEM,
+        )
+        test_resources_cleanup["pvcs"].append(pvc_b)
+
+        helpers.wait_for_resource_state(pvc_a, constants.STATUS_BOUND, timeout=180)
+        helpers.wait_for_resource_state(pvc_b, constants.STATUS_BOUND, timeout=180)
+
+        logger.test_step(f"[{test_id}] Bind PVC-A to Silver VAC and PVC-B to Gold VAC")
+        silver_patch = json.dumps(
+            {"spec": {"volumeAttributesClassName": self.silver_vac_name}}
+        )
+        pvc_a.ocp.patch(
+            resource_name=pvc_a.name, params=silver_patch, format_type="merge"
+        )
+
+        gold_patch = json.dumps(
+            {"spec": {"volumeAttributesClassName": self.gold_vac_name}}
+        )
+        pvc_b.ocp.patch(
+            resource_name=pvc_b.name, params=gold_patch, format_type="merge"
+        )
+
+        logger.test_step(
+            f"[{test_id}] Deploy single Guaranteed pod mounting both volumes simultaneously"
+        )
+        pod_dict = {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "name": "multi-pvc-qos-pod",
+                "namespace": proj.namespace,
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "name": "worker",
+                        "image": QOS_TEST_IMAGE,
+                        "command": QOS_SLEEP_CMD,
+                        "resources": GUARANTEED_RESOURCES,
+                        "volumeMounts": [
+                            {"name": "vol-silver", "mountPath": "/mnt/silver"},
+                            {"name": "vol-gold", "mountPath": "/mnt/gold"},
+                        ],
+                    }
+                ],
+                "volumes": [
+                    {
+                        "name": "vol-silver",
+                        "persistentVolumeClaim": {"claimName": pvc_a.name},
+                    },
+                    {
+                        "name": "vol-gold",
+                        "persistentVolumeClaim": {"claimName": pvc_b.name},
+                    },
+                ],
+            },
+        }
+        pod_obj = Pod(**pod_dict)
+        pod_obj.create()
+        test_resources_cleanup["pods"].append(pod_obj)
+        helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=420)
+
+        logger.test_step(f"[{test_id}] Verify pod QoS class is Guaranteed")
+        actual_qos = pod_obj.get()["status"]["qosClass"]
+        logger.assertion(
+            f"[{test_id}] Pod QoS class: expected=Guaranteed, actual={actual_qos}"
+        )
+        assert (
+            actual_qos == "Guaranteed"
+        ), f"[{test_id}] Pod QoS mismatch: expected Guaranteed, got {actual_qos}"
+
+        logger.test_step(
+            f"[{test_id}] Map each PVC to its block device and verify tier-specific limits"
+        )
+        # Get PVC backing volumes and their volume handles
+        pvc_a_pv = pvc_a.backed_pv_obj.get()
+        pvc_b_pv = pvc_b.backed_pv_obj.get()
+        vol_handle_a = pvc_a_pv.get("spec", {}).get("csi", {}).get("volumeHandle")
+        vol_handle_b = pvc_b_pv.get("spec", {}).get("csi", {}).get("volumeHandle")
+
+        logger.assertion(
+            f"[{test_id}] PVC-A (Silver) volume handle: {vol_handle_a}, PVC-B (Gold) volume handle: {vol_handle_b}"
+        )
+        assert vol_handle_a, f"[{test_id}] Failed to retrieve volume handle for PVC-A"
+        assert vol_handle_b, f"[{test_id}] Failed to retrieve volume handle for PVC-B"
+
+        # Query cgroup io.max to find which device corresponds to each PVC
+        pod_data = pod_obj.get()
+        node_name = pod_data["spec"]["nodeName"]
+        pod_uid = pod_data["metadata"]["uid"]
+        pod_cgroup_uid = pod_uid.replace("-", "_")
+
+        find_cmd = (
+            f"oc debug node/{node_name} -n default -- chroot /host "
+            f'sh -c \'find /sys/fs/cgroup/kubepods.slice/ -path "*pod{pod_cgroup_uid}*" '
+            f'-name "io.max" -type f -exec cat {{}} \\;\''
+        )
+        res = exec_cmd(find_cmd, shell=True, ignore_error=True, timeout=60)
+        cgroup_output = res.stdout.decode() if res.stdout else ""
+
+        logger.debug(f"[{test_id}] Complete cgroup io.max output:\n{cgroup_output}")
+
+        # Verify that both Silver AND Gold limits are present in the cgroup output
+        # (ensures pod has both volume's limits)
+        silver_rbps_str = f"rbps={self.silver_limits['rbps']}"
+        silver_wbps_str = f"wbps={self.silver_limits['wbps']}"
+        gold_rbps_str = f"rbps={self.gold_limits['rbps']}"
+        gold_wbps_str = f"wbps={self.gold_limits['wbps']}"
+
+        logger.assertion(
+            f"[{test_id}] Silver limits "
+            f"(rbps={self.silver_limits['rbps']}, wbps={self.silver_limits['wbps']}) must be in cgroup"
+        )
+        assert (
+            silver_rbps_str in cgroup_output and silver_wbps_str in cgroup_output
+        ), f"[{test_id}] Silver limits not found in cgroup io.max. Expected '{silver_rbps_str}' and '{silver_wbps_str}'"
+
+        logger.assertion(
+            f"[{test_id}] Gold limits "
+            f"(rbps={self.gold_limits['rbps']}, wbps={self.gold_limits['wbps']}) must be in cgroup"
+        )
+        assert (
+            gold_rbps_str in cgroup_output and gold_wbps_str in cgroup_output
+        ), f"[{test_id}] Gold limits not found in cgroup io.max. Expected '{gold_rbps_str}' and '{gold_wbps_str}'"
+
+        logger.assertion(
+            f"[{test_id}] Verified PVC-A has Silver limits and PVC-B has Gold limits applied on distinct devices"
+        )
+
+        logger.test_step(f"[{test_id}] Validate active I/O on both mounted volumes")
+        for mount_path in ("/mnt/silver", "/mnt/gold"):
+            io_target = f"{mount_path}/test_io.img"
+            logger.assertion(
+                f"[{test_id}] Write I/O to {io_target} expected to succeed"
+            )
+            pod_obj.exec_cmd_on_pod(
+                f"dd if=/dev/zero of={io_target} bs=1M count=20 conv=fsync status=progress",
+                out_yaml_format=False,
+            )
+            logger.assertion(
+                f"[{test_id}] Read I/O from {io_target} expected to succeed"
+            )
+            pod_obj.exec_cmd_on_pod(
+                f"dd if={io_target} of=/dev/null bs=1M count=20 status=progress",
+                out_yaml_format=False,
+            )
 
 
 # =========================================================================
