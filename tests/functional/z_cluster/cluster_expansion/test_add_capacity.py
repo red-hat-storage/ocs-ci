@@ -62,13 +62,27 @@ def add_capacity_test(ui_flag=False):
         ui_flag(bool): add capacity via ui [true] or via cli [false]
 
     """
+    logger.test_step("Collect current OSD state before capacity expansion")
     osd_size = storage_cluster.get_osd_size()
+    logger.info(f"Current OSD size: {osd_size}")
     existing_osd_pods = get_osd_pods()
     existing_osd_pod_names = [pod.name for pod in existing_osd_pods]
+    logger.info(f"Existing OSD pod count: {len(existing_osd_pod_names)}")
+
+    logger.test_step(
+        "Add capacity via UI"
+        if (ui_add_capacity_conditions() and ui_flag)
+        else "Add capacity via CLI"
+    )
     if ui_add_capacity_conditions() and ui_flag:
         result = ui_add_capacity(osd_size)
     else:
         result = storage_cluster.add_capacity(osd_size)
+    logger.info(f"Add capacity result (expected OSD replica sets): {result}")
+
+    logger.test_step(
+        "Verify no existing OSD pods were restarted post capacity expansion"
+    )
     osd_pods_post_expansion = get_osd_pods()
     osd_pod_names_post_expansion = [pod.name for pod in osd_pods_post_expansion]
     restarted_osds = list()
@@ -79,15 +93,24 @@ def add_capacity_test(ui_flag=False):
     for pod in existing_osd_pod_names:
         if pod not in osd_pod_names_post_expansion:
             restarted_osds.append(pod)
+    logger.assertion(
+        f"Restarted OSD pods: expected=0, actual={len(restarted_osds)}, "
+        f"restarted={restarted_osds}"
+    )
     assert (
         len(restarted_osds) == 0
     ), f"The following OSD pods were restarted (deleted) post add capacity: {restarted_osds}"
 
+    logger.test_step("Wait for new OSD pods to reach Running state")
     pod = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
     if is_flexible_scaling_enabled():
         replica_count = 1
     else:
         replica_count = 3
+    logger.info(
+        f"Waiting for {result * replica_count} OSD pods (flexible_scaling={is_flexible_scaling_enabled()}, "
+        f"replica_count={replica_count})"
+    )
     pod.wait_for_resource(
         timeout=600,
         sleep=5,
@@ -107,16 +130,20 @@ def add_capacity_test(ui_flag=False):
 
     # Verify OSDs are encrypted.
     if config.ENV_DATA.get("encryption_at_rest"):
+        logger.test_step("Verify OSD encryption after capacity expansion")
         retry((ValueError), tries=5, delay=20)(osd_encryption_verification())
 
     # verify device classes
     ocs_version = version.get_semantic_ocs_version_from_config()
     if ocs_version >= version.VERSION_4_14 and not is_cluster_y_version_upgraded():
+        logger.test_step("Verify storage device class after capacity expansion")
         device_class = get_device_class()
+        logger.info(f"Device class: {device_class}")
         ct_pod = get_ceph_tools_pod()
         verify_storage_device_class(device_class)
         verify_device_class_in_osd_tree(ct_pod, device_class)
 
+    logger.test_step("Verify Ceph health after capacity expansion")
     check_ceph_health_after_add_capacity(ceph_rebalance_timeout=5400)
 
 
@@ -144,6 +171,7 @@ class TestAddCapacity(ManageTest):
         """
         Add capacity on non-lso cluster via cli on Acceptance suite
         """
+        logger.info("Starting add capacity test on non-LSO cluster via CLI")
         add_capacity_test(ui_flag=False)
 
     @tier1
@@ -153,6 +181,7 @@ class TestAddCapacity(ManageTest):
         """
         Add capacity on non-lso cluster via UI on tier1 suite
         """
+        logger.info("Starting add capacity test on non-LSO cluster via UI")
         add_capacity_test(ui_flag=True)
 
 
@@ -180,6 +209,7 @@ class TestAddCapacityLSO(ManageTest):
         """
         Add capacity on lso cluster via CLI on Acceptance suite
         """
+        logger.info("Starting add capacity test on LSO cluster via CLI")
         storage_cluster.add_capacity_lso(ui_flag=False)
 
     @tier1
@@ -189,6 +219,7 @@ class TestAddCapacityLSO(ManageTest):
         """
         Add capacity on lso cluster via UI on tier1 suite
         """
+        logger.info("Starting add capacity test on LSO cluster via UI")
         storage_cluster.add_capacity_lso(ui_flag=True)
 
 
@@ -213,4 +244,5 @@ class TestAddCapacityPreUpgrade(ManageTest):
         """
         Test to add variable capacity to the OSD cluster while IOs running
         """
+        logger.info("Starting add capacity pre-upgrade test")
         add_capacity_test()
