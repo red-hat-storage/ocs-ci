@@ -2433,19 +2433,33 @@ def is_kms_enabled(dont_raise=False):
     """
     Checks StorageCluster yaml if kms is configured.
 
+    Args:
+        dont_raise (bool): If True, catch all exceptions and return False instead
+            of raising. This prevents pytest collection crashes when ODF is not
+            installed or cluster is unreachable.
+
     Return:
         (bool): True if KMS is configured else False
 
     """
-    cluster = storage_cluster.get_storage_cluster()
-    logger.info("Checking if StorageCluster has configured KMS encryption")
-    resource_get = cluster.get(dont_raise=dont_raise)
-    if resource_get:
-        resource = resource_get["items"][0]
-        encryption = (
-            resource.get("spec").get("encryption", {}).get("kms", {}).get("enable")
-        )
-        return bool(encryption)
+    try:
+        cluster = storage_cluster.get_storage_cluster()
+        logger.info("Checking if StorageCluster has configured KMS encryption")
+        resource_get = cluster.get(dont_raise=dont_raise)
+        if resource_get and resource_get.get("items"):
+            resource = resource_get["items"][0]
+            encryption = (
+                resource.get("spec").get("encryption", {}).get("kms", {}).get("enable")
+            )
+            return bool(encryption)
+        return False
+    except Exception as e:
+        if dont_raise:
+            logger.warning(
+                f"Failed to check KMS status (ODF may not be installed): {e}"
+            )
+            return False
+        raise
 
 
 def vault_kv_list(path):
