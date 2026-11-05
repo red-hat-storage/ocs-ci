@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, skipif_no_nvmeof
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -34,19 +34,50 @@ class TestRestoreSnapshotWhenParentPVCDeleted(ManageTest):
         snapshot_restore_factory,
         pvc_clone_factory,
         create_pvcs_and_pods,
+        block_storageclass,
     ):
         """
         Create PVCs and pods
 
+        Args:
+            block_storageclass (OCS): Block-backed StorageClass to use for the
+                RBD PVCs. ``None`` selects the create_pvcs_and_pods default
+                (Ceph RBD, plus CephFS PVCs). When the NVMe-oF StorageClass is
+                passed, only block-mode PVCs on that StorageClass are created.
+
         """
-        self.pvcs, self.pods = create_pvcs_and_pods(pvc_size=3, pods_for_rwx=1)
+        if block_storageclass is None:
+            self.pvcs, self.pods = create_pvcs_and_pods(pvc_size=3, pods_for_rwx=1)
+        else:
+            # NVMe-oF variant: block-only PVCs on the NVMe-oF StorageClass
+            self.pvcs, self.pods = create_pvcs_and_pods(
+                pvc_size=3,
+                pods_for_rwx=1,
+                sc_rbd=block_storageclass,
+                num_of_cephfs_pvc=0,
+                access_modes_rbd=[
+                    f"{constants.ACCESS_MODE_RWO}-Block",
+                    f"{constants.ACCESS_MODE_RWX}-Block",
+                ],
+            )
 
     @tier2
+    @pytest.mark.parametrize(
+        argnames=["block_storageclass"],
+        argvalues=[
+            pytest.param(None),
+            pytest.param(constants.CEPH_NVMEOF_SC, marks=skipif_no_nvmeof),
+        ],
+        indirect=True,
+    )
     def test_restore_snapshot_when_parent_pvc_deleted(
         self, snapshot_factory, snapshot_restore_factory, pvc_clone_factory
     ):
         """
         Restore a pvc from snapshot when the parent PVC is deleted
+
+        Runs against the default Ceph RBD/CephFS StorageClasses and, when
+        NVMe-oF is enabled, against block-mode PVCs on the NVMe-oF StorageClass.
 
         """
         file_name = "fio_test"
