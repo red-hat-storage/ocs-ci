@@ -461,7 +461,9 @@ def get_mon_ids() -> set:
     return mon_ids
 
 
-def wait_for_mon_failover(mon_ids_before, timeout=600, sleep=20, min_wait=0) -> str:
+def wait_for_mon_failover(
+    mon_ids_before, timeout=600, sleep=20, min_wait=0, since_start=None
+) -> str:
     """
     Wait until the rook-ceph-operator fails the mon over by creating a new mon.
 
@@ -470,9 +472,12 @@ def wait_for_mon_failover(mon_ids_before, timeout=600, sleep=20, min_wait=0) -> 
 
     Args:
         mon_ids_before (set): The mon ids from before the mon went down.
-        timeout (int): Maximum time to wait in seconds. Defaults to 600 seconds.
+        timeout (int): Maximum time in seconds from since_start, or from this
+            call when since_start is None. Defaults to 600 seconds.
         sleep (int): Time to wait between checks in seconds. Defaults to 20 seconds.
         min_wait (float): Minimum time for which no new mon may appear.
+        since_start (float | None): Monotonic disruption start time used for
+            both timing bounds. Defaults to the start of this call.
 
     Returns:
         str: The mon id of the new mon
@@ -486,7 +491,7 @@ def wait_for_mon_failover(mon_ids_before, timeout=600, sleep=20, min_wait=0) -> 
         f"Waiting up to {timeout} seconds for the mon failover. The mon ids "
         f"before the failover: {sorted(mon_ids_before)}"
     )
-    start = time.monotonic()
+    start = time.monotonic() if since_start is None else since_start
     last_absent = 0
 
     def sample_mon_ids():
@@ -494,8 +499,13 @@ def wait_for_mon_failover(mon_ids_before, timeout=600, sleep=20, min_wait=0) -> 
         return get_mon_ids(), sample_start
 
     try:
+        remaining_timeout = timeout - (time.monotonic() - start)
+        if remaining_timeout <= 0:
+            raise TimeoutExpiredError("The mon failover deadline has already passed.")
         for mon_ids, sample_start in TimeoutSampler(
-            timeout=timeout, sleep=sleep, func=sample_mon_ids
+            timeout=remaining_timeout,
+            sleep=min(sleep, remaining_timeout),
+            func=sample_mon_ids,
         ):
             elapsed = time.monotonic() - start
             new_mon_ids = mon_ids - set(mon_ids_before)

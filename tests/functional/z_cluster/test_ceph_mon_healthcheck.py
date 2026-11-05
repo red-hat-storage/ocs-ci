@@ -153,7 +153,6 @@ class TestCephMonHealthCheck(ManageTest):
         wait_for_mon_status(
             mon_id=mon_id, status=constants.MON_STATUS_DOWN, timeout=180
         )
-        mon_down_time = time.monotonic()
         # Add a small gap to the timeout to account for any delays
         timeout_gap = 180
         # Calculate the expected mon failover timeout (in seconds). In the rook-ceph-operator,
@@ -161,10 +160,13 @@ class TestCephMonHealthCheck(ManageTest):
         mon_failover_timeout = mon_timeout_seconds * 2 + timeout_gap
         min_failover_seconds = mon_timeout_seconds * 0.8
         new_mon_id = wait_for_mon_failover(
-            mon_ids_before, timeout=mon_failover_timeout, min_wait=min_failover_seconds
+            mon_ids_before,
+            timeout=mon_failover_timeout,
+            min_wait=min_failover_seconds,
+            since_start=disruption_start,
         )
         failover_observed = True
-        failover_seconds = time.monotonic() - mon_down_time
+        failover_seconds = time.monotonic() - disruption_start
         log.info(
             f"The mon '{mon_id}' failed over to the new mon '{new_mon_id}' "
             f"after {failover_seconds:.0f} seconds"
