@@ -300,13 +300,14 @@ def pytest_logger_config(logger_config):
 
 def verify_test_decorators_requirements(items):
     """
-    Verify that all tests collected are decorated with a squad marker
+    Verify that collected tests have the required squad and Polarion markers.
 
     Args:
         items: list of collected tests
 
     """
     items_without_squad_marker = {}
+    items_without_polarion_marker = []
     red_no_mcg_or_rgw_items = {}
     for item in items:
         base_dir = os.path.join(constants.TOP_DIR, "tests")
@@ -318,9 +319,10 @@ def verify_test_decorators_requirements(items):
                     "Ignoring test case %s as it has a marker in the ignore list",
                     item.name,
                 )
+                continue
 
             # Verify tests are decorated with the correct squad owner
-            elif not any(["_squad" in marker for marker in item_markers]):
+            if not any(["_squad" in marker for marker in item_markers]):
                 log.debug("%s is missing a squad owner marker", item.name)
                 items_without_squad_marker.update({item.name: item.fspath.strpath})
 
@@ -332,6 +334,9 @@ def verify_test_decorators_requirements(items):
             ):
                 log.debug("%s is a red_squad test without @mcg or @rgw", item.name)
                 red_no_mcg_or_rgw_items.update({item.name: item.fspath.strpath})
+
+            if "polarion_id" not in item_markers:
+                items_without_polarion_marker.append(item.nodeid)
 
     err_msg = ""
     if items_without_squad_marker:
@@ -355,6 +360,14 @@ The following tests are missing either the @mcg or @rgw decorators: {json.dumps(
 Red squad tests are required to be decorated with either @mcg or @rgw. Please add either depending on the tests's focus.
 
                 """
+    if items_without_polarion_marker:
+        err_msg += f"""
+Missing polarion_id decorator for the following test items: {json.dumps(items_without_polarion_marker, indent=4)}
+
+Tests are required to have a polarion_id marker, for example @polarion_id("OCS-4483").
+The marker can be imported from `ocs_ci.framework.pytest_customization.marks`.
+
+            """
     if err_msg:
         raise MissingDecoratorError(err_msg)
 
