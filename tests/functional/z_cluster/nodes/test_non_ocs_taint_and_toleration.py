@@ -56,6 +56,10 @@ def verify_pod_count_unchanged(number_of_pods_before):
     number_of_pods_after = len(
         get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
     )
+    logger.assertion(
+        f"Pod count: expected={number_of_pods_before}, "
+        f"actual={number_of_pods_after}, match={number_of_pods_before == number_of_pods_after}"
+    )
     assert (
         number_of_pods_before == number_of_pods_after
     ), f"Number of pods didn't match: before={number_of_pods_before}, after={number_of_pods_after}"
@@ -89,13 +93,16 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         """
 
         def finalizer():
+            logger.info("Teardown: removing custom taints from nodes")
             assert untaint_nodes(
                 taint_label="xyz=true:NoSchedule",
             ), "Failed to untaint"
 
+            logger.info("Teardown: removing custom tolerations")
             assert remove_toleration(), "Failed to remove toleration"
             time.sleep(180)
 
+            logger.info("Teardown: waiting for pods to return to running state")
             assert wait_for_pods_to_be_running(
                 timeout=900, sleep=15
             ), "Few pods failed to reach the desired running state"
@@ -115,17 +122,16 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         """
 
-        logger.info("Apply custom taints and tolerations.")
+        logger.test_step("Apply custom taints and tolerations to ODF nodes")
         apply_custom_taint_and_toleration()
 
-        logger.info(
-            "After adding toleration wait for some time for pods to respin as expected"
-        )
+        logger.info("Waiting 300s for pods to respin after toleration change")
         time.sleep(300)
-        assert wait_for_pods_to_be_running(
-            timeout=900, sleep=15
-        ), "Few pods failed to reach the desired running state"
+        pods_running = wait_for_pods_to_be_running(timeout=900, sleep=15)
+        logger.assertion(f"Pods running after toleration applied: {pods_running}")
+        assert pods_running, "Few pods failed to reach the desired running state"
 
+        logger.test_step("Verify toleration 'xyz' on all subscriptions")
         retry(
             (CommandFailed, TolerationNotFoundException),
             tries=10,
@@ -134,9 +140,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             check_toleration_on_subscriptions
         )(toleration_key="xyz")
 
-        logger.info(
-            "Check non-ocs toleration on all newly created pods under openshift-storage NS"
-        )
+        logger.test_step("Verify toleration 'xyz' on all pods in openshift-storage")
         retry(
             (CommandFailed, TolerationNotFoundException),
             tries=10,
@@ -144,17 +148,18 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )(
             check_toleration_on_pods
         )(toleration_key="xyz")
+
+        logger.test_step("Verify cluster health after applying tolerations")
         if config.DEPLOYMENT["external_mode"]:
             cephcluster = CephClusterExternal()
             cephcluster.cluster_health_check()
         else:
             self.sanity_helpers.health_check()
 
-        logger.info("Check number of pods before and after adding non ocs taint")
         if not (
             config.ENV_DATA["mcg_only_deployment"] or config.DEPLOYMENT["external_mode"]
         ):
-            logger.info("Add capacity to check if new osds has toleration")
+            logger.test_step("Add capacity and verify new OSDs have toleration")
             osd_size = storage_cluster.get_osd_size()
             count = storage_cluster.add_capacity(osd_size)
             pod = ocp.OCP(
@@ -164,12 +169,17 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                 replica_count = 1
             else:
                 replica_count = 3
-            assert pod.wait_for_resource(
+            expected_osd_count = count * replica_count
+            osds_running = pod.wait_for_resource(
                 timeout=300,
                 condition=constants.STATUS_RUNNING,
                 selector=constants.OSD_APP_LABEL,
-                resource_count=count * replica_count,
-            ), "New OSDs failed to reach running state"
+                resource_count=expected_osd_count,
+            )
+            logger.assertion(
+                f"New OSDs running: expected={expected_osd_count}, reached={osds_running}"
+            )
+            assert osds_running, "New OSDs failed to reach running state"
             check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)
 
     @pytest.mark.polarion_id("OCS-5985")
@@ -183,9 +193,10 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         """
 
-        logger.info("Apply custom taints and tolerations.")
+        logger.test_step("Apply custom taints and tolerations to ODF nodes")
         apply_custom_taint_and_toleration()
 
+        logger.test_step("Verify toleration 'xyz' on all subscriptions")
         retry(
             (CommandFailed, TolerationNotFoundException),
             tries=10,
@@ -194,17 +205,13 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             check_toleration_on_subscriptions
         )(toleration_key="xyz")
 
-        logger.info(
-            "After adding toleration wait for some time for pods to respin as expected"
-        )
+        logger.info("Waiting 300s for pods to respin after toleration change")
         time.sleep(300)
-        assert wait_for_pods_to_be_running(
-            timeout=900, sleep=15
-        ), "Few pods failed to reach the desired running state"
+        pods_running = wait_for_pods_to_be_running(timeout=900, sleep=15)
+        logger.assertion(f"Pods running after toleration applied: {pods_running}")
+        assert pods_running, "Few pods failed to reach the desired running state"
 
-        logger.info(
-            "Check non-ocs toleration on all newly created pods under openshift-storage NS"
-        )
+        logger.test_step("Verify toleration 'xyz' on all pods in openshift-storage")
         retry(
             (CommandFailed, TolerationNotFoundException),
             tries=10,
@@ -212,13 +219,15 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )(
             check_toleration_on_pods
         )(toleration_key="xyz")
-        # Reboot one of the nodes
+
+        logger.test_step("Reboot a random OCS node and verify recovery")
         node = get_ocs_nodes()
         node = random.choice(node)
+        logger.info(f"Rebooting node '{node.name}'")
         nodes.restart_nodes(nodes=[node], wait=False)
         wait_for_nodes_status([node.name], constants.STATUS_READY, timeout=420)
 
-        # Validate all nodes and services are in READY state and up
+        logger.test_step("Validate cluster connectivity and node status after reboot")
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
             tries=28,
@@ -230,8 +239,10 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             delay=15,
         )(wait_for_nodes_status(timeout=1800))
 
-        # Check cluster is health ok and check toleration on pods
-        assert wait_for_pods_to_be_running(timeout=900, sleep=15)
+        logger.test_step("Verify pods running and tolerations intact after reboot")
+        pods_running = wait_for_pods_to_be_running(timeout=900, sleep=15)
+        logger.assertion(f"Pods running after reboot: {pods_running}")
+        assert pods_running, "Pods failed to reach running state after reboot"
         retry(
             (CommandFailed, TolerationNotFoundException),
             tries=5,
@@ -251,20 +262,16 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         5. Replace one of the nodes and check all odf pods on that node are running.
 
         """
-        logger.info("Apply custom taints and tolerations.")
+        logger.test_step("Apply custom taints and tolerations to ODF nodes")
         apply_custom_taint_and_toleration()
 
-        logger.info(
-            "After adding toleration wait for some time for pods to respin as expected"
-        )
+        logger.info("Waiting 300s for pods to respin after toleration change")
         time.sleep(300)
-        assert wait_for_pods_to_be_running(
-            timeout=900, sleep=15
-        ), "Few pods failed to reach the desired running state"
+        pods_running = wait_for_pods_to_be_running(timeout=900, sleep=15)
+        logger.assertion(f"Pods running after toleration applied: {pods_running}")
+        assert pods_running, "Few pods failed to reach the desired running state"
 
-        logger.info(
-            "Check non-ocs toleration on all newly created pods under openshift-storage NS"
-        )
+        logger.test_step("Verify toleration 'xyz' on all pods in openshift-storage")
         retry(
             (CommandFailed, TolerationNotFoundException),
             tries=10,
@@ -273,15 +280,15 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             check_toleration_on_pods
         )(toleration_key="xyz")
 
-        # Replace the node
+        logger.test_step("Replace an OSD node and verify pod recovery")
         osd_node_name = select_osd_node_name()
+        logger.info(f"Replacing OSD node '{osd_node_name}'")
         delete_and_create_osd_node(osd_node_name)
-        assert wait_for_pods_to_be_running(
-            timeout=900, sleep=15
-        ), "Few pods failed to reach the desired running state"
+        pods_running = wait_for_pods_to_be_running(timeout=900, sleep=15)
+        logger.assertion(f"Pods running after node replacement: {pods_running}")
+        assert pods_running, "Few pods failed to reach the desired running state"
 
-        # Check cluster is health ok and check toleration on pods
-        logger.info("Verifying All resources are Running and matches expected result")
+        logger.test_step("Verify tolerations and cluster health after node replacement")
         retry(
             (CommandFailed, TolerationNotFoundException),
             tries=10,
@@ -304,15 +311,18 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         """
 
-        logger.info("Taint all odf nodes with custom taint")
+        logger.test_step("Taint all ODF nodes with custom taint 'xyz=true:NoSchedule'")
         ocs_nodes = get_ocs_nodes()
+        logger.info(f"Tainting {len(ocs_nodes)} OCS nodes")
         for node in ocs_nodes:
             taint_nodes(nodes=[node.name], taint_label="xyz=true:NoSchedule")
         resource_name = constants.DEFAULT_CLUSTERNAME
         if config.DEPLOYMENT["external_mode"]:
             resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
 
-        logger.info("Add tolerations to storagecluster")
+        logger.test_step(
+            "Add tolerations to storagecluster only (not to ODF subscription)"
+        )
         storagecluster_obj = ocp.OCP(
             resource_name=resource_name,
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -343,7 +353,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         storagecluster_obj.patch(params=param, format_type="merge")
         logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
 
-        logger.info("Add tolerations to the subscription other than odf")
+        logger.test_step("Add tolerations to a non-ODF subscription")
         sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
         param = (
             '{"spec": {"config":  {"tolerations": '
@@ -364,23 +374,29 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             sub_obj.patch(params=param, format_type="merge")
             logger.info(f"Successfully added toleration to {selected_sub}")
 
-        logger.info("Check custom toleration on all subscriptions")
+        logger.test_step(
+            "Verify toleration 'xyz' is NOT propagated to all subscriptions"
+        )
         try:
             check_toleration_on_subscriptions(toleration_key="xyz")
             raise AssertionError("Toleration was found, but it should not exist.")
         except TolerationNotFoundException:
-            logger.info("Toleration not found as expected.")
+            logger.info(
+                "Toleration 'xyz' not found on subscriptions as expected (negative test)"
+            )
+
+        logger.test_step("Delete pods and verify they cannot all reach running state")
         time.sleep(300)
         pod_list = get_all_pods(
             namespace=config.ENV_DATA["cluster_namespace"],
             exclude_selector=True,
         )
+        logger.info(f"Deleting {len(pod_list)} pods to trigger reschedule")
         for pod in pod_list:
             try:
                 pod.delete(wait=False)
             except CommandFailed as ex:
                 err_str = str(ex)
-                # Pod may already be gone (replaced by controller) since we snapshotted the list
                 if "NotFound" not in err_str and "not found" not in err_str:
                     raise
                 logger.debug(
@@ -388,15 +404,20 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                     pod.name,
                 )
 
-        assert not wait_for_pods_to_be_running(
-            timeout=120, sleep=15
-        ), "All pods are running when they should not be. Some pods should be in pending state."
-
-        logger.info(
-            "Validate custom toleration not found on all newly created pods in openshift-storage"
+        all_pods_running = wait_for_pods_to_be_running(timeout=120, sleep=15)
+        logger.assertion(
+            f"Pods should NOT all be running (negative test): all_running={all_pods_running}"
         )
+        assert not all_pods_running, (
+            "All pods are running when they should not be. "
+            "Some pods should be in pending state."
+        )
+
+        logger.test_step("Verify toleration 'xyz' is NOT present on pods")
         try:
             check_toleration_on_pods(toleration_key="xyz")
             raise AssertionError("Toleration was found, but it should not exist.")
         except TolerationNotFoundException:
-            logger.info("Toleration not found as expected.")
+            logger.info(
+                "Toleration 'xyz' not found on pods as expected (negative test)"
+            )
