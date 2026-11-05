@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 @brown_squad
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestMustGather(ManageTest):
     @tier2
     @pytest.mark.parametrize(

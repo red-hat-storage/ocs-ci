@@ -13,7 +13,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs.cluster import ceph_health_check
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -31,6 +31,8 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_ocs_version("<4.14")
 @pytest.mark.polarion_id("OCS-5404")
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestRookCephOsdFlapping(ManageTest):
     """
     Test Rook Ceph OSD Flapping

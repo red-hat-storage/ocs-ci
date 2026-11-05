@@ -8,6 +8,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_provider_and_client,
     skipif_multus_enabled,
     brown_squad,
+    zstream_4_18_1,
+    zstream_4_18_1_ocs_operator,
 )
 from ocs_ci.framework.testlib import tier2, ManageTest, ignore_leftovers
 from ocs_ci.ocs.node import get_worker_nodes_not_in_ocs
@@ -25,6 +27,8 @@ logger = logging.getLogger(__name__)
 @tier2
 @pytest.mark.polarion_id("OCS-2490")
 @ignore_leftovers
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestCheckTolerationForCephCsiDriverDs(ManageTest):
     """
     Check toleration for Ceph CSI driver DS on non ocs node
