@@ -230,6 +230,7 @@ from ocs_ci.helpers.helpers import (
     storagecluster_independent_check,
     get_schedule_precedance_value_from_csi_addons_configmap,
     set_schedule_precedence,
+    get_cephfs_name,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -1381,11 +1382,9 @@ def storageclass_factory_fixture(
 
                     data_chunks, coding_chunks = get_ec_profile()
                     ec_pool_short = sc_name or f"ec-fs-{len(instances)}"
+                    # TODO: Update deletion logic in finalizer when the the fixture can use existing CephFS pool
                     interface_name = helpers.create_cephfs_ec_pool(
                         ec_pool_short, data_chunks, coding_chunks
-                    )
-                    request.addfinalizer(
-                        lambda n=ec_pool_short: helpers.delete_cephfs_ec_pool(n)
                     )
                 else:
                     interface_name = helpers.get_cephfs_data_pool_name()
@@ -1410,6 +1409,7 @@ def storageclass_factory_fixture(
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
             sc_obj.interface_name = interface_name
+            sc_obj.erasure_coded = erasure_coded
 
         instances.append(sc_obj)
         return sc_obj
@@ -1417,6 +1417,7 @@ def storageclass_factory_fixture(
     def finalizer():
         """
         Delete the storageclass by deregistering from StorageConsumer first
+        Removes any CephFS additional data pools if available.
         """
         from ocs_ci.ocs.resources.storage_cluster import (
             delete_storageclass_and_deregister,
@@ -1429,6 +1430,14 @@ def storageclass_factory_fixture(
                     sc_name=instance.name,
                     sc_ocp=instance.ocp,
                 )
+                if instance.erasure_coded:
+                    cephfs_name = get_cephfs_name()
+                    if cephfs_name in instance.interface_name:
+                        pool_short_name = instance.interface_name.removeprefix(
+                            f"{cephfs_name}-"
+                        )
+                        # TODO: Update deletion logic when the fixture can use existing CephFS pool
+                        helpers.delete_cephfs_ec_pool(pool_short_name)
             except Exception as e:
                 log.error(f"Failed to delete storageclass {instance.name}: {e}")
                 teardown_errors.append((instance.name, e))
@@ -1755,6 +1764,7 @@ def pod_factory_fixture(request, pvc_factory):
         node_name=None,
         pod_dict_path=None,
         raw_block_pv=False,
+        raw_block_device=constants.RAW_BLOCK_DEVICE,
         deployment=False,
         service_account=None,
         security_context=None,
@@ -1782,6 +1792,8 @@ def pod_factory_fixture(request, pvc_factory):
             pod_dict_path (str): YAML path for the pod.
             raw_block_pv (bool): True for creating raw block pv based pod,
                 False otherwise.
+            raw_block_device (str): The devicePath to use for the raw block pod.
+                Relevant only when raw_block_pv is True.
             service_account (OCS): Service account object, in case DeploymentConfig
                 is to be created
             security_context (dict): security context in the form of dictionary
@@ -1810,6 +1822,7 @@ def pod_factory_fixture(request, pvc_factory):
                 node_name=node_name,
                 pod_dict_path=pod_dict_path,
                 raw_block_pv=raw_block_pv,
+                raw_block_device=raw_block_device,
                 deployment=deployment,
                 sa_name=sa_name,
                 replica_count=replica_count,
@@ -8027,6 +8040,7 @@ def create_workload_factory():
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
         skip_mirroring_validation=False,
+        custom_sc=False,
     ):
         """
         Args:
@@ -8039,6 +8053,7 @@ def create_workload_factory():
             switch_ctx (int): The cluster index by the cluster name
             skip_mirroring_validation (bool): If True, skip mirroring status validation after deployment.
                 Useful when deploying multiple workloads and validation will be done later.
+            custom_sc (bool): True to create and use custom Pool and Storage Class
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -8089,6 +8104,10 @@ def create_workload_factory():
         for index in range(num_of_appset):
             workload_key = "dr_workload_appset"
             is_mdr_specific = ocsci_config.ENV_DATA.get(workload_key, False)
+            if pvc_interface == constants.CEPHFILESYSTEM and custom_sc:
+                workload_key = "dr_workload_appset_with_custom_pool"
+            else:
+                workload_key = "dr_workload_appset"
             if (
                 ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
             ) or (not is_mdr_specific):
@@ -8143,6 +8162,7 @@ def create_workload_factory():
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
         skip_mirroring_validation=False,
+        custom_sc=False,
     ):
         return _create_resources(
             num_of_subscription,
@@ -8151,6 +8171,7 @@ def create_workload_factory():
             pvc_interface,
             switch_ctx,
             skip_mirroring_validation,
+            custom_sc,
         )
 
     return factory, _teardown
@@ -8429,6 +8450,7 @@ def discovered_apps_dr_workload(request):
         pvc_interface=constants.CEPHBLOCKPOOL,
         multi_ns=False,
         workloads=None,
+        custom_sc=False,
     ):
         """
         Args:
@@ -8437,6 +8459,8 @@ def discovered_apps_dr_workload(request):
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
             multi_ns (bool): True for Multi Namespace
+            custom_sc (bool): False by default, will create and use custom Pool and Storage Class
+                when set to True for discovered apps workload
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -8452,7 +8476,10 @@ def discovered_apps_dr_workload(request):
         if multi_ns and kubeobject <= 1:
             raise UnsupportedWorkloadError("kubeobject count should be more than 2")
         if pvc_interface == constants.CEPHFILESYSTEM:
-            workload_key = "dr_workload_discovered_apps_cephfs"
+            if custom_sc:
+                workload_key = "dr_workload_discovered_apps_cephfs_custom_pool_and_sc"
+            else:
+                workload_key = "dr_workload_discovered_apps_cephfs"
         if workloads == "filebrowser":
             if pvc_interface == constants.CEPHFILESYSTEM:
                 workload_key = "dr_workload_discovered_apps_filebrowser_cephfs"
@@ -11239,12 +11266,25 @@ def pytest_sessionstart(session):
 
     if not (
         ocsci_config.multicluster
-        and ocsci_config.UPGRADE.get("upgrade", False)
+        and ocsci_config.UPGRADE.get("deploy_rdr_workload_at_session_start", False)
         and ocsci_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr"
     ):
         return
 
     prev_ctx = ocsci_config.cur_index
+    # Update the ODF CLI DR kubeconfig paths before deploying the DR workloads.
+    # This mirrors the update_odf_cli_dr_kubeconfigs fixture, which cannot be
+    # requested from a session hook, so the underlying helpers are called here.
+    try:
+        from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
+
+        log.info("Setting up ODF CLI binary and updating DR kubeconfigs")
+        odf_cli_setup_helper()
+        dr_helpers.update_odf_cli_dr_config_kubeconfigs()
+    except Exception as e:
+        log.warning(
+            f"Failed to update ODF CLI DR kubeconfigs at session start, not failing the run: {e}"
+        )
     log.info("Setting up dr workloads running along the session")
     factory, teardown = create_workload_factory()
     session._dr_workload_teardown = teardown
@@ -12449,10 +12489,10 @@ def fill_job_factory(request):
     def factory(
         name=None,
         block_size="1M",
-        cpu_request="100m",
-        mem_request="128Mi",
-        cpu_limit="500m",
-        mem_limit="256Mi",
+        cpu_request=None,
+        mem_request=None,
+        cpu_limit=None,
+        mem_limit=None,
         fill_mode="zero",
         base_yaml_path=constants.FILL_POOL_JOB_YAML,
         pvc_name=None,
@@ -12464,12 +12504,17 @@ def fill_job_factory(request):
 
         Args:
             name (str): Name of the Pod to create.
-            block_size (str): Block size for the dd command.
-            cpu_request (str): CPU request for the Pod.
-            mem_request (str): Memory request for the Pod.
-            cpu_limit (str): CPU limit for the Pod.
-            mem_limit (str): Memory limit for the Pod.
-            fill_mode (str): Mode of filling data, either 'zero' or 'random'.
+            block_size (str): Block size for the fill command.
+            cpu_request (str): CPU request for the Pod. Defaults by fill_mode
+                (500m incompressible, 100m otherwise).
+            mem_request (str): Memory request for the Pod. Defaults by
+                fill_mode (512Mi incompressible, 128Mi otherwise).
+            cpu_limit (str): CPU limit for the Pod. Defaults by fill_mode
+                (2 incompressible, 500m otherwise).
+            mem_limit (str): Memory limit for the Pod. Defaults by fill_mode
+                (2Gi incompressible, 256Mi otherwise).
+            fill_mode (str): Data generator: 'zero', 'random', or 'incompressible'.
+                Use 'incompressible' to increase Ceph used-raw capacity on RBD.
             base_yaml_path (str): Path to the base Job YAML manifest.
             pvc_name (str): Name of the PVC to create and attach to the Pod.
             sc_name (str): StorageClass name for the PVC.

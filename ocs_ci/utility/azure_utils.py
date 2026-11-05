@@ -723,6 +723,10 @@ class AzureAroUtil(AZURE):
         sp_name = f"aro-sp-{cluster_name}"
         logger.info(f"Creating service principal: {sp_name}")
 
+        # Clean up leftovers from previous runs; 'create-for-rbac' fails if more
+        # than one application already has this display name.
+        self.delete_aro_service_principal(cluster_name)
+
         create_sp_cmd = (
             f"az ad sp create-for-rbac --name {sp_name} --role Contributor "
             f"--scopes /subscriptions/{self._subscription_id}"
@@ -795,26 +799,34 @@ class AzureAroUtil(AZURE):
         logger.info(f"Deleting service principal: {sp_name}")
 
         try:
-            # Get the service principal by display name
-            # NOTE: --display-name does substring matching, so we need to filter for exact match
-            list_cmd = f"az ad sp list --display-name {sp_name}"
+            # Delete the application ('az ad app delete' also removes the SP);
+            # deleting only the SP would leave the app and break 'create-for-rbac'.
+            # --display-name matches substrings, so filter for an exact match.
+            list_cmd = f"az ad app list --display-name {sp_name}"
             result = exec_cmd(list_cmd, timeout=60, ignore_error=True)
-            if result.stdout:
-                sp_list = json.loads(result.stdout)
+            if not result.stdout:
+                logger.info(f"Service principal not found: {sp_name}")
+                return
 
-                # Filter for exact display name match to avoid deleting SPs from clusters
-                # where one cluster name is a substring of another (e.g., "aro-sp-j-002" vs "aro-sp-j-002zm3c33")
-                matching_sps = [
-                    sp for sp in sp_list if sp.get("displayName") == sp_name
-                ]
+            app_list = json.loads(result.stdout)
+            matching_apps = [
+                app for app in app_list if app.get("displayName") == sp_name
+            ]
 
-                if matching_sps:
-                    app_id = matching_sps[0]["appId"]
-                    delete_cmd = f"az ad sp delete --id {app_id}"
-                    exec_cmd(delete_cmd, timeout=60, ignore_error=True)
-                    logger.info(f"Service principal deleted: {sp_name}")
-                else:
-                    logger.info(f"Service principal not found: {sp_name}")
+            if not matching_apps:
+                logger.info(f"Service principal not found: {sp_name}")
+                return
+
+            # Delete all matches; duplicates may exist from previous failed runs.
+            for app in matching_apps:
+                app_id = app.get("appId")
+                if not app_id:
+                    continue
+                delete_cmd = f"az ad app delete --id {app_id}"
+                exec_cmd(delete_cmd, timeout=60, ignore_error=True)
+                logger.info(
+                    f"Deleted application/service principal '{sp_name}' (appId: {app_id})"
+                )
         except CommandFailed as e:
             logger.warning(f"Failed to delete service principal, continuing: {e}")
 

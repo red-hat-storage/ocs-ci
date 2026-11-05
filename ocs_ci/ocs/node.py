@@ -3282,6 +3282,11 @@ def gracefully_reboot_nodes(disable_eviction=False):
         nodes.restart_nodes([node], wait=False)
         log.info(f"Waiting for {waiting_time} seconds")
         time.sleep(waiting_time)
+        wait_for_nodes_status(
+            node_names=[node_name],
+            status=constants.NODE_READY_SCHEDULING_DISABLED,
+            timeout=1800,
+        )
         schedule_nodes([node_name])
         wait_for_nodes_status(
             node_names=[node_name], status=constants.NODE_READY, timeout=1800
@@ -3678,11 +3683,11 @@ def get_worker_node_allocatable():
     This function queries the OpenShift (okd) cluster's API using 'oc' command to retrieve the
     available CPU and memory resources for each worker node. The results are then parsed
     and returned as a dictionary with node names as keys, and nested dictionaries containing
-    CPU (in millicores) and Memory (in GB) values.
+    CPU (in fractional cores) and Memory (in GB) values.
 
     Returns:
         dict: A dictionary where keys are worker node names and values are another
-            dictionary containing 'cpu' (int, in millicores) and 'mem' (float, in GB).
+            dictionary containing 'cpu' (float, in fractional cores) and 'mem' (float, in GB).
     """
     cmd = [
         "oc",
@@ -3700,9 +3705,9 @@ def get_worker_node_allocatable():
         name = node["metadata"]["name"]
         cpu_str = node["status"]["allocatable"]["cpu"]
         if cpu_str.endswith("m"):  # e.g. "500m"
-            cpu = int(int(cpu_str[:-1]) / 1000)
+            cpu = int(cpu_str[:-1]) / 1000
         else:
-            cpu = int(cpu_str)
+            cpu = float(cpu_str)
         mem_raw = node["status"]["allocatable"]["memory"]  # e.g. "31948256Ki"
         mem_gib = int(mem_raw.replace("Ki", "")) / (1024**2)
         alloc[name] = {"cpu": cpu, "mem": mem_gib}

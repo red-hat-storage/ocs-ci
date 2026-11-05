@@ -97,6 +97,12 @@ class BackingStore:
             sc_name = backingstore_pvc["spec"]["storageClassName"]
 
         def _oc_deletion_flow():
+            """
+            Delete backingstore using OC command.
+
+            Returns:
+                bool: True if deletion succeeded or resource already deleted, False if retryable error
+            """
             try:
                 OCP(
                     kind=constants.BACKINGSTORE,
@@ -139,6 +145,15 @@ class BackingStore:
                     raise
 
         def _cli_deletion_flow():
+            """
+            Delete backingstore using MCG CLI command.
+
+            Handles retryable errors: buckets still using the backingstore, or accounts
+            with this backingstore as their default resource.
+
+            Returns:
+                bool: True if deletion succeeded, False if retryable error
+            """
             try:
                 self.mcg_obj.exec_mcg_cmd(f"backingstore delete {self.name}")
                 return True
@@ -148,6 +163,25 @@ class BackingStore:
                         f"Deletion of {self.name} failed because it's being used by a bucket. "
                         "Retrying..."
                     )
+                    return False
+                elif "default resource of one or more accounts" in str(e).lower():
+                    log.warning(
+                        f"Deletion of {self.name} failed because it is the default resource "
+                        "of one or more accounts. Reassigning those accounts to the system "
+                        "default backingstore and retrying..."
+                    )
+                    accounts = self.mcg_obj.read_system().get("accounts", [])
+                    for account in accounts:
+                        if account.get("default_resource") == self.name:
+                            acc_email = account["email"]
+                            log.info(
+                                f"Updating default resource for account {acc_email} "
+                                f"from {self.name} to {constants.DEFAULT_NOOBAA_BACKINGSTORE}"
+                            )
+                            self.mcg_obj.exec_mcg_cmd(
+                                f"account update {acc_email} "
+                                f"--new_default_resource={constants.DEFAULT_NOOBAA_BACKINGSTORE}"
+                            )
                     return False
 
         cmdMap = {
@@ -319,6 +353,10 @@ def backingstore_factory(
             i.e. - 'aws': [(3, us-west-1),(2, eu-west-2)]
             PV form - 'pv': [(amount, size_in_gb, storagecluster), ...]
             i.e. - 'pv': [(3, 32, ocs-storagecluster-ceph-rbd),(2, 100, ocs-storagecluster-ceph-rbd)]
+            A PV tuple may also carry explicit agent pod resources, which take
+            precedence over the MCG performance profile's pvPoolResources -
+            'pv': [(amount, size_in_gb, storagecluster, req_cpu, req_mem, lim_cpu, lim_mem), ...]
+            i.e. - 'pv': [(1, 32, ocs-storagecluster-ceph-rbd, '600m', '1Gi', '600m', '1Gi')]
             timeout (int): Timeout until backingstore reaches desired state
         Returns:
             list: A list of backingstore names.
@@ -393,7 +431,14 @@ def backingstore_factory(
                             )
                         else:
                             cmdMap[method.lower()][cloud.lower()](
-                                backingstore_name, vol_num, size, storagecluster
+                                backingstore_name,
+                                vol_num,
+                                size,
+                                storagecluster,
+                                req_cpu=req_cpu,
+                                req_mem=req_mem,
+                                lim_cpu=lim_cpu,
+                                lim_mem=lim_mem,
                             )
                     else:
                         _, region = uls_tup

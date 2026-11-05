@@ -56,6 +56,7 @@ from ocs_ci.utility.version import (
     get_submariner_operator_version,
     get_volsync_operator_version,
 )
+from ocs_ci.helpers.odf_cli import ODFCLIRetriever
 
 
 log = logging.getLogger(__name__)
@@ -805,7 +806,7 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
         log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
         return
 
-    if ocsci_config.DEPLOYMENT.get("fusion_access_deployment"):
+    if ocsci_config.DEPLOYMENT.get("fusion_access"):
         log.info(
             "Skipping Ceph toolbox setup — Fusion Access cluster has no CephCluster"
         )
@@ -1288,6 +1289,42 @@ def _collect_ocs_logs(
             ocs_must_gather_image_and_tag = mirror_image(
                 ocs_must_gather_image_and_tag, cluster_config
             )
+        try:
+            if (
+                version.get_semantic_ocs_version_from_config(
+                    cluster_config=cluster_config
+                )
+                >= version.VERSION_5_0
+            ):
+                # Avoid circular import: ocs.utils -> utility.utils -> ocs.utils
+                from ocs_ci.utility.utils import exec_cmd as _exec_cmd
+
+                retriever = ODFCLIRetriever()
+                retriever.retrieve_odf_cli_binary()
+                ns = cluster_config.ENV_DATA["cluster_namespace"]
+                log.info(
+                    f"Collecting 'odf get health' for cluster "
+                    f"{cluster_config.ENV_DATA['cluster_name']}"
+                )
+                result = _exec_cmd(
+                    f"{retriever.local_cli_path} -n {ns} get health",
+                    cluster_config=cluster_config,
+                    ignore_error=True,
+                )
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                odf_health_file = os.path.join(
+                    ocs_log_dir_path,
+                    f"odf_get_health_{timestamp}.log",
+                )
+                os.makedirs(ocs_log_dir_path, exist_ok=True)
+                with open(odf_health_file, "w") as f:
+                    f.write(result.stdout.decode())
+                    if result.stderr:
+                        f.write("\n--- stderr ---\n")
+                        f.write(result.stderr.decode())
+                log.info(f"'odf get health' output saved to {odf_health_file}")
+        except Exception as e:
+            log.warning(f"Failed to collect 'odf get health' output: {e}")
         mg_output = run_must_gather(
             ocs_log_dir_path,
             ocs_must_gather_image_and_tag,
@@ -1442,6 +1479,10 @@ def collect_ocs_logs(
     """
     Collects OCS logs
 
+    Also copies Krkn scenario/output logs from ``data/krkn_scenarios`` and
+    ``data/krkn_output`` into the collected log directory when those trees
+    exist. Missing or empty sources are skipped.
+
     Args:
         dir_name (str): directory name to store OCS logs. Logs will be stored
             in dir_name suffix with _ocs_logs.
@@ -1461,6 +1502,18 @@ def collect_ocs_logs(
         since_time (str): Only return logs after a specific date (RFC3339). For example "2024-01-15T10:30:00Z"
 
     """
+    try:
+        from ocs_ci.krkn_chaos.krkn_log_collector import (
+            collect_krkn_run_logs,
+            get_krkn_logs_collection_dir,
+        )
+
+        collect_krkn_run_logs(
+            get_krkn_logs_collection_dir(dir_name, status_failure=status_failure)
+        )
+    except Exception:
+        log.exception("Failed to collect Krkn run logs")
+
     cwd = os.getcwd()
     results = list()
     with ThreadPoolExecutor() as executor:
@@ -2263,6 +2316,8 @@ def get_nb_db_psql_version_from_image():
         )
 
 
+# Retry on failures as during upgrades we may encounter transient errors like "the database system is shutting down"
+@retry(UnexpectedBehaviour, tries=10, delay=10, backoff=1)
 def query_nb_db_psql_version():
     """
     Query the NooBaa DB for its PostgreSQL version

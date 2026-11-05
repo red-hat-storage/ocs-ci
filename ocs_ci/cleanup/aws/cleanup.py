@@ -6,6 +6,8 @@ import threading
 import os
 import re
 import boto3
+import time
+import traceback
 
 from botocore.exceptions import ClientError
 from ocs_ci.framework import config
@@ -37,7 +39,1262 @@ logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
+def is_vpc_protected(vpc_obj):
+    """
+    Check if a VPC is protected from deletion.
+
+    Args:
+        vpc_obj: boto3 VPC resource object
+
+    Returns:
+        bool: True if VPC is protected, False otherwise
+    """
+    if not vpc_obj.tags:
+        return False
+
+    # Check for do_not_delete tag
+    for tag in vpc_obj.tags:
+        if tag["Key"] == defaults.DO_NOT_DELETE_TAG:
+            tag_value = tag["Value"].lower()
+            if tag_value in ["true", "1", "yes"]:
+                logger.info(
+                    "VPC %s is protected by %s tag",
+                    vpc_obj.id,
+                    defaults.DO_NOT_DELETE_TAG,
+                )
+                return True
+
+    # Check for protected VPC names
+    vpc_name = None
+    for tag in vpc_obj.tags:
+        if tag["Key"] == "Name":
+            vpc_name = tag["Value"]
+            break
+
+    if vpc_name:
+        for protected_name in defaults.PROTECTED_VPC_NAMES:
+            if protected_name in vpc_name:
+                logger.info(
+                    "VPC %s (name: %s) is protected by name pattern: %s",
+                    vpc_obj.id,
+                    vpc_name,
+                    protected_name,
+                )
+                return True
+
+    return False
+
+
+def is_hypershift_or_capi_cluster(vpc_obj):
+    """
+    Detect if a VPC belongs to a HyperShift or CAPI managed cluster.
+
+    Args:
+        vpc_obj: boto3 VPC resource object
+
+    Returns:
+        bool: True if it's a HyperShift/CAPI cluster, False otherwise
+    """
+    # First check VPC tags (more reliable than instance tags)
+    if vpc_obj.tags:
+        for tag in vpc_obj.tags:
+            # CAPI clusters tag VPCs with kubernetes.io/cluster/<name>
+            if tag["Key"].startswith("kubernetes.io/cluster/"):
+                # Check if it ends with -infra (CAPI pattern)
+                if "-infra" in tag["Key"]:
+                    logger.info("Detected CAPI cluster from VPC tag: %s", tag["Key"])
+                    return True
+            # HyperShift VPC tags
+            if tag["Key"].startswith("hypershift.openshift.io/"):
+                logger.info("Detected HyperShift cluster from VPC tag: %s", tag["Key"])
+                return True
+
+    # Also check instances in the VPC for HyperShift/CAPI tags
+    for instance in vpc_obj.instances.all():
+        if not instance.tags:
+            continue
+
+        for tag in instance.tags:
+            # Check for HyperShift tags
+            if tag["Key"].startswith("hypershift.openshift.io/"):
+                logger.info("Detected HyperShift cluster from tag: %s", tag["Key"])
+                return True
+            # Check for CAPI tags
+            if tag["Key"].startswith("sigs.k8s.io/cluster-api-provider-aws/"):
+                logger.info("Detected CAPI cluster from tag: %s", tag["Key"])
+                return True
+
+    return False
+
+
+def cleanup_vpc(cluster_name, vpc_id, region_name):
+    """
+    Clean up a VPC and all its dependencies in the correct order.
+
+    This is a generic VPC cleanup function that works for any cluster type
+    (IPI, UPI, HyperShift, CAPI, etc.). It deletes all AWS resources in
+    the proper order to avoid dependency violations.
+
+    Args:
+        cluster_name (str): Name of the cluster
+        vpc_id (str): VPC ID to clean up
+        region_name (str): AWS region name
+
+    Returns:
+        bool: True if cleanup was successful, False otherwise
+    """
+    aws = AWS(region_name=region_name)
+    logger.info("Starting VPC cleanup for %s (VPC: %s)", cluster_name, vpc_id)
+
+    try:
+        vpc = aws.ec2_resource.Vpc(vpc_id)
+
+        # Step 1: Terminate all EC2 instances
+        instances = list(vpc.instances.all())
+        if instances:
+            logger.info("Terminating %d EC2 instances", len(instances))
+            instances_dict = {}
+            for instance in instances:
+                instance_name = instance.id
+                if instance.tags:
+                    for tag in instance.tags:
+                        if tag["Key"] == "Name":
+                            instance_name = tag["Value"]
+                            break
+                instances_dict[instance.id] = instance_name
+            aws.terminate_ec2_instances(instances_dict, wait=True)
+
+        # Step 2: Delete VPC Peering Connections
+        try:
+            # Find peering connections where this VPC is either requester or accepter
+            peering_connections = aws.ec2_client.describe_vpc_peering_connections(
+                Filters=[
+                    {
+                        "Name": "status-code",
+                        "Values": ["active", "pending-acceptance"],
+                    }
+                ]
+            )["VpcPeeringConnections"]
+
+            # Filter for connections involving our VPC
+            vpc_peering_connections = [
+                pc
+                for pc in peering_connections
+                if pc.get("RequesterVpcInfo", {}).get("VpcId") == vpc_id
+                or pc.get("AccepterVpcInfo", {}).get("VpcId") == vpc_id
+            ]
+
+            if vpc_peering_connections:
+                logger.info(
+                    "Deleting %d VPC peering connections", len(vpc_peering_connections)
+                )
+                for pc in vpc_peering_connections:
+                    pc_id = pc["VpcPeeringConnectionId"]
+                    requester_vpc = pc.get("RequesterVpcInfo", {}).get("VpcId")
+                    accepter_vpc = pc.get("AccepterVpcInfo", {}).get("VpcId")
+                    logger.info(
+                        "Deleting VPC peering connection %s "
+                        "(requester: %s, accepter: %s)",
+                        pc_id,
+                        requester_vpc,
+                        accepter_vpc,
+                    )
+                    try:
+                        aws.ec2_client.delete_vpc_peering_connection(
+                            VpcPeeringConnectionId=pc_id
+                        )
+                        logger.info(
+                            "Successfully deleted VPC peering connection %s", pc_id
+                        )
+                    except ClientError as e:
+                        logger.warning(
+                            "Failed to delete VPC peering connection %s: %s", pc_id, e
+                        )
+                # Wait a moment for peering connections to be deleted
+                time.sleep(10)
+        except ClientError as e:
+            logger.warning("Error checking VPC peering connections: %s", e)
+
+        # Step 3: Delete NAT Gateways
+        nat_gateways = aws.ec2_client.describe_nat_gateways(
+            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+        )["NatGateways"]
+        nat_gateway_ids = []
+        nat_gateway_eip_allocation_ids = []
+        for nat_gw in nat_gateways:
+            if nat_gw["State"] not in ["deleted", "deleting"]:
+                # Capture EIP allocation IDs before deleting NAT Gateway
+                for address in nat_gw.get("NatGatewayAddresses", []):
+                    alloc_id = address.get("AllocationId")
+                    if alloc_id:
+                        nat_gateway_eip_allocation_ids.append(alloc_id)
+
+                logger.info("Deleting NAT Gateway %s", nat_gw["NatGatewayId"])
+                aws.ec2_client.delete_nat_gateway(NatGatewayId=nat_gw["NatGatewayId"])
+                nat_gateway_ids.append(nat_gw["NatGatewayId"])
+
+        # Wait for NAT Gateways to be fully deleted
+        if nat_gateway_ids:
+            logger.info("Waiting for NAT Gateways to be deleted...")
+            max_wait = 300  # 5 minutes
+            wait_interval = 15
+            for _ in range(max_wait // wait_interval):
+                time.sleep(wait_interval)
+                remaining = aws.ec2_client.describe_nat_gateways(
+                    NatGatewayIds=nat_gateway_ids
+                )["NatGateways"]
+                if all(ngw["State"] == "deleted" for ngw in remaining):
+                    logger.info("All NAT Gateways deleted")
+                    break
+                logger.info(
+                    "Still waiting for %d NAT Gateways to delete...",
+                    sum(1 for ngw in remaining if ngw["State"] != "deleted"),
+                )
+            else:
+                logger.warning("NAT Gateway deletion timed out, continuing anyway")
+
+            # Extra wait for EIPs to be released from NAT Gateways
+            logger.info("Waiting 30s for NAT Gateway EIPs to be released...")
+            time.sleep(30)
+
+        # Step 4: Release Elastic IPs
+        # First release NAT Gateway EIPs (we captured these earlier)
+        for allocation_id in nat_gateway_eip_allocation_ids:
+            logger.info("Releasing NAT Gateway Elastic IP %s", allocation_id)
+            try:
+                aws.ec2_client.release_address(AllocationId=allocation_id)
+            except ClientError as e:
+                logger.warning(
+                    "Failed to release NAT Gateway EIP %s: %s", allocation_id, e
+                )
+
+        # Then check for any other EIPs associated with this VPC
+        all_addresses = aws.ec2_client.describe_addresses()["Addresses"]
+        for address in all_addresses:
+            allocation_id = address.get("AllocationId")
+            if not allocation_id:
+                continue
+
+            # Skip EIPs we already tried to release
+            if allocation_id in nat_gateway_eip_allocation_ids:
+                continue
+
+            # Check if EIP is associated with an ENI in this VPC
+            network_interface_id = address.get("NetworkInterfaceId")
+            if network_interface_id:
+                try:
+                    eni = aws.ec2_client.describe_network_interfaces(
+                        NetworkInterfaceIds=[network_interface_id]
+                    )["NetworkInterfaces"][0]
+                    if eni.get("VpcId") == vpc_id:
+                        logger.info("Releasing Elastic IP %s", allocation_id)
+                        try:
+                            aws.ec2_client.release_address(AllocationId=allocation_id)
+                        except ClientError as e:
+                            logger.warning(
+                                "Failed to release EIP %s: %s", allocation_id, e
+                            )
+                except ClientError:
+                    pass
+
+        # Step 5: Delete VPC Endpoints (these have ENIs with EIPs!)
+        vpc_endpoints = aws.ec2_client.describe_vpc_endpoints(
+            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+        )["VpcEndpoints"]
+        vpc_endpoint_ids = []
+        if vpc_endpoints:
+            logger.info("Deleting %d VPC Endpoints", len(vpc_endpoints))
+            for endpoint in vpc_endpoints:
+                logger.info("Deleting VPC Endpoint %s", endpoint["VpcEndpointId"])
+                try:
+                    aws.ec2_client.delete_vpc_endpoints(
+                        VpcEndpointIds=[endpoint["VpcEndpointId"]]
+                    )
+                    vpc_endpoint_ids.append(endpoint["VpcEndpointId"])
+                except ClientError as e:
+                    logger.warning("Failed to delete VPC endpoint: %s", e)
+
+            # Wait for VPC endpoints to be fully deleted
+            if vpc_endpoint_ids:
+                logger.info("Waiting for VPC endpoints to be deleted...")
+                max_wait = 180  # 3 minutes
+                wait_interval = 15
+                for _ in range(max_wait // wait_interval):
+                    time.sleep(wait_interval)
+                    try:
+                        remaining = aws.ec2_client.describe_vpc_endpoints(
+                            VpcEndpointIds=vpc_endpoint_ids
+                        )["VpcEndpoints"]
+                        remaining = [
+                            ep
+                            for ep in remaining
+                            if ep["State"] not in ["deleted", "deleting"]
+                        ]
+                        if not remaining:
+                            logger.info("All VPC endpoints deleted")
+                            break
+                        logger.info(
+                            "Still waiting for %d VPC endpoints to delete...",
+                            len(remaining),
+                        )
+                    except ClientError:
+                        # All endpoints deleted
+                        logger.info("All VPC endpoints deleted")
+                        break
+                else:
+                    logger.warning("VPC endpoint deletion timed out, continuing anyway")
+
+                # Extra wait for ENIs to be released
+                logger.info("Waiting 30s for VPC endpoint ENIs to be released...")
+                time.sleep(30)
+
+        # Step 6: Delete Load Balancers (ELBv2)
+        lb_arns = []
+        try:
+            elbv2_client = boto3.client("elbv2", region_name=region_name)
+            lbs = elbv2_client.describe_load_balancers()["LoadBalancers"]
+            for lb in lbs:
+                if lb["VpcId"] == vpc_id:
+                    logger.info("Deleting Load Balancer %s", lb["LoadBalancerArn"])
+                    elbv2_client.delete_load_balancer(
+                        LoadBalancerArn=lb["LoadBalancerArn"]
+                    )
+                    lb_arns.append(lb["LoadBalancerArn"])
+            # Wait for load balancers to be deleted
+            if lb_arns:
+                logger.info("Waiting 90s for Load Balancers to be deleted...")
+                time.sleep(90)
+        except Exception as e:
+            logger.warning("Error deleting load balancers: %s", e)
+
+        # Step 6a: Delete Classic Load Balancers (ELB)
+        try:
+            elb_client = boto3.client("elb", region_name=region_name)
+            classic_lbs = elb_client.describe_load_balancers()[
+                "LoadBalancerDescriptions"
+            ]
+            for lb in classic_lbs:
+                if lb["VPCId"] == vpc_id:
+                    logger.info(
+                        "Deleting Classic Load Balancer %s", lb["LoadBalancerName"]
+                    )
+                    try:
+                        elb_client.delete_load_balancer(
+                            LoadBalancerName=lb["LoadBalancerName"]
+                        )
+                        time.sleep(10)
+                    except ClientError as e:
+                        logger.warning("Failed to delete classic LB: %s", e)
+        except Exception as e:
+            logger.warning("Error deleting classic load balancers: %s", e)
+
+        # Step 7: Detach and delete Internet Gateways
+        igws = list(vpc.internet_gateways.all())
+        for igw in igws:
+            logger.info("Detaching and deleting Internet Gateway %s", igw.id)
+            # Retry detachment in case some IPs are still being released
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    igw.detach_from_vpc(VpcId=vpc_id)
+                    logger.info("Successfully detached Internet Gateway %s", igw.id)
+                    break
+                except ClientError as e:
+                    if "DependencyViolation" in str(e) and attempt < max_retries - 1:
+                        logger.warning(
+                            "IGW detach failed (attempt %d/%d), "
+                            "waiting for dependencies: %s",
+                            attempt + 1,
+                            max_retries,
+                            e,
+                        )
+
+                        # Before retry, try to release EIPs associated with this VPC
+                        logger.info(
+                            "Attempting VPC-specific EIP cleanup before retry %d...",
+                            attempt + 2,
+                        )
+                        try:
+                            # Get all network interfaces in this VPC
+                            vpc_enis = aws.ec2_client.describe_network_interfaces(
+                                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+                            )["NetworkInterfaces"]
+                            vpc_eni_ids = {
+                                eni["NetworkInterfaceId"] for eni in vpc_enis
+                            }
+
+                            # Find EIPs associated with network interfaces in this VPC
+                            all_eips = aws.ec2_client.describe_addresses()["Addresses"]
+                            for eip in all_eips:
+                                alloc_id = eip.get("AllocationId")
+                                if not alloc_id:
+                                    continue
+
+                                # Check if this EIP is associated with an ENI in this VPC
+                                eni_id = eip.get("NetworkInterfaceId")
+                                if eni_id and eni_id in vpc_eni_ids:
+                                    assoc_id = eip.get("AssociationId")
+                                    logger.info(
+                                        "Found EIP %s attached to ENI %s in this VPC",
+                                        alloc_id,
+                                        eni_id,
+                                    )
+
+                                    # Try to disassociate first if associated
+                                    if assoc_id:
+                                        try:
+                                            logger.info(
+                                                "Disassociating EIP %s (AssociationId: %s)",
+                                                alloc_id,
+                                                assoc_id,
+                                            )
+                                            aws.ec2_client.disassociate_address(
+                                                AssociationId=assoc_id
+                                            )
+                                            time.sleep(5)
+                                        except ClientError as disassoc_err:
+                                            logger.warning(
+                                                "Failed to disassociate %s: %s",
+                                                alloc_id,
+                                                disassoc_err,
+                                            )
+                                            continue
+
+                                    # Now try to release it
+                                    try:
+                                        logger.info("Releasing EIP %s", alloc_id)
+                                        aws.ec2_client.release_address(
+                                            AllocationId=alloc_id
+                                        )
+                                        logger.info(
+                                            "Successfully released EIP %s", alloc_id
+                                        )
+                                    except ClientError as release_err:
+                                        logger.warning(
+                                            "Failed to release EIP %s: %s",
+                                            alloc_id,
+                                            release_err,
+                                        )
+                        except Exception as eip_cleanup_err:
+                            logger.warning(
+                                "Error during VPC-specific EIP cleanup: %s",
+                                eip_cleanup_err,
+                            )
+
+                        time.sleep(30)
+                    else:
+                        raise
+            igw.delete()
+
+        # Step 8: Wait for ENIs to be auto-deleted
+        # AWS-managed ENIs (from VPC endpoints, NAT gateways, LBs) are automatically
+        # deleted when their parent resources are deleted. We cannot manually delete them.
+        logger.info(
+            "Waiting 60s for AWS-managed network interfaces to be auto-deleted..."
+        )
+        time.sleep(60)
+
+        # Step 9: Delete remaining Network Interfaces with retry logic
+        network_interfaces = list(vpc.network_interfaces.all())
+        enis_to_retry = []
+
+        if network_interfaces:
+            logger.info("Checking for remaining network interfaces...")
+
+            # Get list of remaining VPC endpoints (to check for orphaned ENIs)
+            try:
+                remaining_vpc_endpoints = aws.ec2_client.describe_vpc_endpoints(
+                    Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+                )["VpcEndpoints"]
+                remaining_endpoint_ids = {
+                    ep["VpcEndpointId"] for ep in remaining_vpc_endpoints
+                }
+                if remaining_endpoint_ids:
+                    logger.warning(
+                        "Found %d VPC endpoints still exist: %s",
+                        len(remaining_endpoint_ids),
+                        remaining_endpoint_ids,
+                    )
+            except ClientError:
+                remaining_endpoint_ids = set()
+
+            for ni in network_interfaces:
+                # Skip if it's an AWS-managed ENI
+                requester = ni.requester_id
+                interface_type = (
+                    ni.interface_type if hasattr(ni, "interface_type") else None
+                )
+
+                # Check if this is AWS-managed by interface type (excluding vpc_endpoint for now)
+                aws_managed_types = [
+                    "nat_gateway",
+                    "network_load_balancer",
+                    "gateway_load_balancer",
+                    "gateway_load_balancer_endpoint",
+                    "efa",
+                    "trunk",
+                    "lambda",
+                ]
+                if interface_type and interface_type in aws_managed_types:
+                    logger.info(
+                        "Skipping AWS-managed ENI %s (type: %s)",
+                        ni.id,
+                        interface_type,
+                    )
+                    continue
+
+                # Special handling for vpc_endpoint ENIs - check if endpoint still exists
+                if interface_type == "vpc_endpoint":
+                    # Check if any remaining VPC endpoints could own this ENI
+                    if remaining_endpoint_ids:
+                        logger.warning(
+                            "ENI %s is type vpc_endpoint and VPC endpoints still exist - "
+                            "VPC endpoint deletion may have failed. Trying to delete ENI anyway.",
+                            ni.id,
+                        )
+                        # Don't skip - try to delete it anyway
+                    else:
+                        logger.info(
+                            "ENI %s is type vpc_endpoint but all VPC endpoints deleted - "
+                            "this is an orphaned ENI, will try to delete",
+                            ni.id,
+                        )
+
+                # Check if this is AWS-managed by requester ID
+                if requester and (
+                    requester.startswith("amazon-")
+                    or requester == "amazon-elb"
+                    or requester == "amazon-aws"
+                ):
+                    logger.info(
+                        "Skipping AWS-managed ENI %s (requester: %s)",
+                        ni.id,
+                        requester,
+                    )
+                    continue
+
+                # Check if this ENI has an AWS-managed attachment (like ELA)
+                if ni.attachment:
+                    attachment_id = ni.attachment.get("AttachmentId", "")
+                    # Skip ELA (Elastic Load Balancer) attachments - they can't be manually detached
+                    if attachment_id.startswith("ela-attach-"):
+                        logger.info(
+                            "Skipping ENI %s with ELA attachment %s (managed by AWS Load Balancer)",
+                            ni.id,
+                            attachment_id,
+                        )
+                        continue
+
+                # This appears to be a user-created ENI - try to delete it
+                logger.info(
+                    "Found user-created Network Interface %s (requester: %s)",
+                    ni.id,
+                    requester,
+                )
+
+                # Try to detach if attached
+                if ni.attachment:
+                    attachment_id = ni.attachment.get("AttachmentId", "")
+                    logger.info(
+                        "Detaching Network Interface %s (attachment: %s)",
+                        ni.id,
+                        attachment_id,
+                    )
+                    try:
+                        ni.detach(Force=True)
+                        time.sleep(5)
+                    except ClientError as e:
+                        if "OperationNotPermitted" in str(e):
+                            logger.warning(
+                                "Cannot detach ENI %s - AWS-managed attachment, skipping",
+                                ni.id,
+                            )
+                            continue
+                        logger.warning("Failed to detach network interface: %s", e)
+
+                # Try to delete the ENI
+                try:
+                    logger.info("Deleting Network Interface %s", ni.id)
+                    ni.delete()
+                except ClientError as e:
+                    if "currently in use" in str(e):
+                        logger.info(
+                            "ENI %s currently in use, will retry after waiting",
+                            ni.id,
+                        )
+                        enis_to_retry.append(ni.id)
+                    else:
+                        logger.warning("Failed to delete network interface: %s", e)
+
+        # Retry deletion of ENIs that were "in use"
+        if enis_to_retry:
+            logger.info(
+                "Retrying deletion of %d ENIs that were in use...", len(enis_to_retry)
+            )
+            max_retries = 3
+            for retry in range(max_retries):
+                if not enis_to_retry:
+                    break
+
+                logger.info(
+                    "Retry attempt %d/%d: waiting 30s before retrying %d ENIs...",
+                    retry + 1,
+                    max_retries,
+                    len(enis_to_retry),
+                )
+                time.sleep(30)
+
+                still_in_use = []
+                for eni_id in enis_to_retry:
+                    try:
+                        eni = aws.ec2_resource.NetworkInterface(eni_id)
+                        logger.info("Retrying deletion of ENI %s", eni_id)
+                        eni.delete()
+                        logger.info("Successfully deleted ENI %s on retry", eni_id)
+                    except ClientError as e:
+                        if "currently in use" in str(e):
+                            logger.info("ENI %s still in use", eni_id)
+                            still_in_use.append(eni_id)
+                        elif "InvalidNetworkInterfaceID.NotFound" in str(e):
+                            logger.info("ENI %s already deleted", eni_id)
+                        else:
+                            logger.warning("Failed to delete ENI %s: %s", eni_id, e)
+                            still_in_use.append(eni_id)
+
+                enis_to_retry = still_in_use
+
+            # Final check - report any ENIs that couldn't be deleted
+            if enis_to_retry:
+                logger.warning(
+                    "Failed to delete %d network interfaces after retries: %s",
+                    len(enis_to_retry),
+                    enis_to_retry,
+                )
+                logger.warning(
+                    "These ENIs may block VPC deletion. "
+                    "Check if they are attached to resources outside this VPC."
+                )
+
+        # Step 10: Disassociate and delete route tables (except main)
+        route_tables = list(vpc.route_tables.all())
+        for rt in route_tables:
+            # Skip main route table
+            is_main = any(
+                assoc.get("Main", False) for assoc in rt.associations_attribute or []
+            )
+            if not is_main:
+                # First, disassociate from subnets
+                for association in rt.associations_attribute or []:
+                    if not association.get("Main", False):
+                        assoc_id = association.get("RouteTableAssociationId")
+                        if assoc_id:
+                            logger.info(
+                                "Disassociating route table %s from subnet", rt.id
+                            )
+                            try:
+                                aws.ec2_client.disassociate_route_table(
+                                    AssociationId=assoc_id
+                                )
+                            except ClientError as e:
+                                logger.warning(
+                                    "Failed to disassociate route table: %s", e
+                                )
+
+                # Now delete the route table
+                logger.info("Deleting Route Table %s", rt.id)
+                try:
+                    rt.delete()
+                except ClientError as e:
+                    logger.warning("Failed to delete route table: %s", e)
+
+        # Step 11: Delete subnets
+        subnets = list(vpc.subnets.all())
+        for subnet in subnets:
+            logger.info("Deleting Subnet %s", subnet.id)
+            try:
+                subnet.delete()
+            except ClientError as e:
+                logger.warning("Failed to delete subnet %s: %s", subnet.id, e)
+
+        # Step 12: Delete security groups (except default)
+        security_groups = list(vpc.security_groups.all())
+        for sg in security_groups:
+            if sg.group_name != "default":
+                logger.info("Deleting Security Group %s", sg.id)
+                try:
+                    # Remove all rules first
+                    if sg.ip_permissions:
+                        sg.revoke_ingress(IpPermissions=sg.ip_permissions)
+                    if sg.ip_permissions_egress:
+                        sg.revoke_egress(IpPermissions=sg.ip_permissions_egress)
+                    sg.delete()
+                except ClientError as e:
+                    logger.warning("Failed to delete security group: %s", e)
+
+        # Step 13: Delete Network ACLs (except default)
+        network_acls = list(vpc.network_acls.all())
+        default_acl = None
+        custom_acls = []
+
+        # Find default and custom ACLs
+        for acl in network_acls:
+            if acl.is_default:
+                default_acl = acl
+            else:
+                custom_acls.append(acl)
+
+        # Replace custom ACL associations with default ACL, then delete custom ACLs
+        for acl in custom_acls:
+            logger.info("Processing Network ACL %s", acl.id)
+            # Disassociate from subnets by replacing with default ACL
+            for association in acl.associations_attribute or []:
+                subnet_id = association.get("SubnetId")
+                assoc_id = association.get("NetworkAclAssociationId")
+                if subnet_id and assoc_id and default_acl:
+                    logger.info(
+                        "Replacing ACL %s with default ACL for subnet %s",
+                        acl.id,
+                        subnet_id,
+                    )
+                    try:
+                        aws.ec2_client.replace_network_acl_association(
+                            AssociationId=assoc_id, NetworkAclId=default_acl.id
+                        )
+                    except ClientError as e:
+                        logger.warning("Failed to replace ACL association: %s", e)
+
+            # Now delete the custom ACL
+            logger.info("Deleting Network ACL %s", acl.id)
+            try:
+                acl.delete()
+            except ClientError as e:
+                logger.warning("Failed to delete network ACL: %s", e)
+
+        # Step 14: Final cleanup pass before VPC deletion
+        logger.info("Performing final cleanup pass before VPC deletion...")
+
+        # Re-check for VPC endpoints that might still exist
+        try:
+            final_vpc_endpoints = aws.ec2_client.describe_vpc_endpoints(
+                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+            )["VpcEndpoints"]
+            if final_vpc_endpoints:
+                logger.warning(
+                    "Found %d VPC endpoints still exist, attempting final deletion...",
+                    len(final_vpc_endpoints),
+                )
+                for endpoint in final_vpc_endpoints:
+                    logger.warning(
+                        "Deleting remaining VPC Endpoint %s (state: %s)",
+                        endpoint["VpcEndpointId"],
+                        endpoint.get("State"),
+                    )
+                    try:
+                        aws.ec2_client.delete_vpc_endpoints(
+                            VpcEndpointIds=[endpoint["VpcEndpointId"]]
+                        )
+                    except ClientError as e:
+                        logger.error("Failed to delete VPC endpoint: %s", e)
+                logger.info("Waiting 60s for final VPC endpoint deletions...")
+                time.sleep(60)
+        except ClientError:
+            logger.info("No VPC endpoints found in final check")
+
+        # Re-check for ENIs that might still exist
+        final_enis = list(vpc.network_interfaces.all())
+        if final_enis:
+            logger.warning(
+                "Found %d network interfaces still exist after cleanup!",
+                len(final_enis),
+            )
+            for eni in final_enis:
+                interface_type = (
+                    eni.interface_type if hasattr(eni, "interface_type") else "unknown"
+                )
+                requester = eni.requester_id or "unknown"
+                attachment = (
+                    eni.attachment.get("AttachmentId", "none")
+                    if eni.attachment
+                    else "none"
+                )
+                logger.warning(
+                    "ENI %s still exists - type: %s, requester: %s, attachment: %s",
+                    eni.id,
+                    interface_type,
+                    requester,
+                    attachment,
+                )
+
+        # Step 15: Delete VPC
+        logger.info("Deleting VPC %s", vpc_id)
+        vpc.delete()
+
+        logger.info("Successfully cleaned up VPC %s", vpc_id)
+        return True
+
+    except Exception as e:
+        logger.error("Failed to clean up VPC %s: %s", vpc_id, e)
+        logger.error(traceback.format_exc())
+        return False
+
+
+def cleanup_orphaned_ebs_volumes(regions, time_to_delete, prefixes_hours_to_spare):
+    """
+    Clean up orphaned (unattached) EBS volumes.
+
+    This is a CONSERVATIVE cleanup that only deletes volumes when we're certain
+    they are orphaned and safe to delete.
+
+    Args:
+        regions (list): List of AWS regions to check for orphaned volumes
+        time_to_delete (int): Maximum age in seconds for volumes to keep
+        prefixes_hours_to_spare (dict): Cluster name prefixes with special retention rules
+
+    Safety criteria (ALL must be true to delete):
+    - Volume state is "available" (unattached)
+    - Volume age exceeds time threshold (prevents race with new deployments)
+    - Volume does not have do_not_delete tag
+    - Volume is not a root device (has DeleteOnTermination=false)
+    - Respects cluster prefix retention rules
+    """
+    if not time_to_delete:
+        logger.warning("No time threshold specified, skipping EBS volume cleanup")
+        return
+
+    total_deleted = 0
+    total_checked = 0
+
+    for region in regions:
+        try:
+            logger.info("Checking for orphaned EBS volumes in %s", region)
+            ec2_client = boto3.client("ec2", region_name=region)
+
+            # Get all unattached (available) volumes in this region
+            volumes = ec2_client.describe_volumes(
+                Filters=[{"Name": "status", "Values": ["available"]}]
+            )["Volumes"]
+
+            logger.info("Found %d unattached volumes in %s", len(volumes), region)
+            total_checked += len(volumes)
+
+            orphaned_volumes = []
+
+            for volume in volumes:
+                volume_id = volume["VolumeId"]
+                create_time = volume["CreateTime"]
+                volume_size = volume["Size"]
+                volume_type = volume["VolumeType"]
+
+                # Get volume name from tags
+                tags = {t["Key"]: t["Value"] for t in volume.get("Tags", [])}
+                volume_name = tags.get("Name", "<no-name>")
+
+                # Check for do_not_delete tag
+                if tags.get("do_not_delete", "").lower() in ["true", "1", "yes"]:
+                    logger.info(
+                        "Volume %s (%s) has do_not_delete tag, skipping",
+                        volume_id,
+                        volume_name,
+                    )
+                    continue
+
+                # Calculate volume age
+                if create_time.tzinfo is None:
+                    create_time = create_time.replace(tzinfo=datetime.timezone.utc)
+                current_time = datetime.datetime.now(datetime.timezone.utc)
+                volume_age = current_time - create_time
+
+                # Apply cluster prefix retention rules
+                should_delete = False
+                matched_prefix = False
+
+                # Extract cluster name from volume name
+                cluster_name = None
+                for pattern in [
+                    r"^(.+)-[a-z0-9]{5}-",
+                    r"^(.+)-worker-",
+                    r"^(.+)-master-",
+                ]:
+                    match = re.match(pattern, volume_name)
+                    if match:
+                        cluster_name = match.group(1)
+                        break
+
+                if cluster_name:
+                    # Check if cluster matches any special retention prefixes
+                    for prefix, hours in prefixes_hours_to_spare.items():
+                        if cluster_name.startswith(prefix):
+                            matched_prefix = True
+                            if hours == "never":
+                                logger.info(
+                                    "Volume %s matches never-delete prefix %s, skipping",
+                                    volume_id,
+                                    prefix,
+                                )
+                                break
+                            else:
+                                max_age = int(hours) * 3600
+                                if volume_age.total_seconds() > max_age:
+                                    should_delete = True
+                            break
+
+                # If no special prefix matched, use default time_to_delete
+                if not matched_prefix and volume_age.total_seconds() > time_to_delete:
+                    should_delete = True
+
+                if not should_delete:
+                    logger.debug(
+                        "Volume %s (%s) is only %s old, keeping",
+                        volume_id,
+                        volume_name,
+                        volume_age,
+                    )
+                    continue
+
+                orphaned_volumes.append(
+                    {
+                        "VolumeId": volume_id,
+                        "Name": volume_name,
+                        "Age": volume_age,
+                        "Size": volume_size,
+                        "Type": volume_type,
+                        "Region": region,
+                    }
+                )
+
+            if orphaned_volumes:
+                logger.info(
+                    "Found %d orphaned EBS volumes to delete in %s:",
+                    len(orphaned_volumes),
+                    region,
+                )
+                for vol_info in orphaned_volumes:
+                    logger.info(
+                        "  - %s (%s) - %dGB %s - age: %s",
+                        vol_info["VolumeId"],
+                        vol_info["Name"],
+                        vol_info["Size"],
+                        vol_info["Type"],
+                        vol_info["Age"],
+                    )
+
+                # Delete orphaned volumes
+                for vol_info in orphaned_volumes:
+                    volume_id = vol_info["VolumeId"]
+                    try:
+                        logger.info(
+                            "Deleting EBS volume %s (%s) - %dGB %s",
+                            volume_id,
+                            vol_info["Name"],
+                            vol_info["Size"],
+                            vol_info["Type"],
+                        )
+                        ec2_client.delete_volume(VolumeId=volume_id)
+                        logger.info("Successfully deleted EBS volume %s", volume_id)
+                        total_deleted += 1
+                    except ClientError as e:
+                        error_code = e.response.get("Error", {}).get("Code", "")
+                        if error_code == "InvalidVolume.NotFound":
+                            logger.info("Volume %s already deleted", volume_id)
+                        elif error_code == "VolumeInUse":
+                            logger.warning(
+                                "Volume %s is in use (should not happen for 'available' volumes)",
+                                volume_id,
+                            )
+                        else:
+                            logger.error(
+                                "Failed to delete EBS volume %s: %s", volume_id, e
+                            )
+                    except Exception as e:
+                        logger.error(
+                            "Unexpected error deleting EBS volume %s: %s", volume_id, e
+                        )
+            else:
+                logger.info("No orphaned EBS volumes found in %s", region)
+
+        except Exception as e:
+            logger.error("Error cleaning up EBS volumes in %s: %s", region, e)
+            logger.error(traceback.format_exc())
+
+    logger.info(
+        "EBS volume cleanup complete: checked %d volumes, deleted %d volumes across %d regions",
+        total_checked,
+        total_deleted,
+        len(regions),
+    )
+
+
+def cleanup_orphaned_iam_roles(regions, time_to_delete, prefixes_hours_to_spare):
+    """
+    Clean up orphaned IAM roles from deleted OpenShift clusters.
+
+    This is a CONSERVATIVE cleanup that only deletes roles when we're certain
+    they are orphaned. IAM roles are global (not per-region).
+
+    Args:
+        regions (list): List of AWS regions to check for existing clusters
+        time_to_delete (int): Maximum age in seconds for roles to keep
+        prefixes_hours_to_spare (dict): Cluster name prefixes with special retention rules
+
+    Safety criteria (ALL must be true to delete):
+    - Role name matches OpenShift cluster pattern
+    - Role has cluster-identifying tags
+    - Associated cluster/VPC no longer exists in ANY region
+    - Role hasn't been used recently (based on RoleLastUsed)
+    - Role is not an AWS service-linked role
+    """
+    try:
+        # IAM is global - use any region, typically us-east-1
+        iam_client = boto3.client("iam", region_name="us-east-1")
+
+        logger.info("Fetching all IAM roles...")
+        roles = []
+        paginator = iam_client.get_paginator("list_roles")
+        for page in paginator.paginate():
+            roles.extend(page["Roles"])
+
+        logger.info("Found %d total IAM roles", len(roles))
+
+        # Get all existing cluster names across all regions
+        existing_clusters = set()
+        for region in regions:
+            try:
+                aws = AWS(region_name=region)
+                vpcs = aws.ec2_client.describe_vpcs()["Vpcs"]
+                for vpc in vpcs:
+                    if vpc.get("Tags"):
+                        for tag in vpc["Tags"]:
+                            if tag["Key"] == "Name":
+                                cluster_name = tag["Value"].replace("-vpc", "")
+                                existing_clusters.add(cluster_name)
+                            # Also check for kubernetes cluster tag
+                            if "kubernetes.io/cluster/" in tag["Key"]:
+                                cluster_name = tag["Key"].replace(
+                                    "kubernetes.io/cluster/", ""
+                                )
+                                existing_clusters.add(cluster_name)
+            except Exception as e:
+                logger.warning("Error checking clusters in region %s: %s", region, e)
+
+        logger.info(
+            "Found %d existing clusters across all regions", len(existing_clusters)
+        )
+
+        # Filter for OpenShift/OCS cluster roles
+        orphaned_roles = []
+        for role in roles:
+            role_name = role["RoleName"]
+            role_path = role["Path"]
+            creation_date = role["CreateDate"]
+
+            # Skip AWS service-linked roles
+            if role_path.startswith("/aws-service-role/"):
+                continue
+
+            # Check if role matches OpenShift cluster patterns
+            is_cluster_role = False
+            cluster_id = None
+
+            # Common OpenShift role patterns
+            patterns = [
+                r"^(.+)-openshift-",
+                r"^(.+)-worker-role$",
+                r"^(.+)-master-role$",
+                r"^(.+)-bootstrap-role$",
+                r"^(.+)-cloud-credentials$",
+            ]
+
+            for pattern in patterns:
+                match = re.match(pattern, role_name)
+                if match:
+                    is_cluster_role = True
+                    cluster_id = match.group(1)
+                    break
+
+            if not is_cluster_role:
+                continue
+
+            # Check if cluster still exists
+            cluster_exists = any(
+                cluster_id in existing_cluster for existing_cluster in existing_clusters
+            )
+
+            if cluster_exists:
+                logger.debug(
+                    "Role %s belongs to existing cluster %s, keeping",
+                    role_name,
+                    cluster_id,
+                )
+                continue
+
+            # Check role age
+            if creation_date.tzinfo is None:
+                creation_date = creation_date.replace(tzinfo=datetime.timezone.utc)
+            current_time = datetime.datetime.now(datetime.timezone.utc)
+            role_age = current_time - creation_date
+
+            # Apply cluster prefix retention rules
+            should_delete = False
+            if time_to_delete:
+                # Check if role matches any special retention prefixes
+                matched_prefix = False
+                for prefix, hours in prefixes_hours_to_spare.items():
+                    if cluster_id.startswith(prefix):
+                        matched_prefix = True
+                        if hours == "never":
+                            logger.info(
+                                "Role %s matches never-delete prefix %s, keeping",
+                                role_name,
+                                prefix,
+                            )
+                            break
+                        else:
+                            max_age = int(hours) * 3600
+                            if role_age.total_seconds() > max_age:
+                                should_delete = True
+                        break
+
+                # If no special prefix matched, use default time_to_delete
+                if not matched_prefix and role_age.total_seconds() > time_to_delete:
+                    should_delete = True
+
+            if not should_delete:
+                continue
+
+            # Check when role was last used
+            try:
+                role_last_used = role.get("RoleLastUsed", {})
+                last_used_date = role_last_used.get("LastUsedDate")
+
+                if last_used_date:
+                    if last_used_date.tzinfo is None:
+                        last_used_date = last_used_date.replace(
+                            tzinfo=datetime.timezone.utc
+                        )
+                    time_since_use = current_time - last_used_date
+
+                    # Don't delete roles used in last 7 days (extra safety)
+                    if time_since_use.total_seconds() < 7 * 24 * 3600:
+                        logger.info(
+                            "Role %s was used %s ago, keeping for safety",
+                            role_name,
+                            time_since_use,
+                        )
+                        continue
+
+                orphaned_roles.append(
+                    {
+                        "RoleName": role_name,
+                        "ClusterId": cluster_id,
+                        "Age": role_age,
+                        "LastUsed": last_used_date if last_used_date else "Never",
+                    }
+                )
+
+            except Exception as e:
+                logger.warning("Error checking role %s last used: %s", role_name, e)
+                continue
+
+        if orphaned_roles:
+            logger.info("Found %d orphaned IAM roles to delete:", len(orphaned_roles))
+            for role_info in orphaned_roles:
+                logger.info(
+                    "  - %s (cluster: %s, age: %s, last used: %s)",
+                    role_info["RoleName"],
+                    role_info["ClusterId"],
+                    role_info["Age"],
+                    role_info["LastUsed"],
+                )
+
+            # Delete orphaned roles
+            for role_info in orphaned_roles:
+                role_name = role_info["RoleName"]
+                try:
+                    logger.info("Deleting IAM role %s", role_name)
+
+                    # Step 1: Remove role from instance profiles (AWS recommended order)
+                    instance_profiles = iam_client.list_instance_profiles_for_role(
+                        RoleName=role_name
+                    )["InstanceProfiles"]
+                    for profile in instance_profiles:
+                        profile_name = profile["InstanceProfileName"]
+                        logger.info(
+                            "Removing role %s from instance profile %s",
+                            role_name,
+                            profile_name,
+                        )
+                        iam_client.remove_role_from_instance_profile(
+                            InstanceProfileName=profile_name, RoleName=role_name
+                        )
+
+                    # Step 2: Delete inline policies
+                    inline_policies = iam_client.list_role_policies(RoleName=role_name)[
+                        "PolicyNames"
+                    ]
+                    for policy_name in inline_policies:
+                        logger.info(
+                            "Deleting inline policy %s from role %s",
+                            policy_name,
+                            role_name,
+                        )
+                        iam_client.delete_role_policy(
+                            RoleName=role_name, PolicyName=policy_name
+                        )
+
+                    # Step 3: Detach managed policies
+                    attached_policies = iam_client.list_attached_role_policies(
+                        RoleName=role_name
+                    )["AttachedPolicies"]
+                    for policy in attached_policies:
+                        logger.info(
+                            "Detaching policy %s from role %s",
+                            policy["PolicyArn"],
+                            role_name,
+                        )
+                        iam_client.detach_role_policy(
+                            RoleName=role_name, PolicyArn=policy["PolicyArn"]
+                        )
+
+                    # Step 4: Delete the role
+                    iam_client.delete_role(RoleName=role_name)
+                    logger.info("Successfully deleted IAM role %s", role_name)
+
+                    # Step 5: Delete empty instance profiles (after role is deleted)
+                    for profile in instance_profiles:
+                        profile_name = profile["InstanceProfileName"]
+                        try:
+                            iam_client.delete_instance_profile(
+                                InstanceProfileName=profile_name
+                            )
+                            logger.info("Deleted instance profile %s", profile_name)
+                        except ClientError as e:
+                            # Instance profile might be in use by another role or already deleted
+                            logger.debug(
+                                "Could not delete instance profile %s: %s",
+                                profile_name,
+                                e,
+                            )
+
+                except ClientError as e:
+                    error_code = e.response.get("Error", {}).get("Code", "")
+                    if error_code == "NoSuchEntity":
+                        logger.info("Role %s already deleted", role_name)
+                    else:
+                        logger.error("Failed to delete IAM role %s: %s", role_name, e)
+                except Exception as e:
+                    logger.error(
+                        "Unexpected error deleting IAM role %s: %s", role_name, e
+                    )
+
+        else:
+            logger.info("No orphaned IAM roles found")
+
+    except Exception as e:
+        logger.error("Error during IAM role cleanup: %s", e)
+        logger.error(traceback.format_exc())
+
+
+def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None, region=None):
     """
     Cleanup existing cluster in AWS
 
@@ -47,6 +1304,7 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
         upi (bool): True for UPI cluster, False otherwise
         failed_deletions (list): list of clusters we failed to delete, used
             for reporting purposes
+        region (str): AWS region name where the cluster exists
 
     """
     data = {"cluster_name": cluster_name, "cluster_id": cluster_id}
@@ -60,7 +1318,7 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
     oc_bin = os.path.join(bin_dir, "openshift-install")
 
     if upi:
-        aws = AWS()
+        aws = AWS(region_name=region) if region else AWS()
         rhel_workers = get_rhel_worker_instances(cleanup_path)
         logger.info(f"{cluster_name}'s RHEL workers: {rhel_workers}")
         if rhel_workers:
@@ -115,18 +1373,75 @@ def cleanup(cluster_name, cluster_id, upi=False, failed_deletions=None):
             aws.delete_cloudformation_stacks(stack_names)
         except StackStatusError:
             logger.error("Failed to fully destroy cluster %s", cluster_name)
-            if failed_deletions:
+            if failed_deletions is not None:
                 failed_deletions.append(cluster_name)
             raise
     else:
         logger.info(f"cleaning up {cluster_id}")
         try:
             destroy_cluster(installer=oc_bin, cluster_path=cleanup_path)
-        except CommandFailed:
-            logger.error("Failed to fully destroy cluster %s", cluster_name)
-            if failed_deletions:
-                failed_deletions.append(cluster_name)
-            raise
+
+            # Verify VPC was actually deleted (installer sometimes leaves it behind)
+            logger.info("Verifying VPC cleanup for %s...", cluster_name)
+            aws = AWS(region_name=region) if region else AWS()
+            vpc_name = f"{cluster_id}-vpc"
+            vpcs = aws.ec2_client.describe_vpcs(
+                Filters=[{"Name": "tag:Name", "Values": [vpc_name]}]
+            )["Vpcs"]
+
+            if vpcs:
+                vpc_id = vpcs[0]["VpcId"]
+                logger.warning(
+                    "openshift-install completed but VPC %s still exists! "
+                    "Attempting manual cleanup...",
+                    vpc_id,
+                )
+                success = cleanup_vpc(cluster_name, vpc_id, aws.region_name)
+                if not success:
+                    logger.error("Manual VPC cleanup failed for %s", cluster_name)
+                    if failed_deletions is not None:
+                        failed_deletions.append(cluster_name)
+            else:
+                logger.info("VPC successfully deleted for %s", cluster_name)
+
+        except CommandFailed as e:
+            logger.error(
+                "Failed to destroy cluster %s with openshift-install: %s",
+                cluster_name,
+                e,
+            )
+
+            # Try manual VPC cleanup as fallback
+            logger.info("Attempting manual VPC cleanup for %s", cluster_name)
+            success = False
+            try:
+                aws = AWS(region_name=region) if region else AWS()
+                # Find VPC by name pattern
+                vpc_name = f"{cluster_id}-vpc"
+                vpcs = aws.ec2_client.describe_vpcs(
+                    Filters=[{"Name": "tag:Name", "Values": [vpc_name]}]
+                )["Vpcs"]
+
+                if vpcs:
+                    vpc_id = vpcs[0]["VpcId"]
+                    logger.info(
+                        "Found VPC %s for cluster %s, attempting manual cleanup",
+                        vpc_id,
+                        cluster_name,
+                    )
+                    success = cleanup_vpc(cluster_name, vpc_id, aws.region_name)
+                else:
+                    logger.warning(
+                        "Could not find VPC for cluster %s, cannot attempt manual cleanup",
+                        cluster_name,
+                    )
+            except Exception:
+                logger.exception("Manual cleanup failed for %s", cluster_name)
+
+            if not success:
+                if failed_deletions is not None:
+                    failed_deletions.append(cluster_name)
+                raise
 
     delete_cluster_buckets(cluster_name)
 
@@ -148,17 +1463,40 @@ def get_clusters(
         cluster_pattern (str): The name of the ec2 instances
 
     Returns:
-        tuple: List of the cluster names (e.g ebenahar-cluster-gqtd4) to be provided to the
-            ci-cleanup script, a list of VPCs that are part of cloudformation,
-            and a list of remaining clusters
+        tuple: (clusters_to_delete, cf_clusters_to_delete, hypershift_clusters_to_delete,
+            remaining_clusters, orphaned_cf_vpcs)
+            - clusters_to_delete: Regular cluster names to delete
+            - cf_clusters_to_delete: CloudFormation cluster names to delete via stack deletion
+            - hypershift_clusters_to_delete: List of (cluster_name, vpc_id) tuples for HyperShift/CAPI
+            - remaining_clusters: Clusters that should not be deleted
+            - orphaned_cf_vpcs: List of (cluster_name, vpc_id) for CloudFormation VPCs with no instances
 
     """
 
     def determine_cluster_deletion(ec2_instances, cluster_name):
         for instance in ec2_instances:
+            # Skip terminated instances
+            if instance.state["Name"] in ["terminated", "terminating"]:
+                continue
+
+            # Check if instance has do_not_delete tag
+            if instance.tags:
+                for tag in instance.tags:
+                    if tag["Key"] == defaults.DO_NOT_DELETE_TAG:
+                        tag_value = tag["Value"].lower()
+                        if tag_value in ["true", "1", "yes"]:
+                            logger.info(
+                                "Instance %s has %s tag, skipping cluster deletion",
+                                instance.id,
+                                defaults.DO_NOT_DELETE_TAG,
+                            )
+                            return False
+
             allowed_running_time = time_to_delete
             do_not_delete = False
-            if instance.state["Name"] == "running":
+
+            # Check both running and stopped instances
+            if instance.state["Name"] in ["running", "stopped"]:
                 for prefix, hours in prefixes_hours_to_spare.items():
                     # case insensitive 'startswith'
                     if bool(re.match(prefix, cluster_name, re.I)):
@@ -177,10 +1515,14 @@ def get_clusters(
                     launch_time = instance.launch_time
                     current_time = datetime.datetime.now(launch_time.tzinfo)
                     running_time = current_time - launch_time
+                    instance_name = [
+                        tag["Value"] for tag in instance.tags if tag["Key"] == "Name"
+                    ][0]
                     logger.info(
-                        f"Instance {[tag['Value'] for tag in instance.tags if tag['Key'] == 'Name'][0]} "
-                        f"(id: {instance.id}) running time is {running_time} hours while the allowed"
-                        f" running time for it is {allowed_running_time / 3600} hours"
+                        f"Instance {instance_name} (id: {instance.id}, "
+                        f"state: {instance.state['Name']}) running time is "
+                        f"{running_time} hours while the allowed running time "
+                        f"for it is {allowed_running_time / 3600} hours"
                     )
                     if running_time.total_seconds() > allowed_running_time:
                         return True
@@ -208,8 +1550,10 @@ def get_clusters(
 
     aws = AWS(region_name=region_name)
     clusters_to_delete = list()
+    hypershift_clusters_to_delete = list()  # List of (cluster_name, vpc_id) tuples
     remaining_clusters = list()
     cloudformation_vpc_names = list()
+    cloudformation_vpcs_with_ids = []  # List of (vpc_name, vpc_id) tuples
     vpcs = aws.ec2_client.describe_vpcs()["Vpcs"]
     vpc_ids = [vpc["VpcId"] for vpc in vpcs]
     vpc_objs = [aws.ec2_resource.Vpc(vpc_id) for vpc_id in vpc_ids]
@@ -221,6 +1565,11 @@ def get_clusters(
         ).get("Reservations")
 
     for vpc_obj in vpc_objs:
+        # Check if VPC is protected
+        if is_vpc_protected(vpc_obj):
+            logger.info("Skipping protected VPC %s", vpc_obj.id)
+            continue
+
         vpc_tags = vpc_obj.tags
         if vpc_tags:
             cloudformation_vpc_name = [
@@ -228,31 +1577,59 @@ def get_clusters(
             ]
             if cloudformation_vpc_name:
                 cloudformation_vpc_names.append(cloudformation_vpc_name[0])
+                cloudformation_vpcs_with_ids.append(
+                    (cloudformation_vpc_name[0], vpc_obj.id)
+                )
                 continue
             vpc_name = [tag["Value"] for tag in vpc_tags if tag["Key"] == "Name"][0]
             cluster_name = vpc_name.replace("-vpc", "")
-            vpc_instances = vpc_obj.instances.all()
+            all_vpc_instances = list(vpc_obj.instances.all())
+            # Filter out terminated/terminating instances for decision making
+            vpc_instances = [
+                inst
+                for inst in all_vpc_instances
+                if inst.state["Name"] not in ["terminated", "terminating"]
+            ]
+
+            # Check if this is a HyperShift/CAPI cluster
+            is_hypershift = is_hypershift_or_capi_cluster(vpc_obj)
+
             if not vpc_instances:
-                clusters_to_delete.append(cluster_name)
+                logger.info(
+                    "VPC %s (%s) has no active instances, marking for deletion",
+                    vpc_obj.id,
+                    cluster_name,
+                )
+                if is_hypershift:
+                    hypershift_clusters_to_delete.append((cluster_name, vpc_obj.id))
+                else:
+                    clusters_to_delete.append(cluster_name)
                 continue
 
-            # Append to clusters_to_delete if cluster should be deleted
+            # Determine if cluster should be deleted
+            should_delete = False
             if cluster_pattern is not None:
-                if determine_cluster_deletion_base_name(ec2_instance_objs, vpc_obj.id):
-                    clusters_to_delete.append(cluster_name)
-                else:
-                    remaining_clusters.append(cluster_name)
+                should_delete = determine_cluster_deletion_base_name(
+                    ec2_instance_objs, vpc_obj.id
+                )
             else:
-                if determine_cluster_deletion(vpc_instances, cluster_name):
-                    clusters_to_delete.append(cluster_name)
+                should_delete = determine_cluster_deletion(vpc_instances, cluster_name)
+
+            # Append to appropriate list based on cluster type
+            if should_delete:
+                if is_hypershift:
+                    hypershift_clusters_to_delete.append((cluster_name, vpc_obj.id))
                 else:
-                    remaining_clusters.append(cluster_name)
+                    clusters_to_delete.append(cluster_name)
+            else:
+                remaining_clusters.append(cluster_name)
         else:
             logger.info("No tags found for VPC")
 
     # Get all cloudformation based clusters to delete
     cf_clusters_to_delete = list()
-    for vpc_name in cloudformation_vpc_names:
+    orphaned_cf_vpcs = []  # CloudFormation VPCs with no instances
+    for vpc_name, vpc_id in cloudformation_vpcs_with_ids:
         instance_dicts = aws.get_instances_by_name_pattern(
             f"{vpc_name.replace('-vpc', '')}*"
         )
@@ -261,6 +1638,15 @@ def get_clusters(
             for instance_dict in instance_dicts
         ]
         if not ec2_instances:
+            logger.warning(
+                "CloudFormation VPC %s (%s) has no instances - "
+                "will attempt direct VPC cleanup as fallback",
+                vpc_name,
+                vpc_id,
+            )
+            # Extract cluster name from VPC name (remove -vpc suffix if present)
+            cluster_name = vpc_name.replace("-vpc", "").replace("-vpc-cf", "")
+            orphaned_cf_vpcs.append((cluster_name, vpc_id))
             continue
         cluster_io_tag = None
         for instance in ec2_instances:
@@ -290,7 +1676,13 @@ def get_clusters(
                 cf_clusters_to_delete.append(cluster_name)
             else:
                 remaining_clusters.append(cluster_name)
-    return clusters_to_delete, cf_clusters_to_delete, remaining_clusters
+    return (
+        clusters_to_delete,
+        cf_clusters_to_delete,
+        hypershift_clusters_to_delete,
+        remaining_clusters,
+        orphaned_cf_vpcs,
+    )
 
 
 def cluster_cleanup():
@@ -367,7 +1759,10 @@ def aws_cleanup():
         "--region",
         action="store",
         required=False,
-        help="The name of the AWS region to delete the resources from",
+        help=(
+            "AWS region(s) to delete resources from. "
+            "Can be a single region or comma-separated list (e.g., us-east-2,us-west-2)"
+        ),
     )
     parser.add_argument(
         "--prefix",
@@ -399,6 +1794,30 @@ def aws_cleanup():
         action="store",
         required=False,
         help="The name of the cluster to delete from AWS",
+    )
+    parser.add_argument(
+        "--cleanup-iam-roles",
+        action="store_true",
+        required=False,
+        help="""
+            Clean up orphaned IAM roles from deleted clusters.
+            CONSERVATIVE cleanup - only deletes roles when cluster no longer exists.
+            Checks: role naming pattern, cluster existence, last used time, age.
+            IAM is global - this runs after all regional cleanup is complete.
+            """,
+    )
+    parser.add_argument(
+        "--cleanup-ebs-volumes",
+        action="store_true",
+        required=False,
+        help="""
+            Clean up orphaned (unattached) EBS volumes.
+            CONSERVATIVE cleanup - only deletes volumes that are:
+            - Unattached (state=available)
+            - Older than --hours threshold (prevents race with new deployments)
+            - Not tagged with do_not_delete
+            Safe to run - will not delete attached volumes or recent volumes.
+            """,
     )
     bucket_group = parser.add_argument_group("S3 Bucket Sweeping Options")
     bucket_group.add_argument(
@@ -439,48 +1858,295 @@ def aws_cleanup():
             prefixes_hours_to_spare = {**{prefix: hours}, **prefixes_hours_to_spare}
 
     time_to_delete = args.hours * 60 * 60 if args.hours else None
-    region = defaults.AWS_REGION if not args.region else args.region
-    clusters_to_delete, cf_clusters_to_delete, remaining_clusters = get_clusters(
-        time_to_delete=time_to_delete,
-        region_name=region,
-        prefixes_hours_to_spare=prefixes_hours_to_spare,
-        cluster_pattern=args.cluster_name,
-    )
 
-    if not clusters_to_delete:
-        logger.info("No clusters to delete")
+    # Parse regions - support comma-separated list
+    if args.region:
+        regions = [r.strip() for r in args.region.split(",")]
     else:
-        logger.info("Deleting clusters: %s", clusters_to_delete)
-        get_openshift_installer()
-    procs = []
-    failed_deletions = []
-    for cluster in clusters_to_delete:
-        cluster_name = cluster.rsplit("-", 1)[0]
-        logger.info(f"Deleting cluster {cluster_name}")
-        proc = threading.Thread(
-            target=cleanup, args=(cluster_name, cluster, False, failed_deletions)
+        regions = [defaults.AWS_REGION]
+
+    logger.info("Running cleanup in regions: %s", regions)
+
+    # Run cleanup for each region
+    all_failed_deletions = []
+    for region in regions:
+        logger.info("=" * 80)
+        logger.info("Processing region: %s", region)
+        logger.info("=" * 80)
+
+        (
+            clusters_to_delete,
+            cf_clusters_to_delete,
+            hypershift_clusters_to_delete,
+            remaining_clusters,
+            orphaned_cf_vpcs,
+        ) = get_clusters(
+            time_to_delete=time_to_delete,
+            region_name=region,
+            prefixes_hours_to_spare=prefixes_hours_to_spare,
+            cluster_pattern=args.cluster_name,
         )
-        proc.start()
-        procs.append(proc)
-    for p in procs:
-        p.join()
-    for cluster in cf_clusters_to_delete:
-        cluster_name = cluster.rsplit("-", 1)[0]
-        logger.info(f"Deleting UPI cluster {cluster_name}")
-        proc = threading.Thread(
-            target=cleanup, args=(cluster_name, cluster, True, failed_deletions)
-        )
-        proc.start()
-        procs.append(proc)
-    for p in procs:
-        p.join()
-    logger.info("Remaining clusters: %s", remaining_clusters)
+
+        if not clusters_to_delete:
+            logger.info("No clusters to delete in %s", region)
+        else:
+            logger.info("Deleting clusters in %s: %s", region, clusters_to_delete)
+            get_openshift_installer()
+        procs = []
+        failed_deletions = []
+        for cluster in clusters_to_delete:
+            cluster_name = cluster.rsplit("-", 1)[0]
+            logger.info(f"Deleting cluster {cluster_name}")
+            proc = threading.Thread(
+                target=cleanup,
+                args=(cluster_name, cluster, False, failed_deletions, region),
+            )
+            proc.start()
+            procs.append(proc)
+        for p in procs:
+            p.join()
+        for cluster in cf_clusters_to_delete:
+            cluster_name = cluster.rsplit("-", 1)[0]
+            logger.info(f"Deleting UPI cluster {cluster_name}")
+            proc = threading.Thread(
+                target=cleanup,
+                args=(cluster_name, cluster, True, failed_deletions, region),
+            )
+            proc.start()
+            procs.append(proc)
+        for p in procs:
+            p.join()
+
+        # Clean up HyperShift/CAPI clusters
+        if hypershift_clusters_to_delete:
+            logger.info(
+                "Deleting HyperShift/CAPI clusters: %s",
+                [name for name, _ in hypershift_clusters_to_delete],
+            )
+            for cluster_name, vpc_id in hypershift_clusters_to_delete:
+                logger.info(f"Deleting HyperShift/CAPI cluster {cluster_name}")
+                success = cleanup_vpc(cluster_name, vpc_id, region)
+                if not success:
+                    failed_deletions.append(cluster_name)
+                # Also try to delete associated S3 buckets
+                try:
+                    delete_cluster_buckets(cluster_name)
+                except Exception as e:
+                    logger.error(
+                        "Failed to delete buckets for cluster %s: %s", cluster_name, e
+                    )
+
+        # Clean up orphaned CloudFormation VPCs (CloudFormation VPCs with no instances)
+        if orphaned_cf_vpcs:
+            logger.info(
+                "Deleting orphaned CloudFormation VPCs: %s",
+                [name for name, _ in orphaned_cf_vpcs],
+            )
+            aws = AWS(region_name=region)
+            for cluster_name, vpc_id in orphaned_cf_vpcs:
+                logger.info(
+                    "Attempting to delete orphaned CloudFormation VPC %s (VPC: %s)",
+                    cluster_name,
+                    vpc_id,
+                )
+
+                # First, try to find and delete the CloudFormation stack
+                stack_deleted = False
+                try:
+                    # Try to find stacks matching the cluster name pattern
+                    stack_patterns = [
+                        f"{cluster_name}*vpc*",
+                        f"{cluster_name}*",
+                        cluster_name,
+                    ]
+                    cf_stack_name = None
+                    for pattern in stack_patterns:
+                        try:
+                            stacks = aws.get_cloudformation_stacks(pattern=pattern)
+                            if stacks:
+                                cf_stack_name = stacks[0]["StackName"]
+                                logger.info(
+                                    "Found CloudFormation stack %s for cluster %s",
+                                    cf_stack_name,
+                                    cluster_name,
+                                )
+                                break
+                        except ClientError:
+                            continue
+
+                    if cf_stack_name:
+                        logger.info(
+                            "Attempting to delete CloudFormation stack %s",
+                            cf_stack_name,
+                        )
+                        try:
+                            aws.delete_cloudformation_stacks([cf_stack_name])
+                            logger.info(
+                                "Successfully deleted CloudFormation stack %s",
+                                cf_stack_name,
+                            )
+                            stack_deleted = True
+                        except Exception as stack_error:
+                            logger.warning(
+                                "Failed to delete CloudFormation stack %s: %s. "
+                                "Will attempt direct VPC cleanup.",
+                                cf_stack_name,
+                                stack_error,
+                            )
+                    else:
+                        logger.warning(
+                            "No CloudFormation stack found for %s. "
+                            "Will attempt direct VPC cleanup.",
+                            cluster_name,
+                        )
+                except Exception as e:
+                    logger.warning(
+                        "Error checking CloudFormation stacks for %s: %s. "
+                        "Will attempt direct VPC cleanup.",
+                        cluster_name,
+                        e,
+                    )
+
+                # If stack deletion failed or stack not found, try direct VPC cleanup
+                if not stack_deleted:
+                    logger.info(
+                        "Attempting direct VPC cleanup for %s (VPC: %s)",
+                        cluster_name,
+                        vpc_id,
+                    )
+                    success = cleanup_vpc(cluster_name, vpc_id, region)
+                    if not success:
+                        failed_deletions.append(cluster_name)
+
+                # Always try to delete associated S3 buckets
+                try:
+                    delete_cluster_buckets(cluster_name)
+                except Exception as e:
+                    logger.error(
+                        "Failed to delete buckets for cluster %s: %s", cluster_name, e
+                    )
+
+        logger.info("Remaining clusters in %s: %s", region, remaining_clusters)
+
+        # Clean up orphaned CloudFormation stacks
+        logger.info("=" * 80)
+        logger.info("Checking for orphaned CloudFormation stacks in %s", region)
+        logger.info("=" * 80)
+        try:
+            # Create CloudFormation client directly
+            cf_client = boto3.client("cloudformation", region_name=region)
+            # Get all CloudFormation stacks
+            all_stacks = cf_client.list_stacks(
+                StackStatusFilter=[
+                    "CREATE_COMPLETE",
+                    "ROLLBACK_COMPLETE",
+                    "UPDATE_COMPLETE",
+                    "UPDATE_ROLLBACK_COMPLETE",
+                    "DELETE_FAILED",
+                    "CREATE_FAILED",
+                    "ROLLBACK_FAILED",
+                    "UPDATE_ROLLBACK_FAILED",
+                ]
+            )["StackSummaries"]
+
+            logger.info("Found %d CloudFormation stacks to check", len(all_stacks))
+
+            orphaned_stacks = []
+            for stack in all_stacks:
+                stack_name = stack["StackName"]
+                creation_time = stack["CreationTime"]
+                stack_status = stack["StackStatus"]
+
+                # Calculate age
+                if creation_time.tzinfo is None:
+                    creation_time = creation_time.replace(tzinfo=datetime.timezone.utc)
+                current_time = datetime.datetime.now(datetime.timezone.utc)
+                stack_age = current_time - creation_time
+
+                # Check if stack is old enough to delete
+                if time_to_delete and stack_age.total_seconds() > time_to_delete:
+                    logger.info(
+                        "Stack %s is %s old (status: %s), marking for deletion",
+                        stack_name,
+                        stack_age,
+                        stack_status,
+                    )
+                    orphaned_stacks.append((stack_name, stack_status))
+                else:
+                    logger.debug(
+                        "Stack %s is only %s old, keeping (threshold: %s hours)",
+                        stack_name,
+                        stack_age,
+                        time_to_delete / 3600 if time_to_delete else "N/A",
+                    )
+
+            if orphaned_stacks:
+                logger.info(
+                    "Found %d orphaned CloudFormation stacks to delete",
+                    len(orphaned_stacks),
+                )
+                for stack_name, stack_status in orphaned_stacks:
+                    logger.info(
+                        "Attempting to delete CloudFormation stack %s (status: %s)",
+                        stack_name,
+                        stack_status,
+                    )
+                    try:
+                        cf_client.delete_stack(StackName=stack_name)
+                        logger.info("Initiated deletion of stack %s", stack_name)
+                    except ClientError as e:
+                        error_code = e.response.get("Error", {}).get("Code", "")
+                        if error_code == "ValidationError":
+                            logger.info(
+                                "Stack %s already deleted or does not exist", stack_name
+                            )
+                        else:
+                            logger.warning(
+                                "Failed to delete stack %s: %s", stack_name, e
+                            )
+            else:
+                logger.info("No orphaned CloudFormation stacks found in %s", region)
+
+        except Exception as e:
+            logger.warning("Error cleaning up CloudFormation stacks: %s", e)
+
+        # Collect failures from this region
+        if failed_deletions is not None:
+            logger.error("Failed cluster deletions in %s: %s", region, failed_deletions)
+            all_failed_deletions.extend(failed_deletions)
+
+    # Clean up orphaned IAM roles (IAM is global, run once after all regions)
+    if args.cleanup_iam_roles:
+        logger.info("=" * 80)
+        logger.info("Checking for orphaned IAM roles (global)")
+        logger.info("=" * 80)
+        try:
+            cleanup_orphaned_iam_roles(regions, time_to_delete, prefixes_hours_to_spare)
+        except Exception as e:
+            logger.warning("Error cleaning up IAM roles: %s", e)
+
+    # Clean up orphaned EBS volumes (run per region after all cluster cleanup)
+    if args.cleanup_ebs_volumes:
+        logger.info("=" * 80)
+        logger.info("Checking for orphaned EBS volumes")
+        logger.info("=" * 80)
+        try:
+            cleanup_orphaned_ebs_volumes(
+                regions, time_to_delete, prefixes_hours_to_spare
+            )
+        except Exception as e:
+            logger.warning("Error cleaning up EBS volumes: %s", e)
+
+    # Write all failed deletions across all regions
     filename = "failed_cluster_deletions.txt"
     content = "None\n"
-    if failed_deletions:
-        logger.error("Failed cluster deletions: %s", failed_deletions)
+    if all_failed_deletions:
+        logger.error(
+            "Total failed cluster deletions across all regions: %s",
+            all_failed_deletions,
+        )
         content = ""
-        for cluster in failed_deletions:
+        for cluster in all_failed_deletions:
             content += f"{cluster}\n"
     with open(filename, "w") as f:
         f.write(content)

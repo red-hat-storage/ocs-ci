@@ -5,11 +5,10 @@ import subprocess
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
-    CephHealthException,
     NoRunningCephToolBoxException,
 )
-from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+from ocs_ci.resiliency.resiliency_tools import CephStatusTool
 
 log = logging.getLogger(__name__)
 
@@ -125,94 +124,90 @@ class NetworkFaults(PlatformNodesFactory):
         """
         covered_nodes = set()
 
-        for i in range(self.iterations):
-            remaining_nodes = [
-                node for node in self.nodes if node.name not in covered_nodes
-            ]
-            if not remaining_nodes:
-                remaining_nodes = self.nodes.copy()
+        try:
+            for i in range(self.iterations):
+                remaining_nodes = [
+                    node for node in self.nodes if node.name not in covered_nodes
+                ]
+                if not remaining_nodes:
+                    remaining_nodes = self.nodes.copy()
 
-            count = min(len(remaining_nodes), random.randint(1, len(self.nodes)))
-            selected_nodes = random.sample(remaining_nodes, count)
+                count = min(len(remaining_nodes), random.randint(1, len(self.nodes)))
+                selected_nodes = random.sample(remaining_nodes, count)
+                applied = []
 
-            for node in selected_nodes:
-                interfaces = self.node_interfaces.get(node.name, [])
-                for iface in interfaces:
-                    log.info(
-                        f"[Iteration {i+1}] Applying {description} on {node.name}/{iface}"
-                    )
-                    cmd = f"tc qdisc replace dev {iface} root netem {netem_command}"
-                    try:
-                        self.ocp_obj.exec_oc_debug_cmd(node=node.name, cmd_list=[cmd])
-                        covered_nodes.add(node.name)
-                    except (CommandFailed, subprocess.TimeoutExpired) as e:
-                        log.error(f"Failed to apply fault on {node.name}/{iface}: {e}")
+                try:
+                    for node in selected_nodes:
+                        interfaces = self.node_interfaces.get(node.name, [])
+                        for iface in interfaces:
+                            log.info(
+                                f"[Iteration {i+1}] Applying {description} "
+                                f"on {node.name}/{iface}"
+                            )
+                            cmd = (
+                                f"tc qdisc replace dev {iface} root netem "
+                                f"{netem_command}"
+                            )
+                            try:
+                                self.ocp_obj.exec_oc_debug_cmd(
+                                    node=node.name, cmd_list=[cmd]
+                                )
+                                covered_nodes.add(node.name)
+                                applied.append((node.name, iface))
+                            except (CommandFailed, subprocess.TimeoutExpired) as e:
+                                log.error(
+                                    f"Failed to apply fault on {node.name}/{iface}: {e}"
+                                )
 
-            log.info(f"[Iteration {i+1}] Holding fault for {self.duration}s")
-            time.sleep(self.duration)
-
-            for node in selected_nodes:
-                interfaces = self.node_interfaces.get(node.name, [])
-                for iface in interfaces:
-                    log.info(
-                        f"[Iteration {i+1}] Removing fault from {node.name}/{iface}"
-                    )
-                    cmd = f"tc qdisc del dev {iface} root"
-                    try:
-                        self.ocp_obj.exec_oc_debug_cmd(node=node.name, cmd_list=[cmd])
-                    except (CommandFailed, subprocess.TimeoutExpired) as e:
-                        log.error(
-                            f"Failed to remove fault from {node.name}/{iface}: {e}"
+                    log.info(f"[Iteration {i+1}] Holding fault for {self.duration}s")
+                    time.sleep(self.duration)
+                finally:
+                    for node_name, iface in applied:
+                        log.info(
+                            f"[Iteration {i+1}] Removing fault from "
+                            f"{node_name}/{iface}"
                         )
+                        cmd = f"tc qdisc del dev {iface} root"
+                        try:
+                            self.ocp_obj.exec_oc_debug_cmd(
+                                node=node_name, cmd_list=[cmd]
+                            )
+                        except (CommandFailed, subprocess.TimeoutExpired) as e:
+                            log.error(
+                                f"Failed to remove fault from {node_name}/{iface}: {e}"
+                            )
+                    from ocs_ci.resiliency.netem_cleanup import sweep_cluster_netem
 
-            if i < self.iterations - 1:
-                log.info(
-                    f"[Iteration {i+1}] Pausing for {self.pause}s before next iteration"
-                )
-                time.sleep(self.pause)
+                    sweep_cluster_netem(
+                        ocp_obj=self.ocp_obj,
+                        node_names=[node.name for node in selected_nodes],
+                        fail_on_residue=False,
+                        context=f"NetworkFaults iteration {i+1}",
+                    )
 
-        log.info("All iterations completed. Clearing any residual faults.")
-        self._remove_faults_all_nodes()
+                if i < self.iterations - 1:
+                    log.info(
+                        f"[Iteration {i+1}] Pausing for {self.pause}s "
+                        f"before next iteration"
+                    )
+                    time.sleep(self.pause)
+        finally:
+            log.info("Clearing residual netem on all injected nodes and cluster.")
+            self._remove_faults_all_nodes()
 
     def _remove_faults_all_nodes(self):
         """
-        Removes all netem qdiscs from all interfaces on all nodes,
-        and verifies that the faults have been successfully cleared.
+        Sweep leftover netem on every cluster node (not just interfaces
+        captured at init) and fail if any residue remains.
         """
-        log.info("Performing cleanup of all interfaces on all nodes")
+        from ocs_ci.resiliency.netem_cleanup import sweep_cluster_netem
 
-        for node in self.nodes:
-            interfaces = self.node_interfaces.get(node.name, [])
-            for iface in interfaces:
-                cmd_del = f"tc qdisc del dev {iface} root || true"
-                try:
-                    self.ocp_obj.exec_oc_debug_cmd(node=node.name, cmd_list=[cmd_del])
-                    log.debug(f"Deleted qdisc on {node.name}/{iface}")
-                except (CommandFailed, subprocess.TimeoutExpired) as e:
-                    log.warning(f"Could not delete qdisc on {node.name}/{iface}: {e}")
-                    continue
-
-                # Verify removal
-                cmd_verify = f"tc qdisc show dev {iface}"
-                try:
-                    output = self.ocp_obj.exec_oc_debug_cmd(
-                        node=node.name, cmd_list=[cmd_verify]
-                    )
-                    if "netem" in output:
-                        log.error(
-                            f"Verification failed: netem still active on {node.name}/{iface}"
-                        )
-                    else:
-                        log.info(
-                            f"Verified: netem successfully removed from {node.name}/{iface}"
-                        )
-                except (CommandFailed, subprocess.TimeoutExpired) as e:
-                    log.warning(
-                        f"Could not verify qdisc status on {node.name}/{iface}: {e}"
-                    )
-
-        time.sleep(5)
-        log.info("All fault configurations attempted and verified.")
+        log.info("Performing independent netem sweep on all cluster nodes")
+        sweep_cluster_netem(
+            ocp_obj=self.ocp_obj,
+            fail_on_residue=True,
+            context="NetworkFaults cleanup",
+        )
 
     def network_packet_loss(self, percentage=25):
         """Simulates packet loss on all nodes.
@@ -275,34 +270,67 @@ class NetworkFaults(PlatformNodesFactory):
         self._apply_fault(desc, netem_cmd)
 
     def pre_fault_injection_checks(self):
-        """Perform any pre-fault sanity checks such as node readiness."""
-        log.info("Performing pre-fault injection checks (placeholder)")
+        """Refuse to inject if leftover netem is already present."""
+        from ocs_ci.resiliency.netem_cleanup import assert_cluster_free_of_netem
+
+        log.info("Performing pre-fault injection netem pre-flight")
+        assert_cluster_free_of_netem(
+            ocp_obj=self.ocp_obj,
+            context="NetworkFaults pre-flight",
+        )
 
     def post_fault_injection_checks(self):
-        """Verifies Ceph cluster health and recovers from node failures if needed."""
+        """
+        Verifies the cluster recovered once the faults were removed.
+
+        ClusterIP reachability is checked first and on purpose: OVN-Kubernetes
+        can blackhole service traffic on a node while Ceph stays perfectly
+        healthy, so a Ceph-only check passes through that failure. It is also
+        checked before the node restart below, because a reboot reprograms
+        br-ex and would erase the evidence.
+        """
+        self.verify_cluster_network_recovered()
+
         log.info("Verifying post-fault Ceph cluster health")
         try:
-            if ceph_health_check(tries=3, delay=20):
-                log.info("Ceph cluster is healthy post-fault")
-                return
-        except (CephHealthException, CommandFailed, subprocess.TimeoutExpired) as e:
-            log.error(f"Initial post-fault check failed: {e}")
+            CephStatusTool().wait_till_ceph_status_became_healthy()
+            log.info("Ceph cluster health is acceptable post-fault")
+            return
+        except AssertionError as e:
+            log.error("Initial post-fault check failed: %s", e)
 
-        log.warning("Ceph cluster unhealthy, initiating node restart")
+        log.warning("Ceph cluster in HEALTH_ERR, initiating node restart")
         self.platform_node_obj.restart_nodes_by_stop_and_start(self.nodes)
 
         try:
-            if ceph_health_check(tries=5, delay=30):
-                log.info("Ceph cluster recovered after reboot")
-            else:
-                log.error("Ceph cluster still unhealthy after node reboot")
+            CephStatusTool().wait_till_ceph_status_became_healthy()
+            log.info("Ceph cluster recovered after reboot")
         except (
-            CephHealthException,
+            AssertionError,
             CommandFailed,
             subprocess.TimeoutExpired,
             NoRunningCephToolBoxException,
         ) as e:
-            log.error(f"Final post-reboot health check failed: {e}")
+            log.error("Final post-reboot health check failed: %s", e)
+            raise
+
+    def verify_cluster_network_recovered(self):
+        """
+        Fail if any node still cannot reach the kube-apiserver ClusterIP.
+
+        Reports only. Repairing the SDN here (for example by restarting
+        ovnkube-node) would turn a product bug into a silent teardown step.
+        """
+        from ocs_ci.resiliency.service_connectivity import (
+            assert_cluster_service_connectivity,
+        )
+
+        log.info("Verifying ClusterIP service connectivity recovered post-fault")
+        assert_cluster_service_connectivity(
+            ocp_obj=self.ocp_obj,
+            node_names=[node.name for node in self.nodes],
+            context="NetworkFaults post-fault",
+        )
 
     def run(self):
         """

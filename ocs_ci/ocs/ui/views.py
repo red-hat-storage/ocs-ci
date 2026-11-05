@@ -519,12 +519,12 @@ generic_locators = {
     ),
     "confirm_dilog_input": ("//input[@placeholder='{}']", By.XPATH),
     "confirm_delete_resource": (
-        "//button[contains(normalize-space(), 'Delete')]",
+        "//*[@role='dialog']//button[normalize-space(.)='Delete']",
         By.XPATH,
     ),
     "cancel_delete_resource": (
-        "//button[contains(normalize-space(), 'Cancel')]",
-        By.XPATH,
+        'button[data-test="cancel-action"]',
+        By.CSS_SELECTOR,
     ),
     "close_dialog": ("button[aria-label='Close']", By.XPATH),
     "submit_form": ('button[type="submit"]', By.CSS_SELECTOR),
@@ -596,6 +596,17 @@ generic_locators = {
     "blockpool_name": ("//a[text()='{}']", By.XPATH),
     "openshift-operators": (
         "//a[@data-test-operator-row='ODF Multicluster Orchestrator']"
+    ),
+    "error_boundary_test": ("[data-test='error-boundary']", By.CSS_SELECTOR),
+    "error_boundary_test_id": ("[data-test-id='error-boundary']", By.CSS_SELECTOR),
+    "co_error_boundary": (".co-error-boundary", By.CSS_SELECTOR),
+    "error_boundary_test_contains": (
+        "[data-test*='error-boundary']",
+        By.CSS_SELECTOR,
+    ),
+    "empty_state_danger": (
+        "[class*='empty-state--danger'], [class*='empty-state'][class*='danger']",
+        By.CSS_SELECTOR,
     ),
 }
 
@@ -693,7 +704,8 @@ obc = {
         By.XPATH,
     ),
     "obc_menu_name": (
-        "//a[normalize-space()='Object Bucket Claims'] | //span[normalize-space()='Object Bucket Claims']/..",
+        "//*[@data-test='horizontal-link-Object Bucket Claims']"
+        " | //a[normalize-space()='Object Bucket Claims']",
         By.XPATH,
     ),
     "storageclass_dropdown": ("sc-dropdown", By.ID),
@@ -1186,6 +1198,34 @@ STRETCH_CLUSTER_LOCATORS = {
     ),
     "lun_row_by_wwid": (
         f"{_STRETCH_LUN_TABLE}//tbody//tr[normalize-space(td[2])='{{wwid}}']",
+        By.XPATH,
+    ),
+}
+
+fusion_access_storage_cluster = {
+    "fusion_access_for_san_nav": (
+        "//a[normalize-space()='Fusion Access for SAN']",
+        By.XPATH,
+    ),
+    "create_storage_cluster_btn": (
+        "//button[normalize-space()='Create storage cluster']",
+        By.XPATH,
+    ),
+    "node_row_checkboxes": (
+        "//tbody//tr//input[@type='checkbox' and contains(@id,'node-')]",
+        By.XPATH,
+    ),
+    "nodes_selected_summary": (
+        "//*[contains(text(), 'nodes were selected')]",
+        By.XPATH,
+    ),
+    "nodes_selected_with_disks": (
+        "//*[contains(text(), 'nodes were selected') "
+        "and not(contains(text(), 'sharing 0 disks'))]",
+        By.XPATH,
+    ),
+    "submit_create_storage_cluster_btn": (
+        "//button[normalize-space()='Create storage cluster']",
         By.XPATH,
     ),
 }
@@ -2025,6 +2065,61 @@ acm_configuration_4_22 = {
     ),
 }
 
+acm_configuration_5_0 = {
+    "dr-policies-tab": ("a[data-test='horizontal-link-Policies']", By.CSS_SELECTOR),
+    "dr-create-policy-btn": ("//button[.//span[text()='Create DRPolicy']]", By.XPATH),
+    "dr-cluster-checkbox": (
+        "//tr[.//td[@data-label='Managed Cluster'][normalize-space(.)='{0}']]//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "dr-prerequisites-met": (
+        "//h4[contains(text(),'All disaster recovery prerequisites met')]",
+        By.XPATH,
+    ),
+    "dr-submariner-healthy": (
+        "//span[@data-test='status-text'][contains(text(),'Submariner is healthy')]",
+        By.XPATH,
+    ),
+    "dr-globalnet-enabled": (
+        "//*[contains(text(),'Globalnet')]/following-sibling::*//*[contains(text(),'Enabled')]",
+        By.XPATH,
+    ),
+    "dr-policy-name-input": (
+        "//input[contains(@id,'policy-name')]",
+        By.XPATH,
+    ),
+    "dr-replication-interval-input": (
+        "//input[@type='number' and ancestor::*[contains(.,'Replication interval')]]",
+        By.XPATH,
+    ),
+    "dr-review-cluster-pair-configured": (
+        "//span[@data-test='status-text'][contains(.,'Configured')]",
+        By.XPATH,
+    ),
+    "dr-back-btn": ("//button[.//span[text()='Back']]", By.XPATH),
+    "dr-create-btn": ("//button[.//span[text()='Create']]", By.XPATH),
+    "dr-cancel-btn": ("//button[.//span[text()='Cancel']]", By.XPATH),
+    "dr-pairing-in-progress": (
+        "//h2[contains(text(),'Cluster pairing in progress')]",
+        By.XPATH,
+    ),
+    "dr-clusters-paired-success": (
+        "//h2[contains(text(),'Clusters paired successfully')]",
+        By.XPATH,
+    ),
+    "dr-view-policy-btn": ("//button[.//span[text()='View policy']]", By.XPATH),
+    "dr-close-btn": ("//button[.//span[text()='Close']]", By.XPATH),
+    "dr-policy-row-name": (
+        "//td[@data-label='name'][normalize-space(.)='{0}']",
+        By.XPATH,
+    ),
+    "dr-policy-status-validated": (
+        "//tr[.//td[@data-label='name'][normalize-space(.)='{0}']]"
+        "//td[@data-label='status'][normalize-space(.)='Validated']",
+        By.XPATH,
+    ),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -2074,6 +2169,30 @@ attach_storage = {
     "replication_3": ("//button[contains(., '3-way Replication')]", By.XPATH),
     "new_sc_name_input": ("attach-storage-storageclass-name", By.ID),
     "confirm_action_btn": ('[data-test-id="confirm-action"]', By.CSS_SELECTOR),
+    "edit_annotations_menu_item": (
+        "//button[@role='menuitem' and normalize-space()='Edit annotations']",
+        By.XPATH,
+    ),
+    "annotation_key_input": (
+        'input[data-test="pairs-list-name"]',
+        By.CSS_SELECTOR,
+    ),
+    "annotation_value_input": (
+        'input[data-test="pairs-list-value"]',
+        By.CSS_SELECTOR,
+    ),
+    "annotation_add_row_btn": (
+        'button[data-test="add-button"]',
+        By.CSS_SELECTOR,
+    ),
+    "annotation_save_btn": (
+        "//button[normalize-space(.)='Save']",
+        By.XPATH,
+    ),
+    "annotation_alert_description": (
+        "//div[contains(@class, 'c-alert__description')]",
+        By.XPATH,
+    ),
 }
 
 add_capacity_4_11 = {
@@ -3693,8 +3812,8 @@ bucket_tab = {
         By.XPATH,
     ),
     "lifecycle_rules_list": (
-        "//table[@data-label='Lifecycle rules table']//tbody/tr",
-        By.XPATH,
+        '[aria-label="Lifecycle rules list page"] tbody tr',
+        By.CSS_SELECTOR,
     ),
     "rule_name_by_text": (
         "//td[@data-label='Name' and text()='{}']",
@@ -3760,6 +3879,14 @@ bucket_tab = {
     ),
     "incomplete_multipart_days_input": (
         "//input[@id='incomplete-multiparts-delete-days']",
+        By.XPATH,
+    ),
+    "lifecycle_actions_step": (
+        "//nav//button[normalize-space(.)='Lifecycle rule actions']",
+        By.XPATH,
+    ),
+    "lifecycle_review_step": (
+        "//nav//button[normalize-space(.)='Review']",
         By.XPATH,
     ),
     "wizard_next_button": (
@@ -4338,7 +4465,168 @@ external_systems = {
         "//td[@data-label='Name']//a[normalize-space()='{}']",
         By.XPATH,
     ),
+    "scale_local_node_count_link": (
+        "a[data-test='inventory-nodes']",
+        By.CSS_SELECTOR,
+    ),
+    "scale_node_count_edit_pencil": (
+        "button[aria-label='Edit node inventory']",
+        By.CSS_SELECTOR,
+    ),
+    "scale_encryption_edit_pencil": (
+        "button[aria-label='Edit encryption']",
+        By.CSS_SELECTOR,
+    ),
+    "add_nodes_modal_title": (
+        "div[role='dialog'][class*='modal-box']",
+        By.CSS_SELECTOR,
+    ),
+    "include_control_plane_checkbox": (
+        "input#include-control-plane-nodes",
+        By.CSS_SELECTOR,
+    ),
+    "node_row_checkbox": (
+        "//tr[.//td[@data-label='Name']//a[normalize-space()='{}']]"
+        "//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "control_plane_node_name_links": (
+        "//tr[.//td[@data-label='Role' and contains(normalize-space(),'control-plane')]]"
+        "//td[@data-label='Name']//a",
+        By.XPATH,
+    ),
+    "add_nodes_add_button": (
+        "//div[@role='dialog']//button[normalize-space()='Add']",
+        By.XPATH,
+    ),
+    "add_nodes_cancel_button": (
+        "//div[@role='dialog']//button[normalize-space()='Cancel']",
+        By.XPATH,
+    ),
+    "wizard_kernel_devel_verified": (
+        "div[data-test='kernel-devel-status-success']",
+        By.CSS_SELECTOR,
+    ),
+    "wizard_kernel_devel_status": (
+        "div[data-test^='kernel-devel-status']",
+        By.CSS_SELECTOR,
+    ),
+    "encryption_modal_title": (
+        "//*[@role='dialog']//*[normalize-space()='Enable data encryption']",
+        By.XPATH,
+    ),
+    "enable_encryption_checkbox": (
+        "//label[contains(normalize-space(.),'Enable data encryption')]"
+        "//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "enc_username": ("//input[@id='username']", By.XPATH),
+    "enc_password": ("//input[@id='password']", By.XPATH),
+    "enc_port": ("//input[@id='port']", By.XPATH),
+    "enc_client": ("//input[@id='client']", By.XPATH),
+    "enc_remote_rkm": (
+        "//input[@id='remoteRKM']",
+        By.XPATH,
+    ),
+    "enc_ca_cert_browse": (
+        "//*[@role='dialog']//input[@type='file']",
+        By.XPATH,
+    ),
+    "enc_server_info": (
+        "//input[@id='serverInformation']",
+        By.XPATH,
+    ),
+    "enc_tenant_id": (
+        "//input[@id='tenantId']",
+        By.XPATH,
+    ),
+    "encryption_save_button": (
+        "//footer//button[normalize-space()='Save']",
+        By.XPATH,
+    ),
+    "fs_used_capacity_header": (
+        "//th[normalize-space()='Used capacity']",
+        By.XPATH,
+    ),
+    "fs_total_capacity_header": (
+        "//th[normalize-space()='Total capacity']",
+        By.XPATH,
+    ),
+    "fs_used_capacity_cell": (
+        "//tr[.//*[normalize-space()='{}']]//td[@data-label='Used capacity']",
+        By.XPATH,
+    ),
+    "fs_total_capacity_cell": (
+        "//tr[.//*[normalize-space()='{}']]//td[@data-label='Total capacity']",
+        By.XPATH,
+    ),
+    "scale_dashboard_actions_button": (
+        "//div[@data-test-id='details-actions']//button[@data-test='kebab-button']",
+        By.XPATH,
+    ),
+    "dashboard_remove_action": (
+        "button#REMOVE_REMOTE_CLUSTER",
+        By.CSS_SELECTOR,
+    ),
+    "remove_disabled_subtext": (
+        "//*[contains(normalize-space(),'Cannot be removed if file systems exist')]",
+        By.XPATH,
+    ),
 }
+
+configure_performance = {
+    "core_storage_section": (
+        "//small[@id='core-storage-desc']/parent::div",
+        By.XPATH,
+    ),
+    "mcg_section": (
+        "//small[@id='mcg-performance-desc']/parent::div",
+        By.XPATH,
+    ),
+    "mcg_select_profile_button": (
+        "//button[contains(@class, 'c-menu-toggle') and contains(@aria-label, 'Object Gateway profile')]",
+        By.XPATH,
+    ),
+    "core_storage_select_profile_button": (
+        "//button[contains(@class, 'c-menu-toggle') and contains(@aria-label, 'performance mode from the list')]",
+        By.XPATH,
+    ),
+    "profile_menu_option": (
+        "//li[contains(@class, 'c-menu__list-item')]"
+        "//button[contains(translate(normalize-space(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
+        "'abcdefghijklmnopqrstuvwxyz'), '{}')]",
+        By.XPATH,
+    ),
+    "save_button": (
+        "//button[normalize-space()='Save']",
+        By.XPATH,
+    ),
+    "cancel_button": (
+        "//button[normalize-space()='Cancel']",
+        By.XPATH,
+    ),
+    "node_item": (
+        ".//div[contains(@class, 'node')]",
+        By.XPATH,
+    ),
+    "node_name": (
+        ".//*[contains(@class, 'node-name')]",
+        By.XPATH,
+    ),
+    "node_selection_option": (
+        ".//input[@type='checkbox']",
+        By.XPATH,
+    ),
+}
+
+storage_cluster_locators = {
+    "configure_performance_button": (
+        "//button[normalize-space()='Configure performance profiles']",
+        By.XPATH,
+    ),
+    "kebab_storage_cluster": ("//button[@data-test='kebab-button']", By.XPATH),
+}
+
 locators = {
     "5.0": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -4386,6 +4674,7 @@ locators = {
             **acm_configuration_4_20,
             **acm_configuration_4_21,
             **acm_configuration_4_22,
+            **acm_configuration_5_0,
         },
         "validation": {
             **validation,
@@ -4420,6 +4709,9 @@ locators = {
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
         "virtualmachine": virtualmachine,
+        "fusion_access_storage_cluster": fusion_access_storage_cluster,
+        "configure_performance": configure_performance,
+        "storage_cluster": storage_cluster_locators,
     },
     "4.22": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
@@ -4500,6 +4792,8 @@ locators = {
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
         "virtualmachine": virtualmachine,
+        "configure_performance": configure_performance,
+        "storage_cluster": storage_cluster_locators,
     },
     "4.21": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},

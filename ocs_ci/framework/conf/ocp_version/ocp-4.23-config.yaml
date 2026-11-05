@@ -14,7 +14,7 @@ ENV_DATA:
   # in your custom config (requires TechPreviewNoUpgrade feature set).
   vm_templates:
     "9": "rhcos-9.8.20260428-0-vmware.x86_64"
-    "10": "rhcos-10.2.20260423-0-vmware.x86_64"
+    "10": "rhcos-10.2.20260922-0-vmware.x86_64"
   # Legacy single template (fallback if vm_templates not defined)
   vm_template: "rhcos-9.8.20260428-0-vmware.x86_64"
   acm_hub_channel: "release-5.0"

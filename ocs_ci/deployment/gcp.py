@@ -22,7 +22,10 @@ from ocs_ci.utility.gcp import (
     load_service_account_key_dict,
     SERVICE_ACCOUNT_KEY_FILEPATH,
 )
-from ocs_ci.utility.utils import get_infra_id_from_openshift_install_state
+from ocs_ci.utility.utils import (
+    get_infra_id_from_openshift_install_state,
+    get_openshift_installer,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -120,10 +123,10 @@ class GCPIPI(GCPBase):
         cluster_path = config.ENV_DATA["cluster_path"]
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         if "installer_path" not in config.ENV_DATA:
-            bin_dir = os.path.abspath(os.path.expanduser(config.RUN.get("bin_dir", "")))
-            config.ENV_DATA["installer_path"] = os.path.join(
-                bin_dir, "openshift-install"
+            logger.info(
+                "Installer not available. Downloading installer to enable CCO operations."
             )
+            get_openshift_installer()
         release_image = get_ocp_release_image_from_installer()
         cco_image = cco.get_cco_container_image(release_image, pull_secret_path)
         cco.extract_ccoctl_binary(cco_image, pull_secret_path)

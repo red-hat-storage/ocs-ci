@@ -19,6 +19,8 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.resource_debug import describe_on_failure
+from ocs_ci.utility.status_logger import log_status_change
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 from ocs_ci.utility.version import VERSION_2_12, get_semantic_version
 
@@ -32,6 +34,7 @@ class FusionDeployment:
         self.sds_version = config.DEPLOYMENT.get("fusion_pre_release_sds_version")
         self.image_tag = config.DEPLOYMENT.get("fusion_pre_release_image")
         self.operator_name = defaults.FUSION_OPERATOR_NAME
+        self.subscription_name = defaults.FUSION_SUBSCRIPTION_NAME
         self.namespace = defaults.FUSION_NAMESPACE
         self.kubeconfig = config.RUN["kubeconfig"]
 
@@ -218,8 +221,14 @@ class FusionDeployment:
 
         """
         logger.info("Retrieving installed Fusion version")
+
+        sub_name = (
+            self.subscription_name
+            if config.ENV_DATA.get("platform", "").lower() == constants.IBM_HCI_PLATFORM
+            else self.operator_name
+        )
         results = run_cmd(
-            f"oc get subscription {self.operator_name} -n {self.namespace} --kubeconfig {self.kubeconfig} -o yaml"
+            f"oc get subscription {sub_name} -n {self.namespace} --kubeconfig {self.kubeconfig} -o yaml"
         )
         build = yaml.safe_load(results)["status"]["installedCSV"]
         version = ".".join(build.split(".")[1:])
@@ -297,6 +306,12 @@ def wait_for_csv(csv_name, namespace):
             logger.debug(f"Still waiting for the CSV: {csv_name}")
 
 
+@describe_on_failure(
+    kind="SpectrumFusion",
+    resource_name="spectrumfusion",
+    namespace=defaults.FUSION_NAMESPACE,
+    logger=logger,
+)
 @retry((AssertionError, KeyError), 10, 5)
 def spectrum_fusion_status_check():
     """
@@ -316,4 +331,10 @@ def spectrum_fusion_status_check():
     )
     spectrumfusion.reload()
     spectrumfusion_status = spectrumfusion.data["status"]["status"]
+    log_status_change(
+        key="SpectrumFusion/spectrumfusion",
+        status=spectrumfusion_status,
+        logger=logger,
+        message=f"SpectrumFusion status: {spectrumfusion_status}",
+    )
     assert spectrumfusion_status == "Completed"

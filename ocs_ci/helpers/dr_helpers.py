@@ -36,7 +36,7 @@ from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     get_ceph_tools_pod,
-    get_odf_external_snapshotter_leader,
+    get_odf_snapshotter_leader,
     get_pods_having_label,
     wait_for_matching_pattern_in_pod_logs,
 )
@@ -179,7 +179,10 @@ def get_current_secondary_cluster_name(
 
 
 def set_current_primary_cluster_context(
-    namespace, workload_type=constants.SUBSCRIPTION
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    discovered_apps=False,
+    resource_name=None,
 ):
     """
     Set current primary cluster context based on workload namespace
@@ -187,16 +190,26 @@ def set_current_primary_cluster_context(
     Args:
         namespace (str): Name of the namespace
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        discovered_apps (bool): If true then deployed workload is discovered_apps. Takes precedence over workload_type
+        resource_name (str): DRPC NAME Only Used for discovered apps
 
     """
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
-    cluster_name = get_current_primary_cluster_name(namespace)
+    cluster_name = get_current_primary_cluster_name(
+        namespace=namespace,
+        workload_type=workload_type,
+        discovered_apps=discovered_apps,
+        resource_name=resource_name,
+    )
     config.switch_to_cluster_by_name(cluster_name)
 
 
 def set_current_secondary_cluster_context(
-    namespace, workload_type=constants.SUBSCRIPTION
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    discovered_apps=False,
+    resource_name=None,
 ):
     """
     Set secondary cluster context based on workload namespace
@@ -204,11 +217,18 @@ def set_current_secondary_cluster_context(
     Args:
         namespace (str): Name of the namespace
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        discovered_apps (bool): If true then deployed workload is discovered_apps. Takes precedence over workload_type
+        resource_name (str): DRPC NAME Only Used for discovered apps
 
     """
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
-    cluster_name = get_current_secondary_cluster_name(namespace)
+    cluster_name = get_current_secondary_cluster_name(
+        namespace=namespace,
+        workload_type=workload_type,
+        discovered_apps=discovered_apps,
+        resource_name=resource_name,
+    )
     config.switch_to_cluster_by_name(cluster_name)
 
 
@@ -315,6 +335,7 @@ def failover(
             drpc_name=drpc_obj.resource_name,
             namespace=namespace,
             dr_action="app-failover",
+            retries=10,
         )
 
 
@@ -430,6 +451,7 @@ def relocate(
             drpc_name=drpc_obj.resource_name,
             namespace=namespace,
             dr_action="app-relocate",
+            retries=10,
         )
 
     config.switch_ctx(restore_index)
@@ -1287,7 +1309,7 @@ def wait_for_all_resources_creation(
     pvc_count,
     pod_count,
     namespace,
-    timeout=900,
+    timeout=3600,
     skip_replication_resources=False,
     discovered_apps=False,
     vrg_name="",
@@ -1341,7 +1363,7 @@ def wait_for_all_resources_creation(
 
 def wait_for_all_resources_deletion(
     namespace,
-    timeout=1500,
+    timeout=1000,
     discovered_apps=False,
     workload_cleanup=False,
     vrg_name="",
@@ -1517,6 +1539,7 @@ def get_backend_volumes_for_pvcs(namespace):
             elif pvc_obj.backed_sc in [
                 constants.DEFAULT_STORAGECLASS_CEPHFS,
                 constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS,
+                constants.CUSTOM_CEPHFS_STORAGECLASS,
             ]:
                 backend_volume = pvc_obj.get_cephfs_subvolume_name
 
@@ -2271,11 +2294,24 @@ def get_managed_cluster_node_ips():
     """
     restore_index = config.cur_index
     primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
-    secondary_index = [
-        s.MULTICLUSTER["multicluster_index"]
-        for s in get_non_acm_cluster_config()
-        if s.MULTICLUSTER["multicluster_index"] != primary_index
-    ][0]
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
+    if dr_cluster_relations:
+        # dr_cluster_relations is a list containing cluster pairs list with the index 0 pair as current pair under test
+        dr_cluster_names = dr_cluster_relations[0]
+        primary_name = config.get_cluster_name_by_index(primary_index)
+        secondary_index = config.get_cluster_index_by_name(
+            [
+                cluster_name
+                for cluster_name in dr_cluster_names
+                if cluster_name != primary_name
+            ][0]
+        )
+    else:
+        secondary_index = [
+            s.MULTICLUSTER["multicluster_index"]
+            for s in get_non_acm_cluster_config()
+            if s.MULTICLUSTER["multicluster_index"] != primary_index
+        ][0]
     cluster_name_primary = config.clusters[primary_index].ENV_DATA["cluster_name"]
     cluster_name_secondary = config.clusters[secondary_index].ENV_DATA["cluster_name"]
     cluster_data = [
@@ -2572,8 +2608,7 @@ def verify_drpolicy_cli(switch_ctx=None):
 
     restore_index = config.cur_index
     config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
-    drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
-    drpolicy_items = drpolicy_obj.get().get("items") or []
+    drpolicy_items = get_all_drpolicy()
     if not drpolicy_items:
         config.switch_ctx(restore_index)
         raise UnexpectedBehaviour("No DRPolicy resources found on hub")
@@ -2959,7 +2994,10 @@ def do_discovered_apps_cleanup(
 
 
 def do_discovered_apps_cleanup_multi_ns(
-    old_primary, workload_instance, vrg_state="secondary"
+    old_primary,
+    workload_instance,
+    vrg_state="secondary",
+    skip_resource_deletion_verification=False,
 ):
     """
     Function to clean up Resources
@@ -2967,6 +3005,8 @@ def do_discovered_apps_cleanup_multi_ns(
     Args:
         old_primary (str): Name of old primary where cleanup will happen
         workload_instance (list): Workload instance
+        skip_resource_deletion_verification (bool): Skip verification of rresource deletion, VRG state and DRPC
+            progression
 
     """
     restore_index = config.cur_index
@@ -2986,22 +3026,23 @@ def do_discovered_apps_cleanup_multi_ns(
         run_cmd(
             f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
         )
-    for workload_instance_index in workload_instance:
-        workload_namespace = workload_instance_index.workload_namespace
-        wait_for_all_resources_deletion(
-            namespace=workload_namespace,
-            discovered_apps=True,
-            vrg_name=vrg_name,
-            skip_vrg_check=True,
-        )
+    if not skip_resource_deletion_verification:
+        for workload_instance_index in workload_instance:
+            workload_namespace = workload_instance_index.workload_namespace
+            wait_for_all_resources_deletion(
+                namespace=workload_namespace,
+                discovered_apps=True,
+                vrg_name=vrg_name,
+                skip_vrg_check=True,
+            )
 
-    wait_for_vrg_state(
-        vrg_state=vrg_state,
-        vrg_namespace=constants.DR_OPS_NAMESPACE,
-        resource_name=vrg_name,
-    )
-    config.switch_acm_ctx()
-    drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
+        wait_for_vrg_state(
+            vrg_state=vrg_state,
+            vrg_namespace=constants.DR_OPS_NAMESPACE,
+            resource_name=vrg_name,
+        )
+        config.switch_acm_ctx()
+        drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
     config.switch_ctx(restore_index)
 
 
@@ -3015,6 +3056,9 @@ def generate_kubeobject_capture_interval():
     """
     capture_interval = int(get_all_drpolicy()[0]["spec"]["schedulingInterval"][:-1])
 
+    # For MDR, schedulingInterval is 0m. Use default 5m in that case.
+    if capture_interval == 0:
+        return 5
     if capture_interval <= 5 and capture_interval != 1:
         return capture_interval - 1
     elif capture_interval > 6:
@@ -3263,6 +3307,33 @@ def wait_for_vrg_state(vrg_state, vrg_namespace, resource_name, timeout=900):
     )
 
 
+def wait_for_drpc_progression_completed(
+    namespace, resource_name, timeout=600, sleep=10
+):
+    """
+    Wait until the given DRPC reaches Completed progression.
+
+    Args:
+        namespace (str): Namespace of the DRPC
+        resource_name (str): DRPC resource name
+        timeout (int): Time in seconds to wait (default: 600)
+        sleep (int): Seconds between polls (default: 10)
+
+    Raises:
+        AssertionError: If progression does not reach Completed within timeout
+
+    """
+    with config.RunWithAcmConfigContext():
+        drpc_obj = DRPC(namespace=namespace, resource_name=resource_name)
+        logger.info(
+            f"Waiting for DRPC {resource_name} in namespace {namespace} "
+            f"to reach progression {constants.STATUS_COMPLETED}"
+        )
+        drpc_obj.wait_for_progression_status(
+            status=constants.STATUS_COMPLETED, timeout=timeout, sleep=sleep
+        )
+
+
 def validate_storage_cluster_peer_state():
     """
     Validate Storage cluster peer state
@@ -3481,7 +3552,7 @@ def verify_volsync():
 
 
 def verify_cluster_data_protected_status(
-    workload_type, namespace, workload_placement_name=None
+    workload_type, namespace, workload_placement_name=None, drpc_name=None
 ):
     """
     Verify that the cluster dataProtected is True
@@ -3490,6 +3561,7 @@ def verify_cluster_data_protected_status(
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         namespace (str): the namespace of the drpc resources
         workload_placement_name (str): Placement name
+        drpc_name (str): DRPC resource name for the application
     """
 
     if workload_type == constants.APPLICATION_SET:
@@ -3499,7 +3571,9 @@ def verify_cluster_data_protected_status(
             resource_name=f"{workload_placement_name}-drpc",
         )
     else:
-        drpc_obj = DRPC(namespace=namespace)
+        drpc_obj = DRPC(
+            namespace=namespace, resource_name=drpc_name if drpc_name else ""
+        )
     drpc_obj.wait_for_clusterdataprotected_status()
 
 
@@ -3544,23 +3618,38 @@ def get_vgs_name(vgs_namespace):
 
 def validate_volumegroupsnapshot(vgs_namespace):
     """
-    Validates Volume Group Snapshot resource creation from odf external snapshotter
+    Validates Volume Group Snapshot resource creation.
+
+    For ODF <= 4.22 this reads the odf external snapshotter leader pod logs.
+    For ODF > 4.22 this reads the csi-snapshot-controller leader pod logs
+    (namespace openshift-cluster-storage-operator).
 
     Args:
         vgs_namespace (str): the namespace of the Volume Group snapshot resources
 
     """
-    namespace = config.ENV_DATA["cluster_namespace"]
-    odf_external_snapshotter_leader = get_odf_external_snapshotter_leader(namespace)
+    ocs_version = version.get_semantic_ocs_version_from_config()
     vgs_name = get_vgs_name(vgs_namespace)
     expected_output_lst = (
         f"{vgs_name} was successfully created by the CSI driver",
         f"{vgs_name} is ready to use",
     )
+
+    if ocs_version > version.VERSION_4_22:
+        namespace = constants.OPENSHIFT_CLUSTER_STORAGE_OPERATOR_NAMESPACE
+        snapshotter_leader = get_odf_snapshotter_leader(
+            namespace,
+            label=constants.CSI_SNAPSHOT_CONTROLLER_LABEL,
+            container=None,
+        )
+    else:
+        namespace = config.ENV_DATA["cluster_namespace"]
+        snapshotter_leader = get_odf_snapshotter_leader(namespace)
+
     try:
         for expected_val in expected_output_lst:
             wait_for_matching_pattern_in_pod_logs(
-                pod_name=odf_external_snapshotter_leader.name,
+                pod_name=snapshotter_leader.name,
                 pattern=expected_val,
                 namespace=namespace,
                 timeout=300,
@@ -4532,16 +4621,27 @@ def validate_application_odf_cli(
     Returns:
         str or None: The stdout output from the command,
             or None if any cluster in the multicluster config is a hosted
-            cluster, or if gather failed.
+            cluster, or if gather failed, or if
+            ``skip_odf_cli_validation`` is set in ENV_DATA.
 
     Note:
         Returns None immediately (without running any command) when any
-        cluster in ``config.clusters`` has ``is_hosted=True``.  Skips
-        the test on validation failure.
+        cluster in ``config.clusters`` has ``is_hosted=True``, or when
+        ``skip_odf_cli_validation`` is ``True`` in ``config.ENV_DATA``.
+        Skips the test on validation failure.
 
     """
+    if config.ENV_DATA.get("skip_odf_cli_validation", False):
+        logger.info(
+            f"Skipping ODF CLI DR {action} for DRPC '{drpc_name}': "
+            f"'skip_odf_cli_validation' is set in ENV_DATA"
+        )
+        return None
+
     for cluster in config.clusters:
-        if cluster.MULTICLUSTER.get("is_hosted", False):
+        if cluster.MULTICLUSTER.get("is_hosted", False) or cluster.ENV_DATA.get(
+            "cluster_type"
+        ) in (constants.HCI_CLIENT, constants.EXT_CLIENT):
             cluster_name = cluster.MULTICLUSTER.get(
                 "name", cluster.ENV_DATA.get("cluster_name", "unknown")
             )
@@ -4711,12 +4811,32 @@ def validate_cluster_odf_cli(retries=5, retry_interval=60):
         retry_interval (int): Seconds to wait between retries.
 
     Returns:
-        str: The stdout output from the validation command
+        str or None: The stdout output from the validation command,
+            or None if any cluster in the multicluster config is a hosted
+            cluster, or if ``skip_odf_cli_validation`` is set in ENV_DATA.
 
     Raises:
         CommandFailed: If the ODF CLI command fails
 
     """
+    if config.ENV_DATA.get("skip_odf_cli_validation", False):
+        logger.info(
+            "Skipping ODF CLI DR validate clusters: "
+            "'skip_odf_cli_validation' is set in ENV_DATA"
+        )
+        return None
+
+    for cluster in config.clusters:
+        if cluster.MULTICLUSTER.get("is_hosted", False):
+            cluster_name = cluster.MULTICLUSTER.get(
+                "name", cluster.ENV_DATA.get("cluster_name", "unknown")
+            )
+            logger.info(
+                f"Skipping ODF CLI DR validate clusters: "
+                f"cluster '{cluster_name}' is a hosted cluster"
+            )
+            return None
+
     output_dir = os.path.join(
         os.path.expanduser(config.RUN["log_dir"]),
         f"odf_dr_validate_clusters_{config.RUN['run_id']}",

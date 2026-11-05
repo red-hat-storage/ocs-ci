@@ -53,6 +53,7 @@ ODF_CSI_ADDONS_OPERATOR = "odf-csi-addons-operator"
 LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
 CERT_MANAGER_OPERATOR_NAME = "cert-manager-operator"
 FUSION_OPERATOR_NAME = "isf-operator"
+FUSION_SUBSCRIPTION_NAME = "isf-subscription"
 FUSION_CATALOG_NAME = "isf-data-foundation-catalog"
 FUSION_ACCESS_OPERATOR_NAME = "openshift-fusion-access-operator"
 FUSION_ACCESS_NAMESPACE = "ibm-fusion-access"
@@ -181,7 +182,7 @@ CRUSH_DEVICE_CLASS = "ssd"
 
 # IBM Cloud
 IBM_CLOUD_LOAD_BALANCER_QUOTA = 100
-IBM_CLOUD_REGIONS = {"us-south", "us-east"}
+IBM_CLOUD_REGIONS = {"us-south", "us-east", "ca-tor"}
 
 # HyperShift defaults
 HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT = 3

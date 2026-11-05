@@ -73,8 +73,7 @@ class CephXMONHelper:
         if entities:
             return entities
 
-        toolbox = toolbox_pod or self.get_ceph_cli_pod()
-        mon_dump = toolbox.exec_ceph_cmd("ceph mon dump")
+        mon_dump = self.exec_ceph_cmd_retrying_auth("ceph mon dump", toolbox_pod)
         discovered = []
         for mon in mon_dump.get("mons", []):
             name = mon.get("name")

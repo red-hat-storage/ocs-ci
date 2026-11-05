@@ -5,13 +5,14 @@ Tests for PVC volume health annotation feature (RHSTOR-7596).
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_ocs_version,
+    skipif_cephfs_disabled,
     skipif_mcg_only,
     skipif_managed_service,
     skipif_rosa_hcp,
@@ -31,9 +32,12 @@ from ocs_ci.ocs import constants, ocp, node
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.csi_addons import (
     get_csi_addon_pod_on_node,
+    remove_csi_addons_config_key,
+    restart_csi_addons_controller,
+    update_csi_addons_config,
 )
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -43,6 +47,8 @@ ANNOTATION_POLL_INTERVAL = 15
 REPORTER_TICK_WAIT = 60
 UNHEALTHY_POLL_TIMEOUT = 300
 RECOVERY_POLL_TIMEOUT = 300
+STALE_CLEANUP_WAIT = 210
+MAX_LAST_CHECKED_AGE_SECONDS = 120
 
 
 @tier1
@@ -55,7 +61,10 @@ RECOVERY_POLL_TIMEOUT = 300
     argvalues=[
         pytest.param(
             constants.CEPHFILESYSTEM,
-            marks=pytest.mark.polarion_id("OCS-8219"),
+            marks=[
+                pytest.mark.polarion_id("OCS-8219"),
+                skipif_cephfs_disabled,
+            ],
         ),
         pytest.param(
             constants.CEPHBLOCKPOOL,
@@ -246,13 +255,10 @@ class TestPVCVolumeHealthAnnotation(ManageTest):
         logger.info(f"{driver.upper()} PVC volume health annotation test passed")
 
 
-@green_squad
-@skipif_ocs_version("<4.23")
-@skipif_mcg_only
-class TestPVCVolumeHealthUnhealthy(ManageTest):
+class PVCVolumeHealthTestHelpers:
     """
-    Test PVC volume health annotation transitions to unhealthy state
-    when Ceph connectivity is disrupted, and recovers when restored.
+    Mixin class providing shared helper methods for PVC volume health tests.
+    Not a test class itself - provides utilities for creating PVCs, pods, and I/O.
     """
 
     def _create_pvc_and_pod_with_io(self, pvc_factory, pod_factory):
@@ -317,6 +323,65 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
             f"No CephFS nodeplugin pod found on nodes: "
             f"{sorted(targets - set(restarted))}"
         )
+
+    def _assert_pvc_health_state(
+        self, pvc_obj, expected_key, expected_state, pvc_label="PVC"
+    ):
+        """
+        Validate PVC volume health annotation key exists and has expected state.
+
+        Volume health annotations are added by the CSI driver's csi-addons
+        sidecar to track the health of mounted volumes on each node. Each
+        annotation key is unique per-node and contains JSON with health
+        metadata including state ('healthy' or 'unhealthy').
+
+        This helper performs two validations:
+        1. Checks that the expected annotation key exists on the PVC
+        2. Parses the JSON value and verifies the 'state' field matches
+
+        Args:
+            pvc_obj: PVC object to check for health annotations
+            expected_key (str): The full annotation key to validate.
+                Format: "volumehealth.storage.openshift.io/<node-uid>"
+            expected_state (str): Expected health state value.
+                Valid values: 'healthy', 'unhealthy'
+            pvc_label (str): Human-readable label for logging context.
+                Used to distinguish multiple PVCs in tests (e.g., "PVC-A")
+
+        Returns:
+            dict: Parsed annotation JSON (contains 'state', 'type', 'message')
+                for additional validation if needed by the caller.
+        """
+        ann = pvc_obj.get_volume_health_annotations()
+
+        logger.assertion(f"{pvc_label} annotation key {expected_key} present")
+        assert expected_key in ann, (
+            f"{pvc_label} {pvc_obj.name}: expected key {expected_key} missing. "
+            f"Found: {list(ann.keys())}"
+        )
+
+        parsed = json.loads(ann[expected_key])
+        actual_state = parsed.get("state")
+
+        logger.assertion(
+            f"{pvc_label} state: expected='{expected_state}', actual='{actual_state}'"
+        )
+        assert actual_state == expected_state, (
+            f"{pvc_label} {pvc_obj.name}: expected '{expected_state}', "
+            f"got {actual_state}"
+        )
+        return parsed
+
+
+@green_squad
+@skipif_ocs_version("<4.23")
+@skipif_mcg_only
+@skipif_cephfs_disabled
+class TestPVCVolumeHealthUnhealthy(PVCVolumeHealthTestHelpers, ManageTest):
+    """
+    Test PVC volume health annotation transitions to unhealthy state
+    when Ceph connectivity is disrupted, and recovers when restored.
+    """
 
     @tier1
     @ui
@@ -794,3 +859,849 @@ class TestPVCVolumeHealthUnhealthy(ManageTest):
 
         card.take_screenshot("mds_recovery_confirmed")
         logger.info("PVC health unhealthy via MDS scale-down test passed")
+
+    @tier2
+    @pytest.mark.polarion_id("OCS-8318")
+    @skipif_external_mode
+    def test_rwo_cephfs_dual_pvc_same_node_health(
+        self, pvc_factory, pod_factory, request
+    ):
+        """
+        Verify that blocklisting the CephFS client for one RWO PVC on a
+        shared node causes only that PVC to transition to 'unhealthy'
+        while a second RWO PVC on the same node remains 'healthy'.
+
+        Steps:
+            1. Verify Ceph health is HEALTH_OK.
+            2. Create PVC-A and PVC-B (CephFS, RWO, 5Gi).
+            3. Create pod-A and pod-B, both pinned to the same
+               worker node; run FIO I/O on both.
+            4. Wait ~1 min for reporter tick.
+            5. Assert both PVCs have a volumehealth annotation keyed by
+               the same node UID suffix and state == 'healthy'.
+            6. Blocklist the CephFS client for PVC-A only (evicts it
+               from the active MDS).
+            7. Wait ~1 min for reporter tick.
+            8. Assert PVC-A state == 'unhealthy', PVC-B state == 'healthy'.
+        """
+        logger.test_step("Verify Ceph health is HEALTH_OK")
+        ceph_health_check(tries=3, delay=10)
+
+        logger.test_step("Create PVC-A and PVC-B (CephFS, RWO, 5Gi)")
+        pvc_a = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            size=5,
+            access_mode=constants.ACCESS_MODE_RWO,
+        )
+        logger.info(f"PVC-A {pvc_a.name} created and Bound")
+        pvc_b = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            size=5,
+            access_mode=constants.ACCESS_MODE_RWO,
+        )
+        logger.info(f"PVC-B {pvc_b.name} created and Bound")
+
+        logger.test_step("Pin pod-A and pod-B to the same worker node")
+        worker_nodes = node.get_worker_nodes()
+        logger.assertion(
+            f"Worker node count: expected >= 1, actual={len(worker_nodes)}"
+        )
+        assert (
+            len(worker_nodes) >= 1
+        ), f"Need at least 1 worker node, found {len(worker_nodes)}"
+        target_node = worker_nodes[0]
+
+        pod_a = pod_factory(
+            pvc=pvc_a,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=target_node,
+        )
+        pod_b = pod_factory(
+            pvc=pvc_b,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=target_node,
+        )
+        actual_node_a = pod_a.get()["spec"]["nodeName"]
+        actual_node_b = pod_b.get()["spec"]["nodeName"]
+        logger.info(
+            f"Pod-A {pod_a.name} on {actual_node_a}, "
+            f"Pod-B {pod_b.name} on {actual_node_b}"
+        )
+        logger.assertion(
+            f"Both pods on same node: "
+            f"expected={target_node}, "
+            f"actual_a={actual_node_a}, actual_b={actual_node_b}"
+        )
+        assert (
+            actual_node_a == target_node
+        ), f"Pod-A landed on {actual_node_a}, expected {target_node}"
+        assert (
+            actual_node_b == target_node
+        ), f"Pod-B landed on {actual_node_b}, expected {target_node}"
+
+        logger.test_step("Run FIO I/O on both pods")
+        pod_a.run_io(
+            storage_type="fs",
+            size="512M",
+            fio_filename=pod_a.name,
+        )
+        pod_b.run_io(
+            storage_type="fs",
+            size="512M",
+            fio_filename=pod_b.name,
+        )
+        pod.get_fio_rw_iops(pod_a)
+        pod.get_fio_rw_iops(pod_b)
+        logger.info("FIO I/O completed on both pods")
+
+        logger.test_step(f"Wait {REPORTER_TICK_WAIT}s for reporter tick")
+        time.sleep(REPORTER_TICK_WAIT)
+
+        logger.test_step(
+            "Resolve node UID and assert both PVCs have "
+            "a healthy annotation keyed by the same node UID"
+        )
+        node_ocp = ocp.OCP(kind="node", resource_name=target_node)
+        uid = node_ocp.get()["metadata"]["uid"]
+        expected_key = f"{constants.VOLUME_HEALTH_ANNOTATION_PREFIX}{uid}"
+        logger.info(f"Node {target_node} UID={uid}, expected_key={expected_key}")
+
+        pvc_a.wait_for_volume_health_state(
+            expected_state="healthy",
+            timeout=ANNOTATION_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+        )
+        pvc_b.wait_for_volume_health_state(
+            expected_state="healthy",
+            timeout=ANNOTATION_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+        )
+
+        self._assert_pvc_health_state(pvc_a, expected_key, "healthy", "PVC-A")
+        self._assert_pvc_health_state(pvc_b, expected_key, "healthy", "PVC-B")
+        logger.info("Both PVCs carry healthy annotation with same node UID suffix")
+
+        initial_cluster_index = config.cur_index
+        is_hci = (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        )
+
+        subvolume_path = None
+        if is_hci:
+            pvc_a.reload()
+            pv_name = pvc_a.backed_pv
+            pv_ocp = ocp.OCP(kind="pv", resource_name=pv_name)
+            pv_data = pv_ocp.get()
+            subvolume_path = pv_data["spec"]["csi"]["volumeAttributes"]["subvolumePath"]
+            logger.info(f"Pre-resolved subvolume path for HCI: {subvolume_path}")
+
+        logger.test_step(
+            "Blocklist CephFS client for PVC-A only (evicts it from the active MDS)"
+        )
+        try:
+            if is_hci:
+                logger.info("HCI platform: switching to provider for blocklisting")
+                config.switch_to_provider()
+
+            _, client_addr = blocklist_cephfs_client(
+                pvc_a, subvolume_path=subvolume_path
+            )
+            logger.info(f"PVC-A client blocklisted; addr={client_addr}")
+        finally:
+            if is_hci:
+                config.switch_ctx(initial_cluster_index)
+
+        def finalizer():
+            logger.info("Finalizer: remove CephFS client blocklist")
+            try:
+                if is_hci:
+                    config.switch_to_provider()
+                remove_cephfs_client_blocklist(client_addr)
+            finally:
+                if is_hci:
+                    config.switch_ctx(initial_cluster_index)
+
+        request.addfinalizer(finalizer)
+
+        logger.test_step(
+            "Wait for PVC-A to transition to 'unhealthy' "
+            "while PVC-B remains 'healthy'"
+        )
+        pvc_a.wait_for_volume_health_state(
+            expected_state="unhealthy",
+            timeout=UNHEALTHY_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+        )
+        pvc_b.wait_for_volume_health_state(
+            expected_state="healthy",
+            timeout=ANNOTATION_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+        )
+
+        self._assert_pvc_health_state(pvc_a, expected_key, "unhealthy", "PVC-A")
+        self._assert_pvc_health_state(pvc_b, expected_key, "healthy", "PVC-B")
+
+        logger.info("RWO CephFS dual-PVC same-node health isolation test passed")
+
+
+@tier2
+@green_squad
+@skipif_ocs_version("<4.23")
+@skipif_managed_service
+@skipif_rosa_hcp
+@skipif_external_mode
+@skipif_cephfs_disabled
+@skipif_mcg_only
+class TestPVCVolumeHealthStaleAnnotation(PVCVolumeHealthTestHelpers, ManageTest):
+    """
+    Verify that stale volumehealth annotations are cleaned up by the
+    CSI Addons controller once the stale threshold elapses after the
+    mounting pod is deleted, while annotations from an actively-mounted
+    PVC are preserved.
+    """
+
+    @pytest.fixture(autouse=True)
+    def restore_csi_addons_config(self, request):
+        """
+        Snapshot the CSI Addons ConfigMap state before the test and
+        restore it afterwards via a finalizer.
+
+        If the ConfigMap did not exist before the test, the finalizer
+        deletes it and restarts the controller.  If it did exist, the
+        finalizer restores the original values for the two keys used by
+        this test, removing them when they were absent before.
+
+        Args:
+            request: pytest ``FixtureRequest`` object used to register
+                the teardown finalizer.
+        """
+        ns = config.ENV_DATA["cluster_namespace"]
+        cm_ocp = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            namespace=ns,
+            resource_name=constants.CSI_ADDONS_CONFIGMAP_NAME,
+        )
+        cm_existed = cm_ocp.is_exist(resource_name=constants.CSI_ADDONS_CONFIGMAP_NAME)
+
+        threshold_key = "volume-health-stale-threshold"
+        interval_key = "volume-health-cleanup-interval"
+
+        threshold_existed = False
+        interval_existed = False
+        original_threshold = ""
+        original_interval = ""
+
+        if cm_existed:
+            cm_data = cm_ocp.get().get("data", {})
+            if threshold_key in cm_data:
+                threshold_existed = True
+                original_threshold = cm_data[threshold_key]
+            if interval_key in cm_data:
+                interval_existed = True
+                original_interval = cm_data[interval_key]
+
+        logger.info(
+            f"Snapshotted CSI Addons config — cm_existed={cm_existed}, "
+            f"{threshold_key}_existed={threshold_existed} value={repr(original_threshold)}, "
+            f"{interval_key}_existed={interval_existed} value={repr(original_interval)}"
+        )
+
+        def finalizer():
+            logger.info("restore_csi_addons_config finalizer: restoring state")
+            if not cm_existed:
+                logger.info(
+                    "ConfigMap did not exist before test; deleting it "
+                    "and restarting controller"
+                )
+                try:
+                    cm_ocp.delete(resource_name=constants.CSI_ADDONS_CONFIGMAP_NAME)
+                    logger.info(
+                        f"Deleted ConfigMap " f"{constants.CSI_ADDONS_CONFIGMAP_NAME}"
+                    )
+                except CommandFailed as e:
+                    if "not found" not in str(e).lower():
+                        logger.error(
+                            f"Failed to delete ConfigMap "
+                            f"{constants.CSI_ADDONS_CONFIGMAP_NAME}: {e}"
+                        )
+                        raise
+                    logger.info(
+                        f"ConfigMap {constants.CSI_ADDONS_CONFIGMAP_NAME} "
+                        f"already deleted"
+                    )
+                restart_csi_addons_controller()
+                return
+            for key, existed, original in (
+                (threshold_key, threshold_existed, original_threshold),
+                (interval_key, interval_existed, original_interval),
+            ):
+                if existed:
+                    update_csi_addons_config(key, original, restart=False)
+                    logger.info(f"Restored {key}={original!r}")
+                else:
+                    remove_csi_addons_config_key(key)
+                    logger.info(f"Removed {key} (was absent before test)")
+            restart_csi_addons_controller()
+
+        request.addfinalizer(finalizer)
+
+    def _validate_stale_cleanup(
+        self,
+        pvc_stale,
+        stale_key,
+        active_key,
+        pvc_active=None,
+    ):
+        """
+        Validate stale annotation cleanup behavior.
+
+        Polls for stale annotation cleanup, asserts the stale key is removed
+        and the active key persists with a fresh lastChecked timestamp.
+
+        Args:
+            pvc_stale: PVC object containing the stale annotation key
+            stale_key: Annotation key expected to be cleaned up
+            active_key: Annotation key expected to remain active
+            pvc_active: Optional separate PVC for active annotation.
+                If None, validates active key on pvc_stale (same PVC).
+        """
+        logger.test_step(
+            f"Poll up to {STALE_CLEANUP_WAIT}s for stale annotation cleanup"
+        )
+        try:
+            for cleaned in TimeoutSampler(
+                timeout=STALE_CLEANUP_WAIT,
+                sleep=10,
+                func=lambda: (
+                    stale_key not in pvc_stale.get_volume_health_annotations()
+                ),
+            ):
+                if cleaned:
+                    logger.info(f"Stale annotation {stale_key} cleaned up")
+                    break
+        except TimeoutExpiredError:
+            logger.warning(f"Stale annotation not cleaned within {STALE_CLEANUP_WAIT}s")
+
+        remaining_stale = pvc_stale.get_volume_health_annotations()
+        logger.assertion(
+            f"stale key not in annotations; "
+            f"remaining={list(remaining_stale.keys())}"
+        )
+        assert stale_key not in remaining_stale, (
+            f"Stale key {stale_key} still present "
+            f"on PVC {pvc_stale.name} after {STALE_CLEANUP_WAIT}s"
+        )
+
+        logger.test_step("Assert active annotation key is still present")
+        # Use separate PVC for active validation if provided, else same PVC
+        pvc_for_active = pvc_active if pvc_active else pvc_stale
+        remaining_active = pvc_for_active.get_volume_health_annotations()
+        logger.assertion(
+            f"active key in annotations; " f"present={list(remaining_active.keys())}"
+        )
+        assert active_key in remaining_active, (
+            f"Active key {active_key} missing from "
+            f"PVC {pvc_for_active.name} — should not have been cleaned up"
+        )
+
+        logger.test_step(
+            f"Parse lastChecked from active annotation; "
+            f"assert age <= {MAX_LAST_CHECKED_AGE_SECONDS}s"
+        )
+        active_parsed = json.loads(remaining_active[active_key])
+        last_checked_raw = active_parsed.get("lastChecked", "")
+        logger.assertion(
+            f"lastChecked field exists in annotation {active_key}; "
+            f"value={repr(last_checked_raw)}, full_annotation={active_parsed}"
+        )
+        assert last_checked_raw, (
+            f"Annotation {active_key} missing 'lastChecked' field. "
+            f"Full annotation: {active_parsed}"
+        )
+        logger.info(f"Active annotation lastChecked: {last_checked_raw}")
+        dt_last = datetime.fromisoformat(last_checked_raw.replace("Z", "+00:00"))
+        now = datetime.now(tz=timezone.utc)
+        age_seconds = (now - dt_last).total_seconds()
+        logger.assertion(
+            f"lastChecked age in range [0, {MAX_LAST_CHECKED_AGE_SECONDS}]s; "
+            f"actual={age_seconds:.1f}s"
+        )
+        assert 0 <= age_seconds <= MAX_LAST_CHECKED_AGE_SECONDS, (
+            f"Active annotation lastChecked age out of range: "
+            f"{age_seconds:.1f}s "
+            f"(expected 0 to {MAX_LAST_CHECKED_AGE_SECONDS}s). "
+            f"lastChecked={last_checked_raw}"
+        )
+        logger.info(f"Active annotation lastChecked age={age_seconds:.1f}s — OK")
+
+    @tier2
+    @pytest.mark.polarion_id("OCS-8292")
+    def test_stale_volume_health_annotation_cleanup(self, pvc_factory, pod_factory):
+        """
+        Verify stale volumehealth annotations are cleaned up after the
+        mounting pod is deleted and the stale threshold elapses, while
+        annotations from an actively-mounted PVC survive cleanup.
+
+        Note:
+            The ``restore_csi_addons_config`` autouse fixture
+            automatically snapshots and restores the CSI Addons
+            ConfigMap state after the test completes.
+
+        Steps:
+            1. Ceph health OK; create PVC+pod for stale scenario; wait
+               for healthy annotation.
+            2. Create PVC+pod for active scenario; wait for healthy
+               annotation.
+            3. Record annotation keys for both PVCs.
+            4. Configure stale threshold (2 m) and cleanup interval
+               (1 m) on the CSI Addons controller.
+            5. Delete the stale pod and wait for it to disappear.
+            6. Poll until stale annotation disappears (up to
+               STALE_CLEANUP_WAIT seconds).
+            7. Assert stale annotation key is gone from stale PVC.
+            8. Assert active annotation key is still present on active
+               PVC.
+            9. Parse lastChecked from active annotation; assert age
+               is within MAX_LAST_CHECKED_AGE_SECONDS.
+        """
+        logger.test_step(
+            "Verify Ceph health OK; create stale PVC+pod; "
+            "poll for healthy annotation"
+        )
+        ceph_health_check(tries=3, delay=10)
+        pvc_stale, pod_stale = self._create_pvc_and_pod_with_io(
+            pvc_factory, pod_factory
+        )
+        pvc_stale.wait_for_volume_health_state(
+            "healthy",
+            timeout=ANNOTATION_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+        )
+
+        logger.test_step("Create active PVC+pod; " "poll for healthy annotation")
+        pvc_active, pod_active = self._create_pvc_and_pod_with_io(
+            pvc_factory, pod_factory
+        )
+        pvc_active.wait_for_volume_health_state(
+            "healthy",
+            timeout=ANNOTATION_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+        )
+
+        logger.test_step("Record annotation keys for stale PVC and active PVC")
+        stale_annotations = pvc_stale.get_volume_health_annotations()
+        logger.assertion(
+            f"stale PVC has exactly 1 annotation key; "
+            f"actual={len(stale_annotations)}"
+        )
+        assert len(stale_annotations) == 1, (
+            f"Expected 1 annotation on stale PVC, "
+            f"got {len(stale_annotations)}: {list(stale_annotations.keys())}"
+        )
+        stale_key = next(iter(stale_annotations))
+
+        active_annotations = pvc_active.get_volume_health_annotations()
+        logger.assertion(
+            f"active PVC has exactly 1 annotation key; "
+            f"actual={len(active_annotations)}"
+        )
+        assert len(active_annotations) == 1, (
+            f"Expected 1 annotation on active PVC, "
+            f"got {len(active_annotations)}: "
+            f"{list(active_annotations.keys())}"
+        )
+        active_key = next(iter(active_annotations))
+        logger.info(f"stale_key={stale_key}, active_key={active_key}")
+
+        logger.test_step(
+            "Configure stale threshold=2m, cleanup interval=1m on "
+            "CSI Addons controller"
+        )
+        update_csi_addons_config("volume-health-stale-threshold", "2m", restart=False)
+        update_csi_addons_config("volume-health-cleanup-interval", "1m", restart=True)
+        logger.info("CSI Addons config updated; controller restarted")
+
+        logger.test_step(f"Delete pod {pod_stale.name} and wait for it to disappear")
+        pod_stale.delete(wait=True)
+        pod_stale.ocp.wait_for_delete(pod_stale.name)
+        logger.info(f"Pod {pod_stale.name} deleted")
+
+        self._validate_stale_cleanup(
+            pvc_stale=pvc_stale,
+            stale_key=stale_key,
+            active_key=active_key,
+            pvc_active=pvc_active,
+        )
+
+        logger.info("PVC volume health stale annotation cleanup test passed")
+
+    @tier2
+    @pytest.mark.polarion_id("OCS-8293")
+    def test_stale_volume_health_annotation_cleanup_rwx_multi_node(
+        self, pvc_factory, pod_factory
+    ):
+        """
+        Verify stale volumehealth annotation cleanup on a CephFS RWX PVC
+        mounted across two worker nodes: deleting pod-A on node-1 results
+        in its per-node annotation key being removed after the stale
+        threshold expires, while pod-B on node-2 remains running and its
+        annotation key stays active and fresh.
+
+        Steps:
+            1. Ceph health OK; create CephFS RWX PVC (5Gi).
+            2. Create pod-A on node-1 and pod-B on node-2; run FIO I/O
+               on both.
+            3. Wait for reporter tick and assert 2 per-node healthy
+               annotation keys exist.
+            4. Resolve per-node annotation keys for node-1 (stale candidate)
+               and node-2 (active candidate).
+            5. Configure stale threshold (2 m) and cleanup interval (1 m)
+               on the CSI Addons controller.
+            6. Delete pod-A on node-1 and wait for it to disappear.
+            7. Poll until node-1 annotation key disappears (up to
+               STALE_CLEANUP_WAIT seconds).
+            8. Assert node-1 annotation key is gone from the RWX PVC.
+            9. Assert node-2 annotation key is still present on the RWX PVC.
+            10. Parse lastChecked from node-2 annotation; assert age
+                is within MAX_LAST_CHECKED_AGE_SECONDS.
+        """
+        logger.test_step("Verify Ceph health OK; create CephFS RWX PVC (5Gi)")
+        ceph_health_check(tries=3, delay=10)
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            size=5,
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+        logger.info(f"RWX PVC {pvc_obj.name} created and Bound")
+
+        logger.test_step("Create pod-A on node-1 and pod-B on node-2")
+        worker_nodes = node.get_worker_nodes()
+        logger.assertion(
+            f"Worker node count: expected >= 2, actual={len(worker_nodes)}"
+        )
+        assert (
+            len(worker_nodes) >= 2
+        ), f"Need >= 2 worker nodes, found {len(worker_nodes)}"
+
+        pod_a = pod_factory(
+            pvc=pvc_obj,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=worker_nodes[0],
+        )
+        pod_b = pod_factory(
+            pvc=pvc_obj,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=worker_nodes[1],
+        )
+        node_a = pod_a.get()["spec"]["nodeName"]
+        node_b = pod_b.get()["spec"]["nodeName"]
+        logger.info(
+            f"Pod-A {pod_a.name} on {node_a}, " f"Pod-B {pod_b.name} on {node_b}"
+        )
+        logger.assertion(f"Pods on different nodes: {node_a} != {node_b}")
+        assert node_a != node_b, f"Both pods on same node: {node_a}"
+
+        logger.test_step("Run FIO I/O on both pods")
+        for p in (pod_a, pod_b):
+            p.run_io(
+                storage_type="fs",
+                size="512M",
+                fio_filename=p.name,
+            )
+        for p in (pod_a, pod_b):
+            pod.get_fio_rw_iops(p)
+        logger.info("FIO I/O completed on both pods")
+
+        logger.test_step("Poll for 2 healthy per-node annotation keys")
+        health_annotations = pvc_obj.wait_for_volume_health_state(
+            expected_state="healthy",
+            timeout=ANNOTATION_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+            expected_count=2,
+        )
+
+        logger.test_step(
+            "Resolve per-node annotation keys for node-1 (stale) and " "node-2 (active)"
+        )
+        node_a_ocp = ocp.OCP(kind="node", resource_name=node_a)
+        uid_a = node_a_ocp.get()["metadata"]["uid"]
+        key_a = f"{constants.VOLUME_HEALTH_ANNOTATION_PREFIX}{uid_a}"
+
+        node_b_ocp = ocp.OCP(kind="node", resource_name=node_b)
+        uid_b = node_b_ocp.get()["metadata"]["uid"]
+        key_b = f"{constants.VOLUME_HEALTH_ANNOTATION_PREFIX}{uid_b}"
+
+        logger.assertion(f"key_a ({key_a}) in health annotations")
+        assert key_a in health_annotations, (
+            f"Missing key_a {key_a} in annotations: "
+            f"{list(health_annotations.keys())}"
+        )
+        logger.assertion(f"key_b ({key_b}) in health annotations")
+        assert key_b in health_annotations, (
+            f"Missing key_b {key_b} in annotations: "
+            f"{list(health_annotations.keys())}"
+        )
+        logger.info(f"Resolved key_a={key_a} (node-1), key_b={key_b} (node-2)")
+
+        logger.test_step(
+            "Configure stale threshold=2m, cleanup interval=1m on "
+            "CSI Addons controller"
+        )
+        update_csi_addons_config("volume-health-stale-threshold", "2m", restart=False)
+        update_csi_addons_config("volume-health-cleanup-interval", "1m", restart=True)
+        logger.info("CSI Addons config updated; controller restarted")
+
+        logger.test_step(f"Delete pod-A ({pod_a.name}) on node-1 and wait for deletion")
+        pod_a.delete(wait=True)
+        pod_a.ocp.wait_for_delete(pod_a.name)
+        logger.info(f"Pod-A {pod_a.name} deleted; pod-B {pod_b.name} still running")
+
+        self._validate_stale_cleanup(
+            pvc_stale=pvc_obj,
+            stale_key=key_a,
+            active_key=key_b,
+        )
+
+        logger.info("RWX multi-node stale volume health annotation cleanup test passed")
+
+    @tier2
+    @pytest.mark.polarion_id("OCS-8373")
+    def test_rwx_per_node_annotation_dedup_and_cleanup(self, pvc_factory, pod_factory):
+        """
+        Verify per-node annotation deduplication and shared-mount
+        retention on a CephFS RWX PVC across three pods and two nodes.
+
+        Steps:
+            1. Verify Ceph health is HEALTH_OK.
+            2. Create CephFS RWX PVC (5Gi).
+            3. Assert >= 2 worker nodes.
+            4. Create pod-A on node-1 and pod-B on node-2; run FIO I/O.
+            5. Wait for reporter tick (~60s).
+            6. Poll for exactly 2 healthy per-node annotation keys.
+            7. Assert both key suffixes match node UIDs; both states
+               'healthy'; node hostnames differ.
+            8. Create pod-C on node-1; run FIO I/O.
+            9. Wait for reporter tick.
+            10. Assert annotation count still == 2 (dedup verified).
+            11. Delete pod-A (pod-C still running on node-1).
+            12. Wait for reporter tick.
+            13. Assert both annotation keys still present and healthy
+                (node-1 key retained via pod-C's active mount).
+            14. Delete pod-C (last pod on node-1).
+            15. Configure stale threshold=2m, cleanup interval=1m.
+            16. Poll until node-1 annotation key disappears.
+            17. Assert node-1 key gone; node-2 key present and healthy.
+        """
+        logger.test_step("Verify Ceph health OK; create CephFS RWX PVC")
+        ceph_health_check(tries=3, delay=10)
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            size=5,
+            access_mode=constants.ACCESS_MODE_RWX,
+        )
+        logger.info(f"RWX PVC {pvc_obj.name} created and Bound")
+
+        logger.test_step("Assert >= 2 worker nodes")
+        worker_nodes = node.get_worker_nodes()
+        if len(worker_nodes) < 2:
+            pytest.skip(f"Need >= 2 worker nodes, found {len(worker_nodes)}")
+
+        logger.test_step("Create pod-A on node-1 and pod-B on node-2")
+        pod_a = pod_factory(
+            pvc=pvc_obj,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=worker_nodes[0],
+        )
+        pod_b = pod_factory(
+            pvc=pvc_obj,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=worker_nodes[1],
+        )
+        node_a = pod_a.get()["spec"]["nodeName"]
+        node_b = pod_b.get()["spec"]["nodeName"]
+        logger.info(
+            f"Pod-A {pod_a.name} on {node_a}, " f"Pod-B {pod_b.name} on {node_b}"
+        )
+        logger.assertion(f"Pods on different nodes: {node_a} != {node_b}")
+        assert node_a != node_b, f"Both pods scheduled on same node: {node_a}"
+
+        logger.test_step("Phase 1: Run FIO I/O on pod-A and pod-B")
+        for p in (pod_a, pod_b):
+            p.run_io(
+                storage_type="fs",
+                size="512M",
+                fio_filename=p.name,
+            )
+        for p in (pod_a, pod_b):
+            pod.get_fio_rw_iops(p)
+        logger.info("FIO I/O completed on pod-A and pod-B")
+
+        logger.test_step(f"Wait {REPORTER_TICK_WAIT}s for reporter tick")
+        time.sleep(REPORTER_TICK_WAIT)
+
+        logger.test_step("Poll for exactly 2 healthy per-node " "annotation keys")
+        health_annotations = pvc_obj.wait_for_volume_health_state(
+            expected_state="healthy",
+            timeout=ANNOTATION_POLL_TIMEOUT,
+            interval=ANNOTATION_POLL_INTERVAL,
+            expected_count=2,
+        )
+        logger.assertion(f"Annotation count == 2; " f"actual={len(health_annotations)}")
+        assert len(health_annotations) == 2, (
+            f"Expected 2 annotation keys, "
+            f"got {len(health_annotations)}: "
+            f"{list(health_annotations.keys())}"
+        )
+
+        logger.test_step("Resolve node UIDs and validate annotation keys")
+        uid_a = ocp.OCP(kind="node", resource_name=node_a).get()["metadata"]["uid"]
+        uid_b = ocp.OCP(kind="node", resource_name=node_b).get()["metadata"]["uid"]
+        key_a = f"{constants.VOLUME_HEALTH_ANNOTATION_PREFIX}{uid_a}"
+        key_b = f"{constants.VOLUME_HEALTH_ANNOTATION_PREFIX}{uid_b}"
+
+        logger.assertion(f"key_a ({key_a}) present in annotations")
+        assert key_a in health_annotations, (
+            f"Missing key_a {key_a}. " f"Found: {list(health_annotations.keys())}"
+        )
+        logger.assertion(f"key_b ({key_b}) present in annotations")
+        assert key_b in health_annotations, (
+            f"Missing key_b {key_b}. " f"Found: {list(health_annotations.keys())}"
+        )
+
+        parsed_a = json.loads(health_annotations[key_a])
+        parsed_b = json.loads(health_annotations[key_b])
+        logger.assertion(f"key_a state == 'healthy'; actual='{parsed_a.get('state')}'")
+        assert parsed_a.get("state") == "healthy", (
+            f"key_a state expected 'healthy', " f"got '{parsed_a.get('state')}'"
+        )
+        logger.assertion(
+            f"key_b state == 'healthy'; " f"actual='{parsed_b.get('state')}'"
+        )
+        assert parsed_b.get("state") == "healthy", (
+            f"key_b state expected 'healthy', " f"got '{parsed_b.get('state')}'"
+        )
+
+        hostname_a = parsed_a.get("node", "")
+        hostname_b = parsed_b.get("node", "")
+        logger.assertion(f"Node hostnames differ: {hostname_a} != {hostname_b}")
+        assert hostname_a != hostname_b, (
+            f"Both annotations carry the same node hostname: " f"{hostname_a!r}"
+        )
+        logger.test_step("Create pod-C on node-1 (same as pod-A)")
+        pod_c = pod_factory(
+            pvc=pvc_obj,
+            interface=constants.CEPHFILESYSTEM,
+            node_name=worker_nodes[0],
+        )
+        node_c = pod_c.get()["spec"]["nodeName"]
+        logger.info(f"Pod-C {pod_c.name} on {node_c}")
+
+        logger.test_step("Run FIO I/O on pod-C")
+        pod_c.run_io(
+            storage_type="fs",
+            size="512M",
+            fio_filename=pod_c.name,
+        )
+        pod.get_fio_rw_iops(pod_c)
+        logger.info("FIO I/O completed on pod-C")
+
+        logger.test_step(f" Wait {REPORTER_TICK_WAIT}s for reporter tick")
+        time.sleep(REPORTER_TICK_WAIT)
+
+        logger.test_step("Assert annotation count is still 2 (dedup)")
+        ann = pvc_obj.get_volume_health_annotations()
+        logger.assertion(
+            f"Annotation count still == 2 after pod-C; " f"actual={len(ann)}"
+        )
+        assert len(ann) == 2, (
+            f"Expected 2 annotation keys after pod-C creation, "
+            f"got {len(ann)}: {list(ann.keys())}"
+        )
+        parsed_a2 = json.loads(ann[key_a])
+        logger.assertion(
+            f"key_a still present and healthy after pod-C; "
+            f"state='{parsed_a2.get('state')}'"
+        )
+        assert parsed_a2.get("state") == "healthy", (
+            f"key_a state expected 'healthy' after pod-C, "
+            f"got '{parsed_a2.get('state')}'"
+        )
+        logger.test_step(" Delete pod-A (pod-C still on node-1)")
+        pod_a.delete(wait=True)
+        pod_a.ocp.wait_for_delete(pod_a.name)
+        logger.info(
+            f"Pod-A {pod_a.name} deleted; "
+            f"pod-C {pod_c.name} still running on {node_c}"
+        )
+
+        logger.test_step(f"Wait {REPORTER_TICK_WAIT}s for reporter tick")
+        time.sleep(REPORTER_TICK_WAIT)
+
+        logger.test_step(
+            "Assert both annotation keys still present "
+            "(node-1 retained via pod-C's active mount)"
+        )
+        ann = pvc_obj.get_volume_health_annotations()
+        logger.assertion(
+            f"Annotation count == 2 after pod-A deletion; " f"actual={len(ann)}"
+        )
+        assert len(ann) == 2, (
+            f"Expected 2 annotation keys after pod-A deletion, "
+            f"got {len(ann)}: {list(ann.keys())}"
+        )
+        logger.assertion(f"key_a ({key_a}) still present after pod-A deletion")
+        assert key_a in ann, (
+            f"key_a {key_a} missing after pod-A deletion — "
+            f"should be retained by pod-C. "
+            f"Found: {list(ann.keys())}"
+        )
+        logger.assertion(f"key_b ({key_b}) still present after pod-A deletion")
+        assert key_b in ann, (
+            f"key_b {key_b} missing after pod-A deletion. " f"Found: {list(ann.keys())}"
+        )
+        logger.assertion(
+            f"key_a state == 'healthy' after pod-A deletion; "
+            f"actual='{json.loads(ann[key_a]).get('state')}'"
+        )
+        assert json.loads(ann[key_a]).get("state") == "healthy", (
+            f"key_a state expected 'healthy' after pod-A deletion, "
+            f"got '{json.loads(ann[key_a]).get('state')}'"
+        )
+        logger.assertion(
+            f"key_b state == 'healthy' after pod-A deletion; "
+            f"actual='{json.loads(ann[key_b]).get('state')}'"
+        )
+        assert json.loads(ann[key_b]).get("state") == "healthy", (
+            f"key_b state expected 'healthy' after pod-A deletion, "
+            f"got '{json.loads(ann[key_b]).get('state')}'"
+        )
+        logger.test_step("Delete pod-C (last pod on node-1)")
+        pod_c.delete(wait=True)
+        pod_c.ocp.wait_for_delete(pod_c.name)
+        logger.info(f"Pod-C {pod_c.name} deleted; node-1 has no more mounts")
+
+        logger.test_step(
+            "Configure stale threshold=2m, "
+            "cleanup interval=1m on CSI Addons controller"
+        )
+        update_csi_addons_config("volume-health-stale-threshold", "2m", restart=False)
+        update_csi_addons_config("volume-health-cleanup-interval", "1m", restart=True)
+        logger.info("CSI Addons config updated; controller restarted")
+        self._validate_stale_cleanup(
+            pvc_stale=pvc_obj,
+            stale_key=key_a,
+            active_key=key_b,
+        )
+
+        logger.test_step("Verify surviving annotation key_b is still healthy")
+        remaining_ann = pvc_obj.get_volume_health_annotations()
+        key_b_state = json.loads(remaining_ann[key_b]).get("state")
+        logger.assertion(
+            f"key_b state == 'healthy' after cleanup; actual='{key_b_state}'"
+        )
+        assert key_b_state == "healthy", (
+            f"key_b state expected 'healthy' after stale cleanup, "
+            f"got '{key_b_state}'"
+        )
+        logger.info("RWX per-node annotation dedup and cleanup test passed")

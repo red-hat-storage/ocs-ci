@@ -171,6 +171,11 @@ HEALTHY_OBC_CLI_PHASE = "Phase:Bound"
 HEALTHY_OB_CLI_MODE = "Mode:OPTIMAL"
 HEALTHY_PV_BS = ["OPTIMAL", "LOW_CAPACITY"]
 
+# NooBaa bucket modes, reported in the bucket_mode label of the
+# NooBaaBucketErrorState and NooBaaNamespaceBucketErrorState alerts
+BUCKET_MODE_EXCEEDING_QUOTA = "EXCEEDING_QUOTA"
+BUCKET_MODE_NOT_ENOUGH_HEALTHY_RESOURCES = "NOT_ENOUGH_HEALTHY_RESOURCES"
+
 # Storage-Auto-Scaler statuses
 NOT_STARTED = "NotStarted"
 IN_PROGRES = "InProgress"
@@ -207,6 +212,10 @@ CEPHBLOCKPOOLRADOSNS = "cephblockpoolradosnamespaces"
 CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
 CEPH_NVMEOF_SC = "ocs-storagecluster-ceph-nvmeof"
+CEPHNVMEOFGATEWAY = "CephNVMeOFGateway"
+# Condition the ocs-operator reports on the StorageCluster for the outcome of
+# its last reconcile
+CONDITION_RECONCILE_COMPLETE = "ReconcileComplete"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
 CEPHFILESYSTEM_SC_SELINUX = "ocs-storagecluster-cephfs-selinux-relabel"
 CEPHOBJECTSTORE = "CephObjectStore"
@@ -231,6 +240,7 @@ NODE = "Node"
 DEPLOYMENTCONFIG = "deploymentconfig"
 CONFIG = "Config"
 CONFIGMAP = "ConfigMap"
+EVENT = "Event"
 MACHINESETS = "machinesets"
 STORAGECLUSTER = "storagecluster"
 CLUSTER_OPERATOR = "ClusterOperator"
@@ -250,6 +260,7 @@ HPA = "horizontalpodautoscaler"
 VOLUMESNAPSHOTCONTENT = "VolumeSnapshotContent"
 POD_DISRUPTION_BUDGET = "PodDisruptionBudget"
 STATEFULSET = "StatefulSet"
+LEASE = "leases.coordination.k8s.io"
 BACKINGSTORE = "Backingstore"
 NAMESPACESTORE = "Namespacestore"
 BUCKETCLASS = "Bucketclass"
@@ -381,9 +392,12 @@ SCC_ADMISSION_ANNOTATION = "openshift.io/scc"
 
 # SCC names used by ODF components
 SCC_RESTRICTED_V2 = "restricted-v2"
+SCC_HOSTNETWORK_V2 = "hostnetwork-v2"
+SCC_NONROOT_V2 = "nonroot-v2"
 SCC_ROOK_CEPH = "rook-ceph"
 SCC_NOOBAA_CORE = "noobaa-core"
 SCC_NOOBAA_ENDPOINT = "noobaa-endpoint"
+SCC_NOOBAA_AGENT = "noobaa-agent"
 SCC_CEPH_CSI_OP = "ceph-csi-op-scc"
 SCC_ODF_BLACKBOX = "odf-blackbox-scc"
 
@@ -450,7 +464,9 @@ MS_PROVIDER_TYPE = "provider"
 NON_MS_CLUSTER_TYPE = "non_ms"
 
 # HCI cluster types
+# Generally HCI_CLIENT is used for hosted cluster as client cluster and EXT_CLIENT for non hosted client cluster
 HCI_CLIENT = "hci_client"
+EXT_CLIENT = "ext_client"
 HCI_PROVIDER = "provider"
 # hosted cluster types
 HOSTED_CLUSTER_KUBEVIRT = "kubevirt"
@@ -600,6 +616,7 @@ DEFAULT_MCG_BUCKET_LOGS_PVC = "noobaa-bucket-logging-pvc"
 DEFAULT_MCG_BUCKET_NOTIFS_PVC = "noobaa-bucket-notifications-pvc"
 CUSTOM_MCG_LABEL = "custom=mcg-label"
 NOOBAA_RESOURCE_NAME = "noobaa"
+NOOBAA_KIND = "NooBaa"
 NOOBAA_DB_PVC_NAME = "noobaa-db-pg-cluster-1"
 NOOBAA_INITIALIZING_REASON = "NoobaaInitializing"
 NOOBAA_HEALTH_CHECK_DELAY = 30
@@ -805,6 +822,14 @@ OSD_APP_LABEL = "app=rook-ceph-osd"
 OSD_PREPARE_APP_LABEL = "app=rook-ceph-osd-prepare"
 RGW_APP_LABEL = "app=rook-ceph-rgw"
 NVMEOF_APP_LABEL = "app=rook-ceph-nvmeof"
+# Number of gateway instances the operator deploys when NVMe-oF is enabled on
+# the StorageCluster without an explicit spec.nvmeof.gatewayInstances
+NVMEOF_DEFAULT_GATEWAY_INSTANCES = 2
+# Smallest number of instances the CephNVMeOFGateway CRD accepts. The
+# StorageCluster schema does not enforce it, so a smaller
+# spec.nvmeof.gatewayInstances is admitted but cannot be reconciled into the
+# gateway CR, which makes the ocs-operator report a reconcile failure.
+NVMEOF_MIN_GATEWAY_INSTANCES = 1
 # Map performance profile component name to pod label selector for Ceph daemons
 CEPH_DAEMON_LABEL_BY_COMPONENT = {
     "mgr": MGR_APP_LABEL,
@@ -823,6 +848,12 @@ OSD_CEPHX_GET_OR_CREATE_LOG = "auth get-or-create"
 OSD_ENCRYPTED_LABEL = "encrypted"
 OSD_LOCKBOX_AUTH_PREFIX = "client.osd-lockbox."
 OSD_ACTIVATE_INIT_CONTAINER = "activate"
+OSD_ENCRYPTION_OPEN_INIT_CONTAINER = "encryption-open"
+# encryption-open prints one of these when the LUKS device is usable.
+OSD_ENCRYPTION_DEVICE_OPENED_LOGS = (
+    "already opened",
+    "Opening encrypted device",
+)
 OSD_LOCKBOX_INIT_SUCCESS_LOG = "got latest cephx lockbox key for OSD successfully"
 # Same get-or-create token as OSD cephx init; alias kept for lockbox call sites.
 OSD_LOCKBOX_GET_OR_CREATE_LOG = OSD_CEPHX_GET_OR_CREATE_LOG
@@ -1011,6 +1042,8 @@ RBD_CTRLPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin"
 PROMETHEUS_POD_LABEL = "app.kubernetes.io/name=prometheus"
 ROOK_OPERATOR_PODS = "app.kubernetes.io/created-by=rook-ceph-operator"
 ODF_EXTERNAL_SNAPSHOTTER = "app.kubernetes.io/name=odf-external-snapshotter-operator"
+OPENSHIFT_CLUSTER_STORAGE_OPERATOR_NAMESPACE = "openshift-cluster-storage-operator"
+CSI_SNAPSHOT_CONTROLLER_LABEL = "app=csi-snapshot-controller"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -1749,7 +1782,9 @@ RDR_OSD_MODE_GREENFIELD = "greenfield"
 RDR_OSD_MODE_BROWNFIELD = "brownfield"
 RDR_VOLSYNC_CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs-vrg"
 RDR_CUSTOM_RBD_POOL = "rdr-test-storage-pool"
+CUSTOM_CEPHFS_POOL = "rdr-test-cephfs-storage-pool"
 RDR_CUSTOM_RBD_STORAGECLASS = "rbd-cnv-custom-sc"
+CUSTOM_CEPHFS_STORAGECLASS = "cephfs-custom-sc"
 RDR_CUSTOM_RBD_DR_POLICY = "custom-pool-dr-policy"
 
 # Ramen DR labels on StorageClass
@@ -1878,6 +1913,12 @@ DEFAULT_DESIRED_CEPHX_KEY_GEN = 2
 CEPHX_KEY_GENERATION_DECREASE_ERROR = "keyGeneration cannot be decreased"
 CEPHX_KEY_GENERATION_REMOVE_ERROR = "keyGeneration cannot be removed once set"
 CEPHX_KEY_GENERATION_TYPE_ERROR = "must be of type integer"
+# Boolean ``true`` on an int64 CRD field is rejected as ``must be of type int64``
+# with an empty value, not ``must be of type integer: "boolean"``.
+CEPHX_KEY_GENERATION_TYPE_ERRORS = (
+    CEPHX_KEY_GENERATION_TYPE_ERROR,
+    "must be of type int64",
+)
 
 # DR Pending Cleanup Alert (OCS 4.22+)
 ALERT_APPLICATION_CLEANUP_PENDING = "ApplicationCleanupPending"
@@ -2062,6 +2103,8 @@ ROSA_PLATFORM = "rosa"
 FUSIONAAS_PLATFORM = "fusion_aas"
 ROSA_HCP_PLATFORM = "rosa_hcp"
 IBM_HCI_PLATFORM = "ibm_hci"
+CLASSIC_INFRA_TYPE = "classic"
+VPC_INFRA_TYPE = "vpc"
 ROSA_PLATFORMS = [ROSA_PLATFORM, ROSA_HCP_PLATFORM]
 ROSA_HCP_DS_NAMESPACE = "kube-system"
 ROSA_HCP_DS_LABEL = "app=roks-icsp"
@@ -2138,7 +2181,7 @@ HCI_PROVIDER_CLIENT_PLATFORMS = [
     IBM_HCI_PLATFORM,
 ]
 
-IBM_REGIONS = ["us-east", "us-south", "us"]
+IBM_REGIONS = ["us-east", "us-south", "ca-tor", "us"]
 IBM_CLOUD_SUBNETS = {
     # Washington D.C.
     "us-east": {
@@ -2146,11 +2189,17 @@ IBM_CLOUD_SUBNETS = {
         "us-east-2": "10.241.64.0/18",
         "us-east-3": "10.241.128.0/18",
     },
-    # Dalas
+    # Dallas
     "us-south": {
         "us-south-1": "10.240.0.0/18",
         "us-south-2": "10.240.64.0/18",
         "us-south-3": "10.240.128.0/18",
+    },
+    # Toronto
+    "ca-tor": {
+        "ca-tor-1": "10.242.0.0/18",
+        "ca-tor-2": "10.242.64.0/18",
+        "ca-tor-3": "10.242.128.0/18",
     },
 }
 
@@ -2279,6 +2328,10 @@ ORDER_AFTER_OCS_UPGRADE = 70
 ORDER_BEFORE_FDF_UPGRADE = 50
 ORDER_FDF_UPGRADE = 60
 ORDER_AFTER_FDF_UPGRADE = 70
+# ODF to FDF migration (distinct from FDF-to-FDF upgrade)
+ORDER_BEFORE_FDF_MIGRATION = 72
+ORDER_FDF_MIGRATION = 75
+ORDER_AFTER_FDF_MIGRATION = 78
 ORDER_AFTER_UPGRADE = 80
 
 # Deployment constants
@@ -2304,6 +2357,7 @@ MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
 MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
 NOOBAA_CONFIGMAP = "noobaa-config"
+NOOBAA_CORE_LEASE_NAME = "noobaa-core-lease"
 NOOBAA_POSTGRES_SECRET = "noobaa-pgsql-secret"
 NOOBAA_POSTGRES_12_VERSION = 12
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
@@ -2708,9 +2762,17 @@ STRESSCLI_SERVICE_CA_CM_NAME = "stress-cli-service-ca"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
 AWSCLI_TEST_OBJ_DIR = "/test_objects/"
 MCG_CLI_DEV_IMAGE = "quay.io/rhceph-dev/mcg-cli"
+# mcg-cli official image is used only for live deployments of ODF 4.13 and 4.14
+# (from 4.15 on, the odf-cli image is used instead), so the odf4 namespace is
+# permanently correct here.
 MCG_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/mcg-cli-rhel9"
-ODF_CLI_DEV_IMAGE = "quay.io/rhceph-dev/odf4-odf-cli-rhel9"
-ODF_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/odf-cli-rhel9"
+# The ODF image namespace follows the ODF major version (odf4 for ODF 4.y.z,
+# odf5 for ODF 5.y.z), see ocs_ci.utility.version.get_odf_image_namespace()
+ODF_CLI_DEV_IMAGE_TEMPLATE = "quay.io/rhceph-dev/{namespace}-odf-cli-rhel9"
+ODF_CLI_OFFICIAL_IMAGE_TEMPLATE = "registry.redhat.io/{namespace}/odf-cli-rhel9"
+# The ODF CLI image also ships the standalone noobaa CLI, as one tarball per
+# platform under this directory.
+CLI_IMAGE_RELEASES_DIR = "/releases"
 ACM_CATSRC_IMAGE = "quay.io:443/acm-d/acm-dev-catalog"
 MCE_CATSRC_IMAGE = "quay.io:443/acm-d/mce-dev-catalog"
 
@@ -2976,6 +3038,12 @@ IBM_STORAGE_SCALE_CLUSTER_NAME = "ibm-spectrum-scale"
 IBM_STORAGE_SCALE_CLUSTER_KIND = "Cluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_REMOTECLUSTER_KIND = "RemoteCluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_FILESYSTEM_KIND = "Filesystem.scale.spectrum.ibm.com"
+# Pinned commit URL for the IBM Storage Scale MCO (Machine Config Operator)
+# manifest. The URL is not stable and is expected to change over time.
+IBM_STORAGE_SCALE_MCO_URL = (
+    "https://raw.githubusercontent.com/IBM/ibm-spectrum-scale-container-native/"
+    "502fbcbe968651d2c94bd6b8419958c835383696/generated/scale/mco/mco.yaml"
+)
 IBM_ENTITLEMENT_SECRET_NAME = "ibm-entitlement-key"
 IBM_QUAYIO_SECRET_NAME = "quayio-secret"
 REMOTE_CLUSTER = "RemoteCluster"
@@ -3196,6 +3264,7 @@ SQUADS = {
     "Black": ["/ui/"],
     "Yellow": ["/managed-service/"],
     "Turquoise": ["/disaster-recovery/"],
+    "White": ["/resilience/", "/krkn_chaos/"],
 }
 SQUAD_CHECK_IGNORED_MARKERS = ["ignore_owner", "libtest"]
 
@@ -3251,6 +3320,7 @@ LOGICALVOLUME = "logicalvolume"
 
 PERF_IMAGE = "quay.io/ocsci/perf:latest"
 NGINX_FIO_IMAGE = "quay.io/ocsci/nginx:fio"
+FEDORA_FIO_IMAGE = "quay.io/ocsci/fedora:fio"
 
 ROOK_CEPH_CONFIG_VALUES = """
 [global]
@@ -3680,13 +3750,6 @@ SUBMARINER_BROKER_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "submariner_broker.yaml"
 )
 CLUSTERSET_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "clusterset.yaml")
-# GitOps
-# Temporary workaround CatalogSource applied before GitOps/OADP deployment on
-# OCP >= 5.0
-TEMP_GITOPS_WA_YAML = os.path.join(
-    TEMPLATE_DIR, "gitops-deployment", "temp-gitops-wa.yaml"
-)
-TEMP_GITOPS_WA_CATSRC_NAME = "temp-gitops-wa"
 GITOPS_NAMESPACE = "openshift-gitops"
 GITOPS_OPERATOR_NAME = "openshift-gitops-operator"
 GITOPS_CLUSTER_NAME = "gitops-cluster"
@@ -4226,9 +4289,7 @@ KRKN_RESTART_KUBELET = "restart_kubelet_scenario"
 KRKN_NODE_CRASH = "node_crash_scenario"
 
 # krknclt chaos constants
-KRKNCTL_BINARY_TAR = (
-    "https://krkn-chaos.gateway.scarf.sh/krknctl-v0.10.22-beta-linux-amd64.tar.gz"
-)
+KRKNCTL_BINARY_TAR = "https://krkn-chaos.gateway.scarf.sh/krknctl-v0.14.2-beta-linux-amd64-centos9.tar.gz"
 KRKNCTL = os.path.join(DATA_DIR, "krknctl")
 KRKNCTL_PLAN_TEMPLATE = os.path.join(
     KRKN_SCENARIO_TEMPLATE_DIR, "scenarios", "keknctl", "plan.json.j2"
@@ -4305,3 +4366,22 @@ FUSION_ACCESS_CR_YAML = os.path.join(
 )
 
 CONFIRM_DELETION_ANNOTATION = "uninstall.ocs.openshift.io/confirm-deletion"
+
+# Deployment names
+OCS_OPERATOR_DEPLOYMENT = "ocs-operator"
+
+# MCG Performance Profiles
+# Profiles accepted by the StorageCluster CRD enum. The NooBaa CRD additionally
+# accepts "dev-env" and "mini-env", which must be rejected on the StorageCluster CR.
+MCG_PROFILES = ("default", "mixed-workload", "small-objects")
+MCG_ONLY_PROFILES = ("dev-env", "mini-env")
+
+# Volume count the default pv-pool backingstore is created with, per profile.
+# Stamped at creation only - getPVPoolNumVolumes never lowers an existing count.
+MCG_PV_POOL_NUM_VOLUMES = {
+    "default": 3,
+    "mixed-workload": 3,
+    "small-objects": 3,
+    "dev-env": 1,
+    "mini-env": 1,
+}

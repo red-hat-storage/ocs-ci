@@ -46,6 +46,46 @@ class ResourceLeftoversException(Exception):
     pass
 
 
+class NetemResidueError(Exception):
+    """Raised when leftover tc netem qdiscs are found on cluster nodes."""
+
+    def __init__(self, residue, context=""):
+        self.residue = residue
+        self.context = context
+        lines = []
+        for item in residue:
+            node = item.get("node", "?")
+            iface = item.get("iface", "?")
+            qdisc = item.get("qdisc") or "netem"
+            lines.append(f"{node}/{iface}: {qdisc}")
+        prefix = context.rstrip() + ": " if context else ""
+        detail = "\n".join(f"  - {line}" for line in lines) or "  - (no details)"
+        super().__init__(
+            f"{prefix}leftover tc netem from a previous chaos run remains "
+            f"on the cluster:\n{detail}"
+        )
+
+
+class ClusterIPServiceUnreachableError(Exception):
+    """Raised when nodes cannot reach the kube-apiserver ClusterIP."""
+
+    def __init__(self, failures, context=""):
+        self.failures = failures
+        self.context = context
+        lines = []
+        for item in failures:
+            node = item.get("node", "?")
+            reason = item.get("reason") or "ClusterIP unreachable"
+            lines.append(f"{node}: {reason}")
+        prefix = context.rstrip() + ": " if context else ""
+        detail = "\n".join(f"  - {line}" for line in lines) or "  - (no details)"
+        super().__init__(
+            f"{prefix}nodes cannot reach the kube-apiserver ClusterIP after "
+            f"network faults were removed; cluster networking did not "
+            f"self-recover:\n{detail}"
+        )
+
+
 class ObjectsStillBeingDeletedException(Exception):
     pass
 

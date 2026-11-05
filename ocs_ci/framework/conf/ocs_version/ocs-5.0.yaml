@@ -9,6 +9,7 @@ ENV_DATA:
   ocs_version: '5.0'
 REPORTING:
   default_ocs_must_gather_latest_tag: 'v5.0'
-  default_ocs_must_gather_image: "quay.io/rhceph-dev/odf4-odf-must-gather-rhel9"
+  default_ocs_must_gather_image: "quay.io/rhceph-dev/odf5-odf-must-gather-rhel9"
+  odf_live_must_gather_image: "registry.redhat.io/odf5/odf-must-gather-rhel9"
 UPGRADE:
   default_latest_stable_upgrade_tag: 'latest-stable-upgrade-5.0'

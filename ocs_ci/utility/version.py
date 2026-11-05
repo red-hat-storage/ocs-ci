@@ -76,6 +76,7 @@ VERSION_4_21 = get_semantic_version("4.21", True)
 VERSION_4_22 = get_semantic_version("4.22", True)
 VERSION_4_23 = get_semantic_version("4.23", True)
 VERSION_5_0 = get_semantic_version("5.0", True)
+VERSION_5_1 = get_semantic_version("5.1", True)
 
 # Fusion version constants
 VERSION_2_11 = get_semantic_version("2.11", True)
@@ -94,6 +95,28 @@ def get_semantic_ocs_version_from_config(cluster_config=None):
     if not cluster_config:
         cluster_config = config
     return get_semantic_version(cluster_config.ENV_DATA["ocs_version"], True)
+
+
+def get_odf_image_namespace(ocs_version=None):
+    """
+    Returning the container image namespace used by ODF builds.
+
+    ODF images are published under a namespace derived from the ODF major
+    version - ODF 4.y.z builds use odf4 (e.g.
+    registry.redhat.io/odf4/odf-cli-rhel9 and
+    quay.io/rhceph-dev/odf4-odf-cli-rhel9), ODF 5.y.z builds use odf5.
+
+    Args:
+        ocs_version (semantic_version.base.Version): ODF version to get the
+            namespace for. If not provided, the version from config is used.
+
+    Returns:
+        str: ODF container image namespace (e.g. "odf4" or "odf5")
+
+    """
+    if not ocs_version:
+        ocs_version = get_semantic_ocs_version_from_config()
+    return f"odf{ocs_version.major}"
 
 
 def get_semantic_ocp_version_from_config():

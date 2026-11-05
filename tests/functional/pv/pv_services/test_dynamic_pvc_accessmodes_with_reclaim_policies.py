@@ -13,9 +13,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework.pytest_customization.marks import skipif_cephfs_disabled
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
-from ocs_ci.ocs.resources import pod
-from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.resources import events, pod
 from ocs_ci.helpers import helpers
 from ocs_ci.utility import version
 
@@ -66,23 +64,6 @@ class TestDynamicPvc(ManageTest):
 
         return sc_obj, worker_nodes_list
 
-    @retry(UnexpectedBehaviour, tries=10, delay=5, backoff=1)
-    def verify_expected_failure_event(self, ocs_obj, failure_str):
-        """
-        Checks for the expected failure event message in oc describe command
-
-        """
-        logger.info("Check expected failure event message in oc describe command")
-        if failure_str in ocs_obj.describe():
-            logger.info(
-                f"Failure string {failure_str} is present in oc describe" f" command"
-            )
-            return True
-        else:
-            raise UnexpectedBehaviour(
-                f"Failure string {failure_str} is not found in oc describe" f" command"
-            )
-
     @tier1
     @pytest.mark.parametrize(
         argnames=["interface_type", "reclaim_policy"],
@@ -127,7 +108,13 @@ class TestDynamicPvc(ManageTest):
         """
         # ocs_version = config.ENV_DATA["ocs_version"]
         access_mode = constants.ACCESS_MODE_RWO
-        expected_failure_str = "Multi-Attach error for volume"
+        # kubernetes/kubernetes#138837 updated the FailedAttachVolume event message.
+        # Older clusters: "Multi-Attach error for volume ..."
+        # Newer clusters: "Waiting for detach for volume ..."
+        expected_failure_strs = (
+            "Multi-Attach error for volume",
+            "Waiting for detach for volume",
+        )
         storage_type = "fs"
         sc_obj, worker_nodes_list = setup
 
@@ -194,8 +181,8 @@ class TestDynamicPvc(ManageTest):
                 state=constants.STATUS_CONTAINER_CREATING,
                 timeout=timeout,
             )
-            self.verify_expected_failure_event(
-                ocs_obj=pod_obj2, failure_str=expected_failure_str
+            events.verify_expected_failure_event(
+                ocs_obj=pod_obj2, failure_strs=expected_failure_strs
             )
 
         logger.info(

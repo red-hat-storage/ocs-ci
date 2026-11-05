@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import logging
 import os
 import re
+import shlex
 import yaml
 import tempfile
 import time
@@ -47,7 +48,6 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     exec_cmd,
 )
-from ocs_ci.utility.utils import check_if_executable_in_path
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.constants import CSI_RBD_ADDON_NODEPLUGIN_LABEL_420
 
@@ -594,9 +594,11 @@ class Pod(OCS):
         if isinstance(packages, list):
             packages = " ".join(packages)
 
-        # Detect OS inside pod
+        # oc rsh does not invoke a shell, so compound commands need sh -c.
+        # Use POSIX sh (not bash) so Alpine/busybox images can still run this.
         os_release = self.exec_cmd_on_pod(
-            "cat /etc/os-release || true", out_yaml_format=False
+            f"sh -c {shlex.quote('cat /etc/os-release || true')}",
+            out_yaml_format=False,
         )
 
         os_release_lower = os_release.lower() if os_release else ""
@@ -621,7 +623,7 @@ class Pod(OCS):
                 f"Unsupported OS for package install. /etc/os-release:\n{os_release}"
             )
 
-        self.exec_cmd_on_pod(cmd, out_yaml_format=False)
+        self.exec_cmd_on_pod(f"sh -c {shlex.quote(cmd)}", out_yaml_format=False)
 
     def copy_to_server(self, server, authkey, localpath, remotepath, user=None):
         """
@@ -1097,6 +1099,25 @@ def get_noobaa_db_pod():
     return get_primary_nb_db_pod()
 
 
+def get_noobaa_core_pods(namespace=None):
+    """
+    Fetch all NooBaa core pods in the cluster namespace.
+
+    Args:
+        namespace (str): Namespace to search. Defaults to the configured
+            cluster namespace.
+
+    Returns:
+        list: List of NooBaa core Pod objects
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    core_pods = get_pods_having_label(
+        label=constants.NOOBAA_CORE_POD_LABEL, namespace=namespace
+    )
+    return [Pod(**core_pod) for core_pod in core_pods]
+
+
 def get_noobaa_core_pod():
     """
     Fetches Noobaa core pod details
@@ -1105,12 +1126,73 @@ def get_noobaa_core_pod():
         Pod object: Noobaa core pod object
 
     """
-    noobaa_core = get_pods_having_label(
-        label=constants.NOOBAA_CORE_POD_LABEL,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
-    noobaa_core_pod = Pod(**noobaa_core[0])
-    return noobaa_core_pod
+    return get_noobaa_core_pods()[0]
+
+
+def get_active_core_pod(core_pods=None, namespace=None):
+    """
+    Identify the active (leader) NooBaa core pod from the leader-election lease.
+
+    The search is scoped to NooBaa-owned leases and the holderIdentity is
+    matched exactly or on the ``<pod-name>_`` prefix, so an unrelated lease
+    cannot be mistaken for the core leader.
+
+    Args:
+        core_pods (list): NooBaa core Pod objects to match against. Defaults to
+            the current core pods in the cluster.
+        namespace (str): Namespace containing the lease. Defaults to the
+            configured cluster namespace.
+
+    Returns:
+        Pod: The active (leader) Pod object, or None if no holder matches.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    core_pods = core_pods if core_pods is not None else get_noobaa_core_pods(namespace)
+    leases = OCP(kind="Lease", namespace=namespace).get().get("items", [])
+    for lease in leases:
+        if "noobaa" not in lease.get("metadata", {}).get("name", ""):
+            continue
+        holder = lease.get("spec", {}).get("holderIdentity")
+        if not holder:
+            continue
+        for core_pod in core_pods:
+            if holder == core_pod.name or holder.startswith(f"{core_pod.name}_"):
+                return core_pod
+    return None
+
+
+def get_standby_core_pod(core_pods=None, namespace=None, active_pod=None):
+    """
+    Identify the standby (non-leader) NooBaa core pod.
+
+    The standby is the core pod that does not hold the leader-election lease. If
+    the caller already resolved the active (leader) pod it can pass it as
+    ``active_pod`` to avoid a redundant lease lookup; otherwise the active pod is
+    resolved via ``get_active_core_pod``. Assumes the two-pod HA topology (one
+    active, one standby).
+
+    Args:
+        core_pods (list): NooBaa core Pod objects to choose from. Defaults to
+            the current core pods in the cluster.
+        namespace (str): Namespace containing the lease. Defaults to the
+            configured cluster namespace.
+        active_pod (Pod): The already-resolved active (leader) pod, if known.
+
+    Returns:
+        Pod: The standby (non-leader) Pod object, or None if the active pod
+            cannot be identified or no distinct standby exists.
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    core_pods = core_pods if core_pods is not None else get_noobaa_core_pods(namespace)
+    active_pod = active_pod or get_active_core_pod(core_pods, namespace)
+    if active_pod is None:
+        return None
+    for core_pod in core_pods:
+        if core_pod.name != active_pod.name:
+            return core_pod
+    return None
 
 
 def get_noobaa_endpoint_pods():
@@ -1363,7 +1445,7 @@ def list_ceph_images(pool_name="rbd"):
     return ct_pod.exec_ceph_cmd(ceph_cmd=f"rbd ls {pool_name}", format="json")
 
 
-@retry(TypeError, tries=5, delay=2, backoff=1)
+@retry((TypeError, CommandFailed), tries=5, delay=2, backoff=1)
 def check_file_existence(pod_obj, file_path):
     """
     Check if file exists inside the pod
@@ -1376,14 +1458,14 @@ def check_file_existence(pod_obj, file_path):
     Returns:
         bool: True if the file exist, False otherwise
     """
-    try:
-        check_if_executable_in_path(pod_obj.exec_cmd_on_pod("which find"))
-    except CommandFailed:
-        pod_obj.install_packages("findutils")
-    ret = pod_obj.exec_cmd_on_pod(f'bash -c "find {file_path}"')
-    if re.search(file_path, ret):
-        return True
-    return False
+    existence_script = (
+        f"if [ -e {shlex.quote(file_path)} ]; then echo EXISTS; else echo MISSING; fi"
+    )
+    ret = pod_obj.exec_cmd_on_pod(
+        f"bash -c {shlex.quote(existence_script)}",
+        out_yaml_format=False,
+    )
+    return "EXISTS" in str(ret)
 
 
 def get_file_path(pod_obj, file_name):
@@ -2275,50 +2357,102 @@ def get_plugin_provisioner_leader(interface, namespace=None, leader_type="provis
     return leader_pod
 
 
-def get_odf_external_snapshotter_leader(namespace=None):
+def get_odf_snapshotter_leader(
+    namespace=None,
+    label=constants.ODF_EXTERNAL_SNAPSHOTTER,
+    container="odf-external-snapshotter-operator",
+):
     """
-    Get ODF external snapshotter operator leader pod
+    Get the snapshotter leader pod (leader-elected).
+
+    Resolves the leader by reading the Lease object whose name matches the
+    label-selector value (e.g. ``snapshot-controller-leader``).  The Lease
+    ``spec.holderIdentity`` field is the authoritative pod name — it is set
+    atomically by client-go and is always present regardless of whether the
+    pod logged any leader-election messages (uncontested wins produce no
+    success log line).
+
+    Falls back to log scanning (legacy behaviour) only when no matching
+    Lease exists in the namespace.
 
     Args:
-        namespace (str): Name of cluster namespace
+        namespace (str): Namespace to look in. Defaults to the cluster namespace.
+        label (str): Pod label selector used to find the snapshotter pods
+            (e.g. ``"app=csi-snapshot-controller"``).
+        container (str): Container name used only in the log-scan fallback path.
+            Pass ``None`` to let ``oc logs`` pick the pod's default container.
 
     Returns:
-        Pod: ODF external snapshotter operator leader pod
+        Pod: the current leader pod object
 
+    Raises:
+        AssertionError: when the leader pod cannot be identified
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
-    non_leader_msg = "Failed to acquire lease"
-    lease_acq_msg = "Successfully acquired lease"
-    lease_renew_msg = "Successfully renewed lease"
-    leader_pod = ""
+    # ── Primary path: read the Lease holderIdentity ──────────────────────────
+    # The label value (the part after "=") is typically the Lease name
+    # (e.g. "app=csi-snapshot-controller" → lease "snapshot-controller-leader",
+    #  "app.kubernetes.io/name=odf-external-snapshotter-operator" → same pattern).
+    # We list all Leases in the namespace and pick the one whose holderIdentity
+    # matches one of the running pods, which avoids hardcoding Lease names.
+    pods = get_pods_having_label(label, namespace)
+    snapshotter_pods = [Pod(**pod) for pod in pods]
+    pod_names = {p.name for p in snapshotter_pods}
 
-    # Get all ODF external snapshotter pods
-    pods = get_pods_having_label(constants.ODF_EXTERNAL_SNAPSHOTTER, namespace)
-    odf_snapshotter_pods = [Pod(**pod) for pod in pods]
+    lease_ocp = OCP(kind=constants.LEASE, namespace=namespace)
+    try:
+        leases = lease_ocp.get().get("items", [])
+    except CommandFailed as e:
+        logger.warning(
+            f"Failed to list Lease objects in namespace '{namespace}': {e}; "
+            "falling back to log-scan leader detection."
+        )
+        leases = []
+    for lease in leases:
+        holder = lease.get("spec", {}).get("holderIdentity", "")
+        if holder in pod_names:
+            leader_pod = next(p for p in snapshotter_pods if p.name == holder)
+            logger.info(
+                f"Snapshotter leader pod identified via Lease "
+                f"'{lease['metadata']['name']}': {leader_pod.name}"
+            )
+            return leader_pod
+
+    # ── Fallback: legacy log-scan (kept for backwards compatibility) ─────────
+    logger.warning(
+        "No Lease found whose holderIdentity matches a snapshotter pod; "
+        "falling back to log-scan leader detection."
+    )
+    leader_pod = ""
+    non_leader_msgs = ("Failed to acquire lease", "failed to acquire")
+    leader_msgs = (
+        "Successfully acquired lease",
+        "Successfully renewed lease",
+        "became leader",
+    )
 
     pods_log = {}
-    for pod in odf_snapshotter_pods:
+    for pod in snapshotter_pods:
         pods_log[pod] = get_pod_logs(
             pod_name=pod.name,
-            container="odf-external-snapshotter-operator",
+            container=container,
             namespace=namespace,
         ).split("\n")
 
     for pod, log_list in pods_log.items():
         log_list.reverse()
         for log_msg in log_list:
-            # Check for last occurrence of leader message
-            # This will be the first occurrence in reversed list.
-            if (lease_renew_msg in log_msg) or (lease_acq_msg in log_msg):
+            if any(m in log_msg for m in leader_msgs):
                 curr_index = log_list.index(log_msg)
-                # Ensure that there is no non leader message logged after
-                # the last occurrence of leader message
-                if not any(non_leader_msg in msg for msg in log_list[:curr_index]):
+                if not any(
+                    nl in msg for msg in log_list[:curr_index] for nl in non_leader_msgs
+                ):
                     leader_pod = pod
                 break
-    assert leader_pod, "Couldn't identify ODF external snapshotter leader pod."
-    logger.info(f"ODF external snapshotter leader pod is {leader_pod.name}")
+
+    assert leader_pod, "Couldn't identify snapshotter leader pod."
+    logger.info(f"Snapshotter leader pod is {leader_pod.name}")
     return leader_pod
 
 
@@ -2503,6 +2637,13 @@ def wait_for_noobaa_db_ready(timeout=300, sleep=10, stability_count=3):
         stability_count (int): Number of consecutive ready checks required
 
     """
+    if config.ENV_DATA.get("noobaa_external_pgsql"):
+        logger.info(
+            "NooBaa is configured with an external PostgreSQL DB; there is no "
+            "internal CNPG DB cluster to wait for. Skipping NooBaa DB readiness check."
+        )
+        return
+
     namespace = config.ENV_DATA["cluster_namespace"]
     stable_checks = 0
 
@@ -4159,12 +4300,14 @@ def search_pattern_in_pod_logs(
     return matched_lines
 
 
-def get_containers_names_by_pod(pod: OCP) -> set:
+def get_containers_names_by_pod(pod) -> set:
     """
     Gets the names of all containers in given pod or pods
 
     Args:
-        pod (ocp.OCP): instance of OCP object that represents a pod (kind=POD)
+        pod (ocp.OCP or Pod): instance of OCP object that represents a pod
+            (kind=POD), or a single pod object such as
+            ocs_ci.ocs.resources.pod.Pod
 
     Returns:
         set: hash set of names of all containers in given pod or pods
@@ -4172,7 +4315,8 @@ def get_containers_names_by_pod(pod: OCP) -> set:
     """
     items = pod.data.get("items")
     if not isinstance(items, list):
-        items = [items]
+        # The data holds a single pod rather than a pod list
+        items = [pod.data]
 
     container_names = list()
     for item in items:

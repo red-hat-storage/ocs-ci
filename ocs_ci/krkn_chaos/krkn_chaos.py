@@ -41,6 +41,32 @@ class KrKnRunner:
         self._completed_due_to_failure = False
         os.makedirs(KRKN_OUTPUT_DIR, exist_ok=True)
 
+    def _is_nonfatal_krkn_exit(self, returncode, stdout, stderr):
+        """Return True when Krkn's non-zero exit is an expected chaos outcome.
+
+        Exit code 2 is Krkn's "some scenarios failed" status. Exit code 1 is
+        also treated as non-fatal when stdout/stderr/output.log contain known
+        benign markers (post-scenario SLO leftover, container kill-count miss).
+        """
+        if returncode == 2:
+            return True
+        from ocs_ci.krkn_chaos.krkn_helpers import KRKN_OUTPUT_IGNORED_ERROR_MESSAGES
+
+        combined = f"{stdout or ''}\n{stderr or ''}"
+        if any(marker in combined for marker in KRKN_OUTPUT_IGNORED_ERROR_MESSAGES):
+            return True
+        try:
+            if os.path.exists(self.output_log):
+                with open(self.output_log, "r", encoding="utf-8") as f:
+                    output_text = f.read()
+                return any(
+                    marker in output_text
+                    for marker in KRKN_OUTPUT_IGNORED_ERROR_MESSAGES
+                )
+        except Exception as ex:
+            log.debug("Could not scan Krkn output log for non-fatal markers: %s", ex)
+        return False
+
     def _print_config_file(self):
         """Print the contents of the Krkn config file before execution."""
         try:
@@ -641,18 +667,20 @@ class KrKnRunner:
                     )
 
                 if self.process.returncode != 0:
-                    if self.process.returncode == 2:
-                        # Exit code 2 typically means some scenarios failed, which is acceptable in chaos testing
+                    if self._is_nonfatal_krkn_exit(
+                        self.process.returncode, stdout, stderr
+                    ):
+                        # Exit 2, leftover SLO post-checks, or a container
+                        # kill-count miss are expected chaos outcomes. Do not
+                        # retry — the result is deterministic for this run.
                         log.warning(
-                            "Krkn completed with exit code 2 - some scenarios may have failed"
-                        )
-                        log.warning(
-                            "This is expected in chaos testing and does not indicate a framework failure"
+                            "Krkn completed with exit code %s - treating as "
+                            "non-fatal chaos outcome (not a framework failure)",
+                            self.process.returncode,
                         )
                         if stderr:
-                            log.warning(f"Krkn stderr: {stderr}")
-                        # Don't raise an exception for exit code 2 - let the test continue
-                        return  # Success case - exit retry loop
+                            log.warning("Krkn stderr: %s", stderr)
+                        return
                     else:
                         # Check if this is a port conflict that we can resolve
                         if attempt < max_retries - 1 and self._handle_port_conflict(

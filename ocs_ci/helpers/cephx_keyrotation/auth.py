@@ -27,6 +27,7 @@ class CephXAuthHelper:
                 return str(value).lower()
         return None
 
+    @retry(CommandFailed, tries=5, delay=10, backoff=1)
     def get_auth_entity_key_type(self, entity, toolbox_pod=None):
         """Return the CephX key type for *entity* when exposed by Ceph."""
         toolbox = toolbox_pod or self.get_ceph_cli_pod()
@@ -312,8 +313,52 @@ class CephXAuthHelper:
             entities = [entity for entity in entities if entity.startswith(prefix)]
         return entities
 
+    @staticmethod
+    def _entities_by_name(auth_ls_result):
+        """
+        Normalize ``ceph auth ls`` output to entity name -> entry.
+
+        Current Ceph JSON is ``{"auth_dump": [{"entity": "osd.0", ...}, ...]}``.
+        The wrapper key is not an entity name. A mapping that is already keyed
+        by entity name is returned unchanged.
+        """
+        if not isinstance(auth_ls_result, dict):
+            raise UnexpectedBehaviour(
+                "Unexpected output from 'ceph auth ls': "
+                f"expected a mapping, got {type(auth_ls_result).__name__}"
+            )
+        if "auth_dump" in auth_ls_result:
+            dump = auth_ls_result.get("auth_dump") or []
+            if not isinstance(dump, list):
+                raise UnexpectedBehaviour(
+                    "Unexpected output from 'ceph auth ls': auth_dump is not a list"
+                )
+            entities = {}
+            for entry in dump:
+                if isinstance(entry, dict) and entry.get("entity"):
+                    entities[str(entry["entity"])] = entry
+            return entities
+        return dict(auth_ls_result)
+
+    @retry(CommandFailed, tries=5, delay=15, backoff=1)
+    def exec_ceph_cmd_retrying_auth(self, ceph_cmd, toolbox_pod=None):
+        """
+        Run a toolbox Ceph command, retrying transient monitor auth failures.
+
+        ``handle_auth_bad_method`` / RADOS permission denied while mons are
+        hunting is retried the same way as ``ceph auth ls``.
+        """
+        toolbox = toolbox_pod or self.get_ceph_cli_pod()
+        return toolbox.exec_ceph_cmd(ceph_cmd)
+
+    @retry(CommandFailed, tries=5, delay=15, backoff=1)
     def _auth_entity_exists(self, entity, toolbox_pod=None):
-        """Return True when *entity* is present in the Ceph auth store."""
+        """
+        Return True when *entity* is present in the Ceph auth store.
+
+        Missing entities (ENOENT) are not present. Transient monitor auth
+        failures are retried rather than treated as a missing entity.
+        """
         toolbox = toolbox_pod or self.get_ceph_cli_pod()
         try:
             toolbox.exec_cmd_on_pod(
@@ -321,16 +366,24 @@ class CephXAuthHelper:
                 out_yaml_format=True,
             )
             return True
-        except CommandFailed:
-            return False
+        except CommandFailed as exc:
+            if "ENOENT" in str(exc):
+                return False
+            raise
 
     def auth_entity_exists(self, entity, toolbox_pod=None):
         """Return True if *entity* exists in the Ceph auth store."""
         return self._auth_entity_exists(entity, toolbox_pod=toolbox_pod)
 
+    @retry(CommandFailed, tries=5, delay=10, backoff=1)
     def get_auth_caps(self, entity, toolbox_pod=None):
         """
         Return capability map for a Ceph auth entity.
+
+        Retries the same transient toolbox auth failures as
+        :meth:`get_auth_key` and :meth:`_get_auth_entities_dict`
+        (``handle_auth_bad_method`` / RADOS permission denied while mons are
+        hunting). Missing entities (ENOENT) are not retried.
 
         Returns:
             dict: capability name to value (e.g. mon, mgr, osd).
@@ -416,6 +469,4 @@ class CephXAuthHelper:
         """
         toolbox = toolbox_pod or self.get_ceph_cli_pod()
         result = toolbox.exec_ceph_cmd("ceph auth ls")
-        if isinstance(result, dict):
-            return result
-        raise UnexpectedBehaviour("Unexpected output from 'ceph auth ls'")
+        return self._entities_by_name(result)

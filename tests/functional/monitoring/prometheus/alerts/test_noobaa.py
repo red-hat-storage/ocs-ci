@@ -37,8 +37,21 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota, threading_lock)
 
     alerts = measure_noobaa_exceed_bucket_quota.get("prometheus_alerts")
 
+    ocs_version = version.get_semantic_ocs_version_from_config()
+
+    # since version 4.22 the bucket error state alert message contains the mode
+    # the bucket is in. The fixture fills a bucket over its quota, so the
+    # bucket ends up in the EXCEEDING_QUOTA mode.
+    if ocs_version >= version.VERSION_4_22:
+        bucket_error_msg = (
+            "A NooBaa Bucket Is In Error State "
+            f"(mode={constants.BUCKET_MODE_EXCEEDING_QUOTA})"
+        )
+    else:
+        bucket_error_msg = "A NooBaa Bucket Is In Error State"
+
     # since version 4.5 all NooBaa alerts have defined Pending state
-    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_5:
+    if ocs_version < version.VERSION_4_5:
         expected_alerts = [
             (
                 constants.ALERT_BUCKETREACHINGQUOTASTATE,
@@ -48,7 +61,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota, threading_lock)
             ),
             (
                 constants.ALERT_BUCKETERRORSTATE,
-                "A NooBaa Bucket Is In Error State",
+                bucket_error_msg,
                 ["pending", "firing"],
                 "warning",
             ),
@@ -59,7 +72,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota, threading_lock)
                 "warning",
             ),
         ]
-    elif version.get_semantic_ocs_version_from_config() < version.VERSION_4_13:
+    elif ocs_version < version.VERSION_4_13:
         expected_alerts = [
             (
                 constants.ALERT_BUCKETREACHINGQUOTASTATE,
@@ -69,7 +82,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota, threading_lock)
             ),
             (
                 constants.ALERT_BUCKETERRORSTATE,
-                "A NooBaa Bucket Is In Error State",
+                bucket_error_msg,
                 ["pending", "firing"],
                 "warning",
             ),
@@ -90,7 +103,7 @@ def test_noobaa_bucket_quota(measure_noobaa_exceed_bucket_quota, threading_lock)
             ),
             (
                 constants.ALERT_BUCKETERRORSTATE,
-                "A NooBaa Bucket Is In Error State",
+                bucket_error_msg,
                 ["pending", "firing"],
                 "warning",
             ),
@@ -137,10 +150,22 @@ def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted, threading_loc
 
     alerts = measure_noobaa_ns_target_bucket_deleted.get("prometheus_alerts")
 
+    # since version 4.22 the namespace bucket error state alert message
+    # contains the mode the bucket is in. The fixture deletes the target
+    # bucket of the namespace store, so the namespace bucket ends up in the
+    # NOT_ENOUGH_HEALTHY_RESOURCES mode.
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_22:
+        ns_bucket_error_msg = (
+            "A NooBaa Namespace Bucket Is In Error State "
+            f"(mode={constants.BUCKET_MODE_NOT_ENOUGH_HEALTHY_RESOURCES})"
+        )
+    else:
+        ns_bucket_error_msg = "A NooBaa Namespace Bucket Is In Error State"
+
     expected_alerts = [
         (
             constants.ALERT_NAMESPACEBUCKETERRORSTATE,
-            "A NooBaa Namespace Bucket Is In Error State",
+            ns_bucket_error_msg,
             ["pending", "firing"],
             "warning",
         ),

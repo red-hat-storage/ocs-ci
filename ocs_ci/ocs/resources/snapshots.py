@@ -14,6 +14,52 @@ from ocs_ci.helpers import helpers
 logger = logging.getLogger(__name__)
 
 
+def get_bound_snapshot_content_name(snap_obj):
+    """
+    Get the name of the VolumeSnapshotContent bound to a
+    VolumeSnapshot.
+
+    Args:
+        snap_obj (OCS): VolumeSnapshot object
+
+    Returns:
+        str: Name of the bound VolumeSnapshotContent
+    """
+    ocp_snap = OCP(
+        kind=constants.VOLUMESNAPSHOT,
+        namespace=snap_obj.namespace,
+    )
+    snap_data = ocp_snap.get(resource_name=snap_obj.name)
+    return snap_data["status"]["boundVolumeSnapshotContentName"]
+
+
+def get_snapshot_handle(snap_obj):
+    """
+    Get the CSI snapshot handle of a VolumeSnapshot.
+
+    The handle is read from the status.snapshotHandle field of the
+    bound VolumeSnapshotContent. It is the identifier accepted by
+    the CBT tools through the --previous-snapshot-id (-P) flag, as
+    an alternative to referencing the snapshot by name.
+
+    Args:
+        snap_obj (OCS): VolumeSnapshot object
+
+    Returns:
+        str: The CSI snapshot handle
+    """
+    content_name = get_bound_snapshot_content_name(snap_obj)
+    ocp_content = OCP(kind=constants.VOLUMESNAPSHOTCONTENT)
+    content_data = ocp_content.get(resource_name=content_name)
+    snapshot_handle = content_data["status"]["snapshotHandle"]
+    logger.info(
+        "VolumeSnapshot %s has CSI snapshot handle %s",
+        snap_obj.name,
+        snapshot_handle,
+    )
+    return snapshot_handle
+
+
 def annotate_snapshot_for_block_restore(snap_obj):
     """
     Add the allow-volume-mode-change annotation to the
@@ -28,12 +74,7 @@ def annotate_snapshot_for_block_restore(snap_obj):
     Returns:
         str: Name of the annotated VolumeSnapshotContent
     """
-    ocp_snap = OCP(
-        kind=constants.VOLUMESNAPSHOT,
-        namespace=snap_obj.namespace,
-    )
-    snap_data = ocp_snap.get(resource_name=snap_obj.name)
-    content_name = snap_data["status"]["boundVolumeSnapshotContentName"]
+    content_name = get_bound_snapshot_content_name(snap_obj)
 
     ocp = OCP()
     ocp.exec_oc_cmd(

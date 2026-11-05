@@ -5,7 +5,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
@@ -330,6 +330,41 @@ class CephXKeyRotationCore:
             return self.get_status_key_generation("csi")
         return self.get_status_key_generation("rbdMirrorPeer")
 
+    def get_component_rotation_status_entities(self, component):
+        """
+        Return CephCluster ``status.cephx`` entities that must reach the target.
+
+        Daemon checks mgr and osd only. MON is optional on some builds; MDS
+        lives on CephFilesystem and is waited separately by
+        :meth:`wait_for_rook_daemon_rotation`.
+        """
+        self._validate_component(component)
+        if component == self.COMPONENT_DAEMON:
+            return ["mgr", "osd"]
+        if component == self.COMPONENT_CSI:
+            return ["csi"]
+        return ["rbdMirrorPeer"]
+
+    def get_pending_component_status_generations(self, component, expected_generation):
+        """
+        Return entity=generation strings still below *expected_generation*.
+
+        An empty list means CephCluster status for *component* has caught up.
+        """
+        expected_generation = int(expected_generation)
+        pending = []
+        for entity in self.get_component_rotation_status_entities(component):
+            generation = self.get_status_key_generation(entity)
+            if generation < expected_generation:
+                pending.append(f"{entity}={generation}")
+        return pending
+
+    def component_status_generations_reached(self, component, expected_generation):
+        """Return True when CephCluster status generations for *component* caught up."""
+        return not self.get_pending_component_status_generations(
+            component, expected_generation
+        )
+
     def get_desired_cephx_key_gen(self):
         """
         Return ocs-operator ``DESIRED_CEPHX_KEY_GEN``, or the framework default.
@@ -370,31 +405,36 @@ class CephXKeyRotationCore:
         """
         Return True when writing *key_generation* should start a CephX rotation.
 
-        CephCluster Progressing is expected only when the written generation is
-        greater than the current StorageCluster spec keyGeneration, the current
-        status keyGeneration, and the ocs-operator DESIRED_CEPHX_KEY_GEN baseline.
+        A write above the current StorageCluster spec or reported status starts
+        rotation, and setup waits until ``status.cephx`` catches up.
 
-        Writing the desired baseline (commonly 2) onto StorageCluster is a no-op
-        for CephCluster reconcile — keys are already at that desired level even
-        when status.keyGeneration still reports 1.
+        Greenfield enable is the exception: spec has no ``keyGeneration`` yet
+        and the written value is only the operator ``DESIRED_CEPHX_KEY_GEN``
+        baseline. That update does not make CephCluster Progress, and status
+        may stay at 1.
+
+        Re-enabling KeyGeneration when spec is already set (for example
+        ``keyGeneration`` 1 after the policy was Disabled) does rotate, even
+        when the written value equals the desired baseline.
         """
         self._validate_component(component)
         key_generation = int(key_generation)
         pre_spec = self.get_spec_key_generation(component)
         pre_status = self.get_component_status_key_generation(component)
         desired_baseline = self.get_desired_cephx_key_gen()
-        threshold = max(pre_spec, pre_status, desired_baseline)
-        will_rotate = key_generation > threshold
+        if pre_spec < 1 and key_generation <= max(pre_status, desired_baseline):
+            will_rotate = False
+        else:
+            will_rotate = key_generation > max(pre_spec, pre_status)
         log.info(
             "CephX rotation trigger check for %s: written=%s "
-            "pre_spec=%s pre_status=%s desired_baseline=%s threshold=%s "
+            "pre_spec=%s pre_status=%s desired_baseline=%s "
             "will_rotate=%s",
             component,
             key_generation,
             pre_spec,
             pre_status,
             desired_baseline,
-            threshold,
             will_rotate,
         )
         return will_rotate
@@ -412,10 +452,13 @@ class CephXKeyRotationCore:
         All components patch StorageCluster
         ``managedResources.cephCluster.security.cephx.<component>``.
 
-        Waits for CephCluster Progressing→Ready only when *key_generation*
-        will actually trigger rotation (above StorageCluster spec, status,
-        and DESIRED_CEPHX_KEY_GEN). Policy enable / same-as-desired writes
-        skip that wait so setup paths do not hang on Ready forever.
+        Waits for CephCluster rotation completion only when *key_generation*
+        will actually trigger rotation (above StorageCluster spec or status;
+        a greenfield write of DESIRED_CEPHX_KEY_GEN does not). Completion is
+        ``status.cephx`` reaching the written generation (CephCluster may
+        still be Progressing while OSDs restart / PGs recover). Greenfield
+        baseline writes skip that wait so setup does not hang while status
+        stays at 1.
 
         Args:
             component (str): ``daemon``, ``csi``, or ``rbdMirrorPeer``.
@@ -425,8 +468,8 @@ class CephXKeyRotationCore:
             keep_prior_key_count_max (int): CSI only — number of prior CSI key
                 generations to retain for existing PVC connections.
             wait_for_rotation (bool): When False, patch only and return without
-                waiting for CephCluster/StorageCluster Ready. Use for mid-
-                rotation fault injection.
+                waiting for CephCluster status.cephx / StorageCluster Ready.
+                Use for mid-rotation fault injection.
 
         Returns:
             int: The key generation written to the component spec.
@@ -463,18 +506,35 @@ class CephXKeyRotationCore:
         if will_rotate:
             log.info(
                 f"Generation {key_generation} for {component} should trigger "
-                "rotation; waiting for CephCluster Progressing→Ready"
+                "rotation; waiting for status.cephx to reach that generation "
+                "(CephCluster Ready is recovered later, not rotation completion)"
             )
-            # Daemon rotation restarts MON/MGR/OSD/MDS serially; encrypted
-            # multi-OSD clusters commonly need >15m to reach Ready again.
-            self.wait_for_cephcluster_rotation(timeout=1500, sleep=15)
+            self.wait_for_cephcluster_rotation(
+                timeout=1500,
+                sleep=15,
+                expected_generation=key_generation,
+                component=component,
+            )
         else:
             log.info(
-                f"Generation {key_generation} for {component} does not exceed "
-                "spec/status/DESIRED_CEPHX_KEY_GEN; skipping CephCluster "
-                "Progressing wait"
+                f"Generation {key_generation} for {component} does not start "
+                "CephX rotation; skipping CephCluster Progressing wait"
             )
-        self.wait_for_storagecluster_reconciliation(timeout=600, sleep=10)
+        # Daemon OSD restarts keep CephCluster (and often StorageCluster)
+        # Progressing while PGs recover. Tests wait for Ready separately.
+        if (
+            will_rotate
+            and component == self.COMPONENT_DAEMON
+            and self.get_cephcluster_phase() != constants.STATUS_READY
+        ):
+            log.info(
+                "CephCluster phase=%s after daemon CephX generation %s; "
+                "skipping StorageCluster Ready wait until full recovery",
+                self.get_cephcluster_phase(),
+                key_generation,
+            )
+        else:
+            self.wait_for_storagecluster_reconciliation(timeout=600, sleep=10)
         return key_generation
 
     def rotate_daemon_keys(self, key_generation=None, wait_for_rotation=True):
@@ -642,27 +702,38 @@ class CephXKeyRotationCore:
             f"Waiting for CephX {label} rotation to reach generation "
             f"{expected_generation} (timeout={timeout}s)"
         )
+        last_pending = ""
 
         def _entities_ready():
+            nonlocal last_pending
             pending = []
             for entity in entities:
                 generation = self.get_status_key_generation(entity)
                 if generation < expected_generation:
                     pending.append(f"{entity}={generation}")
+            last_pending = ",".join(pending)
             if pending:
-                log.debug(
-                    f"CephX {label} rotation pending for: {', '.join(pending)} "
+                log.info(
+                    f"CephX {label} rotation pending for: {last_pending} "
                     f"(want >= {expected_generation})"
                 )
                 return False
             return True
 
-        for ready in TimeoutSampler(timeout, sleep, _entities_ready):
-            if ready:
-                log.info(
-                    f"CephX {label} rotation reached generation {expected_generation}"
-                )
-                return True
+        try:
+            for ready in TimeoutSampler(timeout, sleep, _entities_ready):
+                if ready:
+                    log.info(
+                        f"CephX {label} rotation reached generation "
+                        f"{expected_generation}"
+                    )
+                    return True
+        except TimeoutExpiredError as exc:
+            pending_note = f" (pending {last_pending})" if last_pending else ""
+            raise UnexpectedBehaviour(
+                f"CephX {label} rotation did not reach generation "
+                f"{expected_generation} within {timeout}s{pending_note}"
+            ) from exc
 
         raise UnexpectedBehaviour(
             f"CephX {label} rotation did not reach generation {expected_generation} "

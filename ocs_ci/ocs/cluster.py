@@ -1446,11 +1446,15 @@ def validate_pdb_creation():
         pdb_required.remove(constants.MDS_PDB)
         pdb_count -= 1
 
-    if len(item_list) != pdb_count:
-        raise PDBNotCreatedException(
-            f"Not All PDB's created. Expected {pdb_count} PDB's but found {len(item_list)}"
-        )
     pdb_list = [item["metadata"]["name"] for item in item_list]
+
+    if len(item_list) != pdb_count:
+        missing_pdb = [item for item in pdb_required if item not in pdb_list]
+        raise PDBNotCreatedException(
+            f"Not All PDB's created. Expected {pdb_count} PDB's but found {len(item_list)}.\n"
+            f"Expected: {pdb_required} but found {pdb_list} on the cluster.\n"
+            f"Missing PDB: {missing_pdb}"
+        )
 
     pdb_list.sort()
     pdb_required.sort()
@@ -1744,6 +1748,47 @@ def calculate_compression_ratio(pool_name):
     return None
 
 
+def get_pool_raw_overhead_factor(pool_name):
+    """
+    Get the raw storage overhead multiplier for a pool, i.e. how many times
+    the logical (stored) bytes are actually written to raw storage before
+    compression. For replicated pools this is the replica size. Erasure
+    coded pools report "size" as data_chunks + coding_chunks, which is not
+    the raw overhead factor - that is (data_chunks + coding_chunks) /
+    data_chunks instead.
+
+    Args:
+        pool_name (str): name of the pool
+
+    Returns:
+        float: raw storage overhead factor for the pool
+
+    Raises:
+        PoolNotFound: if the pool does not exist on the cluster
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    pool_details = ct_pod.exec_ceph_cmd(
+        ceph_cmd="ceph osd pool ls detail", format="json"
+    )
+    pool_info = next(
+        (pool for pool in pool_details if pool.get("pool_name") == pool_name), None
+    )
+    if not pool_info:
+        raise PoolNotFound(f"Pool {pool_name} not found on cluster")
+
+    ec_profile_name = pool_info.get("erasure_code_profile")
+    if not ec_profile_name:
+        return pool_info["size"]
+
+    ec_profile = ct_pod.exec_ceph_cmd(
+        ceph_cmd=f"ceph osd erasure-code-profile get {ec_profile_name}"
+    )
+    data_chunks = int(ec_profile["k"])
+    coding_chunks = int(ec_profile["m"])
+    return (data_chunks + coding_chunks) / data_chunks
+
+
 def validate_compression(pool_name):
     """
     Check if data was compressed
@@ -1755,14 +1800,14 @@ def validate_compression(pool_name):
         bool: True if compression works. False if not
 
     """
-    pool_replica = get_ceph_pool_property(pool_name, "size")
+    pool_raw_overhead_factor = get_pool_raw_overhead_factor(pool_name)
     ceph_df_detail_output = get_ceph_df_detail()
     pool_list = ceph_df_detail_output.get("pools")
     for pool in pool_list:
         if pool.get("name") == pool_name:
             logger.info(f"{pool_name}")
             stored = pool["stats"]["stored"]
-            used_without_compression = stored * pool_replica
+            used_without_compression = stored * pool_raw_overhead_factor
             compress_under_bytes = pool["stats"]["compress_under_bytes"]
             compression_ratio = compress_under_bytes / used_without_compression
             logger.info(f"this is the comp_ratio {compression_ratio}")
@@ -1781,14 +1826,18 @@ def validate_compression(pool_name):
 
 def get_ec_pool_ec_optimizations():
     """
-    Retrieve the ec_optimizations flag state for every EC pool in the cluster
-    and the cluster-wide default osd_pool_default_flag_ec_optimizations.
+    Retrieve the ec_optimizations and ec_overwrites flag states for every EC
+    pool in the cluster and the cluster-wide default
+    osd_pool_default_flag_ec_optimizations.
 
     Returns:
-        tuple: (dict, str) where the dict maps EC pool name to bool
-            (True if ec_optimizations flag is set), and the str is the
-            cluster-wide default value (e.g. "true" or "false").
-            Returns (None, None) if no EC pools exist.
+        tuple:
+            - dict: Mapping of EC pool name to a dict containing:
+                * "ec_optimizations" (bool): True if ec_optimizations flag is set on the pool.
+                * "ec_overwrites" (bool): True if ec_overwrites flag is set on the pool.
+            - str: The cluster-wide default value for ec_optimizations (e.g. "true" or "false").
+
+        If no EC pools exist, returns (None, None).
     """
     EC_POOL_TYPE = 3
 
@@ -1802,7 +1851,10 @@ def get_ec_pool_ec_optimizations():
             continue
         pool_name = pool_info["pool_name"]
         flags = pool_info.get("flags_names", "")
-        ec_pools[pool_name] = "ec_optimizations" in flags
+        ec_pools[pool_name] = {
+            "ec_optimizations": "ec_optimizations" in flags,
+            "ec_overwrites": "ec_overwrites" in flags,
+        }
 
     if not ec_pools:
         return None, None
@@ -1818,12 +1870,13 @@ def get_ec_pool_ec_optimizations():
 
 def verify_ec_optimizations_unchanged(baseline_pools, baseline_default, context=""):
     """
-    Verify that EC pool ec_optimizations flags and the cluster-wide default
-    have not changed compared to the provided baseline.
+    Verify that EC pool ec_optimizations and ec_overwrites flags and the
+    cluster-wide default have not changed compared to the provided baseline.
 
     Args:
-        baseline_pools (dict): Mapping of pool name to bool from a previous
-            call to get_ec_pool_ec_optimizations().
+        baseline_pools (dict): Mapping of pool name to a dict with keys
+            "ec_optimizations" (bool) and "ec_overwrites" (bool), from a
+            previous call to get_ec_pool_ec_optimizations().
         baseline_default (str): Cluster-wide default from a previous call.
         context (str): Description of what happened between snapshots
             (e.g. "OSD restart") for log messages.
@@ -1835,16 +1888,17 @@ def verify_ec_optimizations_unchanged(baseline_pools, baseline_default, context=
 
     suffix = f" after {context}" if context else ""
 
-    for pool_name, expected_flag in baseline_pools.items():
-        actual_flag = current_pools.get(pool_name)
-        assert actual_flag is not None, f"EC pool '{pool_name}' disappeared{suffix}"
-        assert actual_flag == expected_flag, (
-            f"ec_optimizations flag changed for pool '{pool_name}'{suffix}: "
-            f"expected {expected_flag}, got {actual_flag}"
-        )
+    for pool_name, expected_flags in baseline_pools.items():
+        actual_flags = current_pools.get(pool_name)
+        assert actual_flags is not None, f"EC pool '{pool_name}' disappeared{suffix}"
+        for flag in ("ec_optimizations", "ec_overwrites"):
+            assert actual_flags[flag] == expected_flags[flag], (
+                f"{flag} flag changed for pool '{pool_name}'{suffix}: "
+                f"expected {expected_flags[flag]}, got {actual_flags[flag]}"
+            )
         logger.info(
-            f"Pool '{pool_name}': ec_optimizations={actual_flag} "
-            f"(unchanged{suffix})"
+            f"Pool '{pool_name}': ec_optimizations={actual_flags['ec_optimizations']}"
+            f", ec_overwrites={actual_flags['ec_overwrites']} (unchanged{suffix})"
         )
 
     assert current_default == baseline_default, (
@@ -3583,7 +3637,7 @@ def check_clusters():
             config.RUN["lvm"] = False
 
     # Fusion Access clusters have no CephCluster / StorageCluster
-    if config.DEPLOYMENT.get("fusion_access_deployment"):
+    if config.DEPLOYMENT.get("fusion_access"):
         config.RUN["cephcluster"] = False
         logger.info(
             "Fusion Access cluster detected — skipping CephCluster check, "

@@ -39,8 +39,7 @@ class CephXOSDHelper:
         if entities:
             return entities
 
-        toolbox = toolbox_pod or self.get_ceph_cli_pod()
-        osd_dump = toolbox.exec_ceph_cmd("ceph osd dump")
+        osd_dump = self.exec_ceph_cmd_retrying_auth("ceph osd dump", toolbox_pod)
         discovered = []
         for osd in osd_dump.get("osds", []):
             osd_id = osd.get("osd")
@@ -817,9 +816,33 @@ class CephXOSDHelper:
             mapping[entity] = entity[len(prefix) :]
         return mapping
 
+    def _osd_init_container_logs(self, pod_name, container_name):
+        """Return init-container logs, or an empty string when the container is absent."""
+        try:
+            return (
+                get_pod_logs(
+                    pod_name=pod_name,
+                    container=container_name,
+                    namespace=self.namespace,
+                )
+                or ""
+            )
+        except CommandFailed:
+            log.info(
+                f"OSD pod {pod_name} has no logs for init container {container_name}"
+            )
+            return ""
+
     def verify_osd_activate_lockbox_logs(self, osd_pods=None):
         """
-        Verify the activate init container loaded lockbox keys for encrypted OSDs.
+        Verify an encrypted OSD loaded its key and opened the device after rotation.
+
+        Older Rook images log the lockbox fetch from the activate init container
+        (``got latest cephx lockbox key for OSD successfully``). Current images
+        run ``ceph-bluestore-tool prime-osd-dir`` as activate, which prints
+        nothing. The LUKS key is fetched by ``encryption-kms-get-kek`` and the
+        device is opened by ``encryption-open``. Lockbox CephX rotation itself
+        is recorded by the operator.
 
         Args:
             osd_pods (list): Encrypted OSD pods; discovered when omitted.
@@ -830,25 +853,40 @@ class CephXOSDHelper:
 
         for osd_pod in osd_pods:
             pod_data = osd_pod.get()
-            logs = get_pod_logs(
-                pod_name=osd_pod.name,
-                container=constants.OSD_ACTIVATE_INIT_CONTAINER,
-                namespace=self.namespace,
-            )
             osd_uuid = self._get_pod_env_value(pod_data, constants.ROOK_OSD_UUID_ENV)
-            log.info(
-                f"OSD pod {osd_pod.name} (uuid={osd_uuid}) activate container logs:\n"
-                f"{logs}"
+            activate_logs = self._osd_init_container_logs(
+                osd_pod.name, constants.OSD_ACTIVATE_INIT_CONTAINER
             )
-            if constants.OSD_LOCKBOX_INIT_SUCCESS_LOG not in logs:
-                raise UnexpectedBehaviour(
-                    f"OSD pod {osd_pod.name} activate container did not report "
-                    "successful lockbox key load"
+            if constants.OSD_LOCKBOX_INIT_SUCCESS_LOG in activate_logs:
+                log.info(
+                    f"OSD pod {osd_pod.name} (uuid={osd_uuid}) activate container "
+                    "reported lockbox key load"
                 )
-            if constants.OSD_LOCKBOX_GET_OR_CREATE_LOG not in logs:
+                if constants.OSD_LOCKBOX_GET_OR_CREATE_LOG not in activate_logs:
+                    raise UnexpectedBehaviour(
+                        f"OSD pod {osd_pod.name} activate container did not use "
+                        "ceph auth get-or-create for lockbox key"
+                    )
+                continue
+
+            open_logs = self._osd_init_container_logs(
+                osd_pod.name, constants.OSD_ENCRYPTION_OPEN_INIT_CONTAINER
+            )
+            device_opened = any(
+                token in open_logs
+                for token in constants.OSD_ENCRYPTION_DEVICE_OPENED_LOGS
+            )
+            log.info(
+                f"OSD pod {osd_pod.name} (uuid={osd_uuid}) activate container "
+                "has no lockbox key log; encryption-open "
+                f"{'opened the device' if device_opened else 'did not open the device'}"
+            )
+            if not device_opened:
                 raise UnexpectedBehaviour(
-                    f"OSD pod {osd_pod.name} activate container did not use "
-                    "ceph auth get-or-create for lockbox key"
+                    f"OSD pod {osd_pod.name} did not report a lockbox key load in "
+                    f"{constants.OSD_ACTIVATE_INIT_CONTAINER} and did not open its "
+                    "encrypted device in "
+                    f"{constants.OSD_ENCRYPTION_OPEN_INIT_CONTAINER}"
                 )
 
     def verify_operator_lockbox_rotation_logs(self, expected_count, since_time=None):

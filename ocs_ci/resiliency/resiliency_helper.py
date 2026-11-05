@@ -21,7 +21,6 @@ import yaml
 import os
 import glob
 import logging
-import subprocess
 import threading
 import time
 import random
@@ -30,11 +29,9 @@ from ocs_ci.resiliency.platform_failures import PlatformFailures
 from ocs_ci.resiliency.storagecluster_component_failure import (
     StorageClusterComponentFailures,
 )
-from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     CephHealthException,
-    NoRunningCephToolBoxException,
     TimeoutExpiredError,
 )
 from ocs_ci.ocs.resources.pod import delete_pod_by_phase
@@ -250,9 +247,7 @@ class Resiliency:
         """Perform health checks and gather logs after scenario execution."""
         self._check_ceph_crash_during_run("resiliency post-scenario check")
         log.info("Checking Ceph health...")
-        if not ceph_health_check(fix_ceph_health=True, tries=25):
-            log.error("Ceph health check failed after scenario execution.")
-
+        self.cephtool.wait_till_ceph_status_became_healthy()
         log.info("Ceph health check passed after scenario execution.")
 
         # Removing Failed and Succeeded pods
@@ -342,15 +337,7 @@ class InjectFailures:
     def post_failure_injection_check(self):
         """Perform checks after injecting a failure."""
         log.info("Performing post-failure injection checks...")
-        try:
-            ceph_health_check(fix_ceph_health=True)
-        except (
-            CephHealthException,
-            CommandFailed,
-            subprocess.TimeoutExpired,
-            NoRunningCephToolBoxException,
-        ) as e:
-            log.error(f"Ceph health check failed after failure injection. : {e}")
+        CephStatusTool().wait_till_ceph_status_became_healthy()
 
     def failure_object(self):
         """Get the failure scenario class instance.

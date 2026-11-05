@@ -38,11 +38,16 @@ def ensure_krkn_resiliency_support_files():
     alerts_dst = os.path.join(dest_dir, "alerts.yaml")
     if not os.path.isfile(alerts_src):
         raise FileNotFoundError(f"Bundled Krkn alerts.yaml not found at {alerts_src}")
+    # Always overwrite. The Krkn clone ships an upstream SLO profile at this
+    # path (etcd fsync/commit, etc.). Leaving it in place makes Krkn v5.2+
+    # resiliency scoring fail OpenShift chaos runs even when enable_alerts
+    # is False.
     if os.path.isfile(alerts_dst):
-        log.debug(
-            "Krkn alerts profile already present at %s; skipping copy", alerts_dst
+        log.info(
+            "Replacing Krkn alerts profile at %s with the OCS-CI bundled "
+            "placeholder so Prometheus SLO scoring does not fail chaos runs",
+            alerts_dst,
         )
-        return
     shutil.copy2(alerts_src, alerts_dst)
     log.info("Synced bundled Krkn alerts profile to %s", alerts_dst)
 
@@ -118,14 +123,21 @@ class KrknConfigGenerator:
         """
         self.config_data["kraken"].update(kwargs)
 
-    def add_scenario(self, category, scenario_path):
+    def add_scenario(self, category, scenario_path, isolated=False):
         """Adds a chaos scenario under the specified category.
 
         Args:
             category (str): Scenario category (e.g., 'network_outage_scenarios').
             scenario_path (str): Path to scenario YAML file.
+            isolated (bool): If True, always append a new plugin entry instead of
+                merging into an existing category list. Use this for container
+                kill so one component's plugin exception cannot abort the rest.
         """
         scenarios = self.config_data["kraken"]["chaos_scenarios"]
+
+        if isolated:
+            scenarios.append({category: [scenario_path]})
+            return
 
         # Find existing category or create new one
         for entry in scenarios:

@@ -117,11 +117,16 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
             NoSuchElementException: If bucket not found in search results or UI elements not found
             TimeoutException: If page elements fail to load within timeout period
         """
+        from re import escape
+
         logger.info(f"Navigating to lifecycle rules for bucket: {bucket_name}")
 
         self.navigate_buckets_page()
 
         self.do_send_keys(self.generic_locators["search_resource_field"], bucket_name)
+        logger.info(f"Waiting for bucket name filter in URL: name={bucket_name}")
+        self.wait_for_endswith_url(rf"[?&]name={escape(bucket_name)}(?:[&#]|$)")
+        logger.info(f"Bucket name filter applied in URL: name={bucket_name}")
 
         self.do_click((f"//tr//a[contains(text(), '{bucket_name}')]", By.XPATH))
 
@@ -286,6 +291,10 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
 
             self.do_click(self.bucket_tab["edit_rule_option"])
 
+            logger.info("Opening lifecycle rule actions step")
+            self.do_click(self.bucket_tab["lifecycle_actions_step"])
+            logger.info("Lifecycle rule actions step opened")
+
             for rule_type, params in new_rules.items():
                 if rule_type in LIFECYCLE_RULE_REGISTRY:
                     rule_class = LIFECYCLE_RULE_REGISTRY[rule_type]
@@ -303,6 +312,10 @@ class BucketLifecycleUI(ObjectStorage, ConfirmDialog):
                         )
                 else:
                     logger.warning(f"Unknown rule type: {rule_type}")
+
+            logger.info("Opening lifecycle rule review step")
+            self.do_click(self.bucket_tab["lifecycle_review_step"])
+            logger.info("Lifecycle rule review step opened")
 
             self.scroll_into_view(self.bucket_tab["lifecycle_save_button"])
             self.do_click(self.bucket_tab["lifecycle_save_button"])

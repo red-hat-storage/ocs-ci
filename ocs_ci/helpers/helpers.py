@@ -19,6 +19,7 @@ import stat
 import platform
 import ipaddress
 import pytest
+import requests
 
 from urllib.parse import urlparse, urlunparse
 from concurrent.futures import ThreadPoolExecutor
@@ -66,6 +67,7 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
     exec_cmd,
     get_ocs_build_number,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.utility.utils import convert_device_size
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
@@ -5344,12 +5346,17 @@ def _extract_cli_image(pull_secret_path, image, remote_path, local_cli_dir):
     )
 
 
-def retrieve_cli_binary(cli_type="mcg"):
+def retrieve_cli_binary(cli_type="mcg", force_mcg=False):
     """
     Download the MCG-CLI/ODF-CLI binary and store it locally.
 
     Args:
-        cli_type (str): choose which bin file you want to download ["odf" -> odf-cli , "mcg" -> mcg-cli]
+        cli_type (str): choose which bin file you want to download
+            ["odf" -> odf-cli , "mcg" -> mcg-cli]
+        force_mcg (bool): If True, bypass the >= 4.20 redirect to odf-cli (see DFBUGS-11485).
+
+    Returns:
+        str: Local path of the downloaded CLI binary.
 
     Raises:
         AssertionError: In the case the CLI binary is not executable.
@@ -5360,7 +5367,7 @@ def retrieve_cli_binary(cli_type="mcg"):
     original_cli_type = cli_type
 
     # For OCS >= 4.20, mcg-cli is no longer available, redirect to odf-cli
-    if semantic_version >= version.VERSION_4_20 and cli_type == "mcg":
+    if semantic_version >= version.VERSION_4_20 and cli_type == "mcg" and not force_mcg:
         logger.info(
             f"OCS {semantic_version} >= 4.20 detected. MCG CLI is now part of ODF CLI. "
             "Redirecting to download odf-cli instead."
@@ -5384,9 +5391,10 @@ def retrieve_cli_binary(cli_type="mcg"):
             logger.info(
                 f"Created symlink from {mcg_cli_path} to {odf_cli_path} for backward compatibility"
             )
-        return
+            return mcg_cli_path
+        return odf_retriever.local_cli_path
 
-    # Continue with original mcg-cli download logic for OCS < 4.20
+    # mcg-cli download (OCS < 4.20, or force_mcg=True)
     remote_path = get_architecture_path(cli_type)
     remote_cli_basename = os.path.basename(remote_path)
 
@@ -5399,21 +5407,28 @@ def retrieve_cli_binary(cli_type="mcg"):
     live_deployment = config.DEPLOYMENT["live_deployment"]
 
     # Determine which image to use based on version and CLI type
+    odf_namespace = version.get_odf_image_namespace(semantic_version)
+    odf_cli_dev_image = constants.ODF_CLI_DEV_IMAGE_TEMPLATE.format(
+        namespace=odf_namespace
+    )
     if live_deployment and semantic_version >= version.VERSION_4_13:
-        if semantic_version >= version.VERSION_4_15:
-            image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
+        if semantic_version >= version.VERSION_4_15 and not force_mcg:
+            odf_cli_official_image = constants.ODF_CLI_OFFICIAL_IMAGE_TEMPLATE.format(
+                namespace=odf_namespace
+            )
+            image = f"{odf_cli_official_image}:v{semantic_version}"
         else:
             image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
     else:
         # Development builds
-        if semantic_version >= version.VERSION_4_20:
+        if semantic_version >= version.VERSION_4_20 and not force_mcg:
             # For 4.20+ dev builds, always use ODF CLI
-            image = f"{constants.ODF_CLI_DEV_IMAGE}:{ocs_build}"
+            image = f"{odf_cli_dev_image}:{ocs_build}"
         elif cli_type == "odf" and semantic_version >= version.VERSION_4_15:
             # For 4.15+ dev builds requesting odf-cli
-            image = f"{constants.ODF_CLI_DEV_IMAGE}:{ocs_build}"
+            image = f"{odf_cli_dev_image}:{ocs_build}"
         else:
-            # For older versions or mcg-cli requests in dev
+            # For older versions, odf-cli requests, or force_mcg
             image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
     pull_secret_path = download_pull_secret()
@@ -5437,6 +5452,7 @@ def retrieve_cli_binary(cli_type="mcg"):
     assert os.access(
         local_cli_path, os.X_OK
     ), f"The {cli_type} CLI binary does not have execution permissions"
+    return local_cli_path
 
 
 def get_architecture_path(cli_type):
@@ -7641,7 +7657,14 @@ def wait_for_osds_down(osd_ids: list[str], timeout: int = 300, sleep: int = 10) 
     log.info(f"All OSDs {osd_ids} are now marked as 'down'")
 
 
-def create_cephfs_ec_pool(pool_name, data_chunks, coding_chunks):
+def create_cephfs_ec_pool(
+    pool_name,
+    data_chunks=None,
+    coding_chunks=None,
+    replica=3,
+    compression="none",
+    erasure_coded=True,
+):
     """
     Add an EC data pool to the CephFilesystem via StorageCluster patch.
 
@@ -7652,11 +7675,24 @@ def create_cephfs_ec_pool(pool_name, data_chunks, coding_chunks):
         pool_name (str): Short pool name (e.g. "test-ec-fs")
         data_chunks (int): Number of data chunks (k)
         coding_chunks (int): Number of coding chunks (m)
+        replica (int): Number of replicas for the pool
+        compression (str): Compression mode (none, passive, aggressive, force)
+        erasure_coded (bool): True to create an erasure coded pool instead of replicated.
+            If True, arguments not related to erasure coding will be invalidated.
 
     Returns:
         str: Full pool name (e.g. "ocs-storagecluster-cephfilesystem-test-ec-fs")
     """
+
+    # TODO: Change the name of the function to create_cephfs_data_pool and make erasure_coded=False as default.
+    # TODO: This function can handle replica pool as well.
     from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
+
+    allowed = {"none", "passive", "aggressive", "force", ""}
+    if compression not in allowed:
+        raise ValueError(
+            f"Invalid compressionMode '{compression}'. Supported values: {allowed}"
+        )
 
     sc_obj = get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"])
     sc_data = sc_obj.get()["items"][0]
@@ -7669,10 +7705,37 @@ def create_cephfs_ec_pool(pool_name, data_chunks, coding_chunks):
         .get("additionalDataPools", [])
     )
 
-    new_entry = {
-        "name": pool_name,
-        "erasureCoded": {"dataChunks": data_chunks, "codingChunks": coding_chunks},
-    }
+    fs_name = get_cephfs_name()
+    full_pool_name = f"{fs_name}-{pool_name}"
+
+    pool_names = {p.get("name") for p in current_pools}
+    if pool_name in pool_names:
+        logger.warning(
+            f"Data pool '{pool_name}' already exists in CephFilesystem. The configuration is not verified"
+        )
+        return full_pool_name
+
+    if erasure_coded:
+        from ocs_ci.ocs.cluster import get_ec_profile
+
+        resolved_data_chunks, resolved_coding_chunks = (
+            (data_chunks, coding_chunks)
+            if data_chunks is not None and coding_chunks is not None
+            else get_ec_profile()
+        )
+        new_entry = {
+            "name": pool_name,
+            "erasureCoded": {
+                "dataChunks": resolved_data_chunks,
+                "codingChunks": resolved_coding_chunks,
+            },
+        }
+    else:
+        new_entry = {
+            "name": pool_name,
+            "compressionMode": compression,
+            "replicated": {"size": replica},
+        }
     updated_pools = current_pools + [new_entry]
 
     patch = {
@@ -7684,9 +7747,6 @@ def create_cephfs_ec_pool(pool_name, data_chunks, coding_chunks):
     }
     logger.info(f"Patching StorageCluster to add CephFS EC pool '{pool_name}'")
     sc_obj.patch(resource_name=sc_name, params=json.dumps(patch), format_type="merge")
-
-    fs_name = get_cephfs_name()
-    full_pool_name = f"{fs_name}-{pool_name}"
 
     ct_pod = pod.get_ceph_tools_pod()
     logger.info(f"Waiting for Ceph pool '{full_pool_name}' to appear")
@@ -7795,6 +7855,7 @@ def create_userns_pod(
     namespace,
     run_as_user=10900,
     run_as_group=10900,
+    fs_group=10000,
     interface_type=None,
     node_name=None,
     mount_path="/mnt/test",
@@ -7812,6 +7873,9 @@ def create_userns_pod(
         namespace (str): Target namespace
         run_as_user (int): Container UID (default 10900)
         run_as_group (int): Container GID (default 10900)
+        fs_group (int): fsGroup value for pod securityContext
+            (default 10000). Must be within namespace's
+            supplemental-groups range for restricted-v2 SCC.
         interface_type (str): CephFileSystem or CephBlockPool
             (default CephFileSystem)
         node_name (str): Schedule on this node (optional)
@@ -7840,6 +7904,8 @@ def create_userns_pod(
         scc={
             "runAsUser": run_as_user,
             "runAsGroup": run_as_group,
+            "fsGroup": fs_group,
+            "supplementalGroups": [fs_group],
             "runAsNonRoot": True,
         },
         volumemounts=[
@@ -7987,23 +8053,72 @@ def create_ibm_entitlement_secret(
     return True
 
 
-def _apply_mco():
+def apply_scale_mco(node_role=constants.WORKER_MACHINE, wait_for_rollout=False):
     """
-    Apply the IBM Storage Scale MCO (Meta Cluster Operator) manifest using a
-    pinned commit URL. Isolated in its own function because the URL is not
-    stable and is expected to change over time.
+    Apply the IBM Storage Scale MCO (Machine Config Operator) manifest for the
+    given node role and optionally wait for the MachineConfigPool rollout.
+
+    The upstream manifest targets the worker pool, which installs the
+    kernel-devel packages on worker nodes. For control plane (master) nodes the
+    manifest is rewritten (``worker`` -> ``master``, equivalent to
+    ``sed 's/worker/master/g'``) before applying so the kernel-devel packages
+    are installed on master nodes as well. This is what lets the Scale
+    "Add nodes to local cluster" wizard pass the kernel-devel check when
+    "Include control plane nodes" is selected.
+
+    Args:
+        node_role (str): ``constants.WORKER_MACHINE`` or
+            ``constants.MASTER_MACHINE``.
+        wait_for_rollout (bool): if True, wait for the MachineConfigPool
+            rollout of ``node_role`` nodes to finish (nodes reboot to install
+            the packages).
 
     Raises:
-        CommandFailed: if applying the MCO manifest fails
+        ValueError: if ``node_role`` is not worker or master.
+        CommandFailed: if fetching or applying the MCO manifest fails.
     """
-    mco_url = (
-        "https://raw.githubusercontent.com/IBM/ibm-spectrum-scale-container-native/"
-        "502fbcbe968651d2c94bd6b8419958c835383696/generated/scale/mco/mco.yaml"
-    )
+    if node_role not in (constants.WORKER_MACHINE, constants.MASTER_MACHINE):
+        raise ValueError(
+            f"Unsupported node_role '{node_role}'; expected "
+            f"'{constants.WORKER_MACHINE}' or '{constants.MASTER_MACHINE}'"
+        )
+
+    logger.info(f"Applying IBM Storage Scale MCO for {node_role} nodes")
     try:
-        exec_cmd(f"oc apply -f {mco_url}")
-    except CommandFailed as e:
-        raise CommandFailed(f"Scale operator deployment failed: {e}") from e
+        if node_role == constants.MASTER_MACHINE:
+            resp = requests.get(constants.IBM_STORAGE_SCALE_MCO_URL, timeout=60)
+            resp.raise_for_status()
+            manifest = resp.text.replace(
+                constants.WORKER_MACHINE, constants.MASTER_MACHINE
+            )
+            fd, temp_path = tempfile.mkstemp(suffix=".yaml")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    f.write(manifest)
+                exec_cmd(f"oc apply -f {temp_path}")
+            finally:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+        else:
+            exec_cmd(f"oc apply -f {constants.IBM_STORAGE_SCALE_MCO_URL}")
+    except (CommandFailed, requests.RequestException) as e:
+        raise CommandFailed(
+            f"Scale operator (MCO) deployment for {node_role} nodes failed: {e}"
+        ) from e
+
+    if wait_for_rollout:
+        logger.info(f"Waiting for the {node_role} MachineConfigPool rollout to finish")
+        wait_for_machineconfigpool_status(node_type=node_role)
+
+
+def _apply_mco():
+    """
+    Apply the IBM Storage Scale MCO manifest for worker nodes.
+
+    Thin backwards-compatible wrapper around :func:`apply_scale_mco` used by the
+    coexistence infrastructure setup.
+    """
+    apply_scale_mco(node_role=constants.WORKER_MACHINE)
 
 
 def setup_scale_cluster_infrastructure_for_cnsa_rm(
@@ -8209,13 +8324,18 @@ def assert_pvc_volume_health_event(pvc_obj, reason, event_type, message_substr):
     return matching
 
 
-def blocklist_cephfs_client(pvc_obj):
+def blocklist_cephfs_client(pvc_obj, subvolume_path=None):
     """
     Find the CephFS client for a PVC's subvolume, add it to the
     Ceph OSD blocklist, and evict it from the active MDS.
 
     Args:
-        pvc_obj: PVC object (must be CephFS-backed and have a bound PV)
+        pvc_obj: PVC object (must be CephFS-backed and have a bound PV).
+            Not used when subvolume_path is provided.
+        subvolume_path (str, optional): Pre-resolved subvolume path.
+            If provided, skips PVC/PV lookup. Required for HCI platforms
+            where PVC/PV exist on client cluster but blocklisting happens
+            on provider cluster.
 
     Returns:
         tuple: (client_id, client_addr) for use in cleanup
@@ -8223,13 +8343,15 @@ def blocklist_cephfs_client(pvc_obj):
     from ocs_ci.ocs.ocp import OCP
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
-    pvc_obj.reload()
-    pv_name = pvc_obj.backed_pv
-    assert pv_name, f"PVC {pvc_obj.name} has no bound PV"
+    if subvolume_path is None:
+        pvc_obj.reload()
+        pv_name = pvc_obj.backed_pv
+        assert pv_name, f"PVC {pvc_obj.name} has no bound PV"
 
-    pv_ocp = OCP(kind="pv", resource_name=pv_name)
-    pv_data = pv_ocp.get()
-    subvolume_path = pv_data["spec"]["csi"]["volumeAttributes"]["subvolumePath"]
+        pv_ocp = OCP(kind="pv", resource_name=pv_name)
+        pv_data = pv_ocp.get()
+        subvolume_path = pv_data["spec"]["csi"]["volumeAttributes"]["subvolumePath"]
+
     logger.info(f"Subvolume path: {subvolume_path}")
 
     toolbox = get_ceph_tools_pod()

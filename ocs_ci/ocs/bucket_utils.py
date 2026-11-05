@@ -8,6 +8,8 @@ import os
 import shlex
 import time
 
+from subprocess import TimeoutExpired
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import uuid4
 
@@ -38,6 +40,10 @@ from ocs_ci.utility import version
 from ocs_ci.utility.prometheus import PrometheusAPI
 
 logger = logging.getLogger(__name__)
+
+# The noobaa CLI waits for the backingstore to become healthy by itself. It only needs
+# to stay alive long enough to create the CR, so cap its share of the create timeout
+PV_BACKINGSTORE_CLI_CREATE_TIMEOUT = 120
 
 
 def craft_s3_command(
@@ -1144,7 +1150,16 @@ def cli_create_self_ref_mcg_backingstore(
     )
 
 
-def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
+def oc_create_pv_backingstore(
+    backingstore_name,
+    vol_num,
+    size,
+    storage_class,
+    req_cpu=None,
+    req_mem=None,
+    lim_cpu=None,
+    lim_mem=None,
+):
     """
     Create a new backingstore with pv underlying storage using oc create command
 
@@ -1153,6 +1168,10 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
         vol_num (int): number of pv volumes
         size (int): each volume size in GB
         storage_class (str): which storage class to use
+        req_cpu (str): requested cpu value for the agent pods
+        req_mem (str): requested memory value for the agent pods
+        lim_cpu (str): cpu limit for the agent pods
+        lim_mem (str): memory limit for the agent pods
 
     """
     bs_data = templating.load_yaml(constants.PV_BACKINGSTORE_YAML)
@@ -1162,6 +1181,21 @@ def oc_create_pv_backingstore(backingstore_name, vol_num, size, storage_class):
     bs_data["spec"]["pvPool"]["numVolumes"] = vol_num
     if storage_class:
         bs_data["spec"]["pvPool"]["storageClass"] = storage_class
+    # spec.pvPool.resources is a VolumeResources: its cpu/memory keys override
+    # the performance profile's pvPoolResources for the agent pods, while its
+    # storage key sizes the PVC. requests.storage is always set above, which is
+    # required - the noobaa admission webhook rejects a backingstore whose
+    # volume size is unset or below the minimum.
+    if req_cpu:
+        bs_data["spec"]["pvPool"]["resources"]["requests"]["cpu"] = req_cpu
+    if req_mem:
+        bs_data["spec"]["pvPool"]["resources"]["requests"]["memory"] = req_mem
+    if lim_cpu or lim_mem:
+        limits = bs_data["spec"]["pvPool"]["resources"].setdefault("limits", {})
+        if lim_cpu:
+            limits["cpu"] = lim_cpu
+        if lim_mem:
+            limits["memory"] = lim_mem
     create_resource(**bs_data)
     wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
 
@@ -1176,6 +1210,7 @@ def cli_create_pv_backingstore(
     req_mem=None,
     lim_cpu=None,
     lim_mem=None,
+    timeout=600,
 ):
     """
     Create a new backingstore with pv underlying storage using noobaa cli command
@@ -1189,6 +1224,7 @@ def cli_create_pv_backingstore(
         req_mem (str): requested memory value
         lim_cpu (str): limit cpu value
         lim_mem (str): limit memory value
+        timeout (int): total time to wait for the backingstore to become healthy
 
     """
     cmd = (
@@ -1205,23 +1241,41 @@ def cli_create_pv_backingstore(
         cmd += f" --limit-cpu {lim_cpu}"
     if lim_mem:
         cmd += f" --limit-memory {lim_mem}"
-    mcg_obj.exec_mcg_cmd(cmd)
-    wait_for_pv_backingstore(backingstore_name, config.ENV_DATA["cluster_namespace"])
+
+    # The noobaa CLI blocks until the backingstore is healthy, so on a slow cluster
+    # the subprocess timeout kills it and raises an opaque TimeoutExpired even though
+    # the backingstore CR itself was created. Keep the CLI on a short leash and let
+    # wait_for_pv_backingstore decide whether the creation actually succeeded.
+    cli_timeout = min(PV_BACKINGSTORE_CLI_CREATE_TIMEOUT, timeout // 2)
+    try:
+        mcg_obj.exec_mcg_cmd(cmd, timeout=cli_timeout)
+    except TimeoutExpired:
+        logger.warning(
+            f"The noobaa CLI did not return within {cli_timeout} seconds while waiting "
+            f"for backingstore {backingstore_name} to become healthy. Falling back to "
+            "polling the backingstore CR."
+        )
+    wait_for_pv_backingstore(
+        backingstore_name,
+        config.ENV_DATA["cluster_namespace"],
+        timeout=max(timeout - cli_timeout, 60),
+    )
 
 
-def wait_for_pv_backingstore(backingstore_name, namespace=None):
+def wait_for_pv_backingstore(backingstore_name, namespace=None, timeout=360):
     """
     wait for existing pv backing store to reach OPTIMAL state
 
     Args:
         backingstore_name (str): backingstore name
         namespace (str): backing store's namespace
+        timeout (int): time to wait for the backing store to become healthy
 
     """
 
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     sample = TimeoutSampler(
-        timeout=360,
+        timeout=timeout,
         sleep=15,
         func=check_pv_backingstore_status,
         backingstore_name=backingstore_name,
@@ -1229,10 +1283,67 @@ def wait_for_pv_backingstore(backingstore_name, namespace=None):
     )
     if not sample.wait_for_func_status(result=True):
         raise TimeoutExpiredError(
-            f"Backing Store {backingstore_name} never reached OPTIMAL state"
+            f"Backing Store {backingstore_name} never reached OPTIMAL state. "
+            f"{get_pv_backingstore_unhealthy_reason(backingstore_name, namespace)}"
         )
     else:
         logger.info(f"Backing Store {backingstore_name} created successfully")
+
+
+def get_pv_backingstore_unhealthy_reason(backingstore_name, namespace=None):
+    """
+    Collect why a pv backing store hasn't become healthy.
+
+    Meant for enriching timeout messages, so it never raises - a failure to collect
+    the details is reported in the returned string instead.
+
+    Args:
+        backingstore_name (str): backingstore name
+        namespace (str): backing store's namespace
+
+    Returns:
+        str: The backing store phase and conditions, plus the phase and the
+            scheduling reason of every pv pool pod that isn't running
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    details = []
+    try:
+        status = (
+            OCP(
+                kind=constants.BACKINGSTORE,
+                namespace=namespace,
+                resource_name=backingstore_name,
+            )
+            .get()
+            .get("status", {})
+        )
+        details.append(f"Backing store phase: {status.get('phase')}")
+        for condition in status.get("conditions", []):
+            details.append(
+                f"condition {condition.get('type')}={condition.get('status')} "
+                f"({condition.get('reason')}): {condition.get('message')}"
+            )
+
+        pods = OCP(kind=constants.POD, namespace=namespace).get(
+            selector=f"pool={backingstore_name}"
+        )["items"]
+        for pod_data in pods:
+            pod_status = pod_data.get("status", {})
+            if pod_status.get("phase") == constants.STATUS_RUNNING:
+                continue
+            reasons = [
+                f"{cond.get('reason')}: {cond.get('message')}"
+                for cond in pod_status.get("conditions", [])
+                if cond.get("reason")
+            ]
+            details.append(
+                f"pod {pod_data['metadata']['name']} is "
+                f"{pod_status.get('phase')} - {'; '.join(reasons) or 'no reason given'}"
+            )
+    except Exception as ex:
+        details.append(f"Could not collect the backing store details: {ex}")
+    return " | ".join(details)
 
 
 def check_pv_backingstore_status(
@@ -1888,6 +1999,64 @@ def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey-", bs=
     )
     io_pod.exec_sh_cmd_on_pod(command=command, sh="sh")
     return obj_lst
+
+
+def start_background_object_upload(
+    mcg_obj, awscli_pod, bucket_name, origin_dir, size="1G", max_attempts=20
+):
+    """
+    Create a random object on the awscli pod and start uploading it to the given
+    bucket in the background.
+
+    Object creation reuses ``write_random_objects_in_pod``. The upload is run
+    directly rather than via ``sync_object_directory`` because this is meant for
+    scenarios that need two things that helper does not offer: a configurable
+    (here >2 minute) retry window - ``sync_object_directory`` always uses
+    ``craft_s3_command``'s default ~1 minute ``max_attempts`` - and a background,
+    non-blocking run so the caller can disrupt the cluster (e.g. kill a pod or
+    shut down a node) while the upload is in flight. ``aws s3 cp`` auto-switches
+    to a multipart upload for a file this size, and AWS_MAX_ATTEMPTS drives the
+    retry window (~1 minute per 8 attempts), so the default 20 attempts gives the
+    in-flight part uploads over 2 minutes to ride out a disruption.
+
+    The caller owns the returned executor and future: resolve the future with
+    ``future.result()`` to surface any upload error, and shut the executor down.
+
+    Args:
+        mcg_obj (MCG): MCG object holding the S3 credentials
+        awscli_pod (Pod): Pod running the AWS CLI tools
+        bucket_name (str): Bucket to upload the object to
+        origin_dir (str): Directory on the awscli pod to create the object in
+        size (str): Size of the object to create (``dd`` block size, e.g. ``"1G"``)
+        max_attempts (int): AWS CLI retry attempts for the upload
+
+    Returns:
+        tuple: ``(executor, future, object_key, local_path, s3_path)``
+
+    """
+    object_key = write_random_objects_in_pod(awscli_pod, origin_dir, amount=1, bs=size)[
+        0
+    ]
+    local_path = f"{origin_dir}/{object_key}"
+    s3_path = f"s3://{bucket_name}/{object_key}"
+    secrets = [
+        mcg_obj.access_key_id,
+        mcg_obj.access_key,
+        mcg_obj.s3_internal_endpoint,
+    ]
+    upload_cmd = craft_s3_command(
+        f"cp {local_path} {s3_path}", mcg_obj, max_attempts=max_attempts
+    )
+    executor = ThreadPoolExecutor(max_workers=1)
+    logger.info(f"Starting the background upload of {local_path} to {s3_path}")
+    future = executor.submit(
+        awscli_pod.exec_cmd_on_pod,
+        command=upload_cmd,
+        out_yaml_format=False,
+        secrets=secrets,
+        timeout=900,
+    )
+    return executor, future, object_key, local_path, s3_path
 
 
 def setup_base_objects(awscli_pod, original_dir, amount=2):
@@ -3776,18 +3945,39 @@ def get_noobaa_bucket_replication_metrics_in_prometheus(
     query = f"{metric_name} {{bucket_name='{bucket_name}'}}"
     api = PrometheusAPI(threading_lock=threading_lock)
     logger.info(f"Prometheus query: {query}")
-    resp = api.get("query", payload={"query": query}, timeout=1200)
 
-    if resp.ok:
+    def _query_metric():
+        """
+        Query Prometheus API and extract metric results.
+
+        Returns:
+            list: The result list from Prometheus response (may be empty)
+
+        Raises:
+            Exception: If the Prometheus query fails (non-200 response)
+        """
+        resp = api.get("query", payload={"query": query}, timeout=1200)
+        if not resp.ok:
+            raise Exception(
+                f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
+            )
         logger.info(f"Prometheus response: {resp.text}")
-        metrics_output = json.loads(resp.text)
-        got_metrics_value = int(metrics_output["data"]["result"][0]["value"][1])
-        logger.info(f"Metrics {metric_name} : {got_metrics_value}")
-        return got_metrics_value
-    else:
-        raise Exception(
-            f"Failed to query Prometheus for metric {metric_name}: {resp.text}"
+        return json.loads(resp.text)["data"]["result"]
+
+    # Prometheus returns an empty result until it scrapes the bucket's series
+    try:
+        for result in TimeoutSampler(timeout=300, sleep=15, func=_query_metric):
+            if result:
+                break
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"Prometheus returned no data for metric {metric_name} "
+            f"of bucket {bucket_name}"
         )
+
+    got_metrics_value = int(result[0]["value"][1])
+    logger.info(f"Metrics {metric_name} : {got_metrics_value}")
+    return got_metrics_value
 
 
 def get_bucket_mode(mcg_obj, bucket_name):

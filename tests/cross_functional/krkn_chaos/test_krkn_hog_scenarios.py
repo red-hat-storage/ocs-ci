@@ -15,7 +15,7 @@ import pytest
 import logging
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad, chaos, polarion_id
+from ocs_ci.framework.pytest_customization.marks import white_squad, chaos, polarion_id
 from ocs_ci.krkn_chaos.krkn_chaos import KrKnRunner
 from ocs_ci.krkn_chaos.krkn_config_generator import KrknConfigGenerator
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -30,7 +30,7 @@ from ocs_ci.krkn_chaos.logging_helpers import log_test_start
 log = logging.getLogger(__name__)
 
 
-@green_squad
+@white_squad
 @chaos
 class TestKrKnHogChaosScenarios:
     """

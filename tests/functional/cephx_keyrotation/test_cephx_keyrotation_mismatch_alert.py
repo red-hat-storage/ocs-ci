@@ -1368,7 +1368,8 @@ class TestCephXDesiredKeyGenNegative:
 
         Parametrized over JSON values that must fail validation:
           - ``"16"`` / ``"abc"`` → must be of type integer: "string"
-          - ``true`` → must be of type integer: "boolean"
+          - ``true`` → type error (``integer`` or ``int64``; apiserver may
+            report an empty value instead of ``"boolean"``)
           - ``null`` → keyGeneration cannot be removed once set
             (null is treated as removing the field after it was set)
 

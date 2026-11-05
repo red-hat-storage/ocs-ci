@@ -16,9 +16,9 @@ from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.ocs.exceptions import (
-    CSVNotFound,
     ChannelNotFound,
     ConfigurationError,
+    CSVNotFound,
     TimeoutExpiredError,
 )
 from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
@@ -31,7 +31,6 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     wait_for_machineconfigpool_status,
 )
-
 
 logger = logging.getLogger(__name__)
 
