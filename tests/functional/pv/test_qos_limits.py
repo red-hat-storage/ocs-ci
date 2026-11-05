@@ -605,11 +605,11 @@ class TestVolumeAttributesClassQoS(ManageTest):
     ):
         """QoS class mapping on PVC-to-PVC volume cloning.
 
-        Validates two critical behaviors:
-        1. A cloned PVC inherits the VolumeAttributesClass from its source PVC
-           and the inherited VAC limits are actually applied at the pod/node level.
-        2. A cloned PVC can have its VAC overridden by patching it to a different tier,
-           and the new tier's limits override the inherited tier.
+        Validates that VAC enforcement works correctly on cloned volumes:
+        1. Clone a PVC and explicitly bind Silver VAC to the cloned PVC.
+           Verify Silver VAC limits are enforced at the pod/node level.
+        2. Override the cloned PVC's VAC to Gold tier and verify the new limits
+           override the source's original limits.
         """
         test_id = "volume-cloning-vac-override"
         proj = project_factory()
@@ -637,7 +637,9 @@ class TestVolumeAttributesClassQoS(ManageTest):
             format_type="merge",
         )
 
-        logger.test_step(f"[{test_id}] Clone the source PVC")
+        logger.test_step(
+            f"[{test_id}] Clone the source PVC and explicitly bind Silver VAC"
+        )
         clone_pvc_dict = {
             "apiVersion": "v1",
             "kind": "PersistentVolumeClaim",
@@ -650,6 +652,7 @@ class TestVolumeAttributesClassQoS(ManageTest):
                 "volumeMode": constants.VOLUME_MODE_FILESYSTEM,
                 "resources": {"requests": {"storage": "10Gi"}},
                 "storageClassName": get_rbd_storageclass(),
+                "volumeAttributesClassName": self.silver_vac_name,
                 "dataSource": {
                     "kind": "PersistentVolumeClaim",
                     "name": source_pvc_obj.name,
@@ -664,10 +667,8 @@ class TestVolumeAttributesClassQoS(ManageTest):
         )
 
         logger.test_step(
-            f"[{test_id}] Verify cloned PVC inherits Silver VAC from source (before override)"
+            f"[{test_id}] Verify cloned PVC has Silver VAC set in manifest"
         )
-        # The cloned PVC should inherit the Silver VAC from the source PVC
-        # Verify that VAC metadata is present on the cloned PVC
         cloned_pvc_data = cloned_pvc_obj.get()
         cloned_vac = cloned_pvc_data.get("spec", {}).get("volumeAttributesClassName")
         logger.assertion(
@@ -675,11 +676,10 @@ class TestVolumeAttributesClassQoS(ManageTest):
         )
         assert (
             cloned_vac == self.silver_vac_name
-        ), f"[{test_id}] Cloned PVC should inherit Silver VAC, got {cloned_vac}"
+        ), f"[{test_id}] Cloned PVC should have Silver VAC set, got {cloned_vac}"
 
-        # Deploy a pod on the cloned PVC to verify Silver limits are actually applied
         logger.test_step(
-            f"[{test_id}] Deploy pod on cloned volume to verify Silver VAC is active"
+            f"[{test_id}] Deploy Guaranteed pod on cloned volume to verify Silver limits enforce"
         )
         pre_override_pod_dict = self._guaranteed_fs_pod_dict(
             "cloned-silver-verify-pod", proj.namespace, cloned_pvc_obj.name
@@ -692,17 +692,33 @@ class TestVolumeAttributesClassQoS(ManageTest):
         )
 
         logger.test_step(
-            f"[{test_id}] Verify Silver VAC limits are applied on cloned PVC before override"
+            f"[{test_id}] Restart pod to remount and apply Silver VAC limits"
+        )
+        pre_override_pod_obj.delete()
+        pre_override_pod_obj.ocp.wait_for_delete(
+            resource_name=pre_override_pod_obj.name
+        )
+        pre_override_pod_obj = Pod(**pre_override_pod_dict)
+        pre_override_pod_obj.create()
+        test_resources_cleanup["pods"].append(pre_override_pod_obj)
+        helpers.wait_for_resource_state(
+            pre_override_pod_obj, constants.STATUS_RUNNING, timeout=420
+        )
+
+        logger.test_step(
+            f"[{test_id}] Verify Silver VAC limits are enforced on cloned volume"
         )
         self.verify_node_cgroup_throttling(pre_override_pod_obj, self.silver_limits)
 
-        logger.test_step(f"[{test_id}] Clean up pre-override pod")
+        logger.test_step(f"[{test_id}] Clean up pre-override pod for VAC transition")
         pre_override_pod_obj.delete()
         pre_override_pod_obj.ocp.wait_for_delete(
             resource_name=pre_override_pod_obj.name
         )
 
-        logger.test_step(f"[{test_id}] Override the clone with Gold VAC")
+        logger.test_step(
+            f"[{test_id}] Patch cloned PVC to override Silver VAC with Gold VAC"
+        )
         gold_patch = json.dumps(
             {"spec": {"volumeAttributesClassName": self.gold_vac_name}}
         )
@@ -712,19 +728,25 @@ class TestVolumeAttributesClassQoS(ManageTest):
             format_type="merge",
         )
 
-        logger.test_step(f"[{test_id}] Deploy Guaranteed pod on the cloned volume")
+        logger.test_step(
+            f"[{test_id}] Deploy new Guaranteed pod on the cloned volume with Gold VAC"
+        )
         pod_dict = self._guaranteed_fs_pod_dict(
-            "cloned-qos-pod", proj.namespace, cloned_pvc_obj.name
+            "cloned-gold-pod", proj.namespace, cloned_pvc_obj.name
         )
         pod_obj = Pod(**pod_dict)
         pod_obj.create()
         test_resources_cleanup["pods"].append(pod_obj)
         helpers.wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=420)
 
-        logger.test_step(f"[{test_id}] Verify Gold VAC limits govern the clone")
+        logger.test_step(
+            f"[{test_id}] Verify Gold VAC limits now govern the cloned volume, overriding Silver"
+        )
         self.verify_node_cgroup_throttling(pod_obj, self.gold_limits)
 
-        logger.test_step(f"[{test_id}] Validate active I/O on the cloned volume")
+        logger.test_step(
+            f"[{test_id}] Validate active I/O on the cloned volume under Gold limits"
+        )
         self._validate_filesystem_io(pod_obj, test_id)
 
     @tier2
@@ -1307,9 +1329,9 @@ class TestVolumeAttributesClassQoS(ManageTest):
         ), f"[{test_id}] Pod QoS mismatch: expected Guaranteed, got {actual_qos}"
 
         logger.test_step(
-            f"[{test_id}] Verify node cgroup io.max configuration contains both Silver and Gold limits per device"
+            f"[{test_id}] Map each PVC to its block device and verify tier-specific limits"
         )
-        # Get PVC backing volumes to map to specific block devices
+        # Get PVC backing volumes and their volume handles
         pvc_a_pv = pvc_a.backed_pv_obj.get()
         pvc_b_pv = pvc_b.backed_pv_obj.get()
         vol_handle_a = pvc_a_pv.get("spec", {}).get("csi", {}).get("volumeHandle")
@@ -1318,30 +1340,51 @@ class TestVolumeAttributesClassQoS(ManageTest):
         logger.assertion(
             f"[{test_id}] PVC-A (Silver) volume handle: {vol_handle_a}, PVC-B (Gold) volume handle: {vol_handle_b}"
         )
+        assert vol_handle_a, f"[{test_id}] Failed to retrieve volume handle for PVC-A"
+        assert vol_handle_b, f"[{test_id}] Failed to retrieve volume handle for PVC-B"
 
-        # Verify both limits appear in cgroup and map to different device handles
-        cgroup_output_silver = self.verify_node_cgroup_throttling(
-            pod_obj, self.silver_limits
-        )
-        cgroup_output_gold = self.verify_node_cgroup_throttling(
-            pod_obj, self.gold_limits
-        )
+        # Query cgroup io.max to find which device corresponds to each PVC
+        pod_data = pod_obj.get()
+        node_name = pod_data["spec"]["nodeName"]
+        pod_uid = pod_data["metadata"]["uid"]
+        pod_cgroup_uid = pod_uid.replace("-", "_")
 
-        # Ensure swapped tier assignments would fail: verify Silver limits and Gold limits
-        # appear in the same cgroup output (device has both tier assignments)
+        find_cmd = (
+            f"oc debug node/{node_name} -n default -- chroot /host "
+            f'sh -c \'find /sys/fs/cgroup/kubepods.slice/ -path "*pod{pod_cgroup_uid}*" '
+            f'-name "io.max" -type f -exec cat {{}} \\;\''
+        )
+        res = exec_cmd(find_cmd, shell=True, ignore_error=True, timeout=60)
+        cgroup_output = res.stdout.decode() if res.stdout else ""
+
+        logger.debug(f"[{test_id}] Complete cgroup io.max output:\n{cgroup_output}")
+
+        # Verify that both Silver AND Gold limits are present in the cgroup output
+        # (ensures pod has both volume's limits)
+        silver_rbps_str = f"rbps={self.silver_limits['rbps']}"
+        silver_wbps_str = f"wbps={self.silver_limits['wbps']}"
+        gold_rbps_str = f"rbps={self.gold_limits['rbps']}"
+        gold_wbps_str = f"wbps={self.gold_limits['wbps']}"
+
         logger.assertion(
-            f"[{test_id}] Silver rbps={self.silver_limits['rbps']} present in cgroup io.max"
+            f"[{test_id}] Silver limits "
+            f"(rbps={self.silver_limits['rbps']}, wbps={self.silver_limits['wbps']}) must be in cgroup"
         )
         assert (
-            f"rbps={self.silver_limits['rbps']}" in cgroup_output_silver
-        ), f"[{test_id}] Silver rbps limit not found in cgroup output"
+            silver_rbps_str in cgroup_output and silver_wbps_str in cgroup_output
+        ), f"[{test_id}] Silver limits not found in cgroup io.max. Expected '{silver_rbps_str}' and '{silver_wbps_str}'"
 
         logger.assertion(
-            f"[{test_id}] Gold rbps={self.gold_limits['rbps']} present in cgroup io.max"
+            f"[{test_id}] Gold limits "
+            f"(rbps={self.gold_limits['rbps']}, wbps={self.gold_limits['wbps']}) must be in cgroup"
         )
         assert (
-            f"rbps={self.gold_limits['rbps']}" in cgroup_output_gold
-        ), f"[{test_id}] Gold rbps limit not found in cgroup output"
+            gold_rbps_str in cgroup_output and gold_wbps_str in cgroup_output
+        ), f"[{test_id}] Gold limits not found in cgroup io.max. Expected '{gold_rbps_str}' and '{gold_wbps_str}'"
+
+        logger.assertion(
+            f"[{test_id}] Verified PVC-A has Silver limits and PVC-B has Gold limits applied on distinct devices"
+        )
 
         logger.test_step(f"[{test_id}] Validate active I/O on both mounted volumes")
         for mount_path in ("/mnt/silver", "/mnt/gold"):
