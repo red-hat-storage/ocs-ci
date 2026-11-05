@@ -21,7 +21,13 @@ from ocs_ci.utility.ibmcloud import (
     set_target_region,
     configure_ingress_load_balancer_security_group,
 )
-from ocs_ci.utility.utils import get_cluster_name, get_infra_id, run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import (
+    get_cluster_name,
+    get_infra_id,
+    get_infra_id_from_openshift_install_state,
+    run_cmd,
+    TimeoutSampler,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -125,67 +131,209 @@ class IPIOCPDeployment(BaseOCPDeployment):
                     gather_bootstrap()
                 except Exception as ex:
                     logger.error(ex)
-            # W/A for bug: https://issues.redhat.com/browse/OCPBUGS-63723
+            # W/A for bugs:
+            # - https://issues.redhat.com/browse/OCPBUGS-63723
+            # - https://redhat.atlassian.net/browse/OCPBUGS-125799
             # Issue to track W/A: https://github.com/red-hat-storage/ocs-ci/issues/13519
             if (
                 "failed retrieving cos instance for destroy bootstrap: COS Resource Not Found"
                 in str(e)
             ):
                 logger.warning(
-                    "COS instance not found for destroy bootstrap, related to bug: "
-                    "https://issues.redhat.com/browse/OCPBUGS-63723, continuing..."
+                    "COS instance not found for destroy bootstrap, related to bugs: "
+                    "OCPBUGS-63723 and OCPBUGS-125799, continuing..."
                 )
                 logger.warning("Deleting bootstrap leftovers")
                 set_target_region()
-                infra_id = get_infra_id(config.ENV_DATA["cluster_name"])
+
+                # Try to get infra_id from multiple sources (in order of reliability)
+                # 1. openshift_install_state.json (created early, always available)
+                # 2. Cluster API (if cluster is accessible)
+                # 3. metadata.json (only after successful install)
+                # 4. cluster_name as prefix (last resort)
+                infra_id = None
+
                 try:
+                    infra_id = get_infra_id_from_openshift_install_state(
+                        self.cluster_path
+                    )
+                    logger.info(
+                        f"Got infra_id from openshift_install_state.json: {infra_id}"
+                    )
+                except Exception as ex:
+                    logger.warning(
+                        f"Could not get infra_id from openshift_install_state.json: {ex}"
+                    )
+
+                if not infra_id:
+                    try:
+                        # Try to get infra_id from cluster API (cluster must be accessible)
+                        from ocs_ci.ocs.ocp import OCP
+
+                        infra_obj = OCP(kind="infrastructure", resource_name="cluster")
+                        infra_id = (
+                            infra_obj.get().get("status", {}).get("infrastructureName")
+                        )
+                        if infra_id:
+                            logger.info(f"Got infra_id from cluster API: {infra_id}")
+                        else:
+                            raise ValueError(
+                                "infrastructureName not found in cluster object"
+                            )
+                    except Exception as ex:
+                        logger.warning(f"Could not get infra_id from cluster API: {ex}")
+
+                if not infra_id:
+                    try:
+                        infra_id = get_infra_id(config.ENV_DATA["cluster_name"])
+                        logger.info(f"Got infra_id from metadata.json: {infra_id}")
+                    except Exception as ex:
+                        logger.warning(
+                            f"Could not get infra_id from metadata.json: {ex}"
+                        )
+
+                if not infra_id:
+                    logger.error(
+                        "Could not get infra_id from any source. "
+                        "Attempting cleanup with cluster_name prefix instead."
+                    )
+                    # Fall back to using cluster_name as prefix
+                    infra_id = f"{config.ENV_DATA['cluster_name']}-"
+
+                # Try to delete bootstrap VSI
+                try:
+                    logger.info(f"Checking for bootstrap VSI: {infra_id}-bootstrap")
                     run_ibmcloud_cmd(f"ibmcloud is instance {infra_id}-bootstrap")
+                    logger.warning(f"Deleting bootstrap VSI: {infra_id}-bootstrap")
                     run_ibmcloud_cmd(
                         f"ibmcloud is instance-delete --force {infra_id}-bootstrap"
                     )
-                except Exception as e:
-                    logger.error(f"Failed to delete bootstrap VSI leftovers: {e}")
-                try:
-                    cos_instances = json.loads(
-                        run_ibmcloud_cmd(
-                            f"ibmcloud resource service-instance  --output json {infra_id}-cos"
-                        )
+                    logger.info(
+                        f"Successfully deleted bootstrap VSI: {infra_id}-bootstrap"
                     )
-                    for cos_instance in cos_instances:
-                        buckets = json.loads(
-                            run_ibmcloud_cmd(
-                                f"ibmcloud cos buckets --output json --ibm-service-instance-id {cos_instance['guid']}"
-                            )
-                        )["Buckets"]
-                        if len(buckets) == 1 and "bootstrap" in buckets[0]["Name"]:
-                            run_ibmcloud_cmd(
-                                f"ibmcloud resource service-instance-delete -f {cos_instance['guid']}"
-                            )
                 except Exception as e:
-                    logger.error(f"Failed to delete bootstrap COS leftovers: {e}")
-                cluster_operators = ocp.get_all_cluster_operators()
-                for ocp_operator in cluster_operators:
-                    logger.info(f"Checking cluster status of {ocp_operator}")
+                    logger.warning(
+                        f"Bootstrap VSI cleanup: {e} (may already be deleted)"
+                    )
+
+                # Try to delete COS bootstrap resources
+                try:
+                    logger.info(f"Checking for COS instance: {infra_id}-cos")
+                    cos_instances_output = run_ibmcloud_cmd(
+                        f"ibmcloud resource service-instance --output json {infra_id}-cos"
+                    )
+                    cos_instances = json.loads(cos_instances_output)
+
+                    # Handle both single instance (dict) and multiple instances (list)
+                    if isinstance(cos_instances, dict):
+                        cos_instances = [cos_instances]
+
+                    # Sort by creation time and get the latest one (bootstrap COS)
+                    # The first COS instance is for VSI images, the second is for bootstrap
+                    cos_instances_sorted = sorted(
+                        cos_instances, key=lambda x: x.get("created_at", "")
+                    )
+
+                    for idx, cos_instance in enumerate(cos_instances_sorted):
+                        cos_guid = cos_instance["guid"]
+                        cos_name = cos_instance.get("name", "unknown")
+                        created_at = cos_instance.get("created_at", "unknown")
+
+                        logger.info(
+                            f"Found COS instance {idx+1}/{len(cos_instances_sorted)}: "
+                            f"{cos_name} (GUID: {cos_guid}, created: {created_at})"
+                        )
+
+                        try:
+                            buckets_output = run_ibmcloud_cmd(
+                                f"ibmcloud cos buckets --output json --ibm-service-instance-id {cos_guid}"
+                            )
+                            buckets_data = json.loads(buckets_output)
+                            buckets = buckets_data.get("Buckets", [])
+
+                            # Check if this is the bootstrap COS instance (has bootstrap bucket)
+                            bootstrap_buckets = [
+                                b for b in buckets if "bootstrap" in b.get("Name", "")
+                            ]
+
+                            if bootstrap_buckets:
+                                logger.warning(
+                                    f"Found bootstrap COS instance with {len(bootstrap_buckets)} "
+                                    f"bootstrap bucket(s): {[b['Name'] for b in bootstrap_buckets]}"
+                                )
+                                logger.warning(
+                                    f"Deleting bootstrap COS instance: {cos_name} (GUID: {cos_guid})"
+                                )
+                                run_ibmcloud_cmd(
+                                    f"ibmcloud resource service-instance-delete -f {cos_guid}"
+                                )
+                                logger.info(
+                                    f"Successfully deleted bootstrap COS instance: {cos_name} "
+                                    f"with bucket(s): {[b['Name'] for b in bootstrap_buckets]}"
+                                )
+                            else:
+                                logger.info(
+                                    f"COS instance {cos_name} has no bootstrap buckets "
+                                    f"(has {len(buckets)} bucket(s)), skipping deletion"
+                                )
+                        except Exception as bucket_err:
+                            logger.warning(
+                                f"Could not check/delete buckets for COS {cos_name}: {bucket_err}"
+                            )
+
+                except Exception as e:
+                    logger.warning(
+                        f"COS cleanup failed or no COS instance found: {e}. "
+                        "This is expected if COS resources were already cleaned up or never created."
+                    )
+
+                # Verify the cluster is actually healthy before declaring success
+                logger.info(
+                    "Verifying cluster health after bootstrap cleanup workaround..."
+                )
+                try:
+                    cluster_operators = ocp.get_all_cluster_operators()
+                    logger.info(
+                        f"Found {len(cluster_operators)} cluster operators to verify"
+                    )
+
+                    for ocp_operator in cluster_operators:
+                        logger.info(f"Checking cluster operator: {ocp_operator}")
+                        for sampler in TimeoutSampler(
+                            timeout=1600,
+                            sleep=60,
+                            func=ocp.verify_cluster_operator_status,
+                            cluster_operator=ocp_operator,
+                        ):
+                            if sampler:
+                                logger.info(
+                                    f"Cluster operator {ocp_operator} is healthy"
+                                )
+                                break
+                            else:
+                                logger.info(
+                                    f"Waiting for {ocp_operator} to become healthy..."
+                                )
+
+                    logger.info("Checking clusterversion status")
+                    cluster_version_timeout = 1800
                     for sampler in TimeoutSampler(
-                        timeout=1600,
-                        sleep=60,
-                        func=ocp.verify_cluster_operator_status,
-                        cluster_operator=ocp_operator,
+                        timeout=cluster_version_timeout,
+                        sleep=15,
+                        func=ocp.validate_cluster_version_status,
                     ):
                         if sampler:
+                            logger.info(
+                                "Installation Completed Successfully despite bootstrap cleanup issue! "
+                                "W/A applied for OCPBUGS-63723 / OCPBUGS-125799"
+                            )
                             break
-                        else:
-                            logger.info(f"{ocp_operator} status is not valid")
-                logger.info("Checking clusterversion status")
-                cluster_version_timeout = 1800
-                for sampler in TimeoutSampler(
-                    timeout=cluster_version_timeout,
-                    sleep=15,
-                    func=ocp.validate_cluster_version_status,
-                ):
-                    if sampler:
-                        logger.info("Installation Completed Successfully!")
-                        break
+                except Exception as health_check_err:
+                    logger.error(
+                        f"Cluster health verification failed: {health_check_err}. "
+                        "The cluster may not have deployed successfully."
+                    )
+                    raise
             elif "Waiting up to" in str(e):
                 if (
                     config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
