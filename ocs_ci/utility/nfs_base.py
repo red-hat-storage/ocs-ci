@@ -12,6 +12,8 @@ import socket
 import time
 
 import pytest
+import requests
+from urllib3.exceptions import InsecureRequestWarning
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import ManageTest
@@ -22,9 +24,64 @@ from ocs_ci.utility import nfs_utils
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler
+
+# Disable SSL warnings for OpenShift API calls
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 log = logging.getLogger(__name__)
+
+
+def restart_vm_openshift_virt():
+    """
+    Restart NFS client VM running on OpenShift Virtualization.
+
+    Reads configuration from config.ENV_DATA and config.AUTH.nfs.
+    Uses service account token to call the kubevirt.io REST API.
+
+    Raises:
+        ConfigurationError: If required configuration is missing or restart fails
+    """
+    nfs_client_ip = config.ENV_DATA.get("nfs_client_ip")
+    vm_namespace = config.ENV_DATA.get("nfs_client_vm_namespace")
+    vm_name = config.ENV_DATA.get("nfs_client_vm_name")
+
+    # Get auth credentials from AUTH.nfs section
+    nfs_auth = config.AUTH.get("nfs", {})
+    api_server = nfs_auth.get("api_server")
+    token = nfs_auth.get("token")
+
+    if not all([vm_namespace, vm_name, api_server, token]):
+        raise ConfigurationError(
+            "NFS Client VM is not accessible and OpenShift Virtualization restart config is incomplete. "
+            "Required: ENV_DATA.nfs_client_vm_namespace, ENV_DATA.nfs_client_vm_name, "
+            "AUTH.nfs.api_server, AUTH.nfs.token"
+        )
+
+    restart_url = (
+        f"{api_server}/apis/subresources.kubevirt.io/v1/namespaces/{vm_namespace}"
+        f"/virtualmachines/{vm_name}/restart"
+    )
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    log.info(
+        f"NFS Client VM at {nfs_client_ip} is not accessible. "
+        f"Attempting to restart OpenShift Virtualization VM '{vm_name}' "
+        f"in namespace '{vm_namespace}'"
+    )
+
+    try:
+        response = requests.put(restart_url, headers=headers, verify=False, timeout=30)
+        response.raise_for_status()
+        log.info(f"Successfully triggered restart for VM {vm_name}")
+    except requests.exceptions.RequestException as e:
+        raise ConfigurationError(
+            f"Failed to restart OpenShift Virtualization VM {vm_name}: {e}"
+        )
 
 
 class NFSClientTestBase(ManageTest):
@@ -65,15 +122,8 @@ class NFSClientTestBase(ManageTest):
                     re_try=False
                 )
             except (TimeoutError, socket.gaierror):
-                nfs_client_vm_cloud = config.ENV_DATA.get("nfs_client_vm_cloud")
-                nfs_client_vm_name = config.ENV_DATA.get("nfs_client_vm_name")
-                if not nfs_client_vm_cloud or not nfs_client_vm_name:
-                    raise ConfigurationError(
-                        "NFS Client VM is not accessible and ENV_DATA nfs_client_vm_cloud and/or nfs_client_vm_name "
-                        "parameters are not configured to be able to automatically reboot the NFS Client VM."
-                    )
-                cmd = f"openstack --os-cloud {nfs_client_vm_cloud} server reboot --hard --wait {nfs_client_vm_name}"
-                exec_cmd(cmd)
+                # VM is not accessible - attempt restart via OpenShift Virtualization
+                restart_vm_openshift_virt()
 
                 log.info(
                     f"Waiting for SSH to become available on {self.nfs_client_ip}..."
