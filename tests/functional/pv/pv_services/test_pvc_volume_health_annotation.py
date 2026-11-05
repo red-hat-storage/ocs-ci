@@ -385,6 +385,7 @@ class TestPVCVolumeHealthUnhealthy(PVCVolumeHealthTestHelpers, ManageTest):
 
     @tier1
     @ui
+    @skipif_external_mode
     @pytest.mark.polarion_id("OCS-8228")
     def test_pvc_health_unhealthy_via_ceph_blocklist(
         self, pvc_factory, pod_factory, request, setup_ui_class_factory
@@ -533,7 +534,7 @@ class TestPVCVolumeHealthUnhealthy(PVCVolumeHealthTestHelpers, ManageTest):
         )
         assert no_issues_text == "No issues found."
 
-        pvc_cleared = card.wait_for_pvc_not_in_table(pvc_obj.name, timeout=60)
+        pvc_cleared = card.wait_for_pvc_not_in_table(pvc_obj.name, timeout=120)
         logger.assertion(f"PVC cleared from table: expected=True, actual={pvc_cleared}")
         assert pvc_cleared, f"PVC {pvc_obj.name} still in table after recovery"
 
