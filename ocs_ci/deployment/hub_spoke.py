@@ -684,20 +684,55 @@ def check_odf_prerequisites():
         )
 
 
+@catch_exceptions(Exception)
+def get_aws_hosted_cluster_names_from_hub():
+    """
+    Discover AWS HostedClusters on the live hub (management) cluster.
+
+    The hub is considered an AWS cluster when ``infrastructure/cluster`` has
+    ``spec.platformSpec.type`` (or ``spec.platformSpec.aws``) set to AWS. In that case
+    every HostedCluster with ``spec.platform.type`` equal to AWS is returned.
+
+    Returns:
+        list: Names of AWS HostedClusters found on the hub, empty list if the hub is not
+            an AWS cluster. None if the discovery failed
+    """
+    infra = OCP(kind="infrastructure", resource_name="cluster").get()
+    platform_spec = infra.get("spec", {}).get("platformSpec", {})
+    hub_is_aws = (
+        str(platform_spec.get("type", "")).lower() == constants.AWS_PLATFORM
+        or constants.AWS_PLATFORM in platform_spec
+    )
+    if not hub_is_aws:
+        logger.info("Hub cluster platform is not AWS, skipping HostedCluster scan")
+        return []
+    hosted_clusters = OCP(kind=constants.HOSTED_CLUSTERS).get(all_namespaces=True)
+    return [
+        hc["metadata"]["name"]
+        for hc in hosted_clusters.get("items", [])
+        if str(hc.get("spec", {}).get("platform", {}).get("type", "")).lower()
+        == constants.AWS_PLATFORM
+    ]
+
+
+@catch_exceptions(Exception)
 def destroy_aws_hcp_clusters(cluster_names_list=None):
     """
     Destroy all AWS HCP hosted clusters and clean up their AWS resources.
 
-    Uses ``get_hosted_cluster_names()`` and ``get_client_type_by_name()`` to
-    discover AWS HCP clusters and calls ``destroy_aws_hcp_cluster()``
-    on each one. Must be called before the management cluster is destroyed.
+    AWS HCP clusters are collected from two sources: ``config.ENV_DATA["clusters"]``
+    (``hosted_cluster_platform`` is aws) and the live hub cluster, where AWS
+    HostedClusters are discovered when the hub itself runs on AWS. Calls
+    ``destroy_aws_hcp_cluster()`` on each one. Must be called before the management
+    cluster is destroyed.
 
     Args:
         cluster_names_list (list): Optional list of cluster names to destroy.
             If not provided, discovers all hosted clusters from the hub.
 
     Returns:
-        bool: True if all clusters destroyed successfully, False otherwise
+        bool: True if all clusters destroyed successfully, False otherwise. None if an
+            unexpected exception was caught
     """
     if not cluster_names_list:
         cluster_names_list = get_hosted_cluster_names()
@@ -707,6 +742,11 @@ def destroy_aws_hcp_clusters(cluster_names_list=None):
         for name in cluster_names_list
         if clusters_config.get(name, {}).get("hosted_cluster_platform")
         == constants.AWS_PLATFORM
+    ]
+    aws_hcp_names += [
+        name
+        for name in get_aws_hosted_cluster_names_from_hub() or []
+        if name in cluster_names_list and name not in aws_hcp_names
     ]
 
     if not aws_hcp_names:
@@ -726,7 +766,7 @@ def destroy_aws_hcp_clusters(cluster_names_list=None):
                 all_success = False
             else:
                 logger.info(f"Successfully destroyed '{cluster_name}'")
-        except (ClientError, CommandFailed, ValueError, OSError) as e:
+        except Exception as e:
             logger.error(f"Failed to destroy '{cluster_name}': {e}")
             all_success = False
 
@@ -4312,9 +4352,11 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         """
         all_clean = True
 
+        self._discover_hosted_cluster_config()
         self._discover_oidc_config()
 
-        hypershift_cli_available = self._ensure_sts_credentials()
+        hypershift_cli_available = bool(self._ensure_hypershift_binary())
+        sts_credentials_available = self._ensure_sts_credentials()
 
         if not self.role_arn:
             try:
@@ -4333,7 +4375,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         if not self._cleanup_vpc_peering():
             all_clean = False
 
-        if hypershift_cli_available:
+        if hypershift_cli_available and sts_credentials_available:
             if not self._destroy_cluster_via_hypershift(timeout=timeout):
                 all_clean = False
 
@@ -4351,7 +4393,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                             all_clean = False
         else:
             logger.warning(
-                "Hypershift CLI not available (STS creds or role ARN missing). "
+                "Hypershift CLI not available or STS creds or role ARN missing. "
                 "Skipping CLI-based destroy, proceeding with manual cleanup."
             )
             if not self._terminate_cluster_ec2_instances():
@@ -4398,6 +4440,43 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 )
 
         return verified
+
+    @catch_exceptions(Exception)
+    def _ensure_hypershift_binary(self):
+        """
+        Ensure hcp and hypershift binaries exist before destroying the cluster.
+
+        The destroy flow may run in a different workspace than the deployment, so the binaries
+        are downloaded when missing. On failure the destroy continues with the manual cleanup.
+
+        Returns:
+            bool: True if the hypershift binary is available, None if the check failed
+        """
+        self.ensure_hcp_binaries()
+        return self.hypershift_binary_exists()
+
+    @catch_exceptions(Exception)
+    def _discover_hosted_cluster_config(self):
+        """
+        Discover infra ID and base domain from the live HostedCluster CR.
+
+        Clusters not deployed by ocs-ci have no entry in ``ENV_DATA["clusters"]``,
+        so ``self.infra_id`` and ``self.base_domain`` are taken from
+        ``spec.infraID`` and ``spec.dns.baseDomain`` of the HostedCluster when it exists.
+        On failure the existing values are kept.
+        """
+        hosted_cluster = OCP(
+            kind=constants.HOSTED_CLUSTERS,
+            namespace=get_hosted_cluster_namespace(self.name),
+            resource_name=self.name,
+        ).get()
+        spec = hosted_cluster.get("spec", {})
+        self.infra_id = spec.get("infraID") or self.infra_id
+        self.base_domain = spec.get("dns", {}).get("baseDomain") or self.base_domain
+        logger.info(
+            f"Using infra_id '{self.infra_id}' and base_domain '{self.base_domain}' "
+            f"from HostedCluster '{self.name}'"
+        )
 
     def _discover_oidc_config(self):
         """
