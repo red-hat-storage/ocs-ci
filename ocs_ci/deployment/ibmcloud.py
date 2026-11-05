@@ -162,21 +162,24 @@ class IBMCloudIPI(CloudDeploymentBase):
                 "IBM Cloud IPI deployments are only supported on OCP versions >= 4.10"
             )
 
-        # By default, IBM cloud has load balancer limit of 50 per region.
-        # switch to us-south, if current load balancers are more than 45.
+        # IBM cloud has a load balancer quota per region.
+        # Switch to the region with the fewest load balancers.
         # https://cloud.ibm.com/docs/vpc?topic=vpc-quotas
         ibmcloud.login()
         current_region = config.ENV_DATA["region"]
-        other_region = list(IBM_CLOUD_REGIONS - {current_region})[0]
         if config.ENV_DATA.get("enable_region_dynamic_switching"):
-            current_region_lb_count = self.get_load_balancers_count()
-            ibmcloud.login(region=other_region)
-            other_region_lb_count = self.get_load_balancers_count(other_region)
-            if current_region_lb_count > other_region_lb_count:
+            lb_counts = {}
+            lb_counts[current_region] = self.get_load_balancers_count()
+            for other_region in IBM_CLOUD_REGIONS - {current_region}:
+                ibmcloud.login(region=other_region)
+                lb_counts[other_region] = self.get_load_balancers_count(other_region)
+            best_region = min(lb_counts, key=lb_counts.get)
+            if best_region != current_region:
                 logger.info(
-                    f"Switching region to {other_region} due to lack of load balancers"
+                    f"Switching region to {best_region} due to load balancer "
+                    f"counts: {lb_counts}"
                 )
-                ibmcloud.set_region(other_region)
+                ibmcloud.set_region(best_region)
             else:
                 ibmcloud.login()
         if config.ENV_DATA.get("custom_vpc"):
