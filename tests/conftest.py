@@ -232,7 +232,7 @@ from ocs_ci.helpers.helpers import (
     set_schedule_precedence,
     get_cephfs_name,
 )
-from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
+from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
 from ocs_ci.ocs.pgsql import Postgresql
 from ocs_ci.ocs.resources.rgw import RGW
@@ -9316,16 +9316,8 @@ def scc_factory(request):
     return create_scc
 
 
-@pytest.fixture(scope="session")
-def krew_rook_ceph_install_factory(request):
-    """
-    Install rook-ceph plugin
-    """
-    RookCephPlugin()
-
-
 @pytest.fixture()
-def ceph_objectstore_factory(request, krew_rook_ceph_install_factory):
+def ceph_objectstore_factory(request):
     """
     Setup CephObjectStoreTool instance
     """
@@ -9336,7 +9328,7 @@ def ceph_objectstore_tool_fixture(request):
     """
     Implementation of ceph_objectstore_factory()
     """
-    cot_obj = CephObjectStoreTool()
+    cot_obj = CephObjectStoreTool(install_plugin=False)
 
     def teardown():
         deployment_in_maintenance = cot_obj.deployment_in_maintenance
@@ -9353,7 +9345,7 @@ def ceph_objectstore_tool_fixture(request):
 
 
 @pytest.fixture()
-def ceph_monstore_factory(request, krew_rook_ceph_install_factory):
+def ceph_monstore_factory(request):
     """
     Setup MonStoreTool instance
     """
@@ -9364,7 +9356,7 @@ def ceph_monstore_tool_fixture(request):
     """
     Implementation of ceph_monstore_factory()
     """
-    mot_obj = MonStoreTool()
+    mot_obj = MonStoreTool(install_plugin=False)
 
     def teardown():
         deployment_in_maintenance = mot_obj.deployment_in_maintenance
