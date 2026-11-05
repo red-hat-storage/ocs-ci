@@ -2242,6 +2242,11 @@ class HypershiftHostedOCP(
         auto_repair = (
             config.ENV_DATA["clusters"].get(self.name).get("auto_repair", auto_repair)
         )
+        node_upgrade_type = (
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("node_upgrade_type", defaults.HYPERSHIFT_NODE_UPGRADE_TYPE_DEFAULT)
+        )
 
         hosted_cluster_platform = (
             config.ENV_DATA["clusters"]
@@ -2308,6 +2313,7 @@ class HypershiftHostedOCP(
                 data_replication_separation=data_replication_separation_public,
                 auto_repair=auto_repair,
                 hcp_image=hcp_image,
+                node_upgrade_type=node_upgrade_type,
             )
 
     def deploy_dependencies(
@@ -3554,6 +3560,9 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         # Get generate SSH setting
         generate_ssh = self._get_generate_ssh()
 
+        # Get node upgrade type setting
+        node_upgrade_type = self._get_node_upgrade_type()
+
         # Check if cluster already exists
         if self.name in get_hosted_cluster_names():
             logger.info(f"AWS HCP cluster '{self.name}' already exists")
@@ -3577,6 +3586,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             infra_availability_policy=infra_availability_policy,
             disable_default_sources=disable_default_sources,
             generate_ssh=generate_ssh,
+            node_upgrade_type=node_upgrade_type,
         )
 
         if not cluster_name:
@@ -3800,6 +3810,7 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         infra_availability_policy=constants.AVAILABILITY_POLICY_SINGLE,
         disable_default_sources=True,
         generate_ssh=True,
+        node_upgrade_type=defaults.HYPERSHIFT_NODE_UPGRADE_TYPE_DEFAULT,
     ):
         """
         Create AWS HCP cluster using the hypershift CLI.
@@ -3824,6 +3835,9 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
                 (default: constants.AVAILABILITY_POLICY_HA)
             disable_default_sources (bool): Disable default operator sources (default: True)
             generate_ssh (bool): Generate SSH key for node access (default: True)
+            node_upgrade_type (str): NodePool upgrade strategy for how nodes should behave when upgraded.
+                Supported options: constants.NODE_UPGRADE_TYPE_REPLACE, constants.NODE_UPGRADE_TYPE_INPLACE.
+                Default: constants.NODE_UPGRADE_TYPE_INPLACE
 
         Returns:
             str: Cluster name if successful, empty string if failed
@@ -3925,6 +3939,15 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
         if generate_ssh:
             cmd_parts.append("--generate-ssh")
             logger.info("SSH key generation enabled for cluster nodes")
+
+        if node_upgrade_type and node_upgrade_type in constants.NODE_UPGRADE_TYPES:
+            cmd_parts.append(f"--node-upgrade-type {node_upgrade_type}")
+            logger.info(f"Node upgrade type: {node_upgrade_type}")
+        else:
+            logger.warning(
+                f"Node upgrade type '{node_upgrade_type}' is not valid. "
+                f"Valid values are: {constants.NODE_UPGRADE_TYPES}. Skipping flag."
+            )
 
         if hasattr(self, "idms_mirrors_path") and os.path.exists(
             self.idms_mirrors_path
@@ -5953,6 +5976,20 @@ class HypershiftAWSHostedOCP(SpokeOCP, HyperShiftBase, Deployment, MCEInstaller,
             bool: True if SSH key should be generated, False otherwise
         """
         return config.ENV_DATA["clusters"].get(self.name).get("generate_ssh", True)
+
+    def _get_node_upgrade_type(self):
+        """
+        Get node_upgrade_type setting from configuration.
+
+        Returns:
+            str: NodePool upgrade strategy, e.g. constants.NODE_UPGRADE_TYPE_INPLACE
+                or constants.NODE_UPGRADE_TYPE_REPLACE
+        """
+        return (
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("node_upgrade_type", defaults.HYPERSHIFT_NODE_UPGRADE_TYPE_DEFAULT)
+        )
 
     def create_deployer_iam_role(
         self,
