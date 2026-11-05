@@ -54,6 +54,7 @@ class TestNooBaaEndpointSCCScaling(ManageTest):
         )
         pods_sampler.wait_for_func_value([])
 
+    @pytest.mark.polarion_id("OCS-8402")
     def test_endpoint_scc_survives_scale_to_zero(
         self, request: pytest.FixtureRequest, suspended_noobaa_operator
     ) -> None:
