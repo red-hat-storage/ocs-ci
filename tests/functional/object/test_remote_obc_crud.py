@@ -979,7 +979,7 @@ class TestRemoteOBCCRUD(ManageTest):
                         Bucket=bucket_name, Key=test_object_key
                     )
                     logger.info(
-                        f"Read operation {i+1}: Object size = {response['ContentLength']}"
+                        f"Read operation {i + 1}: Object size = {response['ContentLength']}"
                     )
                 logger.info("All read operations successful")
 

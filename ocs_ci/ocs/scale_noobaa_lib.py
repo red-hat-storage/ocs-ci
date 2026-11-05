@@ -131,7 +131,7 @@ def check_all_obc_reached_bound_state_in_kube_job(
             while_iteration_count_2 += 1
             if while_iteration_count_2 >= no_wait_time:
                 assert log.error(
-                    f" Listed OBCs took more than {timeout*no_wait_time} "
+                    f" Listed OBCs took more than {timeout * no_wait_time} "
                     f"secs to be bounded {obc_not_bound_list}"
                 )
                 break

@@ -532,7 +532,7 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
             # 'daemon_kill_proc' result will be an empty string if command is success
             cmd_out = daemon_kill_proc.result()
             assert isinstance(cmd_out, str) and (not cmd_out), (
-                f"Failed to kill {resources } daemons in the node {node_name}. "
+                f"Failed to kill {resources} daemons in the node {node_name}. "
                 f"Daemon kill command output - {cmd_out}"
             )
 
