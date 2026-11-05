@@ -8,6 +8,7 @@ import random
 import secrets
 import string
 import subprocess
+import sys
 import time
 import tempfile
 import threading
@@ -15,6 +16,9 @@ import json
 import concurrent.futures
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
+from functools import lru_cache
+from hashlib import sha256
+from inspect import unwrap
 from math import floor
 from shutil import copyfile, rmtree
 from copy import deepcopy
@@ -300,44 +304,118 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
-def get_test_signatures(source: str) -> dict[str, tuple[str, ...]]:
+def get_test_signatures(
+    source: str | bytes | ast.Module,
+    fixture_names: set[str] | None = None,
+    include_inherited: bool = True,
+    function_names: set[str] | None = None,
+    declaration_names: set[str] | None = None,
+    import_context=None,
+    declaration_headers: bool = False,
+) -> dict[str, tuple[str, ...]]:
     """
-    Return test syntax and the declarations used by its decorators.
+    Return syntax for tests, fixtures, and requested module declarations.
 
     Args:
-        source (str): Python source from a test module.
+        source (str | bytes | ast.Module): Python source or a parsed module.
+        fixture_names (set, optional): Qualified fixture names to include.
+        include_inherited (bool): Include module and class context in test syntax.
+            If False, return that metadata separately.
+        function_names (set, optional): Extra collected function names to include.
+        declaration_names (set, optional): Module declarations to compare.
+        import_context (callable, optional): Resolve referenced project imports.
+        declaration_headers (bool): Exclude class bodies from module declarations.
 
     Returns:
-        dict: Test names mapped to syntax and inherited marker context.
+        dict: Test syntax with inherited markers, plus requested fixture headers.
 
     Raises:
         SyntaxError: If the source is not valid Python.
 
     """
 
-    def declaration_context(declarations, bindings):
+    def referenced_members(nodes):
+        members = {}
+        for declaration in nodes:
+            for part in ast.walk(declaration):
+                if not isinstance(part, ast.Attribute):
+                    continue
+                path = []
+                while isinstance(part, ast.Attribute):
+                    path.append(part.attr)
+                    part = part.value
+                if isinstance(part, ast.Name):
+                    members.setdefault(part.id, set()).add(tuple(reversed(path)))
+        return members
+
+    def declaration_context(declarations, bindings, class_headers=False):
         pending = {
             part.id
             for declaration in declarations
             for part in ast.walk(declaration)
             if isinstance(part, ast.Name)
         }
+        members = referenced_members(declarations)
         used = {}
         while pending:
             name = pending.pop()
             if name in used or name not in bindings:
                 continue
-            used[name] = tuple(ast.dump(value) for value in bindings[name])
+            values = []
+            for value in bindings[name]:
+                if class_headers and isinstance(value, ast.ClassDef):
+                    value = copy.copy(value)
+                    value.body = []
+                values.append(value)
+            for member, paths in referenced_members(values).items():
+                members.setdefault(member, set()).update(paths)
+            used[name] = values
             pending.update(
                 part.id
-                for value in bindings[name]
+                for value in values
                 for part in ast.walk(value)
                 if isinstance(part, ast.Name)
             )
-        return tuple(f"{name}:{value}" for name in sorted(used) for value in used[name])
+        context = []
+        for name in sorted(used):
+            values = used[name]
+            context.extend(f"{name}:{ast.dump(value)}" for value in values)
+            if not import_context:
+                continue
+            for value in values:
+                imports = (
+                    [value]
+                    if isinstance(value, (ast.Import, ast.ImportFrom))
+                    else [
+                        part
+                        for part in ast.walk(value)
+                        if isinstance(part, (ast.Import, ast.ImportFrom))
+                    ]
+                )
+                loaded_names = {
+                    part.id
+                    for part in ast.walk(value)
+                    if isinstance(part, ast.Name) and isinstance(part.ctx, ast.Load)
+                }
+                for imported in imports:
+                    for alias in imported.names:
+                        bound = alias.asname or alias.name.split(".", 1)[0]
+                        if imported is not value and bound not in loaded_names:
+                            continue
+                        single = copy.copy(imported)
+                        single.names = [alias]
+                        context.extend(
+                            f"{name}:{part}"
+                            for part in import_context(
+                                single, members.get(bound, set()), class_headers
+                            )
+                        )
+        return tuple(context)
 
-    def collect_tests(definitions, prefix, context, bindings):
+    def collect_tests(definitions, prefix, context, bindings, header_context=()):
         scope_bindings = dict(bindings)
+        local_names = set()
+        bindings_at_definition = {}
         markers = []
         for definition in definitions:
             if isinstance(definition, (ast.Import, ast.ImportFrom)):
@@ -346,6 +424,7 @@ def get_test_signatures(source: str) -> dict[str, tuple[str, ...]]:
                     imported.names = [alias]
                     name = alias.asname or alias.name.split(".", 1)[0]
                     scope_bindings[name] = (imported,)
+                    local_names.add(name)
             elif isinstance(definition, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
                 targets = (
                     definition.targets
@@ -358,6 +437,7 @@ def get_test_signatures(source: str) -> dict[str, tuple[str, ...]]:
                     for part in ast.walk(target)
                     if isinstance(part, ast.Name) and isinstance(part.ctx, ast.Store)
                 }
+                local_names.update(names)
                 for name in names:
                     previous = (
                         scope_bindings.get(name, ())
@@ -367,50 +447,138 @@ def get_test_signatures(source: str) -> dict[str, tuple[str, ...]]:
                     scope_bindings[name] = previous + (definition,)
                 if "pytestmark" in names:
                     markers.append(definition)
+            elif isinstance(definition, (ast.If, ast.Expr)):
+                names = set()
+                mutated_names = set()
+                pending = [definition]
+                while pending:
+                    part = pending.pop()
+                    if isinstance(
+                        part,
+                        (
+                            ast.FunctionDef,
+                            ast.AsyncFunctionDef,
+                            ast.ClassDef,
+                            ast.Lambda,
+                        ),
+                    ):
+                        continue
+                    if isinstance(part, ast.Name) and isinstance(part.ctx, ast.Store):
+                        names.add(part.id)
+                    elif (
+                        isinstance(part, ast.Call)
+                        and isinstance(part.func, ast.Attribute)
+                        and isinstance(part.func.value, ast.Name)
+                    ):
+                        name = part.func.value.id
+                        declarations = scope_bindings.get(name, ())
+                        if declarations and not isinstance(
+                            declarations[-1], (ast.Import, ast.ImportFrom)
+                        ):
+                            mutated_names.add(name)
+                    pending.extend(ast.iter_child_nodes(part))
+                local_names.update(names)
+                names.update(mutated_names)
+                for name in names:
+                    previous = scope_bindings.get(name, ())
+                    scope_bindings[name] = previous + (definition,)
+                    if name in mutated_names:
+                        # Decorators retain references to mutable parameter values.
+                        for saved_bindings in bindings_at_definition.values():
+                            if saved_bindings.get(name) is previous:
+                                saved_bindings[name] = scope_bindings[name]
+                if "pytestmark" in names:
+                    markers.append(definition)
             elif isinstance(
                 definition, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
             ):
+                local_names.add(definition.name)
+                if declaration_names is None:
+                    bindings_at_definition[definition] = dict(scope_bindings)
                 scope_bindings[definition.name] = (definition,)
-        shared_context = (
-            context
-            + tuple(ast.dump(marker) for marker in markers)
-            + declaration_context(markers, scope_bindings)
-        )
+        if declaration_names is not None:
+            return {
+                name: declaration_context(
+                    [ast.Name(id=name, ctx=ast.Load())],
+                    scope_bindings,
+                    class_headers=declaration_headers,
+                )
+                for name in sorted(declaration_names)
+                if name in scope_bindings
+            }
+        marker_context = tuple(
+            ast.dump(marker) for marker in markers
+        ) + declaration_context(markers, scope_bindings)
+        shared_context = context + marker_context
         signatures = {
             f"{prefix}{name}": shared_context
             + tuple(ast.dump(declaration) for declaration in declarations)
+            + declaration_context(
+                declarations,
+                scope_bindings,
+                class_headers=isinstance(declarations[-1], (ast.Assign, ast.AnnAssign))
+                and isinstance(declarations[-1].value, ast.Name),
+            )
             for name, declarations in scope_bindings.items()
-            if name.startswith(("test", "Test"))
-            and isinstance(declarations[-1], (ast.Import, ast.ImportFrom))
+            if name in local_names
+            and name.startswith(("test", "Test"))
+            and not isinstance(
+                declarations[-1], (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            )
         }
+        if not include_inherited:
+            signatures[prefix.removesuffix("::")] = header_context + marker_context
         for definition in definitions:
             if isinstance(definition, ast.ClassDef):
                 class_header = copy.copy(definition)
                 class_header.body = []
-                class_context = (
-                    shared_context
-                    + (ast.dump(class_header),)
-                    + declaration_context([class_header], scope_bindings)
+                class_header_context = (
+                    (ast.dump(class_header),)
+                    + declaration_context(
+                        definition.decorator_list + definition.keywords,
+                        bindings_at_definition[definition],
+                    )
+                    + declaration_context(
+                        definition.bases,
+                        bindings_at_definition[definition],
+                        class_headers=True,
+                    )
                 )
+                class_context = shared_context + class_header_context
                 signatures.update(
                     collect_tests(
                         definition.body,
                         f"{prefix}{definition.name}::",
                         class_context,
-                        scope_bindings,
+                        bindings_at_definition[definition],
+                        class_header_context,
                     )
                 )
-            elif isinstance(
-                definition, (ast.FunctionDef, ast.AsyncFunctionDef)
-            ) and definition.name.startswith("test"):
-                signatures[f"{prefix}{definition.name}"] = (
-                    shared_context
-                    + declaration_context(definition.decorator_list, scope_bindings)
-                    + (ast.dump(definition),)
-                )
+            elif isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                name = f"{prefix}{definition.name}"
+                if fixture_names and name in fixture_names:
+                    fixture_header = copy.copy(definition)
+                    fixture_header.body = []
+                    signatures[name] = (
+                        ast.dump(fixture_header),
+                    ) + declaration_context(
+                        [fixture_header], bindings_at_definition[definition]
+                    )
+                elif definition.name.startswith("test") or (
+                    function_names and name in function_names
+                ):
+                    signatures[name] = (
+                        (shared_context if include_inherited else ())
+                        + declaration_context(
+                            definition.decorator_list,
+                            bindings_at_definition[definition],
+                        )
+                        + (ast.dump(definition),)
+                    )
         return signatures
 
-    return collect_tests(ast.parse(source).body, "", (), {})
+    tree = source if isinstance(source, ast.Module) else ast.parse(source)
+    return collect_tests(tree.body, "", (), {})
 
 
 def get_changed_test_nodeids(items: list[pytest.Item], base_branch: str) -> set[str]:
@@ -435,9 +603,57 @@ def get_changed_test_nodeids(items: list[pytest.Item], base_branch: str) -> set[
     if not items:
         return set()
     collected_tests = {}
+    test_locations = {}
+    class_locations = {}
+    function_tests = {}
+    class_tests = {}
+    fixture_consumers = {}
     for item in items:
         filename, _, name = item.nodeid.partition("::")
-        collected_tests.setdefault(filename, set()).add(name.split("[", 1)[0])
+        name = name.split("[", 1)[0]
+        nodeid = f"{filename}::{name}"
+        collected_tests.setdefault(filename, set()).add(name)
+        if not isinstance(item, pytest.Function):
+            continue
+        function = unwrap(item.function)
+        code = getattr(function, "__code__", None)
+        if code is not None and os.path.isfile(code.co_filename):
+            origin = os.path.relpath(code.co_filename, constants.TOP_DIR)
+            qualified_name = function.__qualname__.replace(".", "::")
+            test_locations[nodeid] = (origin, qualified_name)
+            function_tests.setdefault(origin, {}).setdefault(qualified_name, set()).add(
+                nodeid
+            )
+        for cls in item.cls.__mro__ if item.cls else ():
+            module = sys.modules.get(cls.__module__)
+            origin = getattr(module, "__file__", None)
+            if origin and os.path.isfile(origin):
+                origin = os.path.relpath(origin, constants.TOP_DIR)
+                qualified_name = cls.__qualname__.replace(".", "::")
+                if cls is item.cls:
+                    class_locations[nodeid] = (origin, qualified_name)
+                class_tests.setdefault(origin, {}).setdefault(
+                    qualified_name, set()
+                ).add(nodeid)
+        for fixture_name in item.fixturenames:
+            definitions = item._fixtureinfo.name2fixturedefs.get(fixture_name) or ()
+            for fixture_def in reversed(definitions):
+                fixture_consumers.setdefault(fixture_def, set()).add(nodeid)
+                # Match pytest's parametrized-fixture override resolution.
+                if (
+                    fixture_def.params is not None
+                    or fixture_name not in fixture_def.argnames
+                ):
+                    break
+    fixture_tests = {}
+    for fixture_def, nodeids in fixture_consumers.items():
+        function = unwrap(fixture_def.func)
+        code = getattr(function, "__code__", None)
+        if code is None:
+            continue
+        filename = os.path.relpath(code.co_filename, constants.TOP_DIR)
+        name = function.__qualname__.replace(".", "::")
+        fixture_tests.setdefault(filename, {}).setdefault(name, set()).update(nodeids)
     base_ref = f"refs/remotes/origin/{base_branch}"
     merge_base = subprocess.check_output(
         ["git", "merge-base", base_ref, "HEAD"], cwd=constants.TOP_DIR, text=True
@@ -451,37 +667,251 @@ def get_changed_test_nodeids(items: list[pytest.Item], base_branch: str) -> set[
             "--diff-filter=AM",
             "-z",
             merge_base,
-            "--",
-            "tests",
         ],
         cwd=constants.TOP_DIR,
         text=True,
     ).split("\0")
-    changed_tests = set()
-    for status, filename in zip(changes[::2], changes[1::2]):
-        if filename not in collected_tests or not filename.endswith(".py"):
-            continue
-        with open(
-            os.path.join(constants.TOP_DIR, filename), encoding="utf-8"
-        ) as source_file:
-            current = get_test_signatures(source_file.read())
-        previous = {}
-        if status != "A":
-            source = subprocess.check_output(
-                ["git", "show", f"{merge_base}:{filename}"],
-                cwd=constants.TOP_DIR,
-                text=True,
+
+    statuses = dict(zip(changes[1::2], changes[::2]))
+
+    @lru_cache(maxsize=128)
+    def read_source(filename, baseline=False):
+        if baseline and filename in statuses:
+            if statuses[filename] == "A":
+                return b""
+            return subprocess.check_output(
+                ["git", "show", f"{merge_base}:{filename}"], cwd=constants.TOP_DIR
             )
-            previous = get_test_signatures(source)
-        for name in collected_tests[filename]:
+        with open(os.path.join(constants.TOP_DIR, filename), "rb") as source_file:
+            return source_file.read()
+
+    @lru_cache(maxsize=128)
+    def read_tree(filename, baseline=False):
+        return ast.parse(read_source(filename, baseline))
+
+    def project_source(origin):
+        if not origin:
+            return None
+        filename = os.path.relpath(origin, constants.TOP_DIR)
+        if filename.startswith(".." + os.sep) or not filename.endswith(".py"):
+            return None
+        if os.path.isfile(os.path.join(constants.TOP_DIR, filename)):
+            return filename
+        return None
+
+    module_packages = {}
+    for module in tuple(sys.modules.values()):
+        if not isinstance(module, type(sys)):
+            continue
+        filename = project_source(vars(module).get("__file__"))
+        if filename:
+            module_packages[filename] = vars(module).get("__package__") or ""
+
+    @lru_cache(maxsize=128)
+    def module_source(module_name, importer):
+        module = sys.modules.get(module_name)
+        if module is not None:
+            return (
+                project_source(vars(module).get("__file__"))
+                if isinstance(module, type(sys))
+                else None
+            )
+        path = module_name.replace(".", os.sep)
+        for directory in (os.path.dirname(importer), ""):
+            for suffix in (".py", os.sep + "__init__.py"):
+                candidate = os.path.join(constants.TOP_DIR, directory, path + suffix)
+                filename = project_source(candidate)
+                if filename:
+                    return filename
+        return None
+
+    def import_targets(imported, importer):
+        for alias in imported.names:
+            if isinstance(imported, ast.Import):
+                provider = module_source(alias.name, importer)
+                if provider:
+                    prefix = (
+                        tuple(alias.name.split(".")[1:]) if not alias.asname else ()
+                    )
+                    yield provider, None, prefix
+                continue
+            package = module_packages.get(importer)
+            parts = package.split(".") if package else importer.split(os.sep)[:-1]
+            module_name = imported.module or ""
+            if imported.level:
+                parts = parts[: len(parts) - imported.level + 1]
+                module_name = ".".join(parts + ([module_name] if module_name else []))
+            module = sys.modules.get(module_name)
+            member = (
+                vars(module).get(alias.name) if isinstance(module, type(sys)) else None
+            )
+            if isinstance(member, type(sys)):
+                provider = project_source(getattr(member, "__file__", None))
+                if provider:
+                    yield provider, None, ()
+                    continue
+            provider = module_source(module_name, importer)
+            if provider:
+                yield provider, alias.name, ()
+
+    roots = set().union(collected_tests, fixture_tests, function_tests, class_tests)
+    changed_python = {name for name in statuses if name.endswith(".py")}
+    if not changed_python:
+        return set()
+    reverse_imports = {}
+    pending = {
+        name
+        for name in roots | changed_python
+        if project_source(os.path.join(constants.TOP_DIR, name))
+    }
+    scanned = set()
+    while pending:
+        filename = pending.pop()
+        if filename in scanned:
+            continue
+        scanned.add(filename)
+        for baseline in (False, True) if filename in statuses else (False,):
+            for imported in ast.walk(read_tree(filename, baseline)):
+                if not isinstance(imported, (ast.Import, ast.ImportFrom)):
+                    continue
+                for provider, _, _ in import_targets(imported, filename):
+                    reverse_imports.setdefault(provider, set()).add(filename)
+                    if provider not in scanned:
+                        pending.add(provider)
+    affected_sources = set(changed_python)
+    pending = list(changed_python)
+    while pending:
+        for consumer in reverse_imports.get(pending.pop(), ()):
+            if consumer not in affected_sources:
+                affected_sources.add(consumer)
+                pending.append(consumer)
+
+    def imported_names(imported, members, headers, filename):
+        paths = {
+            path
+            for path in members
+            if not any(
+                other != path and other[: len(path)] == path for other in members
+            )
+        }
+        for provider, exported_name, prefix in import_targets(imported, filename):
+            if provider not in affected_sources:
+                continue
+            if exported_name:
+                names = (exported_name,)
+            else:
+                names = tuple(
+                    sorted(
+                        {
+                            path[len(prefix)]
+                            for path in paths
+                            if path[: len(prefix)] == prefix and len(path) > len(prefix)
+                        }
+                    )
+                )
+            if names:
+                yield provider, names, headers
+
+    @lru_cache(maxsize=512)
+    def read_local_exports(filename, names, headers, baseline):
+        dependencies = set()
+
+        def record_imports(node, members, class_headers):
+            dependencies.update(imported_names(node, members, class_headers, filename))
+            return ()
+
+        declarations = get_test_signatures(
+            read_tree(filename, baseline),
+            declaration_names=set(names),
+            declaration_headers=headers,
+            import_context=record_imports,
+        )
+        digest = sha256()
+        for name in sorted(declarations):
+            digest.update(name.encode())
+            for part in declarations[name]:
+                digest.update(part.encode())
+                digest.update(b"\0")
+        return digest.hexdigest(), tuple(sorted(dependencies))
+
+    @lru_cache(maxsize=128)
+    def read_exports(filename, names, baseline, headers):
+        pending = [(filename, names, headers)]
+        visited = {}
+        while pending:
+            node = pending.pop()
+            if node in visited:
+                continue
+            local_digest, dependencies = read_local_exports(*node, baseline)
+            visited[node] = local_digest
+            pending.extend(dependencies)
+        digest = sha256()
+        for node in sorted(visited):
+            digest.update(repr(node).encode())
+            digest.update(visited[node].encode())
+        return (f"{filename}::{names}:{headers}:{digest.hexdigest()}",)
+
+    def imported_context(imported, members, headers, filename, baseline):
+        return tuple(
+            part
+            for provider, names, headers in imported_names(
+                imported, members, headers, filename
+            )
+            for part in read_exports(provider, names, baseline, headers)
+        )
+
+    @lru_cache(maxsize=128)
+    def read_signatures(filename, baseline=False, inherited=True):
+        return get_test_signatures(
+            read_tree(filename, baseline),
+            set(fixture_tests.get(filename, {})),
+            include_inherited=inherited,
+            function_names=set(function_tests.get(filename, {})),
+            import_context=lambda node, members, headers: imported_context(
+                node, members, headers, filename, baseline
+            ),
+        )
+
+    changed_tests = set()
+    for filename in sorted(roots & affected_sources):
+        status = statuses.get(filename, "M")
+        if not filename.endswith(".py") or not any(
+            filename in mapping
+            for mapping in (collected_tests, fixture_tests, function_tests, class_tests)
+        ):
+            continue
+        current = read_signatures(filename)
+        previous = read_signatures(filename, True) if status != "A" else {}
+        current_definitions = read_signatures(filename, inherited=False)
+        previous_definitions = (
+            read_signatures(filename, True, False) if status != "A" else {}
+        )
+        for mapping in (fixture_tests, function_tests, class_tests):
+            for name, nodeids in mapping.get(filename, {}).items():
+                if previous_definitions.get(name) != current_definitions.get(name):
+                    changed_tests.update(nodeids)
+        for name in collected_tests.get(filename, ()):
+            nodeid = f"{filename}::{name}"
+            if previous_definitions.get("") != current_definitions.get(""):
+                changed_tests.add(nodeid)
             definition_name = name
             while definition_name not in current and "::" in definition_name:
                 definition_name = definition_name.rsplit("::", 1)[0]
             if (
-                definition_name not in current
-                or previous.get(definition_name) != current[definition_name]
+                definition_name in current
+                and previous.get(definition_name) != current[definition_name]
             ):
-                changed_tests.add(f"{filename}::{name}")
+                changed_tests.add(nodeid)
+            if nodeid in test_locations:
+                origin, qualified_name = test_locations[nodeid]
+                if qualified_name not in read_signatures(origin, inherited=False):
+                    changed_tests.add(nodeid)
+                if nodeid in class_locations:
+                    origin, qualified_name = class_locations[nodeid]
+                    if qualified_name not in read_signatures(origin, inherited=False):
+                        changed_tests.add(nodeid)
+            elif definition_name not in current:
+                changed_tests.add(nodeid)
     return changed_tests
 
 
@@ -525,8 +955,9 @@ def verify_test_decorators_requirements(items):
                 log.debug("%s is a red_squad test without @mcg or @rgw", item.name)
                 red_no_mcg_or_rgw_items.update({item.name: item.fspath.strpath})
 
+            filename, _, name = item.nodeid.partition("::")
             if (
-                item.nodeid.split("[", 1)[0] in changed_tests
+                f"{filename}::{name.split('[', 1)[0]}" in changed_tests
                 and "polarion_id" not in item_markers
             ):
                 items_without_polarion_marker.append(item.nodeid)

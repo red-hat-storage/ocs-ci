@@ -235,6 +235,76 @@ def git_test_repository(tmp_path, monkeypatch):
             id="changed-parameter-provider-data",
         ),
         pytest.param(
+            (
+                "if True:\n"
+                "    VALUES = [1]\n"
+                "else:\n"
+                "    VALUES = [2]\n"
+                "@parametrize('value', VALUES)\n"
+                "def test_case(value): pass\n"
+                "def test_legacy(): pass\n"
+            ),
+            (
+                "if True:\n"
+                "    VALUES = [1, 3]\n"
+                "else:\n"
+                "    VALUES = [2]\n"
+                "@parametrize('value', VALUES)\n"
+                "def test_case(value): pass\n"
+                "def test_legacy(): pass\n"
+            ),
+            {"test_case"},
+            id="changed-conditional-parameters",
+        ),
+        pytest.param(
+            (
+                "VALUES = [1]\nif True:\n    def helper(): VALUES = [2]\n"
+                "@parametrize('value', VALUES)\ndef test_legacy(value): pass\n"
+            ),
+            (
+                "VALUES = [1]\nif True:\n    def helper(): VALUES = [3]\n"
+                "@parametrize('value', VALUES)\ndef test_legacy(value): pass\n"
+            ),
+            set(),
+            id="unrelated-conditional-helper",
+        ),
+        pytest.param(
+            (
+                "VALUES = [1]\n"
+                "VALUES.append(pytest.param(2, marks=polarion_id('OCS-4483')))\n"
+                "@parametrize('value', VALUES)\n"
+                "def test_case(value): pass\n"
+                "@pytest.mark.blue_squad\ndef test_legacy(): pass\n"
+            ),
+            (
+                "VALUES = [1]\n"
+                "VALUES.append(2)\n"
+                "@parametrize('value', VALUES)\n"
+                "def test_case(value): pass\n"
+                "@pytest.mark.blue_squad\ndef test_legacy(): pass\n"
+            ),
+            {"test_case"},
+            id="changed-mutated-parameters",
+        ),
+        pytest.param(
+            (
+                "VALUES = [1]\nif True:\n"
+                "    VALUES.append(pytest.param(2, marks=polarion_id('OCS-4483')))\n"
+                "@parametrize('value', VALUES)\n"
+                "def test_case(value): pass\n"
+                "@pytest.mark.blue_squad\ndef test_legacy(): pass\n"
+            ),
+            (
+                "VALUES = [1]\nif True:\n"
+                "    VALUES.append(2)\n"
+                "@parametrize('value', VALUES)\n"
+                "def test_case(value): pass\n"
+                "@pytest.mark.blue_squad\ndef test_legacy(): pass\n"
+            ),
+            {"test_case"},
+            id="changed-conditional-mutation",
+        ),
+        pytest.param(
             "pytestmark = polarion_id('OCS-4483')\ndef test_case(): pass\n",
             "def test_case(): pass\n",
             {"test_case"},
@@ -340,10 +410,77 @@ def test_changed_test_nodeids_uses_merge_base(git_test_repository, testdir):
     }
 
 
+@pytest.mark.parametrize(
+    "changed_value,expected",
+    [("[1]", "test_first"), ("[2]", "test_second"), ("[3]", "test_first")],
+)
+def test_changed_test_nodeids_uses_definition_bindings(
+    git_test_repository, testdir, changed_value, expected
+):
+    """Use the parameter binding active when each decorator is evaluated."""
+    repo, root = git_test_repository
+    test_file = root / "tests" / "test_cases.py"
+    test_file.parent.mkdir()
+    source = (
+        "import pytest\n"
+        "VALUES = [1]\n"
+        "@pytest.mark.parametrize('value', VALUES)\n"
+        "def test_first(value): pass\n"
+        "VALUES.extend([3])\n"
+        "VALUES = [2]\n"
+        "@pytest.mark.parametrize('value', VALUES)\n"
+        "def test_second(value): pass\n"
+    )
+    test_file.write_text(source)
+    repo.index.add(["tests/test_cases.py"])
+    base_commit = repo.index.commit("Base tests")
+    repo.git.update_ref("refs/remotes/origin/master", base_commit.hexsha)
+    test_file.write_text(source.replace(changed_value, "[4]"))
+    items = testdir.getitems(test_file)
+    assert test_conftest.get_changed_test_nodeids(items, "master") == {
+        f"tests/test_cases.py::{expected}"
+    }
+
+
+@pytest.mark.parametrize(
+    "before_encoding,after_encoding",
+    [
+        ("utf-8-sig", "utf-8"),
+        ("utf-8", "utf-8-sig"),
+        ("latin-1", "utf-8"),
+        ("utf-8", "latin-1"),
+    ],
+)
+def test_changed_test_nodeids_handles_source_encodings(
+    git_test_repository, testdir, before_encoding, after_encoding
+):
+    """Read Python source encodings from both Git and the working tree."""
+    repo, root = git_test_repository
+    test_file = root / "tests" / "test_cases.py"
+    test_file.parent.mkdir()
+    source = "# coding: {}\nLABEL = 'café'\ndef test_case(): {}\n"
+    test_file.write_bytes(
+        source.format(before_encoding, "pass").encode(before_encoding)
+    )
+    repo.index.add(["tests/test_cases.py"])
+    base_commit = repo.index.commit("Base tests")
+    repo.git.update_ref("refs/remotes/origin/master", base_commit.hexsha)
+    test_file.write_bytes(
+        source.format(after_encoding, "assert True").encode(after_encoding)
+    )
+    items = testdir.getitems(test_file)
+    assert test_conftest.get_changed_test_nodeids(items, "master") == {
+        "tests/test_cases.py::test_case"
+    }
+
+
+@pytest.mark.parametrize("filename", ["test_variants.py", "test_variants[1].py"])
 @pytest.mark.parametrize("inherited_id", [False, True])
-def test_polarion_validation_checks_each_variant(testdir, monkeypatch, inherited_id):
+def test_polarion_validation_checks_each_variant(
+    testdir, monkeypatch, inherited_id, filename
+):
     testdir.makeini("[pytest]\nmarkers =\n    blue_squad\n    polarion_id\n")
-    test_file = Path(str(testdir.tmpdir.mkdir("tests"))) / "test_variants.py"
+    test_file = Path(str(testdir.tmpdir.mkdir("tests"))) / filename
     marker = '@pytest.mark.polarion_id("OCS-4483")\n' if inherited_id else ""
     test_file.write_text(
         "import pytest\n"
@@ -358,8 +495,7 @@ def test_polarion_validation_checks_each_variant(testdir, monkeypatch, inherited
         "def test_legacy(): pass\n"
     )
     items = testdir.getitems(test_file)
-    changed_test = next(item for item in items if item.name.startswith("test_changed"))
-    changed_nodeid = changed_test.nodeid.split("[", 1)[0]
+    changed_nodeid = f"tests/{filename}::test_changed"
     monkeypatch.setattr(test_conftest.constants, "TOP_DIR", str(testdir.tmpdir))
     monkeypatch.setattr(
         test_conftest,
@@ -386,3 +522,321 @@ def test_changed_test_nodeids_handles_empty_collection():
 def test_changed_test_nodeids_rejects_empty_base_branch():
     with pytest.raises(ValueError, match="target branch"):
         test_conftest.get_changed_test_nodeids([], "")
+
+
+@pytest.mark.parametrize(
+    "before,after,changed",
+    [
+        ("marks=pytest.mark.polarion_id('OCS-4483')", "marks=[]", True),
+        ("return request.param", "return request.param + 1", False),
+        ("def value(request):", "def value(request, other):", True),
+    ],
+)
+def test_fixture_signatures_exclude_bodies(before, after, changed):
+    """Compare fixture headers without comparing fixture bodies."""
+    source = (
+        "import pytest\n"
+        "@pytest.fixture(params=[\n"
+        "    pytest.param(1, marks=pytest.mark.polarion_id('OCS-4483')),\n"
+        "])\n"
+        "def value(request): return request.param\n"
+        "def test_case(value): pass\n"
+    )
+    previous = test_conftest.get_test_signatures(source, {"value"})
+    current = test_conftest.get_test_signatures(
+        source.replace(before, after), {"value"}
+    )
+    assert (previous["value"] != current["value"]) is changed
+
+
+@pytest.mark.parametrize("mode", ["direct", "transitive", "autouse", "conftest"])
+@pytest.mark.parametrize(
+    "before,after,affected_modes",
+    [
+        (
+            "marks=pytest.mark.polarion_id('OCS-4483')",
+            "marks=[]",
+            {"direct", "transitive", "autouse", "conftest"},
+        ),
+        (
+            "def value(request): return request.param",
+            "def value(request): return 2",
+            set(),
+        ),
+        ("marks=pytest.mark.polarion_id('OCS-9999')", "marks=[]", set()),
+        (
+            "def bridge(value): return value",
+            "def bridge(): return 1",
+            {"transitive", "autouse"},
+        ),
+    ],
+)
+def test_changed_test_nodeids_tracks_fixture_parameters(
+    git_test_repository, testdir, mode, before, after, affected_modes
+):
+    """Select consumers of changed fixture metadata, including shared fixtures."""
+    repo, root = git_test_repository
+    test_file = root / "tests" / "test_cases.py"
+    test_file.parent.mkdir()
+    providers = (
+        "import pytest\n"
+        "@pytest.fixture(params=[\n"
+        "    pytest.param(1, marks=pytest.mark.polarion_id('OCS-4483')),\n"
+        "])\n"
+        "def value(request): return request.param\n"
+        "@pytest.fixture(params=[\n"
+        "    pytest.param(3, marks=pytest.mark.polarion_id('OCS-9999')),\n"
+        "])\n"
+        "def unused(request): return request.param\n"
+        f"@pytest.fixture(autouse={mode == 'autouse'})\n"
+        "def bridge(value): return value\n"
+    )
+    argument = "bridge" if mode == "transitive" else "value"
+    tests = (
+        "import pytest\n"
+        "@pytest.mark.blue_squad\n"
+        f"def test_case({argument}): pass\n"
+        "@pytest.mark.blue_squad\n"
+        "def test_legacy(): pass\n"
+    )
+    provider_file = test_file
+    if mode == "conftest":
+        provider_file = test_file.parent / "conftest.py"
+        provider_file.write_text(providers)
+        test_file.write_text(tests)
+    else:
+        test_file.write_text(providers + tests)
+    repo.index.add(["tests"])
+    base_commit = repo.index.commit("Base tests")
+    repo.git.update_ref("refs/remotes/origin/master", base_commit.hexsha)
+    provider_file.write_text(provider_file.read_text().replace(before, after))
+    items = testdir.getitems(test_file)
+    expected = set()
+    if mode in affected_modes:
+        expected.add("tests/test_cases.py::test_case")
+        if mode == "autouse":
+            expected.add("tests/test_cases.py::test_legacy")
+    assert test_conftest.get_changed_test_nodeids(items, "master") == expected
+
+
+@pytest.mark.parametrize(
+    "before,after,changed_names",
+    [
+        ("return 1", "return 2", set()),
+        ("'OCS-4483'", "'OCS-4484'", {"Base"}),
+        ("pass", "assert True", {"Base::test_case"}),
+    ],
+)
+def test_test_signatures_separate_class_metadata(before, after, changed_names):
+    """Keep inherited class metadata separate from helper and test bodies."""
+    source = (
+        "import pytest\n"
+        "class Base:\n"
+        "    pytestmark = pytest.mark.polarion_id('OCS-4483')\n"
+        "    def helper(self): return 1\n"
+        "    def test_case(self): pass\n"
+        "class TestCases(Base):\n"
+        "    def test_own(self): assert True\n"
+    )
+    previous = test_conftest.get_test_signatures(source, include_inherited=False)
+    current = test_conftest.get_test_signatures(
+        source.replace(before, after), include_inherited=False
+    )
+    assert {
+        name for name in current if current[name] != previous[name]
+    } == changed_names
+
+
+@pytest.mark.parametrize(
+    "before,after,expected",
+    [
+        ("import pytest", "import pytest\nimport math", set()),
+        ("return 1", "return 2", set()),
+        (
+            "def test_inherited(self): pass",
+            "def test_inherited(self): assert True",
+            {"test_inherited"},
+        ),
+        ("'OCS-4483'", "'OCS-4484'", {"test_inherited", "test_own"}),
+        (
+            "import pytest",
+            "import pytest\npytestmark = pytest.mark.polarion_id('OCS-4484')",
+            {"test_inherited", "test_own"},
+        ),
+    ],
+)
+def test_changed_test_nodeids_tracks_inherited_definitions(
+    git_test_repository, testdir, before, after, expected
+):
+    """Compare inherited tests and class metadata without comparing unused helpers."""
+    repo, root = git_test_repository
+    test_file = root / "tests" / "test_cases.py"
+    test_file.parent.mkdir()
+    source = (
+        "import pytest\n"
+        "class Base:\n"
+        "    pytestmark = pytest.mark.polarion_id('OCS-4483')\n"
+        "    def helper(self): return 1\n"
+        "    def test_inherited(self): pass\n"
+        "@pytest.mark.blue_squad\n"
+        "class TestCases(Base):\n"
+        "    def test_own(self): assert True\n"
+    )
+    test_file.write_text(source)
+    repo.index.add(["tests"])
+    baseline = repo.index.commit("Base tests")
+    repo.git.update_ref("refs/remotes/origin/master", baseline.hexsha)
+    test_file.write_text(source.replace(before, after))
+    items = testdir.getitems(test_file)
+    assert test_conftest.get_changed_test_nodeids(items, "master") == {
+        f"tests/test_cases.py::TestCases::{name}" for name in expected
+    }
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "from",
+        "module",
+        "qualified",
+        "relative",
+        "relative_module",
+        "reexport",
+        "provider",
+        "cyclic",
+        "diamond",
+    ],
+)
+@pytest.mark.parametrize("change", ["parameters", "unrelated"])
+def test_changed_test_nodeids_tracks_imported_parameters(
+    git_test_repository, testdir, mode, change
+):
+    """Follow imported parameter data without selecting tests for unused edits."""
+    repo, root = git_test_repository
+    directory = root / "tests" / "parameter_cases"
+    directory.mkdir(parents=True)
+    (directory / "__init__.py").write_text("")
+    provider = directory / "case_data.py"
+    source = (
+        "import pytest\n"
+        "VALUES = [pytest.param(1, marks=pytest.mark.polarion_id('OCS-4483'))]\n"
+        "def unused(): return 1\n"
+    )
+    source += "def values(): return VALUES\n"
+    if mode == "cyclic":
+        source = (
+            source.replace(
+                "def values(): return VALUES",
+                "def values(): return VALUES if True else get_forwarded()",
+            )
+            + "from .exports import get_forwarded\n"
+        )
+    provider.write_text(source)
+    if mode == "from":
+        imported = "from parameter_cases.case_data import VALUES\n"
+        values = "VALUES"
+    elif mode == "module":
+        imported = "import parameter_cases.case_data as case_data\n"
+        values = "case_data.VALUES"
+    elif mode == "qualified":
+        imported = "import parameter_cases.case_data\n"
+        values = "parameter_cases.case_data.VALUES"
+    elif mode == "provider":
+        imported = "from parameter_cases.case_data import values\n"
+        values = "values()"
+    elif mode == "relative_module":
+        imported = "from . import case_data\n"
+        values = "case_data.VALUES"
+    elif mode == "relative":
+        imported = "from .case_data import VALUES\n"
+        values = "VALUES"
+    elif mode == "cyclic":
+        (directory / "exports.py").write_text(
+            "from .case_data import values\ndef get_forwarded(): return values()\n"
+        )
+        imported = "from parameter_cases.case_data import values\n"
+        values = "values()"
+    elif mode == "diamond":
+        (directory / "left.py").write_text("from .case_data import VALUES\n")
+        (directory / "right.py").write_text("from .case_data import VALUES\n")
+        (directory / "exports.py").write_text(
+            "from .left import VALUES as LEFT\n"
+            "from .right import VALUES as RIGHT\n"
+            "def values(): return LEFT if True else RIGHT\n"
+        )
+        imported = "from parameter_cases.exports import values\n"
+        values = "values()"
+    else:
+        (directory / "exports.py").write_text("from .case_data import VALUES\n")
+        imported = "from parameter_cases.exports import VALUES\n"
+        values = "VALUES"
+    test_file = directory / "test_cases.py"
+    test_file.write_text(
+        "import pytest\n"
+        + imported
+        + "@pytest.mark.blue_squad\n"
+        + f"@pytest.mark.parametrize('value', {values})\n"
+        + "def test_case(value): pass\n"
+        + "@pytest.mark.blue_squad\ndef test_legacy(): pass\n"
+    )
+    repo.index.add(["tests"])
+    baseline = repo.index.commit("Base tests")
+    repo.git.update_ref("refs/remotes/origin/master", baseline.hexsha)
+    if change == "parameters":
+        provider.write_text(source.replace("VALUES = [", "VALUES = [2, "))
+    else:
+        provider.write_text(source.replace("return 1", "return 2"))
+    items = testdir.getitems(test_file)
+    expected = (
+        {"tests/parameter_cases/test_cases.py::test_case"}
+        if change == "parameters"
+        else set()
+    )
+    assert test_conftest.get_changed_test_nodeids(items, "master") == expected
+
+
+@pytest.mark.parametrize("kind", ["test", "fixture"])
+@pytest.mark.parametrize("change", ["unrelated", "definition"])
+def test_changed_test_nodeids_unwraps_decorated_functions(
+    git_test_repository, testdir, kind, change
+):
+    """Locate decorated tests and fixtures in their original source modules."""
+    repo, root = git_test_repository
+    directory = root / "tests" / "wrapped_cases"
+    directory.mkdir(parents=True)
+    (directory / "__init__.py").write_text("")
+    (directory / "wrappers.py").write_text(
+        "from functools import wraps\n"
+        "def wrapped(function):\n"
+        "    @wraps(function)\n"
+        "    def wrapper(*args, **kwargs): return function(*args, **kwargs)\n"
+        "    return wrapper\n"
+    )
+    source = "import pytest\nfrom wrapped_cases.wrappers import wrapped\n"
+    if kind == "fixture":
+        source += (
+            "@pytest.fixture(params=[pytest.param(1, marks=pytest.mark.polarion_id('OCS-4483'))])\n"
+            "@wrapped\ndef value(request): return request.param\n"
+            "@pytest.mark.blue_squad\ndef test_case(value): pass\n"
+        )
+        before, after = "marks=pytest.mark.polarion_id('OCS-4483')", "marks=[]"
+    else:
+        source += "@pytest.mark.blue_squad\n@wrapped\ndef test_case(): pass\n"
+        before, after = "pass", "assert True"
+    test_file = directory / "test_cases.py"
+    test_file.write_text(source)
+    repo.index.add(["tests"])
+    baseline = repo.index.commit("Base tests")
+    repo.git.update_ref("refs/remotes/origin/master", baseline.hexsha)
+    test_file.write_text(
+        source + "UNRELATED = 1\n"
+        if change == "unrelated"
+        else source.replace(before, after)
+    )
+    items = testdir.getitems(test_file)
+    expected = (
+        {"tests/wrapped_cases/test_cases.py::test_case"}
+        if change == "definition"
+        else set()
+    )
+    assert test_conftest.get_changed_test_nodeids(items, "master") == expected
