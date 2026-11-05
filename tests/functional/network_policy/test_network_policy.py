@@ -580,10 +580,12 @@ class TestNetworkPolicyBlockedTraffic(ManageTest):
 
 
 @purple_squad
+@ignore_leftovers
 class TestNetworkPolicyDisruption(ManageTest):
     """
     Category D: Disruption & recovery tests (tier2).
     Verify policies survive operational events.
+    Operator restart creates a replacement pod with a different name.
     """
 
     @tier2
