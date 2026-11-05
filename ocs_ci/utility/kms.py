@@ -158,6 +158,40 @@ class Vault(KMS):
         logger.info(f"Vault policy name will be {policy_name}")
         return policy_name
 
+    @staticmethod
+    @retry(
+        CalledProcessError,
+        tries=6,
+        delay=10,
+        backoff=1,
+        text_in_exception=(
+            "Forbidden",
+            "proxyconnect tcp",
+            "i/o timeout",
+            "dial tcp",
+            "connection refused",
+            "connection reset",
+        ),
+    )
+    def _run_vault_command(cmd):
+        """
+        Execute vault CLI command with retry logic for transient connection errors.
+
+        This wrapper handles intermittent proxy connection failures in containerized
+        CI environments by retrying vault commands when specific connection error
+        patterns are detected.
+
+        Args:
+            cmd (str): vault command to execute
+
+        Returns:
+            bytes: command output
+
+        Raises:
+            CalledProcessError: If command fails after all retries
+        """
+        return subprocess.check_output(shlex.split(cmd))
+
     def deploy(self):
         """
         This function delegates the deployment of vault
@@ -277,7 +311,7 @@ class Vault(KMS):
 
         """
         cmd = "vault secrets list --format=json"
-        out = subprocess.check_output(shlex.split(cmd))
+        out = self._run_vault_command(cmd)
         json_out = json.loads(out)
         for path in json_out.keys():
             if backend_path in path:
@@ -513,7 +547,7 @@ class Vault(KMS):
 
         """
         unseal_cmd = f"vault operator unseal {key}"
-        subprocess.check_output(shlex.split(unseal_cmd))
+        self._run_vault_command(unseal_cmd)
 
     def vault_sealed(self):
         """
@@ -522,7 +556,7 @@ class Vault(KMS):
 
         """
         status_cmd = "vault status --format=json"
-        output = subprocess.check_output(shlex.split(status_cmd))
+        output = self._run_vault_command(status_cmd)
         outbuf = json.loads(output)
         return outbuf["sealed"]
 
@@ -558,7 +592,7 @@ class Vault(KMS):
                 f"vault secrets enable -path={self.vault_backend_path} "
                 f"kv-{self.vault_backend_version}"
             )
-            out = subprocess.check_output(shlex.split(cmd))
+            out = self._run_vault_command(cmd)
             if "Success" in out.decode():
                 logger.info(f"vault path {self.vault_backend_path} created")
             else:
@@ -579,7 +613,7 @@ class Vault(KMS):
         existing_policy_data = None
         read_policy_cmd = f"vault policy read {self.vault_policy_name}"
         try:
-            output = subprocess.check_output(shlex.split(read_policy_cmd))
+            output = self._run_vault_command(read_policy_cmd)
             existing_policy_data = json.loads(output)["policy"]
             logger.info(f"Existing policy found!:\n{existing_policy_data}")
         except Exception:
@@ -615,7 +649,7 @@ class Vault(KMS):
                 self.vault_policy_name = config.ENV_DATA.get("VAULT_POLICY")
 
         cmd = f"vault policy write {self.vault_policy_name} {vault_hcl.name}"
-        out = subprocess.check_output(shlex.split(cmd))
+        out = self._run_vault_command(cmd)
         if "Success" in out.decode():
             logger.info(f"vault policy {self.vault_policy_name} created")
         else:
@@ -638,7 +672,7 @@ class Vault(KMS):
             "--format=json "
             f"-ttl={ttl}"
         )
-        out = subprocess.check_output(shlex.split(cmd))
+        out = self._run_vault_command(cmd)
         json_out = json.loads(out)
         return json_out["auth"]["client_token"]
 
@@ -811,13 +845,13 @@ class Vault(KMS):
             cmd = f"vault secrets disable -namespace={vault_namespace} {self.vault_backend_path}"
         else:
             cmd = f"vault secrets disable {self.vault_backend_path}"
-        subprocess.check_output(shlex.split(cmd))
+        self._run_vault_command(cmd)
         # Check if path doesn't appear in the list
         if vault_namespace:
             cmd = f"vault secrets list -namespace={vault_namespace} --format=json"
         else:
             cmd = "vault secrets list --format=json"
-        out = subprocess.check_output(shlex.split(cmd))
+        out = self._run_vault_command(cmd)
         json_out = json.loads(out)
         for path in json_out.keys():
             if self.vault_backend_path in path:
@@ -841,17 +875,17 @@ class Vault(KMS):
         else:
             cmd_list_policy = "vault policy list --format=json"
 
-        out = subprocess.check_output(shlex.split(cmd_list_policy))
+        out = self._run_vault_command(cmd_list_policy)
         json_out = json.loads(out)
         if self.vault_policy_name in json_out:
             if vault_namespace:
                 cmd = f"vault policy delete -namespace={vault_namespace} {self.vault_policy_name} "
             else:
                 cmd = f"vault policy delete {self.vault_policy_name}"
-            subprocess.check_output(shlex.split(cmd))
+            self._run_vault_command(cmd)
 
         # Check if policy still exists
-        out = subprocess.check_output(shlex.split(cmd_list_policy))
+        out = self._run_vault_command(cmd_list_policy)
         json_out = json.loads(out)
         if self.vault_policy_name in json_out:
             raise KMSResourceCleaneupError(
@@ -877,7 +911,7 @@ class Vault(KMS):
             cmd = f"vault namespace delete -namespace={constants.VAULT_HCP_NAMESPACE} {self.vault_namespace}/"
         else:
             cmd = f"vault namespace delete {self.vault_namespace}/"
-        subprocess.check_output(shlex.split(cmd))
+        self._run_vault_command(cmd)
         if self.vault_namespace_exists(self.vault_namespace):
             raise KMSResourceCleaneupError(
                 f"Namespace {self.vault_namespace} deletion failed"
@@ -1322,7 +1356,7 @@ class Vault(KMS):
             f"bound_service_account_names={sa_name} policies={self.vault_policy_name} "
             f"bound_service_account_namespaces={namespace} ttl=1440h"
         )
-        out = subprocess.check_output(shlex.split(cmd))
+        out = self._run_vault_command(cmd)
         if "Success" in out.decode():
             logger.info(f"Role {role_name} created successfully")
 
@@ -1395,7 +1429,7 @@ class Vault(KMS):
             backend_path = self.csi_vault_backend_path
 
         cmd = f"vault kv get -format=json {backend_path}/{device_handle}"
-        out = subprocess.check_output(shlex.split(cmd))
+        out = self._run_vault_command(cmd)
         json_out = json.loads(out)
 
         def find_passphrase(obj):
@@ -2460,7 +2494,7 @@ def vault_kv_list(path):
 
     """
     cmd = f"vault kv list -format=json {path}"
-    out = subprocess.check_output(shlex.split(cmd))
+    out = Vault._run_vault_command(cmd)
     json_out = json.loads(out)
     return json_out
 
@@ -2655,9 +2689,7 @@ def fetch_osd_secret_from_vault(device_handle, vault_backend_path):
     try:
         # Execute the command and capture the output
         logger.info(f"Getting OSD secrets from vault : {cmd}")
-        out = subprocess.check_output(
-            shlex.split(cmd), stderr=subprocess.STDOUT, text=True
-        )
+        out = Vault._run_vault_command(cmd)
 
         # Parse the JSON response
         json_out = json.loads(out)
@@ -2675,7 +2707,8 @@ def fetch_osd_secret_from_vault(device_handle, vault_backend_path):
 
         return secret
     except subprocess.CalledProcessError as e:
-        logger.error(f"Error executing Vault command: {e.output.strip()}")
+        output = e.output.decode() if isinstance(e.output, bytes) else e.output
+        logger.error(f"Error executing Vault command: {output.strip()}")
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON output from Vault command. : {e}")
 
@@ -2701,9 +2734,7 @@ def fetch_noobaa_secret_from_vault(vault_backend_path):
         logger.info(f"Getting NooBaa secrets from vault : {cmd}")
 
         # Execute the command and capture the output
-        out = subprocess.check_output(
-            shlex.split(cmd), stderr=subprocess.STDOUT, text=True
-        )
+        out = Vault._run_vault_command(cmd)
 
         # Parse the JSON response
         json_out = json.loads(out)
@@ -2720,7 +2751,8 @@ def fetch_noobaa_secret_from_vault(vault_backend_path):
 
         return (key, secret)
     except subprocess.CalledProcessError as e:
-        logger.error(f"Error executing Vault command: {e.output.strip()}")
+        output = e.output.decode() if isinstance(e.output, bytes) else e.output
+        logger.error(f"Error executing Vault command: {output.strip()}")
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON output from Vault command. {e}")
 
