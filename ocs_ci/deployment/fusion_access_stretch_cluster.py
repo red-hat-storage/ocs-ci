@@ -114,7 +114,8 @@ def get_arbiter_node_name():
         str: Name of the arbiter master node.
 
     Raises:
-        AssertionError: If no master node carries the arbiter zone label.
+        AssertionError: If the number of master nodes carrying the arbiter zone
+            label is not exactly one.
     """
     node_ocp = OCP(kind="node")
     selector = f"{constants.ZONE_LABEL}={ARBITER_ZONE}"
@@ -124,9 +125,9 @@ def get_arbiter_node_name():
         for n in arbiter_nodes
         if "node-role.kubernetes.io/master" in n["metadata"].get("labels", {})
     ]
-    assert arbiter_master_names, (
-        f"No master node carries the zone label "
-        f"'{constants.ZONE_LABEL}={ARBITER_ZONE}'"
+    assert len(arbiter_master_names) == 1, (
+        f"Expected exactly one master with zone label "
+        f"'{constants.ZONE_LABEL}={ARBITER_ZONE}', found: {arbiter_master_names}"
     )
     arbiter_name = arbiter_master_names[0]
     logger.info(f"Arbiter master node: {arbiter_name}")
@@ -271,11 +272,7 @@ def _read_node_roles(san_ui):
     Returns:
         dict: Mapping of node name to the role shown in the UI.
     """
-    rows = san_ui.get_visible_node_rows()
-    return {
-        san_ui.get_node_name_in_row(i): san_ui.get_node_role_in_row(i)
-        for i in range(1, len(rows) + 1)
-    }
+    return san_ui.get_node_roles_by_name()
 
 
 def _assert_node_roles(role_by_name, nodes, expected_role):
@@ -553,6 +550,9 @@ def _create_quay_registry_secret():
 
     secret_name = constants.IBM_QUAYIO_SECRET_NAME
     namespace = constants.IBM_STORAGE_SCALE_NAMESPACE
+    if OCP(kind="Secret", namespace=namespace).is_exist(resource_name=secret_name):
+        logger.info(f"Quay secret '{secret_name}' already exists in '{namespace}'")
+        return
     logger.info(
         f"Creating Quay docker-registry secret '{secret_name}' "
         f"in namespace '{namespace}' for external registry access"
@@ -616,7 +616,7 @@ def _validate_lun_group_and_filesystem_health():
         logger.info(f"Entering image registry URL: {image_registry_url}")
         san_ui.enter_image_registry_url(image_registry_url)
 
-        image_repository_name = config.ENV_DATA.get("san_image_repository_name")
+        image_repository_name = config.ENV_DATA["san_image_repository_name"]
         logger.info(f"Entering image repository name: {image_repository_name}")
         san_ui.enter_image_repository_name(image_repository_name)
 
@@ -626,7 +626,7 @@ def _validate_lun_group_and_filesystem_health():
     else:
         # Internal registry: UI pre-populates from the cluster's internal registry;
         # enter only the image repository name — no secret selection required.
-        image_repository_name = config.ENV_DATA.get("san_image_repository_name")
+        image_repository_name = config.ENV_DATA["san_image_repository_name"]
         logger.info(
             f"Internal registry path: entering image repository name only: "
             f"{image_repository_name}"
@@ -733,6 +733,25 @@ def validate_deployment_ui(
     logger.info("UI deployment validation completed successfully")
 
 
+def _validate_registry_config():
+    """
+    Fail fast when the registry config needed by the LUN-group wizard is absent.
+
+    ``san_image_repository_name`` is consumed in the last deployment step, by
+    both the external and the internal registry paths. Checking it up front
+    avoids spending a full deploy cycle before the missing key surfaces.
+
+    Raises:
+        ValueError: If ``ENV_DATA.san_image_repository_name`` is not set.
+    """
+    if not config.ENV_DATA.get("san_image_repository_name"):
+        raise ValueError(
+            "Missing required config key for the LUN-group wizard: "
+            "['san_image_repository_name']. "
+            "Set it under ENV_DATA in your cluster config."
+        )
+
+
 def deploy_fusion_access_stretch_cluster():
     """
     Execute the complete Fusion Access HA (stretch cluster) deployment sequence
@@ -755,8 +774,10 @@ def deploy_fusion_access_stretch_cluster():
 
     Raises:
         AssertionError: If any deployment step or validation check fails.
+        ValueError: If a required registry config key is missing.
     """
     logger.info("Starting Fusion Access HA stretch cluster deployment")
+    _validate_registry_config()
 
     logger.info("Step 1 — Apply topology zone labels")
     apply_stretch_cluster_zone_labels()

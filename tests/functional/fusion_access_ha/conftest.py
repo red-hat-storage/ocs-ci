@@ -97,7 +97,7 @@ def data_zone_1_workers(fusion_access_stretch_cluster_setup):
     Returns:
         list[str]: Worker node names in zone ``data-1``.
     """
-    return fusion_access_stretch_cluster_setup["data_zone_1_workers"]
+    return list(fusion_access_stretch_cluster_setup["data_zone_1_workers"])
 
 
 @pytest.fixture(scope="function")
@@ -108,7 +108,7 @@ def data_zone_2_workers(fusion_access_stretch_cluster_setup):
     Returns:
         list[str]: Worker node names in zone ``data-2``.
     """
-    return fusion_access_stretch_cluster_setup["data_zone_2_workers"]
+    return list(fusion_access_stretch_cluster_setup["data_zone_2_workers"])
 
 
 @pytest.fixture(scope="function")
@@ -120,8 +120,8 @@ def all_cluster_nodes(fusion_access_stretch_cluster_setup):
         dict: ``{'masters': list[str], 'workers': list[str]}``
     """
     return {
-        "masters": fusion_access_stretch_cluster_setup["all_master_nodes"],
-        "workers": fusion_access_stretch_cluster_setup["all_worker_nodes"],
+        "masters": list(fusion_access_stretch_cluster_setup["all_master_nodes"]),
+        "workers": list(fusion_access_stretch_cluster_setup["all_worker_nodes"]),
     }
 
 
