@@ -176,45 +176,29 @@ class TestStorageAutoscalerBase(ManageTest):
 
     def fill_up_cluster(self, target_percentage, is_completed=True):
         """
-        Fill up the cluster to a target percentage of total storage capacity using FIO-based load.
+        Fill up the cluster to a target percentage of total storage capacity.
 
-        This method invokes the benchmark operator to prefill the cluster up to a specified
-        usage level. If `fast_fill_up` is enabled, more aggressive FIO settings are applied
-        to increase fill speed, and the `target_percentage` is reduced slightly to compensate
-        for potential overshoot.
+        Uses FillPoolJob with incompressible fio data so Ceph used-raw increases.
 
         Args:
             target_percentage (int): Desired percentage of used cluster storage to reach.
-            is_completed (bool): Whether to wait until the benchmark workload completes.
+            is_completed (bool): Whether to wait until the fill workload completes.
 
         """
         storage_to_fill = get_file_size(
             expected_used_capacity_percent=target_percentage
         )
-        # Divide the storage to fill between zero and random modes. The random mode will
-        # fill 25% of the total. This is to optimize the time taken to fill the cluster,
-        # as the zero mode is faster.
-        storage_to_fill_random_mode = int(storage_to_fill // 4)
-        storage_to_fill_zero_mode = storage_to_fill - storage_to_fill_random_mode
-        logger.info(
-            f"Total storage to fill the cluster: {storage_to_fill}Gi, "
-            f"Storage to fill in zero mode: {storage_to_fill_zero_mode}Gi, "
-            f"Storage to fill in random mode: {storage_to_fill_random_mode}Gi"
-        )
+        logger.info(f"Total storage to fill the cluster: {storage_to_fill}Gi")
         fill_job_obj = self.fill_job_factory(
-            fill_mode="zero",
-            storage=f"{storage_to_fill_zero_mode}Gi",
-        )
-        self.fill_job_objs.append(fill_job_obj)
-        fill_job_obj = self.fill_job_factory(
-            fill_mode="random",
-            storage=f"{storage_to_fill_random_mode}Gi",
+            fill_mode="incompressible",
+            storage=f"{storage_to_fill}Gi",
+            block_size="4M",
         )
         self.fill_job_objs.append(fill_job_obj)
 
         if is_completed:
             for fill_job in self.fill_job_objs:
-                fill_job.wait_for_completion(timeout=1800, sleep=30)
+                fill_job.wait_for_completion(timeout=3600, sleep=30)
 
     def cleanup_cluster(self):
         """
