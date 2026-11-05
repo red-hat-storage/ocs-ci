@@ -89,25 +89,35 @@ class TestDryRunFailover:
         Verify lastGroupSyncTime (all workloads) and lastKubeObjectProtectionTime
         (DiscoveredApps only) have advanced since the previously recorded value,
         confirming data protection is active on the current primary.
+
+        Each helper switches to ACM context internally but does not restore on
+        exception. The restore_index guard here ensures the caller's cluster
+        context is always reinstated, even if a helper raises.
         """
-        for info in workload_info:
-            logger.info(f"Checking lastGroupSyncTime for {info['drpc_resource_name']}")
-            info["last_group_sync_time"] = dr_helpers.verify_last_group_sync_time(
-                info["drpc_obj"],
-                scheduling_interval,
-                info["last_group_sync_time"],
-            )
-            if info["is_discovered"]:
+        restore_index = config.cur_index
+        try:
+            for info in workload_info:
                 logger.info(
-                    f"Checking lastKubeObjectProtectionTime for {info['drpc_resource_name']}"
+                    f"Checking lastGroupSyncTime for {info['drpc_resource_name']}"
                 )
-                info["last_kubeobj_time"] = (
-                    dr_helpers.verify_last_kubeobject_protection_time(
-                        info["drpc_obj"],
-                        info["workload"].kubeobject_capture_interval_int,
-                        info["last_kubeobj_time"],
+                info["last_group_sync_time"] = dr_helpers.verify_last_group_sync_time(
+                    info["drpc_obj"],
+                    scheduling_interval,
+                    info["last_group_sync_time"],
+                )
+                if info["is_discovered"]:
+                    logger.info(
+                        f"Checking lastKubeObjectProtectionTime for {info['drpc_resource_name']}"
                     )
-                )
+                    info["last_kubeobj_time"] = (
+                        dr_helpers.verify_last_kubeobject_protection_time(
+                            info["drpc_obj"],
+                            info["workload"].kubeobject_capture_interval_int,
+                            info["last_kubeobj_time"],
+                        )
+                    )
+        finally:
+            config.switch_ctx(restore_index)
 
     def _setup_workload_states(
         self, workload_info, cluster_a, cluster_b, scheduling_interval
@@ -465,12 +475,20 @@ class TestDryRunFailover:
         a dryRun is either aborted or promoted. Same logic applies to both — only the
         cluster differs.
 
-        Per workload, in order:
-          1. Hub: wait for intermediate progression state — Cleaning Up (AppSet) or
-             WaitOnUserToCleanUp (DiscoveredApps). Signals cleanup has started; do NOT
-             wait for Completed yet.
-             DiscoveredApps additionally: poll for 60 s to confirm the hold — Ramen must
-             not auto-advance to Completed without user-driven workload cleanup.
+        Two passes over workload_info:
+
+        Pass 1 — Step 1 for all DRPCs before proceeding:
+          All DRPCs are patched simultaneously before this function is called, so Ramen
+          processes them in parallel. The intermediate progression state (Cleaning Up /
+          WaitOnUserToCleanUp) is transient — by the time a sequential loop finishes
+          Steps 2–5 for workload N, workload N+1 may have already advanced past it.
+          Checking Step 1 for all DRPCs upfront guarantees no intermediate state is missed.
+
+          Hub: wait for Cleaning Up (AppSet) or WaitOnUserToCleanUp (DiscoveredApps).
+          DiscoveredApps additionally: poll for 60 s to confirm the hold — Ramen must
+          not auto-advance to Completed without user-driven workload cleanup.
+
+        Pass 2 — Steps 2–5 per workload:
           2. failover_cluster: wait_for_all_resources_deletion — pods deleted first, then
              Ramen transitions VRG to secondary (which triggers dryRun snapshot cleanup
              and releases PVCs), then PVCs and PVs are confirmed gone. VRG secondary is
@@ -480,14 +498,13 @@ class TestDryRunFailover:
           5. Hub: assert DRPC annotation test-failover-dryrun is absent — Ramen deletes
              it (not sets to false) on the DRPC upon successful cleanup.
         """
+        # Pass 1: verify intermediate progression state for all DRPCs before
+        # any long per-workload waits can cause later DRPCs to miss their transient state.
         config.switch_acm_ctx()
         for info in workload_info:
-            vrg_name = info["vrg_name"]
-            vrg_namespace = info["vrg_namespace"]
-            failover_cluster = info["failover_cluster"]
-            is_discovered = info["is_discovered"]
             drpc_obj: DRPC = info["drpc_obj"]
             name = info["drpc_resource_name"]
+            is_discovered = info["is_discovered"]
 
             # Step 1: Hub — intermediate progression state confirms cleanup has started.
             if is_discovered:
@@ -523,6 +540,16 @@ class TestDryRunFailover:
                     constants.STATUS_CLEANING_UP, timeout=300
                 )
                 logger.info(f"[{name}] Reached {constants.STATUS_CLEANING_UP}")
+
+        # Pass 2: per-workload cleanup verification (Steps 2–5).
+        config.switch_acm_ctx()
+        for info in workload_info:
+            vrg_name = info["vrg_name"]
+            vrg_namespace = info["vrg_namespace"]
+            failover_cluster = info["failover_cluster"]
+            is_discovered = info["is_discovered"]
+            drpc_obj: DRPC = info["drpc_obj"]
+            name = info["drpc_resource_name"]
 
             # Step 2: failover_cluster — workload deletion, VRG → secondary, PVCs/PVs gone.
             # vrg_name is required for DiscoveredApps: all workloads share openshift-dr-ops,
