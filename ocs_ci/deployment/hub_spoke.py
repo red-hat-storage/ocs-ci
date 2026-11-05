@@ -27,6 +27,8 @@ from ocs_ci.deployment.helpers.hypershift_base import (
     get_available_hosted_clusters_to_ocp_ver_dict,
     create_cluster_dir,
     fix_hypershift_webhook_ca_bundle,
+    worker_nodes_deployed,
+    wait_for_worker_nodes_to_be_ready,
 )
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework.logger_helper import log_step, reset_current_module_log_steps
@@ -260,6 +262,197 @@ def apply_cluster_roles_wa(cluster_names):
             )
         except CommandFailed:
             logger.warning("rbac w/a already exist")
+
+
+def _get_kubevirtmachine_crd_if_minlength_bug():
+    """
+    Fetch the KubevirtMachine CRD and check for the minLength: 1 bug.
+
+    Returns:
+        dict: The CRD data dict if the bug is present, None otherwise
+
+    """
+    crd_name = "kubevirtmachines.infrastructure.cluster.x-k8s.io"
+    try:
+        crd_json = exec_cmd(f"oc get crd {crd_name} -o json", silent=True)
+        crd_data = json.loads(crd_json.stdout)
+    except (CommandFailed, json.JSONDecodeError):
+        return None
+
+    for version_entry in crd_data.get("spec", {}).get("versions", []):
+        conditions = (
+            version_entry.get("schema", {})
+            .get("openAPIV3Schema", {})
+            .get("properties", {})
+            .get("status", {})
+            .get("properties", {})
+            .get("conditions", {})
+            .get("items", {})
+            .get("properties", {})
+        )
+        if not conditions:
+            continue
+        for field_name in ("message", "reason"):
+            if conditions.get(field_name, {}).get("minLength") == 1:
+                return crd_data
+    return None
+
+
+# Grace period (seconds) to allow rolling updates to self-heal before
+# checking for the DFBUGS-12445 CRD bug
+KUBEVIRTMACHINE_CRD_WA_GRACE_PERIOD = 180
+# Timeout (seconds) to wait for worker nodes to recover after applying
+# the CRD patch workaround
+KUBEVIRTMACHINE_CRD_WA_RECOVERY_TIMEOUT = 900
+
+
+def apply_kubevirtmachine_crd_wa(cluster_names):
+    """
+    Workaround for DFBUGS-12445 / OCPBUGS-132920:
+    Patch KubevirtMachine CRD to fix minLength validation on status conditions.
+
+    Only applied when:
+    - At least one cluster uses KubeVirt platform
+    - Worker nodes are stuck (status.replicas != spec.replicas) after waiting
+    - The CRD actually has the minLength: 1 bug
+
+    The CAPK controller writes empty strings for status.conditions[].message and
+    status.conditions[].reason, but the CRD shipped in MCE 5.0 enforces
+    minLength: 1. This causes all machine condition updates to be rejected,
+    blocking rolling updates.
+
+    Fix is in MCE 5.1 only (https://github.com/openshift/hypershift/pull/10082).
+    Remove this workaround when MCE 5.0 is no longer supported.
+
+    Args:
+        cluster_names (list of str): Hosted cluster names to check and fix
+
+    Returns:
+        bool: True if workaround was applied and nodes recovered, False otherwise
+
+    """
+    kubevirt_clusters = [
+        name
+        for name in cluster_names
+        if config.ENV_DATA.get("clusters", {})
+        .get(name, {})
+        .get("hosted_cluster_platform", "kubevirt")
+        == "kubevirt"
+    ]
+    if not kubevirt_clusters:
+        logger.debug(
+            "No KubeVirt platform clusters found, " "skipping DFBUGS-12445 workaround"
+        )
+        return False
+
+    stuck_clusters = [
+        name for name in kubevirt_clusters if not worker_nodes_deployed(name)
+    ]
+    if not stuck_clusters:
+        logger.info(
+            "All KubeVirt hosted cluster worker nodes match desired "
+            "replica count, DFBUGS-12445 workaround not needed"
+        )
+        return False
+
+    logger.warning(
+        f"Worker nodes stuck on clusters: {stuck_clusters}. "
+        f"Waiting {KUBEVIRTMACHINE_CRD_WA_GRACE_PERIOD}s before checking "
+        f"for DFBUGS-12445 CRD issue..."
+    )
+    time.sleep(KUBEVIRTMACHINE_CRD_WA_GRACE_PERIOD)
+
+    stuck_clusters = [
+        name for name in stuck_clusters if not worker_nodes_deployed(name)
+    ]
+    if not stuck_clusters:
+        logger.info("Worker nodes recovered during wait period, workaround not needed")
+        return False
+
+    crd_data = _get_kubevirtmachine_crd_if_minlength_bug()
+    if crd_data is None:
+        logger.info(
+            "KubevirtMachine CRD does not have minLength: 1 bug, "
+            "stuck nodes are due to a different issue"
+        )
+        return False
+
+    crd_name = "kubevirtmachines.infrastructure.cluster.x-k8s.io"
+    logger.warning(
+        f"!!! Workaround for DFBUGS-12445 / OCPBUGS-132920: "
+        f"patching {crd_name} minLength validation !!!"
+    )
+    logger.warning("!!! Remove when MCE 5.0 is no longer supported !!!")
+
+    for version_entry in crd_data.get("spec", {}).get("versions", []):
+        conditions = (
+            version_entry.get("schema", {})
+            .get("openAPIV3Schema", {})
+            .get("properties", {})
+            .get("status", {})
+            .get("properties", {})
+            .get("conditions", {})
+            .get("items", {})
+            .get("properties", {})
+        )
+        if not conditions:
+            continue
+        for field_name in ("message", "reason"):
+            field = conditions.get(field_name, {})
+            if field.get("minLength") == 1:
+                field["minLength"] = 0
+                logger.info(
+                    f"Patched {crd_name} status.conditions[].{field_name}: "
+                    f"minLength 1 -> 0"
+                )
+
+    patched_file = tempfile.NamedTemporaryFile(
+        mode="w",
+        prefix="kubevirtmachine_crd_patched_",
+        suffix=".json",
+        delete=False,
+    )
+    json.dump(crd_data, patched_file)
+    patched_file.close()
+
+    try:
+        exec_cmd(f"oc replace -f {patched_file.name}", silent=True)
+        logger.info(f"Successfully replaced {crd_name} CRD with patched version")
+    except CommandFailed as e:
+        logger.error(f"Failed to replace {crd_name} CRD: {e}")
+        return False
+    finally:
+        os.unlink(patched_file.name)
+
+    for cluster_name in stuck_clusters:
+        ns = f"clusters-{cluster_name}"
+        try:
+            exec_cmd(
+                f"oc rollout restart deploy/capi-provider -n {ns}",
+                silent=True,
+            )
+            logger.info(f"Restarted capi-provider in namespace {ns}")
+        except CommandFailed as e:
+            logger.warning(f"Could not restart capi-provider in {ns}: {e}")
+
+    logger.info(
+        "DFBUGS-12445 workaround applied. " "Waiting for worker nodes to recover..."
+    )
+    recovered = True
+    for cluster_name in stuck_clusters:
+        if not wait_for_worker_nodes_to_be_ready(
+            cluster_name, timeout=KUBEVIRTMACHINE_CRD_WA_RECOVERY_TIMEOUT
+        ):
+            logger.error(
+                f"Cluster '{cluster_name}' worker nodes did not recover "
+                f"after DFBUGS-12445 workaround"
+            )
+            recovered = False
+        else:
+            logger.info(
+                f"Cluster '{cluster_name}' worker nodes recovered " f"after workaround"
+            )
+    return recovered
 
 
 def skip_if_not_hcp_provider(func):
@@ -1315,6 +1508,15 @@ class HostedClients(HyperShiftBase):
                     logger.warning(
                         "Continuing with deployment, but network connectivity may fail"
                     )
+
+        # Workaround DFBUGS-12445: if rolling updates are stuck on KubeVirt clusters
+        # due to KubevirtMachine CRD minLength bug (MCE 5.0), patch and recover
+        if not hosted_ocp_verification_passed or any(
+            not worker_nodes_deployed(name) for name in cluster_names
+        ):
+            wa_result = apply_kubevirtmachine_crd_wa(cluster_names)
+            if wa_result:
+                hosted_ocp_verification_passed = True
 
         # stage 4 deploy ODF/FDF client on all hosted clusters if not already deployed
         fdf_on_provider = False
