@@ -485,7 +485,21 @@ class CephCrashMonitor(threading.Thread):
         self.reporting_unreliable_reason = ""
 
     def run(self):
-        ceph_tool = CephStatusTool()
+        ceph_tool = None
+        while not self._stop_event.is_set():
+            try:
+                ceph_tool = CephStatusTool()
+                break
+            except Exception as ex:
+                # Toolbox or kubeconfig lookups fail while chaos has the API
+                # or context unavailable. Keep the thread alive and try again.
+                log.warning(
+                    f"Ceph crash monitor could not start for {self.context} "
+                    f"because the cluster is disrupted; retrying: {ex}"
+                )
+                self._stop_event.wait(self.interval)
+        if ceph_tool is None:
+            return
         chaos_type = f"{self.context} (periodic check every {self.interval} s)"
         log.info(
             "Ceph crash monitor started for %s (check every %ss)",
@@ -525,6 +539,12 @@ class CephCrashMonitor(threading.Thread):
                 self.crash_error = ex
                 log.error("Ceph crash detected by background monitor: %s", ex)
                 return False
+            except Exception as ex:
+                log.warning(
+                    f"Ceph crash monitor check failed for {self.context} because "
+                    f"the cluster is disrupted; retrying: {ex}"
+                )
+                return True
 
         if not _check_once():
             return
