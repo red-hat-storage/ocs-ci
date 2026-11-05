@@ -1,0 +1,19 @@
+# FDF Standalone Metro Disaster Recovery Configuration (RHSTOR-8840 / TC-12)
+#
+# Overlay for running MDR (Metro DR) tests on FDF standalone clusters.
+# Stack with the standard MDR workload and multicluster configs:
+#
+#   run-ci ... --ocsci-conf conf/ocsci/fdf_standalone_deployment.yaml \
+#              --ocsci-conf conf/ocsci/fdf_standalone_dr_mdr.yaml \
+#              --ocsci-conf conf/ocsci/multicluster_mode_mdr.yaml \
+#              --ocsci-conf conf/ocsci/mdr_workload.yaml \
+#              tests/functional/disaster-recovery/metro-dr/
+#
+# Both FDF clusters in the MDR pair must use fdf_standalone_deployment.
+---
+DEPLOYMENT:
+  fdf_standalone_deployment: true
+MULTICLUSTER:
+  multicluster_mode: "metro-dr"
+ENV_DATA:
+  dr_metadata_store: "awss3"
