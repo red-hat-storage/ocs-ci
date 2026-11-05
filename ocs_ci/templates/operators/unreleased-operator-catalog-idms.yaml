@@ -5,7 +5,7 @@ metadata:
   name: #IDMS_NAME_PLACEHOLDER
 spec:
   imageDigestMirrors:
-  # Example of mirrors - include for every required package
+  # Simplified IDMS - mirrors all images from registry.redhat.io to registry.stage.redhat.io
   - mirrors:
-    - quay.io/redhat-user-workloads/ocp-art-tenant/art-images-share
-    source: registry.redhat.io/openshift4/IMAGE_PLACEHOLDER
+    - registry.stage.redhat.io
+    source: registry.redhat.io
