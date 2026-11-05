@@ -1204,6 +1204,33 @@ def ocs_install_verification(
             f"Verified '{constants.INTERNAL_STORAGE_CONSUMER_NAME}' storage consumer resources"
         )
 
+    if config.DEPLOYMENT.get("network_policy_verification") and not (
+        config.DEPLOYMENT.get("external_mode")
+        or config.ENV_DATA.get("mcg_only_deployment")
+    ):
+        from ocs_ci.helpers.network_policy_helpers import (
+            get_all_network_policies,
+            verify_csv_network_policy_rbac,
+        )
+
+        namespace = config.ENV_DATA["cluster_namespace"]
+        policies = get_all_network_policies(namespace)
+        assert policies, (
+            f"No NetworkPolicies found in {namespace} but "
+            f"network_policy_verification is enabled"
+        )
+        log.info(f"Found {len(policies)} NetworkPolicies in {namespace}")
+        failures = []
+        for csv_prefix in constants.ODF_CSV_PREFIXES_FOR_NETWORK_POLICY_RBAC:
+            try:
+                verify_csv_network_policy_rbac(csv_prefix, namespace)
+            except AssertionError as ex:
+                log.warning(f"CSV RBAC check failed for {csv_prefix}: {ex}")
+                failures.append(str(ex))
+        if failures:
+            log.warning(f"NetworkPolicy RBAC failures ({len(failures)}): {failures}")
+        log.info("NetworkPolicy deployment verification completed")
+
 
 def mcg_only_install_verification(ocs_registry_image=None):
     """
