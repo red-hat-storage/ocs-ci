@@ -32,7 +32,8 @@ from ocs_ci.utility.utils import ceph_health_check, run_cmd
 
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility.storage_cluster_setup import StorageClusterSetup
-from ocs_ci.utility.operators import LocalStorageOperator
+
+# from ocs_ci.utility.operators import LocalStorageOperator
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 
 import time
@@ -102,9 +103,9 @@ class FusionDataFoundationDeployment:
         In the case of LSO is not available - bring catalog for unreleased version and install it
         """
 
-        logger.info("Ensuring Local Storage Operator (LSO) is installed")
-        lso_operator = LocalStorageOperator(create_catalog=True)
-        lso_operator.deploy()
+        logger.info("Skipping Local Storage Operator (LSO) installation")
+        # lso_operator = LocalStorageOperator(create_catalog=True)
+        # lso_operator.deploy()
 
     def _is_mirror_already_configured(self):
         """
