@@ -76,6 +76,17 @@ class AttachStorage(BaseUI):
         sleep(wait_time)
         # Confirm the action
         self.do_click(self.confirm_action_btn)
+        self.wait_until_expected_text_is_found(
+            locator=self.generic_locators["toast_alert"],
+            timeout=8,
+            expected_text="Storage attached",
+        )
+        self.toast_title = self.get_element_text(
+            self.generic_locators["toast_alert_title"]
+        )
+        self.toast_description = self.get_element_text(
+            self.generic_locators["toast_alert_description"]
+        )
         logger.info(
             "Form submitted for attaching storage with default values. "
             "Waiting for the action to complete and return to Storage Cluster details page."

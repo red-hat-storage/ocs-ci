@@ -608,6 +608,18 @@ generic_locators = {
         "[class*='empty-state--danger'], [class*='empty-state'][class*='danger']",
         By.CSS_SELECTOR,
     ),
+    "toast_alert": (
+        "//div[contains(@class, 'c-alert')]",
+        By.XPATH,
+    ),
+    "toast_alert_title": (
+        "//h4[contains(@class, 'c-alert__title')]",
+        By.XPATH,
+    ),
+    "toast_alert_description": (
+        "//div[contains(@class, 'c-alert__description')]",
+        By.XPATH,
+    ),
 }
 
 generic_locators_4_19 = {
