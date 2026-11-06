@@ -61,6 +61,28 @@ class TestAddCapacityUI(object):
         infra_ui_obj = AddReplaceDeviceUI()
         infra_ui_obj.add_capacity_ui()
 
+        logger.info("Verify toast alert for capacity expansion triggered")
+        infra_ui_obj.wait_until_expected_text_is_found(
+            locator=infra_ui_obj.generic_locators["toast_alert"],
+            timeout=8,
+            expected_text="Capacity expansion triggered",
+        )
+        toast_title = infra_ui_obj.get_element_text(
+            infra_ui_obj.generic_locators["toast_alert_title"]
+        )
+        assert (
+            "Capacity expansion triggered" in toast_title
+        ), f"Expected toast title 'Capacity expansion triggered', got: {toast_title}"
+
+        toast_desc = infra_ui_obj.get_element_text(
+            infra_ui_obj.generic_locators["toast_alert_description"]
+        )
+        assert (
+            "Additional OSDs are being provisioned. This may take several minutes."
+            in toast_desc
+        ), f"Expected OSD provisioning text in toast description, got: {toast_desc}"
+        logger.info("Toast alert verified successfully for capacity expansion")
+
         logger.info("Wait for osd pods to be in Running state")
         for osd_pods in TimeoutSampler(
             timeout=600,
