@@ -13,6 +13,7 @@ from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.node import get_nodes_in_statuses
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.pod import (
@@ -366,12 +367,31 @@ class BucketNotificationsManager:
             list: List of event dictionaries
         """
         # Query the Kafka topic via the Kafka consumer script on any of the Kafka pods
-        kafka_pods = [
-            Pod(**pod_info)
-            for pod_info in get_pods_having_label(
-                namespace=constants.AMQ_NAMESPACE, label=constants.KAFKA_PODS_LABEL
+        # Pods scheduled on NotReady nodes (e.g. after a node shutdown) may still be
+        # reported as Running, so try them last to avoid long oc rsh connection timeouts
+        not_ready_nodes = {
+            node.name
+            for node in get_nodes_in_statuses(
+                [constants.NODE_NOT_READY, constants.NODE_NOT_READY_SCHEDULING_DISABLED]
             )
-        ]
+        }
+        ready_pods = []
+        not_ready_pods = []
+        for pod_info in get_pods_having_label(
+            namespace=constants.AMQ_NAMESPACE, label=constants.KAFKA_PODS_LABEL
+        ):
+            if pod_info["spec"].get("nodeName") in not_ready_nodes:
+                not_ready_pods.append(Pod(**pod_info))
+            else:
+                ready_pods.append(Pod(**pod_info))
+        kafka_pods = ready_pods + not_ready_pods
+        unreachable_errors = (
+            "connect: no route to host",
+            "unable to upgrade connection",
+            "error dialing backend",
+            "i/o timeout",
+        )
+        raw_resp = None
         for kafka_pod in kafka_pods:
             cmd = (
                 f"bin/kafka-console-consumer.sh --bootstrap-server {constants.KAFKA_ENDPOINT} "
@@ -385,10 +405,16 @@ class BucketNotificationsManager:
             try:
                 raw_resp = kafka_pod.exec_cmd_on_pod(command=cmd, out_yaml_format=False)
             except CommandFailed as err:
-                if "connect: no route to host" in err.args[0]:
+                if any(msg in err.args[0] for msg in unreachable_errors):
+                    logger.warning(
+                        f"Kafka pod {kafka_pod.name} is unreachable, trying the next one"
+                    )
                     continue
                 raise err
             break
+
+        if raw_resp is None:
+            raise CommandFailed("None of the Kafka pods are reachable")
 
         # Parse the raw response into a list of event dictionaries
         events = []

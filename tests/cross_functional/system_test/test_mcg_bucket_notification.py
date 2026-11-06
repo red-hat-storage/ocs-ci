@@ -346,7 +346,7 @@ class TestBucketNotificationSystemTest:
             wait_for_nodes_status(
                 node_names=[node.name for node in node_to_shutdown],
                 status=constants.NODE_READY,
-                timeout=300,
+                timeout=600,
             )
             self.ensure_noobaa_pods_running(timeout=1200)
             logger.info("NooBaa pod node started, all NooBaa pods running")
@@ -355,9 +355,7 @@ class TestBucketNotificationSystemTest:
             ceph_cluster = CephCluster()
             ceph_cluster.wait_for_noobaa_health_ok()
             logger.info("NooBaa health check passed after disruptions")
-            logger.info(
-                "ObjectTagging:Put events verified after NooBaa pod node restart"
-            )
+            logger.info("NooBaa pod node restarted and NooBaa is healthy")
 
             logger.test_step(
                 "Delete objects and restart Kafka pods, verify ObjectRemoved events"
@@ -370,7 +368,7 @@ class TestBucketNotificationSystemTest:
             ]
             future_objs = []
             for bucket in buckets_created:
-                logger.info(f"Deleting object {obj_written[0]} from bucket {bucket}")
+                logger.info(f"Deleting object {obj_written[1]} from bucket {bucket}")
                 future_objs.append(
                     executor.submit(
                         s3_delete_object,
