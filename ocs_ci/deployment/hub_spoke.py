@@ -1014,14 +1014,20 @@ class ExternalClients:
 
             valid_clusters.append(cluster_name)
 
+        skipped_clusters_msg = ", ".join(
+            f"{c} ({r})" for c, r in skipped_clusters.items()
+        )
+
         if not valid_clusters:
-            logger.error("No valid clusters found for ODF client deployment. Exiting.")
-            return []
+            raise AssertionError(
+                "No valid clusters found for ODF client deployment, network checks failed on: "
+                + skipped_clusters_msg
+            )
 
         if skipped_clusters:
             logger.warning(
                 "The following clusters were skipped due to network issues: "
-                + ", ".join(f"{c} ({r})" for c, r in skipped_clusters.items())
+                + skipped_clusters_msg
             )
 
         # Stage 3
@@ -1118,6 +1124,11 @@ class ExternalClients:
 
         # Aggregate failures
         failures = []
+
+        if skipped_clusters:
+            failures.append(
+                f"Network checks failed, deployment skipped on: {skipped_clusters_msg}"
+            )
 
         if odf_installed_results and not all(odf_installed_results.values()):
             failed = [c for c, ok in odf_installed_results.items() if not ok]
