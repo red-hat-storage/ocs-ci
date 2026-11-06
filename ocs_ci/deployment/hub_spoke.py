@@ -2047,11 +2047,27 @@ class ExternalOCP(SpokeOCP, Deployment):
     """Class to represent functionality necessary to interact with external OCP cluster from the Hub cluster"""
 
     # the latency we used to have for RDR clusters communication, this is a hard requirement for hub-spoke setup
-    latency_threshold_ms = 10
+    default_latency_threshold_ms = 10
 
     def __init__(self, name):
         SpokeOCP.__init__(self, name)
         Deployment.__init__(self)
+
+    @property
+    def latency_threshold_ms(self):
+        """
+        Maximum average ping latency tolerated between the external cluster and the provider.
+        Overridable via ENV_DATA.hub_spoke_latency_threshold_ms.
+
+        Returns:
+            float: latency threshold in milliseconds
+
+        """
+        return float(
+            config.ENV_DATA.get(
+                "hub_spoke_latency_threshold_ms", self.default_latency_threshold_ms
+            )
+        )
 
     def deploy_dependencies(self, **kwargs):
         logger.info(
@@ -2093,7 +2109,10 @@ class ExternalOCP(SpokeOCP, Deployment):
                 )
                 return True
             else:
-                logger.error(f"High latency detected: {latency} ms")
+                logger.error(
+                    f"High latency detected: {latency} ms, threshold is {self.latency_threshold_ms} ms "
+                    "(configurable via ENV_DATA.hub_spoke_latency_threshold_ms)"
+                )
                 return False
         except ValueError:
             logger.error(
