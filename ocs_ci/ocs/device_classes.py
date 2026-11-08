@@ -7,6 +7,8 @@ from ocs_ci.ocs.exceptions import CephHealthException, ResourceNotFoundError
 from ocs_ci.ocs.node import (
     add_disk_to_node,
     get_node_objs,
+    get_node_boot_id,
+    wait_for_node_boot_id_change_and_ready,
     get_osd_running_nodes,
     wait_for_nodes_status,
 )
@@ -268,7 +270,9 @@ def add_disks_to_nodes_and_wait_for_ready(
     settle before moving on to the next node.
 
     Attaching an SSD disk power-cycles the VM ungracefully, which takes down the OSDs
-    running on that node. After each node, wait for it to reach the Ready status, so the
+    running on that node. For vSphere SSD attachment, require a new boot ID and
+    Ready status in the same node response before checking Ceph health.
+    After each node, wait for it to reach the Ready status, so the
     LSO diskmaker pods are scheduled again and can discover the new disk, and then wait
     for the Ceph health to recover. Without the health wait, every OSD host can be
     power-cycled before the first one recovered, which leaves the PGs inactive.
@@ -284,10 +288,21 @@ def add_disks_to_nodes_and_wait_for_ready(
         ResourceWrongStatusException: In case one of the nodes didn't reach the Ready status
         CephHealthException: In case the Ceph health didn't recover after a node was
             power-cycled
+        ValueError: If a node has no boot ID before a vSphere SSD attachment.
+        TimeoutExpiredError: If a rebooted node does not report a new boot ID and Ready.
 
     """
+    requires_reboot = (
+        ssd and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+    )
     for n in worker_node_objs:
+        if requires_reboot:
+            boot_id = get_node_boot_id(n)
+            if not boot_id:
+                raise ValueError(f"Node {n.name} has no boot ID before disk attachment")
         add_disk_to_node(n, disk_size=disk_size, ssd=ssd)
+        if requires_reboot:
+            wait_for_node_boot_id_change_and_ready(n, boot_id)
         log.info(
             f"Wait for the node {n.name} to reach the {constants.NODE_READY} status"
         )

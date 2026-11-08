@@ -327,6 +327,49 @@ def get_all_nodes():
     return [node["metadata"]["name"] for node in node_items]
 
 
+def get_node_boot_id(node, node_data=None):
+    """Get a node's boot ID from a supplied response or a fresh API read.
+
+    Args:
+        node (OCS): Node resource object.
+        node_data (dict): Optional node response to reuse without another API read.
+
+    Returns:
+        str: Boot ID, or None if it is absent from the node response.
+
+    """
+    if node_data is None:
+        node_data = node.get()
+    return node_data.get("status", {}).get("nodeInfo", {}).get("bootID")
+
+
+def wait_for_node_boot_id_change_and_ready(node, boot_id, timeout=600, sleep=10):
+    """Wait for a new boot ID and Ready status in the same node response.
+
+    Args:
+        node (OCS): Node resource object.
+        boot_id (str): Node boot ID captured before reboot.
+        timeout (int): Maximum time in seconds to wait for recovery.
+        sleep (int): Seconds between node polls.
+
+    Raises:
+        ValueError: If the boot ID captured before reboot is empty.
+        TimeoutExpiredError: If the node does not report a new boot ID and Ready.
+
+    """
+    if not boot_id:
+        raise ValueError(f"Node {node.name} has no boot ID captured before reboot")
+    log.info(f"Wait for node {node.name} to report a new boot ID and Ready status")
+    for node_data in TimeoutSampler(timeout, sleep, node.get):
+        current_boot_id = get_node_boot_id(node, node_data=node_data)
+        ready = any(
+            condition.get("type") == "Ready" and condition.get("status") == "True"
+            for condition in node_data.get("status", {}).get("conditions", [])
+        )
+        if current_boot_id and current_boot_id != boot_id and ready:
+            return
+
+
 def wait_for_nodes_status(
     node_names=None, status=constants.NODE_READY, timeout=600, sleep=3
 ):
