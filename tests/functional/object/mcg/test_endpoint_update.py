@@ -45,6 +45,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     jira,
     polarion_id,
+    post_upgrade,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import (
@@ -1130,6 +1131,7 @@ class TestBackingStoreEndpointUpdate(MCGTest):
     """
 
     @tier2
+    @post_upgrade
     @polarion_id("OCS-8278")
     def test_switch_and_revert_single_bs(self, mcg_obj, endpoint_conf, store_factory):
         """
@@ -1650,6 +1652,7 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         )
 
     @tier2
+    @post_upgrade
     @polarion_id("OCS-8288")
     def test_default_backingstore_endpoint_update(self, mcg_obj):
         """
@@ -2109,6 +2112,7 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
     """
 
     @tier2
+    @post_upgrade
     @polarion_id("OCS-8276")
     def test_switch_and_revert_single_nss(self, mcg_obj, endpoint_conf, store_factory):
         """Switch NamespaceStore OLD→NEW→OLD; verify endpoints."""
