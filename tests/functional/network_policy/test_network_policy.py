@@ -6,7 +6,7 @@ import requests
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
-    purple_squad,
+    brown_squad,
     skipif_external_mode,
 )
 from ocs_ci.framework.testlib import ManageTest, tier1, tier2
@@ -27,7 +27,7 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
-@purple_squad
+@brown_squad
 class TestNetworkPolicyCompliance(ManageTest):
     """
     Category A: RBAC & Conforma compliance tests (tier1).
@@ -180,7 +180,7 @@ class TestNetworkPolicyCompliance(ManageTest):
         assert not all_issues, "Policy structure issues:\n" + "\n".join(all_issues)
 
 
-@purple_squad
+@brown_squad
 class TestNetworkPolicyAllowedTraffic(ManageTest):
     """
     Category B: Allowed traffic positive tests (tier1).
@@ -434,7 +434,7 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
         assert tested > 0, f"No routes found to test in {namespace}"
         logger.info(f"Result: {tested} routes are reachable through NetworkPolicies")
 
-    @tier1
+    @tier2
     @pytest.mark.polarion_id("OCS-6908")
     def test_storage_operations_with_policies(
         self, network_policies_present, pvc_factory, pod_factory
@@ -478,7 +478,7 @@ class TestNetworkPolicyAllowedTraffic(ManageTest):
         )
 
 
-@purple_squad
+@brown_squad
 class TestNetworkPolicyBlockedTraffic(ManageTest):
     """
     Category C: Blocked traffic negative tests (tier2).
@@ -579,7 +579,7 @@ class TestNetworkPolicyBlockedTraffic(ManageTest):
         )
 
 
-@purple_squad
+@brown_squad
 @ignore_leftovers
 class TestNetworkPolicyDisruption(ManageTest):
     """
@@ -647,7 +647,7 @@ class TestNetworkPolicyDisruption(ManageTest):
         )
 
 
-@purple_squad
+@brown_squad
 @ignore_leftovers
 class TestNetworkPolicyPodRestart(ManageTest):
     """
