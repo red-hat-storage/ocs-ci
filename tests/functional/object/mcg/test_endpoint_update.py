@@ -33,6 +33,7 @@ import re
 import threading
 import time
 from functools import lru_cache
+from urllib.parse import urlparse
 
 import pytest
 
@@ -148,6 +149,9 @@ UNREACHABLE_STATUSES = ("UNKNOWN_FAILURE", "INVALID_ENDPOINT")
 # A NEW endpoint that resolves nowhere, so pre-validation always aborts.
 UNREACHABLE_ENDPOINT = "https://unreachable.example.invalid:9000"
 
+# Resolves, then fails on connect - the rejection path a DNS failure skips.
+CLOSED_PORT = 9999
+
 # An https OLD endpoint the rollback test never contacts: only a string the
 # stores share, with a scheme the webhook accepts alongside v4.
 ROLLBACK_OLD_ENDPOINT = "https://rollback-old.example.invalid:9000"
@@ -244,6 +248,12 @@ def dotted_bucket_name(description):
         str: The bucket name.
     """
     return create_unique_resource_name(description, "bucket").replace("-", ".")
+
+
+def dead_port_endpoint(endpoint):
+    """Return ``endpoint``'s host on a port nothing listens on."""
+    parsed = urlparse(endpoint)
+    return f"{parsed.scheme}://{parsed.hostname}:{CLOSED_PORT}"
 
 
 def _search_int(pattern, text):
@@ -540,7 +550,15 @@ def operator_logged_pause_skip(operator_pod, namespace, store_name, since):
 
 
 def run_rejected_update_case(
-    kind, mcg_obj, conf, store_factory, bucketclass, bucket_factory, io_pod, dirs
+    kind,
+    mcg_obj,
+    conf,
+    store_factory,
+    bucketclass,
+    bucket_factory,
+    io_pod,
+    dirs,
+    new_endpoint=UNREACHABLE_ENDPOINT,
 ):
     """Test that a rejected endpoint update is a no-op: store untouched, I/O unaffected."""
     ns = config.ENV_DATA["cluster_namespace"]
@@ -559,7 +577,7 @@ def run_rejected_update_case(
     generation = OCP(kind=kind, namespace=ns, resource_name=store.name).get()[
         "metadata"
     ]["generation"]
-    result = run_connection_update(mcg_obj, old, UNREACHABLE_ENDPOINT)
+    result = run_connection_update(mcg_obj, old, new_endpoint)
     # Verify batch aborted in pre-validation without moving the store
     assert result[
         "aborted"
@@ -2279,6 +2297,7 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
 
     @tier2
     @polarion_id("OCS-8323")
+    @pytest.mark.parametrize("rejection", ["no_such_host", "dead_port"])
     def test_unreachable_endpoint_rejected_single_nss(
         self,
         mcg_obj,
@@ -2288,8 +2307,14 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
         bucket_factory,
         awscli_pod_session,
         test_directory_setup,
+        rejection,
     ):
-        """Rejected endpoint is no-op for NamespaceStore serving bucket."""
+        """Rejected endpoint is no-op for NamespaceStore: host unresolvable, or port dead."""
+        new_endpoint = (
+            UNREACHABLE_ENDPOINT
+            if rejection == "no_such_host"
+            else dead_port_endpoint(endpoint_conf["old"])
+        )
         run_rejected_update_case(
             constants.NAMESPACESTORE,
             mcg_obj,
@@ -2299,6 +2324,7 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
             bucket_factory,
             awscli_pod_session,
             test_directory_setup,
+            new_endpoint=new_endpoint,
         )
 
 
