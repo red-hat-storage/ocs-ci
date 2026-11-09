@@ -352,6 +352,9 @@ class TestProfileSectionIndependence:
         # it back rather than leaving an explicit profile behind.
         initial_core_profile = None
         initial_mcg_profile = None
+        # Until both fields have been read, None means "not recorded" rather
+        # than "absent", and teardown must not act on it.
+        profiles_recorded = False
         try:
             logger.test_step("Navigate to Configure Performance page")
             storage_cluster_page = navigator.nav_storage_cluster_default_page()
@@ -370,6 +373,7 @@ class TestProfileSectionIndependence:
                 initial_mcg_profile = configure_perf_page.get_mcg_profile_from_cr()
             except ValueError:
                 logger.info("MCG performanceProfile is unset at the start")
+            profiles_recorded = True
             logger.info(
                 "Initial profiles - Core Storage: %s, MCG: %s",
                 initial_core_profile,
@@ -502,44 +506,59 @@ class TestProfileSectionIndependence:
                 f"save, got '{mcg_profile}'"
             )
         finally:
-            # Each restore stands on its own so that one failure neither skips
-            # the rest nor replaces the result of the test itself.
-            logger.test_step(
-                f"Restore the initial profiles - Core Storage "
-                f"'{initial_core_profile}', MCG '{initial_mcg_profile}'"
-            )
-            try:
-                storage_cluster_page = navigator.nav_storage_cluster_default_page()
-                configure_perf_page = (
-                    storage_cluster_page.click_configure_performance_button()
+            # Nothing has been changed yet if the starting profiles were never
+            # recorded, and acting on them would clear fields the test found
+            # set. Each restore below stands on its own so that one failure
+            # neither skips the rest nor replaces the result of the test.
+            if not profiles_recorded:
+                logger.warning(
+                    "Starting profiles were never recorded, leaving the "
+                    "StorageCluster CR untouched"
                 )
-                configure_perf_page.select_core_storage_profile(
-                    initial_core_profile or CORE_BASELINE
+            else:
+                logger.test_step(
+                    f"Restore the initial profiles - Core Storage "
+                    f"'{initial_core_profile}', MCG '{initial_mcg_profile}'"
                 )
-                configure_perf_page.select_mcg_profile(
-                    initial_mcg_profile or MCG_BASELINE
-                )
-                configure_perf_page.save_configuration()
-            except Exception:
-                logger.exception("Restoring the profiles through the UI failed")
+                try:
+                    storage_cluster_page = navigator.nav_storage_cluster_default_page()
+                    configure_perf_page = (
+                        storage_cluster_page.click_configure_performance_button()
+                    )
+                    configure_perf_page.select_core_storage_profile(
+                        initial_core_profile or CORE_BASELINE
+                    )
+                    configure_perf_page.select_mcg_profile(
+                        initial_mcg_profile or MCG_BASELINE
+                    )
+                    configure_perf_page.save_configuration()
+                except Exception:
+                    logger.exception("Restoring the profiles through the UI failed")
 
-            # Saving writes whatever the dropdowns show, so a field that was
-            # absent at the start is cleared only after that save.
-            try:
+                # Saving writes whatever the dropdowns show, so a field that
+                # was absent at the start is cleared only after that save.
                 if initial_core_profile is None:
-                    configure_perf_page.remove_core_storage_profile()
+                    try:
+                        configure_perf_page.remove_core_storage_profile()
+                    except Exception:
+                        logger.exception("Clearing spec.resourceProfile failed")
                 if initial_mcg_profile is None:
-                    configure_perf_page.remove_mcg_profile()
-            except Exception:
-                logger.exception("Clearing the initially unset profile fields failed")
+                    try:
+                        configure_perf_page.remove_mcg_profile()
+                    except Exception:
+                        logger.exception(
+                            "Clearing spec.multiCloudGateway.performanceProfile failed"
+                        )
 
-            # Both profiles resize NooBaa, so settle before handing over.
-            try:
-                logger.test_step("Wait for NooBaa to become Ready after the restore")
-                noobaa_phase = configure_perf_page.wait_for_noobaa_ready()
-                logger.info("NooBaa phase after restore: %s", noobaa_phase)
-            except Exception:
-                logger.exception(
-                    "Waiting for NooBaa to settle after the restore failed"
-                )
+                # Both profiles resize NooBaa, so settle before handing over.
+                try:
+                    logger.test_step(
+                        "Wait for NooBaa to become Ready after the restore"
+                    )
+                    noobaa_phase = configure_perf_page.wait_for_noobaa_ready()
+                    logger.info("NooBaa phase after restore: %s", noobaa_phase)
+                except Exception:
+                    logger.exception(
+                        "Waiting for NooBaa to settle after the restore failed"
+                    )
         logger.info("✅ UI-5 PASSED")
