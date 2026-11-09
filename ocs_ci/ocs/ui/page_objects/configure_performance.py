@@ -369,6 +369,16 @@ class ConfigurePerformancePage(StorageClusterPage):
         logger.info("Configuration changes cancelled")
         return self
 
+    def reopen(self):
+        """Reopen the Configure Performance page after a save navigated away.
+
+        Returns:
+            ConfigurePerformancePage: Page object of the reopened page.
+        """
+        logger.info("Reopening the Configure Performance page")
+        storage_cluster_page = self.nav_storage_cluster_default_page()
+        return storage_cluster_page.click_configure_performance_button()
+
     def _get_storage_cluster_data(self) -> dict:
         """Get StorageCluster resource YAML.
 

@@ -18,6 +18,11 @@ from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 logger = logging.getLogger(__name__)
 
+# UI-5 moves each section through three profiles, so every step is a real
+# change and the Save button is never disabled.
+CORE_BASELINE, CORE_ALONE, CORE_COMBINED = "balanced", "lean", "performance"
+MCG_BASELINE, MCG_ALONE, MCG_COMBINED = "default", "mixed-workload", "small-objects"
+
 
 class TestConfigurePerformancePageLayout:
     """Test Configure Performance page layout."""
@@ -326,3 +331,190 @@ class TestCoreStorageRegression:
             noobaa_phase = configure_perf_page.wait_for_noobaa_ready()
             logger.info("NooBaa phase after restore: %s", noobaa_phase)
         logger.info("✅ UI-2 PASSED")
+
+
+class TestProfileSectionIndependence:
+    """Test that the Core Storage and MCG profile sections are independent."""
+
+    @ui
+    @tier2
+    @red_squad
+    @mcg
+    @polarion_id("OCS-8411")
+    @skipif_mcg_only
+    @skipif_hci_client
+    @skipif_disconnected_cluster
+    @skipif_ibm_cloud_managed
+    def test_profile_section_independence(self, setup_ui_class):
+        """UI-5: Verify changing one profile section does not affect the other."""
+        navigator = PageNavigator()
+        initial_mcg_profile = MCG_BASELINE  # fallback
+        initial_core_profile = CORE_BASELINE  # fallback
+        try:
+            logger.test_step("Navigate to Configure Performance page")
+            storage_cluster_page = navigator.nav_storage_cluster_default_page()
+            configure_perf_page = (
+                storage_cluster_page.click_configure_performance_button()
+            )
+
+            logger.test_step("Record the profiles both sections start from")
+            captured_mcg_profile = configure_perf_page.get_mcg_profile_from_ui()
+            if captured_mcg_profile:
+                initial_mcg_profile = captured_mcg_profile
+            try:
+                initial_core_profile = (
+                    configure_perf_page.get_core_storage_profile_from_cr()
+                )
+            except ValueError:
+                logger.info(
+                    "Core Storage resourceProfile is unset, it will be restored "
+                    f"to '{initial_core_profile}'"
+                )
+            logger.info(
+                "Initial profiles - MCG: %s, Core Storage: %s",
+                captured_mcg_profile or "not selected yet ('Select a profile')",
+                initial_core_profile,
+            )
+
+            logger.test_step(
+                f"Put Core Storage on the baseline profile '{CORE_BASELINE}'"
+            )
+            configure_perf_page.select_core_storage_profile(CORE_BASELINE)
+            configure_perf_page.save_configuration()
+            configure_perf_page = configure_perf_page.reopen()
+
+            logger.test_step(f"Put MCG on the baseline profile '{MCG_BASELINE}'")
+            configure_perf_page.select_mcg_profile(MCG_BASELINE)
+            configure_perf_page.save_configuration()
+            configure_perf_page = configure_perf_page.reopen()
+
+            logger.test_step("Verify both sections reached the baseline in the CR")
+            configure_perf_page.take_screenshot("verify_independence_baseline")
+            configure_perf_page.copy_dom("verify_independence_baseline")
+            core_profile = configure_perf_page.wait_for_core_storage_profile_in_cr(
+                CORE_BASELINE
+            )
+            logger.assertion(
+                f"Core Storage profile from CR: expected='{CORE_BASELINE}', "
+                f"actual='{core_profile}'"
+            )
+            assert (
+                core_profile == CORE_BASELINE
+            ), f"Core Storage profile in CR should be '{CORE_BASELINE}', got '{core_profile}'"
+            mcg_profile = configure_perf_page.wait_for_mcg_profile_in_cr(MCG_BASELINE)
+            logger.assertion(
+                f"MCG profile from CR: expected='{MCG_BASELINE}', "
+                f"actual='{mcg_profile}'"
+            )
+            assert (
+                mcg_profile == MCG_BASELINE
+            ), f"MCG profile in CR should be '{MCG_BASELINE}', got '{mcg_profile}'"
+
+            logger.test_step(
+                f"Change only the Core Storage profile: {CORE_BASELINE} → {CORE_ALONE}"
+            )
+            configure_perf_page.select_core_storage_profile(CORE_ALONE)
+            configure_perf_page.save_configuration()
+            configure_perf_page = configure_perf_page.reopen()
+            configure_perf_page.take_screenshot("verify_core_storage_changed_alone")
+            configure_perf_page.copy_dom("verify_core_storage_changed_alone")
+
+            core_profile = configure_perf_page.wait_for_core_storage_profile_in_cr(
+                CORE_ALONE
+            )
+            logger.assertion(
+                f"Core Storage profile from CR: expected='{CORE_ALONE}', "
+                f"actual='{core_profile}'"
+            )
+            assert (
+                core_profile == CORE_ALONE
+            ), f"Core Storage profile in CR should be '{CORE_ALONE}', got '{core_profile}'"
+
+            mcg_profile = configure_perf_page.get_mcg_profile_from_cr()
+            logger.assertion(
+                f"MCG profile from CR after a Core Storage change: "
+                f"expected='{MCG_BASELINE}', actual='{mcg_profile}'"
+            )
+            assert mcg_profile == MCG_BASELINE, (
+                f"Changing the Core Storage profile to '{CORE_ALONE}' also changed "
+                f"the MCG profile to '{mcg_profile}', expected it to stay "
+                f"'{MCG_BASELINE}'"
+            )
+
+            logger.test_step(
+                f"Change only the MCG profile: {MCG_BASELINE} → {MCG_ALONE}"
+            )
+            configure_perf_page.select_mcg_profile(MCG_ALONE)
+            configure_perf_page.save_configuration()
+            configure_perf_page = configure_perf_page.reopen()
+            configure_perf_page.take_screenshot("verify_mcg_changed_alone")
+            configure_perf_page.copy_dom("verify_mcg_changed_alone")
+
+            mcg_profile = configure_perf_page.wait_for_mcg_profile_in_cr(MCG_ALONE)
+            logger.assertion(
+                f"MCG profile from CR: expected='{MCG_ALONE}', actual='{mcg_profile}'"
+            )
+            assert (
+                mcg_profile == MCG_ALONE
+            ), f"MCG profile in CR should be '{MCG_ALONE}', got '{mcg_profile}'"
+
+            core_profile = configure_perf_page.get_core_storage_profile_from_cr()
+            logger.assertion(
+                f"Core Storage profile from CR after an MCG change: "
+                f"expected='{CORE_ALONE}', actual='{core_profile}'"
+            )
+            assert core_profile == CORE_ALONE, (
+                f"Changing the MCG profile to '{MCG_ALONE}' also changed the Core "
+                f"Storage profile to '{core_profile}', expected it to stay "
+                f"'{CORE_ALONE}'"
+            )
+
+            logger.test_step(
+                f"Change both profiles in a single save: Core Storage "
+                f"'{CORE_COMBINED}', MCG '{MCG_COMBINED}'"
+            )
+            configure_perf_page.select_core_storage_profile(CORE_COMBINED)
+            configure_perf_page.select_mcg_profile(MCG_COMBINED)
+            configure_perf_page.save_configuration()
+            configure_perf_page = configure_perf_page.reopen()
+            configure_perf_page.take_screenshot("verify_both_profiles_changed")
+            configure_perf_page.copy_dom("verify_both_profiles_changed")
+
+            core_profile = configure_perf_page.wait_for_core_storage_profile_in_cr(
+                CORE_COMBINED
+            )
+            logger.assertion(
+                f"Core Storage profile from CR after a combined save: "
+                f"expected='{CORE_COMBINED}', actual='{core_profile}'"
+            )
+            assert core_profile == CORE_COMBINED, (
+                f"Core Storage profile in CR should be '{CORE_COMBINED}' after the "
+                f"combined save, got '{core_profile}'"
+            )
+
+            mcg_profile = configure_perf_page.wait_for_mcg_profile_in_cr(MCG_COMBINED)
+            logger.assertion(
+                f"MCG profile from CR after a combined save: "
+                f"expected='{MCG_COMBINED}', actual='{mcg_profile}'"
+            )
+            assert mcg_profile == MCG_COMBINED, (
+                f"MCG profile in CR should be '{MCG_COMBINED}' after the combined "
+                f"save, got '{mcg_profile}'"
+            )
+        finally:
+            logger.test_step(
+                f"Restore the initial profiles - Core Storage "
+                f"'{initial_core_profile}', MCG '{initial_mcg_profile}'"
+            )
+            storage_cluster_page = navigator.nav_storage_cluster_default_page()
+            configure_perf_page = (
+                storage_cluster_page.click_configure_performance_button()
+            )
+            configure_perf_page.select_core_storage_profile(initial_core_profile)
+            configure_perf_page.select_mcg_profile(initial_mcg_profile)
+            configure_perf_page.save_configuration()
+            # Both profiles resize NooBaa, so settle before handing over.
+            logger.test_step("Wait for NooBaa to become Ready after the profile change")
+            noobaa_phase = configure_perf_page.wait_for_noobaa_ready()
+            logger.info("NooBaa phase after restore: %s", noobaa_phase)
+        logger.info("✅ UI-5 PASSED")
