@@ -7735,61 +7735,6 @@ class SpokeODF(SpokeOCP, ABC):
         return f"stable-{version_semantic.major}.{version_semantic.minor}"
 
     @kubeconfig_exists_decorator
-    def update_subscription_channel(self, odf_version_tag=None):
-        """
-        Update the channel of an already existing ODF client subscription.
-
-        The channel is only set when the subscription is created, so bumping
-        the CatalogSource to a newer ODF stream on its own leaves the
-        subscription pinned to the old channel. OLM then keeps resolving the
-        old channel, whose images are no longer covered by the mirrors applied
-        for the new ODF version, and the client ends up with unpullable images.
-
-        Args:
-            odf_version_tag (str): ODF version or version tag to derive the
-                channel from, e.g. '5.0.0-57' or 'latest-stable-5.0'. If not
-                provided, 'hosted_odf_version' of this cluster is used.
-
-        Returns:
-            bool: True if the subscription channel is up to date, False otherwise
-
-        """
-        if not self.subscription_exists():
-            logger.warning(
-                f"ODF client subscription does not exist on cluster '{self.name}', "
-                "skipping channel update"
-            )
-            return False
-
-        channel = self.get_subscription_channel(odf_version_tag)
-
-        subscription = OCP(
-            kind=constants.SUBSCRIPTION_COREOS,
-            namespace=self.namespace_client,
-            resource_name=constants.OCS_CLIENT_OPERATOR,
-            cluster_kubeconfig=self.cluster_kubeconfig,
-        )
-
-        current_channel = subscription.get().get("spec", {}).get("channel")
-        if current_channel == channel:
-            logger.info(
-                f"ODF client subscription on cluster '{self.name}' is already on "
-                f"channel '{channel}'"
-            )
-            return True
-
-        logger.info(
-            f"Updating ODF client subscription channel on cluster '{self.name}' "
-            f"from '{current_channel}' to '{channel}'"
-        )
-        subscription.patch(
-            params=f'{{"spec": {{"channel": "{channel}"}}}}',
-            format_type="merge",
-        )
-
-        return True
-
-    @kubeconfig_exists_decorator
     def storage_class_exists(self, sc_name):
         """
         Check if storage class is ready
