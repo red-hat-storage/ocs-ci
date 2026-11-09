@@ -367,10 +367,15 @@ def get_store_endpoint(kind, name, namespace):
 
 
 def store_endpoint_from_spec(spec):
-    """Return the endpoint from whichever connection block a store spec carries."""
-    return spec.get("s3Compatible", {}).get("endpoint") or spec.get("ibmCos", {}).get(
-        "endpoint"
-    )
+    """Return the endpoint from the connection block the spec's own type names."""
+    blocks = ("s3Compatible", "ibmCos")
+    if spec.get("type") == constants.BACKINGSTORE_TYPE_IBMCOS:
+        blocks = reversed(blocks)
+    for block in blocks:
+        endpoint = spec.get(block, {}).get("endpoint")
+        if endpoint:
+            return endpoint
+    return None
 
 
 def get_pool_endpoint(mcg_obj, store_name, kind=None):
@@ -841,7 +846,7 @@ def endpoint_conf(endpoint_pair):
     # Either side being non-secure forces v2: the store has to satisfy the
     # webhook on the endpoint it moves to as well as the one it starts on.
     plain_http = any(
-        endpoint_pair[side].startswith("http://") for side in ("old", "new")
+        endpoint_pair[side].lower().startswith("http://") for side in ("old", "new")
     )
     return {
         **endpoint_pair,
