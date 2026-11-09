@@ -379,19 +379,58 @@ class ConfigurePerformancePage(StorageClusterPage):
         storage_cluster_page = self.nav_storage_cluster_default_page()
         return storage_cluster_page.click_configure_performance_button()
 
+    @staticmethod
+    def _storage_cluster_ocp() -> OCP:
+        """Build a handle on the StorageCluster CR.
+
+        Returns:
+            OCP: Handle on the StorageCluster resource.
+        """
+        return OCP(
+            kind=constants.STORAGECLUSTER,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+        )
+
     def _get_storage_cluster_data(self) -> dict:
         """Get StorageCluster resource YAML.
 
         Returns:
             dict: StorageCluster CR content.
         """
-        sc = OCP(
-            kind=constants.STORAGECLUSTER,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-        )
         logger.info("Fetching StorageCluster CR")
-        return sc.get()
+        return self._storage_cluster_ocp().get()
+
+    def remove_core_storage_profile(self):
+        """Remove spec.resourceProfile from the StorageCluster CR.
+
+        The dropdown cannot express "no profile", so a test that found the
+        field absent clears it here instead of selecting a value.
+
+        Returns:
+            ConfigurePerformancePage: self
+        """
+        logger.info("Removing spec.resourceProfile from the StorageCluster CR")
+        self._storage_cluster_ocp().patch(
+            params='{"spec": {"resourceProfile": null}}', format_type="merge"
+        )
+        return self
+
+    def remove_mcg_profile(self):
+        """Remove spec.multiCloudGateway.performanceProfile from the CR.
+
+        Returns:
+            ConfigurePerformancePage: self
+        """
+        logger.info(
+            "Removing spec.multiCloudGateway.performanceProfile from the "
+            "StorageCluster CR"
+        )
+        self._storage_cluster_ocp().patch(
+            params='{"spec": {"multiCloudGateway": {"performanceProfile": null}}}',
+            format_type="merge",
+        )
+        return self
 
     def get_mcg_profile_from_cr(self) -> str:
         """Get MCG profile from StorageCluster CR.
