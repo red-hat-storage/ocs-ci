@@ -141,6 +141,12 @@ class OperatorUpgrade(ProviderUpgrade):
         """
         Bump the OCS version to the latest version available in the registry
 
+        Both the CatalogSource and the Subscription channel are bumped. Moving
+        only the CatalogSource leaves the Subscription pinned to the channel it
+        was created with, so OLM keeps resolving the previous ODF stream while
+        the mirrors on the cluster already point at the new one, which leaves
+        the client with unpullable images.
+
         Args:
             cluster_names (list): List of cluster names to upgrade. If None, all clusters will be upgraded.
 
@@ -151,6 +157,8 @@ class OperatorUpgrade(ProviderUpgrade):
 
         if not cluster_names:
             cluster_names = list(config.ENV_DATA.get("clusters").keys())
+
+        odf_version_tag = f"latest-stable-{self.upgrade_version}"
 
         for cluster_name in cluster_names:
             log.info(
@@ -165,7 +173,10 @@ class OperatorUpgrade(ProviderUpgrade):
                     continue
                 hosted_odf.create_catalog_source(
                     reapply=True,
-                    odf_version_tag=f"latest-stable-{self.upgrade_version}",
+                    odf_version_tag=odf_version_tag,
+                )
+                hosted_odf.update_subscription_channel(
+                    odf_version_tag=odf_version_tag,
                 )
             except Exception as e:
                 # we don't want to abort the upgrade process if one client upgrade fails because:
@@ -203,8 +214,6 @@ class ProviderClusterOperatorUpgrade(ProviderUpgrade):
         try:
             log.info("Starting the operator upgrade process...")
             operator_upgrade = OperatorUpgrade()
-            # delete old idms, if exist from the previous upgrades
-            prune_old_df_repo_idms(force_delete_pods=True)
             # Bump OCS version on clients. This function will not fail upgrade if bump of any client fails
             operator_upgrade.bump_ocs_version_on_clients()
             ocs_upgrade.run_ocs_upgrade()
@@ -213,6 +222,13 @@ class ProviderClusterOperatorUpgrade(ProviderUpgrade):
             hosted_clients.apply_idms_to_hosted_clusters()
 
             operator_upgrade.run_operators_upgrade()
+            # Delete old idms left over from previous upgrades. This has to run
+            # only once the provider and all clients are on the new ODF version:
+            # the older df-repo IDMS still carries the mirrors for the version
+            # that is being replaced, and on a Hypershift provider the surviving
+            # IDMS is propagated down to every hosted cluster. Pruning too early
+            # removes mirrors that the running workloads still resolve against.
+            prune_old_df_repo_idms(force_delete_pods=True)
             log.info("Operator upgrade completed successfully.")
         except Exception as e:
             log.error(f"Operator upgrade failed: {e}")

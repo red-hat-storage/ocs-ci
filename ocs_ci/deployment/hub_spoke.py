@@ -7690,16 +7690,7 @@ class SpokeODF(SpokeOCP, ABC):
         subscription_data["metadata"]["namespace"] = self.namespace_client
 
         # since we are allowed to install N+1 on hosted clusters we can not rely on PackageManifest default channel
-        hosted_odf_version = (
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
-        )
-        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
-            hosted_odf_version = hosted_odf_version.split("-")[-1]
-
-        version_semantic = version.get_semantic_version(hosted_odf_version)
-
-        hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
-        subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
+        subscription_data["spec"]["channel"] = self.get_subscription_channel()
 
         subscription_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="subscription", delete=False
@@ -7709,6 +7700,86 @@ class SpokeODF(SpokeOCP, ABC):
         self.exec_oc_cmd(f"apply -f {subscription_file.name}", timeout=120)
 
         return self.subscription_exists()
+
+    def get_subscription_channel(self, odf_version_tag=None):
+        """
+        Build the ODF client subscription channel from an ODF version tag.
+
+        Args:
+            odf_version_tag (str): ODF version or version tag to derive the
+                channel from, e.g. '5.0.0-57' or 'latest-stable-5.0'. If not
+                provided, 'hosted_odf_version' of this cluster is used.
+
+        Returns:
+            str: subscription channel, e.g. 'stable-5.0'
+
+        """
+        if not odf_version_tag:
+            odf_version_tag = (
+                config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
+            )
+
+        if any(tag in odf_version_tag for tag in ["latest", "stable"]):
+            odf_version_tag = odf_version_tag.split("-")[-1]
+
+        version_semantic = version.get_semantic_version(odf_version_tag)
+
+        return f"stable-{version_semantic.major}.{version_semantic.minor}"
+
+    @kubeconfig_exists_decorator
+    def update_subscription_channel(self, odf_version_tag=None):
+        """
+        Update the channel of an already existing ODF client subscription.
+
+        The channel is only set when the subscription is created, so bumping
+        the CatalogSource to a newer ODF stream on its own leaves the
+        subscription pinned to the old channel. OLM then keeps resolving the
+        old channel, whose images are no longer covered by the mirrors applied
+        for the new ODF version, and the client ends up with unpullable images.
+
+        Args:
+            odf_version_tag (str): ODF version or version tag to derive the
+                channel from, e.g. '5.0.0-57' or 'latest-stable-5.0'. If not
+                provided, 'hosted_odf_version' of this cluster is used.
+
+        Returns:
+            bool: True if the subscription channel is up to date, False otherwise
+
+        """
+        if not self.subscription_exists():
+            logger.warning(
+                f"ODF client subscription does not exist on cluster '{self.name}', "
+                "skipping channel update"
+            )
+            return False
+
+        channel = self.get_subscription_channel(odf_version_tag)
+
+        subscription = OCP(
+            kind=constants.SUBSCRIPTION_COREOS,
+            namespace=self.namespace_client,
+            resource_name=constants.OCS_CLIENT_OPERATOR,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
+
+        current_channel = subscription.get().get("spec", {}).get("channel")
+        if current_channel == channel:
+            logger.info(
+                f"ODF client subscription on cluster '{self.name}' is already on "
+                f"channel '{channel}'"
+            )
+            return True
+
+        logger.info(
+            f"Updating ODF client subscription channel on cluster '{self.name}' "
+            f"from '{current_channel}' to '{channel}'"
+        )
+        subscription.patch(
+            params=f'{{"spec": {{"channel": "{channel}"}}}}',
+            format_type="merge",
+        )
+
+        return True
 
     @kubeconfig_exists_decorator
     def storage_class_exists(self, sc_name):
@@ -8085,16 +8156,7 @@ class HostedFDF(HypershiftHostedOCP, SpokeODF):
         subscription_data = templating.load_yaml(constants.PROVIDER_MODE_SUBSCRIPTION)
         subscription_data["metadata"]["namespace"] = self.namespace_client
         subscription_data["spec"]["source"] = self.FDF_CATALOGSOURCE_NAME
-
-        hosted_odf_version = (
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
-        )
-        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
-            hosted_odf_version = hosted_odf_version.split("-")[-1]
-
-        version_semantic = version.get_semantic_version(hosted_odf_version)
-        hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
-        subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
+        subscription_data["spec"]["channel"] = self.get_subscription_channel()
 
         subscription_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="fdf_subscription", delete=False
