@@ -25,6 +25,119 @@ from ocs_ci.utility.retry import retry
 logger = logging.getLogger(__name__)
 
 
+def _inventory_dict(host):
+    """
+    Parse host inventory JSON if present.
+
+    Args:
+        host (dict): host object from Assisted Installer API
+
+    Returns:
+        dict: inventory, or empty dict if missing/invalid
+    """
+    inventory = host.get("inventory")
+    if not inventory:
+        return {}
+    if isinstance(inventory, str):
+        try:
+            return json.loads(inventory)
+        except json.JSONDecodeError:
+            return {}
+    return inventory if isinstance(inventory, dict) else {}
+
+
+def _host_inventory_macs(host):
+    """
+    Lowercase MAC addresses from a discovered host inventory.
+
+    Args:
+        host (dict): host object from Assisted Installer API
+
+    Returns:
+        list: MAC strings (may be empty)
+    """
+    macs = []
+    for interface in _inventory_dict(host).get("interfaces", []):
+        mac = interface.get("mac_address")
+        if mac:
+            macs.append(mac.lower())
+    return macs
+
+
+def _conf_mac_to_hostname():
+    """
+    Build lowercase MAC -> conf server name from ENV_DATA.baremetal.servers.
+
+    Returns:
+        dict: mac -> hostname
+    """
+    mapping = {}
+    servers = (config.ENV_DATA.get("baremetal") or {}).get("servers") or {}
+    for name, details in servers.items():
+        for key in ("public_mac", "private_mac"):
+            mac = details.get(key)
+            if mac:
+                mapping[mac.lower()] = name
+    return mapping
+
+
+def _discovered_host_label(host, mac_name_mapping=None):
+    """
+    Label for a discovered AI host.
+
+    Preference: requested_hostname, suggested_hostname, inventory.hostname,
+    conf MAC match, first inventory MAC, else host id.
+    """
+    for key in ("requested_hostname", "suggested_hostname"):
+        name = host.get(key)
+        if name:
+            return name
+
+    inventory = _inventory_dict(host)
+    inventory_hostname = inventory.get("hostname")
+    if inventory_hostname:
+        return inventory_hostname
+
+    macs = _host_inventory_macs(host)
+    mapping = dict(_conf_mac_to_hostname())
+    if mac_name_mapping:
+        mapping.update({k.lower(): v for k, v in mac_name_mapping.items()})
+    for mac in macs:
+        if mac in mapping:
+            return mapping[mac]
+
+    if macs:
+        return macs[0]
+
+    return host.get("id") or "?"
+
+
+def _format_hosts_table(headers, rows):
+    """
+    Format a fixed-width host table for INFO logs (install progress).
+
+    Args:
+        headers (tuple|list): column titles
+        rows (list): list of row tuples (same length as headers)
+
+    Returns:
+        str: multi-line table, or "(no hosts yet)" if rows is empty
+    """
+    if not rows:
+        return "(no hosts yet)"
+    headers = tuple(str(h) for h in headers)
+    cells = [tuple(str(c) for c in row) for row in rows]
+    widths = [len(h) for h in headers]
+    for row in cells:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths[i], len(cell))
+    col_sep = " | "
+    fmt = col_sep.join(f"{{:<{w}}}" for w in widths)
+    lines = [fmt.format(*headers), col_sep.join("-" * w for w in widths)]
+    lines.extend(fmt.format(*row) for row in cells)
+    return "\n".join(lines)
+
+
 class AssistedInstallerCluster(object):
     def __init__(
         self,
@@ -286,6 +399,21 @@ class AssistedInstallerCluster(object):
             f"Created infrastructure environment {self.name} (id: {self.infra_id}) for cluster {self.id}"
         )
 
+    def get_discovery_iso_url(self):
+        """
+        Get Assisted Installer discovery ISO URL for this cluster's infra-env.
+
+        Returns:
+            str: HTTPS URL of the discovery ISO image
+        """
+        iso_url = self.api.get_discovery_iso_url(self.infra_id)
+        logger.info(
+            "Discovery ISO URL for infra-env %s: %s",
+            self.infra_id,
+            ai.redact_iso_url(iso_url),
+        )
+        return iso_url
+
     def download_discovery_iso(self, local_path):
         """
         Download the discovery iso image
@@ -294,9 +422,13 @@ class AssistedInstallerCluster(object):
             local_path (str): path where to store the discovery iso image
 
         """
-        iso_url = self.api.get_discovery_iso_url(self.infra_id)
+        iso_url = self.get_discovery_iso_url()
         download_file(iso_url, local_path)
-        logger.info(f"Downloaded discovery iso from '{iso_url}' to {local_path}")
+        logger.info(
+            "Downloaded discovery iso from '%s' to %s",
+            ai.redact_iso_url(iso_url),
+            local_path,
+        )
 
     def download_ipxe_config(self, local_path):
         """
@@ -331,11 +463,19 @@ class AssistedInstallerCluster(object):
         for sample in TimeoutSampler(
             timeout=1200, sleep=120, func=self.api.get_cluster_hosts, cluster_id=self.id
         ):
-            logger.debug(f"Discovered {len(sample)} nodes: {[n['id'] for n in sample]}")
+            hosts = [_discovered_host_label(n) for n in sample]
+            logger.debug(
+                "Discovery progress (cluster): %s/%s hosts=%s",
+                len(sample),
+                expected_nodes,
+                hosts,
+            )
             if expected_nodes == len(sample):
                 logger.info(
-                    f"Discovered expected number ({len(sample)}) of nodes in cluster configuration: "
-                    f"{[n['id'] for n in sample]}"
+                    "Discovered expected number (%s) of nodes in cluster "
+                    "configuration: %s",
+                    len(sample),
+                    hosts,
                 )
                 break
 
@@ -346,11 +486,19 @@ class AssistedInstallerCluster(object):
             func=self.api.get_infra_env_hosts,
             infra_env_id=self.infra_id,
         ):
-            logger.debug(f"Discovered {len(sample)} nodes: {[n['id'] for n in sample]}")
+            hosts = [_discovered_host_label(n) for n in sample]
+            logger.debug(
+                "Discovery progress (infra-env): %s/%s hosts=%s",
+                len(sample),
+                expected_nodes,
+                hosts,
+            )
             if expected_nodes == len(sample):
                 logger.info(
-                    f"Discovered expected number ({len(sample)}) of nodes in Infrastructure Environment: "
-                    f"{[n['id'] for n in sample]}"
+                    "Discovered expected number (%s) of nodes in Infrastructure "
+                    "Environment: %s",
+                    len(sample),
+                    hosts,
                 )
                 break
 
@@ -375,10 +523,11 @@ class AssistedInstallerCluster(object):
                     for v in vi[section]:
                         if v["status"] in ("failure", "pending"):
                             failed_validations.append(
-                                f"host {host['id']}, section {section}, {v['id']}: {v['status']} ({v['message']})"
+                                f"host {_discovered_host_label(host)}, section "
+                                f"{section}, {v['id']}: {v['status']} ({v['message']})"
                             )
             except KeyError as err:
-                failed_validations.append(f"host {host['id']}: {err}")
+                failed_validations.append(f"host {_discovered_host_label(host)}: {err}")
         if failed_validations:
             msg = f"Failed hosts validations: \n{os.linesep.join(failed_validations)}"
             logger.debug(msg)
@@ -433,12 +582,15 @@ class AssistedInstallerCluster(object):
             mac_role_mapping (dict): host mac address to host role mapping
 
         """
+        # normalize MAC case — AI and conf may disagree on upper/lower
+        mac_name_mapping = {k.lower(): v for k, v in mac_name_mapping.items()}
+        mac_role_mapping = {k.lower(): v for k, v in mac_role_mapping.items()}
         host_id_mac_mapping = self.get_host_id_mac_mapping()
         for host_id, mac in host_id_mac_mapping:
             try:
                 update_data = {
-                    "host_name": mac_name_mapping[mac],
-                    "host_role": mac_role_mapping[mac],
+                    "host_name": mac_name_mapping[mac.lower()],
+                    "host_role": mac_role_mapping[mac.lower()],
                 }
                 self.api.update_infra_env_host(self.infra_id, host_id, update_data)
                 logger.info(f"Updated host {host_id} configuration: {update_data}")
@@ -446,6 +598,18 @@ class AssistedInstallerCluster(object):
                 # ignoring KeyError failure, because we have more than one mac address for each host and only one of
                 # them is used to the name and role mapping
                 pass
+
+    def get_discovered_macs(self):
+        """
+        Collect all MAC addresses reported by discovered infra-env hosts.
+
+        Returns:
+            set: lowercase MAC addresses seen in host inventories
+        """
+        macs = set()
+        for host in self.api.get_infra_env_hosts(self.infra_id):
+            macs.update(_host_inventory_macs(host))
+        return macs
 
     def install_cluster(self, pending_user_action_handler=None):
         """
@@ -458,37 +622,80 @@ class AssistedInstallerCluster(object):
         """
         self.api.install_cluster(self.id)
         logger.info("Started cluster installation")
+
+        def _host_ui_role(host, schedulable_masters):
+            role = host.get("role")
+            if role == "master" and schedulable_masters:
+                label = "Control plane node, Worker"
+            else:
+                label = role or "-"
+            if host.get("bootstrap"):
+                label = f"{label} (bootstrap)"
+            return label
+
+        def _host_stage(host):
+            progress = host.get("progress") or {}
+            stage = progress.get("current_stage") or "-"
+            stages = host.get("progress_stages") or []
+            if stage in stages:
+                return f"{stage} ({stages.index(stage) + 1}/{len(stages)})"
+            return stage
+
+        def _log_host_table(cluster, hosts_avg_pct, cluster_pct):
+            hosts = cluster.get("hosts") or []
+            schedulable = cluster.get("schedulable_masters")
+            if schedulable is None:
+                schedulable = bool(hosts) and all(
+                    h.get("role") != "worker" for h in hosts
+                )
+            rows = [
+                (
+                    _discovered_host_label(host),
+                    _host_ui_role(host, schedulable),
+                    host.get("status") or "-",
+                    _host_stage(host),
+                )
+                for host in hosts
+            ]
+            table = _format_hosts_table(("Hostname", "Role", "Status", "Stage"), rows)
+            # Cluster progress.total_percentage matches the UI bar; hosts avg is
+            # only per-host install stages (can be 100% while still finalizing).
+            cluster_pct_txt = f"{cluster_pct}%" if cluster_pct is not None else "n/a"
+            logger.info(
+                "Cluster %s (%s) cluster_progress=%s hosts_avg=%s%%\n%s",
+                cluster.get("status"),
+                cluster.get("status_info"),
+                cluster_pct_txt,
+                hosts_avg_pct,
+                table,
+            )
+
         # wait for cluster installation success
         for sample in TimeoutSampler(
             timeout=10800, sleep=300, func=self.api.get_cluster, cluster_id=self.id
         ):
+            hosts = sample.get("hosts") or []
             status_per_hosts = [
-                h.get("progress", {}).get("installation_percentage", 0)
-                for h in sample["hosts"]
+                (h.get("progress") or {}).get("installation_percentage") or 0
+                for h in hosts
             ]
-            installation_percentage = round(
-                sum(status_per_hosts) / len(status_per_hosts)
+            hosts_avg_pct = (
+                round(sum(status_per_hosts) / len(status_per_hosts))
+                if status_per_hosts
+                else 0
             )
-            logger.info(
-                f"Cluster installation status: {sample['status']} ({sample['status_info']}, "
-                f"{installation_percentage}%)"
-            )
-            for host in sample["hosts"]:
-                try:
-                    logger.info(
-                        f"{host['requested_hostname']}: "
-                        f"{host['progress']['current_stage']} "
-                        f"({host['progress_stages'].index(host['progress']['current_stage']) + 1}/"
-                        f"{len(host['progress_stages'])})"
-                    )
-                except KeyError:
-                    pass
+            cluster_progress = sample.get("progress") or {}
+            cluster_pct = cluster_progress.get("total_percentage")
+            _log_host_table(sample, hosts_avg_pct, cluster_pct)
 
             if sample["status"] == "installing-pending-user-action":
-                for host in sample["hosts"]:
+                for host in hosts:
                     try:
                         if host["status"] == "installing-pending-user-action":
-                            msg = f"{host['requested_hostname']}: {host['status']} ({host['status_info']})"
+                            msg = (
+                                f"{host['requested_hostname']}: {host['status']} "
+                                f"({host['status_info']})"
+                            )
                             if pending_user_action_handler:
                                 logger.info(msg)
                                 pending_user_action_handler(host)
@@ -499,7 +706,9 @@ class AssistedInstallerCluster(object):
 
             if sample["status"] == "installed":
                 logger.info(
-                    f"Cluster was successfully installed (status: {sample['status']} - {sample['status_info']})"
+                    "Cluster was successfully installed (status: %s - %s)",
+                    sample["status"],
+                    sample["status_info"],
                 )
                 break
         # create metadata, kubeconfig, kubeadmin-password and openshift_install.log files
