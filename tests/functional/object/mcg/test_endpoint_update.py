@@ -253,7 +253,9 @@ def dotted_bucket_name(description):
 def dead_port_endpoint(endpoint):
     """Return ``endpoint``'s host on a port nothing listens on."""
     parsed = urlparse(endpoint)
-    return f"{parsed.scheme}://{parsed.hostname}:{CLOSED_PORT}"
+    # hostname strips the brackets an IPv6 literal needs back to stay parseable.
+    host = f"[{parsed.hostname}]" if ":" in parsed.hostname else parsed.hostname
+    return f"{parsed.scheme}://{host}:{CLOSED_PORT}"
 
 
 def _search_int(pattern, text):
@@ -362,6 +364,13 @@ def get_store_endpoint(kind, name, namespace):
     """Return the current spec endpoint of a BackingStore/NamespaceStore."""
     obj = OCP(kind=kind, namespace=namespace, resource_name=name).get()
     return obj["spec"]["s3Compatible"]["endpoint"]
+
+
+def store_endpoint_from_spec(spec):
+    """Return the endpoint from whichever connection block a store spec carries."""
+    return spec.get("s3Compatible", {}).get("endpoint") or spec.get("ibmCos", {}).get(
+        "endpoint"
+    )
 
 
 def get_pool_endpoint(mcg_obj, store_name, kind=None):
@@ -829,7 +838,11 @@ def endpoint_conf(endpoint_pair):
             "ENV_DATA['mcg_endpoint_pair'] (old, new, target_bucket, secret) to "
             "run these tests."
         )
-    plain_http = endpoint_pair["old"].startswith("http://")
+    # Either side being non-secure forces v2: the store has to satisfy the
+    # webhook on the endpoint it moves to as well as the one it starts on.
+    plain_http = any(
+        endpoint_pair[side].startswith("http://") for side in ("old", "new")
+    )
     return {
         **endpoint_pair,
         "signature_version_nss": (
@@ -1693,9 +1706,7 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         ).get()
         spec = default.get("spec", {})
         store_type = spec.get("type")
-        endpoint = spec.get("s3Compatible", {}).get("endpoint") or spec.get(
-            "ibmCos", {}
-        ).get("endpoint")
+        endpoint = store_endpoint_from_spec(spec)
         if not endpoint:
             pytest.skip(
                 f"Default backingstore type={store_type} has no endpoint "
@@ -1718,13 +1729,17 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         assert not get_store_pause_annotation(
             constants.BACKINGSTORE, constants.DEFAULT_NOOBAA_BACKINGSTORE, ns
         ), "The default backingstore was left paused by an aborted batch"
-        # Endpoint must be unchanged and the store still Ready.
-        after = (
-            get_store_endpoint(
-                constants.BACKINGSTORE, constants.DEFAULT_NOOBAA_BACKINGSTORE, ns
+        # Endpoint must be unchanged and the store still Ready. Re-read the spec
+        # rather than get_store_endpoint, which only knows the s3Compatible block
+        # and so cannot see an ibm-cos default store move.
+        after = store_endpoint_from_spec(
+            OCP(
+                kind=constants.BACKINGSTORE,
+                namespace=ns,
+                resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
             )
-            if store_type == "s3-compatible"
-            else endpoint
+            .get()
+            .get("spec", {})
         )
         assert after == endpoint
         OCP(
