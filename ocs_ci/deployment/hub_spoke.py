@@ -7719,8 +7719,16 @@ class SpokeODF(SpokeOCP, ABC):
                 config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
             )
 
-        if any(tag in odf_version_tag for tag in ["latest", "stable"]):
-            odf_version_tag = odf_version_tag.split("-")[-1]
+        # Tags come either as a channel tag ('latest-stable-5.0',
+        # 'latest-stable-5.0.0-57') or as a plain version ('4.18.5-8'). Strip
+        # only the channel prefix, so that the build suffix of a full version
+        # stays attached to the version instead of being taken for it - with a
+        # trailing-segment split, 'latest-stable-5.0.0-57' would resolve to
+        # '57' and yield the nonsense channel 'stable-57.0'.
+        for prefix in ("latest-stable-", "latest-", "stable-"):
+            if odf_version_tag.startswith(prefix):
+                odf_version_tag = odf_version_tag[len(prefix) :]
+                break
 
         version_semantic = version.get_semantic_version(odf_version_tag)
 

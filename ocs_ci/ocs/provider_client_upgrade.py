@@ -23,6 +23,8 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
 )
 from ocs_ci.deployment.helpers.lso_helpers import lso_upgrade
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.utility.retry import retry
 
 log = logging.getLogger(__name__)
 
@@ -89,6 +91,9 @@ class OperatorUpgrade(ProviderUpgrade):
         self.metallb_installer_obj = MetalLBInstaller()
         self.cnv_installer_obj = CNVInstaller()
         self.acm_hub_upgrade_obj = ACMUpgrade()
+        # clients whose CatalogSource could not be bumped, their Subscription
+        # channel must not be advanced to a version the catalog cannot serve
+        self.clients_with_failed_catalog_bump = set()
 
     def run_acm_operator_upgrade(self):
         """
@@ -139,13 +144,11 @@ class OperatorUpgrade(ProviderUpgrade):
 
     def bump_ocs_version_on_clients(self, cluster_names=None):
         """
-        Bump the OCS version to the latest version available in the registry
+        Bump the CatalogSource of the client clusters to the new ODF version.
 
-        Both the CatalogSource and the Subscription channel are bumped. Moving
-        only the CatalogSource leaves the Subscription pinned to the channel it
-        was created with, so OLM keeps resolving the previous ODF stream while
-        the mirrors on the cluster already point at the new one, which leaves
-        the client with unpullable images.
+        This only makes the new content available to OLM. The Subscription
+        channel is moved separately, by bump_channel_on_clients(), once the
+        provider itself is upgraded - see that method for the reason.
 
         Args:
             cluster_names (list): List of cluster names to upgrade. If None, all clusters will be upgraded.
@@ -171,19 +174,75 @@ class OperatorUpgrade(ProviderUpgrade):
                         f"ODF client operator not installed on HCP cluster '{cluster_name}', skipping this client"
                     )
                     continue
-                hosted_odf.create_catalog_source(
+                if not hosted_odf.create_catalog_source(
                     reapply=True,
                     odf_version_tag=odf_version_tag,
-                )
-                hosted_odf.update_subscription_channel(
-                    odf_version_tag=odf_version_tag,
-                )
+                ):
+                    self.clients_with_failed_catalog_bump.add(cluster_name)
+                    log.error(
+                        f"Failed to bump CatalogSource on hosted OCP cluster '{cluster_name}'"
+                    )
             except Exception as e:
+                self.clients_with_failed_catalog_bump.add(cluster_name)
                 # we don't want to abort the upgrade process if one client upgrade fails because:
                 # It will be easier to address issue manually with one client
                 # It allows to run negative tests, when one client fails to upgrade
                 log.error(
                     f"Failed to bump ODF client operator version on hosted OCP cluster '{cluster_name}': {e}"
+                )
+
+    def bump_channel_on_clients(self, cluster_names=None):
+        """
+        Move the ODF client Subscription channel of the client clusters to the
+        new ODF version.
+
+        Bumping only the CatalogSource leaves the Subscription pinned to the
+        channel it was created with, so OLM keeps resolving the previous ODF
+        stream while the mirrors on the cluster already point at the new one,
+        which leaves the client with unpullable images.
+
+        This must run only after the provider has been upgraded. The
+        'subscription.ocs.openshift.io' validating webhook of the ocs-client
+        operator rejects any channel that does not satisfy the requirements of
+        the StorageClient, so a channel ahead of the provider is denied with
+        'subscription channel <channel> not allowed as it'll violate
+        storageclient ... requirements'. The provider also needs a moment to
+        advertise its new version to the clients, hence the retry.
+
+        Args:
+            cluster_names (list): List of cluster names to upgrade. If None, all clusters will be upgraded.
+
+        """
+        log.info("Bumping ODF client subscription channel of client clusters")
+
+        if not cluster_names:
+            cluster_names = list(config.ENV_DATA.get("clusters").keys())
+
+        odf_version_tag = f"latest-stable-{self.upgrade_version}"
+
+        for cluster_name in cluster_names:
+            if cluster_name in self.clients_with_failed_catalog_bump:
+                log.error(
+                    f"CatalogSource bump failed earlier on hosted OCP cluster '{cluster_name}', "
+                    "not advancing its subscription channel to a version the catalog cannot serve"
+                )
+                continue
+            try:
+                hosted_odf = HostedODF(cluster_name)
+                if not hosted_odf.odf_client_installed():
+                    log.info(
+                        f"ODF client operator not installed on HCP cluster '{cluster_name}', skipping this client"
+                    )
+                    continue
+                retry(CommandFailed, tries=10, delay=30, backoff=1)(
+                    hosted_odf.update_subscription_channel
+                )(odf_version_tag=odf_version_tag)
+            except Exception as e:
+                # consistent with bump_ocs_version_on_clients: a single failing
+                # client should not abort the upgrade of the remaining ones
+                log.error(
+                    f"Failed to bump ODF client subscription channel on hosted OCP cluster "
+                    f"'{cluster_name}': {e}"
                 )
 
 
@@ -220,6 +279,12 @@ class ProviderClusterOperatorUpgrade(ProviderUpgrade):
 
             hosted_clients = HostedClients()
             hosted_clients.apply_idms_to_hosted_clusters()
+
+            # Only now that the provider is upgraded and the mirrors of the new
+            # ODF version are applied to the hosted clusters, the clients can
+            # follow. Moving the channel earlier is rejected by the ocs-client
+            # operator webhook and would pull images that are not yet mirrored.
+            operator_upgrade.bump_channel_on_clients()
 
             operator_upgrade.run_operators_upgrade()
             # Delete old idms left over from previous upgrades. This has to run
