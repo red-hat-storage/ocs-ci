@@ -761,6 +761,18 @@ class BusyBox(DRWorkload):
                 config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
                 run_cmd(f"oc delete -k {self.workload_subscription_dir}")
 
+    def gather_application_odf_cli(self):
+        """
+        Collect the ODF CLI DR gather bundle for this workload (non-fatal).
+
+        """
+        dr_helpers.validate_application_odf_cli(
+            drpc_name=f"{self.sub_placement_name}-drpc",
+            namespace=self.workload_namespace,
+            action="gather",
+            dr_action="app-gather",
+        )
+
 
 class BusyBox_AppSet(DRWorkload):
     """
@@ -1116,6 +1128,18 @@ class BusyBox_AppSet(DRWorkload):
             )
             log.exception(err_msg)
             raise ResourceNotDeleted(err_msg)
+
+    def gather_application_odf_cli(self):
+        """
+        Collect the ODF CLI DR gather bundle for this workload (non-fatal).
+
+        """
+        dr_helpers.validate_application_odf_cli(
+            drpc_name=f"{self.appset_placement_name}-drpc",
+            namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+            action="gather",
+            dr_action="app-gather",
+        )
 
 
 class CnvWorkload(DRWorkload):
@@ -1582,6 +1606,23 @@ class CnvWorkload(DRWorkload):
                             namespace=self.workload_namespace,
                         )
                     )
+
+    def gather_application_odf_cli(self):
+        """
+        Collect the ODF CLI DR gather bundle for this workload (non-fatal).
+
+        """
+        namespace = (
+            self.workload_namespace
+            if self.workload_type == constants.SUBSCRIPTION
+            else constants.GITOPS_CLUSTER_NAMESPACE
+        )
+        dr_helpers.validate_application_odf_cli(
+            drpc_name=f"{self.cnv_workload_placement_name}-drpc",
+            namespace=namespace,
+            action="gather",
+            dr_action="app-gather",
+        )
 
 
 def validate_data_integrity_vm(
@@ -2054,6 +2095,18 @@ class BusyboxDiscoveredApps(DRWorkload):
             ocp_obj = ocp.OCP()
             ocp_obj.delete_project(project_name=self.workload_namespace)
 
+    def gather_application_odf_cli(self):
+        """
+        Collect the ODF CLI DR gather bundle for this workload (non-fatal).
+
+        """
+        dr_helpers.validate_application_odf_cli(
+            drpc_name=self.discovered_apps_placement_name,
+            namespace=constants.DR_OPS_NAMESPACE,
+            action="gather",
+            dr_action="app-gather",
+        )
+
 
 def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
     """
@@ -2460,3 +2513,15 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 ocp_obj = ocp.OCP()
                 ocp_obj.delete_project(project_name=self.workload_namespace)
                 log.info(f"Project {self.workload_namespace} deleted successfully")
+
+    def gather_application_odf_cli(self):
+        """
+        Collect the ODF CLI DR gather bundle for this workload (non-fatal).
+
+        """
+        dr_helpers.validate_application_odf_cli(
+            drpc_name=self.discovered_apps_placement_name,
+            namespace=constants.DR_OPS_NAMESPACE,
+            action="gather",
+            dr_action="app-gather",
+        )
