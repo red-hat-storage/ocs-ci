@@ -1071,6 +1071,7 @@ NOOBAA_ENDPOINT_DEPLOYMENT = "noobaa-endpoint"
 NOOBAA_DB_STATEFULSET = "noobaa-db-pg"
 NOOBAA_DB_POD = "noobaa-db-pg-0"
 NOOBAA_CORE_STATEFULSET = "noobaa-core"
+NOOBAA_BG_WORKERS_STATEFULSET = "noobaa-bg-workers"
 NOOBAA_CORE_POD = "noobaa-core-0"
 
 # Noobaa db secret
@@ -3016,6 +3017,7 @@ NOOBAA_POD_NAMES = [
     NOOBAA_ENDPOINT_DEPLOYMENT,
     NOOBAA_DB_STATEFULSET,
     NOOBAA_CORE_STATEFULSET,
+    NOOBAA_BG_WORKERS_STATEFULSET,
 ]
 MON_POD_NAMES = "rook-ceph-mon"
 OSD_POD_NAMES = "rook-ceph-osd"
