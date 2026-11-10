@@ -309,6 +309,7 @@ ENV_DATA:
       dr_workload_app_pvc_selector_value: "kubevirt",
       workload_namespace: "cnv-dict-1",
       dr_workload_app_placement_name: "cnv-dict-1",
+      dr_workload_app_recipe_vm_name_selector_value: "vm-workload-.*",
       vm_name: "vm-workload-1",
       vm_secret: "vm-secret-1", vm_username: "cirros",
     }

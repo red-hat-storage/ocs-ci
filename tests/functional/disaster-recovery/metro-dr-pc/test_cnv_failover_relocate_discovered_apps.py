@@ -358,3 +358,268 @@ class TestCnvDiscoveredAppsMDR:
                 username=cnv_wl.vm_username,
                 verify=True,
             )
+
+    @pytest.mark.polarion_id(polarion_id_cnv_primary_down)
+    def test_cnv_multi_recipe_failover_relocate_discovered_apps(
+        self,
+        nodes_multicluster,
+        discovered_apps_dr_workload_cnv,
+        node_restart_teardown,
+    ):
+        """
+        Failover and relocate multiple CNV discovered apps with primary down,
+        covering no-recipe, recipe, and recipe+checkhooks together.
+
+        Covers RHSTOR-9059 recipe, recipe+checkhooks, and concurrent multi-VM
+        FO/relocate. Primary-up is covered by the single-app no-recipe test.
+        """
+        self.primary_cluster_name = None
+        vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
+        md5sum_original = {}
+        md5sum_failover = {}
+
+        CNVInstaller().download_and_extract_virtctl_binary()
+
+        logger.test_step(
+            "Deploy no-recipe, recipe, and recipe+checkhooks CNV discovered apps"
+        )
+        # Fixture returns the accumulated instance list; take only the newly
+        # created workload from each factory call (pvc_vm=1).
+        cnv_workloads = [
+            discovered_apps_dr_workload_cnv(
+                pvc_vm=1, vm_type=constants.VM_VOLUME_PVC, recipe=False
+            )[-1],
+            discovered_apps_dr_workload_cnv(
+                pvc_vm=1,
+                vm_type=constants.VM_VOLUME_PVC,
+                recipe=True,
+                checkhooks=False,
+            )[-1],
+            discovered_apps_dr_workload_cnv(
+                pvc_vm=1,
+                vm_type=constants.VM_VOLUME_PVC,
+                recipe=True,
+                checkhooks=True,
+            )[-1],
+        ]
+        assert (
+            len(cnv_workloads) == 3
+        ), f"Expected 3 CNV workloads, got {len(cnv_workloads)}"
+
+        primary_resource = cnv_workloads[0].discovered_apps_placement_name
+        primary_namespace = cnv_workloads[0].workload_namespace
+        set_current_primary_cluster_context(
+            primary_namespace,
+            discovered_apps=True,
+            resource_name=primary_resource,
+        )
+        primary_cluster_index = config.cur_index
+        self.primary_cluster_name = get_current_primary_cluster_name(
+            primary_namespace,
+            discovered_apps=True,
+            resource_name=primary_resource,
+        )
+
+        for cnv_wl in cnv_workloads:
+            md5sum_original[cnv_wl.discovered_apps_placement_name] = run_dd_io(
+                vm_obj=cnv_wl.vm_obj,
+                file_path=vm_filepaths[0],
+                username=cnv_wl.vm_username,
+                verify=True,
+            )
+            verify_cluster_data_protected_status(
+                workload_type=constants.DISCOVERED_APPS,
+                namespace=constants.DR_OPS_NAMESPACE,
+                workload_placement_name=cnv_wl.discovered_apps_placement_name,
+                drpc_name=cnv_wl.discovered_apps_placement_name,
+            )
+
+        wait_time = 120
+        logger.test_step(
+            f"Wait for {wait_time} seconds before starting Failover of applications"
+        )
+        time.sleep(wait_time)
+
+        set_current_primary_cluster_context(
+            primary_namespace,
+            discovered_apps=True,
+            resource_name=primary_resource,
+        )
+        node_objs = get_node_objs()
+        logger.test_step("Stopping primary cluster nodes")
+        nodes_multicluster[primary_cluster_index].stop_nodes(node_objs)
+
+        enable_fence(drcluster_name=self.primary_cluster_name)
+        assert verify_fence_state(
+            drcluster_name=self.primary_cluster_name, state=constants.ACTION_FENCE
+        ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_FENCE} state"
+
+        secondary_cluster_name = get_current_secondary_cluster_name(
+            primary_namespace,
+            discovered_apps=True,
+            resource_name=primary_resource,
+        )
+
+        logger.test_step(f"Failover {len(cnv_workloads)} CNV discovered apps")
+        for cnv_wl in cnv_workloads:
+            resource_name = cnv_wl.discovered_apps_placement_name
+            failover(
+                failover_cluster=secondary_cluster_name,
+                namespace=cnv_wl.workload_namespace,
+                discovered_apps=True,
+                workload_placement_name=resource_name,
+                old_primary=self.primary_cluster_name,
+                skip_odf_cli_validation=True,
+            )
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            wait_for_all_resources_creation(
+                cnv_wl.workload_pvc_count,
+                cnv_wl.workload_pod_count,
+                cnv_wl.workload_namespace,
+                discovered_apps=True,
+                vrg_name=resource_name,
+            )
+            wait_for_cnv_workload(
+                vm_name=cnv_wl.vm_name,
+                namespace=cnv_wl.workload_namespace,
+                phase=constants.STATUS_RUNNING,
+            )
+            wait_for_vrg_state(
+                vrg_state="primary",
+                vrg_namespace=constants.DR_OPS_NAMESPACE,
+                resource_name=resource_name,
+            )
+            validate_data_integrity_vm(
+                [cnv_wl],
+                vm_filepaths[0],
+                [md5sum_original[resource_name]],
+                "Failover",
+            )
+            md5sum_failover[resource_name] = run_dd_io(
+                vm_obj=cnv_wl.vm_obj,
+                file_path=vm_filepaths[1],
+                username=cnv_wl.vm_username,
+                verify=True,
+            )
+
+        config.switch_to_cluster_by_name(self.primary_cluster_name)
+        nodes_multicluster[primary_cluster_index].start_nodes(node_objs)
+        logger.test_step(
+            f"Waiting for {wait_time} seconds after starting nodes of previous primary cluster"
+        )
+        time.sleep(wait_time)
+        wait_for_nodes_status([node.name for node in node_objs])
+
+        logger.test_step("Cleanup discovered apps on recovered primary")
+        for cnv_wl in cnv_workloads:
+            do_discovered_apps_cleanup(
+                drpc_name=cnv_wl.discovered_apps_placement_name,
+                old_primary=self.primary_cluster_name,
+                workload_namespace=cnv_wl.workload_namespace,
+                workload_dir=cnv_wl.workload_dir,
+                vrg_name=cnv_wl.discovered_apps_placement_name,
+                skip_resource_deletion_verification=True,
+            )
+            mdr_post_failover_check(namespace=cnv_wl.workload_namespace)
+
+        enable_unfence(drcluster_name=self.primary_cluster_name)
+        assert verify_fence_state(
+            drcluster_name=self.primary_cluster_name, state=constants.ACTION_UNFENCE
+        ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_UNFENCE} state"
+
+        gracefully_reboot_ocp_nodes(
+            drcluster_name=self.primary_cluster_name, disable_eviction=True
+        )
+
+        for cnv_wl in cnv_workloads:
+            wait_for_all_resources_deletion(
+                namespace=cnv_wl.workload_namespace,
+                discovered_apps=True,
+                vrg_name=cnv_wl.discovered_apps_placement_name,
+                skip_vrg_check=True,
+            )
+            wait_for_vrg_state(
+                vrg_state="secondary",
+                vrg_namespace=constants.DR_OPS_NAMESPACE,
+                resource_name=cnv_wl.discovered_apps_placement_name,
+            )
+            with config.RunWithAcmConfigContext():
+                drpc_obj = DRPC(
+                    namespace=constants.DR_OPS_NAMESPACE,
+                    resource_name=cnv_wl.discovered_apps_placement_name,
+                )
+                drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
+
+        logger.test_step(f"Relocate {len(cnv_workloads)} CNV discovered apps")
+        for cnv_wl in cnv_workloads:
+            resource_name = cnv_wl.discovered_apps_placement_name
+            current_primary = get_current_primary_cluster_name(
+                cnv_wl.workload_namespace,
+                discovered_apps=True,
+                resource_name=resource_name,
+            )
+            current_secondary = get_current_secondary_cluster_name(
+                cnv_wl.workload_namespace,
+                discovered_apps=True,
+                resource_name=resource_name,
+            )
+            relocate(
+                preferred_cluster=current_secondary,
+                namespace=cnv_wl.workload_namespace,
+                workload_placement_name=resource_name,
+                discovered_apps=True,
+                old_primary=current_primary,
+                workload_instance=cnv_wl,
+            )
+            set_current_secondary_cluster_context(
+                cnv_wl.workload_namespace,
+                discovered_apps=True,
+                resource_name=resource_name,
+            )
+            wait_for_all_resources_deletion(
+                namespace=cnv_wl.workload_namespace,
+                discovered_apps=True,
+                vrg_name=resource_name,
+                skip_vrg_check=True,
+            )
+            set_current_primary_cluster_context(
+                cnv_wl.workload_namespace,
+                discovered_apps=True,
+                resource_name=resource_name,
+            )
+            wait_for_all_resources_creation(
+                cnv_wl.workload_pvc_count,
+                cnv_wl.workload_pod_count,
+                cnv_wl.workload_namespace,
+                discovered_apps=True,
+                vrg_name=resource_name,
+            )
+            wait_for_cnv_workload(
+                vm_name=cnv_wl.vm_name,
+                namespace=cnv_wl.workload_namespace,
+                phase=constants.STATUS_RUNNING,
+            )
+            validate_data_integrity_vm(
+                [cnv_wl],
+                vm_filepaths[0],
+                [md5sum_original[resource_name]],
+                "Relocate",
+            )
+            validate_data_integrity_vm(
+                [cnv_wl],
+                vm_filepaths[1],
+                [md5sum_failover[resource_name]],
+                "Relocate",
+            )
+            run_dd_io(
+                vm_obj=cnv_wl.vm_obj,
+                file_path=vm_filepaths[2],
+                username=cnv_wl.vm_username,
+                verify=True,
+            )
+            with config.RunWithAcmConfigContext():
+                drpc_obj = DRPC(
+                    namespace=constants.DR_OPS_NAMESPACE,
+                    resource_name=resource_name,
+                )
+                drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
