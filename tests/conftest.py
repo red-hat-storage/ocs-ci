@@ -8143,6 +8143,15 @@ def create_workload_factory():
         return instances
 
     def _teardown():
+        if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+            for instance in instances:
+                try:
+                    instance.gather_application_odf_cli()
+                except Exception:
+                    log.warning(
+                        "ODF DR gather application failed; continuing teardown",
+                        exc_info=True,
+                    )
         failed_to_delete = []
         for instance in instances:
             try:
@@ -8426,6 +8435,15 @@ def cnv_dr_workload(request):
         return instances
 
     def teardown():
+        if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+            for instance in instances:
+                try:
+                    instance.gather_application_odf_cli()
+                except Exception:
+                    log.warning(
+                        "ODF DR gather application failed; continuing teardown",
+                        exc_info=True,
+                    )
         for instance in instances:
             try:
                 instance.delete_workload()
@@ -8631,6 +8649,22 @@ def discovered_apps_dr_workload(request):
         return instances
 
     def teardown():
+        if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+            # multi_ns workloads share a single DRPC across instances, so
+            # dedupe by drpc_name to gather exactly once per DRPC.
+            gathered_drpcs = set()
+            for instance in instances:
+                drpc_name = instance.discovered_apps_placement_name
+                if drpc_name in gathered_drpcs:
+                    continue
+                gathered_drpcs.add(drpc_name)
+                try:
+                    instance.gather_application_odf_cli()
+                except Exception:
+                    log.warning(
+                        "ODF DR gather application failed; continuing teardown",
+                        exc_info=True,
+                    )
         for index, instance in enumerate(instances):
             try:
                 log.info(instance.__dict__)
@@ -8747,6 +8781,22 @@ def discovered_apps_dr_workload_cnv(request):
         return instances
 
     def teardown():
+        if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+            # shared_drpc_protection workloads share a single DRPC, so dedupe
+            # by drpc_name to gather exactly once per DRPC.
+            gathered_drpcs = set()
+            for instance in instances:
+                drpc_name = instance.discovered_apps_placement_name
+                if drpc_name in gathered_drpcs:
+                    continue
+                gathered_drpcs.add(drpc_name)
+                try:
+                    instance.gather_application_odf_cli()
+                except Exception:
+                    log.warning(
+                        "ODF DR gather application failed; continuing teardown",
+                        exc_info=True,
+                    )
         if "shared" in request.node.nodeid:
             instances[0].delete_workload(skip_resource_deletion_verification=True)
             instances[1].delete_workload(shared_drpc_protection=True)
