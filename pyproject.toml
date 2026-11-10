@@ -66,7 +66,7 @@ dependencies = [
     "oslo-utils==9.0.0",  # Dependency of python-novaclient and python-cinderclient
     "ovirt-engine-sdk-python==4.4.11",
     "pandas==1.5.2",
-    "paramiko==3.5.0",
+    "paramiko==5.0.0",
     "pexpect>=4.8.0",
     "ping3==4.0.3",
     "prettytable==0.7.2",
