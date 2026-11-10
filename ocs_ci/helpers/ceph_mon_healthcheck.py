@@ -1,17 +1,20 @@
 import json
 import logging
+import math
 import random
 import re
+import time
 
 from ocs_ci.ocs.node import get_mon_running_nodes, get_node_mon_ids
 from ocs_ci.ocs.resources.storage_cluster import get_default_storagecluster
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework import config
+from ocs_ci.ocs.resources.deployment import get_mon_deployments
 from ocs_ci.ocs.resources.pod import (
     wait_for_matching_pattern_in_pod_logs,
+    search_pattern_in_pod_logs,
     get_operator_pods,
-    wait_for_pods_to_be_in_statuses,
-    get_mon_pod_by_id,
+    get_pod_node,
 )
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.utils import TimeoutSampler
@@ -133,6 +136,85 @@ def get_cephcluster_mon_healthcheck(cc_obj=None) -> dict:
     return mon_healthcheck
 
 
+def get_cephcluster_phase(cc_obj=None) -> str:
+    """
+    Get the current phase of the cephcluster resource
+
+    Args:
+        cc_obj (object): CephCluster object. If None, it will be fetched.
+
+    Returns:
+        str: The cephcluster phase (e.g. 'Ready', 'Progressing'), or an empty
+            string if the phase is not set yet.
+
+    """
+    if not cc_obj:
+        cc_obj = ocp.OCP(
+            kind=constants.CEPH_CLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.CEPH_CLUSTER_NAME,
+        )
+
+    cc_dict = cc_obj.get()
+    base_cc_dict = cc_dict["items"][0] if cc_dict.get("items") else cc_dict
+    return base_cc_dict.get("status", {}).get("phase", "")
+
+
+def wait_for_cephcluster_to_settle(timeout=900, sleep=20, stable_samples=3) -> None:
+    """
+    Wait until the cephcluster phase stays Ready for a few consecutive samples.
+
+    The rook-ceph-operator stops the mon health check while a cephcluster
+    orchestration is running, and resumes it only when the orchestration ends.
+    Taking a mon down while an orchestration is in progress can therefore
+    suppress the mon healthcheck timeout entirely, so the caller should wait
+    for the cluster to settle first.
+
+    Args:
+        timeout (int): Maximum time to wait in seconds. Defaults to 900 seconds.
+        sleep (int): Time to wait between checks in seconds. Defaults to 20 seconds.
+        stable_samples (int): Number of consecutive Ready samples required.
+
+    Raises:
+        TimeoutExpiredError: If the cephcluster does not stay Ready within the timeout.
+
+    """
+    logger.info(
+        f"Waiting up to {timeout} seconds for the cephcluster phase to stay "
+        f"{constants.STATUS_READY} for {stable_samples} consecutive samples."
+    )
+    cc_obj = ocp.OCP(
+        kind=constants.CEPH_CLUSTER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.CEPH_CLUSTER_NAME,
+    )
+    ready_samples = 0
+    try:
+        for phase in TimeoutSampler(
+            timeout=timeout, sleep=sleep, func=get_cephcluster_phase, cc_obj=cc_obj
+        ):
+            if phase == constants.STATUS_READY:
+                ready_samples += 1
+                logger.info(
+                    f"Cephcluster phase is {phase} "
+                    f"({ready_samples}/{stable_samples} consecutive samples)"
+                )
+                if ready_samples >= stable_samples:
+                    logger.info("The cephcluster has settled")
+                    return
+            else:
+                ready_samples = 0
+                logger.info(
+                    f"Cephcluster phase is '{phase}'. Waiting for it to become "
+                    f"{constants.STATUS_READY}"
+                )
+    except TimeoutExpiredError as ex:
+        raise TimeoutExpiredError(
+            f"The cephcluster did not stay in the phase {constants.STATUS_READY} "
+            f"for {stable_samples} consecutive samples within {timeout} seconds."
+        ) from ex
+
+
 def verify_mon_healthcheck_consistency(sc_obj=None, cc_obj=None) -> bool:
     """
     Verify that the mon healthcheck configurations in StorageCluster and CephCluster are consistent.
@@ -195,11 +277,20 @@ def wait_for_mon_healthcheck_consistency(
         )
 
 
+def _search_since_start(pod_name, pattern, since_start):
+    """Search pod logs using a lookback measured from a monotonic start time."""
+    elapsed = max(0, time.monotonic() - since_start)
+    return search_pattern_in_pod_logs(
+        pod_name, pattern, since=f"{math.ceil(elapsed) + 2}s"
+    )
+
+
 def wait_for_mon_healthcheck_timeout_in_logs(
     mon_id,
     since="1m",
     timeout=300,
     sleep=20,
+    since_start=None,
 ) -> list:
     """
     Wait for expected mon healthcheck timeout patterns to appear in the
@@ -210,6 +301,8 @@ def wait_for_mon_healthcheck_timeout_in_logs(
         since (str): Time duration to look back in the logs (e.g., '1m', '5m').
         timeout (int): Maximum time in seconds to wait for the patterns to appear.
         sleep (int): Interval in seconds to wait between log polling attempts.
+        since_start (float | None): Monotonic start time for an expanding log window;
+            overrides ``since`` when provided.
 
     Returns:
         list: A list of matched log lines containing the timeout message.
@@ -233,6 +326,24 @@ def wait_for_mon_healthcheck_timeout_in_logs(
     rook_operator_pod = rook_operator_pods[0]
     # Note: Using double quotes " as seen in rook-ceph logs
     pattern = rf'(?i)mon\s+"{re.escape(mon_id)}".*(not found in|lost|loose)\s+quorum.*waiting for timeout'
+
+    if since_start is not None:
+        try:
+            for matched_lines in TimeoutSampler(
+                timeout,
+                sleep,
+                _search_since_start,
+                pod_name=rook_operator_pod.name,
+                pattern=pattern,
+                since_start=since_start,
+            ):
+                if matched_lines:
+                    return matched_lines
+        except TimeoutExpiredError as ex:
+            raise TimeoutExpiredError(
+                f"Mon '{mon_id}' healthcheck timeout message was not found "
+                f"within {timeout} seconds."
+            ) from ex
 
     return wait_for_matching_pattern_in_pod_logs(
         rook_operator_pod.name,
@@ -267,6 +378,7 @@ def verify_mon_healthcheck_timeout_value_in_logs(
     since="1m",
     timeout=300,
     sleep=20,
+    since_start=None,
 ) -> bool:
     """
     Verify that the expected mon healthcheck timeout value appears in the
@@ -279,6 +391,8 @@ def verify_mon_healthcheck_timeout_value_in_logs(
         since (str): Time duration to look back in the logs.
         timeout (int): Maximum time to wait for the patterns.
         sleep (int): Time to wait between log checks.
+        since_start (float | None): Monotonic start time for an expanding log window;
+            overrides ``since`` when provided.
 
     Returns:
         bool: True if the timeout value is found, False otherwise.
@@ -286,7 +400,7 @@ def verify_mon_healthcheck_timeout_value_in_logs(
     """
     try:
         mon_timeout_lines = wait_for_mon_healthcheck_timeout_in_logs(
-            mon_id, since, timeout, sleep
+            mon_id, since, timeout, sleep, since_start=since_start
         )
     except TimeoutExpiredError as ex:
         logger.warning(
@@ -328,47 +442,138 @@ def verify_mon_healthcheck_timeout_value_in_logs(
     return True
 
 
-def wait_for_mon_pod_restart(mon_id, timeout=300, sleep=20) -> None:
+def get_mon_ids() -> set:
     """
-    Wait until the monitor pod for a specified monitor ID restarts.
+    Get the mon ids of the current mon deployments.
+
+    The mon deployments are used instead of the mon pods, because a mon pod can
+    be missing or Pending when its node is unschedulable, while the deployment
+    exists as soon as the rook-ceph-operator decides to create the mon.
+
+    Returns:
+        set: The mon ids (e.g. {'a', 'b', 'c'})
+
+    """
+    mon_ids = set()
+    for mon_deployment in get_mon_deployments():
+        labels = mon_deployment.data.get("metadata", {}).get("labels", {})
+        mon_ids.add(labels.get("mon") or mon_deployment.name.rsplit("-", 1)[-1])
+    return mon_ids
+
+
+def wait_for_mon_failover(
+    mon_ids_before, timeout=600, sleep=20, min_wait=0, since_start=None
+) -> str:
+    """
+    Wait until the rook-ceph-operator fails the mon over by creating a new mon.
+
+    The new mon deployment is the signal of the failover. The new mon pod
+    itself can remain Pending while the cluster schedules it.
 
     Args:
-        mon_id (str): The monitor ID (e.g., 'a', 'b', 'c') to wait for.
-        timeout (int): Maximum time to wait in seconds. Defaults to 300 seconds (5 minutes).
+        mon_ids_before (set): The mon ids from before the mon went down.
+        timeout (int): Maximum time in seconds from since_start, or from this
+            call when since_start is None. Defaults to 600 seconds.
         sleep (int): Time to wait between checks in seconds. Defaults to 20 seconds.
+        min_wait (float): Minimum time for which no new mon may appear.
+        since_start (float | None): Monotonic disruption start time used for
+            both timing bounds. Defaults to the start of this call.
+
+    Returns:
+        str: The mon id of the new mon
 
     Raises:
-        TimeoutExpiredError: If the monitor pod does not restart within the timeout.
+        TimeoutExpiredError: If the mon does not fail over within the timeout.
+        AssertionError: If the minimum wait cannot be established.
 
     """
-    mon_pod = get_mon_pod_by_id(mon_id)
-    logger.info(f"Waiting {timeout} seconds for the monitor pod {mon_id} to restart.")
-    res = wait_for_pods_to_be_in_statuses(
-        expected_statuses=[constants.STATUS_TERMINATING],
-        pod_names=[mon_pod.name],
-        timeout=timeout,
-        sleep=sleep,
+    logger.info(
+        f"Waiting up to {timeout} seconds for the mon failover. The mon ids "
+        f"before the failover: {sorted(mon_ids_before)}"
     )
-    if not res:
+    start = time.monotonic() if since_start is None else since_start
+    last_absent = 0
+
+    def sample_mon_ids():
+        sample_start = time.monotonic()
+        return get_mon_ids(), sample_start
+
+    try:
+        remaining_timeout = timeout - (time.monotonic() - start)
+        if remaining_timeout <= 0:
+            raise TimeoutExpiredError("The mon failover deadline has already passed.")
+        for mon_ids, sample_start in TimeoutSampler(
+            timeout=remaining_timeout,
+            sleep=min(sleep, remaining_timeout),
+            func=sample_mon_ids,
+        ):
+            elapsed = time.monotonic() - start
+            new_mon_ids = mon_ids - set(mon_ids_before)
+            if new_mon_ids:
+                new_mon_id = sorted(new_mon_ids)[0]
+                if elapsed > timeout:
+                    break
+                if last_absent < min_wait:
+                    raise AssertionError(
+                        f"The new mon '{new_mon_id}' appeared before the minimum "
+                        f"wait of {min_wait:.0f} seconds could be confirmed; "
+                        f"it was last absent at {last_absent:.0f} seconds."
+                    )
+                logger.info(f"The operator created the new mon '{new_mon_id}'")
+                return new_mon_id
+            last_absent = sample_start - start
+            logger.info(
+                f"The mon did not fail over yet. Current mon ids: {sorted(mon_ids)}"
+            )
+    except TimeoutExpiredError as ex:
         raise TimeoutExpiredError(
-            f"Monitor pod {mon_id} did not restart within {timeout} seconds."
-        )
+            f"No new mon was observed within {timeout} seconds. The initial mon "
+            f"ids were {sorted(mon_ids_before)}. Check the rook-ceph-operator "
+            "log for the mon health check messages."
+        ) from ex
+    raise TimeoutExpiredError(
+        f"The new mon '{new_mon_id}' was observed after {elapsed:.0f} "
+        f"seconds, exceeding the {timeout}-second failover timeout."
+    )
 
 
 def select_mon_id_and_node() -> tuple[str, str]:
     """
-    Select a monitor ID and its corresponding node name.
+    Select a monitor ID and its corresponding node name to take the mon down.
+
+    The node running rook-ceph-operator is excluded. The mon healthcheck
+    timeout is tracked in memory by the operator and reported in its log, so
+    anything that restarts the operator wipes the state the caller asserts on.
+    Keeping the operator away from the node we disturb avoids that.
 
     Returns:
         tuple: A tuple containing the monitor ID (str) and node name (str).
+
+    Raises:
+        ValueError: If no monitor nodes are found, rook-ceph-operator is
+            missing, or every monitor node also runs the operator.
 
     """
     mon_nodes = get_mon_running_nodes()
     if not mon_nodes:
         raise ValueError("No monitor nodes found in the cluster")
 
-    node_name = random.choice(mon_nodes)
-    logger.info(f"Selected mon node for drain: {node_name}")
+    operator_pods = get_operator_pods()
+    if not operator_pods:
+        raise ValueError("Rook Ceph Operator pod not found.")
+    operator_nodes = {get_pod_node(operator_pod).name for operator_pod in operator_pods}
+    logger.info(f"rook-ceph-operator is running on node(s): {sorted(operator_nodes)}")
+    eligible_nodes = [
+        node_name for node_name in mon_nodes if node_name not in operator_nodes
+    ]
+    if not eligible_nodes:
+        raise ValueError(
+            "Cannot select a mon node: every monitor node also "
+            f"runs rook-ceph-operator ({sorted(operator_nodes)})."
+        )
+
+    node_name = random.choice(eligible_nodes)
+    logger.info(f"Selected mon node: {node_name}")
     mon_id = get_node_mon_ids(node_name)[0]
-    logger.info(f"Selected mon id for drain: '{mon_id}'")
+    logger.info(f"Selected mon id: '{mon_id}'")
     return mon_id, node_name
