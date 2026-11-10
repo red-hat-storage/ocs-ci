@@ -437,7 +437,7 @@ class TestAgnosticDRFailoverAndRelocate:
         run_id = str(config.RUN["run_id"])[-6:]
         app_disc_ns = f"agnostic-disc-app-{run_id}"
         workload = BusyboxDiscoveredApps(
-            workload_dir=workload_details["workload_path"],
+            workload_dir=workload_details["workload_dir"],
             workload_pod_count=workload_details["pod_count"],
             workload_pvc_count=workload_details["pvc_count"],
             workload_namespace=app_disc_ns,
