@@ -8,36 +8,6 @@ kind: Namespace
 metadata:
   name: minio
 ---
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: minio-storage-pv
-  labels:
-    component: minio
-spec:
-  storageClassName: manual
-  capacity:
-    storage: 10Gi
-  accessModes:
-    - ReadWriteOnce
-  hostPath:
-    path: /mnt/minio
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  namespace: minio
-  name: minio-storage-pvc
-  labels:
-    component: minio
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: manual
-  resources:
-    requests:
-      storage: 10Gi
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -58,9 +28,7 @@ spec:
     spec:
       volumes:
         - name: storage
-          persistentVolumeClaim:
-            claimName: minio-storage-pvc
-            readOnly: false
+          emptyDir: {}
       containers:
         - name: minio
           image: quay.io/ocsci/minio_ocs:latest
@@ -75,7 +43,16 @@ spec:
               value: "minio123"
           ports:
             - containerPort: 9000
-              hostPort: 9000
+          readinessProbe:
+            tcpSocket:
+              port: 9000
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: 9000
+            periodSeconds: 10
+            failureThreshold: 6
           volumeMounts:
             - name: storage
               mountPath: "/storage"

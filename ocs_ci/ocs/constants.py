@@ -111,13 +111,14 @@ MINIO_SECRET_KEY = "minio123"
 MOCK_VGRC_NAME = "vgrc-1"
 VOLUME_GROUP_SNAPSHOT_CLASS_CRD_URL = (
     "https://raw.githubusercontent.com/red-hat-storage/external-snapshotter"
-    "/refs/heads/master/config/crd/bases"
+    "/16dd7dae4db768ccf04bd01b5a85e185d7c4fa28/config/crd/bases"
     "/groupsnapshot.storage.openshift.io_volumegroupsnapshotclasses.yaml"
 )
 LSO_PROVISIONER = "kubernetes.io/no-provisioner"
 VOLSYNC_PSK_SECRET_NAME = "volsync-rsync-tls-secret"
 MOCK_STORAGE_OPERATOR_KUSTOMIZE_URL = (
-    "https://github.com/BenamarMk/mock-storage-operator/config/default" "?ref=main"
+    "https://github.com/BenamarMk/mock-storage-operator/config/default"
+    "?ref=aa533337b2d11543315a4189534ca1f23c8c176e"
 )
 MOCK_STORAGE_OPERATOR_NAMESPACE = "mock-storage-operator-system"
 MOCK_STORAGE_OPERATOR_IMAGE = "quay.io/bmekhiss/mock-storage-operator:latest"

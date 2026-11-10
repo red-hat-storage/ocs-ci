@@ -32,11 +32,10 @@ def deploy_minio():
 
     1. Deploys the upstream Ramen MinIO addon manifest
     2. Grants anyuid SCC to the default service account in the minio namespace
-    3. Removes the hostPort from the MinIO container spec
-    4. Replaces the hostPath volume with emptyDir
-    5. Waits for the MinIO rollout to complete
-    6. Creates the S3 bucket via a temporary mc-client pod
-    7. Exposes MinIO via an OpenShift route
+    3. Waits for the MinIO rollout to complete (the manifest already uses
+       emptyDir storage, no hostPort and a readiness probe)
+    4. Creates the S3 bucket via a temporary mc-client pod
+    5. Exposes MinIO via an OpenShift route
 
     Returns:
         dict: cluster_name -> external MinIO endpoint URL (http://<route-host>)
@@ -79,23 +78,6 @@ def deploy_minio():
             run_cmd(
                 f"oc adm policy add-scc-to-user anyuid -z default"
                 f" -n {constants.MINIO_NAMESPACE}",
-                cluster_config=cluster,
-            )
-
-            run_cmd(
-                f"oc patch deployment minio -n {constants.MINIO_NAMESPACE}"
-                " --type=json"
-                ' -p \'[{"op":"remove",'
-                '"path":"/spec/template/spec/containers/0/ports/0/hostPort"}]\'',
-                cluster_config=cluster,
-            )
-
-            run_cmd(
-                f"oc patch deployment minio -n {constants.MINIO_NAMESPACE}"
-                " --type=json"
-                ' -p \'[{"op":"replace",'
-                '"path":"/spec/template/spec/volumes/0",'
-                '"value":{"name":"storage","emptyDir":{}}}]\'',
                 cluster_config=cluster,
             )
 
@@ -244,6 +226,11 @@ def install_mock_storage():
             f" -n {constants.MOCK_STORAGE_OPERATOR_NAMESPACE}",
             cluster_config=cluster,
         )
+        exec_cmd(
+            "oc rollout status deployment/mock-storage-operator-controller-manager"
+            f" -n {constants.MOCK_STORAGE_OPERATOR_NAMESPACE} --timeout=300s",
+            cluster_config=cluster,
+        )
 
         logger.info(
             f"Waiting for mock storage operator pod in namespace"
@@ -280,19 +267,32 @@ def create_psk_secret(namespace, psk_value, cluster_config=None):
         cluster_config: Cluster config object to run commands against.
             Defaults to the current context if None.
     """
-    run_cmd(
-        f"oc create namespace {namespace} --dry-run=client -o yaml | oc apply -f -",
-        cluster_config=cluster_config,
-        shell=True,
-    )
-    run_cmd(
-        f"oc create secret generic {constants.VOLSYNC_PSK_SECRET_NAME}"
-        f" --from-literal=psk.txt='{psk_value}'"
-        f" -n {namespace}"
-        f" --dry-run=client -o yaml | oc apply -f -",
-        cluster_config=cluster_config,
-        shell=True,
-    )
+    manifests = [
+        {
+            "apiVersion": "v1",
+            "kind": constants.NAMESPACE,
+            "metadata": {"name": namespace},
+        },
+        {
+            "apiVersion": "v1",
+            "kind": constants.SECRET,
+            "metadata": {
+                "name": constants.VOLSYNC_PSK_SECRET_NAME,
+                "namespace": namespace,
+            },
+            "stringData": {"psk.txt": psk_value},
+        },
+    ]
+    for manifest in manifests:
+        manifest_file = tempfile.NamedTemporaryFile(
+            mode="w", prefix="psk_", suffix=".yaml", delete=False
+        )
+        manifest_file.close()
+        try:
+            templating.dump_data_to_temp_yaml(manifest, manifest_file.name)
+            exec_cmd(f"oc apply -f {manifest_file.name}", cluster_config=cluster_config)
+        finally:
+            os.remove(manifest_file.name)
 
 
 def create_psk_secret_for_app(namespace):
