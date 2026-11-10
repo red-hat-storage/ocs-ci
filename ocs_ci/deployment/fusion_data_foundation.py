@@ -240,8 +240,19 @@ class FusionDataFoundationDeployment:
         if catalog_image:
             return catalog_image
         if not registry or not tag:
+            if upgrade:
+                mode = "upgrade"
+            elif config.DEPLOYMENT.get("live_deployment"):
+                mode = "live"
+            else:
+                mode = "pre-release"
             raise UnexpectedDeploymentConfiguration(
-                f"Unable to resolve the FDF catalog image for mirroring. Set {config_keys}."
+                f"Unable to resolve the FDF catalog image for mirroring in {mode} "
+                f"mode (resolved registry={registry!r}, tag={tag!r}). Set {config_keys}. "
+                "Note that fdf_pre_release_registry is only set by "
+                "conf/fdf_version/fdf-X.Y.yaml, which is loaded solely when "
+                "--fdf-version is passed to the deploy-fdf entrypoint; a live "
+                "deployment additionally requires --live-deploy."
             )
         return f"{registry}/{defaults.FUSION_CATALOG_NAME}:{tag}"
 
