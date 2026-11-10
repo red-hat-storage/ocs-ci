@@ -350,6 +350,26 @@ L2_ADVERTISEMENT = "L2Advertisement"
 METALLB_INSTANCE = "MetalLB"
 NETWORK_ATTACHMENT_DEFINITION = "NetworkAttachmentDefinition"
 NETWORK_POLICY = "NetworkPolicy"
+
+ODF_CSV_PREFIXES_FOR_NETWORK_POLICY_RBAC = [
+    "odf-operator",
+    "ocs-operator",
+    "mcg-operator",
+    "rook-ceph-operator",
+    "cephcsi-operator",
+]
+
+ODF_OPERATOR_SA_FOR_NETWORK_POLICY = {
+    "rook-ceph-operator": "rook-ceph-system",
+    "cephcsi-operator": "ceph-csi-controller-manager",
+    "mcg-operator": "noobaa",
+    "ocs-operator": "ocs-operator",
+    "odf-operator": "odf-operator-controller-manager",
+}
+
+NETWORK_POLICY_REQUIRED_VERBS = {"create"}
+NETWORK_POLICY_REQUIRED_UPDATE_VERBS = {"update", "patch"}
+
 DAEMONSET = "DaemonSet"
 INGRESSCONTROLLER = "ingresscontroller"
 PROVISIONING = "Provisioning"
@@ -2796,6 +2816,9 @@ MCG_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/mcg-cli-rhel9"
 # odf5 for ODF 5.y.z), see ocs_ci.utility.version.get_odf_image_namespace()
 ODF_CLI_DEV_IMAGE_TEMPLATE = "quay.io/rhceph-dev/{namespace}-odf-cli-rhel9"
 ODF_CLI_OFFICIAL_IMAGE_TEMPLATE = "registry.redhat.io/{namespace}/odf-cli-rhel9"
+# The ODF CLI image also ships the standalone noobaa CLI, as one tarball per
+# platform under this directory.
+CLI_IMAGE_RELEASES_DIR = "/releases"
 ACM_CATSRC_IMAGE = "quay.io:443/acm-d/acm-dev-catalog"
 MCE_CATSRC_IMAGE = "quay.io:443/acm-d/mce-dev-catalog"
 

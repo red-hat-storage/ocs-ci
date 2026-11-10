@@ -92,6 +92,7 @@ dependencies = [
     "pyvmomi==7.0",
     "pyyaml==6.0.3",
     "range-key-dict==1.1.0",
+    "redfish==3.4.0",
     "reportportal-client==3.2.3",
     "requests==2.32.2",
     "scipy==1.12.0",
