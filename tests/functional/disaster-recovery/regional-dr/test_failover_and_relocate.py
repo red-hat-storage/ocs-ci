@@ -37,43 +37,174 @@ class TestFailoverAndRelocate:
             constants.CEPHBLOCKPOOL,
             False,  # via_ui = False
             False,
-            False,
+            False,  # erasure_coding
+            3,
+            None,
             marks=[acceptance, pytest.mark.polarion_id("OCS-4430")],
             id="primary_up-rbd-cli",
+        ),
+        pytest.param(
+            False,  # primary_cluster_down = False
+            constants.CEPHBLOCKPOOL,
+            False,  # via_ui = False
+            True,
+            False,  # erasure_coding
+            2,
+            "aggressive",
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_up-rbd-custom_pool_replica2_with_compression",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHBLOCKPOOL,
             False,  # via_ui = False
             False,
-            False,
+            False,  # erasure_coding
+            3,
+            None,
             marks=[acceptance, pytest.mark.polarion_id("OCS-4427")],
             id="primary_down-rbd-cli",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHBLOCKPOOL,
+            False,  # via_ui = False
+            True,
+            False,  # erasure_coding
+            3,
+            None,
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-rbd-custom_pool_replica3_without_compression",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHBLOCKPOOL,
+            False,  # via_ui = False
+            True,
+            False,  # erasure_coding
+            3,
+            "aggressive",
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-rbd-custom_pool_replica3_with_compression",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHBLOCKPOOL,
+            False,  # via_ui = False
+            True,
+            False,  # erasure_coding
+            2,
+            None,
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-rbd-custom_pool_replica2_without_compression",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHBLOCKPOOL,
+            False,  # via_ui = False
+            True,
+            False,  # erasure_coding
+            2,
+            "aggressive",
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-rbd-custom_pool_replica2_with_compression",
         ),
         pytest.param(
             False,  # primary_cluster_down = False
             constants.CEPHFILESYSTEM,
             False,  # via_ui = False
             False,
-            False,
+            False,  # erasure_coding
+            None,
+            None,
             marks=[acceptance, pytest.mark.polarion_id("OCS-4730")],
             id="primary_up-cephfs-cli",
+        ),
+        pytest.param(
+            False,  # primary_cluster_down = False
+            constants.CEPHFILESYSTEM,
+            False,  # via_ui = False
+            True,
+            False,  # erasure_coding
+            2,
+            "aggressive",
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_up-cephfs-custom_pool_replica2_with_compression",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHFILESYSTEM,
             False,  # via_ui = False
             False,
-            False,
+            False,  # erasure_coding
+            None,
+            None,
             marks=[acceptance, pytest.mark.polarion_id("OCS-4727")],
             id="primary_down-cephfs-cli",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHFILESYSTEM,
+            False,  # via_ui = False
+            True,
+            False,  # erasure_coding
+            3,
+            None,
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-cephfs-custom_pool_replica3_without_compression",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHFILESYSTEM,
+            False,  # via_ui = False
+            True,
+            False,  # erasure_coding
+            3,
+            "aggressive",
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-cephfs-custom_pool_replica3_with_compression",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHFILESYSTEM,
+            False,  # via_ui = False
+            True,
+            False,  # erasure_coding
+            2,
+            None,
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-cephfs-custom_pool_replica2_without_compression",
+        ),
+        pytest.param(
+            True,  # primary_cluster_down = True
+            constants.CEPHFILESYSTEM,
+            False,  # via_ui = False
+            True,
+            False,  # erasure_coding
+            2,
+            "aggressive",
+            # marks=pytest.mark.polarion_id("OCS-XXXX"),
+            id="primary_down-cephfs-custom_pool_replica2_with_compression",
+        ),
+        pytest.param(
+            False,  # primary_cluster_down = False
+            constants.CEPHBLOCKPOOL,
+            True,  # via_ui = True
+            False,
+            False,  # erasure_coding
+            None,
+            None,
+            marks=pytest.mark.polarion_id("OCS-6861"),
+            id="primary_up-rbd-ui",
         ),
         pytest.param(
             True,  # primary_cluster_down = True
             constants.CEPHBLOCKPOOL,
             True,  # via_ui = True
             False,
-            False,
+            False,  # erasure_coding
+            None,
+            None,
             marks=pytest.mark.polarion_id("OCS-4743"),
             id="primary_down-rbd-ui",
         ),
@@ -82,7 +213,9 @@ class TestFailoverAndRelocate:
             constants.CEPHFILESYSTEM,
             True,  # via_ui = True
             False,
-            False,
+            False,  # erasure_coding
+            None,
+            None,
             marks=pytest.mark.polarion_id("OCS-6859"),
             id="primary_down-cephfs-ui",
         ),
@@ -92,6 +225,8 @@ class TestFailoverAndRelocate:
             False,  # via_ui = True
             True,
             True,
+            None,
+            None,
             marks=pytest.mark.polarion_id("OCS-8260"),
             id="primary_up-cephfs-cli-custom_sc-ec",
         ),
@@ -104,6 +239,8 @@ class TestFailoverAndRelocate:
             "via_ui",
             "custom_sc",
             "erasure_coding",
+            "replica",
+            "compression",
         ],
         argvalues=params,
     )
@@ -114,9 +251,12 @@ class TestFailoverAndRelocate:
         via_ui,
         custom_sc,
         erasure_coding,
+        replica,
+        compression,
         setup_acm_ui,
         dr_workload,
         nodes_multicluster,
+        cnv_custom_storage_class,
         cephfs_custom_storage_class,
         node_restart_teardown,
     ):
@@ -133,9 +273,18 @@ class TestFailoverAndRelocate:
             acm_obj = AcmAddClusters()
 
         if custom_sc:
-            if pvc_interface == constants.CEPHFILESYSTEM:
-                cephfs_custom_storage_class(erasure_coded=erasure_coding)
-            # TODO: Test case for custom storageclass RBD
+            if pvc_interface == constants.CEPHBLOCKPOOL:
+                logger.info("Calling fixture to create Custom rbd Pool/SC..")
+                cnv_custom_storage_class(replica=replica, compression=compression)
+
+            elif pvc_interface == constants.CEPHFILESYSTEM:
+                logger.info("Calling fixture to create Custom Pool/SC..")
+                cephfs_custom_storage_class(
+                    replica=replica,
+                    compression=compression,
+                    erasure_coded=erasure_coding,
+                    new_cephfs_pool=not erasure_coding,
+                )
 
         workloads = dr_workload(
             num_of_subscription=1,
