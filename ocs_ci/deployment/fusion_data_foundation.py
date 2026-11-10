@@ -5,6 +5,7 @@ This module contains functions needed to install IBM Fusion Data Foundation.
 import json
 import logging
 import os
+import re
 import tempfile
 
 import yaml
@@ -127,6 +128,40 @@ class FusionDataFoundationDeployment:
             "disconnected_mirror_completed"
         )
 
+    @staticmethod
+    def released_catalog_tag(version):
+        """
+        Normalise a configured version or image tag to the released (GA) FDF
+        catalog tag.
+
+        Released catalogs are published as ``vX.Y``, so any channel suffix and
+        any z-stream / build part are dropped and the ``v`` prefix is enforced:
+
+        * ``4.18``       -> ``v4.18``
+        * ``4.18-ga``    -> ``v4.18``
+        * ``v4.18``      -> ``v4.18``
+        * ``4.18.31-1``  -> ``v4.18``
+
+        Args:
+            version (str): Configured version or image tag.
+
+        Returns:
+            str: Released catalog tag, or None when the value can't be parsed
+                into a major.minor version.
+
+        """
+        if not version:
+            return None
+        value = re.sub(r"-(ga|GA)$", "", str(version).strip()).lstrip("vV")
+        parts = value.split(".")
+        if len(parts) < 2 or not (parts[0].isdigit() and parts[1].isdigit()):
+            logger.warning(
+                "Could not derive a released FDF catalog tag from version %s",
+                version,
+            )
+            return None
+        return f"v{parts[0]}.{parts[1]}"
+
     def get_catalog_image(self, upgrade=False):
         """
         Resolve the FDF catalog image to mirror.
@@ -162,10 +197,12 @@ class FusionDataFoundationDeployment:
                 "DEPLOYMENT.fdf_upgrade_registry and DEPLOYMENT.fdf_upgrade_image_tag"
             )
         elif config.DEPLOYMENT.get("live_deployment"):
-            # Released build: the catalog is always the released one, built
-            # from the same registry the upgrade uses for a released version.
-            # A pre-release catalog image configured for the pipeline is not
-            # what we want to mirror here, so it is ignored.
+            # Released build: the catalog is always the released one, pulled
+            # from the GA registry (DEPLOYMENT.fdf_upgrade_registry). Neither a
+            # pre-release catalog image nor a pre-release image tag configured
+            # for the pipeline is what we want to mirror here, so both are
+            # ignored and the tag is normalised to the released 'vX.Y' form:
+            # '4.18-ga', '4.18.31-1' and 'v4.18' all resolve to 'v4.18'.
             configured_image = config.DEPLOYMENT.get("fdf_catalog_image")
             if configured_image:
                 logger.info(
@@ -174,12 +211,20 @@ class FusionDataFoundationDeployment:
                     configured_image,
                 )
             catalog_image = None
-            registry = config.DEPLOYMENT.get(
-                "fdf_upgrade_registry"
-            ) or config.DEPLOYMENT.get("fdf_pre_release_registry")
-            tag = config.DEPLOYMENT.get("fdf_image_tag") or config.ENV_DATA.get(
-                "fdf_version"
-            )
+            # No fallback to fdf_pre_release_registry: a live deployment must
+            # never mirror from the pre-release registry.
+            registry = config.DEPLOYMENT.get("fdf_upgrade_registry")
+            configured_tag = config.DEPLOYMENT.get(
+                "fdf_image_tag"
+            ) or config.ENV_DATA.get("fdf_version")
+            tag = self.released_catalog_tag(configured_tag)
+            if configured_tag and tag != configured_tag:
+                logger.info(
+                    "Live deployment, using released catalog tag %s "
+                    "(derived from the configured version %s)",
+                    tag,
+                    configured_tag,
+                )
             config_keys = "DEPLOYMENT.fdf_upgrade_registry and DEPLOYMENT.fdf_image_tag"
         else:
             catalog_image = config.DEPLOYMENT.get("fdf_catalog_image")
