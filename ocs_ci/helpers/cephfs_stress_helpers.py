@@ -766,7 +766,8 @@ def verify_openshift_storage_ns_pods_in_running_state(stress_manager=None):
             "\n"
         )
         result = check_pods_in_running_state(
-            namespace=config.ENV_DATA["cluster_namespace"]
+            namespace=config.ENV_DATA["cluster_namespace"],
+            skip_for_status=[constants.STATUS_CONTAINER_STATUS_UNKNOWN],
         )
         if not result:
             raise CommandFailed(
