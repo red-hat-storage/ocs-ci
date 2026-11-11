@@ -1,6 +1,8 @@
 import logging
-import pytest
 import time
+from concurrent.futures import ThreadPoolExecutor
+
+import pytest
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework import config
@@ -367,11 +369,12 @@ class TestCnvDiscoveredAppsMDR:
         node_restart_teardown,
     ):
         """
-        Failover and relocate multiple CNV discovered apps with primary down,
-        covering no-recipe, recipe, and recipe+checkhooks together.
+        Concurrent failover and relocate of multiple CNV discovered apps with
+        primary down.
 
-        Covers RHSTOR-9059 recipe, recipe+checkhooks, and concurrent multi-VM
-        FO/relocate. Primary-up is covered by the single-app no-recipe test.
+        Deploys one VM with kubeobject protection and two with recipe protection
+        (with and without checkhooks), then fails over and relocates them
+        concurrently.
         """
         self.primary_cluster_name = None
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
@@ -381,7 +384,7 @@ class TestCnvDiscoveredAppsMDR:
         CNVInstaller().download_and_extract_virtctl_binary()
 
         logger.test_step(
-            "Deploy no-recipe, recipe, and recipe+checkhooks CNV discovered apps"
+            "Deploy kubeobject and recipe (with and without checkhooks) CNV apps"
         )
         # Fixture returns the accumulated instance list; take only the newly
         # created workload from each factory call (pvc_vm=1).
@@ -415,6 +418,11 @@ class TestCnvDiscoveredAppsMDR:
         )
         primary_cluster_index = config.cur_index
         self.primary_cluster_name = get_current_primary_cluster_name(
+            primary_namespace,
+            discovered_apps=True,
+            resource_name=primary_resource,
+        )
+        secondary_cluster_name = get_current_secondary_cluster_name(
             primary_namespace,
             discovered_apps=True,
             resource_name=primary_resource,
@@ -454,24 +462,34 @@ class TestCnvDiscoveredAppsMDR:
             drcluster_name=self.primary_cluster_name, state=constants.ACTION_FENCE
         ), f"DR cluster {self.primary_cluster_name} reached {constants.ACTION_FENCE} state"
 
-        secondary_cluster_name = get_current_secondary_cluster_name(
-            primary_namespace,
-            discovered_apps=True,
-            resource_name=primary_resource,
+        logger.test_step(
+            f"Concurrently failover {len(cnv_workloads)} CNV discovered apps"
         )
 
-        logger.test_step(f"Failover {len(cnv_workloads)} CNV discovered apps")
+        config.switch_acm_ctx()
+        failover_results = []
+        with ThreadPoolExecutor() as executor:
+            for cnv_wl in cnv_workloads:
+                failover_results.append(
+                    executor.submit(
+                        failover,
+                        failover_cluster=secondary_cluster_name,
+                        namespace=cnv_wl.workload_namespace,
+                        discovered_apps=True,
+                        workload_placement_name=cnv_wl.discovered_apps_placement_name,
+                        old_primary=self.primary_cluster_name,
+                        skip_odf_cli_validation=True,
+                    )
+                )
+                time.sleep(5)
+
+        for result in failover_results:
+            result.result()
+
+        logger.test_step("Verify workloads on secondary after concurrent failover")
+        config.switch_to_cluster_by_name(secondary_cluster_name)
         for cnv_wl in cnv_workloads:
             resource_name = cnv_wl.discovered_apps_placement_name
-            failover(
-                failover_cluster=secondary_cluster_name,
-                namespace=cnv_wl.workload_namespace,
-                discovered_apps=True,
-                workload_placement_name=resource_name,
-                old_primary=self.primary_cluster_name,
-                skip_odf_cli_validation=True,
-            )
-            config.switch_to_cluster_by_name(secondary_cluster_name)
             wait_for_all_resources_creation(
                 cnv_wl.workload_pvc_count,
                 cnv_wl.workload_pod_count,
@@ -520,6 +538,7 @@ class TestCnvDiscoveredAppsMDR:
                 vrg_name=cnv_wl.discovered_apps_placement_name,
                 skip_resource_deletion_verification=True,
             )
+
             mdr_post_failover_check(namespace=cnv_wl.workload_namespace)
 
         enable_unfence(drcluster_name=self.primary_cluster_name)
@@ -550,43 +569,59 @@ class TestCnvDiscoveredAppsMDR:
                 )
                 drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
 
-        logger.test_step(f"Relocate {len(cnv_workloads)} CNV discovered apps")
+        logger.test_step(
+            f"Wait for {wait_time} seconds before starting Relocate of applications"
+        )
+        time.sleep(wait_time)
+
+        logger.test_step(
+            f"Concurrently relocate {len(cnv_workloads)} CNV discovered apps"
+        )
+        # vm_auto_cleanup=True skips in-helper cleanup so concurrent relocate
+        # does not race on global config switches inside do_discovered_apps_cleanup.
+        config.switch_acm_ctx()
+        relocate_results = []
+        with ThreadPoolExecutor() as executor:
+            for cnv_wl in cnv_workloads:
+                relocate_results.append(
+                    executor.submit(
+                        relocate,
+                        preferred_cluster=self.primary_cluster_name,
+                        namespace=cnv_wl.workload_namespace,
+                        workload_placement_name=cnv_wl.discovered_apps_placement_name,
+                        discovered_apps=True,
+                        old_primary=secondary_cluster_name,
+                        workload_instance=cnv_wl,
+                        vm_auto_cleanup=True,
+                    )
+                )
+                time.sleep(5)
+
+        for result in relocate_results:
+            result.result()
+
+        logger.test_step("Cleanup discovered apps on secondary after relocate")
+        for cnv_wl in cnv_workloads:
+            do_discovered_apps_cleanup(
+                drpc_name=cnv_wl.discovered_apps_placement_name,
+                old_primary=secondary_cluster_name,
+                workload_namespace=cnv_wl.workload_namespace,
+                workload_dir=cnv_wl.workload_dir,
+                vrg_name=cnv_wl.discovered_apps_placement_name,
+                skip_resource_deletion_verification=True,
+            )
+
+        logger.test_step("Verify workloads after concurrent relocate")
         for cnv_wl in cnv_workloads:
             resource_name = cnv_wl.discovered_apps_placement_name
-            current_primary = get_current_primary_cluster_name(
-                cnv_wl.workload_namespace,
-                discovered_apps=True,
-                resource_name=resource_name,
-            )
-            current_secondary = get_current_secondary_cluster_name(
-                cnv_wl.workload_namespace,
-                discovered_apps=True,
-                resource_name=resource_name,
-            )
-            relocate(
-                preferred_cluster=current_secondary,
-                namespace=cnv_wl.workload_namespace,
-                workload_placement_name=resource_name,
-                discovered_apps=True,
-                old_primary=current_primary,
-                workload_instance=cnv_wl,
-            )
-            set_current_secondary_cluster_context(
-                cnv_wl.workload_namespace,
-                discovered_apps=True,
-                resource_name=resource_name,
-            )
+            config.switch_to_cluster_by_name(secondary_cluster_name)
             wait_for_all_resources_deletion(
                 namespace=cnv_wl.workload_namespace,
                 discovered_apps=True,
                 vrg_name=resource_name,
                 skip_vrg_check=True,
             )
-            set_current_primary_cluster_context(
-                cnv_wl.workload_namespace,
-                discovered_apps=True,
-                resource_name=resource_name,
-            )
+            config.switch_to_cluster_by_name(self.primary_cluster_name)
             wait_for_all_resources_creation(
                 cnv_wl.workload_pvc_count,
                 cnv_wl.workload_pod_count,

@@ -2179,6 +2179,17 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         )
         self.recipe_enabled = False
 
+    def _get_managed_cluster_configs(self):
+        """
+        Return managed peer cluster configs for discovered CNV apps.
+
+        On provider/client MDR (dr_cluster_relations set), exclude the provider
+        so recipes/secrets are applied only on client peers
+        """
+        if config.MULTICLUSTER.get("dr_cluster_relations", []):
+            return get_non_acm_cluster_and_non_provider_cluster_config()
+        return get_non_acm_cluster_config()
+
     def deploy_workload(
         self,
         shared_drpc_protection=False,
@@ -2200,8 +2211,6 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
         """
         self._deploy_prereqs()
-        for cluster in get_non_acm_cluster_config():
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
         self.manage_dr_vm_secrets(shared_drpc_protection=shared_drpc_protection)
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         self.workload_path = self.target_clone_dir + "/" + self.workload_dir
@@ -2215,8 +2224,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             if recipe:
                 log.info("Creating CNV workload with Ramen Recipe")
                 self.recipe_enabled = True
-                config.switch_to_cluster_by_name(self.preferred_primary_cluster)
-                for cluster in get_non_acm_cluster_config():
+                for cluster in self._get_managed_cluster_configs():
                     config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                     self.create_cnv_recipe(checkhooks=checkhooks)
                 config.switch_acm_ctx()
@@ -2262,7 +2270,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             a workload in an existing namespace
 
         """
-        for cluster in get_non_acm_cluster_config():
+        for cluster in self._get_managed_cluster_configs():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
 
             # Create namespace if it doesn't exist
@@ -2548,7 +2556,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                     f"{placement_name}"
                 )
 
-        for cluster in get_non_acm_cluster_config():
+        for cluster in self._get_managed_cluster_configs():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             log.info(f"Deleting workload from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(
