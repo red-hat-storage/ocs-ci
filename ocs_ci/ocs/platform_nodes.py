@@ -4645,8 +4645,10 @@ class IBMHCIAgentNode(object):
                 node_names = get_node_names()
             for node_name_value in node_names:
                 if "host1" in node_name_value:
-                    node_name = node_name_value
-            details_ipmi_command_working_rack = self._agent_node_map.get(node_name)
+                    node_name_working = node_name_value
+            details_ipmi_command_working_rack = self._agent_node_map.get(
+                node_name_working
+            )
         details = self._agent_node_map.get(node_name)
 
         if not details:
