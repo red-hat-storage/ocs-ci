@@ -1812,6 +1812,8 @@ RDR_CUSTOM_RBD_DR_POLICY = "custom-pool-dr-policy"
 RAMEN_GROUP_REPLICATION_ID_LABEL = "ramendr.openshift.io/groupreplicationid"
 RAMEN_REPLICATION_ID_LABEL = "ramendr.openshift.io/replicationid"
 RAMEN_STORAGE_ID_LABEL = "ramendr.openshift.io/storageid"
+RAMEN_OFFLOADED_LABEL = "ramendr.openshift.io/offloaded"
+RAMEN_GLOBAL_LABEL = "ramendr.openshift.io/global"
 RDR_VM_PROTECTION_LABEL = "ramendr.openshift.io/k8s-resource-selector"
 
 # constants
@@ -3060,6 +3062,14 @@ IBM_STORAGE_SCALE_CLUSTER_NAME = "ibm-spectrum-scale"
 IBM_STORAGE_SCALE_CLUSTER_KIND = "Cluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_REMOTECLUSTER_KIND = "RemoteCluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_FILESYSTEM_KIND = "Filesystem.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_DAEMON_KIND = "Daemon.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_DAEMON_NAME = "ibm-spectrum-scale"
+IBM_STORAGE_SCALE_FSRD_KIND = "FilesystemRecoveryData.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_LOCALDISK_KIND = "LocalDisk.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_CSI_PROVISIONER = "spectrumscale.csi.ibm.com"
+IBM_STORAGE_SCALE_DR_PRIMARY_LABEL = "scale.spectrum.ibm.com/dr-primary"
+IBM_STORAGE_SCALE_DR_STATE_LABEL = "scale.spectrum.ibm.com/dr-state"
+IBM_STORAGE_SCALE_FILESYSTEM_LABEL = "scale.spectrum.ibm.com/filesystem"
 # Pinned commit URL for the IBM Storage Scale MCO (Machine Config Operator)
 # manifest. The URL is not stable and is expected to change over time.
 IBM_STORAGE_SCALE_MCO_URL = (
