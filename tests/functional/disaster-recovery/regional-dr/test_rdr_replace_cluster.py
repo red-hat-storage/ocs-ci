@@ -50,232 +50,175 @@ class TestRDRReplaceCluster:
 
     """
 
-    @pytest.mark.parametrize(
-        argnames=["workload_type"],
-        argvalues=[
-            pytest.param(
-                constants.SUBSCRIPTION,
-                marks=pytest.mark.polarion_id("OCS-XXXX"),
-                id="subscription",
-            ),
-            pytest.param(
-                constants.APPLICATION_SET,
-                marks=pytest.mark.polarion_id("OCS-XXXX"),
-                id="appset",
-            ),
-        ],
-    )
+    @pytest.mark.polarion_id("OCS-XXXX")
     def test_rdr_replace_cluster(
         self,
-        workload_type,
-        nodes_multicluster,
         dr_workload,
-    ):
-        """
-        Verify recovery of a Regional-DR setup to a replacement cluster for
-        Subscription and ApplicationSet based applications.
-
-        """
-
-        # Deploy a Subscription or ApplicationSet based application
-        if workload_type == constants.SUBSCRIPTION:
-            wl = dr_workload(num_of_subscription=1)[0]
-        else:
-            wl = dr_workload(num_of_subscription=0, num_of_appset=1)[0]
-        self.namespace = wl.workload_namespace
-        self.workload_type = wl.workload_type
-        workload = [wl]
-
-        # DRPC lookup differs for ApplicationSet (DRPC lives in the GitOps
-        # namespace and must be referenced by name).
-        resource_name = (
-            f"{wl.appset_placement_name}-drpc"
-            if self.workload_type == constants.APPLICATION_SET
-            else None
-        )
-
-        # Identify the primary managed cluster hosting the application
-        primary_cluster_name = get_current_primary_cluster_name(
-            self.namespace, self.workload_type, resource_name=resource_name
-        )
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        primary_cluster_index = config.cur_index
-        node_objs = get_node_objs()
-        secondary_cluster_name = get_current_secondary_cluster_name(
-            self.namespace, self.workload_type, resource_name=resource_name
-        )
-
-        # Simulate permanent loss of the primary managed cluster by stopping
-        # its nodes.
-        logger.info(f"Stopping nodes of primary cluster: {primary_cluster_name}")
-        nodes_multicluster[primary_cluster_index].stop_nodes(node_objs)
-
-        # Failover the application to the surviving (secondary) cluster
-        dr_helpers.failover(
-            failover_cluster=secondary_cluster_name,
-            namespace=wl.workload_namespace,
-            workload_type=self.workload_type,
-            workload_placement_name=(
-                wl.appset_placement_name
-                if self.workload_type != constants.SUBSCRIPTION
-                else None
-            ),
-        )
-
-        # Verify the application is running on the surviving cluster
-        config.switch_to_cluster_by_name(secondary_cluster_name)
-        wait_for_all_resources_creation(
-            wl.workload_pvc_count,
-            wl.workload_pod_count,
-            wl.workload_namespace,
-        )
-
-        # Validate data integrity on the surviving cluster
-        validate_data_integrity(wl.workload_namespace)
-
-        # Remove DR configuration and rebuild it against the replacement cluster.
-        # This detaches the lost primary, imports the recovery cluster, reinstalls
-        # the Multicluster Orchestrator, and re-creates the mirror peer and DR
-        # policy before re-applying it to the surviving workloads.
-        replace_cluster(workload, primary_cluster_name, secondary_cluster_name)
-
-        # After replacement the surviving cluster is the current primary and the
-        # freshly imported replacement cluster is the new secondary.
-        replacement_cluster_name = get_current_secondary_cluster_name(
-            self.namespace, self.workload_type, resource_name=resource_name
-        )
-
-        # Relocate the application back onto the replacement cluster
-        dr_helpers.relocate(
-            preferred_cluster=replacement_cluster_name,
-            namespace=wl.workload_namespace,
-            workload_type=self.workload_type,
-            workload_placement_name=(
-                wl.appset_placement_name
-                if self.workload_type != constants.SUBSCRIPTION
-                else None
-            ),
-        )
-
-        # Verify resources are deleted from the old primary (surviving cluster)
-        config.switch_to_cluster_by_name(secondary_cluster_name)
-        wait_for_all_resources_deletion(wl.workload_namespace)
-
-        # Verify resources are created on the replacement cluster
-        config.switch_to_cluster_by_name(replacement_cluster_name)
-        wait_for_all_resources_creation(
-            wl.workload_pvc_count,
-            wl.workload_pod_count,
-            wl.workload_namespace,
-        )
-
-        # Validate data integrity on the replacement cluster
-        validate_data_integrity(wl.workload_namespace)
-
-    def test_rdr_replace_cluster_discovered_apps_cnv(
-        self,
+        discovered_apps_dr_workload,
         discovered_apps_dr_workload_cnv,
         nodes_multicluster,
         node_restart_teardown,
     ):
         """
-        Verify recovery of a Regional-DR setup to a replacement cluster for a
-        CNV (VM) workload deployed as a discovered app.
+        Verify recovery of a Regional-DR setup to a replacement cluster with a
+        mixed set of protected applications running simultaneously:
+
+            - Two ApplicationSet based apps (one RBD, one CephFS)
+            - One CNV (VM) workload deployed as a discovered app
+            - Two Busybox discovered apps (one RBD, one CephFS)
 
         Test steps:
-            1. Deploy a CNV discovered app workload and write initial data
+            1. Deploy all workloads and write initial data
             2. Simulate permanent loss of the primary cluster (stop its nodes)
-            3. Failover the discovered app to the surviving cluster
-            4. Verify VM and data integrity on the surviving cluster
-            5. Recover the (now stale) primary cluster and clean up its resources
+            3. Failover every application to the surviving cluster
+            4. Verify resources and data integrity on the surviving cluster
+            5. Recover the (now stale) primary cluster and clean up the discovered
+               apps resources on it
             6. Replace the lost cluster: rebuild DR against a freshly imported
-               replacement cluster and re-protect the discovered app
-            7. Relocate the discovered app back onto the replacement cluster
-            8. Verify VM and data integrity on the replacement cluster
+               replacement cluster and re-protect every application
+            7. Relocate every application back onto the replacement cluster
+            8. Verify resources and data integrity on the replacement cluster
 
         """
         md5sum_original = []
         vm_filepaths = ["/dd_file1.txt"]
 
+        # Deploy two ApplicationSet based apps, one RBD backed and one CephFS backed
+        logger.info("Deploy ApplicationSet workloads (RBD and CephFS)")
+        dr_workload(
+            num_of_subscription=0,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHBLOCKPOOL,
+        )
+        appset_workloads = dr_workload(
+            num_of_subscription=0,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHFILESYSTEM,
+        )
+        appset_rbd, appset_cephfs = appset_workloads[0], appset_workloads[1]
+
+        # Deploy two Busybox discovered apps, one RBD backed and one CephFS backed
+        logger.info("Deploy Busybox discovered app workloads (RBD and CephFS)")
+        discovered_apps_dr_workload(kubeobject=1, pvc_interface=constants.CEPHBLOCKPOOL)
+        discovered_busybox = discovered_apps_dr_workload(
+            kubeobject=1, pvc_interface=constants.CEPHFILESYSTEM
+        )
+        discovered_rbd, discovered_cephfs = (
+            discovered_busybox[0],
+            discovered_busybox[1],
+        )
+
+        # Deploy a single CNV (VM) discovered app
         logger.info("Deploy CNV discovered app workload")
         cnv_workloads = discovered_apps_dr_workload_cnv(pvc_vm=1)
-        workload = cnv_workloads
-        placement_name = cnv_workloads[0].discovered_apps_placement_name
-        workload_namespace = cnv_workloads[0].workload_namespace
+        cnv_wl = cnv_workloads[0]
 
-        primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
-            workload_namespace,
-            discovered_apps=True,
-            resource_name=placement_name,
+        appset_workloads = [appset_rbd, appset_cephfs]
+        busybox_discovered_workloads = [discovered_rbd, discovered_cephfs]
+        discovered_workloads = [cnv_wl] + busybox_discovered_workloads
+
+        # All workloads are deployed onto the same primary managed cluster. Use one
+        # of the ApplicationSet apps to identify the primary/secondary clusters.
+        appset_rbd_drpc = f"{appset_rbd.appset_placement_name}-drpc"
+        primary_cluster_name = get_current_primary_cluster_name(
+            appset_rbd.workload_namespace,
+            constants.APPLICATION_SET,
+            resource_name=appset_rbd_drpc,
         )
+        secondary_cluster_name = get_current_secondary_cluster_name(
+            appset_rbd.workload_namespace,
+            constants.APPLICATION_SET,
+            resource_name=appset_rbd_drpc,
+        )
+
         config.switch_to_cluster_by_name(primary_cluster_name)
         primary_cluster_index = config.cur_index
         primary_cluster_nodes = get_node_objs()
         CNVInstaller().download_and_extract_virtctl_binary()
-        secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            workload_namespace,
-            discovered_apps=True,
-            resource_name=placement_name,
+
+        # Write initial data to the VM and record its checksum
+        logger.info("Write initial data to the VM and record checksum")
+        md5sum_original.append(
+            run_dd_io(
+                vm_obj=cnv_wl.vm_obj,
+                file_path=vm_filepaths[0],
+                username=cnv_wl.vm_username,
+                verify=True,
+            )
         )
 
-        logger.info("Write initial data to VMs and record checksums")
-        for cnv_wl in cnv_workloads:
-            md5sum_original.append(
-                run_dd_io(
-                    vm_obj=cnv_wl.vm_obj,
-                    file_path=vm_filepaths[0],
-                    username=cnv_wl.vm_username,
-                    verify=True,
-                )
-            )
-
+        # Let the IOs sync across clusters before simulating the cluster loss
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            workload_namespace,
+            cnv_wl.workload_namespace,
             discovered_apps=True,
-            resource_name=placement_name,
+            resource_name=cnv_wl.discovered_apps_placement_name,
         )
         wait_time = 2 * scheduling_interval
         logger.info(f"Waiting {wait_time} minutes for IOs to sync")
         sleep(wait_time * 60)
 
-        # Simulate permanent loss of the primary managed cluster by stopping
-        # its nodes.
+        # Simulate permanent loss of the primary managed cluster by stopping its
+        # nodes.
         logger.info(f"Stopping nodes of primary cluster: {primary_cluster_name}")
         nodes_multicluster[primary_cluster_index].stop_nodes(primary_cluster_nodes)
         logger.info("Waiting 300s for the primary cluster to become unreachable")
         sleep(300)
 
-        logger.info(f"Failover discovered app to secondary: {secondary_cluster_name}")
-        dr_helpers.failover(
-            failover_cluster=secondary_cluster_name,
-            namespace=workload_namespace,
-            discovered_apps=True,
-            workload_placement_name=placement_name,
-            old_primary=primary_cluster_name,
-        )
+        # Failover every application to the surviving (secondary) cluster
+        logger.info(f"Failover all workloads to secondary: {secondary_cluster_name}")
+        for wl in appset_workloads:
+            dr_helpers.failover(
+                failover_cluster=secondary_cluster_name,
+                namespace=wl.workload_namespace,
+                workload_type=constants.APPLICATION_SET,
+                workload_placement_name=wl.appset_placement_name,
+            )
+        for wl in discovered_workloads:
+            dr_helpers.failover(
+                failover_cluster=secondary_cluster_name,
+                namespace=wl.workload_namespace,
+                discovered_apps=True,
+                workload_placement_name=wl.discovered_apps_placement_name,
+                old_primary=primary_cluster_name,
+            )
 
+        # Verify resources and data integrity on the surviving cluster
         logger.info("Verify resources on surviving cluster after failover")
         config.switch_to_cluster_by_name(secondary_cluster_name)
-        dr_helpers.wait_for_all_resources_creation(
-            cnv_workloads[0].workload_pvc_count,
-            cnv_workloads[0].workload_pod_count,
-            workload_namespace,
+        for wl in appset_workloads:
+            wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+            )
+            validate_data_integrity(wl.workload_namespace)
+        for wl in busybox_discovered_workloads:
+            wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+                discovered_apps=True,
+                vrg_name=wl.discovered_apps_placement_name,
+            )
+            validate_data_integrity(wl.workload_namespace)
+        wait_for_all_resources_creation(
+            cnv_wl.workload_pvc_count,
+            cnv_wl.workload_pod_count,
+            cnv_wl.workload_namespace,
             discovered_apps=True,
-            vrg_name=placement_name,
+            vrg_name=cnv_wl.discovered_apps_placement_name,
         )
         dr_helpers.wait_for_cnv_workload(
-            vm_name=cnv_workloads[0].vm_name,
-            namespace=workload_namespace,
+            vm_name=cnv_wl.vm_name,
+            namespace=cnv_wl.workload_namespace,
             phase=constants.STATUS_RUNNING,
         )
-
-        logger.info("Validate data integrity on surviving cluster after failover")
         validate_data_integrity_vm(
-            cnv_workloads, vm_filepaths[0], md5sum_original, "Failover"
+            [cnv_wl], vm_filepaths[0], md5sum_original, "Failover"
         )
 
-        # Recover the primary cluster so its stale resources can be cleaned up
-        # before it is detached and replaced.
+        # Recover the primary cluster so its stale discovered apps resources can be
+        # cleaned up before it is detached and replaced.
         logger.info(f"Recovering the primary cluster: {primary_cluster_name}")
         config.switch_to_cluster_by_name(primary_cluster_name)
         nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
@@ -286,74 +229,107 @@ class TestRDRReplaceCluster:
         assert ceph_health_check(tries=10, delay=30)
 
         logger.info("Cleanup discovered apps resources on the old primary")
-        dr_helpers.do_discovered_apps_cleanup(
-            drpc_name=placement_name,
-            old_primary=primary_cluster_name,
-            workload_namespace=workload_namespace,
-            workload_dir=cnv_workloads[0].workload_dir,
-            vrg_name=placement_name,
-        )
+        for wl in discovered_workloads:
+            dr_helpers.do_discovered_apps_cleanup(
+                drpc_name=wl.discovered_apps_placement_name,
+                old_primary=primary_cluster_name,
+                workload_namespace=wl.workload_namespace,
+                workload_dir=wl.workload_dir,
+                vrg_name=wl.discovered_apps_placement_name,
+            )
 
         # Remove DR configuration and rebuild it against the replacement cluster,
-        # re-protecting the discovered app on the surviving cluster.
+        # re-protecting both the ApplicationSet apps and the discovered apps on the
+        # surviving cluster.
         replace_cluster(
-            workload,
+            appset_workloads,
             primary_cluster_name,
             secondary_cluster_name,
-            discovered_apps=True,
+            discovered_apps_workload=discovered_workloads,
         )
 
-        logger.info("Verify discovered app is DR protected after replacement")
-        dr_helpers.validate_application_odf_cli(
-            drpc_name=placement_name,
-            namespace=constants.DR_OPS_NAMESPACE,
-        )
+        logger.info("Verify discovered apps are DR protected after replacement")
+        for wl in discovered_workloads:
+            dr_helpers.validate_application_odf_cli(
+                drpc_name=wl.discovered_apps_placement_name,
+                namespace=constants.DR_OPS_NAMESPACE,
+            )
 
         # After replacement the surviving cluster is the current primary and the
         # freshly imported replacement cluster is the new secondary.
-        replacement_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            workload_namespace,
-            discovered_apps=True,
-            resource_name=placement_name,
+        replacement_cluster_name = get_current_secondary_cluster_name(
+            appset_rbd.workload_namespace,
+            constants.APPLICATION_SET,
+            resource_name=appset_rbd_drpc,
         )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            workload_namespace,
+            cnv_wl.workload_namespace,
             discovered_apps=True,
-            resource_name=placement_name,
+            resource_name=cnv_wl.discovered_apps_placement_name,
         )
         wait_time = 2 * scheduling_interval
         logger.info(f"Waiting {wait_time} minutes for IOs to sync before relocate")
         sleep(wait_time * 60)
 
+        # Relocate every application back onto the replacement cluster
         logger.info(
-            f"Relocate discovered app to replacement: {replacement_cluster_name}"
+            f"Relocate all workloads to replacement: {replacement_cluster_name}"
         )
-        dr_helpers.relocate(
-            preferred_cluster=replacement_cluster_name,
-            namespace=workload_namespace,
-            workload_placement_name=placement_name,
-            discovered_apps=True,
-            old_primary=secondary_cluster_name,
-            workload_instance=cnv_workloads[0],
-        )
+        for wl in appset_workloads:
+            dr_helpers.relocate(
+                preferred_cluster=replacement_cluster_name,
+                namespace=wl.workload_namespace,
+                workload_type=constants.APPLICATION_SET,
+                workload_placement_name=wl.appset_placement_name,
+            )
+        for wl in discovered_workloads:
+            dr_helpers.relocate(
+                preferred_cluster=replacement_cluster_name,
+                namespace=wl.workload_namespace,
+                workload_placement_name=wl.discovered_apps_placement_name,
+                discovered_apps=True,
+                old_primary=secondary_cluster_name,
+                workload_instance=wl,
+            )
 
+        # Verify the ApplicationSet resources are removed from the old primary
+        # (surviving cluster). Discovered apps cleanup is handled within relocate.
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+        for wl in appset_workloads:
+            wait_for_all_resources_deletion(wl.workload_namespace)
+
+        # Verify resources and data integrity on the replacement cluster
         logger.info("Verify resources on replacement cluster after relocate")
         config.switch_to_cluster_by_name(replacement_cluster_name)
-        dr_helpers.wait_for_all_resources_creation(
-            cnv_workloads[0].workload_pvc_count,
-            cnv_workloads[0].workload_pod_count,
-            workload_namespace,
+        for wl in appset_workloads:
+            wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+            )
+            validate_data_integrity(wl.workload_namespace)
+        for wl in busybox_discovered_workloads:
+            wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+                discovered_apps=True,
+                vrg_name=wl.discovered_apps_placement_name,
+            )
+            validate_data_integrity(wl.workload_namespace)
+        wait_for_all_resources_creation(
+            cnv_wl.workload_pvc_count,
+            cnv_wl.workload_pod_count,
+            cnv_wl.workload_namespace,
             discovered_apps=True,
-            vrg_name=placement_name,
+            vrg_name=cnv_wl.discovered_apps_placement_name,
         )
         dr_helpers.wait_for_cnv_workload(
-            vm_name=cnv_workloads[0].vm_name,
-            namespace=workload_namespace,
+            vm_name=cnv_wl.vm_name,
+            namespace=cnv_wl.workload_namespace,
             phase=constants.STATUS_RUNNING,
         )
-
-        logger.info("Validate data integrity on replacement cluster after relocate")
         validate_data_integrity_vm(
-            cnv_workloads, vm_filepaths[0], md5sum_original, "Relocate"
+            [cnv_wl], vm_filepaths[0], md5sum_original, "Relocate"
         )

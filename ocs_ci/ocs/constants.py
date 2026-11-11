@@ -3986,6 +3986,8 @@ OBSERVABILITYMETRICSCONFIGMAP_PATH = os.path.join(
 )
 APPLICATION_SET = "ApplicationSet"
 PLACEMENT = "Placement"
+PLACEMENTDECISION = "PlacementDecision"
+PLACEMENT_LABEL = "cluster.open-cluster-management.io/placement"
 GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
 APPLICATION_ARGOCD = "applications.argoproj.io"
 PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"
