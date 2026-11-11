@@ -488,6 +488,49 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
 
+        # Workaround: patch SubmarinerConfig with the correct subscriptionConfig
+        # channel for released installs. Remove once fixed in next ACM z-stream.
+        submariner_channel = (
+            config.ENV_DATA.get("submariner_channel")
+            or config.ENV_DATA.get("submariner_version", "").rpartition(".")[0]
+        )
+        if submariner_channel and not submariner_image:
+            subscription_config = {
+                "channel": f"stable-{submariner_channel}",
+                "source": "redhat-operators",
+                "sourceNamespace": "openshift-marketplace",
+                "installPlanApproval": "automatic",
+            }
+            patch_param = json.dumps(
+                [
+                    {
+                        "op": "add",
+                        "path": "/spec/subscriptionConfig",
+                        "value": subscription_config,
+                    }
+                ]
+            )
+
+            for cluster_name in (cluster_name_a, cluster_name_b):
+                submariner_config = OCP(
+                    kind=constants.SUBMARINERCONFIG,
+                    namespace=cluster_name,
+                    resource_name="submariner",
+                )
+                log.info(
+                    f"Waiting for SubmarinerConfig/submariner in namespace {cluster_name}"
+                )
+                assert submariner_config.check_resource_existence(
+                    should_exist=True,
+                    timeout=300,
+                    resource_name="submariner",
+                ), f"SubmarinerConfig/submariner not found in namespace {cluster_name} "
+                log.info(
+                    f"Patching SubmarinerConfig/submariner subscriptionConfig to "
+                    f"{subscription_config} for cluster {cluster_name}"
+                )
+                submariner_config.patch(params=patch_param, format_type="json")
+
         # Add loadBalancerEnable: true and hostedCluster: true in the submarinerconfig for kubevirt hcp clusters
         if dr_cluster_relations:
             for dr_cluster in [primary_index, secondary_index]:
@@ -670,19 +713,28 @@ class AcmAddClusters(AcmPageNavigator):
             submariner_config_yaml["metadata"]["namespace"] = cluster.ENV_DATA[
                 "cluster_name"
             ]
+            submariner_channel = (
+                config.ENV_DATA.get("submariner_channel")
+                or config.ENV_DATA.get("submariner_version", "").rpartition(".")[0]
+            )
             if submariner_image:
-                submariner_channel = (
-                    config.ENV_DATA.get("submariner_channel")
-                    if config.ENV_DATA.get("submariner_channel")
-                    else config.ENV_DATA.get("submariner_version").rpartition(".")[0]
-                )
-
-                channel_name = "stable-" + submariner_channel
                 subscription_config = {
                     "source": "submariner-catalogsource",
                     "sourceNamespace": "openshift-marketplace",
-                    "channel": channel_name,
+                    "channel": f"stable-{submariner_channel}",
                     "startingCSV": None,
+                    "installPlanApproval": "automatic",
+                }
+                submariner_config_yaml["spec"][
+                    "subscriptionConfig"
+                ] = subscription_config
+            elif submariner_channel:
+                # Workaround: ACM defaults to an older channel
+                # Remove once fixed in next ACM z-stream.
+                subscription_config = {
+                    "source": "redhat-operators",
+                    "sourceNamespace": "openshift-marketplace",
+                    "channel": f"stable-{submariner_channel}",
                     "installPlanApproval": "automatic",
                 }
                 submariner_config_yaml["spec"][
