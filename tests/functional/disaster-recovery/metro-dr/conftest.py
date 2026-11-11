@@ -16,7 +16,7 @@ def pytest_collection_modifyitems(items):
     client_cluster_available = config.client_cluster_exist()
     if config.MULTICLUSTER.get("multicluster_mode") != constants.MDR_MODE:
         for item in items.copy():
-            if "disaster-recovery/metro-dr" in str(item.fspath):
+            if "disaster-recovery/metro-dr/" in str(item.fspath):
                 log.debug(
                     f"Test {item} is removed from the collected items. Test runs only on MDR clusters"
                 )
