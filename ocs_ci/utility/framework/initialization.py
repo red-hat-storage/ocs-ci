@@ -1,6 +1,7 @@
 import argparse
 import atexit
 import faulthandler
+import logging
 import os
 import re
 import signal
@@ -13,6 +14,8 @@ from ocs_ci import framework
 from ocs_ci.ocs.constants import OCP_VERSION_CONF_DIR, OCS_VERSION_CONF_DIR
 from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
 from ocs_ci.utility import utils
+
+logger = logging.getLogger(__name__)
 
 # Import the XML fix function
 try:
@@ -59,6 +62,63 @@ def signal_term_handler(sig, frame):
 
 
 signal.signal(signal.SIGTERM, signal_term_handler)
+
+
+# Track if full debug logging has been set up (to avoid multiple setups in multicluster mode)
+_full_debug_logging_setup = False
+
+
+def _setup_full_debug_logging(arguments):
+    """
+    Set up full DEBUG logging from the very beginning if --full-debug-log is specified.
+
+    This captures ALL DEBUG logs for the entire execution in a single file.
+    The handler stays active throughout the entire run (not cleaned up).
+
+    Args:
+        arguments (list): Command line arguments to check for --full-debug-log
+    """
+    global _full_debug_logging_setup
+
+    # Skip if already set up (happens in multicluster mode where this is called per cluster)
+    if _full_debug_logging_setup:
+        return
+
+    # Check if --full-debug-log flag is present
+    if "--full-debug-log" not in arguments:
+        return
+
+    # Get log directory from config (should be loaded by now)
+    log_dir = os.path.expanduser(framework.config.RUN.get("log_dir", "/tmp"))
+
+    # Generate run_id early to use in filename
+    run_id = int(time.time() * 1000)
+    framework.config.RUN["run_id"] = run_id
+
+    # Create full debug log file
+    full_debug_log = os.path.join(log_dir, f"full_debug_{run_id}.log")
+
+    # Configure root logger for DEBUG level
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+
+    # Create file handler that will persist for entire execution
+    file_handler = logging.FileHandler(full_debug_log)
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s - %(threadName)s - %(levelname)s - "
+            "%(name)s.%(funcName)s.%(lineno)d - %(message)s"
+        )
+    )
+    root_logger.addHandler(file_handler)
+
+    # Mark as set up to avoid duplicate setup in multicluster mode
+    _full_debug_logging_setup = True
+
+    logger.debug(f"Full DEBUG logging enabled: {full_debug_log}")
+    logger.info(f"Full DEBUG log: {full_debug_log}")
+    logger.debug("This log will contain all DEBUG messages for the entire execution")
 
 
 def check_config_requirements():
@@ -202,6 +262,10 @@ def process_ocsci_conf(arguments):
 
     args, unknown = parser.parse_known_args(args=arguments)
     load_config(args.ocsci_conf)
+
+    # Set up full DEBUG logging after configs are loaded so we get the correct log_dir
+    _setup_full_debug_logging(arguments)
+
     if unknown:
         for each_arg in unknown:
             if each_arg.startswith("--cluster-path"):
@@ -251,7 +315,10 @@ def process_ocsci_conf(arguments):
     if args.flexy_env_file:
         framework.config.ENV_DATA["flexy_env_file"] = args.flexy_env_file
 
-    framework.config.RUN["run_id"] = int(time.time() * 1000)
+    # Set run_id if not already set (may have been set by _setup_full_debug_logging)
+    if not framework.config.RUN.get("run_id"):
+        framework.config.RUN["run_id"] = int(time.time() * 1000)
+
     bin_dir = framework.config.RUN.get("bin_dir")
     if bin_dir:
         framework.config.RUN["bin_dir"] = os.path.abspath(
