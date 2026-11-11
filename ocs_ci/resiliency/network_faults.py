@@ -141,7 +141,7 @@ class NetworkFaults(PlatformNodesFactory):
                         interfaces = self.node_interfaces.get(node.name, [])
                         for iface in interfaces:
                             log.info(
-                                f"[Iteration {i+1}] Applying {description} "
+                                f"[Iteration {i + 1}] Applying {description} "
                                 f"on {node.name}/{iface}"
                             )
                             cmd = (
@@ -159,12 +159,12 @@ class NetworkFaults(PlatformNodesFactory):
                                     f"Failed to apply fault on {node.name}/{iface}: {e}"
                                 )
 
-                    log.info(f"[Iteration {i+1}] Holding fault for {self.duration}s")
+                    log.info(f"[Iteration {i + 1}] Holding fault for {self.duration}s")
                     time.sleep(self.duration)
                 finally:
                     for node_name, iface in applied:
                         log.info(
-                            f"[Iteration {i+1}] Removing fault from "
+                            f"[Iteration {i + 1}] Removing fault from "
                             f"{node_name}/{iface}"
                         )
                         cmd = f"tc qdisc del dev {iface} root"
@@ -182,12 +182,12 @@ class NetworkFaults(PlatformNodesFactory):
                         ocp_obj=self.ocp_obj,
                         node_names=[node.name for node in selected_nodes],
                         fail_on_residue=False,
-                        context=f"NetworkFaults iteration {i+1}",
+                        context=f"NetworkFaults iteration {i + 1}",
                     )
 
                 if i < self.iterations - 1:
                     log.info(
-                        f"[Iteration {i+1}] Pausing for {self.pause}s "
+                        f"[Iteration {i + 1}] Pausing for {self.pause}s "
                         f"before next iteration"
                     )
                     time.sleep(self.pause)

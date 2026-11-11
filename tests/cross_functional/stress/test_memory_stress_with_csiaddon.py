@@ -138,7 +138,7 @@ class TestMemoryStressWithCSIAddon:
             max_memory = max(max_memory, current_metrics["max_memory_mib"])
             max_cpu = max(max_cpu, current_metrics["max_cpu_millicores"])
             log.info(
-                f"Metrics check {i+1}/20 - Memory: {current_metrics['max_memory_mib']:.1f}Mi, "
+                f"Metrics check {i + 1}/20 - Memory: {current_metrics['max_memory_mib']:.1f}Mi, "
                 f"CPU: {current_metrics['max_cpu_millicores']}m"
             )
 
