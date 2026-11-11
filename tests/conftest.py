@@ -6346,6 +6346,9 @@ def setup_ui_fixture(request):
 def setup_acm_ui(request):
     # Try to find any test in the session with via_ui parameter
     via_ui_value = None
+    if not via_ui_value:
+        log.info("Skipping Setting Up ACM UI")
+        return None
 
     # Check all test items in the session
     for item in request.session.items:
