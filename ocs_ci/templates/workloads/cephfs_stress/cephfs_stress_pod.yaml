@@ -114,6 +114,9 @@ spec:
         # Set to 0 for unlimited (checks all files - use for millions of files).
         # For large file counts, consider: 100000, 500000, or 1000000.
         # Default: 1000 (good for quick validation, may miss issues with millions of files).
+    resources:
+      requests:
+        ephemeral-storage: "500Mi"
     volumeMounts:
     - mountPath: /mnt
       name: mypvc
