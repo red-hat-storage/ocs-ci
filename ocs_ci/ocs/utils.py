@@ -2239,6 +2239,7 @@ def is_dr_scenario():
     )
 
 
+@retry(CommandFailed, tries=10, delay=10, backoff=1)
 def get_dr_operator_versions():
     """
     Get all DR operator versions on hub and primary clusters
