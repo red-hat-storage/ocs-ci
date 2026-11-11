@@ -430,6 +430,7 @@ class StorageConsumer:
         volume_group_snapshot_classes=None,
         storage_quota_in_gib=None,
         resource_name_mapping_config_map_name=None,
+        network_fence_classes=None,
     ):
         """
         Create a storage consumer
@@ -464,6 +465,11 @@ class StorageConsumer:
                 storage_consumer_data["spec"].setdefault(
                     "volumeGroupSnapshotClasses",
                     [{"name": vgsc} for vgsc in volume_group_snapshot_classes],
+                )
+            if network_fence_classes:
+                storage_consumer_data["spec"].setdefault(
+                    "networkFenceClasses",
+                    [{"name": nfc} for nfc in network_fence_classes],
                 )
             if storage_quota_in_gib:
                 storage_consumer_data["spec"].setdefault(
@@ -504,6 +510,7 @@ def create_storage_consumer_on_default_cluster(
     volume_group_snapshot_classes=None,
     storage_quota_in_gib=None,
     resource_name_mapping_config_map_name=None,
+    network_fence_classes=None,
 ):
     """
     Create a storage consumer on the storage provider cluster
@@ -515,6 +522,7 @@ def create_storage_consumer_on_default_cluster(
         volume_group_snapshot_classes (list): List of volume group snapshot classes
         storage_quota_in_gib (int): Storage quota in GiB
         resource_name_mapping_config_map_name (str): Resource name mapping config map
+        network_fence_classes (list): List of network fence classes
 
     Returns:
         StorageConsumer: StorageConsumer object
@@ -531,6 +539,7 @@ def create_storage_consumer_on_default_cluster(
         storage_classes=storage_classes,
         storage_quota_in_gib=storage_quota_in_gib,
         resource_name_mapping_config_map_name=resource_name_mapping_config_map_name,
+        network_fence_classes=network_fence_classes,
     )
     return storage_consumer
 
