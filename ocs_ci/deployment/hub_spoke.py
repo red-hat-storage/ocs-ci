@@ -47,6 +47,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     UnexpectedDeploymentConfiguration,
 )
+from ocs_ci.ocs.managedservice import get_consumer_names
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.rados_utils import (
     fetch_pool_names,
@@ -72,6 +73,7 @@ from ocs_ci.ocs.resources.storageconsumer import (
     check_consumer_svg,
     verify_storage_consumer_resources,
     verify_last_heartbeat_timestamp,
+    get_cluster_name_from_storage_consumer,
 )
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import if_version
@@ -87,6 +89,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
     get_server_version,
     get_registry_svc,
+    get_client_type_by_name,
 )
 from ocs_ci.utility.aws import AWS, get_unused_vpc_cidr, get_cluster_region
 from botocore.exceptions import ClientError
@@ -359,9 +362,12 @@ def get_onboarding_token_from_secret(secret_name):
     return secret_obj.get("data", {}).get("onboarding-token")
 
 
-def get_autodistributed_storage_classes():
+def get_autodistributed_storage_classes(skip_virt_sc=True):
     """
     Get the list of StorageClasses that were provisioned by ODF and should be auto-distributed
+
+    Args:
+        skip_virt_sc (bool): If True, do not select virtualization storage class
 
     Returns:
         list: List of StorageClass names that were provisioned by ODF
@@ -383,11 +389,12 @@ def get_autodistributed_storage_classes():
         ]
     ]
     # filter out virtualization storage class. We supposed to have it on vSphere and BM, where CRD created
-    storage_classes["items"] = [
-        item
-        for item in storage_classes["items"]
-        if item["metadata"]["name"] != constants.DEFAULT_STORAGECLASS_VIRTUALIZATION
-    ]
+    if skip_virt_sc:
+        storage_classes["items"] = [
+            item
+            for item in storage_classes["items"]
+            if item["metadata"]["name"] != constants.DEFAULT_STORAGECLASS_VIRTUALIZATION
+        ]
     storage_class_names = [
         item["metadata"]["name"] for item in storage_classes["items"]
     ]
@@ -452,6 +459,25 @@ def get_autodistributed_volumegroup_snapshot_classes():
         item["metadata"]["name"] for item in groupsnapshot_classes["items"]
     ]
     return groupsnapshot_class_names
+
+
+def get_autodistributed_network_fence_classes():
+    """
+    Get the list of NetworkFenceClass
+
+    Returns:
+        list: List of NetworkFenceClass names
+
+    """
+    network_fence_class = OCP(
+        kind=constants.NETWORK_FENCE_CLASS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    network_fence_classes = network_fence_class.get()
+    network_fence_class_names = [
+        item["metadata"]["name"] for item in network_fence_classes.get("items", [])
+    ]
+    return network_fence_class_names
 
 
 def get_provider_address():
@@ -1057,7 +1083,13 @@ class ExternalClients:
         for ext in external_odf_clusters_installed:
             cname = ext.name
             try:
-                storage_classes = get_autodistributed_storage_classes()
+                if get_client_type_by_name(cname) == constants.HOSTED_CLUSTER_KUBEVIRT:
+                    skip_virt_sc = True
+                else:
+                    skip_virt_sc = False
+                storage_classes = get_autodistributed_storage_classes(
+                    skip_virt_sc=skip_virt_sc
+                )
                 volume_snapshot_classes = get_autodistributed_volume_snapshot_classes()
                 verify_storage_consumer_resources(
                     f"{constants.STORAGECONSUMER_NAME_PREFIX}{cname}",
@@ -1430,8 +1462,17 @@ class HostedClients(HyperShiftBase):
         storage_consumers_verified = []
         for hosted_odf_obj in hosted_odf_clusters_installed:
             cluster_name = hosted_odf_obj.name
+            if (
+                get_client_type_by_name(cluster_name)
+                == constants.HOSTED_CLUSTER_KUBEVIRT
+            ):
+                skip_virt_sc = True
+            else:
+                skip_virt_sc = False
             try:
-                storage_classes = get_autodistributed_storage_classes()
+                storage_classes = get_autodistributed_storage_classes(
+                    skip_virt_sc=skip_virt_sc
+                )
                 volume_snapshot_classes = get_autodistributed_volume_snapshot_classes()
 
                 verify_storage_consumer_resources(
@@ -7218,12 +7259,100 @@ class SpokeODF(SpokeOCP, ABC):
         """
 
         log_step("Creating storage consumer")
+        if get_client_type_by_name(self.name) == constants.HOSTED_CLUSTER_KUBEVIRT:
+            skip_virt_sc = True
+        else:
+            skip_virt_sc = False
 
-        storage_class_names = get_autodistributed_storage_classes()
+        # For MDR: The MDR client pairs belong to the same provider cluster. Provider cluster cannot be part of MDR pair
+        # If one of the storageconsumer in the MDR pair is already present,
+        # use tha same value of resourceNameMappingConfigMap
+        # Referring ENV_DATA value as an additional reference because MULTICLUSTER config is causing error
+        # in client deployment job
+        is_mdr_cluster = (
+            config.MULTICLUSTER.get("multicluster_mode") == "metro-dr"
+            or config.ENV_DATA.get("multicluster_mode") == "metro-dr"
+        )
+        dr_cluster_relations = config.MULTICLUSTER.get(
+            "dr_cluster_relations", []
+        ) or config.ENV_DATA.get("dr_cluster_relations", [])
+        peer_cluster = None
+        peer_consumer = None
+        if is_mdr_cluster:
+            for clusters_pair in dr_cluster_relations:
+                if self.name in clusters_pair:
+                    logger.info(
+                        f"The client cluster {self.name} is part of MDR pair {clusters_pair}"
+                    )
+                    if len(clusters_pair) == 2:
+                        peer_cluster = (
+                            clusters_pair[1]
+                            if clusters_pair[0] == self.name
+                            else clusters_pair[0]
+                        )
+                        break
+
+        if is_mdr_cluster and peer_cluster:
+            all_clients_data = [
+                {name: data}
+                for name, data in config.ENV_DATA.get("clusters", {}).items()
+            ]
+            if (
+                all_clients_data[self.name]["provider_cluster_name"]
+                != all_clients_data[peer_cluster]["provider_cluster_name"]
+            ):
+                raise UnexpectedDeploymentConfiguration(
+                    f"The MDR cluster pair {self.name} and {peer_cluster} does not have same provider cluster"
+                )
+
+            consumer_names = get_consumer_names()
+            for consumer in consumer_names:
+                try:
+                    mapped_client_cluster_name = get_cluster_name_from_storage_consumer(
+                        consumer
+                    )
+                except CommandFailed as cfd:
+                    logger.error(
+                        f"Failed to get the client cluster name for storageconsumer peer `{consumer}`: {cfd}"
+                    )
+                    mapped_client_cluster_name = ""
+                if mapped_client_cluster_name == peer_cluster:
+                    peer_consumer = consumer
+                    break
+
+            if not peer_consumer:
+                logger.info(
+                    f"StorageConsumer for the peer cluster {peer_cluster} not found. "
+                    f"The peer cluster might not be ready. Storageconsumer for the cluster {self.name} "
+                    "will not refer an existing resourceNameMappingConfigMap value."
+                )
+        elif is_mdr_cluster:
+            logger.info(
+                f"The peer MDR cluster name of the cluster {self.name} not found. The cluster can be used for other "
+                "purpose or configure the peer cluster later. Continuing storagecluster creation without a reference "
+                "for resourceNameMappingConfigMap value"
+            )
+
+        if is_mdr_cluster and peer_consumer:
+            ocp_obj = OCP(
+                kind=constants.STORAGECONSUMER,
+                resource_name=peer_consumer,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            ).get()
+            storageconsumer_configmap = (
+                ocp_obj.get("status").get("resourceNameMappingConfigMap").get("name")
+            )
+        else:
+            storageconsumer_configmap = None
+
+        storage_class_names = get_autodistributed_storage_classes(
+            skip_virt_sc=skip_virt_sc
+        )
         volumesnapshot_class_names = get_autodistributed_volume_snapshot_classes()
         volumegroup_snapshot_classes = (
             get_autodistributed_volumegroup_snapshot_classes()
         )
+        network_fence_class_names = get_autodistributed_network_fence_classes()
 
         start_time = time.time()
         storage_consumer_obj = create_storage_consumer_on_default_cluster(
@@ -7231,6 +7360,8 @@ class SpokeODF(SpokeOCP, ABC):
             storage_classes=storage_class_names,
             volume_snapshot_classes=volumesnapshot_class_names,
             volume_group_snapshot_classes=volumegroup_snapshot_classes,
+            resource_name_mapping_config_map_name=storageconsumer_configmap,
+            network_fence_classes=network_fence_class_names,
         )
         secret_name = storage_consumer_obj.get_onboarding_ticket_secret()
 
