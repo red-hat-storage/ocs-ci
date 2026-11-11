@@ -733,6 +733,8 @@ def odf_cli_setup_helper(odf_cli_class=ODFCliRunner, **kwargs):
         if not odf_cli_retriever.check_odf_cli_binary():
             raise RuntimeError("Failed to download ODF CLI binary")
 
+    odf_cli_retriever._create_fdf_alias()
+
     if config.DEPLOYMENT.get("fdf_cluster") and "binary_name" not in kwargs:
         kwargs["binary_name"] = "fdf"
 
