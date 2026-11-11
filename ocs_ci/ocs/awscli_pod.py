@@ -170,9 +170,11 @@ def _add_startup_commands_to_set_ca(awscli_sts_dict):
                 "rgw_secure is set but neither embedded RGW CA nor rgw_cert_ca URL is available"
             )
     if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
-        startup_cmds.append(
-            f"cat /cert/ocs-ca-bundle.crt >> {constants.AWSCLI_CA_BUNDLE_PATH}"
+        cmd = (
+            f"if [ -f /cert/ocs-ca-bundle.crt ]; then "
+            f"cat /cert/ocs-ca-bundle.crt >> {constants.AWSCLI_CA_BUNDLE_PATH}; fi"
         )
+        startup_cmds.append(cmd)
 
     # Keep the pod running after the commands
     startup_cmds.append("sleep infinity")
