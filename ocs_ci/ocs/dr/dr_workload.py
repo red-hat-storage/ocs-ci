@@ -49,6 +49,7 @@ from ocs_ci.utility.utils import (
     clone_repo,
     run_cmd,
     TimeoutSampler,
+    exec_cmd,
 )  # IgnoreDeprecation
 
 log = logging.getLogger(__name__)
@@ -1373,7 +1374,14 @@ class CnvWorkload(DRWorkload):
         )
         config.switch_acm_ctx()
         if self.workload_type == constants.SUBSCRIPTION:
-            run_cmd(f"oc create -f {self.channel_yaml_file}")
+            try:
+                create_project(project_name=self.channel_namespace)
+            except CommandFailed as ex:
+                if "AlreadyExists" in str(ex):
+                    log.warning(
+                        f"The namespace {self.channel_namespace} already exists."
+                    )
+            exec_cmd(f"oc apply -f {self.channel_yaml_file}")
         run_cmd(f"oc create -f {self.cnv_workload_yaml_file}")
         self.check_pod_pvc_status(skip_replication_resources=True)
         # Wait for temporary resources to be cleaned up before DRPC creation
