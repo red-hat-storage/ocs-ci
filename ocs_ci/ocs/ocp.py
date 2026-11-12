@@ -783,9 +783,19 @@ class OCP(object):
             update_kubeconfig_with_proxy_url_for_client(kubeconfig)
         return status
 
+    @retry(
+        CommandFailed,
+        tries=3,
+        delay=60,
+        backoff=1,
+        text_in_exception="Service Unavailable",
+    )
     def login_as_user(self, user="system:admin"):
         """
         Logs in as specified user (by default 'system:admin'). This user should have valid token in kubeconfig file.
+
+        Retries up to 3 times with 60-second delays on "Service Unavailable" errors to handle
+        post-upgrade API server stabilization scenarios.
 
         Args:
             user (str): Name of user to be logged in (by default 'system:admin')
