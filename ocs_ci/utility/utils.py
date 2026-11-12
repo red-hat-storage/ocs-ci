@@ -609,6 +609,7 @@ def run_cmd_multicluster(
         "proxyconnect tcp",
         "i/o timeout",
         "websocket: close 1006",
+        "Service Unavailable",
     ),
 )
 def exec_cmd(
