@@ -36,7 +36,6 @@ from ocs_ci.ocs.machinepool import (
     MachinePools,
     NodeConf,
 )
-from ocs_ci.ocs.utils import get_secondary_cluster_config
 from ocs_ci.utility import templating
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.utility.load_balancer import LoadBalancer
@@ -48,7 +47,6 @@ from ocs_ci.ocs.node import (
     get_typed_worker_nodes,
     get_nodes,
     get_worker_nodes,
-    get_node_names,
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
@@ -4635,22 +4633,7 @@ class IBMHCIAgentNode(object):
             RuntimeError: If operation fails on all IP addresses
 
         """
-        if "mdr-hcp3" in node_name:
-            second_cluster = get_secondary_cluster_config()
-            with config.RunWithConfigContext(
-                config.get_cluster_index_by_name(
-                    second_cluster.ENV_DATA["cluster_name"]
-                )
-            ):
-                node_names = get_node_names()
-            for node_name_value in node_names:
-                if "host1" in node_name_value:
-                    node_name_working = node_name_value
-            details_ipmi_command_working_rack = self._agent_node_map.get(
-                node_name_working
-            )
         details = self._agent_node_map.get(node_name)
-
         if not details:
             raise RuntimeError(
                 f"No BMC details found for agent node {node_name}. "
@@ -4659,8 +4642,8 @@ class IBMHCIAgentNode(object):
 
         manufacturer = details["manufacturer"].lower()
         rack_ip = (
-            details_ipmi_command_working_rack["rack_ip"]
-            if "mdr-hcp3" in node_name
+            config.ENV_DATA.get("ipmitool_machine_ip", details["rackIP"])
+            if "mdr-hcp3"
             else details["rackIP"]
         )
         username = details["username"]
