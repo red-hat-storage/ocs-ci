@@ -37,6 +37,7 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers import helpers
+from ocs_ci.helpers.cnv_helpers import check_fio_status
 
 logger = logging.getLogger(__name__)
 
@@ -490,3 +491,112 @@ def verify_workload_moved_out_of_zone(
             f"Workload {label} has no running pod in the surviving zone "
             f"{surviving_zone} after {timeout} seconds"
         )
+
+
+def verify_vm_moved_out_of_zone(vm_obj, zone, timeout=1500, sleep_time=30):
+    """
+    Wait for a VM to be rescheduled out of a failed zone and verify it comes up
+    in the surviving zone.
+
+    Unlike the Deployment based workloads, the VM does not move on its own. Once
+    the 5 minute 'node.kubernetes.io/unreachable' toleration expires the
+    virt-launcher pod of the unreachable node is only marked for deletion and
+    stays in Terminating state, as the kubelet that has to confirm the removal
+    is down. The VM is not started elsewhere until that pod is gone, so the pod
+    has to be force deleted.
+
+    Args:
+        vm_obj (VirtualMachine): VirtualMachine object
+        zone (str): Zone the VM is expected to move out of
+        timeout (int): Time in seconds to wait for the VM to be running in the
+            surviving zone. Has to comfortably exceed the 5 minute eviction
+            toleration plus the time it takes to schedule and boot the VM
+        sleep_time (int): Time in seconds between two checks
+
+    Returns:
+        str: Name of the node of the surviving zone the VM is running on
+
+    Raises:
+        UnexpectedBehaviour: If the failed zone is not a data zone, or if the VM
+            is not running in the surviving data zone within the timeout
+
+    """
+    data_zones = get_data_zones()
+    if zone not in data_zones:
+        raise UnexpectedBehaviour(
+            f"Failed zone {zone} is not one of the data zones {data_zones}"
+        )
+    surviving_zone = next(data_zone for data_zone in data_zones if data_zone != zone)
+    logger.info(f"Waiting for the VM {vm_obj.name} to run in zone {surviving_zone}")
+
+    pod_ocp_obj = OCP(kind=constants.POD, namespace=vm_obj.namespace)
+
+    def _force_delete_stuck_launcher_pods():
+        for pod_data in get_pods_having_label(
+            label=f"vm.kubevirt.io/name={vm_obj.name}", namespace=vm_obj.namespace
+        ):
+            if pod_data["metadata"].get("deletionTimestamp") is None:
+                continue
+            pod_name = pod_data["metadata"]["name"]
+            node_name = pod_data["spec"].get("nodeName")
+            if node_name and get_zone_of_node(node_name) == zone:
+                logger.info(
+                    f"virt-launcher pod {pod_name} is stuck in Terminating on "
+                    f"node {node_name} of the failed zone {zone}, force deleting it"
+                )
+                try:
+                    pod_ocp_obj.delete(resource_name=pod_name, force=True, wait=False)
+                except CommandFailed as ex:
+                    if "not found" not in str(ex).lower():
+                        raise
+
+    def _vm_node_in_surviving_zone():
+        _force_delete_stuck_launcher_pods()
+        try:
+            vmi_obj = vm_obj.get_vmi_instance()
+            if not vmi_obj.is_vmi_running():
+                return None
+            node_name = vmi_obj.node()
+        except CommandFailed:
+            # The VMI is gone while the VM is being started again
+            return None
+        node_zone = get_zone_of_node(node_name)
+        if node_zone == surviving_zone:
+            return node_name
+        logger.info(
+            f"VM {vm_obj.name} is reported running on node {node_name} in zone "
+            f"{node_zone}, waiting for it to come up in {surviving_zone}"
+        )
+        return None
+
+    try:
+        for node_name in TimeoutSampler(
+            timeout=timeout, sleep=sleep_time, func=_vm_node_in_surviving_zone
+        ):
+            if node_name:
+                logger.info(
+                    f"VM {vm_obj.name} moved to node {node_name} in zone "
+                    f"{surviving_zone}"
+                )
+                return node_name
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"VM {vm_obj.name} is not running in the surviving zone "
+            f"{surviving_zone} after {timeout} seconds"
+        )
+
+
+@retry((CommandFailed, AssertionError), tries=10, delay=30)
+def verify_vm_fio_running(vm_obj):
+    """
+    Verify the continuous fio I/O started inside the VM is running
+
+    Args:
+        vm_obj (VirtualMachine): VirtualMachine object
+
+    Raises:
+        AssertionError: If the fio service of the VM is not running
+
+    """
+    assert check_fio_status(vm_obj), f"fio is not running inside the VM {vm_obj.name}"
+    logger.info(f"fio is running inside the VM {vm_obj.name}")

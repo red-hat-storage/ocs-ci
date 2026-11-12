@@ -18,11 +18,16 @@ from ocs_ci.helpers.fusion_access_helper import (
     wait_for_workload_pods,
     verify_baseline_file,
     verify_route_accessible,
+    verify_vm_fio_running,
+    verify_vm_moved_out_of_zone,
     verify_workload_moved_out_of_zone,
 )
+from ocs_ci.helpers.stretchcluster_helper import verify_vm_workload
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources.pod import get_pod_node
+from ocs_ci.utility.retry import retry
 
 log = logging.getLogger(__name__)
 
@@ -56,21 +61,26 @@ class TestFusionAccessZoneFailureAndRecovery:
         Zone Failure and Recovery - only one of the zone nodes
 
         Steps:
-            1) Deploy the logwriter, busybox and file-uploader workloads and
-               take a data integrity baseline of every volume
+            1) Deploy the logwriter, busybox, file-uploader and VM workloads,
+               start continuous fio I/O in the VM and take a data integrity
+               baseline of every volume
             2) Shut down all the ocpnodes of one data zone and make sure they
                transition to NotReady
             3) Make sure the Deployment based workloads are rescheduled on a
                node of the surviving zone and reach Running state
-            4) Verify the data written before the failure is intact and the
+            4) Make sure the VM is rescheduled on a node of the surviving zone.
+               The virt-launcher pod of the failed zone is stuck in Terminating
+               and has to be force deleted for that to happen
+            5) Verify the data written before the failure is intact, the
                file-uploader route is still accessible from the surviving zone
-            5) Restart the nodes of the failed zone and wait for them to rejoin
+               and the VM is accessible with its fio I/O running again
+            6) Restart the nodes of the failed zone and wait for them to rejoin
                the cluster and transition to Ready
-            6) Rediscover the shared SAN LUNs so the recovered nodes get their
+            7) Rediscover the shared SAN LUNs so the recovered nodes get their
                iSCSI sessions back
-            7) Make sure the zone aware logwriter workload did not see a write
+            8) Make sure the zone aware logwriter workload did not see a write
                pause in the surviving zone and that there is no data loss
-            8) Verify the data integrity of every volume once more
+            9) Verify the data integrity of every volume and of the VM once more
 
         Run with conf/ocsci/fusion_access_stretch_cluster.yaml, which sets the
         'arbiter_deployment' flag the 'stretchcluster_required' mark gates on.
@@ -82,23 +92,25 @@ class TestFusionAccessZoneFailureAndRecovery:
 
         """
         namespace = setup_stretch_cluster_project.namespace
-        sc_obj, md5sum_before = setup_fusion_access_workloads()
+        sc_obj, md5sum_before, vm_obj = setup_fusion_access_workloads()
 
         # Note the logfiles created so far, used for the data loss check
         sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
         # Fetch the nodes of the zone that needs to be shutdown. The zone is
-        # taken from where the Deployment based workloads actually landed, not
-        # fixed in advance: failing a zone they do not run in would leave them
-        # untouched and the failover checks below would pass without anything
-        # having moved. The file-uploader template keeps them together with a
-        # pod affinity, which is a preference and not a guarantee, so the
+        # taken from where the Deployment based workloads and the VM actually
+        # landed, not fixed in advance: failing a zone they do not run in would
+        # leave them untouched and the failover checks below would pass without
+        # anything having moved. The file-uploader template keeps the
+        # Deployments together with a pod affinity, which is a preference and
+        # not a guarantee, and nothing keeps the VM with them, so the
         # co-location is asserted rather than assumed
         data_zones = get_data_zones()
         workload_zones = {}
         for label in WORKLOAD_MOUNT_PATHS:
             pod_obj = get_workload_pod(label=label, namespace=namespace)
             workload_zones[label] = get_zone_of_node(get_pod_node(pod_obj).name)
+        workload_zones[vm_obj.name] = get_zone_of_node(vm_obj.get_vmi_instance().node())
         log.info(f"Workload placement before the failure: {workload_zones}")
 
         zone = workload_zones[constants.BUSYBOX_FUSION_LABEL]
@@ -107,10 +119,10 @@ class TestFusionAccessZoneFailureAndRecovery:
             f"data zones {data_zones}"
         )
         assert set(workload_zones.values()) == {zone}, (
-            f"The Deployment based workloads did not all start in the same "
-            f"zone, their placement is {workload_zones}. Shutting down zone "
-            f"{zone} would leave the workloads of the other zone running and "
-            f"their failover would never be exercised"
+            f"The Deployment based workloads and the VM did not all start in "
+            f"the same zone, their placement is {workload_zones}. Shutting "
+            f"down zone {zone} would leave the workloads of the other zone "
+            f"running and their failover would never be exercised"
         )
 
         nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
@@ -148,21 +160,23 @@ class TestFusionAccessZoneFailureAndRecovery:
             )
         log.info("All the Deployment based workloads moved to the surviving zone")
 
-        # Step 3: verify the data written before the failure is intact and the
+        # Step 3: the VM does not move on its own, its virt-launcher pod stays
+        # in Terminating on the failed node and is force deleted so the VM is
+        # started on a node of the surviving zone
+        verify_vm_moved_out_of_zone(vm_obj=vm_obj, zone=zone)
+        log.info("The VM moved to the surviving zone")
+
+        # Step 4: verify the data written before the failure is intact and the
         # workloads are accessible from the surviving zone
         for label, mount_path in WORKLOAD_MOUNT_PATHS.items():
             verify_baseline_file(workload_pods[label], mount_path, md5sum_before[label])
         verify_route_accessible(
             route_name=constants.FILE_UPLOADER_FUSION_NAME, namespace=namespace
         )
+        verify_vm_data_and_io(vm_obj, md5sum_before[vm_obj.name])
         log.info("Workloads are accessible with data integrity preserved")
 
-        # TODO: verify the VM is rescheduled on a node of the surviving zone,
-        # reaches Running state and that the test file written into it before
-        # the failure still matches. Blocked on the CNSA OFD lock regression,
-        # see the 'setup_fusion_access_workloads' fixture
-
-        # Step 4: start the zone nodes back up and wait for them to rejoin
+        # Step 5: start the zone nodes back up and wait for them to rejoin
         nodes.start_nodes(nodes=nodes_to_shutdown)
         wait_for_nodes_status(timeout=900)
 
@@ -186,7 +200,7 @@ class TestFusionAccessZoneFailureAndRecovery:
         end_time = datetime.now(timezone.utc)
         log.info(f"Zone {zone} failure started at {start_time} and ended at {end_time}")
 
-        # Step 5: the logwriter replica of the surviving zone must not have
+        # Step 6: the logwriter replica of the surviving zone must not have
         # seen a write pause, and the replica of the failed zone must come back
         # on its own and restore the zone spread
         sc_obj.get_logwriter_reader_pods(
@@ -202,7 +216,7 @@ class TestFusionAccessZoneFailureAndRecovery:
         ), "Data loss detected for the logwriter workload"
         log.info("No data loss detected for the logwriter workload")
 
-        # Step 6: verify the data integrity of every volume post recovery
+        # Step 7: verify the data integrity of every volume post recovery
         for pod_obj in sc_obj.workload_map[constants.LOGWRITER_RBD_LABEL][0]:
             verify_baseline_file(pod_obj, "/mnt/target", md5sum_before[pod_obj.name])
 
@@ -213,4 +227,21 @@ class TestFusionAccessZoneFailureAndRecovery:
         verify_route_accessible(
             route_name=constants.FILE_UPLOADER_FUSION_NAME, namespace=namespace
         )
+        verify_vm_data_and_io(vm_obj, md5sum_before[vm_obj.name])
         log.info("All the workloads recovered with data integrity preserved")
+
+
+def verify_vm_data_and_io(vm_obj, md5sum_before):
+    """
+    Verify the VM is reachable, the data written into it before the failure is
+    intact, new data can be written and the continuous fio I/O is running
+
+    Args:
+        vm_obj (VirtualMachine): VirtualMachine object
+        md5sum_before (str): md5sum of the VM test file before the failure
+
+    """
+    log.info(f"Waiting for the SSH connectivity of VM {vm_obj.name}")
+    retry(CommandFailed, tries=5, delay=10)(vm_obj.wait_for_ssh_connectivity)()
+    retry(CommandFailed, tries=5, delay=10)(verify_vm_workload)(vm_obj, md5sum_before)
+    verify_vm_fio_running(vm_obj)
