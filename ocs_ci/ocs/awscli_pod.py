@@ -172,7 +172,8 @@ def _add_startup_commands_to_set_ca(awscli_sts_dict):
     if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
         cmd = (
             f"if [ -f /cert/ocs-ca-bundle.crt ]; then "
-            f"cat /cert/ocs-ca-bundle.crt >> {constants.AWSCLI_CA_BUNDLE_PATH}; fi"
+            f"cat /cert/ocs-ca-bundle.crt >> {constants.AWSCLI_CA_BUNDLE_PATH}; "
+            f"else echo 'WARNING: /cert/ocs-ca-bundle.crt not found; ingress CA not added' >&2; fi"
         )
         startup_cmds.append(cmd)
 
