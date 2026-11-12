@@ -136,7 +136,7 @@ class TestNoobaaMetrics:
         )
         assert (
             int(num_objects_after_write) == max_objects - 1
-        ), f"Number of written objects is {num_objects_after_write}, expected {max_objects -1}"
+        ), f"Number of written objects is {num_objects_after_write}, expected {max_objects - 1}"
         num_objects_avail_after_write = get_bucket_status_value(
             mcg_obj, bucket_name, "Num Objects Avail"
         )
