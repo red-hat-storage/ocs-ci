@@ -68,7 +68,7 @@ class TestCloneWhenFull(ManageTest):
             available_size = int(df_avail_size.strip().split()[1][0:-1])
             pod_obj.run_io(
                 "fs",
-                size=f"{available_size-2}M",
+                size=f"{available_size - 2}M",
                 runtime=20,
                 rate="100M",
                 fio_filename=file_name,
