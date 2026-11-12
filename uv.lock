@@ -9,23 +9,6 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "acme"
-version = "3.1.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-    { name = "josepy" },
-    { name = "pyopenssl" },
-    { name = "pyrfc3339" },
-    { name = "pytz" },
-    { name = "requests" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/56/66/cf2dc843eb075caedc5407190ba41e837fabd5d8536380c68601e40ea325/acme-3.1.0.tar.gz", hash = "sha256:39ae0032834585e5c893d7865a5867af01598b5ebef688edb54e9f11cb89ccd9", size = 91131, upload-time = "2025-01-07T23:33:42.997Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b4/bc/06c7e5749c77616681a0da0cc6e49b131fc4be56201a368d85428d1f314b/acme-3.1.0-py3-none-any.whl", hash = "sha256:d5b6bb7cddbdf276666794b235ef73fbb064cdc4d5b596979a7e9f523eac29b1", size = 95520, upload-time = "2025-01-07T23:33:00.421Z" },
-]
-
-[[package]]
 name = "adal"
 version = "1.2.7"
 source = { registry = "https://pypi.org/simple" }
@@ -71,24 +54,6 @@ wheels = [
 ]
 
 [[package]]
-name = "atlassian-python-api"
-version = "4.0.7"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "beautifulsoup4" },
-    { name = "deprecated" },
-    { name = "jmespath" },
-    { name = "oauthlib" },
-    { name = "requests" },
-    { name = "requests-oauthlib" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/40/e8/f23b7273e410c6fe9f98f9db25268c6736572f22a9566d1dc9ed3614bb68/atlassian_python_api-4.0.7.tar.gz", hash = "sha256:8d9cc6068b1d2a48eb434e22e57f6bbd918a47fac9e46b95b7a3cefb00fceacb", size = 271149, upload-time = "2025-08-21T13:19:40.746Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1d/83/e4f9976ce3c933a079b8931325e7a9c0a8bba7030a2cb85764c0048f3479/atlassian_python_api-4.0.7-py3-none-any.whl", hash = "sha256:46a70cb29eaab87c0a1697fccd3e25df1aa477e6aa4fb9ba936a9d46b425933c", size = 197746, upload-time = "2025-08-21T13:19:39.044Z" },
-]
-
-[[package]]
 name = "atomicwrites"
 version = "1.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -105,11 +70,11 @@ wheels = [
 
 [[package]]
 name = "azure-common"
-version = "1.1.28"
+version = "1.1.25"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3e/71/f6f71a276e2e69264a97ad39ef850dca0a04fce67b12570730cb38d0ccac/azure-common-1.1.28.zip", hash = "sha256:4ac0cd3214e36b6a1b6a442686722a5d8cc449603aa833f3f0f40bda836704a3", size = 20914, upload-time = "2022-02-03T19:39:44.373Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7e/c5/27ebe1f286036f0fda02274d57f3303d3e3cbac09e188b5faa47d3649488/azure-common-1.1.25.zip", hash = "sha256:ce0f1013e6d0e9faebaf3188cc069f4892fc60a6ec552e3f817c1a2f92835054", size = 18110, upload-time = "2020-03-09T18:54:48.96Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/62/55/7f118b9c1b23ec15ca05d15a578d8207aa1706bc6f7c87218efffbbf875d/azure_common-1.1.28-py2.py3-none-any.whl", hash = "sha256:5c12d3dcf4ec20599ca6b0d3e09e86e146353d443e7fcc050c9a19c1f9df20ad", size = 14462, upload-time = "2022-02-03T19:39:42.417Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/4d/d000fc3c5af601d00d55750b71da5c231fcb128f42ac95b208ed1091c2c1/azure_common-1.1.25-py2.py3-none-any.whl", hash = "sha256:fd02e4256dc9cdd2d4422bc795bdca2ef302f7a86148b154fbf4ea1f09da400a", size = 12112, upload-time = "2020-03-09T18:54:47.164Z" },
 ]
 
 [[package]]
@@ -156,17 +121,16 @@ wheels = [
 
 [[package]]
 name = "azure-mgmt-compute"
-version = "33.0.0"
+version = "12.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-common" },
-    { name = "azure-mgmt-core" },
-    { name = "isodate" },
-    { name = "typing-extensions" },
+    { name = "msrest" },
+    { name = "msrestazure" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/90/f2/a2b1391e9df876d7ef9086f8d41ad4666eafef921ae0c47da931f8cedb1a/azure-mgmt-compute-33.0.0.tar.gz", hash = "sha256:a3cc0fe4f09c8e1d3523c1bfb92620dfe263a0a893b0ac13a33d7057e9ddddd2", size = 5308187, upload-time = "2024-08-23T08:47:37.38Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/84/eb/9badfde9c80b462331ca0c567fd892108120374815f0217928f1f02ee811/azure-mgmt-compute-12.0.0.zip", hash = "sha256:187dd375211ac9fd498d701ff41785760adc431a63cee93391d15e27de48f86f", size = 2126540, upload-time = "2020-03-26T15:14:50.498Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/90/e6/3a012b49e83e2579d2f771613303aa301b675f3db03541381cd1d823216f/azure_mgmt_compute-33.0.0-py3-none-any.whl", hash = "sha256:155f8d78a1fdedcea1725fd12b85b2d87fbcb6b53f8e77451c644f45701e3bcf", size = 5932934, upload-time = "2024-08-23T08:47:40.51Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/26/3dd7d1634744d33e705e4c58367230e3a505294c838611288ef8cd9a4ac7/azure_mgmt_compute-12.0.0-py2.py3-none-any.whl", hash = "sha256:72c966374a599e3f57a0e3423b719df959a78591a5365473839f4896b718f606", size = 1619207, upload-time = "2020-03-26T11:36:29.142Z" },
 ]
 
 [[package]]
@@ -183,32 +147,30 @@ wheels = [
 
 [[package]]
 name = "azure-mgmt-network"
-version = "28.0.0"
+version = "10.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-common" },
-    { name = "azure-mgmt-core" },
-    { name = "isodate" },
-    { name = "typing-extensions" },
+    { name = "msrest" },
+    { name = "msrestazure" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ad/63/d8f7caf2801747607b66e78a0fc00dcc936bce1bed0ac2ba7b4f3caddb45/azure_mgmt_network-28.0.0.tar.gz", hash = "sha256:40356d348ef4838324f19a41cd80340b4f8dd4ac2f0a18a4cbd5cc95ef2974f3", size = 620390, upload-time = "2024-11-01T07:43:32.282Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e7/65/b75d8d1fb8a520e6f522107a72629fb145a998d53e2d09c54d96718438e5/azure-mgmt-network-10.2.0.zip", hash = "sha256:d50c74cdc1c9be6861ddef9adffd3b05afc5a5092baf0209eea30f4439cba2d9", size = 8704570, upload-time = "2020-05-13T09:09:02.773Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/fc/76f4ca88c3cc5d3146ee05bab75cc7828724c0b95f03b578268132a50c86/azure_mgmt_network-28.0.0-py3-none-any.whl", hash = "sha256:2ee23c1f2ba75752187bd7f4c3e94ad172282cbf8153694feadc7886ef88493c", size = 548681, upload-time = "2024-11-01T07:43:34.857Z" },
+    { url = "https://files.pythonhosted.org/packages/39/d8/84a181e6e4926ebad56e68c1d05427f5ad64e7a784acab82a302dc4a93d2/azure_mgmt_network-10.2.0-py2.py3-none-any.whl", hash = "sha256:f82b8b3874e0655a10fb36077036fb3e8e3daa96fa42c964e8b91ef5a466a8e6", size = 8575409, upload-time = "2020-05-13T09:09:00.035Z" },
 ]
 
 [[package]]
 name = "azure-mgmt-resource"
-version = "23.2.0"
+version = "10.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-common" },
-    { name = "azure-mgmt-core" },
-    { name = "isodate" },
-    { name = "typing-extensions" },
+    { name = "msrest" },
+    { name = "msrestazure" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/71/e9/cafb7076283db9f21e05e54fa0536b16d790e43f30691e80d6eac4603789/azure_mgmt_resource-23.2.0.tar.gz", hash = "sha256:747b750df7af23ab30e53d3f36247ab0c16de1e267d666b1a5077c39a4292529", size = 1957902, upload-time = "2024-10-24T04:09:38.688Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cc/1b/bfe8d07b4ae62296aa91fbb828a7e2e0f932026ea7643faa54c680b4cf55/azure-mgmt-resource-10.0.0.zip", hash = "sha256:bd9a3938f5423741329436d2da09693845c2fad96c35fadbd7c5ae5213208345", size = 1289883, upload-time = "2020-06-05T05:20:04.183Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/05/ed/85b5e33b2d5ee8ae12228a77f74a484cd6bf58d3288d8524498a02cf0c8c/azure_mgmt_resource-23.2.0-py3-none-any.whl", hash = "sha256:7af2bca928ecd58e57ea7f7731d245f45e9d927036d82f1d30b96baa0c26b569", size = 2670967, upload-time = "2024-10-24T04:09:41.091Z" },
+    { url = "https://files.pythonhosted.org/packages/be/20/b639d8e4b0c1c49e3f1373c6a7948fd4ced55e57f204b63fb15a7cd77e73/azure_mgmt_resource-10.0.0-py2.py3-none-any.whl", hash = "sha256:c1e2d834dee84953a4e25bef119008854a861d6d3fbe79b436589dc042e5a7c5", size = 809167, upload-time = "2020-06-05T05:20:02.121Z" },
 ]
 
 [[package]]
@@ -227,7 +189,7 @@ wheels = [
 
 [[package]]
 name = "azure-storage-blob"
-version = "12.23.1"
+version = "12.19.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-core" },
@@ -235,9 +197,9 @@ dependencies = [
     { name = "isodate" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/66/b2/df9ac2ea294e558fa8b6cdade9a14a938b07529f5194303664152819277a/azure_storage_blob-12.23.1.tar.gz", hash = "sha256:a587e54d4e39d2a27bd75109db164ffa2058fe194061e5446c5a89bca918272f", size = 566114, upload-time = "2024-09-26T23:12:26.616Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fd/f8/59c209132b3b2993402df6b7e79728726927b53168624e917cd9daaffea8/azure-storage-blob-12.19.0.tar.gz", hash = "sha256:26c0a4320a34a3c2a1b74528ba6812ebcb632a04cd67b1c7377232c4b01a5897", size = 551109, upload-time = "2023-11-07T23:50:44.103Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/bf/f19dd2261dd6193aa53375fcd58929d613e45d14bcdb778567d1fd5e2d6e/azure_storage_blob-12.23.1-py3-none-any.whl", hash = "sha256:1c2238aa841d1545f42714a5017c010366137a44a0605da2d45f770174bfc6b4", size = 405622, upload-time = "2024-09-26T23:12:28.501Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/82/24b0d7cf67ea63af86f11092756b8fe2adc1d55323241dc4107f5f5748e2/azure_storage_blob-12.19.0-py3-none-any.whl", hash = "sha256:7bbc2c9c16678f7a420367fef6b172ba8730a7e66df7f4d7a55d5b3c8216615b", size = 394221, upload-time = "2023-11-07T23:50:46.706Z" },
 ]
 
 [[package]]
@@ -411,43 +373,6 @@ wheels = [
 ]
 
 [[package]]
-name = "certbot"
-version = "3.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "acme" },
-    { name = "configargparse" },
-    { name = "configobj" },
-    { name = "cryptography" },
-    { name = "distro" },
-    { name = "josepy" },
-    { name = "parsedatetime" },
-    { name = "pyrfc3339" },
-    { name = "pytz" },
-    { name = "pywin32", marker = "sys_platform == 'win32'" },
-    { name = "setuptools" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/43/88/2be7d027cd2def0790d29d58a4287d99b261a24e3eaad2e66c7938527a38/certbot-3.0.0.tar.gz", hash = "sha256:480014af69ac507c1ff4b892d23159a98d8d2ff3f70aedc3e6e56cf170878f5b", size = 438457, upload-time = "2024-11-05T20:05:20.458Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/cf/d1f4306d068c884f5544849106118ec7462badafc5d47c4cdd22f6dd8007/certbot-3.0.0-py3-none-any.whl", hash = "sha256:18b01f12b6278d19bad416fb9435a7e192b37a5081528473031193502f920c97", size = 407032, upload-time = "2024-11-05T20:04:53.711Z" },
-]
-
-[[package]]
-name = "certbot-dns-route53"
-version = "3.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "acme" },
-    { name = "boto3" },
-    { name = "certbot" },
-    { name = "setuptools" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d7/85/3c08174a1a55cad7144f8fbe1220ef2c1c27e2b4467e8e9ebd90b2e05291/certbot_dns_route53-3.0.0.tar.gz", hash = "sha256:ea47ff36513478e28c590276c3605b4f592d9b9938d36f2231484c63b38249e2", size = 15465, upload-time = "2024-11-05T20:05:35.107Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/61/eb/11cf5d503783ad52711b1ada705b63b9ddad71156d394fb14c08b8980def/certbot_dns_route53-3.0.0-py3-none-any.whl", hash = "sha256:4d234462963ed56a4161bda039c24bd8c984e999f42c26fb2e18263416220ecf", size = 13240, upload-time = "2024-11-05T20:05:13.74Z" },
-]
-
-[[package]]
 name = "certifi"
 version = "2026.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -607,24 +532,6 @@ wheels = [
 ]
 
 [[package]]
-name = "configargparse"
-version = "1.7.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/85/4d/6c9ef746dfcc2a32e26f3860bb4a011c008c392b83eabdfb598d1a8bbe5d/configargparse-1.7.1.tar.gz", hash = "sha256:79c2ddae836a1e5914b71d58e4b9adbd9f7779d4e6351a637b7d2d9b6c46d3d9", size = 43958, upload-time = "2025-05-23T14:26:17.369Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/31/28/d28211d29bcc3620b1fece85a65ce5bb22f18670a03cd28ea4b75ede270c/configargparse-1.7.1-py3-none-any.whl", hash = "sha256:8b586a31f9d873abd1ca527ffbe58863c99f36d896e2829779803125e83be4b6", size = 25607, upload-time = "2025-05-23T14:26:15.923Z" },
-]
-
-[[package]]
-name = "configobj"
-version = "5.0.9"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f5/c4/c7f9e41bc2e5f8eeae4a08a01c91b2aea3dfab40a3e14b25e87e7db8d501/configobj-5.0.9.tar.gz", hash = "sha256:03c881bbf23aa07bccf1b837005975993c4ab4427ba57f959afdd9d1a2386848", size = 101518, upload-time = "2024-09-21T12:47:46.315Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a6/c4/0679472c60052c27efa612b4cd3ddd2a23e885dcdc73461781d2c802d39e/configobj-5.0.9-py2.py3-none-any.whl", hash = "sha256:1ba10c5b6ee16229c79a05047aeda2b55eb4e80d7c7d8ecf17ec1ca600c79882", size = 35615, upload-time = "2024-11-26T14:03:32.972Z" },
-]
-
-[[package]]
 name = "cryptography"
 version = "43.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -691,18 +598,6 @@ wheels = [
 ]
 
 [[package]]
-name = "deprecated"
-version = "1.3.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "wrapt" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/49/85/12f0a49a7c4ffb70572b6c2ef13c90c88fd190debda93b23f026b25f9634/deprecated-1.3.1.tar.gz", hash = "sha256:b1b50e0ff0c1fddaa5708a2c6b0a6588bb09b892825ab2b214ac9ea9d92a5223", size = 2932523, upload-time = "2025-10-30T08:19:02.757Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/84/d0/205d54408c08b13550c733c4b85429e7ead111c7f0014309637425520a9a/deprecated-1.3.1-py2.py3-none-any.whl", hash = "sha256:597bfef186b6f60181535a29fbe44865ce137a5079f295b479886c82729d5f3f", size = 11298, upload-time = "2025-10-30T08:19:00.758Z" },
-]
-
-[[package]]
 name = "detect-secrets"
 version = "0.13.1+ibm.64.dss"
 source = { git = "https://github.com/ibm/detect-secrets.git?rev=master#076672a9a01abdfc7ecee2e7d14f08cdccb73976" }
@@ -723,15 +618,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/96/8e/709914eb2b5749865801041647dc7f4e6d00b549cfe88b65ca192995f07c/distlib-0.4.0.tar.gz", hash = "sha256:feec40075be03a04501a973d81f633735b4b69f98b05450592310c0f401a4e0d", size = 614605, upload-time = "2025-07-17T16:52:00.465Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/33/6b/e0547afaf41bf2c42e52430072fa5658766e3d65bd4b03a563d1b6336f57/distlib-0.4.0-py2.py3-none-any.whl", hash = "sha256:9659f7d87e46584a30b5780e43ac7a2143098441670ff0a49d5f9034c54a6c16", size = 469047, upload-time = "2025-07-17T16:51:58.613Z" },
-]
-
-[[package]]
-name = "distro"
-version = "1.9.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/fc/f8/98eea607f65de6527f8a2e8885fc8015d3e6f5775df186e443e0964a11c3/distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed", size = 60722, upload-time = "2023-12-24T09:54:32.31Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2", size = 20277, upload-time = "2023-12-24T09:54:30.421Z" },
 ]
 
 [[package]]
@@ -1309,19 +1195,6 @@ wheels = [
 ]
 
 [[package]]
-name = "josepy"
-version = "1.15.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-    { name = "pyopenssl" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c1/8a/cd416f56cd4492878e8d62701b4ad32407c5ce541f247abf31d6e5f3b79b/josepy-1.15.0.tar.gz", hash = "sha256:46c9b13d1a5104ffbfa5853e555805c915dcde71c2cd91ce5386e84211281223", size = 59310, upload-time = "2025-01-22T23:56:23.577Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5f/74/fc54f4b03cb66b0b351131fcf1797fe9d7c1e6ce9a38fd940d9bc2d9531b/josepy-1.15.0-py3-none-any.whl", hash = "sha256:878c08cedd0a892c98c6d1a90b3cb869736f9c751f68ec8901e7b05a0c040fed", size = 32774, upload-time = "2025-01-22T23:56:21.524Z" },
-]
-
-[[package]]
 name = "jsonschema"
 version = "4.26.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1706,7 +1579,6 @@ version = "4.21.0"
 source = { editable = "." }
 dependencies = [
     { name = "apache-libcloud" },
-    { name = "atlassian-python-api" },
     { name = "azure-common" },
     { name = "azure-identity" },
     { name = "azure-keyvault-secrets" },
@@ -1717,8 +1589,6 @@ dependencies = [
     { name = "azure-storage-blob" },
     { name = "boto3" },
     { name = "bs4" },
-    { name = "certbot" },
-    { name = "certbot-dns-route53" },
     { name = "docopt" },
     { name = "elasticsearch" },
     { name = "fauxfactory" },
@@ -1765,12 +1635,12 @@ dependencies = [
     { name = "psutil" },
     { name = "psycopg2-binary" },
     { name = "pyopenssl" },
-    { name = "pyotp" },
     { name = "pyparsing" },
     { name = "pytest" },
     { name = "pytest-html" },
     { name = "pytest-jira" },
     { name = "pytest-logger" },
+    { name = "pytest-marker-bugzilla" },
     { name = "pytest-metadata" },
     { name = "pytest-order" },
     { name = "pytest-progress" },
@@ -1813,19 +1683,16 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "apache-libcloud", specifier = "==3.8.0" },
-    { name = "atlassian-python-api", specifier = "==4.0.7" },
-    { name = "azure-common", specifier = "==1.1.28" },
+    { name = "azure-common", specifier = "==1.1.25" },
     { name = "azure-identity", specifier = "==1.16.1" },
     { name = "azure-keyvault-secrets", specifier = "==4.8.0" },
-    { name = "azure-mgmt-compute", specifier = "==33.0.0" },
-    { name = "azure-mgmt-network", specifier = "==28.0.0" },
-    { name = "azure-mgmt-resource", specifier = "==23.2.0" },
+    { name = "azure-mgmt-compute", specifier = "==12.0.0" },
+    { name = "azure-mgmt-network", specifier = "==10.2.0" },
+    { name = "azure-mgmt-resource", specifier = "==10.0.0" },
     { name = "azure-mgmt-storage", specifier = "==21.0.0" },
-    { name = "azure-storage-blob", specifier = "==12.23.1" },
+    { name = "azure-storage-blob", specifier = "==12.19.0" },
     { name = "boto3", specifier = "==1.38.31" },
     { name = "bs4", specifier = "==0.0.1" },
-    { name = "certbot", specifier = "==3.0.0" },
-    { name = "certbot-dns-route53", specifier = "==3.0.0" },
     { name = "docopt", specifier = "==0.6.2" },
     { name = "elasticsearch", specifier = "==8.11.1" },
     { name = "fauxfactory", specifier = "==3.1.0" },
@@ -1872,12 +1739,12 @@ requires-dist = [
     { name = "psutil", specifier = "==5.9.0" },
     { name = "psycopg2-binary", specifier = "==2.9.9" },
     { name = "pyopenssl", specifier = "==24.2.1" },
-    { name = "pyotp", specifier = "==2.9.0" },
     { name = "pyparsing", specifier = "==2.4.7" },
     { name = "pytest", specifier = "==6.2.5" },
     { name = "pytest-html", specifier = "==3.1.1" },
-    { name = "pytest-jira", specifier = "==0.3.22" },
+    { name = "pytest-jira", specifier = "==0.3.21" },
     { name = "pytest-logger", specifier = "==0.5.1" },
+    { name = "pytest-marker-bugzilla", specifier = ">=0.9.3" },
     { name = "pytest-metadata", specifier = "==1.11.0" },
     { name = "pytest-order", specifier = "==1.2.0" },
     { name = "pytest-progress", specifier = "==1.2.5" },
@@ -2090,15 +1957,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/1b/0f/c00296e36ff7485935b83d466c4f2cf5934b84b0ad14e81796e1d9d3609b/paramiko-3.5.0.tar.gz", hash = "sha256:ad11e540da4f55cedda52931f1a3f812a8238a7af7f62a60de538cd80bb28124", size = 1704305, upload-time = "2024-09-15T23:58:11.704Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1f/66/14b2c030fcce69cba482d205c2d1462ca5c77303a263260dcb1192801c85/paramiko-3.5.0-py3-none-any.whl", hash = "sha256:1fedf06b085359051cd7d0d270cebe19e755a8a921cc2ddbfa647fb0cd7d68f9", size = 227143, upload-time = "2024-09-15T23:58:09.23Z" },
-]
-
-[[package]]
-name = "parsedatetime"
-version = "2.6"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/a8/20/cb587f6672dbe585d101f590c3871d16e7aec5a576a1694997a3777312ac/parsedatetime-2.6.tar.gz", hash = "sha256:4cb368fbb18a0b7231f4d76119165451c8d2e35951455dfee97c62a87b04d455", size = 60114, upload-time = "2020-05-31T23:50:57.443Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9d/a4/3dd804926a42537bf69fb3ebb9fd72a50ba84f807d95df5ae016606c976c/parsedatetime-2.6-py3-none-any.whl", hash = "sha256:cb96edd7016872f58479e35879294258c71437195760746faffedb692aef000b", size = 42548, upload-time = "2020-05-31T23:50:56.315Z" },
 ]
 
 [[package]]
@@ -2425,30 +2283,12 @@ wheels = [
 ]
 
 [[package]]
-name = "pyotp"
-version = "2.9.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f3/b2/1d5994ba2acde054a443bd5e2d384175449c7d2b6d1a0614dbca3a63abfc/pyotp-2.9.0.tar.gz", hash = "sha256:346b6642e0dbdde3b4ff5a930b664ca82abfa116356ed48cc42c7d6590d36f63", size = 17763, upload-time = "2023-07-27T23:41:03.295Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c3/c0/c33c8792c3e50193ef55adb95c1c3c2786fe281123291c2dbf0eaab95a6f/pyotp-2.9.0-py3-none-any.whl", hash = "sha256:81c2e5865b8ac55e825b0358e496e1d9387c811e85bb40e71a3b29b288963612", size = 13376, upload-time = "2023-07-27T23:41:01.685Z" },
-]
-
-[[package]]
 name = "pyparsing"
 version = "2.4.7"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c1/47/dfc9c342c9842bbe0036c7f763d2d6686bcf5eb1808ba3e170afdb282210/pyparsing-2.4.7.tar.gz", hash = "sha256:c203ec8783bf771a155b207279b9bccb8dea02d8f0c9e5f8ead507bc3246ecc1", size = 649718, upload-time = "2020-04-05T22:21:25.349Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/bb/488841f56197b13700afd5658fc279a2025a39e22449b7cf29864669b15d/pyparsing-2.4.7-py2.py3-none-any.whl", hash = "sha256:ef9d7589ef3c200abe66653d3f1ab1033c3c419ae9b9bdb1240a85b024efc88b", size = 67842, upload-time = "2020-04-05T22:21:22.897Z" },
-]
-
-[[package]]
-name = "pyrfc3339"
-version = "2.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/b4/7f/3c194647ecb80ada6937c38a162ab3edba85a8b6a58fa2919405f4de2509/pyrfc3339-2.1.0.tar.gz", hash = "sha256:c569a9714faf115cdb20b51e830e798c1f4de8dabb07f6ff25d221b5d09d8d7f", size = 12589, upload-time = "2025-08-23T16:40:31.889Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/34/90/0200184d2124484f918054751ef997ed6409cb05b7e8dcbf5a22da4c4748/pyrfc3339-2.1.0-py3-none-any.whl", hash = "sha256:560f3f972e339f579513fe1396974352fd575ef27caff160a38b312252fcddf3", size = 6758, upload-time = "2025-08-23T16:40:30.49Z" },
 ]
 
 [[package]]
@@ -2494,7 +2334,7 @@ wheels = [
 
 [[package]]
 name = "pytest-jira"
-version = "0.3.22"
+version = "0.3.21"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "marshmallow" },
@@ -2504,7 +2344,7 @@ dependencies = [
     { name = "retry2" },
     { name = "six" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3a/88/238f28f46dd237ee32f2c232b08a4bed8c8b430f3b900e34a43e0b344105/pytest-jira-0.3.22.zip", hash = "sha256:f1649cd1823a57c2663f60150beb964ae109d560572dc67e6ebb243e6352260b", size = 34684, upload-time = "2025-04-15T15:08:38.207Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f7/4b/61ddccd94c0bea0ca5a710031ca6830059af4ab8f935219433342b8d52d4/pytest-jira-0.3.21.zip", hash = "sha256:ca0dd9d13a915849507bc00957c8eae6905f9774434f1e4827e7bc6ae937f29e", size = 34203, upload-time = "2024-04-30T10:45:51.799Z" }
 
 [[package]]
 name = "pytest-logger"
@@ -2517,6 +2357,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5f/1b/fe57649d65877df91660e3704f9c3cb8857880787adbc82ca9b92d8a023a/pytest-logger-0.5.1.tar.gz", hash = "sha256:45324dc1c946d6600dbaa259c2dc97b59d4ebd1d61394ef6c44ebdded1cb165b", size = 28442, upload-time = "2019-07-25T20:40:39.386Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/41/9c/ef04e7416b5a70fbf0d516bc8aabbd51ffa6d6f64fb491dd00c0c9265111/pytest_logger-0.5.1-py2.py3-none-any.whl", hash = "sha256:0d174a40e1731817fb5c51b9844b7b4da366b33ee4c39d6e30e4165b74b99ac7", size = 11067, upload-time = "2019-07-25T20:40:37.549Z" },
+]
+
+[[package]]
+name = "pytest-marker-bugzilla"
+version = "0.9.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+    { name = "python-bugzilla" },
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/3c/c9266cd46813a4cf4e32036426e52067236c67e510902ea4a12fb590bac3/pytest_marker_bugzilla-0.9.5.tar.gz", hash = "sha256:52f9c3bd51d7b9daa0d7f577789363bfdaa2ba35e588537f72281234811d53f9", size = 10835, upload-time = "2025-04-02T17:02:07.887Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e4/f1/7aa5c2c5d1505ca493d7c0a06cb7b9af064b666aa3ee5394230d2d42442c/pytest_marker_bugzilla-0.9.5-py2.py3-none-any.whl", hash = "sha256:ffb8899a715c672fd782af11fe0b489899f8aeea0cbb0c42279aad0cb9a6f3fd", size = 7507, upload-time = "2025-04-02T17:02:06.626Z" },
 ]
 
 [[package]]
@@ -2579,6 +2433,15 @@ sdist = { url = "https://files.pythonhosted.org/packages/bc/7f/670cea45a5de7ba79
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b6/ae/76f758e10b04c00f26c1613d8c77a078a3001d8ec439ec9e992d7c5a9268/python_benedict-0.35.0-py3-none-any.whl", hash = "sha256:4be33761812a2b8986b19f9dcb9df687feefd81c4cbb11becd044a5e28c340f6", size = 59905, upload-time = "2025-09-30T22:57:40.637Z" },
 ]
+
+[[package]]
+name = "python-bugzilla"
+version = "3.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d0/c5/bd8468140061c0165488f32d6d395bc9a4b645526883d9a1a175600982ec/python_bugzilla-3.3.0.tar.gz", hash = "sha256:e18220171e033eb3ba600c4d139359d01aa1acec1daebc4308910e450763de47", size = 120711, upload-time = "2024-09-23T07:35:55.776Z" }
 
 [[package]]
 name = "python-cinderclient"
@@ -2727,19 +2590,6 @@ dependencies = [
     { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/5e/86/38c3031db023672b4d16557e44017c80ee3889dd0a66c5526c4cf7dccbad/pyvmomi-7.0.tar.gz", hash = "sha256:4e1802494a6bbc4c3be36afd11f730e4a85094b2074e9d5806a47131cf788232", size = 587116, upload-time = "2020-04-14T08:02:27.003Z" }
-
-[[package]]
-name = "pywin32"
-version = "311"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7b/40/44efbb0dfbd33aca6a6483191dae0716070ed99e2ecb0c53683f400a0b4f/pywin32-311-cp310-cp310-win32.whl", hash = "sha256:d03ff496d2a0cd4a5893504789d4a15399133fe82517455e78bad62efbb7f0a3", size = 8760432, upload-time = "2025-07-14T20:13:05.9Z" },
-    { url = "https://files.pythonhosted.org/packages/5e/bf/360243b1e953bd254a82f12653974be395ba880e7ec23e3731d9f73921cc/pywin32-311-cp310-cp310-win_amd64.whl", hash = "sha256:797c2772017851984b97180b0bebe4b620bb86328e8a884bb626156295a63b3b", size = 9590103, upload-time = "2025-07-14T20:13:07.698Z" },
-    { url = "https://files.pythonhosted.org/packages/57/38/d290720e6f138086fb3d5ffe0b6caa019a791dd57866940c82e4eeaf2012/pywin32-311-cp310-cp310-win_arm64.whl", hash = "sha256:0502d1facf1fed4839a9a51ccbcc63d952cf318f78ffc00a7e78528ac27d7a2b", size = 8778557, upload-time = "2025-07-14T20:13:11.11Z" },
-    { url = "https://files.pythonhosted.org/packages/7c/af/449a6a91e5d6db51420875c54f6aff7c97a86a3b13a0b4f1a5c13b988de3/pywin32-311-cp311-cp311-win32.whl", hash = "sha256:184eb5e436dea364dcd3d2316d577d625c0351bf237c4e9a5fabbcfa5a58b151", size = 8697031, upload-time = "2025-07-14T20:13:13.266Z" },
-    { url = "https://files.pythonhosted.org/packages/51/8f/9bb81dd5bb77d22243d33c8397f09377056d5c687aa6d4042bea7fbf8364/pywin32-311-cp311-cp311-win_amd64.whl", hash = "sha256:3ce80b34b22b17ccbd937a6e78e7225d80c52f5ab9940fe0506a1a16f3dab503", size = 9508308, upload-time = "2025-07-14T20:13:15.147Z" },
-    { url = "https://files.pythonhosted.org/packages/44/7b/9c2ab54f74a138c491aba1b1cd0795ba61f144c711daea84a88b63dc0f6c/pywin32-311-cp311-cp311-win_arm64.whl", hash = "sha256:a733f1388e1a842abb67ffa8e7aad0e70ac519e09b0f6a784e65a136ec7cefd2", size = 8703930, upload-time = "2025-07-14T20:13:16.945Z" },
-]
 
 [[package]]
 name = "pyyaml"

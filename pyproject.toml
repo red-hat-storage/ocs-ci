@@ -8,19 +8,16 @@ readme = "README.md"
 requires-python = ">=3.10,<3.12"
 dependencies = [
     "apache-libcloud==3.8.0",
-    "atlassian-python-api==4.0.7",
-    "azure-common==1.1.28",
+    "azure-common==1.1.25",
     "azure-identity==1.16.1",
     "azure-keyvault-secrets==4.8.0",
-    "azure-mgmt-compute==33.0.0",
-    "azure-mgmt-network==28.0.0",
-    "azure-mgmt-resource==23.2.0",
+    "azure-mgmt-compute==12.0.0",
+    "azure-mgmt-network==10.2.0",
+    "azure-mgmt-resource==10.0.0",
     "azure-mgmt-storage==21.0.0",
-    "azure-storage-blob==12.23.1",
+    "azure-storage-blob==12.19.0",
     "boto3==1.38.31",
     "bs4==0.0.1",
-    "certbot==3.0.0",
-    "certbot-dns-route53==3.0.0",
     "docopt==0.6.2",
     "elasticsearch==8.11.1",
     "fauxfactory==3.1.0",
@@ -74,16 +71,16 @@ dependencies = [
     "psutil==5.9.0",
     "psycopg2-binary==2.9.9",
     "pyopenssl==24.2.1",
-    "pyotp==2.9.0",
     "pyparsing==2.4.7",
     "pytest==6.2.5",
     "pytest-html==3.1.1",
-    "pytest-jira==0.3.22",
+    "pytest-jira==0.3.21",
     "pytest-logger==0.5.1",
     "pytest-metadata==1.11.0",
     "pytest-order==1.2.0",
     "pytest-progress==1.2.5",
     "pytest-repeat==0.9.3",
+    "pytest_marker_bugzilla>=0.9.3",
     "python-cinderclient==9.7.0",
     "python-dateutil==2.9.0",
     "python-hcl2==3.0.1",
@@ -133,9 +130,6 @@ aws-cleanup = "ocs_ci.cleanup.aws.cleanup:aws_cleanup"
 vsphere-cleanup = "ocs_ci.cleanup.vsphere.cleanup:vsphere_cleanup"
 ocs-build = "ocs_ci.utility.ocs_build:main"
 get-ssl-cert = "ocs_ci.utility.ssl_certs:main"
-rosa-ocp-version = "ocs_ci.utility.rosa:rosa_ocp_version_endpoint"
-deploy-fusion = "ocs_ci.framework.fusion.main:main"
-deploy-fdf = "ocs_ci.framework.fusion_data_foundation.main:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]
