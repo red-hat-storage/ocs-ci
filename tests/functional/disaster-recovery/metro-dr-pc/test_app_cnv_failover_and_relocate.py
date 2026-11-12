@@ -124,6 +124,7 @@ class TestCnvApplicationMDR:
 
         # Create CNV applications(appset push+pull)
         cnv_workloads = cnv_dr_workload(
+            num_of_vm_subscription=0,
             num_of_vm_appset_push=1,
             num_of_vm_appset_pull=1,
             vm_type=vm_type,
