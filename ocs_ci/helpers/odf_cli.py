@@ -188,11 +188,19 @@ class ODFCLIRetriever:
             return
 
         fdf_path = os.path.join(os.path.dirname(self.local_cli_path), "fdf")
-        if os.path.exists(fdf_path):
+        try:
+            os.symlink("odf", fdf_path)
+        except FileExistsError:
+            if not os.path.islink(fdf_path) or os.path.realpath(
+                fdf_path
+            ) != os.path.realpath(self.local_cli_path):
+                raise FileExistsError(
+                    f"FDF alias path {fdf_path} exists but is not a symlink "
+                    f"to {self.local_cli_path}"
+                )
             log.info(f"FDF alias already exists at {fdf_path}")
             return
 
-        os.symlink("odf", fdf_path)
         log.info(f"Created FDF alias: {fdf_path} -> odf")
 
     def _verify_cli_binary(self):
@@ -733,10 +741,11 @@ def odf_cli_setup_helper(odf_cli_class=ODFCliRunner, **kwargs):
         if not odf_cli_retriever.check_odf_cli_binary():
             raise RuntimeError("Failed to download ODF CLI binary")
 
-    odf_cli_retriever._create_fdf_alias()
-
     if config.DEPLOYMENT.get("fdf_cluster") and "binary_name" not in kwargs:
         kwargs["binary_name"] = "fdf"
+
+    if kwargs.get("binary_name") == "fdf":
+        odf_cli_retriever._create_fdf_alias()
 
     # Check and initialize ODFCliRunner
     odf_cli_runner = odf_cli_class(**kwargs)
