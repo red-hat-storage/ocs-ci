@@ -48,25 +48,6 @@ from ocs_ci.framework import config
 log = logging.getLogger(__name__)
 
 
-def get_first_deviceset_by_sc_name():
-    """
-    Get the first StorageCluster deviceset matching the first SC name.
-
-    Returns:
-        dict: The first deviceset spec entry, or None if not found.
-
-    """
-    first_sc_name = get_first_sc_name_from_storagecluster()
-    for device_set in get_all_device_sets():
-        if get_deviceset_sc_name(device_set) == first_sc_name:
-            return device_set
-    log.warning(
-        "No deviceset found for storageclass %s",
-        first_sc_name,
-    )
-    return None
-
-
 def _is_deviceset_count_healed(deviceset_name, target_count, replica):
     """
     Check whether deviceset count and leftover PVCs are healed.
@@ -127,8 +108,9 @@ def heal_inflated_default_deviceset_count(timeout=600, sleep=20):
     Lower inflated default deviceset count and clear non-Bound leftover PVCs.
 
     Failed add_capacity runs can leave storageDeviceSets[0].count higher than
-    Bound deviceset PVC capacity. This patches count down and deletes non-Bound
-    leftover PVCs, then waits via TimeoutSampler until the heal is complete.
+    Bound deviceset PVC capacity, which keeps the StorageCluster Progressing.
+    This patches the count down to match the Bound PVCs, deletes the non-Bound
+    leftover PVCs, and waits via TimeoutSampler until the heal is complete.
 
     Args:
         timeout (int): Seconds to wait for the heal to settle.
@@ -142,13 +124,11 @@ def heal_inflated_default_deviceset_count(timeout=600, sleep=20):
             the Bound deviceset PVCs didn't settle within the timeout.
 
     """
-    first_deviceset = get_first_deviceset_by_sc_name()
-    if not first_deviceset:
-        return False
-    first_sc_name = get_deviceset_sc_name(first_deviceset)
-    deviceset_name = first_deviceset["name"]
-    current_count = int(first_deviceset["count"])
-    replica = int(first_deviceset.get("replica", 1)) or 1
+    # set_deviceset_count patches storageDeviceSets[0], so heal that same entry.
+    device_set = get_all_device_sets()[0]
+    deviceset_name = device_set["name"]
+    current_count = int(device_set["count"])
+    replica = int(device_set.get("replica", 1)) or 1
 
     deviceset_pvcs = get_pvcs_in_deviceset(deviceset_name)
     bound_count = len(
@@ -158,35 +138,24 @@ def heal_inflated_default_deviceset_count(timeout=600, sleep=20):
         "Default deviceset %s (sc=%s): count=%s, replica=%s, "
         "Bound PVCs=%s, total PVCs=%s",
         deviceset_name,
-        first_sc_name,
+        get_deviceset_sc_name(device_set),
         current_count,
         replica,
         bound_count,
         len(deviceset_pvcs),
     )
-    if bound_count == 0:
-        return False
-
-    if bound_count % replica != 0:
-        log.warning(
-            "Bound PVC count %s is not divisible by replica %s; "
-            "skipping deviceset count heal to avoid a partial "
-            "replica group",
+    if bound_count == 0 or bound_count % replica != 0:
+        log.info(
+            "Skipping deviceset count heal: Bound PVC count %s is zero or not "
+            "divisible by replica %s, so it cannot be mapped to a count",
             bound_count,
             replica,
         )
         return False
 
-    # Each deviceset count unit provisions 'replica' OSDs/PVCs. Derive the
-    # highest safe count from Bound PVC capacity so count * replica matches
-    # provisioned PVCs without truncating a partial replica group.
-    log.info(
-        "Calculating target deviceset count from Bound PVCs (%s) / "
-        "replica (%s) so count * replica matches provisioned capacity",
-        bound_count,
-        replica,
-    )
-    target_count = max(1, bound_count // replica)
+    # Each deviceset count unit provisions 'replica' OSDs/PVCs, so the highest
+    # safe count is the Bound PVC capacity divided by the replica.
+    target_count = bound_count // replica
     if current_count <= target_count:
         return False
 
@@ -207,6 +176,9 @@ def heal_inflated_default_deviceset_count(timeout=600, sleep=20):
             )
             pvc.delete(wait=False)
 
+    # The sampler below verifies the end state (count, no leftover PVCs, and
+    # Bound PVCs == count * replica), so a delete that didn't take effect
+    # surfaces as a timeout rather than a falsely successful heal.
     for healed in TimeoutSampler(
         timeout,
         sleep,
@@ -263,7 +235,7 @@ def ensure_storagecluster_ready_for_deviceclass_test(timeout=600, sleep=20):
 
 
 def add_disks_to_nodes_and_wait_for_ready(
-    worker_node_objs, disk_size, ssd=True, tries=30, delay=30
+    worker_node_objs, disk_size, ssd=True, tries=30, delay=30, boot_timeout=900
 ):
     """
     Add a new disk to each of the given nodes, one node at a time, letting the cluster
@@ -283,6 +255,8 @@ def add_disks_to_nodes_and_wait_for_ready(
         ssd (bool): if True, mark disk as SSD
         tries (int): Number of retries when waiting for the Ceph health after each node
         delay (int): Seconds between the Ceph health retries
+        boot_timeout (int): Seconds to wait for a power-cycled node to report a new
+            boot ID and the Ready status
 
     Raises:
         ResourceWrongStatusException: In case one of the nodes didn't reach the Ready status
@@ -296,18 +270,24 @@ def add_disks_to_nodes_and_wait_for_ready(
         ssd and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
     )
     for n in worker_node_objs:
+        boot_id = None
         if requires_reboot:
+            # Fail before mutating the VM: without a boot ID we cannot tell a
+            # completed reboot apart from a node that never went down.
             boot_id = get_node_boot_id(n)
             if not boot_id:
                 raise ValueError(f"Node {n.name} has no boot ID before disk attachment")
         add_disk_to_node(n, disk_size=disk_size, ssd=ssd)
         if requires_reboot:
-            wait_for_node_boot_id_change_and_ready(n, boot_id)
-        log.info(
-            f"Wait for the node {n.name} to reach the {constants.NODE_READY} status"
-        )
-        wait_for_nodes_status([n.name], constants.NODE_READY)
-        log.info(f"Wait for the Ceph health to be OK after power-cycling {n.name}")
+            # This already requires Ready in the same response as the new boot
+            # ID, so no extra wait_for_nodes_status call is needed here.
+            wait_for_node_boot_id_change_and_ready(n, boot_id, timeout=boot_timeout)
+        else:
+            log.info(
+                f"Wait for the node {n.name} to reach the {constants.NODE_READY} status"
+            )
+            wait_for_nodes_status([n.name], constants.NODE_READY)
+        log.info(f"Wait for the Ceph health to be OK after adding a disk to {n.name}")
         ceph_health_check(tries=tries, delay=delay)
 
 
