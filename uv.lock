@@ -1559,7 +1559,8 @@ dependencies = [
     { name = "range-key-dict" },
     { name = "reportportal-client" },
     { name = "requests" },
-    { name = "scipy" },
+    { name = "scipy", version = "1.10.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "scipy", version = "1.12.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "selenium" },
     { name = "semantic-version" },
     { name = "tabulate" },
@@ -1664,7 +1665,8 @@ requires-dist = [
     { name = "range-key-dict", specifier = "==1.1.0" },
     { name = "reportportal-client", specifier = "==3.2.3" },
     { name = "requests", specifier = "==2.32.2" },
-    { name = "scipy", specifier = "==1.10.0" },
+    { name = "scipy", marker = "python_full_version < '3.12'", specifier = "==1.10.0" },
+    { name = "scipy", marker = "python_full_version >= '3.12'", specifier = "==1.12.0" },
     { name = "selenium", specifier = "==4.36.0" },
     { name = "semantic-version", specifier = "==2.8.5" },
     { name = "tabulate", specifier = "==0.9.0" },
@@ -2772,9 +2774,11 @@ wheels = [
 name = "scipy"
 version = "1.10.0"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.12'",
+]
 dependencies = [
     { name = "numpy", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d6/bd/2d13a273d95f7b7d9903c906c486040b0aebb85e008f93a5dd0891f21f1f/scipy-1.10.0.tar.gz", hash = "sha256:c8b3cbc636a87a89b770c6afc999baa6bcbb01691b5ccbbc1b1791c7c0a07540", size = 42398693, upload-time = "2023-01-03T22:37:50.97Z" }
 wheels = [
@@ -2783,6 +2787,34 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d5/80/b23382de9c50509afd151d6876dca33cafef2237a36f74ac7f3bfc327fc2/scipy-1.10.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4df25a28bd22c990b22129d3c637fd5c3be4b7c94f975dca909d8bab3309b694", size = 30677591, upload-time = "2023-01-03T22:34:44.765Z" },
     { url = "https://files.pythonhosted.org/packages/da/b8/03dae1cd4fa687d84cd60513aef17efecf7c277bc771bb96a1d8780dd734/scipy-1.10.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2ad449db4e0820e4b42baccefc98ec772ad7818dcbc9e28b85aa05a536b0f1a2", size = 34124731, upload-time = "2023-01-03T22:34:48.641Z" },
     { url = "https://files.pythonhosted.org/packages/c3/c4/8efe05b8ee86c7276448ef54f71ddb194416b881bc7a0d3c353279eea6aa/scipy-1.10.0-cp311-cp311-win_amd64.whl", hash = "sha256:6faf86ef7717891195ae0537e48da7524d30bc3b828b30c9b115d04ea42f076f", size = 42226259, upload-time = "2023-01-03T22:34:52.955Z" },
+]
+
+[[package]]
+name = "scipy"
+version = "1.12.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.12' and sys_platform == 'win32'",
+    "python_full_version >= '3.12' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+]
+dependencies = [
+    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/30/85/cdbf2c3c460fe5aae812917866392068a88d02f07de0fe31ce738734c477/scipy-1.12.0.tar.gz", hash = "sha256:4bf5abab8a36d20193c698b0f1fc282c1d083c94723902c447e5d2f1780936a3", size = 56811768, upload-time = "2024-01-20T21:13:43.442Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c3/32/7915195ca4643508fe9730691eaed57b879646279572b10b02bdadf165c5/scipy-1.12.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:408c68423f9de16cb9e602528be4ce0d6312b05001f3de61fe9ec8b1263cad08", size = 38908720, upload-time = "2024-01-20T21:11:13.467Z" },
+    { url = "https://files.pythonhosted.org/packages/21/d4/e6c57acc61e59cd46acca27af1f400094d5dee218e372cc604b8162b97cb/scipy-1.12.0-cp311-cp311-macosx_12_0_arm64.whl", hash = "sha256:5adfad5dbf0163397beb4aca679187d24aec085343755fcdbdeb32b3679f254c", size = 31392892, upload-time = "2024-01-20T21:11:18.947Z" },
+    { url = "https://files.pythonhosted.org/packages/e3/c5/d40abc1a857c1c6519e1a4e096d6aee86861eddac019fb736b6af8a58d25/scipy-1.12.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c3003652496f6e7c387b1cf63f4bb720951cfa18907e998ea551e6de51a04467", size = 34733860, upload-time = "2024-01-20T21:11:26.666Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/b8/7169935f9a2ea9e274ad8c21d6133d492079e6ebc3fc69a915c2375616b0/scipy-1.12.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8b8066bce124ee5531d12a74b617d9ac0ea59245246410e19bca549656d9a40a", size = 38418720, upload-time = "2024-01-20T21:11:33.479Z" },
+    { url = "https://files.pythonhosted.org/packages/64/e7/4dbb779d09d1cb757ddbe42cae7c4fe8270497566bb902138d637b04d88c/scipy-1.12.0-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:8bee4993817e204d761dba10dbab0774ba5a8612e57e81319ea04d84945375ba", size = 38652247, upload-time = "2024-01-20T21:11:40.229Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/25/5b30cb3efc9566f0ebeaeca1976150316353c17031ad7868ef46de5ab8dc/scipy-1.12.0-cp311-cp311-win_amd64.whl", hash = "sha256:a24024d45ce9a675c1fb8494e8e5244efea1c7a09c60beb1eeb80373d0fecc70", size = 46162940, upload-time = "2024-01-20T21:11:47.726Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/4a/b2b2cae0c5dfd46361245a67102886ed7188805bdf7044e36fe838bbcf26/scipy-1.12.0-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:e7e76cc48638228212c747ada851ef355c2bb5e7f939e10952bc504c11f4e372", size = 38911995, upload-time = "2024-01-20T21:11:54.759Z" },
+    { url = "https://files.pythonhosted.org/packages/71/ba/744bbdd65eb3fce1412dd4633fc425ad39e6b4068b5b158aee1cd3afeb54/scipy-1.12.0-cp312-cp312-macosx_12_0_arm64.whl", hash = "sha256:f7ce148dffcd64ade37b2df9315541f9adad6efcaa86866ee7dd5db0c8f041c3", size = 31433326, upload-time = "2024-01-20T21:12:00.295Z" },
+    { url = "https://files.pythonhosted.org/packages/db/fd/81feac476e1ae495b51b8c3636aee1f50a1c5ca2a3557f5b0043d4e2fb02/scipy-1.12.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:9c39f92041f490422924dfdb782527a4abddf4707616e07b021de33467f917bc", size = 34165749, upload-time = "2024-01-20T21:12:06.38Z" },
+    { url = "https://files.pythonhosted.org/packages/11/7d/850bfe9462fff393130519eb54f97d43ad9c280ec4297b4cb98b7c2e96cd/scipy-1.12.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a7ebda398f86e56178c2fa94cad15bf457a218a54a35c2a7b4490b9f9cb2676c", size = 37790844, upload-time = "2024-01-20T21:12:12.826Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/7f/504b7b3834d8c9229831c6c58a44943e29a34004eeb34c7ff150add4e001/scipy-1.12.0-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:95e5c750d55cf518c398a8240571b0e0782c2d5a703250872f36eaf737751338", size = 38026369, upload-time = "2024-01-20T21:12:19.69Z" },
+    { url = "https://files.pythonhosted.org/packages/f3/31/91a2a3c5eb85d2bfa86d7c98f2df5d77dcdefb3d80ca9f9037ad04393acf/scipy-1.12.0-cp312-cp312-win_amd64.whl", hash = "sha256:e646d8571804a304e1da01040d21577685ce8e2db08ac58e543eaca063453e1c", size = 45816713, upload-time = "2024-01-20T21:12:26.619Z" },
 ]
 
 [[package]]
