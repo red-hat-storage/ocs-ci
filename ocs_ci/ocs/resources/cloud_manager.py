@@ -838,6 +838,18 @@ class AwsSTSClient(S3Client):
             **kwargs,
         )
 
+        self.region = "us-east-1"
+        self.endpoint = None
+        self.client = boto3.resource(
+            "s3",
+            verify=verify,
+            endpoint_url=self.endpoint,
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
+            region_name=self.region,
+            config=Config(s3={"addressing_style": "virtual"}),
+        )
+
 
 class AzureSTSClient(AzureClient):
     """
