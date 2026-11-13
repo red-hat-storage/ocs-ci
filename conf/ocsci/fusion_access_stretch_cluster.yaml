@@ -1,0 +1,31 @@
+---
+# Config for a Fusion Access (IBM Storage Scale / CNSA) stretch cluster.
+#
+# Pass it alongside the cluster config when running the tests of
+# tests/functional/fusion_access/stretch_cluster, for example:
+#
+#   run-ci --ocsci-conf conf/ocsci/fusion_access_stretch_cluster.yaml \
+#       --ocsci-conf <your private cluster conf> \
+#       tests/functional/fusion_access/stretch_cluster
+#
+# The iSCSI target details used to rediscover the shared SAN LUNs after a node
+# comes back up, 'san_iscsi_ip' and 'san_iscsi_iqn', are environment specific
+# and belong in your private cluster config, not here.
+DEPLOYMENT:
+  fusion_access_deployment: true
+  # The 'fusion_access_required' mark skips unless this is true. It is a
+  # separate key from 'fusion_access_deployment' above, which only drives the
+  # deployment itself, so both are needed to run these tests against an
+  # already deployed cluster
+  fusion_access: true
+  # The 'stretchcluster_required' mark skips unless this is true. The flag is
+  # named after the ODF arbiter stretch cluster, which is the only stretch
+  # topology it originally covered. A Fusion Access stretch cluster is also a
+  # two data zone plus arbiter topology, it just keeps the data in an IBM
+  # Storage Scale filesystem instead of Ceph, so the same mark applies.
+  arbiter_deployment: true
+
+ENV_DATA:
+  # Storage class backed by the IBM Storage Scale filesystem. Defaults to
+  # constants.FUSION_ACCESS_SC when not set.
+  fusion_access_storageclass: "san-fs1"
