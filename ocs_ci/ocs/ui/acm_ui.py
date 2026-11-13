@@ -811,7 +811,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
                 left_shift_offset = len(remote_text) - index
                 self.do_send_keys(
                     self.acm_page_nav["cc_vsphere_network_name"],
-                    f"{left_shift_offset*Keys.ARROW_LEFT}{constants.SPACE}",
+                    f"{left_shift_offset * Keys.ARROW_LEFT}{constants.SPACE}",
                 )
             except ValueError:
                 raise ACMClusterDeployException(
