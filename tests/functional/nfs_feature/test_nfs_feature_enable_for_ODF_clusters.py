@@ -1,13 +1,17 @@
 import ipaddress
-import pytest
 import logging
-import time
 import os
+import pytest
+import requests
 import socket
+import time
 
 from subprocess import CompletedProcess
+from urllib3.exceptions import InsecureRequestWarning
+
 from ocs_ci.utility import nfs_utils
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.nfs_base import restart_vm_openshift_virt
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs import constants, ocp
@@ -38,11 +42,14 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.utility import version as version_module
 from ocs_ci.ocs.resources import pod, ocs
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
 )
 from ocs_ci.utility.nfs_utils import provisioner_selectors
+
+# Disable SSL warnings for OpenShift API calls
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 # Error message to look in a command output
@@ -310,17 +317,22 @@ class TestNfsEnable(ManageTest):
                     re_try=False
                 )
             except (TimeoutError, socket.gaierror):
-                nfs_client_vm_cloud = config.ENV_DATA.get("nfs_client_vm_cloud")
-                nfs_client_vm_name = config.ENV_DATA.get("nfs_client_vm_name")
-                if not nfs_client_vm_cloud or not nfs_client_vm_name:
-                    raise ConfigurationError(
-                        "NFS Client VM is not accessible and ENV_DATA nfs_client_vm_cloud and/or nfs_client_vm_name "
-                        "parameters are not configured to be able to automatically reboot the NFS Client VM."
-                    )
-                cmd = f"openstack --os-cloud {nfs_client_vm_cloud} server reboot --hard --wait {nfs_client_vm_name}"
-                exec_cmd(cmd)
+                # VM is not accessible - attempt restart via OpenShift Virtualization
+                restart_vm_openshift_virt()
 
-                time.sleep(60)
+                logger.info(
+                    f"Waiting for SSH to become available on {self.nfs_client_ip}..."
+                )
+                for _ in TimeoutSampler(
+                    timeout=300,
+                    sleep=10,
+                    func=lambda: socket.create_connection(
+                        (self.nfs_client_ip, 22), timeout=5
+                    ),
+                ):
+                    logger.info(f"SSH port is reachable on {self.nfs_client_ip}")
+                    break
+
                 self.__nfs_client_connection = self.get_nfs_client_connection()
         return self.__nfs_client_connection
 
