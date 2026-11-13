@@ -31,6 +31,7 @@ from ocs_ci.ocs.ui.base_ui import (
 from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import get_running_acm_version
 
 log = logging.getLogger(__name__)
@@ -868,6 +869,21 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
     )
 
 
+@retry(SeleniumTimeoutException, tries=3, delay=10, backoff=1)
+def _refresh_and_navigate_data_services(acm_obj):
+    """
+    Refresh the ACM console and navigate to the Data Services > Disaster recovery
+    page. Retried on Selenium timeouts, as the 'Disaster recovery' menu link may not
+    be clickable right after a page refresh.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+
+    """
+    acm_obj.refresh_page()
+    acm_obj.navigate_data_services()
+
+
 def verify_pending_cleanup_alert_firing(
     acm_obj, operation="Failover", drpc_name=None, namespace=None
 ):
@@ -892,8 +908,7 @@ def verify_pending_cleanup_alert_firing(
         f"alert is firing on DR Dashboard after {operation}"
         + (f" for DRPC '{drpc_name}'" if drpc_name else "")
     )
-    acm_obj.refresh_page()
-    acm_obj.navigate_data_services()
+    _refresh_and_navigate_data_services(acm_obj)
 
     # Navigate to Disaster Recovery Overview page where alerts are shown
     acm_obj.do_click(
@@ -923,24 +938,40 @@ def verify_pending_cleanup_alert_firing(
         )
         acm_obj.take_screenshot()
 
-    # Verify alert is visible - use DRPC-specific locator if drpc_name provided
+    # Verify alert is visible.
+    # When drpc_name is provided, try the DRPC-specific message locator first.
+    # If the UI renders the alert text differently (truncated, different quotes,
+    # etc.) the DRPC-specific XPath may miss; fall back to the generic
+    # ApplicationCleanupPending header locator before declaring failure.
     if drpc_name:
-        alert_locator = (
+        drpc_alert_locator = (
             acm_loc["pending-cleanup-alert-drpc-message"][0].format(
                 drpc_name, namespace
             ),
             acm_loc["pending-cleanup-alert-drpc-message"][1],
         )
-        expected_text = f"DRPC '{drpc_name}'"
+        alert_found = acm_obj.wait_until_expected_text_is_found(
+            locator=drpc_alert_locator,
+            expected_text=f"DRPC '{drpc_name}'",
+            timeout=120,
+        )
+        if not alert_found:
+            log.warning(
+                f"DRPC-specific alert locator did not find the alert for '{drpc_name}' — "
+                "falling back to generic ApplicationCleanupPending locator"
+            )
+            acm_obj.take_screenshot()
+            alert_found = acm_obj.wait_until_expected_text_is_found(
+                locator=acm_loc["pending-cleanup-alert"],
+                expected_text=constants.ALERT_APPLICATION_CLEANUP_PENDING,
+                timeout=60,
+            )
     else:
-        alert_locator = acm_loc["pending-cleanup-alert"]
-        expected_text = constants.ALERT_APPLICATION_CLEANUP_PENDING
-
-    alert_found = acm_obj.wait_until_expected_text_is_found(
-        locator=alert_locator,
-        expected_text=expected_text,
-        timeout=120,
-    )
+        alert_found = acm_obj.wait_until_expected_text_is_found(
+            locator=acm_loc["pending-cleanup-alert"],
+            expected_text=constants.ALERT_APPLICATION_CLEANUP_PENDING,
+            timeout=120,
+        )
 
     if alert_found:
         log.info(
@@ -988,41 +1019,6 @@ def verify_pending_cleanup_alert_resolved(
         + (f" for DRPC '{drpc_name}'" if drpc_name else "")
     )
 
-    # Navigate to DR Dashboard Overview page
-    acm_obj.refresh_page()
-    acm_obj.navigate_data_services()
-    acm_obj.do_click(
-        acm_loc["disaster-recovery-overview"],
-        avoid_stale=True,
-        enable_screenshot=True,
-        timeout=60,
-    )
-    acm_obj.take_screenshot()
-
-    # Try to expand Critical alerts section if it exists
-    try:
-        critical_alert = acm_obj.find_an_element_by_xpath(
-            acm_loc["critical-alert"][0]
-        ).get_attribute("aria-expanded")
-
-        if critical_alert == "false":
-            critical_alert_elem = wait_for_element_to_be_clickable(
-                acm_loc["critical-alert"]
-            )
-            acm_obj.driver.execute_script("arguments[0].click();", critical_alert_elem)
-            acm_obj.take_screenshot()
-    except (NoSuchElementException, StaleElementReferenceException) as e:
-        log.info(
-            f"Critical alerts section not found or not expandable: {e}. "
-            "This may indicate no critical alerts exist (expected)."
-        )
-        acm_obj.take_screenshot()
-    except Exception as e:
-        acm_obj.take_screenshot()
-        raise UnexpectedBehaviour(
-            f"Unable to verify DR Dashboard critical-alert section after {operation} cleanup."
-        ) from e
-
     # Verify alert is NOT visible - use DRPC-specific locator if drpc_name provided
     if drpc_name:
         alert_locator = (
@@ -1036,13 +1032,74 @@ def verify_pending_cleanup_alert_resolved(
         alert_locator = acm_loc["pending-cleanup-alert"]
         expected_text = constants.ALERT_APPLICATION_CLEANUP_PENDING
 
-    # use_fallback=False as this is intentional negative check (alert should NOT exist)
-    alert_still_present = acm_obj.wait_until_expected_text_is_found(
-        locator=alert_locator,
-        expected_text=expected_text,
-        timeout=60,
-        use_fallback=False,
-    )
+    def _is_alert_present():
+        """
+        Reload the DR Dashboard Overview page and check whether the alert is shown.
+
+        Returns:
+            bool: True if the alert is still present, False otherwise
+
+        """
+        _refresh_and_navigate_data_services(acm_obj)
+        acm_obj.do_click(
+            acm_loc["disaster-recovery-overview"],
+            avoid_stale=True,
+            enable_screenshot=True,
+            timeout=60,
+        )
+        acm_obj.take_screenshot()
+
+        # Try to expand Critical alerts section if it exists
+        try:
+            critical_alert = acm_obj.find_an_element_by_xpath(
+                acm_loc["critical-alert"][0]
+            ).get_attribute("aria-expanded")
+
+            if critical_alert == "false":
+                critical_alert_elem = wait_for_element_to_be_clickable(
+                    acm_loc["critical-alert"]
+                )
+                acm_obj.driver.execute_script(
+                    "arguments[0].click();", critical_alert_elem
+                )
+                acm_obj.take_screenshot()
+        except (NoSuchElementException, StaleElementReferenceException) as e:
+            log.info(
+                f"Critical alerts section not found or not expandable: {e}. "
+                "This may indicate no critical alerts exist (expected)."
+            )
+            acm_obj.take_screenshot()
+        except Exception as e:
+            acm_obj.take_screenshot()
+            raise UnexpectedBehaviour(
+                f"Unable to verify DR Dashboard critical-alert section after {operation} cleanup."
+            ) from e
+
+        # use_fallback=False as this is intentional negative check (alert should
+        # NOT exist). The text is looked up with a short timeout: the call returns
+        # True as soon as the text is present, so a long timeout would only delay
+        # the "alert is gone" result.
+        return acm_obj.wait_until_expected_text_is_found(
+            locator=alert_locator,
+            expected_text=expected_text,
+            timeout=10,
+            use_fallback=False,
+        )
+
+    # The alert is cleared by Prometheus a while after the cleanup (rule 'for: 1m'
+    # plus scrape/evaluation delay) and the console only reflects it after a page
+    # reload, so reload and re-check until the alert is gone or the timeout expires.
+    alert_still_present = True
+    deadline = time.time() + 300
+    while True:
+        alert_still_present = _is_alert_present()
+        if not alert_still_present or time.time() >= deadline:
+            break
+        log.info(
+            f"Alert '{constants.ALERT_APPLICATION_CLEANUP_PENDING}' is still present, "
+            "reloading DR Dashboard in 15 seconds"
+        )
+        time.sleep(15)
 
     if alert_still_present:
         log.error(
