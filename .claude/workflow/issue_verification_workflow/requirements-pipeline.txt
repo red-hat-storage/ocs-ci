@@ -1,0 +1,2 @@
+# Pipeline orchestrator dependencies (ocs-ci venv usually already has PyYAML)
+PyYAML>=6.0

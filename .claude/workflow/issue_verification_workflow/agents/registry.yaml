@@ -1,0 +1,24 @@
+agents:
+  jira_search:
+    description: Fetch JIRA issues by explicit keys or ON_QA JQL search
+    record_stage: jira_intake
+
+  repro_steps:
+    description: Generate reproduction and verification steps per issue
+    record_stage: repro_steps
+
+  live_repro:
+    description: Plan or run live issue reproduction on cluster via ocs_ci_live_repro
+    record_stage: live_cluster_verification
+
+  test_matching:
+    description: Find ocs-ci pytest tests covering each issue
+    record_stage: test_matching
+
+  ocs_ci_execution:
+    description: Trigger matched tests on Jenkins via ocs-ci-run agent
+    record_stage: ocs_ci_execution
+
+  reporting:
+    description: Build and deliver comprehensive run report via ocs_ci_reporting
+    record_stage: reporting
