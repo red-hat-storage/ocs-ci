@@ -190,7 +190,7 @@ class TestZoneShutdownsAndCrashes:
         end_time = None
 
         for i in range(iteration):
-            log.info(f"------ Iteration {i+1} ------")
+            log.info(f"------ Iteration {i + 1} ------")
 
             # note the file names created
             sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
@@ -397,7 +397,7 @@ class TestZoneShutdownsAndCrashes:
         )
 
         for i in range(iteration):
-            log.info(f"------ Iteration {i+1} ------")
+            log.info(f"------ Iteration {i + 1} ------")
 
             # note the file names created
             sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
