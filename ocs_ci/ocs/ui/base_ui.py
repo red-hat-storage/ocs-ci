@@ -3,6 +3,7 @@ from pathlib import Path
 import datetime
 import logging
 import os
+import sys
 import gc
 import time
 import traceback
@@ -288,11 +289,30 @@ class BaseUI:
                 raise
         except ElementClickInterceptedException:
             # appears due to JS graphics on the page: one element overlapping another, or dynamic graphics in progress
-            logger.info("ElementClickInterceptedException, try click again")
+            logger.info(
+                "ElementClickInterceptedException, scrolling and retrying click"
+            )
             take_screenshot("ElementClickInterceptedException")
             self.copy_dom()
-            time.sleep(5)
-            _do_click(locator, timeout, enable_screenshot, copy_dom)
+            try:
+                element = wait_for_element_to_be_clickable(locator, timeout)
+                SeleniumDriver().execute_script(
+                    "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});",
+                    element,
+                )
+                element.click()
+                logger.info("Click succeeded after scrolling the element into view")
+            except (
+                ElementClickInterceptedException,
+                StaleElementReferenceException,
+                TimeoutException,
+            ) as ex:
+                logger.warning(
+                    f"Click after scrolling failed ({type(ex).__name__}), "
+                    "falling back to JavaScript click"
+                )
+                self.click_with_script(locator)
+                logger.info("Click succeeded using the JavaScript fallback")
 
     def click_with_script(self, locator):
         """
@@ -1178,12 +1198,13 @@ def garbage_collector_webdriver():
     for obj in collected_objs:
         if str(type(obj)) == constants.WEB_DRIVER_CHROME_OBJ_TYPE:
             try:
+                session_id = getattr(obj, "session_id", "unknown")
                 logger.debug(
-                    f"garbage collector to quit webdriver session id {obj.session_id}"
+                    f"garbage collector to quit webdriver session id {session_id}"
                 )
                 obj.quit()
                 SeleniumDriver.remove_instance()
-            except WebDriverException as e:
+            except (WebDriverException, AttributeError) as e:
                 logger.error(e)
 
 
@@ -1320,9 +1341,15 @@ class SeleniumDriver(WebDriver):
                     chrome_options.add_argument("--no-proxy-server")
 
             chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
-            chrome_service = Service(
-                ChromeDriverManager(chrome_type=chrome_browser_type).install()
-            )
+            driver_path = ChromeDriverManager(chrome_type=chrome_browser_type).install()
+            if sys.platform == "darwin":
+                import subprocess
+
+                subprocess.run(["xattr", "-c", driver_path], check=False)
+                subprocess.run(
+                    ["codesign", "-s", "-", "--force", driver_path], check=False
+                )
+            chrome_service = Service(driver_path)
             driver = webdriver.Chrome(
                 service=chrome_service,
                 options=chrome_options,

@@ -1813,6 +1813,9 @@ RAMEN_GROUP_REPLICATION_ID_LABEL = "ramendr.openshift.io/groupreplicationid"
 RAMEN_REPLICATION_ID_LABEL = "ramendr.openshift.io/replicationid"
 RAMEN_STORAGE_ID_LABEL = "ramendr.openshift.io/storageid"
 RDR_VM_PROTECTION_LABEL = "ramendr.openshift.io/k8s-resource-selector"
+# Recipe (in DR_OPS_NAMESPACE) the ACM UI references when DR protecting a VM
+VM_RECIPE_NAME = "vm-recipe"
+
 
 # constants
 RBD_INTERFACE = "rbd"
@@ -3809,6 +3812,7 @@ ACM_HUB_BACKUP_NAMESPACE = "open-cluster-management-backup"
 ACM_OBSERVABILITY_NAMESPACE = "open-cluster-management-observability"
 ACM_HUB_RESTORE = "Restore"
 ACM_BACKUP_SCHEDULE = "BackupSchedule"
+ACM_BACKUP_LABEL = "cluster.open-cluster-management.io/backup"
 KLUSTERLET_CONFIG = "KlusterletConfig"
 KLUSTERLET_CONFIG_MCE_IMPORT_NAME = "mce-import-klusterlet-config"
 
@@ -3994,6 +3998,10 @@ PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"
 DISCOVERED_APPS = "DiscoveredApps"
 DR_OPS_NAMESPACE = "openshift-dr-ops"
 DPA_DISCOVERED_APPS_PATH = os.path.join(TEMPLATE_DIR, "DR", "dpa_discovered_apps.yaml")
+
+# RHSTOR-8082: VM static IP translation during DR failover/failback
+VM_IP_TRANSLATION_WORKLOAD_NS = "vm-ip-translation-test"
+VM_STATIC_IP_WORKLOAD_NS = "test-vm-static-ip"
 
 DISABLE_DR_EACH_APP = os.path.join(TEMPLATE_DIR, "DR", "disable_dr_each_app.sh")
 REMOVE_DR_EACH_MANAGED_CLUSTER = os.path.join(TEMPLATE_DIR, "DR", "dr_conf_removal.sh")

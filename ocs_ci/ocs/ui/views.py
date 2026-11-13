@@ -2053,6 +2053,130 @@ acm_configuration_5_0 = {
         "//td[@data-label='status'][normalize-space(.)='Validated']",
         By.XPATH,
     ),
+    # OCP 5.0 / PF6: perspective-switcher-toggle moved from data-test-id to
+    # data-test.  Accept both so the locator survives a mid-stream backport.
+    "switch-perspective": (
+        "//*[@data-test='perspective-switcher-toggle'] | "
+        "//*[@data-test-id='perspective-switcher-toggle']",
+        By.XPATH,
+    ),
+    # OCP 5.0 / ACM 5.0: Fleet Virtualization option in the perspective menu
+    # is rendered as a PF6 menu item.  Accept both the legacy h2 text match
+    # and the new button text to cover any minor bundle variation.
+    "fleet-virtual": (
+        "//button[@role='option'][.//h2[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'fleet virtualization')]] | "  # noqa: E501
+        "//button[normalize-space()='Fleet Virtualization'] | "
+        "//h2[normalize-space()='Fleet Virtualization'] | "
+        "//*[@data-test='perspective-Fleet Virtualization']",
+        By.XPATH,
+    ),
+    # The VMs nav item moved from data-test-id to data-test on the ACM hub
+    # console shipped with OCP 5.0.
+    "nav-bar-vms-page": (
+        "//a[@data-test='virtualmachines-nav-item'] | "
+        "//a[@data-test-id='virtualmachines-nav-item']",
+        By.XPATH,
+    ),
+    # The side nav is rendered collapsed (and aria-hidden) after switching to
+    # the Fleet Virtualization perspective, so it has to be expanded before any
+    # of the nav items can be clicked.
+    "nav-sidebar-collapsed": (
+        "//div[@id='page-sidebar' and contains(@class, 'pf-m-collapsed')]",
+        By.XPATH,
+    ),
+    "nav-sidebar-toggle": ("//button[@id='nav-toggle']", By.XPATH),
+    # OCP 5.0 / PF6: VM name button in tree view or link in table
+    "cnv-vm-name": (
+        # OCP 5.0 / PF6: ONLY tree-view node buttons — <a> links in the sidebar
+        # and VM list table navigate to ACM Search, NOT to the Fleet Virt detail page.
+        "//button[contains(@class, 'pf-v6-c-tree-view__node-text') and normalize-space()='{0}'] | "
+        "//button[contains(@class, 'pf-v6-c-tree-view__node-text') and .//span[normalize-space()='{0}']]",
+        By.XPATH,
+    ),
+    "enroll-vm": (
+        "//button[contains(text(),'Enroll')] | //button[.//span[contains(text(),'Enroll')]] | button[aria-label='Empty Page']",  # noqa: E501
+        By.XPATH,
+    ),
+    "vm-page-next-btn": (
+        "//footer//button[normalize-space()='Next' or contains(., 'Next')] | button[type='submit']",
+        By.XPATH,
+    ),
+    "assign": (
+        "//footer//button[normalize-space()='Assign' or contains(., 'Assign')] | button[type='submit']",
+        By.XPATH,
+    ),
+    # OCP 5.0 / PF6: the status is rendered as an inline link-variant <button>
+    # containing the printable status text (e.g. "Running") next to an icon.
+    # Scoped to the detail page header to avoid matching unrelated buttons.
+    "vm-status": (
+        "(//button[@type='button'][normalize-space()='Running']"
+        " | //*[contains(@class,'pf-v6-c-label') or contains(@class,'pf-v6-c-badge')]"
+        "[contains(normalize-space(),'Running')])[1]",
+        By.XPATH,
+    ),
+    # OCP 5.0: DRPolicy dropdown toggle uses id="policy-selection-dropdown"
+    # (confirmed from odf-multicluster-console bundle).
+    # The 4.21 "Typeahead single select" aria-label and "dr-policy-dropdown" id no
+    # longer exist.  After clicking the toggle, the first list item is selected.
+    "dr-policy": (
+        "//button[@aria-label='Typeahead single select'] | "
+        "//button[contains(., 'Select a policy')] | "
+        "//*[@id='policy-selection-dropdown']",
+        By.XPATH,
+    ),
+    "select-policy": (
+        "//ul[contains(@class,'pf-v6-c-select__menu') or contains(@class,'pf-v6-c-menu__list') or @role='listbox']"
+        "/li[1]//button | "
+        "//ul[@role='listbox']/li[1] | "
+        "//li[contains(@class, 'pf-v6-c-menu__list-item')]//button",
+        By.XPATH,
+    ),
+    "all-clusters": (
+        "//button[contains(@class, 'pf-v6-c-tree-view') and contains(., 'All clusters')] | "
+        "//button[normalize-space()='All clusters'] | "
+        "//button[contains(text(), 'All clusters')]",
+        By.XPATH,
+    ),
+    # OCP 5.0 / PF6: modal close covers both the standard modal ×  button and the
+    # onboarding "Create a new project" popover dismiss button (data-test=
+    # "onboarding-dismiss-btn") which floats over the page and intercepts clicks.
+    "modal_dialog_close_button": (
+        "//div[@role='dialog' or contains(@class, 'c-modal-box')]//button[@aria-label='Close'] | "
+        "//button[@data-test='onboarding-dismiss-btn']",
+        By.XPATH,
+    ),
+    # OCP 5.0 / PF6: the confirmation alert title contains an embedded screen-reader
+    # span ("Success alert:") before the message text, so text()= no longer matches.
+    # Use contains() to match regardless of the hidden span content.
+    "conf-msg": (
+        "//div[@data-ouia-component-type='PF6/Alert']//h4[contains(., 'New policy assigned to application')] | "
+        '//h4[contains(., "New policy assigned to application")]',
+        By.XPATH,
+    ),
+    # OCP 5.0 / PF6: after the success alert appears the modal close button is the
+    # header × (aria-label='Close') — no separate footer close button exists.
+    "close-page": (
+        "//div[@role='dialog' or contains(@class, 'c-modal-box')]//button[@aria-label='Close'] | "
+        "//button[@aria-label='Close']",
+        By.XPATH,
+    ),
+    # OCP 5.0 / PF6: clicking a namespace in the tree lands on the Overview tab.
+    # The VM list is only visible after clicking the "Virtual machines" tab.
+    "vm-list-tab": (
+        "//button[.//*[@data-test='vm-list-tab']] | "
+        "//button[@data-test='vm-list-tab'] | "
+        "//*[@data-test='vm-list-tab']",
+        By.XPATH,
+    ),
+    # Select a specific DRPC radio button by placement/protection name when multiple
+    # DRPCs exist in the namespace.  Format with the protection_name string.
+    "select-drpc-by-name": (
+        "//input[@name='radioGroup' and @value='{0}'] | "
+        "//label[contains(., '{0}')]//input[@name='radioGroup'] | "
+        "//input[@name='radioGroup'][following-sibling::*[contains(., '{0}')] or "
+        "preceding-sibling::*[contains(., '{0}')]]",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {
@@ -4694,6 +4818,7 @@ locators = {
             **acm_configuration_4_20,
             **acm_configuration_4_21,
             **acm_configuration_4_22,
+            **acm_configuration_5_0,
         },
         "validation": {
             **validation,

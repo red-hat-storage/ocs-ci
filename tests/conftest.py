@@ -8666,6 +8666,7 @@ def discovered_apps_dr_workload_cnv(request):
         shared_drpc_protection=False,
         vm_type=constants.VM_VOLUME_PVC,
         dr_policy_name=None,
+        workload_namespace=None,
     ):
         """
         Args:
@@ -8678,6 +8679,7 @@ def discovered_apps_dr_workload_cnv(request):
                                         a workload using the existing DRPC in the same namespace
             vm_type (str): VM deployment type
             dr_policy_name (str): Name of the DRPolicy to use. If None, uses the default.
+            workload_namespace (str): Namespace override; if None, generates a unique namespace.
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
 
@@ -8700,15 +8702,18 @@ def discovered_apps_dr_workload_cnv(request):
 
         for index in range(pvc_vm):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
-            workload_namespace = create_unique_resource_name("wrkld-vm", "dist")[:20]
+            ns = (
+                workload_namespace
+                or create_unique_resource_name("wrkld-vm", "dist")[:20]
+            )
             if shared_drpc_protection and instances:
                 workload_details["workload_namespace"] = instances[0].workload_namespace
-                workload_namespace = instances[0].workload_namespace
+                ns = instances[0].workload_namespace
             wl_kwargs = dict(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
-                workload_namespace=workload_namespace,
+                workload_namespace=ns,
                 discovered_apps_pvc_selector_key=workload_details[
                     "dr_workload_app_pvc_selector_key"
                 ],
@@ -8750,6 +8755,116 @@ def discovered_apps_dr_workload_cnv(request):
         if "shared" in request.node.nodeid:
             instances[0].delete_workload(skip_resource_deletion_verification=True)
             instances[1].delete_workload(shared_drpc_protection=True)
+        else:
+            for instance in instances:
+                try:
+                    instance.delete_workload()
+                except ResourceNotDeleted:
+                    raise ResourceNotDeleted("Workload deletion was unsuccessful")
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def cnv_workload_with_static_ip(request):
+    """
+    Deploys a CNV Discovered App workload wired onto a Primary UDN with a pinned
+    static IP for DR static IP translation testing (RHSTOR-8082).
+
+    The VM manifests (``dr_cnv_discovered_apps_static_ip`` /
+    ``..._static_ip_shared``) already carry the Primary UDN interface and the
+    ``network.kubevirt.io/addresses`` annotation pinning the static IP. They
+    deploy into ``constants.VM_IP_TRANSLATION_WORKLOAD_NS`` - the namespace the
+    ``setup_udn_nad`` fixture prepares with the primary-UDN label and the
+    "vm-network" UserDefinedNetwork on both managed clusters - so that fixture
+    must be active for this one to work.
+    """
+
+    instances = []
+    # Parallel to ``instances``: True when the instance was deployed with
+    # shared_drpc_protection=True. Teardown uses this instead of the test node ID.
+    shared_flags = []
+
+    def factory(
+        pvc_vm=1,
+        shared_drpc_protection=False,
+        dr_policy_name=None,
+    ):
+        """
+        Deploys the workloads without DR-protecting them. The test is expected to
+        create the NetworkMapping ConfigMap first and then DR-protect the workload
+        (Placement + DRPC via CLI, or via UI).
+
+        Args:
+            pvc_vm (int): Number of workload instances to create
+            shared_drpc_protection (bool): When True, additional instances share the
+                namespace and DRPC of the first instance
+            dr_policy_name (str): DRPolicy name override; if None uses the default
+
+        Returns:
+            list: objects of workload class
+        """
+        total_pvc_count = 0
+        workload_key = (
+            "dr_cnv_discovered_apps_static_ip_shared"
+            if shared_drpc_protection
+            else "dr_cnv_discovered_apps_static_ip"
+        )
+
+        for index in range(pvc_vm):
+            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            # Deploy into the namespace that already holds the Primary UDN
+            workload_namespace = workload_details["workload_namespace"]
+            wl_kwargs = dict(
+                workload_dir=workload_details["workload_dir"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+                workload_namespace=workload_namespace,
+                discovered_apps_pvc_selector_key=workload_details[
+                    "dr_workload_app_pvc_selector_key"
+                ],
+                discovered_apps_pvc_selector_value=workload_details[
+                    "dr_workload_app_pvc_selector_value"
+                ],
+                discovered_apps_pod_selector_key=workload_details[
+                    "dr_workload_app_pod_selector_key"
+                ],
+                discovered_apps_pod_selector_value=workload_details[
+                    "dr_workload_app_pod_selector_value"
+                ],
+                workload_placement_name=workload_details[
+                    "dr_workload_app_placement_name"
+                ],
+                vm_secret=workload_details["vm_secret"],
+                vm_username=workload_details["vm_username"],
+                workload_name=workload_details["name"],
+                vm_name=workload_details["vm_name"],
+            )
+            if dr_policy_name:
+                wl_kwargs["dr_policy_name"] = dr_policy_name
+            workload = CnvWorkloadDiscoveredApps(**wl_kwargs)
+
+            instances.append(workload)
+            shared_flags.append(shared_drpc_protection)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload(
+                dr_protect=False, shared_drpc_protection=shared_drpc_protection
+            )
+
+        return instances
+
+    def teardown():
+        if len(instances) > 1 and all(shared_flags):
+            # All instances share one namespace and DRPC: the first deletes the
+            # DRPC, only the last verifies resource deletion and drops the project.
+            instances[0].delete_workload(skip_resource_deletion_verification=True)
+            for instance in instances[1:-1]:
+                instance.delete_workload(
+                    shared_drpc_protection=True,
+                    skip_resource_deletion_verification=True,
+                )
+            instances[-1].delete_workload(shared_drpc_protection=True)
         else:
             for instance in instances:
                 try:
