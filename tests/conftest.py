@@ -1268,6 +1268,8 @@ def storageclass_factory_fixture(
 
     """
     instances = []
+    # (cluster index, pool name) of CephFS data pools created by this fixture
+    additional_cephfs_data_pools = []
 
     def factory(
         interface=constants.CEPHBLOCKPOOL,
@@ -1290,6 +1292,7 @@ def storageclass_factory_fixture(
         mounter=None,
         erasure_coded=False,
         data_pool_name=None,
+        new_cephfs_pool=False,
     ):
         """
         Args:
@@ -1323,6 +1326,7 @@ def storageclass_factory_fixture(
                 metadata pool and dataPool set to the new EC data pool.
             data_pool_name (str): Explicit EC data pool name to set as dataPool in the StorageClass.
                 Use when sharing an existing EC pool across multiple SCs without creating a new one.
+            new_cephfs_pool (bool): True if user wants to create new cephfs pool for SC
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -1386,8 +1390,24 @@ def storageclass_factory_fixture(
                     interface_name = helpers.create_cephfs_ec_pool(
                         ec_pool_short, data_chunks, coding_chunks
                     )
-                else:
+                elif ocsci_config.ENV_DATA.get("new_cephfs_pool") or new_cephfs_pool:
+                    new_data_pool_name = helpers.create_cephfs_data_pool(
+                        pool_name=constants.CUSTOM_CEPHFS_POOL,
+                        compression=ocsci_config.ENV_DATA.get("compression")
+                        or compression,
+                        replica=ocsci_config.ENV_DATA.get("replica") or replica,
+                    )
+                    if new_data_pool_name:
+                        additional_cephfs_data_pools.append(
+                            (ocsci_config.cur_index, new_data_pool_name)
+                        )
+                    interface_name = (
+                        f"ocs-storagecluster-cephfilesystem-{new_data_pool_name}"
+                    )
+                elif pool_name is None:
                     interface_name = helpers.get_cephfs_data_pool_name()
+                else:
+                    interface_name = pool_name
 
             sc_obj = helpers.create_storage_class(
                 interface_type=interface,
@@ -1441,6 +1461,24 @@ def storageclass_factory_fixture(
             except Exception as e:
                 log.error(f"Failed to delete storageclass {instance.name}: {e}")
                 teardown_errors.append((instance.name, e))
+        original_index = ocsci_config.cur_index
+        try:
+            for cluster_index, cfs_data_pool in additional_cephfs_data_pools:
+                ocsci_config.switch_ctx(cluster_index)
+                try:
+                    if not helpers.delete_cephfs_data_pool(cfs_data_pool):
+                        log.warning(
+                            f"CephFS data pool {cfs_data_pool} was not found on "
+                            f"cluster index {cluster_index}"
+                        )
+                except Exception as e:
+                    log.error(
+                        f"Failed to delete CephFS data pool {cfs_data_pool} on "
+                        f"cluster index {cluster_index}: {e}"
+                    )
+                    teardown_errors.append((cfs_data_pool, e))
+        finally:
+            ocsci_config.switch_ctx(original_index)
         if teardown_errors:
             parts = [f"{name}: {exc}" for name, exc in teardown_errors]
             raise RuntimeError(
@@ -8454,8 +8492,8 @@ def discovered_apps_dr_workload(request):
     ):
         """
         Args:
-            kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
-            recipe (int): Number if Discovered Apps workload with recipe protection to be created
+            kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
+            recipe (int): Number of Discovered Apps workload with recipe protection to be created
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
             multi_ns (bool): True for Multi Namespace
