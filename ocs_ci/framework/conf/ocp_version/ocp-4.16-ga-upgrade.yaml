@@ -1,5 +1,9 @@
 ---
 # Use this config for upgrading of OCP 4.16 GA cluster
 UPGRADE:
-  ocp_channel: "stable-4.16"
+  # stable-4.16 is capped at 4.16.55 since 4.16 is EUS-only now; that build
+  # predates the RHCOS kernel fix (KCS 7077108, needs >=4.16.65) for the
+  # cephx aes256k CSI key cipher, so kernel-client PV mounts fail cluster-wide.
+  # Use eus-4.16 instead to pick up a kernel that supports it.
+  ocp_channel: "eus-4.16"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
