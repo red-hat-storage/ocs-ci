@@ -49,6 +49,10 @@ from ocs_ci.utility.utils import (
     create_stats_dir,
     create_kubeconfig,
 )
+from ocs_ci.deployment.helpers.hypershift_base import (
+    create_kubeadmin_password_file_hosted_cluster,
+    create_kubeconfig_file_hosted_cluster,
+)
 
 from ocs_ci.utility.memory import (
     get_consumed_ram,
@@ -659,7 +663,11 @@ def process_cluster_cli_params(config):
         or get_cli_param(config, "teardown", default=False)
         or get_cli_param(config, "kubeconfig")
     ):
-        create_kubeconfig(kubeconfig_path)
+        if ocsci_config.ENV_DATA.get("hosted_cluster_exists", False):
+            create_kubeconfig_file_hosted_cluster()
+            create_kubeadmin_password_file_hosted_cluster()
+        else:
+            create_kubeconfig(kubeconfig_path)
 
     # Importing here cause once the function is invoked we have already config
     # loaded, so this is OK to import once you sure that config is loaded.
