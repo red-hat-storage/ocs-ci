@@ -6,17 +6,19 @@ external cluster deployment.
 import json
 import logging
 import re
+import shlex
 import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants
 from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ExternalClusterCephfsMissing,
+    ExternalClusterCephSSHAuthDetailsMissing,
     ExternalClusterExporterRunFailed,
     ExternalClusterRGWEndPointMissing,
     ExternalClusterRGWEndPointPortMissing,
-    ExternalClusterCephSSHAuthDetailsMissing,
     ExternalClusterObjectStoreUserCreationFailed,
-    ExternalClusterCephfsMissing,
     ExternalClusterNodeRoleNotFound,
 )
 from ocs_ci.ocs.resources import pod
@@ -193,6 +195,83 @@ class ExternalCluster(object):
             if value == "key":
                 config.EXTERNAL_MODE["admin_keyring"]["key"] = client_admin[index + 2]
                 return
+
+    def fetch_cephadm_root_ca_cert_pem(self):
+        """
+        Return the cephadm-managed root CA (``cephadm_root_ca_cert``) from this host.
+
+        Used for Ceph 19+ when RGW TLS is signed by the cephadm CA. Runs
+        ``cephadm shell``; prefixes ``sudo`` when the SSH user is not ``root``.
+
+        Returns:
+            str: PEM text (with trailing newline).
+
+        Raises:
+            ExternalClusterExporterRunFailed: If the remote command fails or PEM is empty.
+
+        """
+        cmd = (
+            "/usr/sbin/cephadm shell -- ceph orch certmgr cert get cephadm_root_ca_cert"
+        )
+        if self.user != "root":
+            cmd = f"sudo {cmd}"
+        ret, out, err = self.rhcs_conn.exec_cmd(cmd)
+        if ret != 0:
+            raise ExternalClusterExporterRunFailed(
+                f"cephadm_root_ca_cert fetch failed: {err}"
+            )
+        pem = _normalize_cephadm_certmgr_stdout(out)
+        if not pem:
+            raise ExternalClusterExporterRunFailed(
+                "cephadm_root_ca_cert fetch returned empty output"
+            )
+        return pem if pem.endswith("\n") else f"{pem}\n"
+
+    def fetch_rgw_server_certificate(self, rgw_endpoint):
+        """
+        Fetch the actual certificate presented by the RGW server for Ceph < 19.0.
+
+        For Reef (18.x), cephadm doesn't have certmgr, so we extract the cert
+        directly from the RGW server endpoint using openssl s_client.
+
+        Args:
+            rgw_endpoint (str): RGW endpoint (e.g., "10.1.112.76:443")
+
+        Returns:
+            str: PEM-encoded certificate
+
+        Raises:
+            ExternalClusterExporterRunFailed: If certificate fetch fails or endpoint format is invalid
+
+        """
+        # Validate RGW endpoint format to prevent command injection
+        # Expected format: host:port or [ipv6]:port
+        endpoint_pattern = r"^\[?[A-Za-z0-9:._-]+\]?:\d{1,5}$"
+        if not re.fullmatch(endpoint_pattern, rgw_endpoint):
+            raise ExternalClusterExporterRunFailed(
+                f"Invalid RGW endpoint format: {rgw_endpoint}. "
+                f"Expected format: 'host:port' or '[ipv6]:port'"
+            )
+
+        # Use openssl s_client to fetch the server certificate
+        # Use shlex.quote() to safely escape the endpoint parameter
+        cmd = (
+            f"echo | openssl s_client -connect {shlex.quote(rgw_endpoint)} -showcerts 2>/dev/null | "
+            f"openssl x509 -outform PEM"
+        )
+
+        ret, out, err = self.rhcs_conn.exec_cmd(cmd)
+        if ret != 0 or not out or "BEGIN CERTIFICATE" not in out:
+            raise ExternalClusterExporterRunFailed(
+                f"Failed to fetch RGW server certificate from {rgw_endpoint}: {err}"
+            )
+
+        pem = out.strip()
+        if not pem.endswith("\n"):
+            pem = f"{pem}\n"
+
+        logger.info(f"Fetched RGW server certificate from {rgw_endpoint} (Ceph < 19.0)")
+        return pem
 
     def get_rgw_endpoint_api_port(self):
         """
@@ -526,13 +605,17 @@ def generate_exporter_script():
     return external_cluster_details_exporter.name
 
 
-def get_and_apply_rgw_cert_ca():
+def get_and_apply_rgw_cert_ca(apply=True):
     """
-    Downloads CA Certificate of RGW if SSL is used and apply it to be trusted
-    by the OCP cluster
+    Obtain the RGW TLS CA: for external Ceph **19.0+**, fetch ``cephadm_root_ca_cert``
+    from the ``_admin`` node via SSH; for Ceph **18.x (Reef)**, fetch the certificate
+    directly from the RGW server; otherwise download from ``rgw_cert_ca`` URL.
+
+    Args:
+        apply (bool): if True, the certificate is applied as trusted CA by the OCP cluster
 
     Returns:
-        str: path to the downloaded RGW Cert CA
+        str: path to the local RGW CA PEM file
 
     """
     rgw_cert_ca_path = tempfile.NamedTemporaryFile(
@@ -541,14 +624,141 @@ def get_and_apply_rgw_cert_ca():
         suffix=".pem",
         delete=False,
     ).name
-    download_file(
-        config.EXTERNAL_MODE["rgw_cert_ca"],
-        rgw_cert_ca_path,
-    )
+    config.EXTERNAL_MODE.pop("embedded_external_rgw_ca_pem", None)
+
+    ceph_version = _external_ceph_semantic_version_or_none()
+
+    # Ceph 19.0+ (Squid): Use cephadm certmgr
+    if ceph_version and ceph_version >= version.get_semantic_version(
+        "19.0", only_major_minor=True
+    ):
+        try:
+            host, user, password, ssh_key = get_external_cluster_client("_admin")
+            pem = ExternalCluster(
+                host, user, password, ssh_key
+            ).fetch_cephadm_root_ca_cert_pem()
+            with open(rgw_cert_ca_path, "w", encoding="utf-8") as pem_fd:
+                pem_fd.write(pem)
+            config.EXTERNAL_MODE["embedded_external_rgw_ca_pem"] = pem
+            logger.info(
+                "Using cephadm_root_ca_cert from external cluster (Ceph >= 19.0)"
+            )
+        except Exception as exc:
+            logger.warning(
+                "cephadm CA fetch failed (%s); falling back to rgw_cert_ca URL", exc
+            )
+            try:
+                download_file(
+                    config.EXTERNAL_MODE["rgw_cert_ca"],
+                    rgw_cert_ca_path,
+                )
+            except Exception:
+                raise CommandFailed(
+                    f"Failed to download RGW CA cert from "
+                    f"{config.EXTERNAL_MODE['rgw_cert_ca']}"
+                )
+
+    # Ceph 18.x (Reef): Fetch directly from RGW server
+    elif ceph_version and ceph_version >= version.get_semantic_version(
+        "18.0", only_major_minor=True
+    ):
+        try:
+            rgw_endpoint = get_rgw_endpoint()
+            ext = get_external_cluster_instance()
+            rgw_port = ext.get_rgw_endpoint_api_port()
+            rgw_full_endpoint = f"{rgw_endpoint}:{rgw_port}"
+
+            pem = ext.fetch_rgw_server_certificate(rgw_full_endpoint)
+            with open(rgw_cert_ca_path, "w", encoding="utf-8") as pem_fd:
+                pem_fd.write(pem)
+            config.EXTERNAL_MODE["embedded_external_rgw_ca_pem"] = pem
+            logger.info(
+                f"Using server certificate from RGW endpoint {rgw_full_endpoint} (Ceph 18.x)"
+            )
+        except Exception as exc:
+            logger.warning(
+                "RGW server certificate fetch failed (%s); falling back to rgw_cert_ca URL",
+                exc,
+            )
+            try:
+                download_file(
+                    config.EXTERNAL_MODE["rgw_cert_ca"],
+                    rgw_cert_ca_path,
+                )
+            except Exception:
+                raise CommandFailed(
+                    f"Failed to download RGW CA cert from "
+                    f"{config.EXTERNAL_MODE['rgw_cert_ca']}"
+                )
+
+    # Older versions or version detection failed: Use rgw_cert_ca URL
+    else:
+        if ceph_version is None:
+            logger.warning(
+                "Could not determine Ceph version, falling back to rgw_cert_ca URL"
+            )
+        else:
+            logger.info(f"Ceph version {ceph_version} < 18.0, using rgw_cert_ca URL")
+        try:
+            download_file(
+                config.EXTERNAL_MODE["rgw_cert_ca"],
+                rgw_cert_ca_path,
+            )
+        except Exception:
+            raise CommandFailed(
+                f"Failed to download RGW CA cert from "
+                f"{config.EXTERNAL_MODE['rgw_cert_ca']}"
+            )
+
     # configure the CA cert to be trusted by the OCP cluster
-    ssl_certs.configure_trusted_ca_bundle(ca_cert_path=rgw_cert_ca_path)
-    wait_for_machineconfigpool_status("all", timeout=1800)
+    if apply:
+        ssl_certs.configure_trusted_ca_bundle(ca_cert_path=rgw_cert_ca_path)
+        wait_for_machineconfigpool_status("all", timeout=1800)
     return rgw_cert_ca_path
+
+
+def _normalize_cephadm_certmgr_stdout(raw_stdout):
+    text = (raw_stdout or "").strip()
+    if "BEGIN CERTIFICATE" in text or "BEGIN TRUSTED CERTIFICATE" in text:
+        return text
+    if text.startswith("{"):
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            return text
+        for key in ("certificate", "cert", "pem", "data", "ca_certificate"):
+            val = payload.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+    return text
+
+
+def _external_ceph_semantic_version_or_none():
+    """
+    Parse Ceph version from ``ceph --version`` on the default external SSH host.
+
+    Uses ``cephadm shell`` so the command runs in the cephadm environment; if that
+    fails (e.g. legacy non-cephadm layout), falls back to host ``ceph --version``.
+    """
+    try:
+        ext = get_external_cluster_instance()
+        cmd = "/usr/sbin/cephadm shell -- ceph --version"
+        if ext.user != "root":
+            cmd = f"sudo {cmd}"
+        rc, out, _ = ext.rhcs_conn.exec_cmd(cmd)
+        if rc != 0 or not (out or "").strip():
+            rc, out, _ = ext.rhcs_conn.exec_cmd("ceph --version")
+        if rc != 0:
+            return None
+        m = re.search(r"ceph\s+version\s+(\d+)\.(\d+)", out, re.I)
+        if not m:
+            return None
+        return version.get_semantic_version(
+            f"{m.group(1)}.{m.group(2)}", only_major_minor=True
+        )
+    except Exception as exc:
+        logger.debug("Could not determine external Ceph version: %s", exc)
+        return None
 
 
 def get_rgw_endpoint():
@@ -616,6 +826,21 @@ def get_external_cluster_client():
     except ExternalClusterNodeRoleNotFound:
         logger.warning(f"No {node_role} role defined, using node1 address!")
         return (nodes["node1"]["ip_address"], user, password, ssh_key)
+
+
+def get_external_cluster_instance():
+    """
+    Create and return an ExternalCluster instance using credentials from config.
+
+    Returns:
+        ExternalCluster: Configured external cluster connection.
+
+    Raises:
+        ExternalClusterCephSSHAuthDetailsMissing: If credentials missing.
+
+    """
+    host, user, password, ssh_key = get_external_cluster_client()
+    return ExternalCluster(host, user, password, ssh_key)
 
 
 def get_node_by_role(nodes, role, user, password, ssh_key):
