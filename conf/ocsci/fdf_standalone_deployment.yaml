@@ -1,0 +1,18 @@
+# FDF Standalone Deployment Configuration (RHSTOR-8290)
+#
+# Base overlay for running any test suite on an FDF standalone cluster.
+# Stack this with the platform config and test-specific overlays:
+#
+#   run-ci ... --ocsci-conf conf/ocsci/fdf_standalone_deployment.yaml \
+#              --ocsci-conf conf/deployment/aws/ipi_1az_rhcos_3m_3w.yaml
+#
+# The catalog image must be set via fdf_standalone_catalog_image below
+# or via the existing ocs_registry_image parameter (--ocs-registry-image
+# CLI / OCS_REGISTRY_IMAGE Jenkins parameter).
+---
+DEPLOYMENT:
+  fdf_standalone_deployment: true
+  # Full image reference for the FDF catalog source.
+  # Override per-build in Jenkins or CLI:
+  #   --ocs-registry-image cp.stg.icr.io/cp/df/isf-data-foundation-catalog:5.0.0-NN
+  fdf_standalone_catalog_image: ""
