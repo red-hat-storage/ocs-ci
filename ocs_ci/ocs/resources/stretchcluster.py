@@ -435,11 +435,11 @@ class StretchCluster(OCS):
         ):
             logger.error(
                 f"Existing log files: {set(log_files_now)}\n"
-                f"Expected log files: {set(self.logfile_map[label][0]+self.logfile_map[label][2])}"
+                f"Expected log files: {set(self.logfile_map[label][0] + self.logfile_map[label][2])}"
             )
             return False
         logger.info(
-            f"Expected log files:\n {set(self.logfile_map[label][0]+self.logfile_map[label][2])}"
+            f"Expected log files:\n {set(self.logfile_map[label][0] + self.logfile_map[label][2])}"
         )
         logger.info(f"Existing log files:\n {set(log_files_now)}")
         return True
