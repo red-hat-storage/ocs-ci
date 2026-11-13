@@ -4000,17 +4000,14 @@ data_foundation_overview = {
 
 # VirtualMachine Page Locators
 virtualmachine = {
-    # Navigation — Virtualization section button in left nav (expand/collapse)
     "virtualization_menu": (
         "//button[text()='Virtualization']",
         By.XPATH,
     ),
-    # VirtualMachines link inside expanded Virtualization section
     "virtualmachines_tab": (
         "VirtualMachines",
         By.LINK_TEXT,
     ),
-    # Left nav — Workloads section button (expand/collapse)
     "workloads_menu": (
         "//button[text()='Workloads']",
         By.XPATH,
@@ -4019,7 +4016,6 @@ virtualmachine = {
         "Pods",
         By.LINK_TEXT,
     ),
-    # Top project selector
     "project_selector_dropdown": (
         "//button[contains(@class,'co-namespace-dropdown__menu-toggle')]",
         By.XPATH,
@@ -4032,110 +4028,103 @@ virtualmachine = {
         "//input[@data-test='dropdown-text-filter']",
         By.XPATH,
     ),
-    # Project namespace item in the dropdown — format with namespace name at runtime
     "project_namespace_item_tmpl": (
         "//button[normalize-space(.)='{namespace}']",
         By.XPATH,
     ),
-    # Namespace entry in the left-side tree — format with namespace name at runtime
     "namespace_left_tree_item_tmpl": (
         "//li[contains(.,'{namespace}')]",
         By.XPATH,
     ),
-    # Welcome / overlay modal close button
+    "virtual_machines_list_tab": (
+        "//button[normalize-space(.)='Virtual machines']",
+        By.XPATH,
+    ),
     "modal_close_button": (
         "//button[@aria-label='Close'][ancestor::*[@role='dialog' or contains(@class,'modal')]]",
         By.XPATH,
     ),
-    # Creation wizard — top-right Create button (main action, not the dropdown arrow)
     "create_vm_button": (
         "//button[@aria-label='Create VirtualMachine']",
         By.XPATH,
     ),
-    # VM name input
     "vm_name_input": (
         "//input[@id='vm-name']",
         By.XPATH,
     ),
-    # Next button shared across all wizard pages
     "creation_wizard_next": (
         "//button[normalize-space(.)='Next']",
         By.XPATH,
     ),
-    # Guest OS page — Other Linux card (3rd card).
     "guest_os_other_linux": (
         "//*[contains(@class,'operating-system-tile')][.//*[normalize-space(.)='Other Linux']]",
         By.XPATH,
     ),
-    # Guest OS type dropdown toggle inside the preference-select-menu form group
     "guest_os_type_dropdown": (
         "//div[contains(@class,'preference-select-menu')]//button[@aria-expanded]",
         By.XPATH,
     ),
-    # All centos.stream* options — button with role="option" inside the floating menu
     "guest_os_type_centos_stream_options": (
-        "//button[@role='option'][.//span[@class='pf-v6-c-menu__item-text']"
+        "//button[@role='option'][.//span[contains(@class,'c-menu__item-text')]"
         "[starts-with(normalize-space(.), 'centos.stream')]]",
         By.XPATH,
     ),
-    # Compute resources — size dropdown toggle
-    "compute_size_dropdown": (
-        "//div[contains(@class,'instance-type-series-menu-card__size-dropdown')]//button",
+    "compute_general_purpose_card": (
+        "//div[contains(@class,'instance-type-series-menu-card__card-title')]"
+        "[.//*[normalize-space(.)='General Purpose']]",
         By.XPATH,
     ),
-    # small: 1 CPUs, 2 GiB Memory option
+    "compute_size_dropdown": (
+        "//div[contains(@class,'instance-type-series-menu-card__size-dropdown')]"
+        "//button[.//span[normalize-space(.)='Select size']]",
+        By.XPATH,
+    ),
     "compute_size_small_option": (
         "//button[@role='menuitem']"
         "[.//span[normalize-space(.)='small: 1 CPUs, 2 GiB Memory']]",
         By.XPATH,
     ),
-    # Boot source — all centos-stream* volume rows
     "boot_volume_centos_stream_options": (
         "//td[starts-with(normalize-space(.), 'centos-stream')]",
         By.XPATH,
     ),
-    # Customization — Storage tab
+    "boot_volume_row_by_name_tmpl": (
+        "//td[normalize-space(.)='{volume_name}']",
+        By.XPATH,
+    ),
     "customization_storage_tab": (
         "//*[@role='tab' and normalize-space(.)='Storage']",
         By.XPATH,
     ),
-    # rootdisk row three-dots kebab button
     "rootdisk_kebab_button": (
         "//button[@id='disk-actions-rootdisk']",
         By.XPATH,
     ),
-    # Edit option from rootdisk kebab menu
     "rootdisk_kebab_edit": (
         "//li//button[normalize-space(.)='Edit']",
         By.XPATH,
     ),
-    # StorageClass dropdown in Edit disk popup
     "edit_disk_storageclass_dropdown": (
         "//*[@data-test-id='storage-class-select']//button",
         By.XPATH,
     ),
-    # StorageClass option ending with -vm
     "edit_disk_storageclass_vm_option": (
         "//button[@role='option'][contains(@id,'-vm') and "
         "substring(@id, string-length(@id)-2) = '-vm']",
         By.XPATH,
     ),
-    # Resource name span inside a StorageClass dropdown option
     "sc_resource_name_span": (
         ".//span[@class='co-resource-item__resource-name']",
         By.XPATH,
     ),
-    # Save button in Edit disk popup
     "edit_disk_save_button": (
         "//*[@role='dialog']//button[normalize-space(.)='Save']",
         By.XPATH,
     ),
-    # Create VirtualMachine submit on Review and create page
     "create_vm_submit_button": (
         "//button[normalize-space(.)='Create VirtualMachine']",
         By.XPATH,
     ),
-    # VM status field in overview description list
     "vm_status_running": (
         "//dd[@data-test-id='virtual-machine-overview-details-status']"
         "//*[normalize-space(text())='Running']",
@@ -4146,34 +4135,179 @@ virtualmachine = {
         "//*[normalize-space(text())='Stopped']",
         By.XPATH,
     ),
-    # Actions menu button on VM detail page
     "actions_button": (
         "//button[normalize-space(.)='Actions']",
         By.XPATH,
     ),
-    # Actions > Control submenu
     "actions_control_menu": (
         "//li//button[normalize-space(.)='Control']",
         By.XPATH,
     ),
-    # Stop option inside Actions menu
     "actions_stop_option": (
         "//li//button[normalize-space(.)='Stop']",
         By.XPATH,
     ),
-    # Delete option inside Actions menu
+    "actions_start_option": (
+        "//li//button[normalize-space(.)='Start']",
+        By.XPATH,
+    ),
     "actions_delete_option": (
         "//li//button[normalize-space(.)='Delete']",
         By.XPATH,
     ),
-    # Delete confirmation modal — Delete button
     "delete_confirm_button": (
         "//*[@role='dialog']//button[normalize-space(.)='Delete']",
         By.XPATH,
     ),
-    # Delete modal — 'With grace period' checkbox
     "delete_grace_period_checkbox": (
         "//label[contains(normalize-space(.),'With grace period')]/..//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    "actions_clone_option": (
+        "//li//button[normalize-space(.)='Clone']",
+        By.XPATH,
+    ),
+    "clone_start_vm_checkbox": (
+        "//input[@id='start-clone']",
+        By.XPATH,
+    ),
+    "clone_submit_button": (
+        "//*[@role='dialog']//button[@data-test='save-button']",
+        By.XPATH,
+    ),
+    "clone_vm_name_input": (
+        "//input[@id='clone-name']",
+        By.XPATH,
+    ),
+    "vm_left_tree_link_tmpl": (
+        "//a[@data-test='{vm_name}']",
+        By.XPATH,
+    ),
+    "dialog_overlay": (
+        "//*[@role='dialog']",
+        By.XPATH,
+    ),
+    # --- Snapshot / Restore locators ---
+    "actions_take_snapshot_option": (
+        "//li//button[normalize-space(.)='Take snapshot']",
+        By.XPATH,
+    ),
+    "take_snapshot_save_button": (
+        "//*[@role='dialog']//button[normalize-space(.)='Save']",
+        By.XPATH,
+    ),
+    "vm_detail_snapshots_tab": (
+        "//a[@data-test-id='horizontal-link-Snapshots']",
+        By.XPATH,
+    ),
+    "vm_detail_overview_tab": (
+        "//a[@data-test-id='horizontal-link-Overview']",
+        By.XPATH,
+    ),
+    "snapshot_row_status_succeeded": (
+        "//span[@data-test='status-text'][normalize-space(text())='Succeeded']",
+        By.XPATH,
+    ),
+    "snapshot_kebab_button": (
+        "//button[starts-with(@id,'snapshot-actions-')][@aria-expanded]",
+        By.XPATH,
+    ),
+    "snapshot_kebab_restore_option": (
+        "//li[@role='none']//button[@role='menuitem']"
+        "[.//*[normalize-space(text())='Restore VirtualMachine from snapshot']]",
+        By.XPATH,
+    ),
+    "restore_snapshot_confirm_button": (
+        "//button[@data-test='save-button']" "[ancestor::*[@role='dialog']]",
+        By.XPATH,
+    ),
+    # --- Add Volume (boot source) locators ---
+    "boot_source_add_volume_button": (
+        "//button[normalize-space(.)='Add volume']",
+        By.XPATH,
+    ),
+    "add_volume_source_type_dropdown": (
+        "//button[@data-test-id='source-type-select']",
+        By.XPATH,
+    ),
+    "add_volume_source_use_existing_volume": (
+        "//li[@data-test-id='use-existing-volume']//button",
+        By.XPATH,
+    ),
+    "add_volume_project_dropdown": (
+        "//*[@id='pvc-project-select']//button[contains(@class,'c-menu-toggle')]",
+        By.XPATH,
+    ),
+    "add_volume_project_search_input": (
+        "//div[contains(@class,'c-menu__search')]//input",
+        By.XPATH,
+    ),
+    "add_volume_project_option_tmpl": (
+        "//li[@data-test-id='select-option-{project}']//button[@role='option']",
+        By.XPATH,
+    ),
+    "add_volume_name_dropdown": (
+        "//*[@id='pvc-name-select']//button[contains(@class,'c-menu-toggle')]",
+        By.XPATH,
+    ),
+    "add_volume_first_centos_stream_option": (
+        "//li[@data-test-id[starts-with(.,'select-option-centos-stream')]]"
+        "//button[@role='option']",
+        By.XPATH,
+    ),
+    "add_volume_destination_name_input": (
+        "//input[@id='volume-name']",
+        By.XPATH,
+    ),
+    "add_volume_storageclass_dropdown": (
+        "//div[@data-test-id='storage-class-select']//button",
+        By.XPATH,
+    ),
+    "add_volume_storageclass_vm_option": (
+        "//li[@data-test-id[substring(.,string-length(.)-2)='-vm']]//button[@role='option']",
+        By.XPATH,
+    ),
+    "add_volume_preference_dropdown": (
+        "//button[.//span[normalize-space(.)='Select preference']]",
+        By.XPATH,
+    ),
+    "add_volume_preference_centos_stream_options": (
+        "//li[@data-test-id[contains(.,'VirtualMachineClusterPreference-centos.stream')]]"
+        "//button[@role='option']",
+        By.XPATH,
+    ),
+    "add_volume_save_button": (
+        "//*[@role='dialog']//button[@data-test='save-button']",
+        By.XPATH,
+    ),
+    "boot_volume_clone_in_progress": (
+        "//span[normalize-space(text())='Clone in progress']",
+        By.XPATH,
+    ),
+    # --- LUN group teardown locators ---
+    "storage_menu": (
+        "//button[normalize-space(text())='Storage']",
+        By.XPATH,
+    ),
+    "external_systems_nav_link": (
+        "//a[normalize-space(text())='External systems']",
+        By.XPATH,
+    ),
+    "san_storage_link": FDF_SAN_LOCATORS["san_storage_link"],
+    "lungroup_kebab_button": (
+        "(//button[@aria-expanded][ancestor::tr][not(@id)])[last()]",
+        By.XPATH,
+    ),
+    "lungroup_delete_option": (
+        "//button[@id='Delete'][@role='menuitem']",
+        By.XPATH,
+    ),
+    "lungroup_confirm_name_input": (
+        "//input[@data-test='confirm-name-input']",
+        By.XPATH,
+    ),
+    "lungroup_delete_confirm_button": (
+        "//button[@data-test='delete-action']",
         By.XPATH,
     ),
 }
