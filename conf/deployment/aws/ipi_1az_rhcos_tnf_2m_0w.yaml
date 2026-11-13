@@ -1,0 +1,37 @@
+---
+# TNF (Two-Node Fencing) deployment via AWS EC2 bare-metal hypervisor
+#
+# Provisions EC2 bare-metal instance, runs dev-scripts to create
+# a 2-node OCP cluster (fencing-ipi), then deploys ODF with DRBD.
+
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  local_storage: true
+  ocs_operator_nodes_to_label: 2
+ENV_DATA:
+  platform: 'baremetal'
+  deployment_type: 'ipi'
+  worker_replicas: 0
+  master_replicas: 2
+  base_domain: 'qe.rh-ocs.com'
+  device_class: 'ssd'
+  skip_nfs_deployment: true
+  region: 'us-east-2'
+  tnf:
+    hypervisor:
+      instance_type: 'c5n.metal'
+      region: 'us-east-2'
+      root_volume_size: 200
+      root_volume_type: 'gp3'
+      ssh_user: 'ec2-user'
+    dev_scripts:
+      topology: 'fencing-ipi'
+      num_masters: 2
+      num_workers: 0
+      master_vcpu: 16
+      master_memory: 65536            # MB (64 GiB)
+      master_disk: 120                # GB, OS disk
+      extra_disks:
+        - size: 20                    # GB, DRBD monitor (<50 GB recommended)
+        - size: 500                   # GB, OSD (>= 500 GB required)
+      network_type: 'OVNKubernetes'
