@@ -138,6 +138,41 @@ class TestScaleConnection(object):
     @skipif_ibm_cloud_managed
     @tier2
     @skipif_ocs_version("<4.23")
+    @polarion_id("OCS-7763")
+    def test_enable_data_encryption(self, setup_ui_class):
+        """
+        TC4: Enable data encryption backed by an external KMS from the Scale
+        dashboard. KMS connection details are sourced from AUTH config.
+        """
+        logger.test_step("Open the Scale dashboard")
+        dashboard = self.nav_to_dashboard()
+
+        logger.test_step("Read KMS connection details from AUTH config")
+        kms_params = {
+            "username": config.AUTH.get("scale_gklm_user"),
+            "password": config.AUTH.get("scale_gklm_password"),
+            "port": config.AUTH.get("scale_gklm_port"),
+            "client": config.AUTH.get("scale_gklm_client"),
+            "remote_rkm": config.AUTH.get("scale_gklm_remote_rkm"),
+            "server_info": config.AUTH.get("scale_gklm_server_info"),
+            "tenant_id": config.AUTH.get("scale_gklm_tenant_id"),
+            "ca_cert": config.AUTH.get("scale_gklm_ca_cert"),
+        }
+
+        logger.test_step("Enable data encryption with the external KMS")
+        encryption_enabled = dashboard.enable_data_encryption(kms_params)
+        dashboard.take_screenshot("enable_data_encryption")
+        dashboard.copy_dom("enable_data_encryption")
+        logger.assertion(
+            f"Enable data encryption flow completed: expected=True, "
+            f"actual={encryption_enabled}"
+        )
+        assert encryption_enabled, "Enable data encryption flow did not complete"
+
+    @ui
+    @skipif_ibm_cloud_managed
+    @tier2
+    @skipif_ocs_version("<4.23")
     @polarion_id("OCS-7760")
     def test_kernel_devel_node_validation(self, setup_ui_class):
         """
