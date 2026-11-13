@@ -1,0 +1,19 @@
+# FDF Standalone External Ceph Mode Configuration (RHSTOR-8290 / TC-16)
+#
+# Overlay for running existing external mode tests on FDF standalone clusters.
+# FDF standalone supports external Ceph mode identically to ODF — the same
+# deploy_with_external_mode() path is used (deployment.py).
+#
+# Usage:
+#   run-ci ... --ocsci-conf conf/ocsci/fdf_standalone_deployment.yaml \
+#              --ocsci-conf conf/ocsci/fdf_standalone_external_mode.yaml \
+#              --ocsci-conf conf/deployment/<platform>/external_mode.yaml \
+#              tests/functional/z_cluster/test_ceph_external.py
+#
+# Requires external Ceph cluster connection details (JSON/script output)
+# configured via the platform-specific external mode config.
+---
+DEPLOYMENT:
+  fdf_standalone_deployment: true
+  external_mode: true
+  use_external_script: true
