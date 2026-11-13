@@ -139,7 +139,7 @@ class TestScaleConnection(object):
     @tier2
     @skipif_ocs_version("<4.23")
     @polarion_id("OCS-7763")
-    def test_enable_data_encryption(self, setup_ui_class):
+    def test_enable_data_encryption(self, setup_ui_class, scale_connection_setup):
         """
         TC4: Enable data encryption backed by an external KMS from the Scale
         dashboard. KMS connection details are sourced from AUTH config.
@@ -168,6 +168,18 @@ class TestScaleConnection(object):
             f"actual={encryption_enabled}"
         )
         assert encryption_enabled, "Enable data encryption flow did not complete"
+
+        logger.test_step("Verify encryption configuration persists after saving")
+        encryption_persisted = dashboard.verify_encryption_state_persists()
+        dashboard.take_screenshot("encryption_state_persisted")
+        dashboard.copy_dom("encryption_state_persisted")
+        logger.assertion(
+            f"Encryption state persisted: expected=True, actual={encryption_persisted}"
+        )
+        assert encryption_persisted, (
+            "Encryption configuration was not saved or did not persist after "
+            "reopening the configuration modal"
+        )
 
     @ui
     @skipif_ibm_cloud_managed
