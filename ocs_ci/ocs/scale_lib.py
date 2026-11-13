@@ -1260,7 +1260,7 @@ def construct_pvc_clone_yaml_bulk_for_kube_job(pvc_dict_list, clone_yaml, sc_nam
 
 
 def check_all_pvc_reached_bound_state_in_kube_job(
-    kube_job_obj, namespace, no_of_pvc, timeout=30
+    kube_job_obj, namespace, no_of_pvc, timeout=30, max_iterations=None
 ):
     """
     Function to check either bulk created PVCs reached Bound state using kube_job
@@ -1270,6 +1270,7 @@ def check_all_pvc_reached_bound_state_in_kube_job(
         namespace (str): Namespace of PVC's created
         no_of_pvc (int): Bulk PVC count
         timeout: a timeout for all the pvc in kube job to reach bound status
+        max_iterations (int): Maximum number of iterations to wait (defaults to scaling with no_of_pvc)
 
     Returns:
         pvc_bound_list (list): List of all PVCs which is in Bound state.
@@ -1278,6 +1279,11 @@ def check_all_pvc_reached_bound_state_in_kube_job(
         If not all PVC reached to Bound state.
 
     """
+    if max_iterations is None:
+        # Dynamic timeout scaling: allow at least 600s or ~3s per PVC
+        max_wait_time = max(600, no_of_pvc * 3)
+        max_iterations = max(10, max_wait_time // timeout)
+
     # Check all the PVC reached Bound state
     pvc_bound_list, pvc_not_bound_list = ([], [])
     while_iteration_count = 0
@@ -1300,11 +1306,11 @@ def check_all_pvc_reached_bound_state_in_kube_job(
         if len(pvc_not_bound_list):
             time.sleep(timeout)
             while_iteration_count += 1
-            # Breaking while loop after 10 Iteration i.e. after timeout*10 secs of wait_time
+            # Breaking while loop after max_iterations
             # And if PVCs still not in bound state then there will be assert.
-            if while_iteration_count >= 10:
+            if while_iteration_count >= max_iterations:
                 assert logger.error(
-                    f" Listed PVCs took more than {timeout * 10} secs to bound {pvc_not_bound_list}"
+                    f" Listed PVCs took more than {timeout * max_iterations} secs to bound {pvc_not_bound_list}"
                 )
                 break
             pvc_not_bound_list.clear()
