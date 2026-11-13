@@ -8,6 +8,7 @@ import logging
 import re
 import tempfile
 import json
+from typing import Optional
 
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
@@ -1157,6 +1158,55 @@ def verify_storage_system():
         )
 
 
+def get_noobaa_phase(namespace: str) -> Optional[str]:
+    """
+    Get the current phase of the NooBaa CR via a single lightweight API call.
+
+    Args:
+        namespace (str): Kubernetes namespace where NooBaa is deployed.
+
+    Returns:
+        Optional[str]: NooBaa phase string (e.g. "Ready", "Configuring"),
+            or None if the CR cannot be retrieved.
+
+    """
+    try:
+        noobaa = OCP(kind="noobaa", namespace=namespace).get(
+            resource_name=constants.NOOBAA_RESOURCE_NAME
+        )
+        return noobaa.get("status", {}).get("phase", "")
+    except CommandFailed as ex:
+        log.warning("Failed to get NooBaa CR (%s) — skipping NooBaa health check", ex)
+        return None
+
+
+def get_storage_cluster_phase(namespace: str) -> Optional[str]:
+    """
+    Get the current phase of the StorageCluster CR via a single lightweight
+    API call.
+
+    Args:
+        namespace (str): Kubernetes namespace where the StorageCluster is
+            deployed.
+
+    Returns:
+        Optional[str]: StorageCluster phase string (e.g. "Ready",
+            "Progressing"), or None if the CR cannot be retrieved.
+
+    """
+    try:
+        sc_name = config.ENV_DATA["storage_cluster_name"]
+        sc = OCP(kind=constants.STORAGECLUSTER, namespace=namespace).get(
+            resource_name=sc_name
+        )
+        return sc.get("status", {}).get("phase", "")
+    except CommandFailed as ex:
+        log.warning(
+            "Failed to get StorageCluster CR (%s) — skipping SC phase check", ex
+        )
+        return None
+
+
 def verify_storage_cluster():
     """
     Verify storage cluster status
@@ -1179,7 +1229,93 @@ def verify_storage_cluster():
             timeout = 1800
         else:
             timeout = 600
-        storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+
+        # Give cluster initial time to settle, then check for Ceph health issues
+        # and apply W/A if needed (e.g., mon slow ops - DFBUGS-2456)
+        initial_wait = min(300, timeout // 2)  # 5 mins or half timeout
+        remaining_timeout = timeout - initial_wait
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        try:
+            storage_cluster.wait_for_phase(phase="Ready", timeout=initial_wait)
+            # Success! Cluster ready
+        except ResourceWrongStatusException:
+            # Check StorageCluster conditions for Ceph health issues
+            fresh_sc = storage_cluster.get()
+            conditions = fresh_sc.get("status", {}).get("conditions", [])
+
+            ceph_has_issues = any(
+                c.get("reason") in constants.CEPH_CONDITION_REASONS for c in conditions
+            )
+
+            if ceph_has_issues:
+                log.warning(
+                    "Ceph health issues detected in StorageCluster conditions. "
+                    "Attempting to fix known issues (e.g., mon slow ops)."
+                )
+                try:
+                    utils.ceph_health_check(
+                        namespace,
+                        tries=6,
+                        delay=30,
+                        fix_ceph_health=True,
+                        update_jira=True,
+                        no_exception_if_jira_issue_updated=True,
+                    )
+                    log.info("Ceph health check/fix completed")
+                except Exception as fix_ex:
+                    log.warning(f"Ceph health check/fix completed with: {fix_ex}")
+
+            # Always continue waiting with remaining timeout
+            log.info(
+                f"Continuing to wait for StorageCluster Ready phase "
+                f"({remaining_timeout}s remaining)..."
+            )
+            try:
+                storage_cluster.wait_for_phase(phase="Ready", timeout=remaining_timeout)
+            except ResourceWrongStatusException:
+                # Handle special cases (noobaa issue) or re-raise
+                noobaa_issue = config.RUN.get("noobaa_not_ready_at_setup")
+                if not noobaa_issue:
+                    raise
+
+                fresh_sc = storage_cluster.get()
+                conditions = fresh_sc.get("status", {}).get("conditions", [])
+
+                noobaa_is_cause = any(
+                    c.get("reason") == constants.NOOBAA_INITIALIZING_REASON
+                    and c.get("type") == "Progressing"
+                    for c in conditions
+                )
+                ceph_has_issues = any(
+                    c.get("reason") in constants.CEPH_CONDITION_REASONS
+                    for c in conditions
+                )
+
+                if not noobaa_is_cause or ceph_has_issues:
+                    raise
+
+                current_nb_phase = get_noobaa_phase(namespace)
+
+                if current_nb_phase == constants.STATUS_READY:
+                    config.RUN.pop("noobaa_not_ready_at_setup", None)
+                    raise
+
+                if current_nb_phase != noobaa_issue.get("phase"):
+                    log.warning(
+                        "NooBaa phase changed from '%s' to '%s'"
+                        " — running full verification",
+                        noobaa_issue["phase"],
+                        current_nb_phase,
+                    )
+                    raise
+
+                log.warning(
+                    "StorageCluster not Ready due to NooBaa (phase: %s),"
+                    " which was already unhealthy at test setup."
+                    " Waiving SC phase check — version check still runs.",
+                    current_nb_phase,
+                )
 
     # verify storage cluster version
     if not config.ENV_DATA.get("disable_storage_cluster_version_check"):
