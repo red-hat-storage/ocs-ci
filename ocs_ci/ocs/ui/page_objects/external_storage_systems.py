@@ -668,7 +668,7 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
 
     def enable_data_encryption(self, kms_params, timeout=30):
         """
-        Enable data encryption backed by an external KMS (TC4).
+        Enable data encryption backed by an external KMS.
 
         Args:
             kms_params (dict): any subset of the following KMS connection fields
@@ -706,7 +706,7 @@ class ExternalStorageCluster(DataFoundationDefaultTab, BlockAndFile):
         ca_cert = kms_params.get("ca_cert")
         if ca_cert:
             logger.info(f"Uploading CA certificate from '{ca_cert}'")
-            self.do_send_keys(self.external_systems["enc_ca_cert_browse"], ca_cert)
+            self.upload_file(self.external_systems["enc_ca_cert_browse"], ca_cert)
 
         logger.info("Clicking Save to enable data encryption")
         self.do_click(
