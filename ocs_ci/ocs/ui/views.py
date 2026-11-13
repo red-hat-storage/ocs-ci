@@ -4451,13 +4451,12 @@ external_systems = {
         By.XPATH,
     ),
     "enable_encryption_checkbox": (
-        "//label[contains(normalize-space(.),'Enable data encryption')]"
-        "//input[@type='checkbox']",
-        By.XPATH,
+        "input#encryption-enabled",
+        By.CSS_SELECTOR,
     ),
-    "enc_username": ("//input[@id='username']", By.XPATH),
-    "enc_password": ("//input[@id='password']", By.XPATH),
-    "enc_port": ("//input[@id='port']", By.XPATH),
+    "enc_username": ("//input[@id='encryptionUserName']", By.XPATH),
+    "enc_password": ("//input[@id='encryptionPassword']", By.XPATH),
+    "enc_port": ("//input[@id='encryptionPort']", By.XPATH),
     "enc_client": ("//input[@id='client']", By.XPATH),
     "enc_remote_rkm": (
         "//input[@id='remoteRKM']",
