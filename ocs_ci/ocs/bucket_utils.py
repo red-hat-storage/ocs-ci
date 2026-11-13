@@ -1491,7 +1491,7 @@ def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey-", bs=
         object_key = pattern + "{}".format(i)
         obj_lst.append(object_key)
     command = (
-        f"for i in $(seq 0 {amount-1}); "
+        f"for i in $(seq 0 {amount - 1}); "
         f"do dd if=/dev/urandom of={file_dir}/{pattern}$i bs={bs} count=1 status=none; done"
     )
     io_pod.exec_sh_cmd_on_pod(command=command, sh="sh")

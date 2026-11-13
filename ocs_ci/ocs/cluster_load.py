@@ -325,7 +325,7 @@ class ClusterLoad:
         self.increase_load_and_print_data(rate=self.rate)
         msg = (
             f"The target load, in IOPS, is: {target_iops}, which is "
-            f"{self.target_percentage*100}% of the {self.cluster_limit} cluster limit"
+            f"{self.target_percentage * 100}% of the {self.cluster_limit} cluster limit"
         )
         logger.info(wrap_msg(msg))
 

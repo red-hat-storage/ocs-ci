@@ -206,10 +206,10 @@ class TestReclaimSpaceCronJobMultiClones(PASTest):
         performance_lib.wait_for_cronjobs(
             self.namespace,
             self.num_of_clones + 1,  # 1 for PVC and 1 for each clone
-            f"Expected number of cronjobs {self.num_of_clones+1} not found.",
+            f"Expected number of cronjobs {self.num_of_clones + 1} not found.",
         )
 
-        logger.info(f"{self.num_of_clones+1} cronjobs found")
+        logger.info(f"{self.num_of_clones + 1} cronjobs found")
 
     def test_cephfs_pvc_multiple_clone_cronjobs(
         self,

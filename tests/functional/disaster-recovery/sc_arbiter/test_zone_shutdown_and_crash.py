@@ -174,7 +174,7 @@ class TestZoneShutdownsAndCrashes:
         end_time = None
 
         for i in range(iteration):
-            log.info(f"------ Iteration {i+1} ------")
+            log.info(f"------ Iteration {i + 1} ------")
             check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
             log.info("CephFS and RBD workloads are running successfully")
 
@@ -356,7 +356,7 @@ class TestZoneShutdownsAndCrashes:
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
 
         for i in range(iteration):
-            log.info(f"------ Iteration {i+1} ------")
+            log.info(f"------ Iteration {i + 1} ------")
             check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
             log.info("All logwriter workload pods are running successfully")
 
