@@ -15,6 +15,11 @@ from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.resources.pod import Pod, cal_md5sum
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
+from ocs_ci.helpers.dr_helpers import (
+    update_odf_cli_dr_config_kubeconfigs,
+    run_rdr_cluster_health_check,
+)
+from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 from ocs_ci.utility.utils import run_ceph_health_cmd, TimeoutSampler
 from ocs_ci.ocs.resources.storage_cluster import (
     get_storage_cluster,
@@ -23,6 +28,61 @@ from ocs_ci.ocs.resources.storage_cluster import (
 
 
 log = logging.getLogger(__name__)
+
+# Upgrade markers after which the RDR cluster health should be validated.
+POST_UPGRADE_MARKS = {
+    "post_upgrade",
+    "post_ocp_upgrade",
+    "post_ocs_upgrade",
+    "post_fdf_upgrade",
+}
+
+
+@pytest.fixture(autouse=True, scope="session")
+def setup_odf_cli_binary_for_upgrade(request):
+    """
+    Set up the ODF CLI binary and update the DR config kubeconfigs for RDR
+    upgrade pipeline runs.
+
+    The regional-dr conftest fixtures that normally do this are only in scope
+    for tests under tests/functional/disaster-recovery/regional-dr/. Upgrade
+    pipeline tests live under tests/functional/upgrade/, so this fixture mirrors
+    that setup for RDR upgrade runs. No-op on non-RDR deployments.
+
+    """
+    if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        return
+    odf_cli_setup_helper()
+    update_odf_cli_dr_config_kubeconfigs()
+
+
+@pytest.fixture(autouse=True, scope="function")
+def rdr_health_check_upgrade(request):
+    """
+    Validate RDR cluster health (ODF CLI DR validate, Ceph health, rbd-mirror,
+    mirroring status) for post-upgrade tests in an RDR upgrade pipeline run.
+
+    Runs only for tests carrying a post-upgrade marker so the health check acts
+    as a post-upgrade validation rather than gating every intermediate upgrade
+    step. No-op on non-RDR deployments, in dev_mode, or when the
+    skip_rdr_health_check marker is set.
+
+    """
+    if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        return
+
+    if request.node.get_closest_marker("skip_rdr_health_check"):
+        log.info("Skipping RDR health check (skip_rdr_health_check marker)")
+        return
+
+    if config.RUN["cli_params"].get("dev_mode"):
+        log.info("Skipping RDR health checks for development mode")
+        return
+
+    if not any(mark.name in POST_UPGRADE_MARKS for mark in request.node.iter_markers()):
+        return
+
+    run_rdr_cluster_health_check()
 
 
 def create_fio_pod(
