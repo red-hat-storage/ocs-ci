@@ -1,0 +1,75 @@
+# Copyright 2017 the Velero contributors.
+# SPDX-FileCopyrightText: The RamenDR authors
+# SPDX-License-Identifier: Apache-2.0
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: minio
+  name: minio
+  labels:
+    component: minio
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      component: minio
+  template:
+    metadata:
+      labels:
+        component: minio
+    spec:
+      volumes:
+        - name: storage
+          emptyDir: {}
+      containers:
+        - name: minio
+          image: quay.io/ocsci/minio_ocs:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              memory: "300Mi"
+          env:
+            - name: MINIO_ACCESS_KEY
+              value: "minio"
+            - name: MINIO_SECRET_KEY
+              value: "minio123"
+          ports:
+            - containerPort: 9000
+          readinessProbe:
+            tcpSocket:
+              port: 9000
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: 9000
+            periodSeconds: 10
+            failureThreshold: 6
+          volumeMounts:
+            - name: storage
+              mountPath: "/storage"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: minio
+  name: minio
+  labels:
+    component: minio
+spec:
+  type: NodePort
+  ports:
+    - port: 9000
+      targetPort: 9000
+      protocol: TCP
+      nodePort: 30000
+  selector:
+    component: minio
