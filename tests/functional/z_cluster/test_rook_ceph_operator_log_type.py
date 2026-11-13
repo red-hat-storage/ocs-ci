@@ -11,7 +11,11 @@ from ocs_ci.helpers.helpers import (
     check_osd_log_exist_on_rook_ceph_operator_pod,
 )
 from ocs_ci.helpers.odf_cli import ODFCLIRetriever, ODFCliRunner
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import (
+    brown_squad,
+    ignore_leftover_label,
+)
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -28,6 +32,7 @@ log = logging.getLogger(__name__)
 @tier2
 @skipif_ocs_version("<4.8")
 @skipif_external_mode
+@ignore_leftover_label(constants.MON_APP_LABEL)
 @pytest.mark.polarion_id("OCS-2581")
 class TestRookCephOperatorLogType(ManageTest):
     """
