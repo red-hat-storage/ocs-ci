@@ -3060,6 +3060,14 @@ IBM_STORAGE_SCALE_CLUSTER_NAME = "ibm-spectrum-scale"
 IBM_STORAGE_SCALE_CLUSTER_KIND = "Cluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_REMOTECLUSTER_KIND = "RemoteCluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_FILESYSTEM_KIND = "Filesystem.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_LOCALDISK_KIND = "LocalDisk.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_DAEMON_KIND = "Daemon.scale.spectrum.ibm.com"
+IBM_STORAGE_SCALE_DAEMON_NAME = "ibm-spectrum-scale"
+IBM_STORAGE_SCALE_CSI_LABEL = "app.kubernetes.io/name=ibm-spectrum-scale-csi"
+# IBM Storage Fusion (isf-operator) namespace. Note this is a different
+# deployment shape from the standalone Fusion Access operator, which lives in
+# FUSION_ACCESS_NAMESPACE and owns the FusionAccess CR.
+IBM_SPECTRUM_FUSION_NAMESPACE = "ibm-spectrum-fusion-ns"
 # Pinned commit URL for the IBM Storage Scale MCO (Machine Config Operator)
 # manifest. The URL is not stable and is expected to change over time.
 IBM_STORAGE_SCALE_MCO_URL = (
