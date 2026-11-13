@@ -561,7 +561,7 @@ class TestPvPool:
         }
         bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
         logger.info(
-            f"The bucket with name {bucket.name} was successfully created on {pv_in_bs*2} pvs."
+            f"The bucket with name {bucket.name} was successfully created on {pv_in_bs * 2} pvs."
         )
 
         for i in range(file_count):
