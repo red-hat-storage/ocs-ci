@@ -65,7 +65,7 @@ spec:
       - name: FILES_SIZE       # File size in KB
         value: "4"
       - name: OPERATIONS       # File and directory operations to perform, Pass as a comma-separated string
-        value: "create,append,rename,stat,chmod,ls-l"
+        value: "create,mkdir,symlink,readdir,delete,append,rename,stat,chmod,ls-l"
       - name: OUTPUT_DIR
         value: "/mnt/output"
       - name: THREADS
@@ -114,9 +114,14 @@ spec:
         # Set to 0 for unlimited (checks all files - use for millions of files).
         # For large file counts, consider: 100000, 500000, or 1000000.
         # Default: 1000 (good for quick validation, may miss issues with millions of files).
+    resources:
+      requests:
+        ephemeral-storage: "500Mi"
     volumeMounts:
     - mountPath: /mnt
       name: mypvc
+  securityContext:
+    fsGroupChangePolicy: OnRootMismatch
   restartPolicy: Never
   volumes:
   - name: mypvc
