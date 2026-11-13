@@ -188,6 +188,10 @@ class TestDefaultSCReconciliation(ManageTest):
     """
 
     @tier2
+    @pytest.mark.skip(
+        reason="Default SC annotation reconciliation not implemented - "
+        "RHSTOR-7972 closed as Won't Do (upstream KEP-5489 closed)"
+    )
     @pytest.mark.polarion_id("OCS-8033")
     def test_default_sc_reconciliation(self, restore_default_sc_annotation):
         """
