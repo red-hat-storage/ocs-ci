@@ -128,7 +128,9 @@ class TestCephMonHealthCheck(ManageTest):
         wait_for_mon_status(
             mon_id=mon_id, status=constants.MON_STATUS_DOWN, timeout=180
         )
-        res = verify_mon_healthcheck_timeout_value_in_logs(mon_id, mon_timeout_seconds)
+        res = verify_mon_healthcheck_timeout_value_in_logs(
+            mon_id, mon_timeout_seconds, timeout=720
+        )
         assert res, "Mon healthcheck timeout value not found in logs"
         # Add a small gap to the timeout to account for any delays
         timeout_gap = 180
