@@ -1014,14 +1014,20 @@ class ExternalClients:
 
             valid_clusters.append(cluster_name)
 
+        skipped_clusters_msg = ", ".join(
+            f"{c} ({r})" for c, r in skipped_clusters.items()
+        )
+
         if not valid_clusters:
-            logger.error("No valid clusters found for ODF client deployment. Exiting.")
-            return []
+            raise AssertionError(
+                "No valid clusters found for ODF client deployment, network checks failed on: "
+                + skipped_clusters_msg
+            )
 
         if skipped_clusters:
             logger.warning(
                 "The following clusters were skipped due to network issues: "
-                + ", ".join(f"{c} ({r})" for c, r in skipped_clusters.items())
+                + skipped_clusters_msg
             )
 
         # Stage 3
@@ -1118,6 +1124,11 @@ class ExternalClients:
 
         # Aggregate failures
         failures = []
+
+        if skipped_clusters:
+            failures.append(
+                f"Network checks failed, deployment skipped on: {skipped_clusters_msg}"
+            )
 
         if odf_installed_results and not all(odf_installed_results.values()):
             failed = [c for c, ok in odf_installed_results.items() if not ok]
@@ -2047,11 +2058,27 @@ class ExternalOCP(SpokeOCP, Deployment):
     """Class to represent functionality necessary to interact with external OCP cluster from the Hub cluster"""
 
     # the latency we used to have for RDR clusters communication, this is a hard requirement for hub-spoke setup
-    latency_threshold_ms = 10
+    default_latency_threshold_ms = 10
 
     def __init__(self, name):
         SpokeOCP.__init__(self, name)
         Deployment.__init__(self)
+
+    @property
+    def latency_threshold_ms(self):
+        """
+        Maximum average ping latency tolerated between the external cluster and the provider.
+        Overridable via ENV_DATA.hub_spoke_latency_threshold_ms.
+
+        Returns:
+            float: latency threshold in milliseconds
+
+        """
+        return float(
+            config.ENV_DATA.get(
+                "hub_spoke_latency_threshold_ms", self.default_latency_threshold_ms
+            )
+        )
 
     def deploy_dependencies(self, **kwargs):
         logger.info(
@@ -2093,7 +2120,10 @@ class ExternalOCP(SpokeOCP, Deployment):
                 )
                 return True
             else:
-                logger.error(f"High latency detected: {latency} ms")
+                logger.error(
+                    f"High latency detected: {latency} ms, threshold is {self.latency_threshold_ms} ms "
+                    "(configurable via ENV_DATA.hub_spoke_latency_threshold_ms)"
+                )
                 return False
         except ValueError:
             logger.error(

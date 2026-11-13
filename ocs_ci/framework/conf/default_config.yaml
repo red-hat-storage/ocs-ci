@@ -281,6 +281,10 @@ ENV_DATA:
   deploy_acm_hub_cluster: false
   # HyperConverged deployment
   deploy_hyperconverged: false
+  # maximum average ping latency (in ms) tolerated between an external (spoke) cluster
+  # and the hub/provider cluster, clusters above this value are skipped during the
+  # ODF client deployment
+  hub_spoke_latency_threshold_ms: 10
 
   # Managed service git stat  default configurations
   # Managed StorageCluster size in TiB
