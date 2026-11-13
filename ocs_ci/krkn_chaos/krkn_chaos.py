@@ -39,7 +39,7 @@ class KrKnRunner:
             with open(self.krkn_config, "r", encoding="utf-8") as f:
                 config_contents = f.read()
                 log.info(
-                    f"Krkn config file contents:\n{'='*50}\n{config_contents}\n{'='*50}"
+                    f"Krkn config file contents:\n{'=' * 50}\n{config_contents}\n{'=' * 50}"
                 )
         except FileNotFoundError:
             log.warning(f"Config file {self.krkn_config} not found")

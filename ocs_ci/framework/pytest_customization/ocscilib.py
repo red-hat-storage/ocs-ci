@@ -873,20 +873,20 @@ def pytest_collection_modifyitems(session, config, items):
                 f"\nTest name length: {length} characters (exceeds limit of {MAX_TEST_NAME_LENGTH})\n"
                 f"Test name: {test_name}\n"
                 f"Full path: {nodeid}\n"
-                f"{'-'*80}"
+                f"{'-' * 80}"
             )
 
         # Combine all details into one message
         full_error_message = (
-            f"\n{'='*80}\n"
+            f"\n{'=' * 80}\n"
             f"ERROR: Found {len(long_test_names)} test(s) with names exceeding "
             f"{MAX_TEST_NAME_LENGTH} characters.\n"
             f"Long test names cause issues with data upload and reporting.\n"
-            f"{'='*80}" + "".join(error_details) + f"\n{'='*80}\n"
+            f"{'=' * 80}" + "".join(error_details) + f"\n{'=' * 80}\n"
             f"Test collection failed: {len(long_test_names)} test(s) have names "
             f"exceeding {MAX_TEST_NAME_LENGTH} characters.\n"
             f"Please shorten the parametrization names or test function names.\n"
-            f"{'='*80}"
+            f"{'=' * 80}"
         )
 
         # Exit with the complete error message
