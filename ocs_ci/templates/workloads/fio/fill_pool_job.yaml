@@ -13,6 +13,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: filler
+        # FillPoolJob.create overwrites image, command, resources, and BLOCK_SIZE.
         image: quay.io/ocsci/busybox:latest
         imagePullPolicy: IfNotPresent
         command:
