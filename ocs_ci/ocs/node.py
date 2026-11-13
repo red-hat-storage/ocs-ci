@@ -327,6 +327,61 @@ def get_all_nodes():
     return [node["metadata"]["name"] for node in node_items]
 
 
+def get_boot_id_from_node_data(node_data):
+    """Extract the boot ID from an already fetched node response.
+
+    Args:
+        node_data (dict): Node response to read the boot ID from.
+
+    Returns:
+        str: Boot ID, or None if it is absent from the node response.
+
+    """
+    return node_data.get("status", {}).get("nodeInfo", {}).get("bootID")
+
+
+def get_node_boot_id(node):
+    """Get a node's boot ID with a fresh API read.
+
+    Args:
+        node (OCS): Node resource object.
+
+    Returns:
+        str: Boot ID, or None if it is absent from the node response.
+
+    """
+    return get_boot_id_from_node_data(node.get())
+
+
+def wait_for_node_boot_id_change_and_ready(node, boot_id, timeout=900, sleep=10):
+    """Wait for a new boot ID and Ready status in the same node response.
+
+    Args:
+        node (OCS): Node resource object.
+        boot_id (str): Node boot ID captured before reboot.
+        timeout (int): Maximum time in seconds to wait for recovery. The default
+            matches the vSphere 'vsphere_vm_start_timeout' budget, because the
+            node has to power on and then report a Ready kubelet.
+        sleep (int): Seconds between node polls.
+
+    Raises:
+        ValueError: If the boot ID captured before reboot is empty.
+        TimeoutExpiredError: If the node does not report a new boot ID and Ready.
+
+    """
+    if not boot_id:
+        raise ValueError(f"Node {node.name} has no boot ID captured before reboot")
+    log.info(f"Wait for node {node.name} to report a new boot ID and Ready status")
+    for node_data in TimeoutSampler(timeout, sleep, node.get):
+        current_boot_id = get_boot_id_from_node_data(node_data)
+        ready = any(
+            condition.get("type") == "Ready" and condition.get("status") == "True"
+            for condition in node_data.get("status", {}).get("conditions", [])
+        )
+        if current_boot_id and current_boot_id != boot_id and ready:
+            return
+
+
 def wait_for_nodes_status(
     node_names=None, status=constants.NODE_READY, timeout=600, sleep=3
 ):
