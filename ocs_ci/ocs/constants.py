@@ -1948,6 +1948,7 @@ ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD = 15 * 60  # 15 minutes in seconds
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
 INFRA_NODE_LABEL = "node-role.kubernetes.io/infra=''"
+GPU_NODE_LABEL = "gpu.isf.ibm.com=''"
 NODE_SELECTOR_ANNOTATION = "openshift.io/node-selector="
 TOPOLOGY_ROOK_LABEL = "topology.rook.io/rack"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
