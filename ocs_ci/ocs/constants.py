@@ -3056,6 +3056,8 @@ RHCOS = "RHCOS"
 
 # Scale constants
 IBM_STORAGE_SCALE_NAMESPACE = "ibm-spectrum-scale"
+IBM_STORAGE_SCALE_FILESYSTEM = "filesystem"
+IBM_STORAGE_SCALE_LOCALDISK = "LocalDisk"
 IBM_STORAGE_SCALE_CLUSTER_NAME = "ibm-spectrum-scale"
 IBM_STORAGE_SCALE_CLUSTER_KIND = "Cluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_REMOTECLUSTER_KIND = "RemoteCluster.scale.spectrum.ibm.com"
