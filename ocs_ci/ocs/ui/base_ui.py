@@ -388,6 +388,30 @@ class BaseUI:
             )
         return element
 
+    def upload_file(self, locator, file_path, timeout=30):
+        """
+        Upload a file using a hidden file input element.
+        File inputs are hidden by security, so we use find_element without waiting
+        for visibility, then send keys directly.
+
+        Args:
+            locator (tuple): (GUI element needs to operate on (str), type (By))
+            file_path (str): Absolute path to the file to upload
+            timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
+        """
+        wait = WebDriverWait(self.driver, timeout)
+        try:
+            element = wait.until(
+                ec.presence_of_element_located((locator[1], locator[0]))
+            )
+            element.send_keys(file_path)
+            logger.debug(f"File uploaded successfully: {file_path}")
+        except TimeoutException as e:
+            self.take_screenshot()
+            self.copy_dom()
+            logger.error(f"Failed to upload file: {e}")
+            raise
+
     def is_expanded(self, locator, timeout=30):
         """
         Check whether an element is in an expanded or collapsed state
