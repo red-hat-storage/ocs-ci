@@ -976,7 +976,7 @@ class BackgroundClusterOperations:
             workload_pvcs = []
             for idx, workload in enumerate(self.workloads[:num_pvcs]):
                 log.debug(
-                    f"Checking workload {idx+1}/{num_pvcs}: "
+                    f"Checking workload {idx + 1}/{num_pvcs}: "
                     f"type={type(workload).__name__}, "
                     f"has_pvc_objs={hasattr(workload, 'pvc_objs')}, "
                     f"has_pvc_obj={hasattr(workload, 'pvc_obj')}, "

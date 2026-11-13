@@ -139,7 +139,7 @@ class NetworkFaults(PlatformNodesFactory):
                 interfaces = self.node_interfaces.get(node.name, [])
                 for iface in interfaces:
                     log.info(
-                        f"[Iteration {i+1}] Applying {description} on {node.name}/{iface}"
+                        f"[Iteration {i + 1}] Applying {description} on {node.name}/{iface}"
                     )
                     cmd = f"tc qdisc replace dev {iface} root netem {netem_command}"
                     try:
@@ -148,14 +148,14 @@ class NetworkFaults(PlatformNodesFactory):
                     except (CommandFailed, subprocess.TimeoutExpired) as e:
                         log.error(f"Failed to apply fault on {node.name}/{iface}: {e}")
 
-            log.info(f"[Iteration {i+1}] Holding fault for {self.duration}s")
+            log.info(f"[Iteration {i + 1}] Holding fault for {self.duration}s")
             time.sleep(self.duration)
 
             for node in selected_nodes:
                 interfaces = self.node_interfaces.get(node.name, [])
                 for iface in interfaces:
                     log.info(
-                        f"[Iteration {i+1}] Removing fault from {node.name}/{iface}"
+                        f"[Iteration {i + 1}] Removing fault from {node.name}/{iface}"
                     )
                     cmd = f"tc qdisc del dev {iface} root"
                     try:
@@ -167,7 +167,7 @@ class NetworkFaults(PlatformNodesFactory):
 
             if i < self.iterations - 1:
                 log.info(
-                    f"[Iteration {i+1}] Pausing for {self.pause}s before next iteration"
+                    f"[Iteration {i + 1}] Pausing for {self.pause}s before next iteration"
                 )
                 time.sleep(self.pause)
 
