@@ -4231,6 +4231,57 @@ def add_new_deviceset_in_storagecluster(
     return result
 
 
+def get_storage_cluster_resources(component):
+    """
+    Get the resource requirements of a component in the storagecluster
+
+    Args:
+        component (str): The component name in the storagecluster 'spec.resources'
+            section. For example, 'mon', 'mgr', 'mds'.
+
+    Returns:
+        dict: The resource requirements of the given component. Empty dict, if the
+            component doesn't have resource requirements defined.
+
+    """
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    return storage_cluster.data["spec"].get("resources", {}).get(component, {})
+
+
+def set_storage_cluster_resources(component, resources):
+    """
+    Set the resource requirements of a component in the storagecluster
+
+    Args:
+        component (str): The component name in the storagecluster 'spec.resources'
+            section. For example, 'mon', 'mgr', 'mds'.
+        resources (dict): The resource requirements to set for the given component.
+            If None or empty, the component will be removed from the 'spec.resources'
+            section.
+
+    Returns:
+        bool: True if the patch was applied successfully, False otherwise.
+
+    """
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    # Patching the component with 'null' removes it from the 'spec.resources' section
+    params = json.dumps({"spec": {"resources": {component: resources or None}}})
+    log.info(f"Set the resources of the component {component} to {resources}")
+    return storage_cluster.patch(
+        resource_name=storage_cluster_name,
+        params=params,
+        format_type="merge",
+    )
+
+
 def get_all_device_sets():
     """
     Get all the device classes in the storagecluster
