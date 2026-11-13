@@ -1817,6 +1817,9 @@ RDR_VM_PROTECTION_LABEL = "ramendr.openshift.io/k8s-resource-selector"
 # constants
 RBD_INTERFACE = "rbd"
 CEPHFS_INTERFACE = "cephfs"
+# pytest user_properties key holding the real call duration of a parallel DR test
+CALL_DURATION_PROPERTY = "workload_call_duration"
+
 RAW_BLOCK_DEVICE = "/dev/rbdblock"
 
 # Constant values for IOPS and Throughput is set
