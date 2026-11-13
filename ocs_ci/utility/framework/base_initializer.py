@@ -10,6 +10,7 @@ import time
 
 from ocs_ci import framework
 from ocs_ci.framework import config
+from ocs_ci.framework.custom_logger import TEST_STEP, ASSERTION, AI_DATA
 from ocs_ci.framework.exceptions import ClusterNameNotProvidedError
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.constants import OCP_VERSION_CONF_DIR
@@ -120,7 +121,7 @@ class BaseInitializer:
         root_logger.addHandler(file_handler)
 
         console_handler = logging.StreamHandler()
-        console_handler.setFormatter(log_formatter)
+        console_handler.setFormatter(ColoredFormatter(constants.LOG_FORMAT))
         console_handler.setLevel(log_level)
         root_logger.addHandler(console_handler)
 
@@ -199,3 +200,31 @@ class BaseInitializer:
         except CommandFailed as ex:
             raise ClusterNotAccessibleError("Cluster is not ready to use: %s", ex)
         logger.info("Access to cluster is OK!")
+
+
+class ColoredFormatter(logging.Formatter):
+    """
+    Logging formatter that colors the levelname based on severity.
+    Intended for console output only; log files should stay plain text.
+    """
+
+    # Matches pytest's log_cli colors (_pytest._io.terminalwriter.TerminalWriter),
+    # which is what `run-ci` uses, so console output looks consistent across entry points.
+    COLORS = {
+        AI_DATA: "\033[2m",  # dim/gray
+        logging.DEBUG: "\033[35m",  # purple
+        ASSERTION: "\033[36m",  # cyan
+        logging.INFO: "\033[32m",  # green
+        TEST_STEP: "\033[34m",  # blue
+        logging.WARNING: "\033[33m",  # yellow
+        logging.ERROR: "\033[31m\033[1m",  # red + bold
+        logging.CRITICAL: "\033[31m",  # red
+    }
+    RESET = "\033[0m"
+
+    def format(self, record: logging.LogRecord) -> str:
+        color = self.COLORS.get(record.levelno)
+        if color:
+            record = logging.makeLogRecord(record.__dict__)
+            record.levelname = f"{color}{record.levelname}{self.RESET}"
+        return super().format(record)
