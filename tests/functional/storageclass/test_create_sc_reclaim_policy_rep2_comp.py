@@ -4,6 +4,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     skipif_external_mode,
     skipif_ocs_version,
+    skipif_stretch_cluster,
     green_squad,
 )
 from ocs_ci.ocs.resources.pod import delete_pods
@@ -32,6 +33,7 @@ log = logging.getLogger(__name__)
 @tier2
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
+@skipif_stretch_cluster
 @polarion_id("OCS-2398")
 class TestScReclaimPolicyRetainRep2Comp(ManageTest):
     """
