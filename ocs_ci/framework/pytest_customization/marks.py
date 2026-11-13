@@ -110,6 +110,7 @@ rdr = pytest.mark.rdr
 mdr = pytest.mark.mdr
 resiliency = pytest.mark.resiliency
 chaos = pytest.mark.chaos
+fa_functional = pytest.mark.fa_functional
 
 tier_marks = [
     tier1,
