@@ -406,6 +406,12 @@ class ROSA(CloudDeploymentBase):
                     )
                     rook_operator_pod[0].delete(wait=False)
 
+        # HCP defers this inside Deployment.deploy_ocs so the profile is applied
+        # once, after the ROSA health check. The addon path never calls that method.
+        from ocs_ci.helpers.tlsprofile_helper import apply_tls_profile_after_deployment
+
+        apply_tls_profile_after_deployment()
+
     def destroy_ocs(self):
         """
         Uninstall ODF Managed Service addon via rosa cli.
