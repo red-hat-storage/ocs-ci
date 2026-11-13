@@ -8,6 +8,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier4a,
     polarion_id,
     brown_squad,
+    zstream_4_18_1,
+    zstream_4_18_1_ocs_operator,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.cluster import CephCluster
@@ -51,6 +53,8 @@ def get_osd_pod_name(osd_node_name):
     return osd_pod_name
 
 
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestAddDifferentInstanceTypeNode(ManageTest):
     @pytest.fixture
     def setup(self, request):

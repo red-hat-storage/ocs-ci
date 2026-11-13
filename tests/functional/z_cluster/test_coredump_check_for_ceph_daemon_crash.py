@@ -7,7 +7,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.disruption_helpers import Disruptions
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.framework.pytest_customization.marks import skipif_rhel_os, brown_squad
+from ocs_ci.framework.pytest_customization.marks import skipif_rhel_os, brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -35,6 +35,8 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-2492")
 @pytest.mark.polarion_id("OCS-2493")
 @skipif_rhel_os
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestKillCephDaemon(ManageTest):
     """
     Verify coredump getting generated for ceph daemon crash
