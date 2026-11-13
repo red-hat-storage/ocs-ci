@@ -77,6 +77,48 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         self.aws = aws.AWS()
         self.__helper_node_handler = None
 
+    def get_node_name_for_machine(self, machine):
+        """
+        Get the OCP node name corresponding to a server configured under
+        ENV_DATA.baremetal.servers. Each BM deployment flavor assigns
+        hostnames differently, so this must be implemented per flavor
+        (see BAREMETALUPI.OCPDeployment and BAREMETALAI.OCPDeployment).
+
+        Args:
+            machine (str): server name as used as a key in
+                ENV_DATA.baremetal.servers
+
+        Returns:
+            str: the node name as it appears in "oc get nodes"
+
+        """
+        raise NotImplementedError
+
+    def label_gpu_nodes(self, target_nodes):
+        """
+        Label servers marked with 'ibm_gpu_isf_node: true' in
+        ENV_DATA.baremetal.servers with the GPU node label, so that GPU
+        workloads can be scheduled on them.
+
+        Args:
+            target_nodes (list): server names (as used as keys in
+                ENV_DATA.baremetal.servers) that were actually selected
+                for this deployment. Servers present in the inventory
+                but not part of this deployment (e.g. inventory has more
+                workers than worker_replicas) must be excluded, otherwise
+                the label command targets a Node that doesn't exist.
+
+        """
+        node_obj = ocp.OCP(kind="node")
+        for machine in target_nodes:
+            if not self.srv_details[machine].get("ibm_gpu_isf_node"):
+                continue
+            node_name = self.get_node_name_for_machine(machine)
+            logger.info(
+                f"Labeling GPU node {node_name} with {constants.GPU_NODE_LABEL}"
+            )
+            node_obj.add_label(resource_name=node_name, label=constants.GPU_NODE_LABEL)
+
     def deploy_prereq(self):
         """
         Pre-Requisites for Bare Metal deployments
@@ -334,6 +376,15 @@ class BAREMETALUPI(BAREMETALBASE):
         def __init__(self):
             super().__init__()
 
+        def get_node_name_for_machine(self, machine):
+            """
+            UPI nodes get their hostname from dnsmasq DHCP config using
+            only the short hostname (see configure_dnsmasq_hosts_config),
+            not the full server name configured in
+            ENV_DATA.baremetal.servers.
+            """
+            return machine.split(".")[0]
+
         def deploy_prereq(self):
             """
             Pre-Requisites for Bare Metal UPI Deployment
@@ -504,6 +555,7 @@ class BAREMETALUPI(BAREMETALBASE):
             # Uploading pxe files
             master_count = 0
             worker_count = 0
+            target_nodes = []
             logger.info("Deploying OCP cluster for Bare Metal platform")
             logger.info(f"Openshift-installer will be using log level:{log_cli_level}")
             ocp_version = get_ocp_version()
@@ -563,6 +615,7 @@ class BAREMETALUPI(BAREMETALBASE):
                         self.set_pxe_boot_and_reboot(machine)
                         api_record_ip_list.append(self.srv_details[machine]["ip"])
                         master_count += 1
+                        target_nodes.append(machine)
 
                     elif (
                         self.srv_details[machine]["role"] == constants.WORKER_MACHINE
@@ -571,6 +624,7 @@ class BAREMETALUPI(BAREMETALBASE):
                         self.set_pxe_boot_and_reboot(machine)
                         apps_record_ip_list.append(self.srv_details[machine]["ip"])
                         worker_count += 1
+                        target_nodes.append(machine)
 
             zone_id = self.aws.create_hosted_zone(cluster_name=cluster_name)
 
@@ -695,6 +749,7 @@ class BAREMETALUPI(BAREMETALBASE):
             approve_pending_csr()
 
             self.test_cluster()
+            self.label_gpu_nodes(target_nodes)
             if config.ENV_DATA.get("skip_disks_cleanup", False):
                 logger.info("Skipping disks cleanup")
             else:
@@ -897,6 +952,16 @@ class BAREMETALAI(BAREMETALBASE):
             super(BAREMETALAI.OCPDeployment, self).__init__()
             self.handled_pending_user_actions = {}
             self.discovery_iso_url = None
+
+        def get_node_name_for_machine(self, machine):
+            """
+            The Assisted Installer sets each host's requested_hostname to
+            the full server name (see update_hosts_config() call below and
+            update_uefi_boot_order's ocp_node usage), so the OCP node name
+            is the same as the server name configured in
+            ENV_DATA.baremetal.servers.
+            """
+            return machine
 
         def _boot_method(self):
             """Return discovery boot method: 'iso' or 'ipxe' (default)."""
@@ -1372,6 +1437,7 @@ class BAREMETALAI(BAREMETALBASE):
                     )
 
             self.test_cluster()
+            self.label_gpu_nodes(target_nodes)
             if config.ENV_DATA.get("skip_disks_cleanup", False):
                 logger.info("Skipping disks cleanup")
             else:

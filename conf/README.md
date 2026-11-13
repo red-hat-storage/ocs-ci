@@ -382,6 +382,7 @@ higher priority).
             * `node_network_configuration_policy_destination_route` - The destination route of NodeNetworkConfigurationPolicy CR
             * `fix_uefi_boot_order_first_option` - string identifying the PXE boot option which should be set to first place, if defined
                 (this is a workaround for UEFI boot order getting changed on some servers during the OCP deployment)
+            * `ibm_gpu_isf_node` - if `true`, the corresponding OCP node will be labeled with `gpu.isf.ibm.com=''` once the cluster deployment completes
 * `hcp_version` - version of HCP client to be deployed on machine running the tests
 * `metallb_version` - MetalLB operator version to install
 * `deploy_acm_hub_cluster` - Deploy ACM hub cluster or not (Default: false)
