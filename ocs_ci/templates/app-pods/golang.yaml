@@ -1,13 +1,17 @@
-kind: DeploymentConfig
-apiVersion: apps.openshift.io/v1
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: hsbenchpod
   labels:
     app: hsbenchpod
 spec:
+  selector:
+    matchLabels:
+      name: hsbenchpod
   template:
     metadata:
       labels:
+        name: hsbenchpod
         app: hsbenchpod
     spec:
       securityContext:
