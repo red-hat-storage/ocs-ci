@@ -9,6 +9,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
+    jira,
     skipif_mcg_only,
     tier2,
     runs_on_provider,
@@ -127,6 +128,7 @@ class TestODFUpgradePrecheckConditions(ManageTest):
     ODF upgrade pre-check conditions not met
     """
 
+    @jira("DFBUGS-8060")
     @pytest.mark.polarion_id("OCS-7422")
     def test_ceph_health_warning_blocks_upgrade(self, mon_pod_down, threading_lock):
         """
