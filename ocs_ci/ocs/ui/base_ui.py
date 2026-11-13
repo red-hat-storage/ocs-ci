@@ -399,17 +399,19 @@ class BaseUI:
             file_path (str): Absolute path to the file to upload
             timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
         """
-        wait = WebDriverWait(self.driver, timeout)
+        driver = SeleniumDriver()
+        logger.info("Starting file upload: %s", file_path)
+        wait = WebDriverWait(driver, timeout)
         try:
             element = wait.until(
                 ec.presence_of_element_located((locator[1], locator[0]))
             )
             element.send_keys(file_path)
-            logger.debug(f"File uploaded successfully: {file_path}")
-        except TimeoutException as e:
+            logger.info("File uploaded successfully: %s", file_path)
+        except TimeoutException:
             self.take_screenshot()
             self.copy_dom()
-            logger.error(f"Failed to upload file: {e}")
+            logger.error("Failed to upload file: %s", file_path)
             raise
 
     def is_expanded(self, locator, timeout=30):
