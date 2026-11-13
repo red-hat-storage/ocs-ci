@@ -29,11 +29,13 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.framework.pytest_customization.marks import purple_squad
 from ocs_ci.ocs.cluster import ceph_health_check
-from ocs_ci.ocs import defaults
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.fdf_migration import FDFMigration
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csv import (
     check_all_csvs_are_succeeded,
     get_csvs_start_with_prefix,
+    verify_scale_operator_subscription_and_csv,
 )
 from ocs_ci.deployment.fusion_data_foundation import storagecluster_health_check
 
@@ -124,6 +126,12 @@ class TestPostFDFMigration(ManageTest):
         namespace = config.ENV_DATA["cluster_namespace"]
         logger.assertion(f"All CSVs in namespace '{namespace}' are Succeeded")
         assert check_all_csvs_are_succeeded(namespace=namespace)
+
+        scale_ns = constants.IBM_STORAGE_SCALE_NAMESPACE
+        if OCP(kind=constants.NAMESPACE).is_exist(resource_name=scale_ns):
+            logger.assertion(f"All CSVs in namespace '{scale_ns}' are Succeeded")
+            assert check_all_csvs_are_succeeded(namespace=scale_ns)
+            verify_scale_operator_subscription_and_csv(namespace=scale_ns)
 
     def test_storagecluster_health_post_fdf_migration(self):
         """Verify StorageCluster is Ready after FDF migration."""
