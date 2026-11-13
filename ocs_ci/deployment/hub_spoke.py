@@ -7690,16 +7690,7 @@ class SpokeODF(SpokeOCP, ABC):
         subscription_data["metadata"]["namespace"] = self.namespace_client
 
         # since we are allowed to install N+1 on hosted clusters we can not rely on PackageManifest default channel
-        hosted_odf_version = (
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
-        )
-        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
-            hosted_odf_version = hosted_odf_version.split("-")[-1]
-
-        version_semantic = version.get_semantic_version(hosted_odf_version)
-
-        hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
-        subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
+        subscription_data["spec"]["channel"] = self.get_subscription_channel()
 
         subscription_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="subscription", delete=False
@@ -7709,6 +7700,39 @@ class SpokeODF(SpokeOCP, ABC):
         self.exec_oc_cmd(f"apply -f {subscription_file.name}", timeout=120)
 
         return self.subscription_exists()
+
+    def get_subscription_channel(self, odf_version_tag=None):
+        """
+        Build the ODF client subscription channel from an ODF version tag.
+
+        Args:
+            odf_version_tag (str): ODF version or version tag to derive the
+                channel from, e.g. '5.0.0-57' or 'latest-stable-5.0'. If not
+                provided, 'hosted_odf_version' of this cluster is used.
+
+        Returns:
+            str: subscription channel, e.g. 'stable-5.0'
+
+        """
+        if not odf_version_tag:
+            odf_version_tag = (
+                config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
+            )
+
+        # Tags come either as a channel tag ('latest-stable-5.0',
+        # 'latest-stable-5.0.0-57') or as a plain version ('4.18.5-8'). Strip
+        # only the channel prefix, so that the build suffix of a full version
+        # stays attached to the version instead of being taken for it - with a
+        # trailing-segment split, 'latest-stable-5.0.0-57' would resolve to
+        # '57' and yield the nonsense channel 'stable-57.0'.
+        for prefix in ("latest-stable-", "latest-", "stable-"):
+            if odf_version_tag.startswith(prefix):
+                odf_version_tag = odf_version_tag[len(prefix) :]
+                break
+
+        version_semantic = version.get_semantic_version(odf_version_tag)
+
+        return f"stable-{version_semantic.major}.{version_semantic.minor}"
 
     @kubeconfig_exists_decorator
     def storage_class_exists(self, sc_name):
@@ -8085,16 +8109,7 @@ class HostedFDF(HypershiftHostedOCP, SpokeODF):
         subscription_data = templating.load_yaml(constants.PROVIDER_MODE_SUBSCRIPTION)
         subscription_data["metadata"]["namespace"] = self.namespace_client
         subscription_data["spec"]["source"] = self.FDF_CATALOGSOURCE_NAME
-
-        hosted_odf_version = (
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
-        )
-        if any(tag in hosted_odf_version for tag in ["latest", "stable"]):
-            hosted_odf_version = hosted_odf_version.split("-")[-1]
-
-        version_semantic = version.get_semantic_version(hosted_odf_version)
-        hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
-        subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
+        subscription_data["spec"]["channel"] = self.get_subscription_channel()
 
         subscription_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="fdf_subscription", delete=False
