@@ -20,6 +20,7 @@ Success Criteria:
 """
 
 import logging
+import subprocess
 import threading
 import time
 import random
@@ -39,12 +40,40 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     CommandFailed,
     ResourceNotFoundError,
+    ResourceWrongStatusException,
     TimeoutExpiredError,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
+
+# Failures with these types are the outage itself (API slow, PVC not Bound,
+# toolbox exec timed out). They are recorded and the operation is retried.
+# They do not escalate the test.
+_DISRUPTION_EXCEPTIONS = (
+    TimeoutExpiredError,
+    TimeoutError,
+    subprocess.TimeoutExpired,
+    CommandFailed,
+    ResourceWrongStatusException,
+)
+
+
+def _is_cluster_disruption(exc):
+    """Return True when the exception is chaos disruption, not a product bug."""
+    return isinstance(exc, _DISRUPTION_EXCEPTIONS)
+
+
+def _short_exception(exc):
+    """One line, capped, so a PVC describe does not flood the log."""
+    first = str(exc).splitlines()[0].strip() if str(exc) else ""
+    if len(first) > 240:
+        first = first[:240] + "..."
+    if first:
+        return f"{type(exc).__name__}: {first}"
+    return type(exc).__name__
+
 
 # MDS failover: poll until rank 0 is active instead of a fixed sleep.
 MDS_FAILOVER_TIMEOUT = 300
@@ -260,7 +289,11 @@ class BackgroundClusterMetrics:
         self.consecutive_failures.clear()
 
     def record_operation(
-        self, operation_type: str, success: bool, error: Optional[str] = None
+        self,
+        operation_type: str,
+        success: bool,
+        error: Optional[str] = None,
+        count_consecutive: bool = True,
     ):
         """Record an operation result."""
         self.operations[operation_type] += 1
@@ -269,7 +302,8 @@ class BackgroundClusterMetrics:
             self.consecutive_failures[operation_type] = 0
         else:
             self.failures[operation_type] += 1
-            self.consecutive_failures[operation_type] += 1
+            if count_consecutive:
+                self.consecutive_failures[operation_type] += 1
             if error:
                 self.errors.append(
                     {
@@ -772,8 +806,8 @@ class BackgroundClusterOperations:
         """
         Stop background ops when the cluster is unrecoverable.
 
-        Degraded (HEALTH_WARN, MDS failover in progress, one OSD down) is
-        expected during chaos and does not abort.
+        Degraded (HEALTH_WARN, MDS failover in progress, OSDs below pool
+        min_size) is expected during chaos and does not abort.
 
         Returns:
             bool: True if the run should stop.
@@ -806,7 +840,8 @@ class BackgroundClusterOperations:
 
         Failures are recorded and other operations continue until the same
         operation fails ``max_consecutive_failures`` times in a row, at which
-        point the run is escalated.
+        point the run is escalated. Timeouts and other chaos disruption are
+        recorded but do not count toward that limit.
 
         Args:
             operation_name: Name of the operation
@@ -832,6 +867,19 @@ class BackgroundClusterOperations:
         except BackgroundOperationEscalationError:
             raise
         except Exception as e:
+            if _is_cluster_disruption(e):
+                error_msg = (
+                    f"{operation_name} skipped because the cluster is disrupted: "
+                    f"{_short_exception(e)}"
+                )
+                log.warning(error_msg)
+                self.metrics.record_operation(
+                    operation_name,
+                    success=False,
+                    error=error_msg,
+                    count_consecutive=False,
+                )
+                return
             error_msg = f"{operation_name} failed: {str(e)}"
             log.exception(error_msg)
             self.metrics.record_operation(
@@ -1611,8 +1659,10 @@ class BackgroundClusterOperations:
                     )
                 except Exception as e:
                     pvc_name = getattr(pvc_obj, "name", None) if pvc_obj else None
-                    log.error(
-                        f"Failed to create snapshot from PVC {pvc_name or '(unknown)'}: {e}"
+                    log.warning(
+                        "Failed to create snapshot from PVC "
+                        f"{pvc_name or '(unknown)'} because the cluster is "
+                        f"disrupted: {type(e).__name__}"
                     )
                     continue
 
@@ -1652,8 +1702,9 @@ class BackgroundClusterOperations:
                         timeout=300,
                     )
                 except Exception as e:
-                    log.error(
-                        f"Failed to restore from snapshot {snapshot_obj.name}: {e}"
+                    log.warning(
+                        f"Failed to restore from snapshot {snapshot_obj.name} "
+                        f"because the cluster is disrupted: {type(e).__name__}"
                     )
                     continue
 

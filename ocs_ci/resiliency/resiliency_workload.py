@@ -8,6 +8,7 @@ to validate cluster and storage behavior under varying load and failure conditio
 
 import logging
 import os
+import subprocess
 
 from abc import ABC, abstractmethod
 from jinja2 import Environment, FileSystemLoader
@@ -19,6 +20,28 @@ from ocs_ci.workloads.vdbench import VdbenchWorkload as VdbenchWorkloadImpl
 from ocs_ci.workloads.rgw_workload import RGWWorkload as RGWWorkloadImpl
 
 log = logging.getLogger(__name__)
+
+
+def _warp_failure_is_transient(exc):
+    """True when Warp could not start because the cluster is disrupted.
+
+    The exception text is not logged: ``TimeoutExpired`` includes the oc exec
+    command, and that command carries the S3 keys.
+    """
+    if isinstance(exc, (subprocess.TimeoutExpired, TimeoutError)):
+        return True
+    msg = str(exc).lower()
+    return any(
+        token in msg
+        for token in (
+            "timed out",
+            "timeout",
+            "unable to connect",
+            "connection refused",
+            "context deadline exceeded",
+            "the server is currently unable",
+        )
+    )
 
 
 class Workload(ABC):
@@ -553,22 +576,29 @@ class WarpWorkload(Workload):
                     )
                     consecutive_failures = 0
                 except Exception as e:
+                    if _warp_failure_is_transient(e):
+                        log.warning(
+                            "Warp workload iteration could not start because the "
+                            f"cluster is disrupted ({type(e).__name__}); retrying"
+                        )
+                        if self.stop_event.wait(10):
+                            break
+                        continue
                     consecutive_failures += 1
                     log.warning(
-                        "Warp workload iteration failed (%s/%s): %s",
-                        consecutive_failures,
-                        max_consecutive_failures,
-                        e,
+                        "Warp workload iteration failed "
+                        f"({consecutive_failures}/{max_consecutive_failures}): "
+                        f"{type(e).__name__}"
                     )
                     if self.stop_event.is_set():
                         break
                     if consecutive_failures >= max_consecutive_failures:
                         log.error(
-                            "Stopping Warp background workload after %s consecutive "
-                            "failures (max_consecutive_warp_failures=%s). Last error: %s",
-                            consecutive_failures,
-                            max_consecutive_failures,
-                            e,
+                            "Stopping Warp background workload after "
+                            f"{consecutive_failures} consecutive failures "
+                            f"(max_consecutive_warp_failures="
+                            f"{max_consecutive_failures}). "
+                            f"Last error: {type(e).__name__}"
                         )
                         self.is_workload_running = False
                         self._warp_stopped_after_consecutive_failures = True

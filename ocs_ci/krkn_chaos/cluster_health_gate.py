@@ -1,12 +1,12 @@
 """
 Cluster health gate for Krkn chaos and resiliency tests.
 
-Distinguishes recoverable degradation during chaos (HEALTH_WARN, a single OSD
-down, MDS failover in progress, StorageCluster Progressing) from unrecoverable
-failure that must skip the current test and the rest of the session:
-StorageCluster phase Error,
-MDS_DAMAGE, PGs inactive above a threshold, OSDs below pool min_size, or a
-fully offline filesystem when chaos is not in progress.
+Distinguishes recoverable degradation during chaos (HEALTH_WARN, OSD count
+below pool min_size, MDS failover in progress, StorageCluster Progressing)
+from unrecoverable failure that must skip the current test and the rest of
+the session: StorageCluster phase Error, MDS_DAMAGE, PGs inactive above a
+threshold, OSDs still below pool min_size once chaos is finished, or a fully
+offline filesystem when chaos is not in progress.
 
 StorageCluster phase Error is independent of ``ceph health``. Ceph can be
 HEALTH_OK while the ODF StorageCluster CR is Error (Available=False). The
@@ -158,7 +158,10 @@ def classify_cluster_health(
         pg_stat: ``ceph pg stat`` dict
         osd_stat: ``ceph osd stat`` dict
         osd_dump: ``ceph osd dump`` dict (for pool min_size)
-        chaos_in_progress: When True, MDS_ALL_DOWN alone is degraded (failover)
+        chaos_in_progress: When True, MDS_ALL_DOWN and an OSD count below
+            pool min_size are degraded. Those are expected while an outage is
+            running. The same OSD count is unrecoverable once chaos has
+            finished.
         inactive_pg_threshold: Inactive PG fraction that is unrecoverable
         storagecluster_phase: StorageCluster ``status.phase``. A single reading
             of Error is unrecoverable. The session gate waits 1 hour for
@@ -200,10 +203,13 @@ def classify_cluster_health(
     up_osds = _num_up_osds(osd_stat)
     min_size = _min_pool_min_size(osd_dump)
     if up_osds is not None and min_size is not None and up_osds < min_size:
-        return ClusterHealthClassification(
-            UNRECOVERABLE,
-            f"OSDs up ({up_osds}) below pool min_size ({min_size})",
-        )
+        reason = f"OSDs up ({up_osds}) below pool min_size ({min_size})"
+        # An application outage is allowed to take OSDs down. Aborting the
+        # test for that reading treats the chaos itself as a framework failure.
+        # The pre-test gate still skips later tests if the count does not recover.
+        if chaos_in_progress:
+            return ClusterHealthClassification(DEGRADED, reason)
+        return ClusterHealthClassification(UNRECOVERABLE, reason)
 
     if token in ("HEALTH_WARN", "HEALTH_ERR") or codes:
         reason = token or ", ".join(sorted(codes)) or "degraded"
