@@ -99,14 +99,16 @@ def set_region(region=None):
     logger.info(f"cluster region is {region}")
     logger.info(f"updating region {region} to ENV_DATA ")
     config.ENV_DATA["region"] = region
-    other_region = list(IBM_CLOUD_REGIONS - {region})[0]
     for node_type in ["master", "worker"]:
         for idx, zone in enumerate(
             copy(config.ENV_DATA.get(f"{node_type}_availability_zones", []))
         ):
-            config.ENV_DATA[f"{node_type}_availability_zones"][idx] = zone.replace(
-                other_region, region
-            )
+            for old_region in IBM_CLOUD_REGIONS - {region}:
+                if old_region in zone:
+                    config.ENV_DATA[f"{node_type}_availability_zones"][idx] = (
+                        zone.replace(old_region, region)
+                    )
+                    break
     # Make sure we are logged in proper region from config, once region changed!
     login()
 
