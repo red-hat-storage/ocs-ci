@@ -85,6 +85,11 @@ DEPLOYMENT:
   # Following options are defaults for deployment from live content
   live_deployment: False
   preserve_bootstrap_node: False
+  # Fusion Access migration tool image that packages resources.yaml and
+  # migration-job.yaml under /migration-tool/. Must be provided by the build
+  # team for custom builds (do not hardcode a release tag in tests).
+  # Example: "quay.io/rhceph-dev/odf4-odf-cli-rhel9:v4.22"
+  migration_tool_image: ""
   # Terraform version
   terraform_version: "1.0.11"
   # Following options are defaults for deployment with infra worker nodes
