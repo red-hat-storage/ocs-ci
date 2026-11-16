@@ -47,6 +47,7 @@ from ocs_ci.utility.utils import (
     check_timeout_reached,
     TimeoutSampler,
     exec_cmd,
+    should_probe_cluster,
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.constants import CSI_RBD_ADDON_NODEPLUGIN_LABEL_420
@@ -885,6 +886,12 @@ def get_ceph_tools_pod(
         namespace = cluster_namespace or config.ENV_DATA["cluster_namespace"]
     else:
         namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    # Fresh OCP deploy: kubeconfig does not exist yet — do not call oc
+    if not should_probe_cluster(cluster_kubeconfig or None):
+        raise CephToolBoxNotFoundException(
+            "ceph tools unavailable: kubeconfig not present during fresh OCP deploy"
+        )
 
     ocp_pod_obj = OCP(
         kind=constants.POD,

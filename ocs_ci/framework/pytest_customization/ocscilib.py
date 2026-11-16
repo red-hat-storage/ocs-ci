@@ -467,9 +467,13 @@ def pytest_configure(config):
             if logs_url:
                 config._metadata["Logs URL"] = logs_url
 
+            from ocs_ci.utility.utils import (
+                is_fresh_ocp_deployment,
+                should_probe_cluster,
+            )
+
             if ocsci_config.RUN["cli_params"].get("teardown") or (
-                "deployment" in markers_arg
-                and ocsci_config.RUN["cli_params"].get("deploy")
+                is_fresh_ocp_deployment() and not should_probe_cluster()
             ):
                 log.info(
                     "Skipping versions collecting because: Deploy or destroy of "

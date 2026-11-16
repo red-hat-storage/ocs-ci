@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import os
+import sys
 import platform
 import random
 import re
@@ -2645,6 +2646,67 @@ def is_cluster_running(cluster_path):
     )
 
 
+def is_fresh_ocp_deployment():
+    """
+    True when this run is deploying OCP from scratch.
+    In that case kubeconfig is not expected to exist yet.
+
+    OCS-only deploy uses skip_ocp_deployment=True -> returns False
+    (kubeconfig must already exist).
+
+    Returns:
+        bool: True if fresh OCP deploy is in progress
+    """
+    deploy = config.RUN.get("cli_params", {}).get("deploy")
+    if deploy is None:
+        # marks import happens before cli_params is fully ready
+        deploy = "--deploy" in sys.argv
+    return bool(deploy) and not config.ENV_DATA.get("skip_ocp_deployment")
+
+
+def get_kubeconfig_path(kubeconfig_path=None):
+    """
+    Resolve kubeconfig path for current (or provided) cluster context.
+
+    Args:
+        kubeconfig_path (str): Optional explicit kubeconfig path
+
+    Returns:
+        str | None: Resolved kubeconfig path, or None if unavailable
+    """
+    if kubeconfig_path:
+        return kubeconfig_path
+    path = config.RUN.get("kubeconfig")
+    if path:
+        return path
+    cluster_path = config.ENV_DATA.get("cluster_path")
+    if not cluster_path:
+        return None
+    return os.path.join(
+        cluster_path,
+        config.RUN.get("kubeconfig_location", defaults.KUBECONFIG_LOCATION),
+    )
+
+
+def should_probe_cluster(kubeconfig_path=None):
+    """
+    Whether live oc/cluster probes are valid right now.
+
+    Returns False only for fresh OCP deploy while kubeconfig is missing.
+    Teardown, OCS-only deploy, and normal runs return True.
+
+    Args:
+        kubeconfig_path (str): Optional explicit kubeconfig path (e.g. provider)
+
+    Returns:
+        bool: True if cluster probes should run
+    """
+    if not is_fresh_ocp_deployment():
+        return True
+    path = get_kubeconfig_path(kubeconfig_path)
+    return bool(path and os.path.isfile(path))
+
+
 def decompose_html_attributes(soup, attributes):
     """
     Decomposes the given html attributes
@@ -3075,6 +3137,21 @@ def get_ocs_build_number():
         str: build number for ocs operator version
 
     """
+    # OCP-only deploy (skip_ocs_deployment): openshift-storage / OCS CSV are not
+    # expected yet — skip live lookup. OCS-only deploy and normal test runs still probe.
+    if config.ENV_DATA.get("skip_ocs_deployment"):
+        log.info(
+            "Skipping OCS build number query: OCS deployment is skipped "
+            "(OCP-only / no openshift-storage yet)"
+        )
+        return ""
+    if not should_probe_cluster():
+        log.info(
+            "Skipping OCS build number query: kubeconfig not available during "
+            "fresh OCP deploy"
+        )
+        return ""
+
     # Importing here to avoid circular dependency
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
     from ocs_ci.ocs.resources.catalog_source import CatalogSource

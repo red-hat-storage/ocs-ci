@@ -40,6 +40,7 @@ from ocs_ci.utility.utils import (
     convert_device_size,
     get_az_count,
     mask_secrets,
+    should_probe_cluster,
 )
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
@@ -1545,6 +1546,13 @@ def get_worker_nodes(skip_master_nodes=None):
 
     """
     from ocs_ci.ocs.cluster import is_hci_provider_cluster
+
+    # Fresh OCP deploy: kubeconfig not present yet — no workers to query
+    if not should_probe_cluster():
+        log.info(
+            "Skipping get_worker_nodes: kubeconfig not available during fresh OCP deploy"
+        )
+        return []
 
     label = "node-role.kubernetes.io/worker"
     ocp_node_obj = ocp.OCP(kind=constants.NODE)
@@ -3863,6 +3871,13 @@ def check_cluster_resources(ram_gb=65, cpu_cores=6):
     Returns:
         bool: True if resources are sufficient, False otherwise.
     """
+    # Fresh OCP deploy: kubeconfig not present yet — don't block on capacity
+    if not should_probe_cluster():
+        log.info(
+            "Skipping cluster resource check: kubeconfig not available during "
+            "fresh OCP deploy"
+        )
+        return True
     try:
         free_ram, free_cpu, breakdown = get_cluster_resource_capacity()
 

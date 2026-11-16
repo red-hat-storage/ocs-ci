@@ -3612,11 +3612,40 @@ class LVM(object):
             return False
 
 
+def _set_lvm_flag_from_config():
+    """Set config.RUN['lvm'] from deployment intent when live LVMCluster probe is unavailable."""
+    config.RUN["lvm"] = "install_lvmo" in config.DEPLOYMENT
+
+
+def _set_cephcluster_flag_from_config():
+    """
+    Set config.RUN['cephcluster'] from deployment intent when live CephCluster
+    probe is unavailable (fresh deploy, missing kubeconfig, or known non-Ceph setups).
+    """
+    if config.DEPLOYMENT.get("fusion_access") or config.ENV_DATA.get(
+        "skip_ocs_deployment"
+    ):
+        config.RUN["cephcluster"] = False
+    else:
+        config.RUN["cephcluster"] = True
+
+
 def check_clusters():
     """
     Test if lvm or cephcluster is installed and set config.RUN values for conditions
 
     """
+    from ocs_ci.utility.utils import should_probe_cluster
+
+    # Fresh OCP deploy: kubeconfig not present yet — derive flags from config
+    if not should_probe_cluster():
+        logger.info(
+            "Skipping live cluster checks: kubeconfig not available during "
+            "fresh OCP deploy"
+        )
+        _set_lvm_flag_from_config()
+        _set_cephcluster_flag_from_config()
+        return
 
     try:
         lvmcluster_obj = OCP(
@@ -3631,14 +3660,11 @@ def check_clusters():
     except CommandFailed:
         config.RUN["lvm"] = False
     except FileNotFoundError:
-        if "install_lvmo" in config.DEPLOYMENT:
-            config.RUN["lvm"] = True
-        else:
-            config.RUN["lvm"] = False
+        _set_lvm_flag_from_config()
 
     # Fusion Access clusters have no CephCluster / StorageCluster
     if config.DEPLOYMENT.get("fusion_access"):
-        config.RUN["cephcluster"] = False
+        _set_cephcluster_flag_from_config()
         logger.info(
             "Fusion Access cluster detected — skipping CephCluster check, "
             "setting cephcluster=False"
@@ -3660,10 +3686,7 @@ def check_clusters():
         logger.info(
             "This is deployment, will try to check from ENV_DATA and DEPLOYMENT"
         )
-        if config.ENV_DATA["skip_ocs_deployment"]:
-            config.RUN["cephcluster"] = False
-        else:
-            config.RUN["cephcluster"] = True
+        _set_cephcluster_flag_from_config()
 
 
 def get_lvm_full_version():
