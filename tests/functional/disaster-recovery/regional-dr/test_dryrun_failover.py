@@ -90,34 +90,27 @@ class TestDryRunFailover:
         (DiscoveredApps only) have advanced since the previously recorded value,
         confirming data protection is active on the current primary.
 
-        Each helper switches to ACM context internally but does not restore on
-        exception. The restore_index guard here ensures the caller's cluster
-        context is always reinstated, even if a helper raises.
+        Each helper switches to ACM context internally and restores context on
+        return or exception via try/finally guards within the helper functions.
         """
-        restore_index = config.cur_index
-        try:
-            for info in workload_info:
+        for info in workload_info:
+            logger.info(f"Checking lastGroupSyncTime for {info['drpc_resource_name']}")
+            info["last_group_sync_time"] = dr_helpers.verify_last_group_sync_time(
+                info["drpc_obj"],
+                scheduling_interval,
+                info["last_group_sync_time"],
+            )
+            if info["is_discovered"]:
                 logger.info(
-                    f"Checking lastGroupSyncTime for {info['drpc_resource_name']}"
+                    f"Checking lastKubeObjectProtectionTime for {info['drpc_resource_name']}"
                 )
-                info["last_group_sync_time"] = dr_helpers.verify_last_group_sync_time(
-                    info["drpc_obj"],
-                    scheduling_interval,
-                    info["last_group_sync_time"],
+                info["last_kubeobj_time"] = (
+                    dr_helpers.verify_last_kubeobject_protection_time(
+                        info["drpc_obj"],
+                        info["workload"].kubeobject_capture_interval_int,
+                        info["last_kubeobj_time"],
+                    )
                 )
-                if info["is_discovered"]:
-                    logger.info(
-                        f"Checking lastKubeObjectProtectionTime for {info['drpc_resource_name']}"
-                    )
-                    info["last_kubeobj_time"] = (
-                        dr_helpers.verify_last_kubeobject_protection_time(
-                            info["drpc_obj"],
-                            info["workload"].kubeobject_capture_interval_int,
-                            info["last_kubeobj_time"],
-                        )
-                    )
-        finally:
-            config.switch_ctx(restore_index)
 
     def _setup_workload_states(
         self, workload_info, cluster_a, cluster_b, scheduling_interval
@@ -155,20 +148,20 @@ class TestDryRunFailover:
         for f in futures:
             f.result()
 
-        for info in failover_infos:
-            is_discovered = info["is_discovered"]
-            placement_name = info["placement_name"]
-            if is_discovered:
-                logger.info(
-                    f"Doing discovered apps cleanup for {placement_name} on {cluster_a}"
-                )
-                dr_helpers.do_discovered_apps_cleanup(
-                    drpc_name=placement_name,
-                    old_primary=cluster_a,
-                    workload_namespace=info["workload"].workload_namespace,
-                    workload_dir=info["workload"].workload_dir,
-                    vrg_name=placement_name,
-                )
+        discovered_failover_infos = [
+            info for info in failover_infos if info["is_discovered"]
+        ]
+        for info in discovered_failover_infos:
+            logger.info(
+                f"Doing discovered apps cleanup for {info['placement_name']} on {cluster_a}"
+            )
+            dr_helpers.do_discovered_apps_cleanup(
+                drpc_name=info["placement_name"],
+                old_primary=cluster_a,
+                workload_namespace=info["workload"].workload_namespace,
+                workload_dir=info["workload"].workload_dir,
+                vrg_name=info["placement_name"],
+            )
 
         config.switch_to_cluster_by_name(cluster_b)
         for info in failover_infos:
@@ -469,11 +462,21 @@ class TestDryRunFailover:
 
         return workload_info, cluster_a, cluster_b, scheduling_interval, wait_time
 
-    def _verify_cleanup_after_dryrun_abort_or_promote(self, workload_info):
+    def _verify_cleanup_after_dryrun_abort_or_promote(
+        self, workload_info, is_promote=False
+    ):
         """
-        Verify the full cleanup sequence on the old primary (failover_cluster) after
-        a dryRun is either aborted or promoted. Same logic applies to both — only the
-        cluster differs.
+        Verify the full cleanup sequence on the old primary after a dryRun is
+        either aborted or promoted.
+
+        Args:
+            workload_info: List of workload info dicts
+            is_promote (bool): True for promote (cleanup current_cluster),
+                              False for abort (cleanup failover_cluster)
+
+        Cleanup target:
+          - Abort: failover_cluster (delete the dryRun test copy)
+          - Promote: current_cluster (delete the old production primary)
 
         Two passes over workload_info:
 
@@ -489,11 +492,11 @@ class TestDryRunFailover:
           not auto-advance to Completed without user-driven workload cleanup.
 
         Pass 2 — Steps 2–5 per workload:
-          2. failover_cluster: wait_for_all_resources_deletion — pods deleted first, then
+          2. cleanup_cluster: wait_for_all_resources_deletion — pods deleted first, then
              Ramen transitions VRG to secondary (which triggers dryRun snapshot cleanup
              and releases PVCs), then PVCs and PVs are confirmed gone. VRG secondary is
              asserted internally before PVC deletion, matching Ramen's actual sequence.
-          3. failover_cluster: VRG annotation "false" confirmed (120s).
+          3. cleanup_cluster: VRG annotation "false" confirmed (120s).
           4. Hub: wait for Completed (120s — expected immediately after cleanup finishes).
           5. Hub: assert DRPC annotation test-failover-dryrun is absent — Ramen deletes
              it (not sets to false) on the DRPC upon successful cleanup.
@@ -518,18 +521,30 @@ class TestDryRunFailover:
                 # Continuously poll for 60 s to confirm the hold — a single re-read is
                 # not enough because Ramen could auto-advance to Completed between polls.
                 # Every sample must equal WaitOnUserToCleanUp; the first deviation fails.
+                # TimeoutExpiredError after 60s means the status held (success condition).
                 logger.info(
                     f"[{name}] Reached {constants.STATUS_WAITFORUSERTOCLEANUP} — "
                     f"polling for 60 s to confirm it does not auto-advance"
                 )
-                for actual in TimeoutSampler(
+                sampler = TimeoutSampler(
                     timeout=60, sleep=5, func=drpc_obj.get_progression_status
-                ):
-                    assert actual == constants.STATUS_WAITFORUSERTOCLEANUP, (
-                        f"DRPC {name} advanced past "
-                        f"{constants.STATUS_WAITFORUSERTOCLEANUP} to {actual!r} "
-                        f"without workload cleanup — Ramen must not auto-complete "
-                        f"this state"
+                )
+                try:
+                    for actual in sampler:
+                        assert actual == constants.STATUS_WAITFORUSERTOCLEANUP, (
+                            f"DRPC {name} advanced past "
+                            f"{constants.STATUS_WAITFORUSERTOCLEANUP} to {actual!r} "
+                            f"without workload cleanup — Ramen must not auto-complete "
+                            f"this state"
+                        )
+                except sampler.timeout_exc_cls:
+                    # Re-raise if sampler never ran or func call failed
+                    if sampler.attempt == 0 or sampler.last_exception is not None:
+                        raise
+                    # Timeout with successful iterations = status held for 60s
+                    logger.info(
+                        f"[{name}] Confirmed {constants.STATUS_WAITFORUSERTOCLEANUP} "
+                        f"held for 60 s without auto-advancing"
                     )
             else:
                 logger.info(
@@ -541,23 +556,45 @@ class TestDryRunFailover:
                 )
                 logger.info(f"[{name}] Reached {constants.STATUS_CLEANING_UP}")
 
+        # Delete DiscoveredApps workload manifests on cleanup cluster using existing helper
+        for info in workload_info:
+            if info["is_discovered"]:
+                cleanup_cluster = (
+                    info["current_cluster"] if is_promote else info["failover_cluster"]
+                )
+                logger.info(
+                    f"[{info['drpc_resource_name']}] Doing discovered apps cleanup "
+                    f"on {cleanup_cluster}"
+                )
+                dr_helpers.do_discovered_apps_cleanup(
+                    drpc_name=info["placement_name"],
+                    old_primary=cleanup_cluster,
+                    workload_namespace=info["workload_namespace"],
+                    workload_dir=info["workload"].workload_dir,
+                    vrg_name=info["vrg_name"],
+                )
+
         # Pass 2: per-workload cleanup verification (Steps 2–5).
         config.switch_acm_ctx()
         for info in workload_info:
             vrg_name = info["vrg_name"]
             vrg_namespace = info["vrg_namespace"]
-            failover_cluster = info["failover_cluster"]
             is_discovered = info["is_discovered"]
             drpc_obj: DRPC = info["drpc_obj"]
             name = info["drpc_resource_name"]
 
-            # Step 2: failover_cluster — workload deletion, VRG → secondary, PVCs/PVs gone.
+            # Determine cleanup cluster based on action type
+            cleanup_cluster = (
+                info["current_cluster"] if is_promote else info["failover_cluster"]
+            )
+
+            # Step 2: cleanup_cluster — workload deletion, VRG → secondary, PVCs/PVs gone.
             # vrg_name is required for DiscoveredApps: all workloads share openshift-dr-ops,
             # so omitting it would match any VRG in the namespace instead of this workload's.
-            config.switch_to_cluster_by_name(failover_cluster)
+            config.switch_to_cluster_by_name(cleanup_cluster)
             logger.info(
                 f"[{name}] Waiting for workload + replication resource deletion "
-                f"on {failover_cluster}"
+                f"on {cleanup_cluster}"
             )
             dr_helpers.wait_for_all_resources_deletion(
                 info["workload_namespace"],
@@ -565,13 +602,13 @@ class TestDryRunFailover:
                 vrg_name=vrg_name,
             )
 
-            # Step 3: failover_cluster — VRG annotation must be "false", not deleted.
+            # Step 3: cleanup_cluster — VRG annotation must be "false", not deleted.
             # ManifestWork cannot propagate key deletions to the spoke, so Ramen sets
             # the annotation to "false" rather than removing it.
             logger.info(
                 f"[{name}] Verifying VRG annotation "
                 f"{constants.DRPC_TEST_FAILOVER_DRYRUN_ANNOTATION!r} = 'false' "
-                f"on {failover_cluster}"
+                f"on {cleanup_cluster}"
             )
             dr_helpers.get_vrg_annotation(
                 vrg_name=vrg_name,
@@ -807,7 +844,9 @@ class TestDryRunFailover:
                 params=promote_params, format_type="merge"
             ), f"Failed to patch DRPC {info['drpc_resource_name']} for stage 1 promote"
 
-        self._verify_cleanup_after_dryrun_abort_or_promote(stage1_infos)
+        self._verify_cleanup_after_dryrun_abort_or_promote(
+            stage1_infos, is_promote=True
+        )
 
         config.switch_to_cluster_by_name(cluster_b)
         for info in stage1_infos:
@@ -867,6 +906,7 @@ class TestDryRunFailover:
         )
         sleep(wait_time * 60)
         nodes_multicluster[cluster_b_index].start_nodes(cluster_b_nodes)
+        config.switch_to_cluster_by_name(cluster_b)
         wait_for_nodes_status([node.name for node in cluster_b_nodes])
         sleep(180)
         assert wait_for_pods_to_be_running(
@@ -874,7 +914,9 @@ class TestDryRunFailover:
         ), "Not all pods reached Running state after cluster_b recovery"
         ceph_health_check()
 
-        self._verify_cleanup_after_dryrun_abort_or_promote(workload_info)
+        self._verify_cleanup_after_dryrun_abort_or_promote(
+            workload_info, is_promote=True
+        )
 
         config.switch_to_cluster_by_name(cluster_a)
         for info in workload_info:
