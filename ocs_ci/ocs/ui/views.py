@@ -4508,6 +4508,13 @@ external_systems = {
     ),
 }
 
+# Version-specific overrides for encryption field IDs (OCS < 4.23 may use generic IDs)
+external_systems_4_21_4_22 = {
+    "enc_username": ("//input[@id='username']", By.XPATH),
+    "enc_password": ("//input[@id='password']", By.XPATH),
+    "enc_port": ("//input[@id='port']", By.XPATH),
+}
+
 configure_performance = {
     "core_storage_section": (
         "//small[@id='core-storage-desc']/parent::div",
@@ -4639,7 +4646,7 @@ locators = {
         "alerting": alerting,
         "bucket_tab": bucket_tab,
         "s3_vector_tab": s3_vector_tab,
-        "external_systems": external_systems,
+        "external_systems": {**external_systems, **external_systems_4_21_4_22},
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
         "virtualmachine": virtualmachine,
@@ -4795,7 +4802,7 @@ locators = {
         "mcg_stores": mcg_stores,
         "alerting": alerting,
         "bucket_tab": bucket_tab,
-        "external_systems": external_systems,
+        "external_systems": {**external_systems, **external_systems_4_21_4_22},
         "data_foundation_overview": data_foundation_overview,
         "attach_storage": attach_storage,
     },
