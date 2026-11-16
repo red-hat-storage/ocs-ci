@@ -5,11 +5,7 @@ description = "ODF QE test framework for qualifying Data Foundation"
 authors = [{name = "OCS QE", email = "ocs-ci@redhat.com"}]
 license="MIT"
 readme = "README.md"
-<<<<<<< HEAD
 requires-python = ">=3.11,<3.13"
-=======
-requires-python = ">=3.10,<3.13"
->>>>>>> e99153102 (fix: update Python version requirement to support 3.12)
 dependencies = [
     "apache-libcloud==3.8.0",
     "atlassian-python-api==4.0.7",
