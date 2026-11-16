@@ -456,9 +456,9 @@ def _induce_daemon_key_mismatch(rotator, namespace):
     component_config = dict(
         rotator.get_storagecluster_component_spec(rotator.COMPONENT_DAEMON)
     )
-    component_config["keyRotationPolicy"] = (
-        CephXKeyRotation.KEY_ROTATION_POLICY_KEY_GENERATION
-    )
+    component_config[
+        "keyRotationPolicy"
+    ] = CephXKeyRotation.KEY_ROTATION_POLICY_KEY_GENERATION
     component_config["keyGeneration"] = int(target_generation)
     rotator.patch_storagecluster_cephx_component(
         rotator.COMPONENT_DAEMON, component_config

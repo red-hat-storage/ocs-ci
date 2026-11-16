@@ -246,9 +246,10 @@ class TestCephXKeyRotationNegative:
         self._deleted_osd_auth_entity = sorted(osd_entities)[-1]
         target_generation = rotator.rotate_daemon_keys(wait_for_rotation=False)
         try:
-            failed_entity, operator_log_marker = (
-                rotator.inject_osd_auth_rotation_failure(pre_osd_keys, timeout=900)
-            )
+            (
+                failed_entity,
+                operator_log_marker,
+            ) = rotator.inject_osd_auth_rotation_failure(pre_osd_keys, timeout=900)
             self._deleted_osd_auth_entity = failed_entity
         except Exception:
             injected = getattr(rotator, "last_deleted_osd_auth_entity", None)
@@ -565,12 +566,13 @@ class TestCephXKeyRotationNegativeOSD:
         rotator.wait_for_pgs_active_clean()
 
         min_rotated = min(MIN_ROTATED_OSDS_BEFORE_OPERATOR_KILL, osd_count - 1)
-        target_generation, rotated_deployments = (
-            rotator.kill_operator_during_partial_osd_rotation(
-                baseline_cephx_status,
-                min_rotated=min_rotated,
-                timeout=1500,
-            )
+        (
+            target_generation,
+            rotated_deployments,
+        ) = rotator.kill_operator_during_partial_osd_rotation(
+            baseline_cephx_status,
+            min_rotated=min_rotated,
+            timeout=1500,
         )
         assert rotated_deployments, "Expected partial OSD rotation before operator kill"
 
@@ -640,9 +642,10 @@ class TestCephXKeyRotationNegativeEncryptedCSI:
             lockbox_entities, label="lockbox keys before disruption"
         )
 
-        target_generation, self._scaled_mon_deployments = (
-            rotator.break_mon_quorum_during_lockbox_rotation(mons_to_stop=2)
-        )
+        (
+            target_generation,
+            self._scaled_mon_deployments,
+        ) = rotator.break_mon_quorum_during_lockbox_rotation(mons_to_stop=2)
         rotator.wait_for_mon_quorum_count_at_most(MON_QUORUM_BROKEN_MAX, timeout=300)
 
         rotator.assert_lockbox_auth_keys_present(lockbox_entities)
