@@ -18,8 +18,8 @@ jobs:
           GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r .tag_name)
           GITLEAKS_VERSION_NUM=${GITLEAKS_VERSION#v}
           echo "Installing gitleaks ${GITLEAKS_VERSION}"
-          wget https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION_NUM}_linux_x64.tar.gz
-          tar -xzf gitleaks_${GITLEAKS_VERSION_NUM}_linux_x64.tar.gz
+          wget https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks-${GITLEAKS_VERSION_NUM}-linux-x64.tar.gz
+          tar -xzf gitleaks-${GITLEAKS_VERSION_NUM}-linux-x64.tar.gz
           sudo mv gitleaks /usr/local/bin/
           gitleaks version
       - name: Install tox
