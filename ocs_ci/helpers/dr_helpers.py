@@ -3474,8 +3474,9 @@ def verify_dryrun_snapshots(namespace, vrg_name, expected_count, timeout=900):
             return None
         return snapshots
 
-    sample = TimeoutSampler(timeout=timeout, sleep=5, func=_check_snapshots)
-    sample.wait_for_func_value(lambda v: v is not None)
+    for snapshots in TimeoutSampler(timeout=timeout, sleep=5, func=_check_snapshots):
+        if snapshots is not None:
+            break
     logger.info(
         f"All {expected_count} dryRun VolumeSnapshot(s) are present "
         f"with correct labels and readyToUse=true in namespace '{namespace}'"
