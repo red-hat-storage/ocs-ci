@@ -6,6 +6,9 @@ Tools call ocs_ci.utility.jira.JiraHelper. Start this server with:
 """
 
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 TOOL_NAMES = (
     "jira_get_issue",
@@ -91,7 +94,8 @@ def jira_save_verification_report(
     reports/<version>/<issue_key>.yaml.
     This writes a local file. It does not update Jira. During --dry-run the
     saved report records dry_run so a later run can see that Jira and other
-    applications were left unchanged.
+    applications were left unchanged. A dry run still writes that file when
+    the OpenAI summary call fails, using the issue text already read.
 
     Args:
         version (str): Version name, for example odf-5.0.
@@ -102,13 +106,7 @@ def jira_save_verification_report(
         str: JSON with the saved path.
 
     """
-    from ocs_ci.agents.jira_verification.jenkins_cluster import cluster_check
     from ocs_ci.agents.jira_verification.report_store import write_verification_report
-    from ocs_ci.agents.jira_verification.summary import (
-        summarize_issue,
-        verification_steps_for_report,
-    )
-    from ocs_ci.agents.jira_verification.test_index import matching_tests
     from ocs_ci.agents.runtime.dry_run import dry_run_enabled
 
     report = json.loads(report_json)
@@ -116,20 +114,14 @@ def jira_save_verification_report(
     if isinstance(fetched, dict) and "parent_issues" in fetched:
         report["parent_issues"] = fetched["parent_issues"]
     source = fetched if isinstance(fetched, dict) else report
-    report["summary"] = summarize_issue(source)
-    report["verification_steps"] = verification_steps_for_report(
-        source,
-        report["summary"],
-        report.get("verification_steps"),
-        issue_key,
-    )
-    report["tests"] = matching_tests(source)
-    checked = cluster_check(report)
-    if checked:
-        report["cluster_check"] = checked
-    if dry_run_enabled():
+    dry_run = dry_run_enabled()
+    if dry_run:
         report["dry_run"] = True
+    _enrich_report(report, source, issue_key, dry_run)
+    if dry_run:
+        _fill_missing_report_fields(report, source)
     path = write_verification_report(version, issue_key, report)
+    logger.info(f"Saved verification report {path}")
     return json.dumps(
         {
             "key": issue_key,
@@ -137,6 +129,104 @@ def jira_save_verification_report(
             "dry_run": bool(report.get("dry_run")),
         }
     )
+
+
+def _enrich_report(report, source, issue_key, dry_run):
+    """
+    Add the summary, verification commands, tests, and cluster check.
+
+    A dry run writes the report from the collected issue when OpenAI cannot
+    summarize it or cannot fill commands. Any other run still raises that
+    error before a file is written.
+
+    Args:
+        report (dict): Report fields from the agent.
+        source (dict): Fetched issue, or the report when the issue was not
+            cached.
+        issue_key (str): Jira issue key.
+        dry_run (bool): True when this run must only write the local report.
+    """
+    from ocs_ci.agents.jira_verification.jenkins_cluster import cluster_check
+    from ocs_ci.agents.jira_verification.summary import (
+        summary_from_issue,
+        summarize_issue,
+        verification_steps_for_report,
+    )
+    from ocs_ci.agents.jira_verification.test_index import matching_tests
+
+    try:
+        report["summary"] = summarize_issue(source)
+    except Exception as error:
+        if not dry_run:
+            raise
+        logger.error(
+            f"OpenAI summary failed for {issue_key} ({type(error).__name__}). "
+            "Writing the dry-run report from the collected issue."
+        )
+        report["summary"] = summary_from_issue(source)
+    try:
+        report["verification_steps"] = verification_steps_for_report(
+            source,
+            report.get("summary"),
+            report.get("verification_steps"),
+            issue_key,
+        )
+    except Exception as error:
+        if not dry_run:
+            raise
+        logger.error(
+            f"OpenAI verification steps failed for {issue_key} "
+            f"({type(error).__name__}). Keeping the steps already collected."
+        )
+    try:
+        report["tests"] = matching_tests(source)
+    except Exception as error:
+        if not dry_run:
+            raise
+        logger.error(
+            f"Test matching failed for {issue_key} ({type(error).__name__}). "
+            "Saving the dry-run report without tests."
+        )
+        report["tests"] = []
+    checked = cluster_check(report)
+    if checked:
+        report["cluster_check"] = checked
+
+
+def _fill_missing_report_fields(report, source):
+    """
+    Fill report fields that the writer requires when the agent omitted them.
+
+    Args:
+        report (dict): Report fields about to be saved.
+        source (dict): Fetched issue, or the report itself.
+    """
+    source = source if isinstance(source, dict) else {}
+    if "bug_description" not in report:
+        report["bug_description"] = (
+            source.get("bug_description")
+            or source.get("description")
+            or source.get("summary")
+            or ""
+        )
+    for name in ("affected_version", "fix_version", "git_prs"):
+        if name not in report or report[name] is None:
+            report[name] = list(source.get(name) or [])
+    if "environment_reported" not in report:
+        report["environment_reported"] = str(
+            source.get("environment_reported") or source.get("environment") or ""
+        )
+    if "environment_verify" not in report:
+        versions = report.get("fix_version") or []
+        report["environment_verify"] = ", ".join(
+            str(version) for version in versions if str(version).strip()
+        )
+    if "upgrade_scenario" not in report:
+        report["upgrade_scenario"] = False
+    if not isinstance(report.get("verification_steps"), list):
+        report["verification_steps"] = []
+    if "additional_info" not in report:
+        report["additional_info"] = ""
 
 
 def _jira_helper():
