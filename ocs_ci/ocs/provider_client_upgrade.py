@@ -17,7 +17,6 @@ from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.ocs.acm_upgrade import ACMUpgrade
-from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
@@ -135,11 +134,42 @@ def approve_ocs_client_operator_upgrade(
     )
     if approval_mode == "Manual":
         log.info(
-            "Subscription uses Manual approval — waiting for InstallPlan and approving"
+            "Subscription uses Manual approval — waiting for ocs-client-operator InstallPlan"
         )
-        wait_for_install_plan_and_approve(
-            namespace=namespace, timeout=install_plan_timeout
-        )
+        # Wait specifically for an install plan that covers ocs-client-operator,
+        # then approve only that plan.  Using the generic wait_for_install_plan_and_approve
+        # would race against unrelated plans already pending in the namespace.
+        ocp_ip = OCP(kind="InstallPlan", namespace=namespace)
+        if cluster_kubeconfig:
+            ocp_ip = OCP(
+                kind="InstallPlan",
+                namespace=namespace,
+                cluster_kubeconfig=cluster_kubeconfig,
+            )
+        for plans in TimeoutSampler(
+            timeout=install_plan_timeout,
+            sleep=10,
+            func=ocp_ip.get,
+        ):
+            target = [
+                p
+                for p in plans.get("items", [])
+                if not p["spec"]["approved"]
+                and constants.OCS_CLIENT_OPERATOR
+                in p["spec"].get("clusterServiceVersionNames", [])
+            ]
+            if target:
+                for plan in target:
+                    plan_name = plan["metadata"]["name"]
+                    log.info(
+                        f"Approving InstallPlan '{plan_name}' for ocs-client-operator"
+                    )
+                    ocp_ip.patch(
+                        resource_name=plan_name,
+                        params='{"spec":{"approved":true}}',
+                        format_type="merge",
+                    )
+                break
     else:
         # Automatic approval: delete the catalog source pod so OLM reinitialises
         # its internal cache.  On HCP clusters the catalog-operator can hold a
@@ -565,14 +595,38 @@ class OperatorUpgrade(ProviderUpgrade):
             log.info("No consumer clusters found, skipping client upgrade")
             return
 
+        # Clients marked two_minor_versions_behind are intentionally left at an
+        # older channel so that test_alert_severity_escalates_to_critical can verify
+        # the critical-severity alert.  Exclude them from the upgrade loop; their
+        # alert instances will keep firing on the provider after this run.
+        retained_indexes = [
+            idx
+            for idx in consumer_indexes
+            if config.clusters[idx].ENV_DATA.get("two_minor_versions_behind", False)
+        ]
+        upgrade_indexes = [
+            idx for idx in consumer_indexes if idx not in retained_indexes
+        ]
+        if retained_indexes:
+            retained_names = [
+                config.get_cluster_name_by_index(i) for i in retained_indexes
+            ]
+            log.info(
+                f"Skipping upgrade for retained client(s) {retained_names} "
+                f"(two_minor_versions_behind=true); their alert will keep firing"
+            )
+        if not upgrade_indexes:
+            log.info("All consumer clusters are retained — nothing to upgrade")
+            return
+
         log.info(
             f"Upgrading ocs-client-operator to '{upgrade_channel}' on "
-            f"{len(consumer_indexes)} consumer cluster(s)"
+            f"{len(upgrade_indexes)} consumer cluster(s)"
         )
 
-        # Step 1: subscription channel must be unchanged on all clients
+        # Step 1: subscription channel must be unchanged on clients being upgraded
         log.info("Step 1: Verify subscription channel is unchanged on all clients")
-        for idx in consumer_indexes:
+        for idx in upgrade_indexes:
             cluster_name = config.get_cluster_name_by_index(idx)
             with config.RunWithConfigContext(idx):
                 verify_client_subscription_channel_unchanged(
@@ -591,7 +645,7 @@ class OperatorUpgrade(ProviderUpgrade):
         )
 
         # Step 3: per-client staged upgrade with alert validation
-        for loop_pos, idx in enumerate(consumer_indexes):
+        for loop_pos, idx in enumerate(upgrade_indexes):
             cluster_name = config.get_cluster_name_by_index(idx)
 
             log.info(
@@ -621,24 +675,38 @@ class OperatorUpgrade(ProviderUpgrade):
                 "open bug: https://redhat.atlassian.net/browse/DFBUGS-10826"
             )
 
-            remaining_clients = len(consumer_indexes) - loop_pos - 1
-            if remaining_clients > 0:
+            # After this client's upgrade, the remaining firing count equals:
+            # clients not yet upgraded + retained clients that are intentionally kept behind.
+            remaining_upgrade = len(upgrade_indexes) - loop_pos - 1
+            expected_remaining = remaining_upgrade + len(retained_indexes)
+            if expected_remaining > 0:
                 log.info(
                     f"Step 3d [{cluster_name}]: Verify provider alert count dropped to "
-                    f"{remaining_clients} (one fewer than before this client's upgrade)"
+                    f"{expected_remaining} ({remaining_upgrade} pending upgrade + "
+                    f"{len(retained_indexes)} retained)"
                 )
                 verify_incompatible_operator_version_alert_count(
-                    expected_count=remaining_clients, timeout=600
+                    expected_count=expected_remaining, timeout=600
                 )
 
             log.info(f"Client '{cluster_name}' upgraded successfully")
 
-        # Step 4: IncompatibleOperatorVersion must clear on the provider
-        log.info(
-            "Step 4: Verify StorageClientIncompatibleOperatorVersion cleared on provider"
-        )
-        verify_incompatible_operator_version_alert_cleared(timeout=900)
-        log.info("All clients upgraded — provider alert cleared")
+        # Step 4: after all upgradeable clients are done the alert count should
+        # equal the number of intentionally retained clients (may be 0).
+        if retained_indexes:
+            log.info(
+                f"Step 4: Verify provider alert count is {len(retained_indexes)} "
+                f"(retained clients keep the alert firing)"
+            )
+            verify_incompatible_operator_version_alert_count(
+                expected_count=len(retained_indexes), timeout=900
+            )
+        else:
+            log.info(
+                "Step 4: Verify StorageClientIncompatibleOperatorVersion cleared on provider"
+            )
+            verify_incompatible_operator_version_alert_cleared(timeout=900)
+        log.info("All upgradeable clients done — provider alert at expected level")
 
 
 class KubevirtClusterUpgrade(ProviderUpgrade):
