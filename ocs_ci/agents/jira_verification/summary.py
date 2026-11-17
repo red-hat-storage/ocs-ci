@@ -59,6 +59,34 @@ _MUTATING = re.compile(
 )
 
 
+def summary_from_issue(issue):
+    """
+    Build a summary from issue text without calling a model.
+
+    A dry run uses this when OpenAI cannot summarize the issue, so the local
+    report file is still written from the text already collected.
+
+    Args:
+        issue (dict): Verification payload, or the report fields when the
+            payload was not cached.
+
+    Returns:
+        dict: issue, reproduction_steps, and expected_results.
+    """
+    source = issue_text_for_summary(issue)
+    sections = source.get("sections")
+    if not isinstance(sections, dict):
+        sections = {}
+    title = str(source.get("title") or "").strip()
+    description = str(source.get("description") or "").strip()
+    first_line = description.split("\n", 1)[0].strip() if description else ""
+    return {
+        "issue": title or first_line,
+        "reproduction_steps": _string_list(sections.get("steps_to_reproduce")),
+        "expected_results": _string_list(sections.get("expected_results")),
+    }
+
+
 def summarize_issue(issue):
     """
     Ask OpenAI for a short summary of one issue.
