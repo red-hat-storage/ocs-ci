@@ -389,4 +389,15 @@ class TestMultipleDeviceClassesUI(ManageTest):
         self.available_pvs_count = verify_available_pvs_for_deviceclass()
         attach_storage = PageNavigator().nav_to_attach_storage_page()
         self.new_device_class_name = attach_storage.send_form_with_default_values()
+        log.info("Verify toast alert for attach storage")
+        assert (
+            "Storage attached" in attach_storage.toast_title
+        ), f"Expected toast title 'Storage attached', got: {attach_storage.toast_title}"
+        assert (
+            "A new storage device class set is being provisioned."
+            in attach_storage.toast_description
+        ), (
+            "Expected device class provisioning text in toast description, "
+            f"got: {attach_storage.toast_description}"
+        )
         self.post_deviceclass_checks()

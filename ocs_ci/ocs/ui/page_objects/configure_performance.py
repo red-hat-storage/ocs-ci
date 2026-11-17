@@ -327,13 +327,23 @@ class ConfigurePerformancePage(StorageClusterPage):
         wait_for_element_to_be_clickable(option_loc).click()
         return self
 
-    def save_configuration(self):
+    def save_configuration(self, expected_toast_text=None):
         """Save configuration and wait for the page to navigate away.
+
+        When expected_toast_text is set, the toast alert is read immediately
+        after the click, before the page navigates away. The title and
+        description are stored on this page object.
+
+        Args:
+            expected_toast_text (str): Text expected in the toast alert.
 
         Returns:
             ConfigurePerformancePage: self
         """
         logger.info("Saving configuration")
+        if expected_toast_text:
+            self.toast_title = ""
+            self.toast_description = ""
         save_button = self.configure_performance_loc["save_button"]
 
         try:
@@ -348,6 +358,10 @@ class ConfigurePerformancePage(StorageClusterPage):
         original_url = SeleniumDriver().current_url
         logger.info("Clicking Save button, waiting for page navigation")
         save_btn.click()
+        if expected_toast_text:
+            self.toast_title, self.toast_description = self.get_toast_alert_text(
+                expected_toast_text
+            )
 
         try:
             WebDriverWait(SeleniumDriver(), 30).until(ec.url_changes(original_url))

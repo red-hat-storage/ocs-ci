@@ -22,6 +22,19 @@ logger = logging.getLogger(__name__)
 # change and the Save button is never disabled.
 CORE_BASELINE, CORE_ALONE, CORE_COMBINED = "balanced", "lean", "performance"
 MCG_BASELINE, MCG_ALONE, MCG_COMBINED = "default", "mixed-workload", "small-objects"
+CORE_PROFILES = (CORE_BASELINE, CORE_ALONE, CORE_COMBINED)
+MCG_PROFILES = (MCG_BASELINE, MCG_ALONE, MCG_COMBINED)
+CORE_TOAST_TITLE = "Core profile updated"
+CORE_TOAST_DESCRIPTION = (
+    "Pod and service restarts have been scheduled. "
+    "Storage may be unavailable for a few minutes."
+)
+MCG_TOAST_TITLE = "Multicloud Object Gateway profile updated"
+MCG_TOAST_DESCRIPTION = (
+    "MCG service restarts have been scheduled. "
+    "Object storage may be unavailable for a few minutes."
+)
+BOTH_TOAST_TITLE = "Performance profiles updated"
 
 
 class TestConfigurePerformancePageLayout:
@@ -562,3 +575,177 @@ class TestProfileSectionIndependence:
                         "Waiting for NooBaa to settle after the restore failed"
                     )
         logger.info("✅ UI-5 PASSED")
+
+
+def _different_profile(current, profiles):
+    """Return a profile other than the one currently set."""
+    for profile in profiles:
+        if profile != current:
+            return profile
+    return profiles[0]
+
+
+def _toast_for_profile_change(core_changed, mcg_changed):
+    """Pick the toast alert for a one-profile or both-profile save.
+
+    One changed profile uses that profile's own title. Both changed profiles
+    use the combined title. The core and combined alerts share a description,
+    so the title is what distinguishes them.
+    """
+    if core_changed and mcg_changed:
+        return BOTH_TOAST_TITLE, CORE_TOAST_DESCRIPTION
+    if core_changed:
+        return CORE_TOAST_TITLE, CORE_TOAST_DESCRIPTION
+    if mcg_changed:
+        return MCG_TOAST_TITLE, MCG_TOAST_DESCRIPTION
+    raise AssertionError("Save did not change a profile, so no toast alert is expected")
+
+
+def _assert_saved_toast(page, core_before, mcg_before):
+    """Assert the toast alert for the profile change since core_before."""
+    core_changed = page.get_core_storage_profile_from_ui() != core_before
+    mcg_changed = page.get_mcg_profile_from_ui() != mcg_before
+    title, description = _toast_for_profile_change(core_changed, mcg_changed)
+    logger.info(
+        "Profile change before save - core: %s, mcg: %s. Expect toast alert '%s'",
+        core_changed,
+        mcg_changed,
+        title,
+    )
+    page.save_configuration(title)
+    logger.info("Verify toast alert '%s'", title)
+    assert (
+        title in page.toast_title
+    ), f"Expected toast title '{title}', got: {page.toast_title}"
+    if core_changed and mcg_changed:
+        assert CORE_TOAST_TITLE not in page.toast_title
+        assert MCG_TOAST_TITLE not in page.toast_title
+    else:
+        assert (
+            BOTH_TOAST_TITLE not in page.toast_title
+        ), f"Expected a one-profile toast alert, got: {page.toast_title}"
+    assert (
+        description in page.toast_description
+    ), f"Expected toast description '{description}', got: {page.toast_description}"
+
+
+class TestPerformanceProfileToastAlerts:
+    """Test the toast alerts shown when performance profiles are saved."""
+
+    @ui
+    @tier2
+    @red_squad
+    @mcg
+    @skipif_mcg_only
+    @skipif_hci_client
+    @skipif_disconnected_cluster
+    @skipif_ibm_cloud_managed
+    def test_performance_profile_toast_alerts(self, setup_ui_class):
+        """Verify the toast alert for a core, MCG, and combined profile save.
+
+        A core-only save reports 'Core profile updated'. An MCG-only save
+        reports 'Multicloud Object Gateway profile updated'. Saving both
+        reports 'Performance profiles updated'.
+        """
+        navigator = PageNavigator()
+        initial_core_profile = None
+        initial_mcg_profile = None
+        profiles_recorded = False
+        configure_perf_page = None
+        try:
+            logger.test_step("Navigate to Configure Performance page")
+            storage_cluster_page = navigator.nav_storage_cluster_default_page()
+            configure_perf_page = (
+                storage_cluster_page.click_configure_performance_button()
+            )
+
+            try:
+                initial_core_profile = (
+                    configure_perf_page.get_core_storage_profile_from_cr()
+                )
+            except ValueError:
+                logger.info("Core Storage resourceProfile is unset at the start")
+            try:
+                initial_mcg_profile = configure_perf_page.get_mcg_profile_from_cr()
+            except ValueError:
+                logger.info("MCG performanceProfile is unset at the start")
+            profiles_recorded = True
+
+            core_before = configure_perf_page.get_core_storage_profile_from_ui()
+            mcg_before = configure_perf_page.get_mcg_profile_from_ui()
+            core_profile = _different_profile(core_before, CORE_PROFILES)
+            logger.test_step(
+                f"Change only the Core Storage profile to '{core_profile}'"
+            )
+            configure_perf_page.select_core_storage_profile(core_profile)
+            _assert_saved_toast(configure_perf_page, core_before, mcg_before)
+
+            configure_perf_page = configure_perf_page.reopen()
+            core_before = configure_perf_page.get_core_storage_profile_from_ui()
+            mcg_before = configure_perf_page.get_mcg_profile_from_ui()
+            mcg_profile = _different_profile(mcg_before, MCG_PROFILES)
+            logger.test_step(f"Change only the MCG profile to '{mcg_profile}'")
+            configure_perf_page.select_mcg_profile(mcg_profile)
+            _assert_saved_toast(configure_perf_page, core_before, mcg_before)
+
+            configure_perf_page = configure_perf_page.reopen()
+            core_before = configure_perf_page.get_core_storage_profile_from_ui()
+            mcg_before = configure_perf_page.get_mcg_profile_from_ui()
+            combined_core = _different_profile(core_before, CORE_PROFILES)
+            combined_mcg = _different_profile(mcg_before, MCG_PROFILES)
+            logger.test_step(
+                f"Change both profiles: Core Storage '{combined_core}', "
+                f"MCG '{combined_mcg}'"
+            )
+            configure_perf_page.select_core_storage_profile(combined_core)
+            configure_perf_page.select_mcg_profile(combined_mcg)
+            _assert_saved_toast(configure_perf_page, core_before, mcg_before)
+        finally:
+            if not profiles_recorded:
+                logger.warning(
+                    "Starting profiles were never recorded, leaving the "
+                    "StorageCluster CR untouched"
+                )
+            else:
+                logger.test_step(
+                    f"Restore the initial profiles - Core Storage "
+                    f"'{initial_core_profile}', MCG '{initial_mcg_profile}'"
+                )
+                try:
+                    storage_cluster_page = navigator.nav_storage_cluster_default_page()
+                    configure_perf_page = (
+                        storage_cluster_page.click_configure_performance_button()
+                    )
+                    configure_perf_page.select_core_storage_profile(
+                        initial_core_profile or CORE_BASELINE
+                    )
+                    configure_perf_page.select_mcg_profile(
+                        initial_mcg_profile or MCG_BASELINE
+                    )
+                    configure_perf_page.save_configuration()
+                except Exception:
+                    logger.exception("Restoring the profiles through the UI failed")
+
+                if initial_core_profile is None and configure_perf_page:
+                    try:
+                        configure_perf_page.remove_core_storage_profile()
+                    except Exception:
+                        logger.exception("Clearing spec.resourceProfile failed")
+                if initial_mcg_profile is None and configure_perf_page:
+                    try:
+                        configure_perf_page.remove_mcg_profile()
+                    except Exception:
+                        logger.exception(
+                            "Clearing spec.multiCloudGateway.performanceProfile failed"
+                        )
+
+                try:
+                    logger.test_step(
+                        "Wait for NooBaa to become Ready after the restore"
+                    )
+                    noobaa_phase = configure_perf_page.wait_for_noobaa_ready()
+                    logger.info("NooBaa phase after restore: %s", noobaa_phase)
+                except Exception:
+                    logger.exception(
+                        "Waiting for NooBaa to settle after the restore failed"
+                    )

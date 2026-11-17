@@ -61,30 +61,47 @@ class TestAddCapacityUI(object):
         infra_ui_obj = AddReplaceDeviceUI()
         infra_ui_obj.add_capacity_ui()
 
-        logger.info("Wait for osd pods to be in Running state")
-        for osd_pods in TimeoutSampler(
-            timeout=600,
-            sleep=10,
-            func=get_osd_pods,
-        ):
-            if len(osd_pods) == (osd_count + 3):
-                break
-
-        osd_pod_names = list()
-        for osd_pod in osd_pods:
-            wait_for_resource_state(
-                resource=osd_pod, state=constants.STATUS_RUNNING, timeout=300
+        logger.info("Verify toast alert for capacity expansion triggered")
+        try:
+            toast_title, toast_desc = infra_ui_obj.get_toast_alert_text(
+                "Capacity expansion triggered"
             )
-            osd_pod_names.append(osd_pod.name)
+            assert (
+                "Capacity expansion triggered" in toast_title
+            ), f"Expected toast title 'Capacity expansion triggered', got: {toast_title}"
+            assert (
+                "Additional OSDs are being provisioned. This may take several minutes."
+                in toast_desc
+            ), (
+                "Expected OSD provisioning text in toast description, "
+                f"got: {toast_desc}"
+            )
+            logger.info("Toast alert verified successfully for capacity expansion")
+        finally:
+            logger.info("Wait for osd pods to be in Running state")
+            for osd_pods in TimeoutSampler(
+                timeout=600,
+                sleep=10,
+                func=get_osd_pods,
+            ):
+                if len(osd_pods) == (osd_count + 3):
+                    break
 
-        logger.info("Verify via ui, all osd pods in Running state")
-        infra_ui_obj.verify_pod_status(pod_names=osd_pod_names)
+            osd_pod_names = list()
+            for osd_pod in osd_pods:
+                wait_for_resource_state(
+                    resource=osd_pod, state=constants.STATUS_RUNNING, timeout=300
+                )
+                osd_pod_names.append(osd_pod.name)
 
-        logger.info("Wait data re-balance to complete")
-        ceph_cluster_obj = CephCluster()
-        assert ceph_cluster_obj.wait_for_rebalance(
-            timeout=5400
-        ), "Data re-balance failed to complete"
+            logger.info("Verify via ui, all osd pods in Running state")
+            infra_ui_obj.verify_pod_status(pod_names=osd_pod_names)
 
-        if config.ENV_DATA.get("encryption_at_rest"):
-            osd_encryption_verification()
+            logger.info("Wait data re-balance to complete")
+            ceph_cluster_obj = CephCluster()
+            assert ceph_cluster_obj.wait_for_rebalance(
+                timeout=5400
+            ), "Data re-balance failed to complete"
+
+            if config.ENV_DATA.get("encryption_at_rest"):
+                osd_encryption_verification()
