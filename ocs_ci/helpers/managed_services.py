@@ -235,7 +235,7 @@ def verify_osd_distribution_on_provider():
         # 4Ti is the size of OSD
         assert (
             osd_count == int(size) / 4
-        ), f"Zone {zone} does not have {size/4} osd, but {osd_count}"
+        ), f"Zone {zone} does not have {size / 4} osd, but {osd_count}"
 
 
 def verify_storageclient(

@@ -2647,7 +2647,7 @@ def create_and_attach_ebs_volumes(
                     instance_id=worker["id"],
                     name=f"{worker['name']}_extra_volume_{number}",
                     size=size,
-                    device=f"/dev/{device_names[number-1]}",
+                    device=f"/dev/{device_names[number - 1]}",
                 )
 
 

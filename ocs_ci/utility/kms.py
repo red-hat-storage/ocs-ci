@@ -449,7 +449,7 @@ class Vault(KMS):
         if self.vault_sealed():
             logger.info("Vault is sealed, Unsealing now..")
             for i in range(3):
-                kkey = f"UNSEAL_KEY{i+1}"
+                kkey = f"UNSEAL_KEY{i + 1}"
                 self._vault_unseal(self.vault_conf[kkey])
             # Check if vault is unsealed or not
             if self.vault_sealed():

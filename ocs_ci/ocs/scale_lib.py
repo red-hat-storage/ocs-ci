@@ -333,7 +333,7 @@ class FioPodScale(object):
             if actual_itr_counter == expected_itr_counter:
                 logger.info(
                     f"Scaled {scale_pvc_count} PVCs and created "
-                    f"{scale_pvc_count/pvc_per_pod_count} PODs"
+                    f"{scale_pvc_count / pvc_per_pod_count} PODs"
                 )
                 # TODO: Removing PG balancer validation, due to PG auto_scale enabled
                 # TODO: sometime PG's can't be equally distributed across OSDs
@@ -352,13 +352,13 @@ class FioPodScale(object):
                     max_pvc_size=max_pvc_size,
                 )
                 logger.info(
-                    f"Scaled {len(rbd_pvc)+len(fs_pvc)} PVCs and Created "
+                    f"Scaled {len(rbd_pvc) + len(fs_pvc)} PVCs and Created "
                     f"{len(pod_running)} PODs in interation {actual_itr_counter}"
                 )
 
         logger.info(
             f"Scaled {actual_itr_counter * min_pvc_count} PVC's and Created "
-            f"{int(actual_itr_counter * (min_pvc_count/pvc_per_pod_count))} PODs"
+            f"{int(actual_itr_counter * (min_pvc_count / pvc_per_pod_count))} PODs"
         )
 
         return self.kube_job_pod_list, self.kube_job_pvc_list
@@ -1299,7 +1299,7 @@ def check_all_pvc_reached_bound_state_in_kube_job(
             # And if PVCs still not in bound state then there will be assert.
             if while_iteration_count >= 10:
                 assert logger.error(
-                    f" Listed PVCs took more than {timeout*10} secs to bound {pvc_not_bound_list}"
+                    f" Listed PVCs took more than {timeout * 10} secs to bound {pvc_not_bound_list}"
                 )
                 break
             pvc_not_bound_list.clear()
@@ -1872,7 +1872,7 @@ def validate_all_expanded_pvc_size_in_kube_job(
             # And if PVCs size still not extended then there will be assert.
             if while_iteration_count >= 10:
                 assert logger.error(
-                    f" Listed PVC size not expanded in {timeout*10} secs, PVCs {pvc_not_extended_list}"
+                    f" Listed PVC size not expanded in {timeout * 10} secs, PVCs {pvc_not_extended_list}"
                 )
                 break
             pvc_not_extended_list.clear()
