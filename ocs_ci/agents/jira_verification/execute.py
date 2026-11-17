@@ -42,10 +42,11 @@ def execute_saved_reports(request):
             and GitHub.
 
     Returns:
-        dict: JSON-ready result with one entry per issue.
+        dict: JSON-ready result with one entry per issue. ok is false when
+            any issue raised. That issue is logged and the next issue still runs.
 
     Raises:
-        ValueError: The release, issue, cluster, or plan file is missing.
+        ValueError: The release, issue list, or cluster is missing.
     """
     args = request.get("args") or {}
     version = str(args.get("release") or "").strip()
@@ -64,22 +65,33 @@ def execute_saved_reports(request):
     if kubeconfig and not Path(kubeconfig).is_file():
         raise ValueError(f"kubeconfig was not found: {kubeconfig}")
     results = []
-    for key in issues:
-        results.append(
-            _execute_one(
-                version,
-                key,
-                kubeconfig,
-                dry_run,
-                str(args.get("cluster") or "").strip(),
+    errors = []
+    cluster = str(args.get("cluster") or "").strip()
+    for index, key in enumerate(issues, start=1):
+        logger.info(f"Executing verification for {key} ({index}/{len(issues)})")
+        try:
+            results.append(_execute_one(version, key, kubeconfig, dry_run, cluster))
+        except Exception as error:
+            logger.exception(f"Verification failed for {key}: {error}")
+            errors.append({"key": key, "error": str(error)})
+            results.append(
+                {
+                    "key": key,
+                    "status": "failed",
+                    "saved": "",
+                    "github_issue": "",
+                    "verification_report": "",
+                    "error": str(error),
+                }
             )
-        )
+            continue
     return {
-        "ok": True,
+        "ok": not errors,
         "agent": request.get("agent"),
         "execute": True,
         "dry_run": dry_run,
         "results": results,
+        "errors": errors,
     }
 
 

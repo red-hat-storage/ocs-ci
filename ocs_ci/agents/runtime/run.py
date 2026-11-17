@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import copy
 import importlib.util
 import json
 import logging
@@ -310,6 +311,171 @@ def agent_state(request):
 
 def invoke_agent(agent_dir, request):
     """
+    Compile the agent graph and run it.
+
+    jira_verification runs one issue at a time. A failure is logged and the
+    next issue still runs.
+
+    Args:
+        agent_dir (Path): Agent directory.
+        request (dict): Value returned by build_request.
+
+    Returns:
+        dict: JSON-ready result with ok, the agent name, the final reply, and
+            the graph state. A jira_verification result also lists each issue.
+
+    Raises:
+        NotImplementedError: The shared LangGraph builder is not connected yet.
+    """
+    configure_agent_logging()
+    logger.info(f"Starting {describe_run(request)}")
+    with activate_provider(request), activate_dry_run(request):
+        if request.get("agent") == "jira_verification":
+            return run_each_issue(request, lambda one: _invoke_graph(agent_dir, one))
+        return _invoke_graph(agent_dir, request)
+
+
+def run_each_issue(request, invoke_one):
+    """
+    Run one Jira issue at a time and keep going after a failure.
+
+    Args:
+        request (dict): Value returned by build_request.
+        invoke_one (callable): Runs the agent for a request that names one issue.
+
+    Returns:
+        dict: JSON-ready result. ok is false when any issue failed. errors
+            lists those failures. results lists every issue that was attempted.
+    """
+    try:
+        issues = issue_keys_for_request(request)
+    except Exception as error:
+        logger.exception(f"Could not list Jira issues: {error}")
+        return {
+            "ok": False,
+            "agent": request.get("agent"),
+            "jenkins": request.get("jenkins"),
+            "reply": "",
+            "error": str(error),
+            "results": [],
+            "errors": [{"key": "", "error": str(error)}],
+        }
+    if not issues:
+        logger.info("No ON_QA issues to verify")
+        return {
+            "ok": True,
+            "agent": request.get("agent"),
+            "jenkins": request.get("jenkins"),
+            "reply": "No ON_QA issues to verify",
+            "results": [],
+            "errors": [],
+        }
+    results = []
+    errors = []
+    for index, key in enumerate(issues, start=1):
+        logger.info(f"Starting issue {key} ({index}/{len(issues)})")
+        try:
+            result = invoke_one(_request_for_issue(request, key))
+        except Exception as error:
+            logger.exception(f"jira_verification failed for {key}: {error}")
+            errors.append({"key": key, "error": str(error)})
+            results.append({"key": key, "ok": False, "error": str(error)})
+            continue
+        results.append(
+            {
+                "key": key,
+                "ok": True,
+                "reply": (result or {}).get("reply") or "",
+            }
+        )
+    logger.info(
+        f"Finished {len(issues)} issues, {len(errors)} failed, "
+        f"{len(issues) - len(errors)} succeeded"
+    )
+    return {
+        "ok": not errors,
+        "agent": request.get("agent"),
+        "jenkins": request.get("jenkins"),
+        "reply": _issue_run_reply(results),
+        "results": results,
+        "errors": errors,
+    }
+
+
+def issue_keys_for_request(request):
+    """
+    Return the Jira keys this verification run should process.
+
+    Named issues are used as given. Otherwise the ON_QA issues for the
+    release, or for the version in the message, are listed from Jira.
+
+    Args:
+        request (dict): Value returned by build_request.
+
+    Returns:
+        list: Issue keys, in the order they should run.
+    """
+    args = request.get("args") or {}
+    keys = [str(key).strip() for key in (args.get("issues") or []) if str(key).strip()]
+    if keys:
+        return keys
+    release = str(args.get("release") or "").strip()
+    message = str(request.get("message") or "").strip()
+    version = message.splitlines()[0].strip() if message else ""
+    if not release and not version:
+        return []
+    from ocs_ci.utility.jira import JiraHelper, resolve_agent_jira_auth
+
+    project = str(args.get("project") or "DFBUGS").strip() or "DFBUGS"
+    found = JiraHelper(auth=resolve_agent_jira_auth()).search_on_qa(
+        version, project=project, release=release or None
+    )
+    return [
+        str(item.get("key")).strip()
+        for item in found
+        if isinstance(item, dict) and str(item.get("key") or "").strip()
+    ]
+
+
+def _request_for_issue(request, issue_key):
+    """
+    Copy a run request so the agent handles one issue.
+
+    Args:
+        request (dict): Value returned by build_request.
+        issue_key (str): Jira issue key.
+
+    Returns:
+        dict: Request whose args.issues is that one key.
+    """
+    copied = copy.deepcopy(request)
+    args = dict(copied.get("args") or {})
+    args["issues"] = [issue_key]
+    copied["args"] = args
+    return copied
+
+
+def _issue_run_reply(results):
+    """
+    Summarize one-issue runs for the Jenkins result.
+
+    Args:
+        results (list): Per-issue results from run_each_issue.
+
+    Returns:
+        str: One line per issue.
+    """
+    lines = []
+    for item in results:
+        if item.get("ok"):
+            lines.append(f"{item.get('key')}: ok")
+        else:
+            lines.append(f"{item.get('key')}: {item.get('error')}")
+    return "\n".join(lines)
+
+
+def _invoke_graph(agent_dir, request):
+    """
     Compile the agent graph and run it once.
 
     Args:
@@ -322,6 +488,7 @@ def invoke_agent(agent_dir, request):
 
     Raises:
         NotImplementedError: The shared LangGraph builder is not connected yet.
+        Exception: The graph run failed.
     """
 
     async def _run():
@@ -335,10 +502,7 @@ def invoke_agent(agent_dir, request):
             },
         )
 
-    configure_agent_logging()
-    logger.info(f"Starting {describe_run(request)}")
-    with activate_provider(request), activate_dry_run(request):
-        state = asyncio.run(_run())
+    state = asyncio.run(_run())
     reply = _final_reply(state)
     logger.info(f"Agent {request['agent']} finished: {_reply_for_log(reply)}")
     return {
@@ -535,7 +699,9 @@ def _verify_collected_reports(request, collected):
     """
     if request.get("agent") != "jira_verification":
         return collected
-    if not isinstance(collected, dict) or not collected.get("ok", True):
+    if not isinstance(collected, dict):
+        return collected
+    if collected.get("error") and not collected.get("results"):
         return collected
     args = request.get("args") or {}
     if args.get("dry_run"):
