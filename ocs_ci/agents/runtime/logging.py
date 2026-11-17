@@ -53,8 +53,8 @@ def describe_run(request):
         request (dict): Value returned by build_request.
 
     Returns:
-        str: Agent, provider, and the issue, release, cluster, and dry-run
-            arguments when they were set.
+        str: Agent, provider, and the issue, release, cluster, collection,
+            execute, and dry-run arguments when they were set.
     """
     args = request.get("args") or {}
     provider = (
@@ -68,6 +68,10 @@ def describe_run(request):
         parts.append(f"release {args['release']}")
     if args.get("cluster"):
         parts.append(f"cluster {args['cluster']}")
+    if request.get("collection"):
+        parts.append("collection")
+    if request.get("execute"):
+        parts.append("execute")
     if args.get("dry_run"):
         parts.append("dry-run")
     return ", ".join(parts)
