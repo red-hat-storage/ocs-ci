@@ -123,7 +123,7 @@ class TestRawBlockPV(ManageTest):
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
-                    size=f"{random.randint(10,200)}M",
+                    size=f"{random.randint(10, 200)}M",
                     invalidate=0,
                 )
             for pod in pvc_gb_pods:
@@ -131,7 +131,7 @@ class TestRawBlockPV(ManageTest):
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
-                    size=f"{random.randint(1,5)}G",
+                    size=f"{random.randint(1, 5)}G",
                     invalidate=0,
                 )
             for pod in pvc_tb_pods:
@@ -139,7 +139,7 @@ class TestRawBlockPV(ManageTest):
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
-                    size=f"{random.randint(10,15)}G",
+                    size=f"{random.randint(10, 15)}G",
                     invalidate=0,
                 )
 

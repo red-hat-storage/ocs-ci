@@ -131,7 +131,7 @@ class TestMonLogTrimming(E2ETest):
             selected_osd_pod_obj = random.choice(osd_pod_list)
             log.info(
                 f"Deleting osd pod {selected_osd_pod_obj.get().get('metadata').get('name')}. "
-                f"Deletion #{num_of_deletions+1}"
+                f"Deletion #{num_of_deletions + 1}"
             )
             pod.delete_pods(pod_objs=[selected_osd_pod_obj])
             num_of_deletions = num_of_deletions + 1

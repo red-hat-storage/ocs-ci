@@ -71,7 +71,7 @@ class TestRbdBlockPvc(ManageTest):
             log.info("Run IO from one pod")
             io_pod.run_io(
                 storage_type="block",
-                size=f"{int(self.pvc_size/2)}M",
+                size=f"{int(self.pvc_size / 2)}M",
                 io_direction="write",
                 runtime=5,
                 end_fsync=1,
@@ -136,7 +136,7 @@ class TestRbdBlockPvc(ManageTest):
         log.info("Run IO from new pod")
         pod_obj_new.run_io(
             storage_type="block",
-            size=f"{int(self.pvc_size/2)}M",
+            size=f"{int(self.pvc_size / 2)}M",
             io_direction="write",
             runtime=30,
             end_fsync=1,
