@@ -344,17 +344,26 @@ def invoke_agent(agent_dir, request):
     logger.info(f"Starting {describe_run(request)}")
     with activate_provider(request), activate_dry_run(request):
         if request.get("agent") == "jira_verification":
-            return run_each_issue(request, lambda one: _invoke_graph(agent_dir, one))
+
+            async def invoke_one(one):
+                state = await _ainvoke_graph(agent_dir, one)
+                return _result_from_state(one, state)
+
+            # One loop for every issue. A fresh asyncio.run per issue closes
+            # the loop while the async HTTP client from the previous issue is
+            # still cached, and the next issue fails with "Event loop is closed".
+            return asyncio.run(run_each_issue(request, invoke_one))
         return _invoke_graph(agent_dir, request)
 
 
-def run_each_issue(request, invoke_one):
+async def run_each_issue(request, invoke_one):
     """
     Run one Jira issue at a time and keep going after a failure.
 
     Args:
         request (dict): Value returned by build_request.
-        invoke_one (callable): Runs the agent for a request that names one issue.
+        invoke_one (callable): Async callable that runs one issue. Every issue
+            shares the caller's event loop.
 
     Returns:
         dict: JSON-ready result. ok is false when any issue failed. errors
@@ -388,7 +397,7 @@ def run_each_issue(request, invoke_one):
     for index, key in enumerate(issues, start=1):
         logger.info(f"Starting issue {key} ({index}/{len(issues)})")
         try:
-            result = invoke_one(_request_for_issue(request, key))
+            result = await invoke_one(_request_for_issue(request, key))
         except Exception as error:
             logger.exception(f"jira_verification failed for {key}: {error}")
             errors.append({"key": key, "error": str(error)})
@@ -504,18 +513,46 @@ def _invoke_graph(agent_dir, request):
         Exception: The graph run failed.
     """
 
-    async def _run():
-        make_graph = load_make_graph(agent_dir)
-        graph = await make_graph()
-        return await graph.ainvoke(
-            agent_state(request),
-            config={
-                "recursion_limit": _recursion_limit(),
-                "callbacks": agent_run_callbacks(),
-            },
-        )
+    return _result_from_state(request, asyncio.run(_ainvoke_graph(agent_dir, request)))
 
-    state = asyncio.run(_run())
+
+async def _ainvoke_graph(agent_dir, request):
+    """
+    Compile the agent graph and run it on the current event loop.
+
+    Args:
+        agent_dir (Path): Agent directory.
+        request (dict): Value returned by build_request.
+
+    Returns:
+        dict: Final graph state.
+
+    Raises:
+        NotImplementedError: The shared LangGraph builder is not connected yet.
+        Exception: The graph run failed.
+    """
+    make_graph = load_make_graph(agent_dir)
+    graph = await make_graph()
+    return await graph.ainvoke(
+        agent_state(request),
+        config={
+            "recursion_limit": _recursion_limit(),
+            "callbacks": agent_run_callbacks(),
+        },
+    )
+
+
+def _result_from_state(request, state):
+    """
+    Build the JSON result for one finished graph run.
+
+    Args:
+        request (dict): Value returned by build_request.
+        state (dict): Final graph state.
+
+    Returns:
+        dict: ok, the agent name, the final reply, and the public state.
+    """
     reply = _final_reply(state)
     logger.info(f"Agent {request['agent']} finished: {_reply_for_log(reply)}")
     return {
