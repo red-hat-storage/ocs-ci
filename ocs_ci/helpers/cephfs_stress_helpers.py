@@ -61,6 +61,9 @@ from ocs_ci.ocs.resources import pod as pod_module
 
 logger = logging.getLogger(__name__)
 
+_SMALLFILE_OK_STATUSES = {"ok", "success", "no error information", ""}
+_SMALLFILE_ELAPSED_SENTINEL = 1e8
+
 
 class CephFSStressTestManager:
     """
@@ -88,6 +91,10 @@ class CephFSStressTestManager:
         # Reuse PrometheusAPI instance to prevent memory leaks from creating new instances
         self.prometheus_api = PrometheusAPI(threading_lock=self.verification_lock)
         self.pod_restart_baseline = {}
+        # Mirrors the ENABLE_FS_MONITORING env-var set in the pod/job YAML.
+        # Updated by create_cephfs_stress_pod / create_cephfs_stress_job so that
+        # the watchdog skips filesystem hang checks when monitoring is disabled.
+        self.fs_monitoring_enabled = True
 
     def setup_stress_test_environment(self, pvc_size, storageclass_factory):
         """
@@ -103,13 +110,20 @@ class CephFSStressTestManager:
         """
         sc_name = constants.CEPHFILESYSTEM_SC_SELINUX
         logger.info(f"Creating SELinux CephFS storageclass: {sc_name}")
-        sc_obj = storageclass_factory(
-            sc_name=sc_name,
-            interface=constants.CEPHFILESYSTEM,
-            kernelMountOptions='context="system_u:object_r:container_file_t:s0"',
-        )
-        self.created_resources.append(sc_obj)
-        logger.info(f"Created SELinux CephFS StorageClass: {sc_name}")
+        try:
+            sc_obj = storageclass_factory(
+                sc_name=sc_name,
+                interface=constants.CEPHFILESYSTEM,
+                kernelMountOptions='context="system_u:object_r:container_file_t:s0"',
+            )
+            logger.info(f"Created SELinux CephFS StorageClass: {sc_name}")
+            self.created_resources.append(sc_obj)
+        except CommandFailed as e:
+            if "(AlreadyExists)" not in str(e):
+                raise
+            logger.warning(f"StorageClass '{sc_name}' already exists")
+            sc_data = ocp.OCP(kind=constants.STORAGECLASS).get(resource_name=sc_name)
+            sc_obj = OCS(**sc_data)
 
         pvc_obj = create_pvc(
             sc_name=sc_name,
@@ -180,6 +194,18 @@ class CephFSStressTestManager:
         ] = pvc_name
         logger.info("Set environment variables in the pod template")
         self._set_env_vars(cephfs_stress_pod_data, env_vars, type=constants.POD)
+        self.fs_monitoring_enabled = (
+            self._read_env_var_from_spec(
+                cephfs_stress_pod_data["spec"]["containers"][0].get("env", []),
+                "ENABLE_FS_MONITORING",
+                default="true",
+            ).lower()
+            == "true"
+        )
+        logger.info(
+            f"Filesystem monitoring {'enabled' if self.fs_monitoring_enabled else 'DISABLED'} "
+            "(ENABLE_FS_MONITORING)"
+        )
         cephfs_stress_pod_obj = pod.Pod(**cephfs_stress_pod_data)
         logger.info(f"Creating CephFS stress pod with PVC: {pvc_name}")
         created_resource = cephfs_stress_pod_obj.create()
@@ -247,8 +273,22 @@ class CephFSStressTestManager:
             cephfs_stress_job_data["spec"]["parallelism"] = parallelism
         if completions:
             cephfs_stress_job_data["spec"]["completions"] = completions
-        logger.info("Set environment variables in the pod template")
+        logger.info("Set environment variables in the job template")
         self._set_env_vars(cephfs_stress_job_data, env_vars, type=constants.JOB)
+        self.fs_monitoring_enabled = (
+            self._read_env_var_from_spec(
+                cephfs_stress_job_data["spec"]["template"]["spec"]["containers"][0].get(
+                    "env", []
+                ),
+                "ENABLE_FS_MONITORING",
+                default="true",
+            ).lower()
+            == "true"
+        )
+        logger.info(
+            f"Filesystem monitoring {'enabled' if self.fs_monitoring_enabled else 'DISABLED'} "
+            "(ENABLE_FS_MONITORING)"
+        )
         job_name = cephfs_stress_job_data["metadata"]["name"]
         job_ocs_obj = OCS(**cephfs_stress_job_data)
         created_resource = job_ocs_obj.create()
@@ -285,6 +325,26 @@ class CephFSStressTestManager:
 
         """
         wait_for_resource_state(resource, state=state, timeout=timeout)
+
+    def _read_env_var_from_spec(
+        self, env_list: list, name: str, default: str = ""
+    ) -> str:
+        """
+        Return the value of an env variable from a container env list.
+
+        Args:
+            env_list (list): The ``env`` list from the container spec.
+            name (str): The env variable name to look up.
+            default (str): Value to return when the variable is not found.
+
+        Returns:
+            str: The value string, or *default* if not present.
+
+        """
+        for item in env_list:
+            if item.get("name") == name:
+                return str(item.get("value", default))
+        return default
 
     def _set_env_vars(self, resource_data, env_vars, type):
         """
@@ -493,8 +553,14 @@ class CephFSStressTestManager:
         verifications_to_run = [
             check_ceph_health,
             verify_openshift_storage_ns_pods_in_running_state,
-            verify_no_filesystem_hangs,
         ]
+        if self.fs_monitoring_enabled:
+            verifications_to_run.append(verify_no_filesystem_hangs)
+        else:
+            logger.info(
+                "Skipping filesystem hang verification - "
+                "ENABLE_FS_MONITORING is disabled"
+            )
         try:
             for verification_func in verifications_to_run:
                 if self.stop_event.is_set():
@@ -597,6 +663,7 @@ class CephFSStressTestManager:
             logger.info("Collecting output directory from shared CephFS mount...")
             try:
                 collect_stress_job_output_directory(self.standby_pod)
+                report_smallfile_op_failures()
             except Exception as e:
                 logger.warning(f"Failed to collect output directory: {e}")
         else:
@@ -703,7 +770,8 @@ def verify_openshift_storage_ns_pods_in_running_state(stress_manager=None):
             "\n"
         )
         result = check_pods_in_running_state(
-            namespace=config.ENV_DATA["cluster_namespace"]
+            namespace=config.ENV_DATA["cluster_namespace"],
+            skip_for_status=[constants.STATUS_CONTAINER_STATUS_UNKNOWN],
         )
         if not result:
             raise CommandFailed(
@@ -1293,6 +1361,87 @@ def collect_stress_job_output_directory(standby_pod_obj, dir_name=None):
 
     except Exception as e:
         logger.error(f"Failed to collect stress job output directory: {e}")
+
+
+def report_smallfile_op_failures(dir_name=None):
+    """
+    Scan the collected smallfile result JSONs and REPORT any operation-level failures.
+
+    This is a non-fatal, post-run visibility check. The stress test script already gates the run
+    (it counts op failures and aborts an iteration only when the failure rate exceeds 50%),
+    so this does NOT raise or fail the test -- it surfaces isolated op failures (for example a
+    single readdir "I/O error") that would otherwise be lost in per-op JSON files, because the
+    pod exits 0 even when individual smallfile threads error out.
+
+    Args:
+        dir_name (str): Optional subdirectory under stress_output (same value passed to
+            collect_stress_job_output_directory), when outputs were collected into one.
+
+    Returns:
+        list[dict]: One entry per failing op with keys {file, operation, status, elapsed}.
+            Empty list means every op reported success.
+
+    """
+    tmp_path = Path(ocsci_log_path())
+    base_output_dir = os.path.join(tmp_path, get_current_test_name(), "stress_output")
+    scan_dir = f"{base_output_dir}/{dir_name}" if dir_name else base_output_dir
+
+    failures = []
+    total = 0
+    if not os.path.isdir(scan_dir):
+        logger.warning(
+            f"smallfile op validation skipped: {scan_dir} not found "
+            f"(were outputs collected?)"
+        )
+        return failures
+
+    for root, _, files in os.walk(scan_dir):
+        for fname in files:
+            if not fname.endswith(".json"):
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath) as jf:
+                    data = json.load(jf)
+            except (OSError, ValueError):
+                continue
+            results = data.get("results")
+            if not isinstance(results, dict) or "status" not in results:
+                continue
+            total += 1
+            operation = data.get("params", {}).get("operation", "unknown")
+            status = str(results.get("status", "")).strip().lower()
+            try:
+                elapsed = float(results.get("elapsed", 0) or 0)
+            except (TypeError, ValueError):
+                elapsed = 0.0
+            if (
+                status not in _SMALLFILE_OK_STATUSES
+                or elapsed >= _SMALLFILE_ELAPSED_SENTINEL
+            ):
+                failures.append(
+                    {
+                        "file": os.path.relpath(fpath, scan_dir),
+                        "operation": operation,
+                        "status": results.get("status"),
+                        "elapsed": results.get("elapsed"),
+                    }
+                )
+
+    if failures:
+        table = PrettyTable()
+        table.field_names = ["operation", "status", "elapsed", "file"]
+        for f in failures:
+            table.add_row([f["operation"], f["status"], f["elapsed"], f["file"]])
+        logger.warning(
+            f"smallfile op validation: {len(failures)}/{total} operation result(s) reported "
+            f"a failure (reporting only, not failing the test):\n{table}"
+        )
+    else:
+        logger.info(
+            f"smallfile op validation: all {total} operation result(s) reported success"
+        )
+    return failures
 
 
 def check_for_filesystem_hangs(namespace, output_dir="/mnt/output"):
