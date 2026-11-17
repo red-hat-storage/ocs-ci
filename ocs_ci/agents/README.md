@@ -130,6 +130,17 @@ plan lists no test, an issue titled `Automation_<Jira key>` is opened on
 the result YAML and the verification Markdown. `--dry-run` writes the local
 report only. A report whose steps have no command is `blocked`.
 
+`--collection` runs the collection phase only. It reads Jira and writes
+`reports/<release>/<issue>.yaml`, then stops. Cluster verification is not
+started. `OCS_AGENT_COLLECTION=1` is the same switch.
+
+```bash
+python3 -m ocs_ci.agents.runtime.run \
+  --agent jira_verification \
+  --collection \
+  --release odf-4.22.6
+```
+
 `--execute` skips the Jira collection and verifies a report that was already
 saved. Use it to repeat the cluster step without reading Jira again.
 

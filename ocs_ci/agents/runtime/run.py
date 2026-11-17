@@ -105,6 +105,15 @@ def build_request(argv, env):
         ),
     )
     parser.add_argument(
+        "--collection",
+        action="store_true",
+        help=(
+            "Read Jira and write the local verification reports, then stop. "
+            "Cluster verification is not started. "
+            "Also enabled by OCS_AGENT_COLLECTION=1."
+        ),
+    )
+    parser.add_argument(
         "--execute",
         action="store_true",
         help=(
@@ -134,11 +143,15 @@ def build_request(argv, env):
     if not result_file and env.get("WORKSPACE"):
         result_file = str(Path(env["WORKSPACE"]) / "agent-result.json")
     execute = args.execute or _truthy(env.get("OCS_AGENT_EXECUTE"))
+    collection = args.collection or _truthy(env.get("OCS_AGENT_COLLECTION"))
+    if execute and collection:
+        raise ValueError("--collection and --execute cannot be used together")
     kubeconfig = args.kubeconfig or env.get("OCS_AGENT_KUBECONFIG") or ""
     return {
         "agent": agent,
         "message": message,
         "provider": args.provider,
+        "collection": collection,
         "execute": execute,
         "kubeconfig": str(kubeconfig).strip(),
         "args": _agent_args(args, env),
@@ -651,9 +664,11 @@ def main(argv=None, env=None, invoke=None):
     try:
         agent_dir = resolve_agent_dir(request["agent"])
         load_agent_spec(agent_dir)
-        if request.get("execute"):
+        if request.get("collection") or request.get("execute"):
             if request["agent"] != "jira_verification":
-                raise ValueError("--execute is only available for jira_verification")
+                flag = "--collection" if request.get("collection") else "--execute"
+                raise ValueError(f"{flag} is only available for jira_verification")
+        if request.get("execute"):
             from ocs_ci.agents.jira_verification.execute import execute_saved_reports
 
             with activate_dry_run(request):
@@ -662,7 +677,10 @@ def main(argv=None, env=None, invoke=None):
             runner = invoke or invoke_agent
             with activate_provider(request):
                 result = runner(agent_dir, request)
-            result = _verify_collected_reports(request, result)
+            if request.get("collection"):
+                logger.info("Collection only: cluster verification was not started")
+            else:
+                result = _verify_collected_reports(request, result)
         result.setdefault("ok", True)
         code = EXIT_OK if result["ok"] else EXIT_AGENT_ERROR
     except LookupError as exc:
