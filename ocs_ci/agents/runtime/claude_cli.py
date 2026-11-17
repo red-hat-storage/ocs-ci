@@ -4,9 +4,16 @@ import json
 import subprocess
 import uuid
 
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
+try:
+    from langchain_core.language_models.chat_models import BaseChatModel
+    from langchain_core.messages import AIMessage
+    from langchain_core.outputs import ChatGeneration, ChatResult
+except ImportError:
+    # The unit import test loads every module without the agents extra.
+    BaseChatModel = object
+    AIMessage = None
+    ChatGeneration = None
+    ChatResult = None
 
 
 class ClaudeCliChat(BaseChatModel):
@@ -20,6 +27,19 @@ class ClaudeCliChat(BaseChatModel):
 
     model_name: str = ""
     use_vertex: bool = False
+
+    def __init__(self, *args, **kwargs):
+        """
+        Build the chat model when LangChain is installed.
+
+        Raises:
+            NotImplementedError: langchain-core is not installed.
+        """
+        if AIMessage is None:
+            raise NotImplementedError(
+                "Claude CLI chat requires langchain-core in the agents extra"
+            )
+        super().__init__(*args, **kwargs)
 
     @property
     def _llm_type(self):
