@@ -30,7 +30,7 @@ class TestStorageClassReclamespace:
             raise UnexpectedBehaviour(
                 f"RBD image {rbd_image_name} size is not expected as {expected_size}GiB"
             )
-        log.info(f" RBD Image { rbd_image_name} is size of {image_size}GiB")
+        log.info(f" RBD Image {rbd_image_name} is size of {image_size}GiB")
         return True
 
     @tier2

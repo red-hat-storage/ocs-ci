@@ -127,7 +127,7 @@ class TestAddCapacityStretchCluster:
 
         # add capacity to the cluster
         for iteration in range(iterations):
-            logger.info(f"[{iteration+1}] adding capacity to the cluster now...")
+            logger.info(f"[{iteration + 1}] adding capacity to the cluster now...")
             self.add_capacity_to_stretch_cluster()
             logger.info("successfully added capacity to the cluster")
 

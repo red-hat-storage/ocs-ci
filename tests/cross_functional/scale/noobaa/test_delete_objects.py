@@ -165,7 +165,7 @@ class TestDeleteObjects:
         )
         time_2 = datetime.now()
         log.info(
-            f" Time taken to generate and upload objects: {(time_2-time_1).total_seconds()}"
+            f" Time taken to generate and upload objects: {(time_2 - time_1).total_seconds()}"
         )
 
         if delete_mode == "single":

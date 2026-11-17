@@ -147,7 +147,7 @@ class TestPvcExpand(ManageTest):
 
             # Split file size and write from two pods if access mode is RWX
             size = (
-                f"{int(file_size/2)}G"
+                f"{int(file_size / 2)}G"
                 if (pod_obj.pvc.access_mode == constants.ACCESS_MODE_RWX)
                 else f"{file_size}G"
             )
