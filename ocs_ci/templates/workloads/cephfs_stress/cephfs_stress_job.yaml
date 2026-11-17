@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
       - name: cephfs-stress
-        image: quay.io/ocsci/cephfs-stress-pod:optimized-v1.0
+        image: quay.io/ocsci/cephfs-stress-pod:latest
         imagePullPolicy: Always
         command: ["/bin/sh", "-c"]
         args:
@@ -78,11 +78,25 @@ spec:
             value: "4"
           - name: OPERATIONS       # File and directory operations to perform, Pass as a comma-separated string
             value: "create,mkdir,symlink,readdir,delete,append,rename,stat,chmod,ls-l"
+            # NOTE on destructive ops (delete / delete-renamed):
+            # The test works on three generations of files at once -- it creates files in
+            # iter{N}, runs the non-destructive ops (stat, append, chmod, ls-l, readdir, ...)
+            # on iter{N-1}, and runs the destructive ops on iter{N-2}. Pointing delete two
+            # generations back means it never removes files the other ops are currently using,
+            # so there are no "No such file or directory" failures. Specifically:
+            #   * "delete"         -> deletes the MAIN data set of iter{N-2}. That whole
+            #                         generation is reaped, so only the most recent ~2
+            #                         generations of created files remain on disk at the end.
+            #   * "delete-renamed" -> deletes ONLY the renamed scratch files (created for the
+            #                         "rename" op) in iter{N-2}/rename_data. The main created
+            #                         data set is preserved, so the filesystem keeps growing.
+            # Include both to reap scratch AND old generations; include only one for the
+            # corresponding behavior. "delete-renamed" requires "rename" to also be enabled
+            # (it is what produces the renamed files to reap).
           - name: OUTPUT_DIR
             value: "/mnt/output"
           - name: THREADS
             value: "8"
-          # Filesystem Monitoring Configuration
           - name: ENABLE_FS_MONITORING
             value: "true"
             # Enable/disable filesystem monitoring. Set to "true" to run continuous ls -lRf, find+stat commands

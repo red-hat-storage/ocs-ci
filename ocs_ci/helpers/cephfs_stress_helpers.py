@@ -61,6 +61,9 @@ from ocs_ci.ocs.resources import pod as pod_module
 
 logger = logging.getLogger(__name__)
 
+_SMALLFILE_OK_STATUSES = {"ok", "success", "no error information", ""}
+_SMALLFILE_ELAPSED_SENTINEL = 1e8
+
 
 class CephFSStressTestManager:
     """
@@ -660,6 +663,7 @@ class CephFSStressTestManager:
             logger.info("Collecting output directory from shared CephFS mount...")
             try:
                 collect_stress_job_output_directory(self.standby_pod)
+                report_smallfile_op_failures()
             except Exception as e:
                 logger.warning(f"Failed to collect output directory: {e}")
         else:
@@ -1357,6 +1361,87 @@ def collect_stress_job_output_directory(standby_pod_obj, dir_name=None):
 
     except Exception as e:
         logger.error(f"Failed to collect stress job output directory: {e}")
+
+
+def report_smallfile_op_failures(dir_name=None):
+    """
+    Scan the collected smallfile result JSONs and REPORT any operation-level failures.
+
+    This is a non-fatal, post-run visibility check. The stress test script already gates the run
+    (it counts op failures and aborts an iteration only when the failure rate exceeds 50%),
+    so this does NOT raise or fail the test -- it surfaces isolated op failures (for example a
+    single readdir "I/O error") that would otherwise be lost in per-op JSON files, because the
+    pod exits 0 even when individual smallfile threads error out.
+
+    Args:
+        dir_name (str): Optional subdirectory under stress_output (same value passed to
+            collect_stress_job_output_directory), when outputs were collected into one.
+
+    Returns:
+        list[dict]: One entry per failing op with keys {file, operation, status, elapsed}.
+            Empty list means every op reported success.
+
+    """
+    tmp_path = Path(ocsci_log_path())
+    base_output_dir = os.path.join(tmp_path, get_current_test_name(), "stress_output")
+    scan_dir = f"{base_output_dir}/{dir_name}" if dir_name else base_output_dir
+
+    failures = []
+    total = 0
+    if not os.path.isdir(scan_dir):
+        logger.warning(
+            f"smallfile op validation skipped: {scan_dir} not found "
+            f"(were outputs collected?)"
+        )
+        return failures
+
+    for root, _, files in os.walk(scan_dir):
+        for fname in files:
+            if not fname.endswith(".json"):
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath) as jf:
+                    data = json.load(jf)
+            except (OSError, ValueError):
+                continue
+            results = data.get("results")
+            if not isinstance(results, dict) or "status" not in results:
+                continue
+            total += 1
+            operation = data.get("params", {}).get("operation", "unknown")
+            status = str(results.get("status", "")).strip().lower()
+            try:
+                elapsed = float(results.get("elapsed", 0) or 0)
+            except (TypeError, ValueError):
+                elapsed = 0.0
+            if (
+                status not in _SMALLFILE_OK_STATUSES
+                or elapsed >= _SMALLFILE_ELAPSED_SENTINEL
+            ):
+                failures.append(
+                    {
+                        "file": os.path.relpath(fpath, scan_dir),
+                        "operation": operation,
+                        "status": results.get("status"),
+                        "elapsed": results.get("elapsed"),
+                    }
+                )
+
+    if failures:
+        table = PrettyTable()
+        table.field_names = ["operation", "status", "elapsed", "file"]
+        for f in failures:
+            table.add_row([f["operation"], f["status"], f["elapsed"], f["file"]])
+        logger.warning(
+            f"smallfile op validation: {len(failures)}/{total} operation result(s) reported "
+            f"a failure (reporting only, not failing the test):\n{table}"
+        )
+    else:
+        logger.info(
+            f"smallfile op validation: all {total} operation result(s) reported success"
+        )
+    return failures
 
 
 def check_for_filesystem_hangs(namespace, output_dir="/mnt/output"):
