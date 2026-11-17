@@ -1,0 +1,8 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "jira_verification": "./jira_verification/graph.py:make_graph"
+  }
+}
