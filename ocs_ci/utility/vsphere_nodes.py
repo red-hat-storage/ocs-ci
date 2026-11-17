@@ -3,6 +3,7 @@ Module that contains operations related to vSphere nodes in a cluster
 This module directly interacts with VM nodes
 """
 import errno
+import json
 import logging
 import os
 
@@ -94,6 +95,58 @@ class VSPHERENode(object):
 
         """
         cmd = f"sudo hostnamectl set-hostname {host_name}"
+        return self.vmnode.exec_cmd(cmd)
+
+    def is_kubelet_active(self):
+        """
+        Check if kubelet service is active on the node
+
+        Returns:
+            bool: True if kubelet is active, False otherwise
+
+        """
+        retcode, stdout, _ = self.vmnode.exec_cmd("sudo systemctl is-active kubelet")
+        is_active = retcode == 0 and stdout.strip() == "active"
+        logger.info(f"Kubelet on {self.host}: {'active' if is_active else 'inactive'}")
+        return is_active
+
+    def get_active_ostree_image(self):
+        """
+        Get the active ostree image reference from rpm-ostree status
+
+        Returns:
+            str: The active deployment's container image reference, or None
+
+        """
+        retcode, stdout, _ = self.vmnode.exec_cmd("sudo rpm-ostree status --json")
+        if retcode != 0:
+            logger.warning(f"Failed to get rpm-ostree status on {self.host}")
+            return None
+        try:
+            status = json.loads(stdout)
+            for deployment in status.get("deployments", []):
+                if deployment.get("booted"):
+                    return deployment.get("container-image-reference", "")
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning(f"Failed to parse rpm-ostree status on {self.host}: {e}")
+        return None
+
+    def rpm_ostree_rebase(self, image_ref):
+        """
+        Rebase the node to a new ostree image
+
+        Args:
+            image_ref (str): The target image reference
+                e.g. quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:...
+
+        Returns:
+            tuple: tuple which contains command return code, output and error
+
+        """
+        self.vmnode.exec_cmd(
+            "sudo cp /var/lib/kubelet/config.json /etc/ostree/auth.json"
+        )
+        cmd = f"sudo rpm-ostree rebase ostree-unverified-registry:{image_ref}"
         return self.vmnode.exec_cmd(cmd)
 
     def reboot(self):
