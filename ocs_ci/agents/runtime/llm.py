@@ -56,6 +56,7 @@ def _openai_model():
         ValueError: No OpenAI API key is configured.
     """
     try:
+        import httpx
         from langchain_openai import ChatOpenAI
     except ImportError as error:
         raise NotImplementedError(
@@ -68,7 +69,15 @@ def _openai_model():
             "or OPENAI_API_KEY. OCS_AGENT_MODEL overrides the default model gpt-4o."
         )
     model_name = os.environ.get("OCS_AGENT_MODEL") or "gpt-4o"
-    return ChatOpenAI(model=model_name, api_key=api_key, temperature=0)
+    # LangChain caches one async HTTP client. Each Jira issue runs in its own
+    # asyncio.run, which closes that loop. The next issue then fails with
+    # "Event loop is closed". A new client is bound to the loop that uses it.
+    return ChatOpenAI(
+        model=model_name,
+        api_key=api_key,
+        temperature=0,
+        http_async_client=httpx.AsyncClient(),
+    )
 
 
 def _openai_api_key():
