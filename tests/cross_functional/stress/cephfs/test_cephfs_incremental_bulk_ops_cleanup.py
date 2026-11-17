@@ -3,7 +3,11 @@ import time
 
 from concurrent.futures import ThreadPoolExecutor
 
-from ocs_ci.framework.pytest_customization.marks import magenta_squad, stress
+from ocs_ci.framework.pytest_customization.marks import (
+    magenta_squad,
+    polarion_id,
+    stress,
+)
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cephfs_stress_helpers import (
     run_stress_cleanup,
@@ -24,6 +28,7 @@ class TestCephfsStressCleanUp(E2ETest):
     Test Cephfs incremental bulk operations cleanup
     """
 
+    @polarion_id("OCS-8414")
     def test_cephfs_stress_cleanup(
         self, project_factory, teardown_factory, storageclass_factory
     ):

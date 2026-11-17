@@ -3,7 +3,11 @@ import time
 import re
 import random
 
-from ocs_ci.framework.pytest_customization.marks import magenta_squad, ignore_leftovers
+from ocs_ci.framework.pytest_customization.marks import (
+    magenta_squad,
+    ignore_leftovers,
+    polarion_id,
+)
 from ocs_ci.framework.testlib import E2ETest, stress
 from ocs_ci.helpers.cephfs_stress_helpers import (
     CephFSStressTestManager,
@@ -69,6 +73,7 @@ class TestCephfsStressWithFailures(E2ETest):
     CephFS stress test with comprehensive component failures
     """
 
+    @polarion_id("OCS-8415")
     def test_cephfs_stress_with_component_failures(
         self,
         project_factory,

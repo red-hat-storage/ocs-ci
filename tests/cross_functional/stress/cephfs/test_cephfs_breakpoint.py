@@ -1,7 +1,11 @@
 import logging
 import time
 
-from ocs_ci.framework.pytest_customization.marks import magenta_squad, stress
+from ocs_ci.framework.pytest_customization.marks import (
+    magenta_squad,
+    polarion_id,
+    stress,
+)
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cephfs_stress_helpers import CephFSStressTestManager
 from ocs_ci.ocs import constants
@@ -17,6 +21,7 @@ class TestCephfsStress(E2ETest):
     CephFS break point test - without failures
     """
 
+    @polarion_id("OCS-8413")
     def test_cephfs_breakpoint(
         self,
         project_factory,
