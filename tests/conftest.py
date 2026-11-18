@@ -12030,6 +12030,14 @@ def distribute_storage_classes_to_all_consumers():
 
         storage_class_names = get_autodistributed_storage_classes()
         for consumer in consumers:
+            existing_sc = consumer.get_storage_classes()
+            # To avoid removal of virtualization sc if already present
+            if all([st_class in existing_sc for st_class in storage_class_names]):
+                log.info(
+                    f"Storageclasses {storage_class_names} are already present in the storageconsumer {consumer.name}. "
+                    f"This list of storageclasses in the storageconsumer {consumer.name} is {existing_sc}"
+                )
+                continue
             log.info(f"Distributing storage classes to consumer {consumer.name}")
             consumer.set_storage_classes(storage_class_names)
 

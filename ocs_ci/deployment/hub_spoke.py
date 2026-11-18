@@ -1123,12 +1123,8 @@ class ExternalClients:
         for ext in external_odf_clusters_installed:
             cname = ext.name
             try:
-                if get_client_type_by_name(cname) == constants.HOSTED_CLUSTER_KUBEVIRT:
-                    skip_virt_sc = True
-                else:
-                    skip_virt_sc = False
                 storage_classes = get_autodistributed_storage_classes(
-                    skip_virt_sc=skip_virt_sc
+                    skip_virt_sc=False
                 )
                 volume_snapshot_classes = get_autodistributed_volume_snapshot_classes()
                 verify_storage_consumer_resources(
