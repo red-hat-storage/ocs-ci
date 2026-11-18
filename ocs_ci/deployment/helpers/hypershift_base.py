@@ -30,6 +30,7 @@ from ocs_ci.utility.utils import (
     get_latest_release_version,
     get_random_letters,
     get_registry_svc,
+    prepare_bin_dir,
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.ocs.utils import get_namespce_name_by_pattern
@@ -677,6 +678,9 @@ class HyperShiftBase:
 
         exec_cmd(f"cd {temp_dir} && make hypershift product-cli", shell=True)
 
+        # Ensure bin directory exists before moving binaries
+        prepare_bin_dir(self.bin_dir)
+
         shutil.move(
             os.path.join(temp_dir, "bin", "hypershift"), self.hypershift_binary_path
         )
@@ -737,6 +741,8 @@ class HyperShiftBase:
         # I was unable to wait until the file is downloaded in subprocess and decided not to invest in
         # finding the solution and adjust exec_cmd. This 20 sec is a workaround.
         time.sleep(20)
+        # Ensure bin directory exists before copying binaries
+        prepare_bin_dir(self.bin_dir)
         exec_cmd(f"podman cp hcp:/bin/hcp {self.bin_dir}")
         # check hcp binary is downloaded
         if os.path.isfile(self.hcp_binary_path):
