@@ -331,6 +331,16 @@ def pytest_addoption(parser):
         ),
     )
     parser.addoption(
+        "--full-debug-log",
+        dest="full_debug_log",
+        action="store_true",
+        default=False,
+        help=(
+            "Save complete DEBUG log for the entire execution from the very beginning. "
+            "Creates {log_dir}/full_debug_{run_id}.log file."
+        ),
+    )
+    parser.addoption(
         "--ceph-debug",
         dest="ceph_debug",
         action="store_true",
