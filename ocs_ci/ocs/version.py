@@ -133,7 +133,7 @@ def get_ocp_version(version_dict=None):
             if installer_version:
                 return installer_version
             logger.error("installer_version not found in config.DEPLOYMENT")
-            raise
+            raise ValueError("installer_version not found in config.DEPLOYMENT")
         try:
             version_dict = get_ocp_version_dict()
         except CommandFailed as e:
