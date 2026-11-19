@@ -1958,19 +1958,24 @@ def confirm_cluster_operator_version(target_version, cluster_operator):
     return False
 
 
-def upgrade_ocp(image_path, image):
+def upgrade_ocp(image_path, image, force=True):
     """
     upgrade OCP version
 
     Args:
         image (str): image to be installed
         image_path (str): path to image
+        force (bool): if True, pass --force to bypass update-blocking
+            conditions and unverified release image signature checks. This
+            is needed for nightly/unreleased builds, but is not required
+            (and not recommended) when upgrading to a GA'ed version.
 
     """
     ocp = OCP()
+    force_arg = "--force " if force else ""
     ocp.exec_oc_cmd(
         f"adm upgrade --to-image={image_path}:{image} "
-        f"--allow-explicit-upgrade --force "
+        f"--allow-explicit-upgrade {force_arg}"
     )
     log.info(f"Upgrading OCP to version: {image} ")
 
