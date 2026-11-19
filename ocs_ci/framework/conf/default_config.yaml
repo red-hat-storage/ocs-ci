@@ -107,6 +107,9 @@ DEPLOYMENT:
   ignition_version: "3.2.0"
   # Label all nodes with "dummy" zone labels? Assumes zone lables are missing.
   dummy_zone_node_labels: False
+  # Label each worker with a unique topology.rook.io/rack value before ODF
+  # install (required for deploying with monCount: 5).
+  unique_rack_node_labels: False
   # Network split setup. When enabled, network split scripts will be deployed
   # on all master and worker nodes via MachineConfig during deployment.
   # See also: https://mbukatov.gitlab.io/ocp-network-split/
