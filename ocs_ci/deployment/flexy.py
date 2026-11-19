@@ -26,8 +26,8 @@ from ocs_ci.utility.utils import (
     clone_repo,
     exec_cmd,
     expose_ocp_version,
+    get_ocp_release_image_ref,
     get_ocp_version,
-    get_registry_svc,
     get_terraform,
     get_terraform_ignition_provider,
     login_to_mirror_registry,
@@ -259,16 +259,18 @@ class FlexyBase(object):
         """
         A proper installer payload url required for flexy
         based on DEPLOYMENT['installer_version'].
-        If 'nigtly' is present then we will use registry.svc to get latest
-        nightly else if '-ga' is present then we will look for
-        ENV_DATA['installer_payload_image']
+        If 'nightly' is present we use the CI registry to get the latest nightly
+        payload. If '-ga' is present we resolve to the latest GA z-stream and use
+        the GA release registry (quay.io/openshift-release-dev/ocp-release) so the
+        cluster records the GA pullspec instead of the CI registry.
 
         """
         payload_img = {"installer_payload_image": None}
         vers = version or config.DEPLOYMENT["installer_version"]
+        is_ga = str(vers).endswith("-ga")
         installer_version = expose_ocp_version(vers)
-        payload_img["installer_payload_image"] = ":".join(
-            [get_registry_svc(installer_version), installer_version]
+        payload_img["installer_payload_image"] = get_ocp_release_image_ref(
+            installer_version, ga=is_ga
         )
         return payload_img
 

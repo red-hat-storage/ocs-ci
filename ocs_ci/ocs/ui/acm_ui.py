@@ -23,7 +23,7 @@ from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.views import acm_ui_specific
 from ocs_ci.utility.utils import (
     expose_ocp_version,
-    get_registry_svc,
+    get_ocp_release_image_ref,
     run_cmd,
     get_running_acm_version,
 )
@@ -901,8 +901,10 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
         self.fill_multiple_textbox(cluster_details)
 
     def get_ocp_release_img(self):
-        vers = expose_ocp_version(self.cluster_conf.DEPLOYMENT["installer_version"])
-        return f"{get_registry_svc(vers)}:{vers}"
+        installer_version = self.cluster_conf.DEPLOYMENT["installer_version"]
+        is_ga = str(installer_version).endswith("-ga")
+        vers = expose_ocp_version(installer_version)
+        return get_ocp_release_image_ref(vers, ga=is_ga)
 
     def post_destroy_ops(self):
         """
