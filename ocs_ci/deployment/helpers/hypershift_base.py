@@ -355,7 +355,7 @@ def is_hosted_cluster(cluster_name=None):
             )
         else:
             provider_index = None
-        if provider_index:
+        if provider_index is not None:
             config.switch_ctx(provider_index)
         else:
             config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
@@ -392,7 +392,7 @@ def get_hosted_cluster_type(cluster_name=None):
         provider_index = config.get_cluster_index_by_name(cluster_name=provider_name)
     else:
         provider_index = None
-    if provider_index:
+    if provider_index is not None:
         config.switch_ctx(provider_index)
     else:
         config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
