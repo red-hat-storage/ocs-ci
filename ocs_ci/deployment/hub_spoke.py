@@ -7382,7 +7382,7 @@ class SpokeODF(SpokeOCP, ABC):
                     mapped_client_cluster_name = get_cluster_name_from_storage_consumer(
                         consumer
                     )
-                except CommandFailed as cfd:
+                except (CommandFailed, AttributeError) as cfd:
                     logger.error(
                         f"Failed to get the client cluster name for storageconsumer peer `{consumer}`: {cfd}"
                     )
