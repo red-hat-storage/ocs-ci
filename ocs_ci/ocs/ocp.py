@@ -1958,6 +1958,29 @@ def confirm_cluster_operator_version(target_version, cluster_operator):
     return False
 
 
+@retry(CommandFailed, tries=3, delay=30, backoff=1)
+def get_release_image_digest(image_path, image):
+    """
+    Resolve the digest of an OCP release image.
+
+    Args:
+        image_path (str): path to image (e.g. quay.io/openshift-release-dev/ocp-release)
+        image (str): image tag (e.g. 4.16.5-x86_64)
+
+    Returns:
+        str: digest of the release image (e.g. sha256:...)
+
+    """
+    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+    cmd = (
+        f"oc adm release info {image_path}:{image} "
+        f"-a {pull_secret_path} -o jsonpath='{{.digest}}'"
+    )
+    digest = exec_cmd(cmd).stdout.decode().strip()
+    log.info(f"Resolved digest for {image_path}:{image} is {digest}")
+    return digest
+
+
 def upgrade_ocp(image_path, image, force=True):
     """
     upgrade OCP version
@@ -1967,15 +1990,22 @@ def upgrade_ocp(image_path, image, force=True):
         image_path (str): path to image
         force (bool): if True, pass --force to bypass update-blocking
             conditions and unverified release image signature checks. This
-            is needed for nightly/unreleased builds, but is not required
-            (and not recommended) when upgrading to a GA'ed version.
+            is needed for nightly/unreleased builds. GA'ed versions don't
+            need this bypass, but `oc adm upgrade --to-image` requires a
+            by-digest pull spec without --force, so the release image is
+            resolved to its digest instead of using the tag.
 
     """
     ocp = OCP()
-    force_arg = "--force " if force else ""
+    if force:
+        to_image = f"{image_path}:{image}"
+        force_arg = "--force "
+    else:
+        digest = get_release_image_digest(image_path, image)
+        to_image = f"{image_path}@{digest}"
+        force_arg = ""
     ocp.exec_oc_cmd(
-        f"adm upgrade --to-image={image_path}:{image} "
-        f"--allow-explicit-upgrade {force_arg}"
+        f"adm upgrade --to-image={to_image} " f"--allow-explicit-upgrade {force_arg}"
     )
     log.info(f"Upgrading OCP to version: {image} ")
 
