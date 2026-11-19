@@ -2693,6 +2693,10 @@ FLEXY_ENV_FILE_UPDATED_PATH = os.path.join(
     FLEXY_HOST_DIR_PATH, FLEXY_ENV_FILE_UPDATED_NAME
 )
 REGISTRY_SVC = "registry.ci.openshift.org/ocp/release"
+REGISTRY_SVC_V5 = "registry.ci.openshift.org/ocp/release-5"
+# GA release repo on quay. Unlike the CI registry (which splits 4.x -> release
+# and 5.x -> release-5), quay hosts both 4.x and 5.x GA payloads in this single
+# repo, tagged with the version + arch suffix (e.g. 4.18.56-x86_64, 5.0.1-x86_64).
 QUAY_REGISTRY_SVC = "quay.io/openshift-release-dev/ocp-release"
 FLEXY_USER_LOCAL_UID = 101000
 
