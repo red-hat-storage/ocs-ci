@@ -7368,13 +7368,9 @@ class SpokeODF(SpokeOCP, ABC):
                         break
 
         if is_mdr_cluster and peer_cluster:
-            all_clients_data = [
-                {name: data}
-                for name, data in config.ENV_DATA.get("clusters", {}).items()
-            ]
             if (
-                all_clients_data[self.name]["provider_cluster_name"]
-                != all_clients_data[peer_cluster]["provider_cluster_name"]
+                config.ENV_DATA["clusters"][self.name]["provider_cluster_name"]
+                != config.ENV_DATA["clusters"][peer_cluster]["provider_cluster_name"]
             ):
                 raise UnexpectedDeploymentConfiguration(
                     f"The MDR cluster pair {self.name} and {peer_cluster} does not have same provider cluster"

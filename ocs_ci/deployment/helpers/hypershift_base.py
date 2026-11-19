@@ -343,9 +343,23 @@ def is_hosted_cluster(cluster_name=None):
     """
 
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
-    config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
     try:
-        config.switch_to_provider()
+        provider_name = (
+            config.ENV_DATA.get("clusters", {})
+            .get(cluster_name, {})
+            .get("provider_cluster_name")
+        )
+        if provider_name:
+            provider_index = config.get_cluster_index_by_name(
+                cluster_name=provider_name
+            )
+        else:
+            provider_index = None
+        if provider_index:
+            config.switch_ctx(provider_index)
+        else:
+            config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
+            config.switch_to_provider()
     except ClusterNotFoundException:
         return False
     ocp_obj = OCP(
@@ -369,8 +383,20 @@ def get_hosted_cluster_type(cluster_name=None):
 
     """
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
-    config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
-    config.switch_to_provider()
+    provider_name = (
+        config.ENV_DATA.get("clusters", {})
+        .get(cluster_name, {})
+        .get("provider_cluster_name")
+    )
+    if provider_name:
+        provider_index = config.get_cluster_index_by_name(cluster_name=provider_name)
+    else:
+        provider_index = None
+    if provider_index:
+        config.switch_ctx(provider_index)
+    else:
+        config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
+        config.switch_to_provider()
     ocp_hosted_cluster_obj = OCP(
         kind=constants.HOSTED_CLUSTERS,
         namespace=get_hosted_cluster_namespace(cluster_name),
