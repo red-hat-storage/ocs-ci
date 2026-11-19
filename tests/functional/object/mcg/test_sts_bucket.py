@@ -67,9 +67,7 @@ class TestSTSBucket:
                         "backingstore_dict": {"gcp-sts": [(1, None)]},
                     },
                 ],
-                # TODO: add polarion_id once the RHSTOR-8661 CLI (4-param,
-                # auto-create secret) Polarion case is created
-                marks=[tier1, gcp_platform_required],
+                marks=[tier1, gcp_platform_required, polarion_id("OCS-8416")],
             ),
             pytest.param(
                 *[
