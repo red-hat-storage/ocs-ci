@@ -64,6 +64,17 @@ class TestSTSBucket:
                 *[
                     {
                         "interface": "CLI",
+                        "backingstore_dict": {"gcp-sts": [(1, None)]},
+                    },
+                ],
+                # TODO: add polarion_id once the RHSTOR-8661 CLI (4-param,
+                # auto-create secret) Polarion case is created
+                marks=[tier1, gcp_platform_required],
+            ),
+            pytest.param(
+                *[
+                    {
+                        "interface": "CLI",
                         "namespace_policy_dict": {
                             "type": "Single",
                             "namespacestore_dict": {"azure-sts": [(1, None)]},
@@ -81,6 +92,7 @@ class TestSTSBucket:
             "AWS-STS-BS-CLI",
             "AZURE-STS-BS-CLI",
             "GCP-STS-BS-OC",
+            "GCP-STS-BS-CLI",
             "AZURE-STS-NSS-CLI",
             "STS-DEFAULT",
         ],

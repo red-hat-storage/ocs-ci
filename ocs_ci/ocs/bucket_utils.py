@@ -823,6 +823,33 @@ def cli_create_azure_sts_backingstore(
     )
 
 
+def cli_create_gcp_sts_backingstore(
+    mcg_obj, cld_mgr, backingstore_name, uls_name, region
+):
+    """
+    Create a new backingstore of type google-cloud-storage-sts via the NooBaa
+    CLI, passing the four WIF parameters inline so NooBaa auto-creates a new
+    secret with external_account credentials.
+
+    Args:
+        mcg_obj (MCG): Used for execution for the NooBaa CLI command
+        cld_mgr (CloudManager): holds GCP STS (WIF) credentials for backingstore creation
+        backingstore_name (str): backingstore name
+        uls_name (str): underlying storage name
+        region (str): which region to create backingstore (should be the same as uls)
+
+    """
+    mcg_obj.exec_mcg_cmd(
+        f"backingstore create google-cloud-storage-sts {backingstore_name} "
+        f"--target-bucket {uls_name} "
+        f"--project-number {cld_mgr.gcp_sts_client.project_number} "
+        f"--pool-id {cld_mgr.gcp_sts_client.pool_id} "
+        f"--provider-id {cld_mgr.gcp_sts_client.provider_id} "
+        f"--service-account-email {cld_mgr.gcp_sts_client.service_account_email}",
+        use_yes=True,
+    )
+
+
 def oc_create_azure_sts_backingstore(cld_mgr, backingstore_name, uls_name, region):
     """
     Create a new backingstore with Azure STS (managed identity) using oc create command
