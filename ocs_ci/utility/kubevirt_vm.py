@@ -232,8 +232,8 @@ class KubevirtVM(object):
         """
         for vm in vms:
             vm_name = get_vm_name(vm)
-            logger.info(f"Pausing the VM {vm_name}")
-            cmd = f"pause {vm_name}"
+            logger.info(f"UnPausing the VM {vm_name}")
+            cmd = f"unpause {vm_name}"
             self.run_kubevirt_vm_cmd(cmd)
 
         if wait:
