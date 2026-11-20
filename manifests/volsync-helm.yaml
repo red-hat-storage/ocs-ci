@@ -1,0 +1,5 @@
+repo_name: backube
+repo_url: https://backube.github.io/helm-charts/
+chart: backube/volsync
+release_name: volsync
+namespace: volsync-system
