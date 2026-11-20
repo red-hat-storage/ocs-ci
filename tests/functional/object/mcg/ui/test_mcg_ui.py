@@ -297,7 +297,17 @@ def generate_test_params():
     if is_collect_only:
         noobaa_sc = "noobaa"
     else:
-        noobaa_sc = fetch_noobaa_storage_class_name().decode("utf-8")
+        saved_index = config.cur_index
+        try:
+            if config.multicluster:
+                try:
+                    config.switch_to_provider()
+                # Catching Exception in this case is an intentional best-effort guard
+                except Exception:
+                    pass
+            noobaa_sc = fetch_noobaa_storage_class_name().decode("utf-8")
+        finally:
+            config.switch_ctx(saved_index)
     return [
         pytest.param(
             *[
