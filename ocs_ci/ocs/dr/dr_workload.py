@@ -2171,7 +2171,23 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self.discovered_apps_pod_selector_value = kwargs.get(
             "discovered_apps_pod_selector_value"
         )
+        self.discovered_apps_multi_ns = kwargs.get("discovered_apps_multi_ns")
         self.kubeobject_capture_interval_int = generate_kubeobject_capture_interval()
+
+    def _get_managed_cluster_configs(self):
+        """
+        Return managed peer cluster configs for discovered CNV apps.
+
+        On provider/client MDR (dr_cluster_relations set), exclude the provider
+        so secrets and workloads are applied only on client peers.
+
+        Returns:
+            list: Managed cluster config objects
+
+        """
+        if config.MULTICLUSTER.get("dr_cluster_relations", []):
+            return get_non_acm_cluster_and_non_provider_cluster_config()
+        return get_non_acm_cluster_config()
 
     def deploy_workload(self, shared_drpc_protection=False, dr_protect=True):
         """
@@ -2186,8 +2202,6 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
         """
         self._deploy_prereqs()
-        for cluster in get_non_acm_cluster_config():
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
         self.manage_dr_vm_secrets(shared_drpc_protection=shared_drpc_protection)
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         self.workload_path = self.target_clone_dir + "/" + self.workload_dir
@@ -2196,7 +2210,8 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         # Wait for temporary resources to be cleaned up before DRPC creation
         time.sleep(10)
         config.switch_acm_ctx()
-        if dr_protect:
+        # For multi_ns, fixture creates a shared Placement/DRPC after all VMs deploy
+        if dr_protect and not self.discovered_apps_multi_ns:
             self.create_placement()
             self.create_drpc()
             self.verify_workload_deployment()
@@ -2238,7 +2253,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             a workload in an existing namespace
 
         """
-        for cluster in get_non_acm_cluster_config():
+        for cluster in self._get_managed_cluster_configs():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
 
             # Create namespace if it doesn't exist
@@ -2290,15 +2305,19 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 create_cdi_pull_secret(namespace=self.workload_namespace)
                 create_cdi_cert_configmap(namespace=self.workload_namespace)
 
-    def create_placement(self):
+    def create_placement(self, placement_name=None):
         """
         Create placement CR for discovered Apps
+
+        Args:
+            placement_name (str): Full Placement resource name. When None, defaults to
+                ``{discovered_apps_placement_name}-plmnt-1``.
 
         """
 
         placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
         placement_yaml_data["metadata"]["name"] = (
-            self.discovered_apps_placement_name + "-plmnt-1"
+            placement_name or self.discovered_apps_placement_name + "-plmnt-1"
         )
         placement_yaml_data["metadata"].setdefault("annotations", {})
         placement_yaml_data["metadata"]["annotations"][
@@ -2312,9 +2331,23 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         log.info(f"Creating Placement for workload {self.workload_name}")
         run_cmd(f"oc create -f {placement_yaml.name}")
 
-    def create_drpc(self):
+    def create_drpc(
+        self,
+        drpc_name=None,
+        placement_name=None,
+        protected_namespaces=None,
+        pvc_selector_key=None,
+        pvc_selector_value=None,
+    ):
         """
         Create DRPC for discovered Apps
+
+        Args:
+            drpc_name (str): Name for DRPC
+            placement_name (str): Name for Placement referenced by the DRPC
+            protected_namespaces (list): Namespaces to protect (multi-ns shared DRPC)
+            pvc_selector_key (str): Key for PVC selector
+            pvc_selector_value (str): Value for PVC selector
 
         """
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
@@ -2326,12 +2359,14 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         del drpc_yaml_data["spec"]["pvcSelector"]["matchLabels"]
 
         log.info(self.discovered_apps_pvc_selector_key)
-        drpc_yaml_data["metadata"]["name"] = self.discovered_apps_placement_name
+        drpc_yaml_data["metadata"]["name"] = (
+            drpc_name or self.discovered_apps_placement_name
+        )
         drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESPACE
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         drpc_yaml_data["spec"]["placementRef"]["name"] = (
-            self.discovered_apps_placement_name + "-plmnt-1"
+            placement_name or self.discovered_apps_placement_name + "-plmnt-1"
         )
         drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESPACE
         drcp_data_yaml = tempfile.NamedTemporaryFile(
@@ -2339,14 +2374,17 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         )
         templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
         log.info(drcp_data_yaml.name)
-        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0][
-            "key"
-        ] = self.discovered_apps_pvc_selector_key
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["key"] = (
+            pvc_selector_key or self.discovered_apps_pvc_selector_key
+        )
         drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["operator"] = "In"
-        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["values"][
-            0
-        ] = self.discovered_apps_pvc_selector_value
-        drpc_yaml_data["spec"]["protectedNamespaces"][0] = self.workload_namespace
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["values"][0] = (
+            pvc_selector_value or self.discovered_apps_pvc_selector_value
+        )
+        if protected_namespaces:
+            drpc_yaml_data["spec"]["protectedNamespaces"] = protected_namespaces
+        else:
+            drpc_yaml_data["spec"]["protectedNamespaces"][0] = self.workload_namespace
         drpc_yaml_data["spec"]["kubeObjectProtection"][
             "captureInterval"
         ] = self.kubeobject_capture_interval
@@ -2366,23 +2404,27 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         log.info("Creating DRPC")
         run_cmd(f"oc create -f {drcp_data_yaml.name}")
 
-    def verify_workload_deployment(self):
+    def verify_workload_deployment(self, vrg_name=None):
         """
         Verify cnv workload deployment
 
+        Args:
+            vrg_name (str): Optional VRG/DRPC name override (used for multi-ns shared DRPC)
+
         """
-        self.check_pod_pvc_status(skip_replication_resources=False)
+        self.check_pod_pvc_status(skip_replication_resources=False, vrg_name=vrg_name)
         dr_helpers.wait_for_drpc_progression_completed(
             namespace=constants.DR_OPS_NAMESPACE,
-            resource_name=self.discovered_apps_placement_name,
+            resource_name=vrg_name or self.discovered_apps_placement_name,
         )
 
-    def check_pod_pvc_status(self, skip_replication_resources=False):
+    def check_pod_pvc_status(self, skip_replication_resources=False, vrg_name=None):
         """
         Check for Pod and PVC status
 
         Args:
             skip_replication_resources (bool): Skip Volumereplication check
+            vrg_name (str): Optional VRG name override
 
         """
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
@@ -2392,7 +2434,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             self.workload_namespace,
             skip_replication_resources=skip_replication_resources,
             discovered_apps=True,
-            vrg_name=self.discovered_apps_placement_name,
+            vrg_name=vrg_name or self.discovered_apps_placement_name,
         )
         dr_helpers.wait_for_cnv_workload(
             vm_name=self.vm_name,
@@ -2415,24 +2457,31 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
         """
 
+        ignore_not_found_param = ""
+        if self.discovered_apps_multi_ns:
+            ignore_not_found_param = "--ignore-not-found=true"
+
         config.switch_acm_ctx()
         if not shared_drpc_protection:
             log.info("Deleting DRPC")
             try:
                 run_cmd(
-                    f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}"
+                    f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} "
+                    f"{self.discovered_apps_placement_name} {ignore_not_found_param}"
                 )
             except CommandFailed:
                 # This is needed when DRPolicy is applied via UI, where DRPC which is created has suffix -drpc
                 # hence deletion fails
                 run_cmd(
-                    f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}-drpc"
+                    f"oc delete drpc -n {constants.DR_OPS_NAMESPACE} "
+                    f"{self.discovered_apps_placement_name}-drpc {ignore_not_found_param}"
                 )
                 log.info("DRPC deleted")
             log.info("Deleting Placement")
             try:
                 run_cmd(
-                    f"oc delete placement -n {constants.DR_OPS_NAMESPACE} {self.discovered_apps_placement_name}-plmnt-1"
+                    f"oc delete placement -n {constants.DR_OPS_NAMESPACE} "
+                    f"{self.discovered_apps_placement_name}-plmnt-1 {ignore_not_found_param}"
                 )
             except CommandFailed:
                 # When the VMs are protected from UI, placement created does not contain suffix "-plmnt-1",
@@ -2440,10 +2489,10 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 placement_name = f"{self.discovered_apps_placement_name}-placement-1"
                 run_cmd(
                     f"oc delete placement -n {constants.DR_OPS_NAMESPACE} "
-                    f"{placement_name}"
+                    f"{placement_name} {ignore_not_found_param}"
                 )
 
-        for cluster in get_non_acm_cluster_config():
+        for cluster in self._get_managed_cluster_configs():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             log.info(f"Deleting workload from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(
