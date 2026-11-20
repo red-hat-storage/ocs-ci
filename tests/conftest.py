@@ -8180,6 +8180,7 @@ def create_workload_factory():
         switch_ctx=None,
         skip_mirroring_validation=False,
         custom_sc=False,
+        use_statefulsets=False,
     ):
         """
         Args:
@@ -8193,6 +8194,10 @@ def create_workload_factory():
             skip_mirroring_validation (bool): If True, skip mirroring status validation after deployment.
                 Useful when deploying multiple workloads and validation will be done later.
             custom_sc (bool): True to create and use custom Pool and Storage Class
+            use_statefulsets (bool): If True, use StatefulSet-based workload manifests instead of
+                Deployment-based manifests. Requires the dr_workload_appset_<interface>_statefulsets
+                and dr_workload_subscription_placement_<interface>_statefulsets config keys to be
+                present in ENV_DATA (see conf/ocsci/dr_workload.yaml).
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -8213,6 +8218,8 @@ def create_workload_factory():
             ocs_version = version.get_semantic_ocs_version_from_config()
             appset_model = "pull" if ocs_version >= version.VERSION_4_16 else "push"
 
+        statefulsets_suffix = "_statefulsets" if use_statefulsets else ""
+
         for index in range(num_of_subscription):
             workload_key = "dr_workload_subscription"
             is_mdr_specific = ocsci_config.ENV_DATA.get(workload_key, False)
@@ -8220,7 +8227,7 @@ def create_workload_factory():
                 ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
             ) or (not is_mdr_specific):
                 workload_key = "dr_workload_subscription_placement"
-                workload_key += f"_{interface}"
+                workload_key += f"_{interface}{statefulsets_suffix}"
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyBox(
                 workload_details=workload_details,
@@ -8250,7 +8257,7 @@ def create_workload_factory():
             if (
                 ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
             ) or (not is_mdr_specific):
-                workload_key += f"_{interface}"
+                workload_key += f"_{interface}{statefulsets_suffix}"
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyBox_AppSet(
                 workload_dir=workload_details["workload_dir"],
@@ -8302,6 +8309,7 @@ def create_workload_factory():
         switch_ctx=None,
         skip_mirroring_validation=False,
         custom_sc=False,
+        use_statefulsets=False,
     ):
         return _create_resources(
             num_of_subscription,
@@ -8311,6 +8319,7 @@ def create_workload_factory():
             switch_ctx,
             skip_mirroring_validation,
             custom_sc,
+            use_statefulsets,
         )
 
     return factory, _teardown
@@ -8590,6 +8599,7 @@ def discovered_apps_dr_workload(request):
         multi_ns=False,
         workloads=None,
         custom_sc=False,
+        use_statefulsets=False,
     ):
         """
         Args:
@@ -8600,6 +8610,8 @@ def discovered_apps_dr_workload(request):
             multi_ns (bool): True for Multi Namespace
             custom_sc (bool): False by default, will create and use custom Pool and Storage Class
                 when set to True for discovered apps workload
+            use_statefulsets (bool): When True, use the StatefulSet variant of the busybox
+                discovered-apps workload. Only valid when ``workloads`` is None (default busybox).
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -8619,6 +8631,8 @@ def discovered_apps_dr_workload(request):
                 workload_key = "dr_workload_discovered_apps_cephfs_custom_pool_and_sc"
             else:
                 workload_key = "dr_workload_discovered_apps_cephfs"
+        if use_statefulsets and workloads is None:
+            workload_key += "_statefulsets"
         if workloads == "filebrowser":
             if pvc_interface == constants.CEPHFILESYSTEM:
                 workload_key = "dr_workload_discovered_apps_filebrowser_cephfs"
