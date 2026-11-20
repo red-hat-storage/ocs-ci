@@ -18,9 +18,9 @@ from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
     list_objects_from_bucket,
 )
-from ocs_ci.ocs.resources.pod import get_noobaa_pods
+from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_logs
 from ocs_ci.ocs.ocp import OCP, get_all_resource_of_kind_containing_string
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, warp
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -41,6 +41,20 @@ class TestNoobaaDbBackupRecoveryOps:
             if config.ENV_DATA["mcg_only_deployment"]
             else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
         )
+
+    @pytest.fixture()
+    def warps3(self, request):
+        """
+        Create warp S3 benchmark resource for multi-client testing
+        """
+        warps3 = warp.Warp()
+        warps3.create_resource_warp(replicas=4, multi_client=True)
+
+        def teardown():
+            warps3.cleanup(multi_client=True)
+
+        request.addfinalizer(teardown)
+        return warps3
 
     def trigger_cluster_recovery(self, db_cluster_name):
         """
@@ -239,6 +253,8 @@ class TestNoobaaDbBackupRecoveryOps:
         bucket_factory,
         test_directory_setup,
         noobaa_db_recovery_patch,
+        warps3,
+        mcg_obj_session,
     ):
         """
         Test to verify CNPG based noobaa DB backup operation using CLI
@@ -362,6 +378,38 @@ class TestNoobaaDbBackupRecoveryOps:
             volumesnapshot_obj.delete(resource_name=volumesnapshot_name, force=True)
             volumesnapshot_obj.wait_for_delete(resource_name=volumesnapshot_name)
         logger.info("volumesnapshots created by CNPG operator Removed successfully")
+
+        # Run multi client warp benchmarking
+        logger.info("Running multi-client warp benchmarking on the bucket")
+        warps3.run_benchmark(
+            bucket_name=bucket_name,
+            access_key=mcg_obj_session.access_key_id,
+            secret_key=mcg_obj_session.access_key,
+            duration="10m",
+            concurrent=10,
+            objects=100,
+            obj_size="1MiB",
+            validate=True,
+            timeout=6000,
+            multi_client=True,
+            tls=True,
+            debug=True,
+            insecure=True,
+        )
+
+        # make sure no errors in the noobaa pod logs
+        search_string = (
+            "AssertionError [ERR_ASSERTION]: _id must be unique. "
+            "found 2 rows with _id=undefined in table bucketstats"
+        )
+        nb_pods = get_noobaa_pods()
+        for pod in nb_pods:
+            pod_logs = get_pod_logs(pod_name=pod.name)
+            for line in pod_logs:
+                assert (
+                    search_string not in line
+                ), f"[Error] {search_string} found in the noobaa pod logs"
+        logger.info(f"No {search_string} errors are found in the noobaa pod logs")
 
     @tier4
     def test_noobaa_db_backup_snapshot_op(
