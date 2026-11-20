@@ -1,0 +1,3 @@
+ENV_DATA:
+  enable_tls_profile: true
+  tls_profile_config_path: "conf/tlsprofiles/enable_all_tlsprofile_v13.yaml"
