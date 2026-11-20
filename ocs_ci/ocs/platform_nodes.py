@@ -4641,7 +4641,11 @@ class IBMHCIAgentNode(object):
             )
 
         manufacturer = details["manufacturer"].lower()
-        rack_ip = details["rack_ip"]
+        rack_ip = (
+            config.ENV_DATA.get("ipmitool_machine_ip", details["rackIP"])
+            if "mdr-hcp3" in node_name
+            else details["rackIP"]
+        )
         username = details["username"]
         password = details["password"]
 
