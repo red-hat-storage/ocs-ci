@@ -40,7 +40,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.job import get_job_obj, get_jobs_with_prefix
-from ocs_ci.utility import templating
+from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import (
     get_primary_nb_db_pod,
     run_cmd,
@@ -2594,17 +2594,27 @@ def wait_for_noobaa_pods_running(timeout=300, sleep=10):
     Args:
         timeout (int): Timeout in seconds
 
+    Returns:
+        bool: True if all the noobaa pods reached Running state within the
+            timeout, False otherwise
+
     """
 
     def _check_nb_pods_status():
+        # From ODF 4.19 the NooBaa DB pods are managed by CNPG and use a different label
+        nb_db_label = (
+            constants.NOOBAA_DB_LABEL_419_AND_ABOVE
+            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
+            else constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+        )
         nb_pod_labels = [
             constants.NOOBAA_CORE_POD_LABEL,
             constants.NOOBAA_ENDPOINT_POD_LABEL,
             constants.NOOBAA_OPERATOR_POD_LABEL,
-            constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+            nb_db_label,
         ]
         if config.ENV_DATA.get("noobaa_external_pgsql"):
-            nb_pod_labels.remove(constants.NOOBAA_DB_LABEL_47_AND_ABOVE)
+            nb_pod_labels.remove(nb_db_label)
         nb_pods_running = list()
         for pod_label in nb_pod_labels:
             pods = get_pods_having_label(pod_label, statuses=[constants.STATUS_RUNNING])
@@ -2614,7 +2624,7 @@ def wait_for_noobaa_pods_running(timeout=300, sleep=10):
         return set(nb_pod_labels) == set(nb_pods_running)
 
     sampler = TimeoutSampler(timeout=timeout, sleep=10, func=_check_nb_pods_status)
-    sampler.wait_for_func_status(True)
+    return sampler.wait_for_func_status(True)
 
 
 @config.run_with_provider_context_if_available
