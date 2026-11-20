@@ -1,0 +1,128 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: file-uploader-fusion-pvc
+  labels:
+    appname: file-uploader-fusion
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: san-fs1
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: file-uploader-fusion
+  labels:
+    appname: file-uploader-fusion
+spec:
+  selector:
+    matchLabels:
+      workload: file-uploader-fusion
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        workload: file-uploader-fusion
+    spec:
+      # Prefer the zone busybox landed in, so that a zone failure disrupts both
+      # Deployments instead of only one of them. Deliberately a soft preference,
+      # a hard one would stop the pod from being rescheduled into the surviving
+      # zone, which is exactly what the zone failure test needs it to do
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: topology.kubernetes.io/zone
+              labelSelector:
+                matchLabels:
+                  workload: busybox-fusion
+      containers:
+      - name: file-uploader-server
+        image: quay.io/ocsci/filebrowser:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /srv
+          name: mypvc
+      - name: file-generator
+        image: quay.io/ocsci/rdr-ocs-workload
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            UPLOAD_DIR="/srv";
+            FILE_SIZE_KB=1024;
+            INTERVAL=30;
+            echo "=== File Generator Started ===";
+            COUNTER=0;
+            while true; do
+              COUNTER=$((COUNTER + 1));
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S);
+              FILENAME="upload_${TIMESTAMP}_${COUNTER}.dat";
+              dd if=/dev/urandom of="${UPLOAD_DIR}/${FILENAME}" bs=1024 count=${FILE_SIZE_KB} 2>/dev/null;
+              CHECKSUM=$(md5sum "${UPLOAD_DIR}/${FILENAME}" | awk '{print $1}');
+              echo "${CHECKSUM}  ${FILENAME}" >> "${UPLOAD_DIR}/checksums.log";
+              FILE_COUNT=$(ls -1 "${UPLOAD_DIR}"/*.dat 2>/dev/null | wc -l);
+              DISK_USAGE=$(du -sh "${UPLOAD_DIR}" | awk '{print $1}');
+              echo "[$(date)] Generated: ${FILENAME} | MD5: ${CHECKSUM} | Files: ${FILE_COUNT} | Usage: ${DISK_USAGE}";
+              if [ "${FILE_COUNT}" -gt 100 ]; then
+                OLDEST=$(ls -1t "${UPLOAD_DIR}"/*.dat | tail -1);
+                echo "[$(date)] Removing oldest file: $(basename ${OLDEST})";
+                sed -i "/$(basename ${OLDEST})/d" "${UPLOAD_DIR}/checksums.log";
+                rm -f "${OLDEST}";
+              fi;
+              sleep ${INTERVAL};
+            done
+        volumeMounts:
+        - mountPath: /srv
+          name: mypvc
+      volumes:
+      - name: mypvc
+        persistentVolumeClaim:
+          claimName: file-uploader-fusion-pvc
+          readOnly: false
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: file-uploader-fusion
+  labels:
+    appname: file-uploader-fusion
+spec:
+  ports:
+  - name: 8080-tcp
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  type: ClusterIP
+  selector:
+    workload: file-uploader-fusion
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: file-uploader-fusion
+  labels:
+    appname: file-uploader-fusion
+  annotations:
+    haproxy.router.openshift.io/balance: roundrobin
+    haproxy.router.openshift.io/disable_cookies: 'true'
+spec:
+  to:
+    kind: Service
+    name: file-uploader-fusion
+    weight: 100
+  port:
+    targetPort: 8080-tcp
+  tls:
+    termination: edge
+  wildcardPolicy: None
