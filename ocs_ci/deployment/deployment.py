@@ -4358,7 +4358,7 @@ class MultiClusterDROperatorsDeploy(object):
         are configured and self.dr_policy_name is set.
 
         """
-        run_e2e = config.UPGRADE.get("run_ramenctl_e2e")
+        run_e2e = config.ENV_DATA.get("run_ramenctl_e2e")
         if not run_e2e:
             return
 
@@ -4367,6 +4367,18 @@ class MultiClusterDROperatorsDeploy(object):
             return
 
         logger.info("[ramenctl-e2e] Starting ramenctl e2e test execution")
+
+        # Create a dedicated DRPolicy for the e2e run and point
+        # ramenctl at it. The existing deployment DRPolicy
+        # is left intact, so both policies exist.
+        # On failure, fall back to the existing policy so tests can still run.
+        try:
+            self.dr_policy_name = self._create_ramenctl_dr_policy()
+        except Exception:
+            logger.exception(
+                "[ramenctl-e2e] Failed to create DRPolicy; "
+                f"falling back to existing DRPolicy {self.dr_policy_name}"
+            )
 
         ramenctl_repo_url = constants.RAMENCTL_REPO_URL
         ramenctl_branch = constants.RAMENCTL_REPO_BRANCH
@@ -4409,6 +4421,87 @@ class MultiClusterDROperatorsDeploy(object):
                 f"[ramenctl-e2e] Cleaning up temporary directory: {ramenctl_clone_dir}"
             )
             shutil.rmtree(ramenctl_clone_dir, ignore_errors=True)
+
+    def _create_ramenctl_dr_policy(self):
+        """
+        Create a dedicated DRPolicy for the ramenctl e2e run.
+
+        deploy_dr_policy() already created the standard RDR DRPolicy (e.g.
+        odr-policy-5m). This creates an additional DRPolicy (default 1m,
+        configurable via ENV_DATA.ramenctl_dr_policy_interval), reusing the
+        same drClusters as the existing policy, so both policies exist on the hub.
+        Idempotent: reuses the policy if it already exists.
+
+        Returns:
+            str: Name of the short-interval DRPolicy to use for the e2e run
+
+        """
+        interval = config.ENV_DATA.get("ramenctl_dr_policy_interval", 1)
+        new_policy_name = f"odr-policy-{interval}m"
+
+        old_ctx = config.cur_index
+        try:
+            config.switch_acm_ctx()
+
+            # Reuse the drClusters from the existing deployment DRPolicy.
+            existing_policy = ocp.OCP(
+                kind=constants.DRPOLICY,
+                resource_name=self.dr_policy_name,
+                namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+            )
+            dr_clusters = existing_policy.get()["spec"]["drClusters"]
+
+            new_policy = ocp.OCP(
+                kind=constants.DRPOLICY,
+                resource_name=new_policy_name,
+                namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+            )
+            if new_policy.is_exist():
+                logger.info(
+                    f"[ramenctl-e2e] DRPolicy '{new_policy_name}' already exists "
+                    "— reusing"
+                )
+            else:
+                policy_data = {
+                    "apiVersion": "ramendr.openshift.io/v1alpha1",
+                    "kind": "DRPolicy",
+                    "metadata": {
+                        "name": new_policy_name,
+                        "labels": {
+                            "cluster.open-cluster-management.io/backup": "resource"
+                        },
+                    },
+                    "spec": {
+                        "drClusters": dr_clusters,
+                        "schedulingInterval": f"{interval}m",
+                    },
+                }
+                policy_yaml = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="ramenctl_dr_policy_", delete=False
+                )
+                templating.dump_data_to_temp_yaml(policy_data, policy_yaml.name)
+                logger.info(
+                    f"[ramenctl-e2e] Creating {interval}m DRPolicy "
+                    f"'{new_policy_name}' with drClusters {dr_clusters}"
+                )
+                exec_cmd(f"oc create -f {policy_yaml.name}")
+
+            # Wait for the new DRPolicy to reach the Succeeded state.
+            new_policy.get()
+            sample = TimeoutSampler(
+                timeout=600,
+                sleep=3,
+                func=self.meta_obj._get_status,
+                resource_data=new_policy,
+            )
+            if not sample.wait_for_func_status(True):
+                raise TimeoutExpiredError(
+                    f"DRPolicy '{new_policy_name}' failed to reach Succeeded state"
+                )
+            logger.info(f"[ramenctl-e2e] DRPolicy '{new_policy_name}' is ready")
+            return new_policy_name
+        finally:
+            config.switch_ctx(old_ctx)
 
     def _install_ramenctl(self, ramenctl_dir):
         """
@@ -4749,11 +4842,36 @@ class MultiClusterDROperatorsDeploy(object):
             # deployment log (which is archived) to preserve the root cause.
             self._log_ramenctl_result_file(output_path)
         finally:
+            self._make_ramenctl_results_readable(output_path)
             # Always attempt to tear down the test artifacts deployed on the
             # clusters by the test run, while config.yaml still exists in
             # ramenctl_dir. Best-effort: failures must not block workspace
             # deletion in the caller.
             self._clean_ramenctl_e2e(ramenctl_dir)
+
+    def _make_ramenctl_results_readable(self, output_path):
+        """
+        Make a ramenctl results directory readable.
+
+        ramenctl creates its output directory and files with owner-only
+        permissions, so they are not accessible to the Jenkins artifact
+        server that serves the ocs-ci log directory. Apply ``o+rX``
+        recursively (read for files, read+traverse for directories) so the
+        results can be browsed. Best-effort: never raises.
+
+        Args:
+            output_path (str): ramenctl output directory to make readable
+
+        """
+        if not os.path.isdir(output_path):
+            return
+        try:
+            run_cmd(f"chmod -R o+rX {output_path}", shell=True)
+            logger.info(f"[ramenctl-e2e] Made results readable at: {output_path}")
+        except Exception as e:
+            logger.warning(
+                f"[ramenctl-e2e] Could not relax permissions on {output_path}: {e}"
+            )
 
     def _log_ramenctl_result_file(self, output_path, max_lines=500):
         """
@@ -4773,9 +4891,7 @@ class MultiClusterDROperatorsDeploy(object):
         log_file = os.path.join(output_path, "test-run.log")
         try:
             if not os.path.exists(log_file):
-                logger.warning(
-                    f"[ramenctl-e2e] Result log not found at {log_file}"
-                )
+                logger.warning(f"[ramenctl-e2e] Result log not found at {log_file}")
                 return
             with open(log_file) as f:
                 lines = f.readlines()
@@ -4787,9 +4903,7 @@ class MultiClusterDROperatorsDeploy(object):
                 + "".join(tail)
             )
         except Exception as e:
-            logger.warning(
-                f"[ramenctl-e2e] Could not read result log {log_file}: {e}"
-            )
+            logger.warning(f"[ramenctl-e2e] Could not read result log {log_file}: {e}")
 
     def _clean_ramenctl_e2e(self, ramenctl_dir):
         """
@@ -4832,6 +4946,9 @@ class MultiClusterDROperatorsDeploy(object):
                 "[ramenctl-e2e] Test cleanup failed, continuing with workspace "
                 f"deletion: {e}"
             )
+        finally:
+            # Make cleanup diagnostics browsable from the Jenkins log dir too.
+            self._make_ramenctl_results_readable(clean_output_path)
 
     def deploy_dr_policy(self):
         # Create DR policy on ACM hub cluster
