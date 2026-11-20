@@ -26,7 +26,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     jira,
     skipif_external_mode,
-    skipif_ocs_version,
     tier2,
 )
 from ocs_ci.helpers.helpers import get_last_log_time_date
@@ -51,7 +50,6 @@ CSI_POST_ROTATION_PVC_SIZE = 5
 
 
 @skipif_external_mode
-@skipif_ocs_version("<4.21")
 @green_squad
 @ignore_leftovers
 class TestCephXKeyRotationNegative:
@@ -320,7 +318,6 @@ class TestCephXKeyRotationNegative:
 
     @pytest.mark.polarion_id("OCS-8157")
     @tier2
-    @skipif_ocs_version("<4.21")
     def test_cephx_daemon_key_generation_decrease_rejected(
         self, cephx_keyrotation_setup
     ):
@@ -428,7 +425,6 @@ class TestCephXKeyRotationNegative:
 
 
 @skipif_external_mode
-@skipif_ocs_version("<4.21")
 @green_squad
 @ignore_leftovers
 class TestCephXKeyRotationNegativeOSD:
@@ -609,7 +605,6 @@ class TestCephXKeyRotationNegativeOSD:
 
 
 @skipif_external_mode
-@skipif_ocs_version("<4.21")
 @green_squad
 @ignore_leftovers
 class TestCephXKeyRotationNegativeEncryptedCSI:

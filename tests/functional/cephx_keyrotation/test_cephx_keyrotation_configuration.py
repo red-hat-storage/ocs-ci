@@ -13,7 +13,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_external_mode,
     skipif_ibm_hci_platform,
-    skipif_ocs_version,
     tier1,
 )
 from ocs_ci.helpers.cephx_keyrotation import CephXKeyRotation
@@ -28,7 +27,6 @@ EXPECTED_INITIAL_GENERATION = 2
 
 
 @skipif_external_mode
-@skipif_ocs_version("<4.21")
 @skipif_ibm_hci_platform
 @green_squad
 @pytest.mark.order("first")
@@ -110,7 +108,6 @@ class TestCephXKeyRotationPolicyDisabled:
 
 
 @skipif_external_mode
-@skipif_ocs_version("<4.21")
 @skipif_ibm_hci_platform
 @green_squad
 class TestCephXAllowedCiphers:

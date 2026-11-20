@@ -16,7 +16,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
     jira,
     skipif_external_mode,
-    skipif_ocs_version,
     tier2,
 )
 from ocs_ci.helpers.cephx_keyrotation import CephXKeyRotation
@@ -33,7 +32,6 @@ MIN_OSD_NODES = 3
 
 
 @skipif_external_mode
-@skipif_ocs_version("<4.21")
 @green_squad
 @ignore_leftovers
 class TestCephXKeyRotationNodeCordon:

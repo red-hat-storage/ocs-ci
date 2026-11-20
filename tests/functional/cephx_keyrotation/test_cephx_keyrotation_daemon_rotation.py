@@ -14,7 +14,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_external_mode,
-    skipif_ocs_version,
     tier1,
 )
 from ocs_ci.helpers.helpers import get_last_log_time_date
@@ -41,7 +40,6 @@ POST_ROTATION_PVC_SIZE = 5
 
 
 @skipif_external_mode
-@skipif_ocs_version("<4.21")
 @green_squad
 class TestCephXKeyRotation:
     @pytest.mark.polarion_id("OCS-8128")
@@ -388,7 +386,6 @@ class TestCephXKeyRotation:
 
 
 @skipif_external_mode
-@skipif_ocs_version("<4.21")
 @green_squad
 class TestCephXKeyRotationIdempotency:
     @pytest.mark.polarion_id("OCS-8131")
@@ -464,7 +461,6 @@ class TestCephXKeyRotationIdempotency:
 
 
 @skipif_external_mode
-@skipif_ocs_version("<4.21")
 @green_squad
 class TestCephXKeyRotationIOContinuity:
     @pytest.mark.polarion_id("OCS-8132")
