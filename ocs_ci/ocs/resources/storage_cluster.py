@@ -1852,7 +1852,15 @@ def verify_max_openshift_version():
     odf_sem_version = get_semantic_version(
         version=odf_full_version, ignore_pre_release=True
     )
-    expected_max_openshift_sem_version = odf_sem_version.next_minor()
+    odf_major_minor_version = get_semantic_version(
+        version=odf_full_version, only_major_minor=True
+    )
+    if odf_major_minor_version == version.VERSION_4_22:
+        # OCP renumbers its next release as 5.0 instead of 4.23, so ODF 4.22
+        # is allowed to run on OCP 5.0 rather than the usual N+1 minor version.
+        expected_max_openshift_sem_version = get_semantic_version(version="5.0")
+    else:
+        expected_max_openshift_sem_version = odf_sem_version.next_minor()
     assert max_openshift_sem_version == expected_max_openshift_sem_version, (
         f"olm.maxOpenShiftVersion is {max_openshift_version} but expected "
         f"version is {expected_max_openshift_sem_version}"
