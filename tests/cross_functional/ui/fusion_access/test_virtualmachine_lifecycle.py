@@ -18,6 +18,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     fa_functional,
     yellow_squad,
     ignore_leftovers,
+    pre_fdf_upgrade,
 )
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_project
 from ocs_ci.ocs.ui.page_objects.virtualmachine_ui import VirtualMachineUI
@@ -48,6 +49,7 @@ class TestVirtualMachineLifecycle(ManageTest):
 
     @pytest.mark.polarion_id("OCS-8066")
     @fa_functional
+    @pre_fdf_upgrade
     def test_create_virtualmachine_from_instancetype(self):
         """
         Test to create a VirtualMachine via the new UI wizard.
