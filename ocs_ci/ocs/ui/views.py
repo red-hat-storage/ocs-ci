@@ -355,6 +355,17 @@ deployment_4_19 = {
     ),
     "0.5 TiB": ('button[data-test-dropdown-menu="0.5 TiB"]', By.CSS_SELECTOR),
 }
+deployment_5_0 = {
+    "mcg_only_deployment_entry": (
+        "#setup-object-storage button[class*='c-card__clickable-action']",
+        By.CSS_SELECTOR,
+    ),
+    "mcg_wizard_backing_storage_step": (
+        "//*[normalize-space()='Backing storage']",
+        By.XPATH,
+    ),
+}
+
 deployment_4_21 = {
     "osd_size_dropdown": (
         "//button[contains(@aria-label, 'select') and contains(@class, 'dropdown--full-width')]",
@@ -4580,6 +4591,7 @@ locators = {
             **deployment_4_16,
             **deployment_4_17,
             **deployment_4_19,
+            **deployment_5_0,
             **deployment_4_21,
             **deployment_4_22,
         },
