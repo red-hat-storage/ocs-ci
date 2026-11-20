@@ -422,6 +422,7 @@ def wait_for_alert_firing(
     expected_severity=None,
     expected_message_substr=None,
     min_count=1,
+    labels=None,
 ):
     """
     Wait for a Prometheus alert to reach the ``firing`` state and validate it.
@@ -437,6 +438,7 @@ def wait_for_alert_firing(
             ``alert["annotations"]["message"]``.
         min_count (int): Minimum number of firing alert instances to
             wait for. Defaults to 1.
+        labels (dict | None): Label values required on matching alerts.
 
     Returns:
         list[dict]: All fired alert records (at least ``min_count``).
@@ -445,13 +447,12 @@ def wait_for_alert_firing(
         AssertionError: If fewer than ``min_count`` alerts fire, or any
             validation fails.
     """
-    alerts = api.wait_for_alert(
-        name=alert_name,
-        state="firing",
-        timeout=timeout,
-        sleep=10,
-        min_count=min_count,
+    wait_kwargs = dict(
+        name=alert_name, state="firing", timeout=timeout, sleep=10, min_count=min_count
     )
+    if labels is not None:
+        wait_kwargs["labels"] = labels
+    alerts = api.wait_for_alert(**wait_kwargs)
     assert len(alerts) >= min_count, (
         f"Expected at least {min_count} '{alert_name}' alert(s) to fire "
         f"within {timeout}s, got {len(alerts)}"
@@ -474,7 +475,7 @@ def wait_for_alert_firing(
     return alerts
 
 
-def wait_for_alert_cleared(api, alert_name, timeout=600):
+def wait_for_alert_cleared(api, alert_name, timeout=600, labels=None):
     """
     Wait for a Prometheus alert to disappear (no longer firing or pending).
 
@@ -482,11 +483,15 @@ def wait_for_alert_cleared(api, alert_name, timeout=600):
         api (PrometheusAPI): Prometheus API instance.
         alert_name (str): Alert name to wait for clearing.
         timeout (int): Seconds to wait for the alert to clear.
+        labels (dict | None): Label values required on matching alerts.
 
     Raises:
         AssertionError: If the alert is still present after ``timeout``.
     """
-    alerts = api.wait_for_alert(name=alert_name, timeout=timeout, sleep=10)
+    wait_kwargs = dict(name=alert_name, timeout=timeout, sleep=10)
+    if labels is not None:
+        wait_kwargs["labels"] = labels
+    alerts = api.wait_for_alert(**wait_kwargs)
     assert not alerts, f"Alert '{alert_name}' did not clear within {timeout}s"
     logger.info("Alert '%s' cleared successfully", alert_name)
 
@@ -816,7 +821,9 @@ class PrometheusAPI(object):
         # return actual result of the query
         return content["data"]["result"]
 
-    def wait_for_alert(self, name, state=None, timeout=1200, sleep=5, min_count=1):
+    def wait_for_alert(
+        self, name, state=None, timeout=1200, sleep=5, min_count=1, labels=None
+    ):
         """
         Search for alerts that have requested name and state.
 
@@ -834,6 +841,7 @@ class PrometheusAPI(object):
             min_count (int): Minimum number of matching alerts required
                 before breaking out of the polling loop (only applies when
                 ``state`` is provided). Defaults to 1.
+            labels (dict | None): Label values required on matching alerts.
 
         Returns:
             list: List of alert records
@@ -857,6 +865,10 @@ class PrometheusAPI(object):
                         for alert in alerts_response.json().get("data").get("alerts")
                         if alert.get("labels").get("alertname") == name
                         and alert.get("state") == state
+                        and all(
+                            alert["labels"].get(key) == value
+                            for key, value in (labels or {}).items()
+                        )
                     ]
                     logger.info(
                         f"Checking for {name} alerts with state {state}... "
@@ -871,6 +883,10 @@ class PrometheusAPI(object):
                         alert
                         for alert in alerts_response.json().get("data").get("alerts")
                         if alert.get("labels").get("alertname") == name
+                        and all(
+                            alert["labels"].get(key) == value
+                            for key, value in (labels or {}).items()
+                        )
                     ]
                     logger.info(
                         f"Checking for {name} alerts. There should be no alerts ... "
