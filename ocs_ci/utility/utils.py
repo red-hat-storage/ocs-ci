@@ -6863,7 +6863,7 @@ def get_nb_db_pod_by_cnpg_label(cnpg_label, namespace=None):
 
 
 @config.run_with_provider_context_if_available
-def exec_nb_db_query(query):
+def exec_nb_db_query(query, timeout=600):
     """
     Send a psql query to the Noobaa DB
 
@@ -6872,6 +6872,8 @@ def exec_nb_db_query(query):
 
     Args:
         query (str): The query to send
+        timeout (int): Timeout in seconds of the 'oc' command. Statements that
+            rewrite or delete a large part of the DB outlast the default
 
     Returns:
         list of str: The query result rows
@@ -6884,6 +6886,7 @@ def exec_nb_db_query(query):
     response = nb_db_pod.exec_cmd_on_pod(
         command=f'psql -U postgres -d nbcore -c "{query}"',
         out_yaml_format=False,
+        timeout=timeout,
     )
 
     output = response.strip().split("\n")
