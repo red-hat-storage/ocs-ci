@@ -1,0 +1,5 @@
+# Provide the migration-tool image from the build team when running
+# Fusion Access migration tests. Example:
+#   migration_tool_image: "quay.io/rhceph-dev/odf4-odf-cli-rhel9:<build-tag>"
+DEPLOYMENT:
+  migration_tool_image: ""
