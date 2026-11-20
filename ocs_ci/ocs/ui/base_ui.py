@@ -529,6 +529,60 @@ class BaseUI:
                 ).text
             raise
 
+    def get_toast_alert_text(self, expected_text, timeout=8):
+        """
+        Wait for the toast alert whose title contains expected_text and read
+        its title and description from that same toast.
+
+        The title is matched on its own. A toast that only shares the
+        description is not selected.
+
+        Args:
+            expected_text (str): Text expected in the toast title.
+            timeout (int): Seconds to wait for the toast.
+
+        Returns:
+            tuple: Toast title and description. Both are empty when the toast
+                is not found.
+
+        """
+        toast_locator = self.generic_locators["toast_alert"]
+        title_locator = self.generic_locators["toast_alert_title"]
+        description_locator = self.generic_locators["toast_alert_description"]
+
+        def toast_with_text(driver):
+            """Read the title and description from the toast that matches."""
+            try:
+                for element in driver.find_elements(toast_locator[1], toast_locator[0]):
+                    title = element.find_element(
+                        title_locator[1], title_locator[0]
+                    ).text
+                    if expected_text not in title:
+                        continue
+                    description = element.find_element(
+                        description_locator[1], description_locator[0]
+                    ).text
+                    return title, description
+            except StaleElementReferenceException:
+                return False
+            return False
+
+        logger.info(f"Wait for toast containing '{expected_text}'")
+        try:
+            title, description = WebDriverWait(
+                self.driver,
+                timeout=timeout,
+                poll_frequency=1,
+                ignored_exceptions=(StaleElementReferenceException,),
+            ).until(toast_with_text)
+        except TimeoutException:
+            self.take_screenshot()
+            logger.warning(f"Toast containing '{expected_text}' was not found")
+            return "", ""
+
+        logger.info(f"Toast captured. Title: '{title}', description: '{description}'")
+        return title, description
+
     def get_elements(self, locator):
         """
         Get an elements list. Useful to count number of elements presented on page, etc.
