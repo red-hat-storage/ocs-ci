@@ -11,14 +11,17 @@ from selenium.webdriver.common.by import By
 
 from ocs_ci.deployment.hub_spoke import HostedClients
 from ocs_ci.framework import config
-from ocs_ci.framework.logger_helper import log_step
+
+# ICSP/IDMS rules disabled for ODF upgrade: logger_helper import removed
 from ocs_ci.helpers.helpers import verify_nb_db_psql_version
 from ocs_ci.deployment.deployment import (
     create_catalog_source,
     create_ocs_secret,
     Deployment,
 )
-from ocs_ci.utility.deployment import get_and_apply_idms_from_catalog
+
+# ICSP/IDMS rules disabled for ODF upgrade
+# from ocs_ci.utility.deployment import get_and_apply_idms_from_catalog
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
@@ -904,20 +907,10 @@ class OCSUpgrade(object):
         stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
         konflux_build = config.DEPLOYMENT.get("konflux_build")
         if konflux_build and stage_testing:
-            log_step("Creating stage TagMirrorSet")
-            exec_cmd(f"oc apply -f {constants.STAGE_TAG_MIRROR_SET_YAML}")
-            log_step("Creating stage ImageDigestMirrorSet")
-            exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
-            log_step("Sleeping 60 seconds after applying tag mirror set.")
-            time.sleep(60)
-            log_step("Waiting max 50 mins for master MCP to get updated")
-            exec_cmd(
-                "oc wait --for=condition=Updated --timeout=50m mcp/master", timeout=3600
-            )
-            log_step("Waiting max 30 mins for worker MCP to get updated")
-            exec_cmd(
-                "oc wait --for=condition=Updated --timeout=30m mcp/worker", timeout=2100
-            )
+            # ICSP/IDMS rules disabled for ODF upgrade: the stage
+            # TagMirrorSet / ImageDigestMirrorSet apply and MCP wait that was
+            # here has been removed. Early-return preserved to keep the
+            # konflux stage control flow unchanged.
             return
         if not self.upgrade_in_current_source:
             disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
@@ -957,8 +950,9 @@ class OCSUpgrade(object):
                 dump_data_to_temp_yaml(cs_data, cs_yaml.name)
                 ocs_catalog.apply(cs_yaml.name)
                 if not config.DEPLOYMENT.get("disconnected"):
+                    # ICSP/IDMS rules disabled for ODF upgrade
                     # on Disconnected cluster, ICSP /IDMS from the ocs-registry image is not needed/valid
-                    get_and_apply_idms_from_catalog(f"{image_url}:{new_image_tag}")
+                    # get_and_apply_idms_from_catalog(f"{image_url}:{new_image_tag}")
                     if config.ENV_DATA.get("platform", "").lower() not in (
                         constants.HCI_PROVIDER_CLIENT_PLATFORMS
                     ):
