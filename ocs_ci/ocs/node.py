@@ -1220,6 +1220,58 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     return new_node_name
 
 
+def delete_and_create_worker_node_ipi(node_name):
+    """
+    Unschedule, drain and delete a worker node, then wait for a replacement
+    worker to be spun by the Machine API (IPI).
+
+    Intended for non-OCS stacks (e.g. Fusion Access) where the new node must
+    not receive the OCS operator node label.
+
+    Args:
+        node_name (str): Worker node name to delete
+
+    Returns:
+        str: The new node name
+
+    """
+    log.info("Going to unschedule, drain and delete %s node", node_name)
+    unschedule_nodes([node_name])
+    drain_nodes([node_name])
+    log.info("Getting machine name from specified node name")
+    machine_name = machine.get_machine_from_node_name(node_name)
+    log.info(f"Node {node_name} associated machine is {machine_name}")
+    log.info(f"Deleting machine {machine_name} and waiting for new machine to come up")
+    new_machine_name = machine.delete_machine_and_check_state_of_new_spinned_machine(
+        machine_name
+    )
+    if config.ENV_DATA.get("worker_replicas") == 0:
+        new_node_name = get_node_from_machine_name(new_machine_name)
+        log.info("Waiting for new worker node to be in ready state")
+        wait_for_nodes_status(
+            [new_node_name], constants.STATUS_READY, timeout=600, sleep=20
+        )
+    else:
+        machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
+        log.info("Waiting for new worker node to be in ready state")
+        machine.wait_for_new_node_to_be_ready(machineset_name)
+        new_node_name = get_node_from_machine_name(new_machine_name)
+
+    log.info(f"Wait for the old machine {machine_name} to be deleted")
+    if config.ENV_DATA.get("worker_replicas") == 0:
+        timeout = 1200
+    else:
+        timeout = 420
+    ocp_obj = OCP(kind="machine", namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
+    ocp_obj.wait_for_delete(
+        resource_name=machine_name,
+        timeout=timeout,
+        sleep=30,
+        ignore_command_failed_exception=True,
+    )
+    return new_node_name
+
+
 def delete_and_create_osd_node_managed_cp(osd_node_name):
     """
     Function developed to delete and create OSD node in Control Plane managed cluster (e.g. ROSA HCP).

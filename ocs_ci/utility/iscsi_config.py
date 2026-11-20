@@ -3,6 +3,7 @@ This module is used for configuring iscsi.
 """
 
 import logging
+import os
 import re
 import traceback
 
@@ -933,3 +934,108 @@ def run_iscsi_setup_validations():
     validate_iscsi_sessions()
     validate_iscsi_devices()
     log.info("All iSCSI setup validations passed.")
+
+
+def get_iscsi_target_ssh_connection():
+    """
+    Create an SSH connection to the iSCSI target server using ENV_DATA credentials.
+
+    Supports key-based auth via ``iscsi_target_private_key`` as well as password
+    auth via ``iscsi_target_password``. One of the two must be set: Connection
+    only calls ``client.connect()`` when it has a private key or a password, so
+    supplying neither yields an unconnected client that fails later with a
+    confusing error.
+
+    Returns:
+        Connection: SSH connection to the iSCSI target.
+
+    Raises:
+        ValueError: If required iSCSI target ENV_DATA keys are missing.
+    """
+    target_ip = config.ENV_DATA.get("iscsi_target_ip")
+    username = config.ENV_DATA.get("iscsi_target_username")
+    password = config.ENV_DATA.get("iscsi_target_password")
+    private_key = config.ENV_DATA.get("iscsi_target_private_key")
+    if not target_ip or not username:
+        raise ValueError(
+            "iscsi_target_ip and iscsi_target_username must be set in ENV_DATA"
+        )
+    if not password and not private_key:
+        raise ValueError(
+            "Either iscsi_target_password or iscsi_target_private_key must be set "
+            "in ENV_DATA, otherwise the SSH client is never actually connected"
+        )
+    if private_key:
+        private_key = os.path.expanduser(private_key)
+    return Connection(
+        host=target_ip,
+        user=username,
+        private_key=private_key,
+        password=password,
+        stdout=True,
+    )
+
+
+def configure_iscsi_for_workers(worker_node_names, remove_iqns=None):
+    """
+    Add worker initiator IQNs to the iSCSI target ACL (targetcli) and configure
+    initiators on the given workers. Optionally remove stale IQNs first.
+
+    Used after worker node replacement so the new node can see SAN LUNs.
+
+    Args:
+        worker_node_names (list): Worker node names to configure.
+        remove_iqns (list, optional): Initiator IQNs to remove from target ACLs
+            (e.g. IQNs from the replaced node).
+
+    Raises:
+        ValueError: If iSCSI target config or worker IQNs are missing.
+        AssertionError: If post-config session/device validation fails.
+    """
+    if not worker_node_names:
+        raise ValueError("worker_node_names must not be empty")
+
+    target_iqn = config.ENV_DATA.get("iscsi_target_iqn")
+    if not target_iqn:
+        raise ValueError("iscsi_target_iqn must be set in ENV_DATA")
+
+    target_node_ssh = get_iscsi_target_ssh_connection()
+    username = config.ENV_DATA.get("iscsi_target_username")
+
+    if remove_iqns:
+        log.info(f"Removing stale initiator ACLs: {remove_iqns}")
+        remove_acls_from_target(
+            target_node_ssh, target_iqn, remove_iqns, username=username
+        )
+
+    worker_iqns = get_worker_iqns(worker_node_names)
+    if not worker_iqns:
+        raise ValueError(f"No initiator IQNs found for workers: {worker_node_names}")
+
+    log.info(
+        f"Adding ACLs and mapping LUNs for workers {worker_node_names}: {worker_iqns}"
+    )
+    configure_target(target_node_ssh, target_iqn, worker_iqns)
+    configure_initiators(worker_node_names)
+
+    session_results = verify_iscsi_sessions(worker_node_names, target_iqn)
+    device_results = verify_iscsi_devices(worker_node_names, target_iqn)
+    failed_sessions = [
+        name
+        for name, result in session_results.items()
+        if not result.get("session", False)
+    ]
+    failed_devices = [
+        name for name, result in device_results.items() if result.get("count", 0) <= 0
+    ]
+    assert not failed_sessions, (
+        f"iSCSI sessions not established on: {failed_sessions}. "
+        f"Results: {session_results}"
+    )
+    assert (
+        not failed_devices
+    ), f"No iSCSI devices visible on: {failed_devices}. Results: {device_results}"
+    log.info(
+        f"iSCSI configured successfully for workers {worker_node_names}: "
+        f"sessions and LUN devices verified"
+    )
