@@ -26,14 +26,14 @@ spec:
     - quay.io/rhceph-dev/openshift-ose-csi-node-driver-registrar
     source: registry.redhat.io/openshift4/ose-csi-node-driver-registrar
   - mirrors:
-    - quay.io/rhceph-dev/odf4-cephcsi-rhel8
-    source: registry.redhat.io/odf4/cephcsi-rhel8
+    - quay.io/rhceph-dev/{{ odf_namespace }}-cephcsi-rhel8
+    source: registry.redhat.io/{{ odf_namespace }}/cephcsi-rhel8
   - mirrors:
-    - quay.io/rhceph-dev/odf4-cephcsi-rhel9
-    source: registry.redhat.io/odf4/cephcsi-rhel9
+    - quay.io/rhceph-dev/{{ odf_namespace }}-cephcsi-rhel9
+    source: registry.redhat.io/{{ odf_namespace }}/cephcsi-rhel9
   - mirrors:
-    - quay.io/rhceph-dev/odf4-odf-csi-addons-sidecar-rhel8
-    source: registry.redhat.io/odf4/odf-csi-addons-sidecar-rhel8
+    - quay.io/rhceph-dev/{{ odf_namespace }}-odf-csi-addons-sidecar-rhel8
+    source: registry.redhat.io/{{ odf_namespace }}/odf-csi-addons-sidecar-rhel8
   - mirrors:
-    - quay.io/rhceph-dev/odf4-odf-csi-addons-sidecar-rhel9
-    source: registry.redhat.io/odf4/odf-csi-addons-sidecar-rhel9
+    - quay.io/rhceph-dev/{{ odf_namespace }}-odf-csi-addons-sidecar-rhel9
+    source: registry.redhat.io/{{ odf_namespace }}/odf-csi-addons-sidecar-rhel9
