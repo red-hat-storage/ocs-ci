@@ -413,7 +413,21 @@ class MultiClusterOrchestratorUpgrade(DRUpgrade):
         assert (
             self.pre_upgrade_data.get("pod_status", "") == "Running"
         ), "odfmo-controller pod is not in Running status"
-        super().run_upgrade()
+        pre_version = self.pre_upgrade_data.get("version", "")
+        if pre_version and self.upgrade_version in pre_version:
+            log.info(
+                f"MCO operator is already at version {pre_version} "
+                f"which matches target upgrade version {self.upgrade_version}. "
+                "Skipping upgrade execution and version-change validation."
+            )
+            self.upgrade_phase = "post_upgrade"
+            self.collect_data()
+            assert (
+                self.post_upgrade_data.get("pod_status", "") == "Running"
+            ), "odfmo-controller pod is not in Running status after already-upgraded check"
+            return
+        else:
+            super().run_upgrade()
         self.upgrade_phase = "post_upgrade"
         self.collect_data()
         self.validate_upgrade()
@@ -456,7 +470,21 @@ class DRHubUpgrade(DRUpgrade):
         assert (
             self.pre_upgrade_data.get("pod_status", "") == "Running"
         ), "ramen-hub-operator pod is not in Running status"
-        super().run_upgrade()
+        pre_version = self.pre_upgrade_data.get("version", "")
+        if pre_version and self.upgrade_version in pre_version:
+            log.info(
+                f"DR Hub operator is already at version {pre_version} "
+                f"which matches target upgrade version {self.upgrade_version}. "
+                "Skipping upgrade execution and version-change validation."
+            )
+            self.upgrade_phase = "post_upgrade"
+            self.collect_data()
+            assert (
+                self.post_upgrade_data.get("pod_status", "") == "Running"
+            ), "ramen-hub-operator pod is not in Running status after already-upgraded check"
+            return
+        else:
+            super().run_upgrade()
         self.upgrade_phase = "post_upgrade"
         self.collect_data()
         self.validate_upgrade()
