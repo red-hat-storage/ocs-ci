@@ -6,6 +6,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     ignore_leftovers,
     brown_squad,
+    zstream_4_18_1,
+    zstream_4_18_1_ocs_operator,
 )
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -37,6 +39,8 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-5646")
 @pytest.mark.polarion_id("OCS-5656")
 @pytest.mark.polarion_id("OCS-5657")
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestProfileDefaultValuesCheck(ManageTest):
     @pytest.mark.parametrize(
         argnames=["perf_profile"],

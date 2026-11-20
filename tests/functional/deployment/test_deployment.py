@@ -1,7 +1,7 @@
 import logging
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import purple_squad
+from ocs_ci.framework.pytest_customization.marks import purple_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import deployment, polarion_id
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
@@ -25,6 +25,8 @@ log = logging.getLogger(__name__)
 @purple_squad
 @deployment
 @polarion_id(get_polarion_id())
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 def test_deployment(pvc_factory, pod_factory):
     deploy = config.RUN["cli_params"].get("deploy")
     teardown = config.RUN["cli_params"].get("teardown")

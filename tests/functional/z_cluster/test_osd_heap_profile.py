@@ -3,7 +3,7 @@ import pytest
 import time
 import random
 
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -24,6 +24,8 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.6")
 @pytest.mark.polarion_id("OCS-2512")
 @skipif_external_mode
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestOSDHeapProfile(ManageTest):
     """
     1.Start heap profiler for osd

@@ -4,7 +4,7 @@ import pytest
 
 from time import sleep
 from ocs_ci.ocs import constants, node
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import E2ETest, tier4, tier4b
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.node import get_worker_nodes
@@ -15,6 +15,8 @@ log = logging.getLogger(__name__)
 
 
 @brown_squad
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestKernelCrash(E2ETest):
     """
     Tests to verify kernel crash

@@ -6,6 +6,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     brown_squad,
     runs_on_provider,
+    zstream_4_18_1,
+    zstream_4_18_1_ocs_operator,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants
@@ -21,6 +23,8 @@ log = logging.getLogger(__name__)
 @tier2
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2481")
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestDeleteRookCephMonPod(ManageTest):
     """
     Tries to delete rook-ceph-operator pod.
