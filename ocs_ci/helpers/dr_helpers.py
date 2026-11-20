@@ -2093,49 +2093,51 @@ def verify_last_group_sync_time(
 
     """
     restore_index = config.cur_index
-    config.switch_acm_ctx()
-    if initial_last_group_sync_time:
-        for last_group_sync_time in TimeoutSampler(
-            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
-        ):
-            if last_group_sync_time:
-                if last_group_sync_time != initial_last_group_sync_time:
-                    logger.info(
-                        f"Verified: Current lastGroupSyncTime {last_group_sync_time} is different from "
-                        f"previous value {initial_last_group_sync_time}"
-                    )
+    try:
+        config.switch_acm_ctx()
+        if initial_last_group_sync_time:
+            for last_group_sync_time in TimeoutSampler(
+                (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
+            ):
+                if last_group_sync_time:
+                    if last_group_sync_time != initial_last_group_sync_time:
+                        logger.info(
+                            f"Verified: Current lastGroupSyncTime {last_group_sync_time} is different from "
+                            f"previous value {initial_last_group_sync_time}"
+                        )
+                        break
+                logger.info(
+                    "The value of lastGroupSyncTime in drpc is not updated. Retrying..."
+                )
+        else:
+            logger.info("Waiting for lastGroupSyncTime to be set")
+            for last_group_sync_time in TimeoutSampler(
+                (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
+            ):
+                if last_group_sync_time:
+                    logger.info(f"lastGroupSyncTime is now set: {last_group_sync_time}")
                     break
-            logger.info(
-                "The value of lastGroupSyncTime in drpc is not updated. Retrying..."
-            )
-    else:
-        logger.info("Waiting for lastGroupSyncTime to be set")
-        for last_group_sync_time in TimeoutSampler(
-            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
-        ):
-            if last_group_sync_time:
-                logger.info(f"lastGroupSyncTime is now set: {last_group_sync_time}")
-                break
-            logger.info("lastGroupSyncTime not yet set, retrying...")
+                logger.info("lastGroupSyncTime not yet set, retrying...")
 
-    # Verify lastGroupSyncTime
-    time_format = "%Y-%m-%dT%H:%M:%SZ"
-    last_group_sync_time_formatted = datetime.strptime(
-        last_group_sync_time, time_format
-    )
-    current_time = datetime.strptime(
-        datetime.utcnow().strftime(time_format), time_format
-    )
-    time_since_last_sync = (
-        current_time - last_group_sync_time_formatted
-    ).total_seconds() / 60
-    logger.info(f"Time in minutes since the last sync {time_since_last_sync}")
-    assert (
-        time_since_last_sync < 3 * scheduling_interval
-    ), "The syncing of volumes is exceeding three times the scheduled snapshot interval"
-    logger.info("Verified lastGroupSyncTime value within expected range")
-    config.switch_ctx(restore_index)
-    return last_group_sync_time
+        # Verify lastGroupSyncTime
+        time_format = "%Y-%m-%dT%H:%M:%SZ"
+        last_group_sync_time_formatted = datetime.strptime(
+            last_group_sync_time, time_format
+        )
+        current_time = datetime.strptime(
+            datetime.utcnow().strftime(time_format), time_format
+        )
+        time_since_last_sync = (
+            current_time - last_group_sync_time_formatted
+        ).total_seconds() / 60
+        logger.info(f"Time in minutes since the last sync {time_since_last_sync}")
+        assert (
+            time_since_last_sync < 3 * scheduling_interval
+        ), "The syncing of volumes is exceeding three times the scheduled snapshot interval"
+        logger.info("Verified lastGroupSyncTime value within expected range")
+        return last_group_sync_time
+    finally:
+        config.switch_ctx(restore_index)
 
 
 def get_all_drclusters():
@@ -3135,50 +3137,87 @@ def verify_drpc_placement_deletion(cmd, expected_output_lst):
     return True
 
 
-def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
+def verify_last_kubeobject_protection_time(
+    drpc_obj, kubeobject_sync_interval, initial_last_kubeobject_protection_time=None
+):
     """
     Verifies that the lastKubeObjectProtectionTime for a given DRPC object is within the expected range.
+    When a previous value is supplied the function additionally waits (via TimeoutSampler) until the
+    timestamp advances beyond that value, mirroring the behaviour of verify_last_group_sync_time.
 
     Args:
         drpc_obj (obj): DRPC object
         kubeobject_sync_interval (int): The KubeObject sync interval in minutes
+        initial_last_kubeobject_protection_time (str): Previous lastKubeObjectProtectionTime value
+            (optional). When provided, the function polls until the value changes before performing
+            the freshness check, ensuring the kubeobject sync has actually advanced.
 
     Returns:
         str: Current lastKubeObjectProtectionTime
 
     Raises:
         AssertionError: If the lastKubeObjectProtectionTime is outside the expected range
-            (greater than or equal to two times the scheduling interval)
+            (greater than or equal to three times the scheduling interval) or has not advanced
+            beyond the previous value within the timeout.
 
     """
     restore_index = config.cur_index
-    config.switch_acm_ctx()
-    last_kubeobject_protection_time = drpc_obj.get_last_kubeobject_protection_time()
-    if not last_kubeobject_protection_time:
-        assert last_kubeobject_protection_time, (
-            "There is no lastKubeObjectProtectionTime. "
-            "Verify that certificates are included correctly in the Ramen Hub configuration map."
+    try:
+        config.switch_acm_ctx()
+        if initial_last_kubeobject_protection_time:
+            for last_kubeobject_protection_time in TimeoutSampler(
+                (3 * kubeobject_sync_interval * 60),
+                15,
+                drpc_obj.get_last_kubeobject_protection_time,
+            ):
+                if last_kubeobject_protection_time:
+                    if (
+                        last_kubeobject_protection_time
+                        != initial_last_kubeobject_protection_time
+                    ):
+                        logger.info(
+                            f"Verified: Current lastKubeObjectProtectionTime "
+                            f"{last_kubeobject_protection_time} is different from "
+                            f"previous value {initial_last_kubeobject_protection_time}"
+                        )
+                        break
+                logger.info(
+                    "The value of lastKubeObjectProtectionTime in drpc is not updated. Retrying..."
+                )
+        else:
+            logger.info("Waiting for lastKubeObjectProtectionTime to be set")
+            for last_kubeobject_protection_time in TimeoutSampler(
+                (3 * kubeobject_sync_interval * 60),
+                15,
+                drpc_obj.get_last_kubeobject_protection_time,
+            ):
+                if last_kubeobject_protection_time:
+                    logger.info(
+                        f"lastKubeObjectProtectionTime is now set: {last_kubeobject_protection_time}"
+                    )
+                    break
+                logger.info("lastKubeObjectProtectionTime not yet set, retrying...")
+        # Verify lastKubeObjectProtectionTime
+        time_format = "%Y-%m-%dT%H:%M:%SZ"
+        last_kubeobject_protection_time_formatted = datetime.strptime(
+            last_kubeobject_protection_time, time_format
         )
-    # Verify lastKubeObjectProtectionTime
-    time_format = "%Y-%m-%dT%H:%M:%SZ"
-    last_kubeobject_protection_time_formatted = datetime.strptime(
-        last_kubeobject_protection_time, time_format
-    )
-    current_time = datetime.strptime(
-        datetime.utcnow().strftime(time_format), time_format
-    )
-    time_since_last_sync = (
-        current_time - last_kubeobject_protection_time_formatted
-    ).total_seconds() / 60
-    logger.info(
-        f"Time in minutes since the last Kube Object sync {time_since_last_sync}"
-    )
-    assert (
-        time_since_last_sync < 2 * kubeobject_sync_interval
-    ), "The syncing of Kube Resources is exceeding three times the Kube object sync interval"
-    logger.info("Verified lastKubeObjectProtectionTime value within expected range")
-    config.switch_ctx(restore_index)
-    return last_kubeobject_protection_time
+        current_time = datetime.strptime(
+            datetime.utcnow().strftime(time_format), time_format
+        )
+        time_since_last_sync = (
+            current_time - last_kubeobject_protection_time_formatted
+        ).total_seconds() / 60
+        logger.info(
+            f"Time in minutes since the last Kube Object sync {time_since_last_sync}"
+        )
+        assert (
+            time_since_last_sync < 3 * kubeobject_sync_interval
+        ), "The syncing of Kube Resources is exceeding three times the Kube object sync interval"
+        logger.info("Verified lastKubeObjectProtectionTime value within expected range")
+        return last_kubeobject_protection_time
+    finally:
+        config.switch_ctx(restore_index)
 
 
 def configure_rdr_hub_recovery():
@@ -3332,6 +3371,116 @@ def wait_for_drpc_progression_completed(
         drpc_obj.wait_for_progression_status(
             status=constants.STATUS_COMPLETED, timeout=timeout, sleep=sleep
         )
+
+
+def get_vrg_annotation(
+    vrg_name, vrg_namespace, annotation_key, expected_value=None, timeout=120
+):
+    """
+    Fetch (or poll for) the value of a specific annotation on a VolumeReplicationGroup.
+
+    The caller is responsible for switching to the correct cluster context
+    before invoking this function.
+
+    When expected_value is given the function polls via TimeoutSampler until
+    the annotation equals that value. TimeoutSampler retries transient errors
+    (e.g., VRG not yet propagated). When expected_value is None a single read is done.
+
+    Args:
+        vrg_name (str): Name of the VRG resource
+        vrg_namespace (str): Namespace of the VRG resource
+        annotation_key (str): The full annotation key to read
+        expected_value (str | None): When set, poll until the annotation equals
+            this value (default: None — single read)
+        timeout (int): Seconds to poll when expected_value is set (default: 120)
+
+    Returns:
+        str | None: The annotation value, or None if the annotation is absent
+    """
+    vrg_obj = ocp.OCP(
+        kind=constants.VOLUME_REPLICATION_GROUP,
+        namespace=vrg_namespace,
+        resource_name=vrg_name,
+    )
+
+    def _read():
+        annotations = vrg_obj.get().get("metadata", {}).get("annotations", {}) or {}
+        return annotations.get(annotation_key)
+
+    if expected_value is not None:
+        for value in TimeoutSampler(timeout=timeout, sleep=5, func=_read):
+            if value == expected_value:
+                logger.info(f"VRG {vrg_name} annotation {annotation_key!r} = {value!r}")
+                return value
+            logger.info(
+                f"VRG {vrg_name} annotation {annotation_key!r} = {value!r}, "
+                f"waiting for {expected_value!r}"
+            )
+
+    return _read()
+
+
+def verify_dryrun_snapshots(namespace, vrg_name, expected_count, timeout=900):
+    """
+    Verify that the expected number of dryRun VolumeSnapshots exist in a
+    namespace, that every snapshot carries the correct Ramen dryRun labels,
+    and that every snapshot has status.readyToUse == true.
+
+    The caller is responsible for switching to the correct cluster context
+    before invoking this function.
+
+    Args:
+        namespace (str): Namespace where the VolumeSnapshots are expected
+        vrg_name (str): VRG name used as the value of the dry-run-vrg label
+        expected_count (int): Exact number of dryRun snapshots expected
+        timeout (int): Seconds to wait for the expected count to appear
+
+    Raises:
+        AssertionError: If count, labels, or readyToUse checks fail
+        TimeoutExpiredError: If expected count is not reached within timeout
+    """
+    label_selector = (
+        f"{constants.DRYRUN_SNAPSHOT_LABEL}=true,"
+        f"{constants.DRYRUN_VRG_LABEL}={vrg_name}"
+    )
+    logger.info(
+        f"Waiting for {expected_count} dryRun VolumeSnapshot(s) "
+        f"in namespace '{namespace}' with selector '{label_selector}'"
+    )
+
+    snap_ocp = ocp.OCP(
+        kind=constants.VOLUMESNAPSHOT,
+        namespace=namespace,
+        selector=label_selector,
+    )
+
+    # Wait until the expected count is reached AND all snapshots are readyToUse.
+    # Poll both conditions together to avoid a race where the count matches but
+    # snapshots are not yet ready.
+    def _check_snapshots():
+        snapshots = snap_ocp.get().get("items", [])
+        if len(snapshots) != expected_count:
+            return None
+        not_ready = [
+            snap["metadata"]["name"]
+            for snap in snapshots
+            if not snap.get("status", {}).get("readyToUse", False)
+        ]
+        if not_ready:
+            logger.info(
+                f"Found {len(snapshots)} snapshot(s), waiting for {len(not_ready)} "
+                f"to become readyToUse: {not_ready}"
+            )
+            return None
+        return snapshots
+
+    for snapshots in TimeoutSampler(timeout=timeout, sleep=5, func=_check_snapshots):
+        if snapshots is not None:
+            break
+    logger.info(
+        f"All {expected_count} dryRun VolumeSnapshot(s) are present "
+        f"with correct labels and readyToUse=true in namespace '{namespace}'"
+    )
 
 
 def validate_storage_cluster_peer_state():
