@@ -109,6 +109,10 @@ dependencies = [
     "zope-event==6.0",
 ]
 
+[tool.uv]
+# Keep contributors/CI on a uv range that matches uv.lock revision 5 format.
+required-version = ">=0.13.8"
+
 [tool.uv.sources]
 ocp-network-split = { git = "https://github.com/red-hat-storage/ocp-network-split.git" }
 detect-secrets = { git = "https://github.com/ibm/detect-secrets.git", rev = "master" }
