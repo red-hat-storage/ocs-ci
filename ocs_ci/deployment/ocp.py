@@ -169,6 +169,14 @@ class OCPDeployment:
                 ocp_image_path, ocp_version = ocp_relase_image.split(":")
             _, _, ics, _ = mirror_ocp_release_images(ocp_image_path, ocp_version)
             config.RUN["imageContentSources"] = ics
+        installer_env_vars = config.DEPLOYMENT.get("installer_env_vars", {})
+        if installer_env_vars:
+            logger.info(
+                "Setting custom installer environment variables: %s",
+                list(installer_env_vars.keys()),
+            )
+            for key, value in installer_env_vars.items():
+                os.environ[key] = str(value)
         if (
             not self.flexy_deployment
             and config.ENV_DATA["deployment_type"] != "managed"
