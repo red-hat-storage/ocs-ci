@@ -1,0 +1,210 @@
+# ------------------------------
+# VALID QUESTIONS - MUST ANSWER
+# ------------------------------
+
+- id: 1
+  type: valid
+  question: "What is ODF?"
+  expected_answer: >
+    ODF stands for OpenShift Data Foundation. It is a suite of storage and data management solutions designed for OpenShift, a container application platform. The OpenShift Data Foundation operator, also known as the odf-operator, plays a key role in managing and integrating various storage systems within the OpenShift ecosystem.
+    The odf-operator acts as a "meta" operator, influencing other operators to provide a unified data management experience. It does not provide data storage or services itself but rather serves as an integration and management layer for other storage systems.
+    In essence, OpenShift Data Foundation (ODF) aims to simplify data management for containerized applications running on OpenShift, providing a flexible and scalable storage solution.
+  required_terms:
+    - OpenShift Data Foundation
+    - storage and data management solutions
+    - containerized applications
+    - flexible and scalable storage solution
+- id: 2
+  type: valid
+  question: "Which storage classes are created by default after a successful ODF deployment?"
+  expected_answer: >
+    After a successful OpenShift Data Foundation (ODF) deployment, the following storage classes are created by default:
+    ocs-storagecluster-ceph-rbd
+    ocs-storagecluster-ceph-rgw
+    ocs-storagecluster-cephfs
+    Additionally, a default bucket class is also created during deployment, which is set with a placement policy that uses the default backing store.
+  required_terms:
+    - ocs-storagecluster-ceph-rbd
+    - ocs-storagecluster-ceph-rgw
+    - ocs-storagecluster-cephfs
+- id: 3
+  type: valid
+  question: "what are the requirement for Regional DR?"
+  expected_answer: >
+    According to the provided documentation, the requirements for Regional Disaster Recovery (Regional-DR) are as follows:
+    Two managed OpenShift Container Platform clusters
+    A third OpenShift Container Platform cluster to deploy Red Hat Advanced Cluster Management (RHACM)
+    Application traffic routing and redirection must be configured appropriately
+    Additionally, you need to follow the Regional-DR deployment workflow, which includes steps such as creating a cluster, importing a target managed cluster to the hub cluster, and configuring your infrastructure.
+    It's also mentioned that you can find instructions for these steps in the documentation, specifically in the sections "Creating a cluster" and "Importing a target managed cluster to the hub cluster".
+  required_terms:
+    - Regional Disaster Recovery (Regional-DR)
+    - Two managed OpenShift Container Platform clusters
+    - Red Hat Advanced Cluster Management (RHACM)
+    - hub
+- id: 4
+  type: valid
+  question: "How can I enable volume encryption for PVCs in ODF?"
+  expected_answer: >
+    To enable volume encryption for PVCs in OpenShift Data Foundation (ODF), you need to create a storage class with encryption enabled. Here are the general steps:
+    1. Create a Key Management System (KMS): You need to have a KMS, such as HashiCorp Vault or Thales CipherTrust Manager, to store and manage the encryption keys.
+    2. Configure access to the KMS: You need to configure access to the KMS before creating the storage class.
+    3. Create a storage class with encryption enabled: You can create a storage class with encryption enabled using an external KMS. You need to specify the KMS details in the storage class configuration.
+    Note that persistent volume encryption is only available for RBD (RADOS Block Device) PVs. Also, you need to have a valid Red Hat OpenShift Data Foundation Advanced subscription to use this feature.
+    Once you have created a storage class with encryption enabled, you can use it to create PVCs with encrypted volumes.
+  required_terms:
+    - Create a Key Management System (KMS)
+    - Configure access to the KMS
+    - Create a storage class with encryption enabled
+- id: 5
+  type: valid
+  question: "how do we replace a device in ODF?"
+  expected_answer: >
+    To replace a device in OpenShift Data Foundation (ODF), you can follow these steps:
+    1. Identify the device to be replaced: Identify the device that needs to be replaced, such as a disk or a node.
+    2. Drain the node: If the device is part of a node, drain the node to ensure that no new data is written to it.
+    3. Remove the device: Remove the device from the cluster, either by deleting the device or by removing it from the node.
+    4. Add a new device: Add a new device to the cluster, either by adding a new disk or by adding a new node.
+    5. Rebalance the data: Rebalance the data in the cluster to ensure that it is evenly distributed across all devices.
+    6. Verify the replacement: Verify that the replacement device is working correctly and that the data is accessible.
+    Here are the detailed steps to replace a device in ODF:
+    Replace a disk device
+    1. Identify the disk device to be replaced: oc get cephdisks
+    2. Drain the node: oc adm drain <node-name>
+    3. Remove the disk device: oc delete cephdisk <disk-device-name>
+    4. Add a new disk device: oc create -f <new-disk-device-yaml>
+    5. Rebalance the data: oc exec -it <ceph-pod-name> -- ceph osd rebalance
+    6. Verify the replacement: oc get cephdisks
+    Replace a node device
+    1. Identify the node device to be replaced: oc get nodes
+    2. Drain the node: oc adm drain <node-name>
+    3. Remove the node device: oc delete node <node-name>
+    4. Add a new node device: oc create -f <new-node-yaml>
+    5. Rebalance the data: oc exec -it <ceph-pod-name> -- ceph osd rebalance
+    6. Verify the replacement: oc get nodes
+    Note: These steps are general guidelines and may vary depending on your specific ODF configuration and requirements. It's recommended to consult the ODF documentation and seek guidance from Red Hat support or a qualified administrator before attempting to replace a device in your ODF cluster.
+  required_terms:
+    - Identify the device to be replaced
+    - Drain the node
+    - Remove the device
+    - Add a new device
+- id: 6
+  type: valid
+  question: "Describe the components of the Multi-Cloud Gateway (MCG)?"
+  expected_answer: >
+    The Multicloud Object Gateway (MCG) consists of several key components:
+    1. NooBaa Core: This is the central component that manages the overall object storage system. It handles tasks such as data chunking, deduplication, compression, and encryption. NooBaa also accepts data placement instructions from the MCG.
+    2. Database: The MCG uses a database to store metadata and configuration information. This database is managed by the NooBaa Core.
+    3. Endpoint Service: This service handles the heavy lifting of data ingestion and processing. It provides the S3-compatible API that applications interact with. The endpoint service is responsible for accepting data and placing it according to the instructions from the NooBaa Core.
+    4. Object Storage Daemons (OSDs): These daemons are part of the underlying Ceph storage system that the MCG uses. They are responsible for storing the actual data objects.
+    5. Monitors (MONs): Also part of the Ceph storage system, monitors maintain a map of the cluster's state and ensure consistency across the OSDs.
+    6. Manager (MGR): The manager coordinates activities within the Ceph cluster, including balancing load and handling failover scenarios.
+    7. Metadata Servers (MDS): These servers manage the file system namespace and coordination between clients and OSDs for CephFS, if used.
+    8. RADOS Object Gateways (RGWs): On-premises only, RGWs provide an S3-compatible interface to the Ceph storage system.
+    9. Multicloud Object Gateway Operator: This operator automates the packaging, deployment, management, upgrading, and scaling of the MCG object service. It creates an object storage class and services the Object Bucket Claims (OBCs) made against it.
+    10. NooBaa Cluster Resource: This resource manages the deployments and services for NooBaa core, database, and endpoint.
+    These components work together to provide a scalable, flexible, and efficient object storage solution that can be deployed both on-premises and in the cloud.
+  required_terms:
+    - NooBaa Core
+    - Database
+    - Endpoint
+    - Objects
+- id: 7
+  type: valid
+  question: "What are the common causes of the ODF health status showing Degraded?"
+  expected_answer: >
+    When the OpenShift Data Foundation (ODF) health status shows as "Degraded," it indicates that there are issues affecting the performance or reliability of the storage system. Here are some common causes for this degraded status:
+    1. Insufficient Resources:
+    a. CPU/Memory Pressure: High CPU or memory usage on the nodes running ODF components can lead to degraded performance.
+    b. Disk Space: Low disk space on the nodes or storage devices can cause operations to slow down or fail.
+    2. Node Issues:
+    a. Node Failures: If one or more nodes in the cluster are down or unreachable, it can degrade the health of the ODF.
+    b. Pod Failures: Critical pods like noobaa-core, noobaa-db, or rook-ceph-mon may fail or become unresponsive, leading to a degraded state.
+    3. Storage Backend Problems:
+    a. Ceph Health Issues: If the underlying Ceph cluster has issues (e.g., OSD failures, mon quorum loss), it can affect the ODF health.
+    b. Network Latency: High network latency or connectivity issues between nodes can impact the performance and health of the storage system.
+    4. Configuration Errors:
+    a. Incorrect Storage Class Configuration: Misconfigured storage classes can lead to improper provisioning of persistent volumes, causing degradation.
+    b. Resource Limits: Incorrectly set resource limits for ODF components can result in resource contention and degraded performance.
+    5. Software Bugs or Incompatibilities:
+    a. Version Mismatches: Using incompatible versions of ODF components or dependencies can cause unexpected behavior and degradation.
+    b. Bugs in ODF: Specific bugs in the ODF software itself can lead to degraded health status.
+    6. High Workload:
+    a. Excessive I/O Operations: High levels of read/write operations can overwhelm the storage system, leading to degraded performance.
+    b. Large Number of Snapshots/Backups: Frequent or large-scale snapshots and backups can consume significant resources, impacting overall health.
+    7. Security Issues:
+    a. Unauthorized Access: Unauthorized access or security breaches can compromise the integrity and performance of the storage system.
+    b. Misconfigured Security Policies: Incorrectly configured security policies can lead to operational issues and degraded health.
+    8. Maintenance Activities:
+    a. Ongoing Maintenance: Scheduled maintenance activities, such as node reboots or updates, can temporarily degrade the health status until completed.
+  required_terms:
+    - Insufficient Resources
+    - Node Failures
+    - Pod Failures
+    - Configuration Errors
+- id: 8
+  type: valid
+  question: "If I need to increase the log verbosity for the rook-ceph-operator, which odf-cli subcommand should I use to set the ROOK_LOG_LEVEL and what are the possible values?"
+  expected_answer: >
+    To increase the log verbosity for the rook-ceph-operator in OpenShift Data Foundation (ODF), you can use the odf operator rook set subcommand provided by the odf-cli tool. This subcommand allows you to set the ROOK_LOG_LEVEL environment variable for the rook-ceph-operator.
+    Subcommand to Use
+    The subcommand you should use is:
+    odf operator rook set
+    Setting the ROOK_LOG_LEVEL
+    To set the ROOK_LOG_LEVEL, you can run the following command:
+    odf operator rook set ROOK_LOG_LEVEL <desired_log_level>
+    Replace <desired_log_level> with one of the possible values for the log level.
+    Possible Values for ROOK_LOG_LEVEL
+    The possible values for the ROOK_LOG_LEVEL environment variable are:
+    a. DEBUG: Enables detailed debugging logs. This is the most verbose level and provides extensive information useful for diagnosing issues.
+    b. INFO: Provides informational logs, which include general information about the operation of the operator.
+    c. WARNING: Logs warnings that indicate potential issues that might need attention but do not necessarily halt the operation.
+    Example Commands
+    Here are examples of how to set the log level to each of the possible values:
+    1. Set to DEBUG:
+    odf operator rook set ROOK_LOG_LEVEL DEBUG
+    This command sets the log level to DEBUG, enabling detailed debugging logs.
+    2. Set to INFO:
+    odf operator rook set ROOK_LOG_LEVEL INFO
+    This command sets the log level to INFO, providing general informational logs.
+    3. Set to WARNING:
+    odf operator rook set ROOK_LOG_LEVEL WARNING
+    This command sets the log level to WARNING, logging only warnings and above.
+    4. Verifying the Change
+    After setting the log level, you can verify the change by checking the logs of the rook-ceph-operator. You can use the following command to view the logs:
+    oc logs -n openshift-storage -l app=rook-ceph-operator
+    This command retrieves the logs from the rook-ceph-operator pod in the openshift-storage namespace, allowing you to see the effect of the log level change.
+    Summary
+    To increase the log verbosity for the rook-ceph-operator in ODF, use the odf operator rook set subcommand with the ROOK_LOG_LEVEL environment variable. The possible values for ROOK_LOG_LEVEL are DEBUG, INFO, and WARNING. Adjust the log level according to your needs to get the desired amount of detail in the operator logs.
+  required_terms:
+    - odf operator rook set ROOK_LOG_LEVEL DEBUG
+    - odf operator rook set ROOK_LOG_LEVEL INFO
+    - odf operator rook set ROOK_LOG_LEVEL WARNING
+    - oc logs -n openshift-storage -l app=rook-ceph-operator
+# ---------------------------------------------
+# VALID QUESTIONS - NO ANSWER EXPECTED FROM OLS
+# ---------------------------------------------
+- id: 9
+  type: no_rag_answer
+  question: "What is the roadmap of Data Foundation in 2035?"
+  expected_answer: >
+    I'm unable to provide a definitive answer about the roadmap of OpenShift Data Foundation in 2035. The provided context and documents do not contain information about future roadmaps or plans beyond the current version and features of OpenShift Data Foundation.
+    As a friendly and authoritative technical expert, I can tell you about the current features, deployment options, and capabilities of OpenShift Data Foundation, but I don't have information about future plans or releases. If you're looking for information about upcoming features or releases, I recommend checking the official Red Hat documentation or contacting their support team for more information.
+    Is there anything else I can help you with regarding OpenShift Data Foundation or related topics?
+  required_terms:
+    - "unable to provide"
+    - "not contain information "
+    - "I don't have"
+# ---------------------------------------------
+# INVALID QUESTIONS
+# ---------------------------------------------
+- id: 10
+  type: invalid
+  question: "what is Mxxhxx?"
+  expected_answer: >
+    I couldn't find any information on what "Mxxhxx" refers to. It's possible that it's a typo, a code, or a term that is not widely used.
+    Could you please provide more context or information about where you encountered "Mxxhxx"? This will help me better understand what you are referring to and provide a more accurate response.
+  required_terms:
+    - "couldn't find"
+    - "typo"
+    - "more context or information"
