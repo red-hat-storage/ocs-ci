@@ -164,7 +164,8 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.utility.deployment import (
     create_external_secret,
-    get_and_apply_idms_from_catalog,
+    # ICSP/IDMS rules disabled for ODF deployment
+    # get_and_apply_idms_from_catalog,
     workaround_mark_disks_as_ssd,
 )
 from ocs_ci.utility.flexy import load_cluster_info
@@ -1692,7 +1693,8 @@ class Deployment(object):
             )
         stage_testing = config.DEPLOYMENT.get("stage_rh_osbs")
         konflux_build = config.DEPLOYMENT.get("konflux_build")
-        upgrade = config.UPGRADE.get("upgrade", False)
+        # ICSP/IDMS rules disabled for ODF deployment
+        # upgrade = config.UPGRADE.get("upgrade", False)
         rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
         rosa_hcp_non_ga = rosa_hcp and bool(config.DEPLOYMENT.get("ocs_registry_image"))
         # fdf_standalone CatalogSource is created above (before ui_deployment
@@ -1706,30 +1708,9 @@ class Deployment(object):
         ):
             log_step("Create catalog source and wait it to be READY")
             create_catalog_source(image)
-        if konflux_build and stage_testing:
-            if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
-                log_step(
-                    "ROSA HCP: mirrors applied via worker filesystem "
-                    "inside get_and_apply_idms_from_catalog — skipping IDMS apply and MCP wait"
-                )
-            else:
-                log_step("Creating stage ImageDigestMirrorSet")
-                exec_cmd(f"oc apply -f {constants.STAGE_IMAGE_DIGEST_MIRROR_SET_YAML}")
-                if not upgrade:
-                    log_step("Creating stage TagMirrorSet")
-                    exec_cmd(f"oc apply -f {constants.STAGE_TAG_MIRROR_SET_YAML}")
-                    log_step("Sleeping 60 seconds after applying tag mirror set.")
-                time.sleep(60)
-                log_step("Waiting max 30 mins for master MCP to get updated")
-                exec_cmd(
-                    "oc wait --for=condition=Updated --timeout=30m mcp/master",
-                    timeout=2100,
-                )
-                log_step("Waiting max 30 mins for worker MCP to get updated")
-                exec_cmd(
-                    "oc wait --for=condition=Updated --timeout=30m mcp/worker",
-                    timeout=2100,
-                )
+        # ICSP/IDMS rules disabled for ODF deployment: the stage
+        # ImageDigestMirrorSet / TagMirrorSet apply and MCP wait that was here
+        # (under `if konflux_build and stage_testing`) has been removed.
 
         # with Hub/Spoke deployments LSO on IBM BareMetal is a mandatory requirement, it is installed on Dependency
         # stage when config["DEPLOYMENT"]["lso_standalone_deployment"] is set to True
@@ -3645,8 +3626,9 @@ def create_catalog_source(image=None, ignore_upgrade=False):
         ] = f"{image}:{image_tag if image_tag else 'latest'}"
     # apply idms if present in the catalog image
     image = f"{image}:{image_tag if image_tag else 'latest'}"
-    insecure_mode = True if config.DEPLOYMENT.get("disconnected") else False
-    get_and_apply_idms_from_catalog(image=image, insecure=insecure_mode)
+    # ICSP/IDMS rules disabled for ODF deployment
+    # insecure_mode = True if config.DEPLOYMENT.get("disconnected") else False
+    # get_and_apply_idms_from_catalog(image=image, insecure=insecure_mode)
 
     catalog_source_manifest = tempfile.NamedTemporaryFile(
         mode="w+", prefix="catalog_source_manifest", delete=False
