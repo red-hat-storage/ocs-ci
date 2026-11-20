@@ -48,21 +48,47 @@ class CephXMetricsHelper:
             resource_name="ocs-metrics-exporter",
         ).get()
 
+    @staticmethod
+    def _scheme_for_port_name(port_name):
+        """
+        Derive the URL scheme from a Service/container port name.
+
+        Exporter port names follow a ``<protocol>-<purpose>`` convention
+        (``https-main``, ``http-metrics``). Only a name that is exactly
+        ``http`` or prefixed with ``http-`` is treated as plaintext;
+        anything else, including an unnamed port, defaults to https.
+
+        Args:
+            port_name (str): Service or containerPort name.
+
+        Returns:
+            str: ``"http"`` or ``"https"``.
+        """
+        name = (port_name or "").lower()
+        if name == "http" or name.startswith("http-"):
+            return "http"
+        return "https"
+
     def _discover_metrics_exporter_scrape_port(self):
         """
-        Resolve the HTTPS port that serves OCS/Ceph /metrics.
+        Resolve the port that serves OCS/Ceph /metrics.
+
+        Also records the matching URL scheme on ``self._metrics_scrape_scheme``
+        so callers do not assume https on a plaintext port.
 
         Preference order:
             1. Service port named ``https-main`` (kube-rbac-proxy layout)
             2. Any other Service HTTPS port except ``https-self``
-            3. Deployment containerPort named ``https-main``
-            4. Fallback constants (8443 modern, then 9443 legacy)
+            3. Any remaining Service port except ``https-self``
+            4. Deployment containerPort named ``https-main``
+            5. Fallback constants (8443 modern, then 9443 legacy)
         """
         cached = getattr(self, "_metrics_scrape_port", None)
         if cached:
             return cached
 
         port = None
+        scheme = "https"
         source = "fallback"
 
         try:
@@ -81,10 +107,23 @@ class CephXMetricsHelper:
                 port = by_name[constants.OCS_METRICS_EXPORTER_HTTPS_MAIN_PORT_NAME]
                 source = "service/https-main"
             else:
-                for name, value in by_name.items():
-                    if name == constants.OCS_METRICS_EXPORTER_HTTPS_SELF_PORT_NAME:
-                        continue
+                # Prefer an https-named port. Taking the first non-https-self
+                # port unconditionally selected the plaintext port on
+                # Services that expose one (e.g. http-metrics on 8080) and
+                # then forced https:// onto it, failing with curl exit 35.
+                candidates = [
+                    (name, value)
+                    for name, value in by_name.items()
+                    if name != constants.OCS_METRICS_EXPORTER_HTTPS_SELF_PORT_NAME
+                ]
+                secure = [
+                    (name, value)
+                    for name, value in candidates
+                    if self._scheme_for_port_name(name) == "https"
+                ]
+                for name, value in secure or candidates:
                     port = value
+                    scheme = self._scheme_for_port_name(name)
                     source = f"service/{name}"
                     break
         except Exception as exc:
@@ -121,18 +160,32 @@ class CephXMetricsHelper:
             source = "constant/OCS_METRICS_EXPORTER_PORT"
 
         self._metrics_scrape_port = int(port)
+        self._metrics_scrape_scheme = scheme
         log.info(
-            "ocs-metrics-exporter scrape port=%s (source=%s)",
+            "ocs-metrics-exporter scrape scheme=%s port=%s (source=%s)",
+            self._metrics_scrape_scheme,
             self._metrics_scrape_port,
             source,
         )
         return self._metrics_scrape_port
 
+    def _discover_metrics_exporter_scrape_scheme(self):
+        """
+        Return the URL scheme matching the discovered scrape port.
+
+        Returns:
+            str: ``"http"`` or ``"https"``.
+        """
+        self._discover_metrics_exporter_scrape_port()
+        return getattr(self, "_metrics_scrape_scheme", "https")
+
     def _metrics_exporter_local_url(self):
-        """HTTPS /metrics URL on the exporter pod loopback interface."""
+        """/metrics URL on the exporter pod loopback interface."""
         port = self._discover_metrics_exporter_scrape_port()
+        scheme = self._discover_metrics_exporter_scrape_scheme()
         return (
-            f"https://127.0.0.1:{port}" f"{constants.OCS_METRICS_EXPORTER_METRICS_PATH}"
+            f"{scheme}://127.0.0.1:{port}"
+            f"{constants.OCS_METRICS_EXPORTER_METRICS_PATH}"
         )
 
     def _metrics_exporter_requires_auth(self):
@@ -256,7 +309,8 @@ class CephXMetricsHelper:
             raise UnexpectedBehaviour("ocs-metrics-exporter pod IP is not assigned")
 
         remote_url = (
-            f"https://{pod_ip}:{scrape_port}"
+            f"{self._discover_metrics_exporter_scrape_scheme()}://"
+            f"{pod_ip}:{scrape_port}"
             f"{constants.OCS_METRICS_EXPORTER_METRICS_PATH}"
         )
         log.info(f"Fetching ocs-metrics-exporter metrics via toolbox ({remote_url})")
