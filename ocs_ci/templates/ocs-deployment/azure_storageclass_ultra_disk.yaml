@@ -1,0 +1,20 @@
+---
+# Azure Ultra Disk StorageClass
+# UltraSSD_LRS provides the highest performance with customizable IOPS and throughput
+# See: https://learn.microsoft.com/en-us/azure/virtual-machines/disks-types#ultra-disks
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ocs-disk-perfplus-sc
+provisioner: disk.csi.azure.com
+parameters:
+  skuName: UltraSSD_LRS
+  cachingMode: None  # Ultra Disk doesn't support caching
+  # Optional: Set custom IOPS and throughput (if not set, Azure uses defaults based on disk size)
+  # diskIOPSReadWrite: "5000"
+  # diskMBpsReadWrite: "200"
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+
+# Made with Bob

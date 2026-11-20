@@ -11,6 +11,9 @@ compute:
         - {{ zone }}
 {% endfor %}
 {% endif %}
+{% if azure_ultra_ssd_enabled %}
+        ultraSSDCapability: Enabled
+{% endif %}
     replicas: {{ worker_replicas | default(3) }}
 controlPlane:
   name: master
