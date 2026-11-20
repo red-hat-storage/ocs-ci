@@ -1323,24 +1323,64 @@ def download_ga_oc_client_as_bootstrap(bin_dir, target_version):
         os.chdir(previous_dir)
 
 
-def get_registry_svc(version):
+def get_registry_svc(version, ga=False):
     """
-    Get the CI registry image path for the given OCP version.
+    Get the release registry image path for the given OCP version.
+
+    By default the CI registry (registry.ci.openshift.org) is used, which hosts
+    nightly/CI payloads. When ``ga`` is True the officially published GA release
+    registry (quay.io/openshift-release-dev/ocp-release) is used instead, so that
+    a GA deployment records the GA pullspec in clusterversion rather than the CI
+    registry (which only mirrors the same content).
 
     OCP 5.x uses a different image stream name (release-5) than
     OCP 4.x (release).
 
     Args:
         version (str): OCP version string (e.g. "5.0.0-0.nightly-2026-06-18-000016")
+        ga (bool): When True, return the GA release registry
+            (quay.io/openshift-release-dev/ocp-release) instead of the CI registry.
+            quay hosts both 4.x and 5.x GA payloads in the same repo, so unlike
+            the CI registry there is no separate release-5 path for GA.
 
     Returns:
         str: Registry image path (e.g. "registry.ci.openshift.org/ocp/release-5")
 
     """
+    if ga:
+        return constants.QUAY_REGISTRY_SVC
     major = version.split(".")[0]
     if int(major) >= 5:
-        return "registry.ci.openshift.org/ocp/release-5"
+        return constants.REGISTRY_SVC_V5
     return constants.REGISTRY_SVC
+
+
+def get_ocp_release_image_ref(version, ga=False):
+    """
+    Build the full OCP release image pullspec for the given resolved version.
+
+    For CI/nightly (ga=False) the CI registry is used with a plain version tag
+    (e.g. registry.ci.openshift.org/ocp/release:4.22.0-0.nightly-...). For GA
+    (ga=True) the quay GA registry is used and the architecture suffix required
+    by quay GA tags is appended (e.g.
+    quay.io/openshift-release-dev/ocp-release:4.22.22-x86_64). The arch defaults
+    to the host architecture (x86_64/aarch64/ppc64le/s390x, which match quay's
+    suffixes) and can be overridden via ENV_DATA['release_image_arch']
+    (e.g. "multi" for heterogeneous clusters).
+
+    Args:
+        version (str): Resolved OCP version (e.g. "4.22.22", not "4.22-ga").
+        ga (bool): When True, target the quay GA registry with an arch suffix.
+
+    Returns:
+        str: Full release image reference (registry:tag).
+
+    """
+    registry = get_registry_svc(version, ga=ga)
+    if ga:
+        arch = config.ENV_DATA.get("release_image_arch") or get_architecture_host()
+        return f"{registry}:{version}-{arch}"
+    return f"{registry}:{version}"
 
 
 @retry(CommandFailed, tries=2, delay=5, backoff=2)
@@ -1363,6 +1403,8 @@ def get_openshift_installer(
 
     """
     version = version or config.DEPLOYMENT["installer_version"]
+    # capture GA intent before expose_ocp_version_safe() resolves "-ga" away
+    is_ga = str(version).endswith("-ga")
     bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     bin_dir = os.path.abspath(bin_dir_rel_path)
     if (
@@ -1401,7 +1443,7 @@ def get_openshift_installer(
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         cmd = (
             f"oc adm release extract --registry-config {pull_secret_path} --command={installer_filename} "
-            f"--to ./ {get_registry_svc(version)}:{version}"
+            f"--to ./ {get_ocp_release_image_ref(version, ga=is_ga)}"
         )
         exec_cmd(cmd)
         # return to the previous working directory
