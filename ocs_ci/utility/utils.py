@@ -6452,7 +6452,8 @@ def get_client_type_by_name(cluster_name):
     # Store original context index to restore later
     orig_index = config.cur_index
     try:
-        config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
+        if config.is_cluster_present(cluster_name):
+            config.switch_ctx(config.get_cluster_index_by_name(cluster_name))
         if not is_hosted_cluster(cluster_name):
             return constants.NON_HOSTED_CLUSTER
 

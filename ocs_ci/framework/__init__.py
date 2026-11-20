@@ -551,6 +551,19 @@ class MultiClusterConfig:
             self.clusters[index].RUN.get("kubeconfig_location", "auth/kubeconfig"),
         )
 
+    def is_cluster_present(self, cluster_name):
+        """
+        Find if the cluster present in the config
+
+        Returns:
+            Bool: True if the cluster name is present, False if the cluster name is not present
+
+        """
+        for i, cluster in enumerate(self.clusters):
+            if cluster.ENV_DATA["cluster_name"] == cluster_name:
+                return True
+        return False
+
     def run_for_all_clusters(self, func):
         """
         A decorator to run the decorated function for all clusters
