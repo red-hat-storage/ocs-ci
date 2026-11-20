@@ -241,3 +241,81 @@ def check_operatorcondition_upgradeable_false(
             f"or not found: {e}."
         )
         return False
+
+
+def verify_scale_operator_subscription_and_csv(
+    namespace=constants.IBM_STORAGE_SCALE_NAMESPACE,
+    operator_prefix=constants.IBM_STORAGE_SCALE_OPERATOR_NAME,
+    timeout=600,
+    sleep=15,
+):
+    """
+    Verify that the IBM Spectrum Scale operator subscription exists and
+    its CSV reaches the 'Succeeded' phase in the target namespace.
+
+    Args:
+        namespace (str): Namespace where the operator is installed
+            (defaults to 'ibm-spectrum-scale').
+        operator_prefix (str): Prefix for the Scale operator CSV / Subscription name
+            (defaults to 'ibm-spectrum-scale-operator').
+        timeout (int): Timeout in seconds to wait for CSV Succeeded phase.
+        sleep (int): Interval in seconds between status checks.
+
+    Raises:
+        TimeoutExpiredError: If no matching Subscription is found within 180
+            seconds, if the Subscription does not report a currentCSV, or if
+            that CSV fails to reach Succeeded phase.
+
+    Returns:
+        str: Name of the verified CSV.
+    """
+    log.info(f"Verifying Scale operator Subscription in namespace '{namespace}'")
+    sub_ocp = OCP(kind="Subscription", namespace=namespace)
+
+    scale_subs = []
+    for subs in TimeoutSampler(
+        timeout=180,
+        sleep=sleep,
+        func=lambda: sub_ocp.get().get("items", []),
+    ):
+        scale_subs = [
+            sub
+            for sub in subs
+            if operator_prefix in sub.get("metadata", {}).get("name", "")
+            or sub.get("spec", {}).get("name") == operator_prefix
+            or "spectrum-scale" in sub.get("metadata", {}).get("name", "")
+        ]
+        if scale_subs:
+            break
+
+    assert (
+        scale_subs
+    ), f"No Subscription found for '{operator_prefix}' in namespace '{namespace}'"
+    sub_name = scale_subs[0]["metadata"]["name"]
+    log.info(f"Found Scale operator subscription: '{sub_name}'")
+
+    log.info(
+        f"Waiting for Subscription '{sub_name}' in namespace '{namespace}' "
+        "to report its currentCSV"
+    )
+    csv_name = None
+    for current_csv in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=lambda: sub_ocp.get(resource_name=sub_name)
+        .get("status", {})
+        .get("currentCSV"),
+    ):
+        if current_csv:
+            csv_name = current_csv
+            break
+
+    log.info(f"Subscription '{sub_name}' currentCSV is '{csv_name}'")
+    csv_obj = CSV(resource_name=csv_name, namespace=namespace)
+
+    log.info(f"Waiting for CSV '{csv_obj.resource_name}' to reach phase 'Succeeded'")
+    csv_obj.wait_for_phase(phase="Succeeded", timeout=timeout, sleep=sleep)
+    log.info(
+        f"Scale operator CSV '{csv_obj.resource_name}' successfully reached 'Succeeded' state"
+    )
+    return csv_obj.resource_name
