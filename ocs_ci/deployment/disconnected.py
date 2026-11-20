@@ -169,6 +169,33 @@ def tag_fdf_catalog_adjacent_versions(
             logger.warning(f"Failed to create tag {dest_image}: {e}")
 
 
+def delete_stale_fdf_itms(keep):
+    """
+    Delete the FDF catalog ImageTagMirrorSets left by previous mirroring runs.
+
+    Older runs named the ImageTagMirrorSet after the mirrored version, so each
+    run added a new one for the same source. CRI-O merges the mirrors of all
+    of them and pulls from the first one that has the requested tag, which can
+    resolve a tag to a previously mirrored build.
+
+    Args:
+        keep (str): Name of the ImageTagMirrorSet that must not be deleted.
+
+    """
+    resources = (
+        exec_cmd("oc get imagetagmirrorset -o name", silent=True)
+        .stdout.decode()
+        .split()
+    )
+    for resource in resources:
+        name = resource.split("/")[-1]
+        if name != keep and name.startswith("isf-fdf-itms"):
+            logger.info(
+                "Deleting ImageTagMirrorSet '%s' from a previous mirroring run", name
+            )
+            exec_cmd(f"oc delete imagetagmirrorset {name}")
+
+
 def get_csv_from_image(bundle_image):
     """
     Extract clusterserviceversion.yaml file from operator bundle image.
@@ -553,9 +580,12 @@ def mirror_index_image_via_oc_mirror(
             f"{mirroring_manifests_dir}",
             "working-dir/cluster-resources/itms-oc-mirror.yaml",
         )
-        itms_name = (
-            f"isf-fdf-itms-{version_subpath}" if version_subpath else "isf-fdf-itms"
-        )
+        # A single ImageTagMirrorSet for the FDF catalog, replaced on every
+        # mirroring run. Keeping one per version would leave CRI-O with
+        # several mirrors for the same source: it merges them and pulls from
+        # the first one holding the requested tag, which - thanks to the
+        # adjacent version tags - can be an older build.
+        itms_name = "isf-fdf-itms"
         itms_content = {
             "apiVersion": "config.openshift.io/v1",
             "kind": "ImageTagMirrorSet",
@@ -578,6 +608,10 @@ def mirror_index_image_via_oc_mirror(
             yaml.dump(itms_content, f)
         logger.info(f"ImageTagMirrorSet written to {itms_file}")
         exec_cmd(f"oc apply -f {itms_file}")
+        # Drop the rules of the previous runs once the new one is in place, so
+        # that the nodes are never left without a mirror for the catalog. Both
+        # changes are rendered by the MCO before the rollout waited for below.
+        delete_stale_fdf_itms(keep=itms_name)
 
     wait_for_machineconfigpool_status("all")
 
