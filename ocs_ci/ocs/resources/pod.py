@@ -187,7 +187,7 @@ class Pod(OCS):
             Munch Obj: This object represents a returned yaml file
         """
         if container_name:
-            cmd = f"exec {self.name} -c {container_name} {command}"
+            cmd = f"exec {self.name} -c {container_name} -- {command}"
         else:
             cmd = f"rsh {self.name} "
             cmd += command
