@@ -457,6 +457,23 @@ def relocate(
     config.switch_ctx(restore_index)
 
 
+def is_fusion_access_dr():
+    """
+    Check whether the DR clusters are backed by IBM Fusion Access for SAN
+    (IBM Storage Scale / GPFS) instead of Ceph.
+
+    Fusion Access MDR reuses multicluster_mode "metro-dr", so the run mode cannot
+    distinguish it from an ODF MDR deployment. The storage backend flag is the
+    only reliable discriminator, which is why Ceph specific checks must be gated
+    on this rather than on the multicluster mode.
+
+    Returns:
+        bool: True if the DR clusters are backed by Fusion Access
+
+    """
+    return config.DEPLOYMENT.get("fusion_access") is True
+
+
 def check_rbd_mirror_running(namespace=None):
     """
     Check if the rbd-mirror daemon deployment is running with at least one ready replica.
@@ -468,13 +485,20 @@ def check_rbd_mirror_running(namespace=None):
             Defaults to config.ENV_DATA['cluster_namespace'].
 
     Returns:
-        bool: True if rbd-mirror deployment has ready replicas
+        bool: True if rbd-mirror deployment has ready replicas. Also True on a
+            Fusion Access backend, where no rbd-mirror daemon exists.
 
     Raises:
         UnexpectedDeploymentConfiguration: If the rbd-mirror deployment is
             not found or not running
 
     """
+    if is_fusion_access_dr():
+        logger.info(
+            "Fusion Access backend, there is no rbd-mirror daemon to check. "
+            "Skipping rbd-mirror deployment check"
+        )
+        return True
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     dep_ocp = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
     try:
@@ -656,12 +680,20 @@ def wait_for_mirroring_status_ok(
         timeout (int): time in seconds to wait for mirroring status reach OK
 
     Returns:
-        bool: True if status contains expected health and states values
+        bool: True if status contains expected health and states values. Also
+            True on a Fusion Access backend, where there is no Ceph mirroring.
 
     Raises:
         TimeoutExpiredError: In case of unexpected mirroring status
 
     """
+    if is_fusion_access_dr():
+        logger.info(
+            "Fusion Access backend, volume replication is performed synchronously "
+            "by the storage array and there is no Ceph mirroring to validate. "
+            "Skipping mirroring status check"
+        )
+        return True
     if config.ENV_DATA.get("skip_mirroring_status_check"):
         logger.warning(
             "Skipping mirroring status check (skip_mirroring_status_check is set)"
@@ -1122,7 +1154,7 @@ def wait_for_replication_resources_creation(
     )
 
     # TODO: Improve the parameter for condition
-    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+    if config.MULTICLUSTER["multicluster_mode"] != constants.MDR_MODE:
         # TODO: Improve the parameter for condition
         if "cephfs" in namespace:
             wait_for_resource_count(
@@ -1271,7 +1303,10 @@ def wait_for_replication_resources_deletion(
             should_exist=False,
         )
 
-    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr" and not skip_vrg_check:
+    if (
+        config.MULTICLUSTER["multicluster_mode"] != constants.MDR_MODE
+        and not skip_vrg_check
+    ):
         wait_for_resource_count(
             kind=resource_kind,
             namespace=namespace,
@@ -1434,7 +1469,7 @@ def wait_for_all_resources_deletion(
                 resource_name=pvc_obj.name, timeout=timeout, sleep=5
             )
 
-    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+    if config.MULTICLUSTER["multicluster_mode"] != constants.MDR_MODE:
         if workload_cleanup or "cephfs" not in namespace:
             logger.info("Waiting for all PVs to be deleted")
             wait_for_resource_count(
