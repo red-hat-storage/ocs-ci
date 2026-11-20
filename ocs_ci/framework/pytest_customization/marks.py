@@ -54,7 +54,7 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
-from ocs_ci.utility.utils import load_auth_config
+from ocs_ci.utility.utils import load_auth_config, should_probe_cluster
 from ocs_ci.deployment.hub_spoke import hypershift_cluster_factory
 from ocs_ci.utility.nfs_utils import check_cluster_resources_for_nfs
 from ocs_ci.ocs.node import check_cluster_resources
@@ -980,7 +980,7 @@ ui = compose(skipif_ibm_cloud_managed, pytest.mark.ui)
 
 skipif_lean_deployment = pytest.mark.skipif(
     config.ENV_DATA.get("performance_profile") == "lean"
-    or not check_cluster_resources_for_nfs(),
+    or (should_probe_cluster() and not check_cluster_resources_for_nfs()),
     reason="Test cannot run on lean profile or requires higher cluster resources (insufficient CPU/memory)",
 )
 
@@ -1015,6 +1015,7 @@ def skipif_insufficient_resources(ram_gb=65, cpu_cores=6):
         cpu_cores (int): Required CPU cores.
     """
     return pytest.mark.skipif(
-        not check_cluster_resources(ram_gb=ram_gb, cpu_cores=cpu_cores),
+        should_probe_cluster()
+        and not check_cluster_resources(ram_gb=ram_gb, cpu_cores=cpu_cores),
         reason=f"Cluster hardware requirements not met: Need {ram_gb}GB RAM and {cpu_cores} Cores.",
     )

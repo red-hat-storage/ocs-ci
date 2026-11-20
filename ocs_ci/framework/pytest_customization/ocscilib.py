@@ -477,16 +477,25 @@ def pytest_configure(config):
             if logs_url:
                 config._metadata["Logs URL"] = logs_url
 
-            if ocsci_config.RUN["cli_params"].get("teardown") or (
-                "deployment" in markers_arg
-                and ocsci_config.RUN["cli_params"].get("deploy")
-            ):
+            from ocs_ci.utility.utils import should_probe_cluster
+
+            # Two independent skip reasons (kept separate for readability):
+            # 1) teardown — cluster is being destroyed
+            # 2) fresh OCP deploy before kubeconfig exists — cannot probe yet
+            #    (should_probe_cluster() is False only in that window)
+            if ocsci_config.RUN["cli_params"].get("teardown"):
                 log.info(
-                    "Skipping versions collecting because: Deploy or destroy of "
-                    "cluster is performed."
+                    "Skipping versions collecting because cluster teardown "
+                    "is performed."
                 )
                 continue
-            elif markers_arg == "acm_import":
+            if not should_probe_cluster():
+                log.info(
+                    "Skipping versions collecting: fresh OCP deploy and "
+                    "kubeconfig is not available yet."
+                )
+                continue
+            if markers_arg == "acm_import":
                 log.info(
                     "Skipping auto pytest executions and version collecting because "
                     "Import Clusters to ACM is performed."
