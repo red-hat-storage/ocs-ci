@@ -3,6 +3,18 @@
 ## Overview
 We now have the ability to manage the project dependencies and execution with [uv](https://docs.astral.sh/uv/).
 
+## Required uv version
+This repository pins the supported uv range in `pyproject.toml` (`[tool.uv] required-version`).
+Use **uv >=0.13.8** so installs match the committed `uv.lock` format (`revision = 5`).
+
+Check your version:
+
+```
+uv --version
+```
+
+If you are below that version, upgrade before running `uv sync` / `uv lock`.
+
 ## Basic Usage
 For more detailed information about uv, please refer to their own [documentation](https://docs.astral.sh/uv/).
 
@@ -15,7 +27,7 @@ You can sync the project dependencies by running `uv sync` from the project dire
 > [!WARNING]
 > If you already have a venv at `<PROJECT_DIR>/.venv` you will want to move or remove it before running `uv sync`
 ```
-uv sync
+uv sync --locked
 ```
 
 ### Executing Entry-points
