@@ -2,6 +2,10 @@ import base64
 import json
 import logging
 
+from cryptography import x509
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric import ec, padding
+
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
@@ -19,12 +23,22 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
+    compare_directory,
+    start_background_object_upload,
     sync_object_directory,
     verify_s3_object_integrity,
     write_random_objects_in_pod,
 )
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import (
+    delete_pods,
+    get_active_core_pod,
+    get_noobaa_core_pods,
+    get_noobaa_operator_pod,
+    get_standby_core_pod,
+    wait_for_noobaa_pods_running,
+)
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -87,6 +101,46 @@ def get_noobaa_core_env_map():
     """
     core_env = get_noobaa_container_envs()[constants.NOOBAA_CORE_STATEFULSET]
     return {env["name"]: env.get("value") for env in core_env}
+
+
+def sync_with_retry(awscli_pod, src, dst, mcg_obj):
+    """
+    Run :func:`sync_object_directory` with a retry on transient CommandFailed
+    (S3 operations can briefly fail while pods are restarting).
+    """
+    return retry(CommandFailed, tries=3, delay=10)(sync_object_directory)(
+        awscli_pod, src, dst, mcg_obj
+    )
+
+
+def disrupt_during_background_upload(
+    mcg_obj, awscli_pod, bucket_name, origin_dir, disrupt_fn
+):
+    """
+    Start a background S3 upload that stays in flight while ``disrupt_fn`` kills
+    a pod and waits for recovery, then surface the upload result. This proves S3
+    I/O survives the disruption (not just that I/O works before/after it).
+
+    Args:
+        mcg_obj (MCG): MCG object holding the S3 credentials.
+        awscli_pod (Pod): Pod running the AWS CLI tools.
+        bucket_name (str): Target bucket name.
+        origin_dir (str): Directory on the awscli pod to create the object in.
+        disrupt_fn (callable): Deletes a pod and waits for the cluster to recover.
+
+    Returns:
+        str: The object key uploaded in the background.
+
+    """
+    executor, future, object_key, _, _ = start_background_object_upload(
+        mcg_obj, awscli_pod, bucket_name, origin_dir
+    )
+    try:
+        disrupt_fn()
+        future.result()
+    finally:
+        executor.shutdown(wait=True)
+    return object_key
 
 
 def wait_for_noobaa_ready(timeout=300, sleep=15):
@@ -297,6 +351,23 @@ def verify_encrypted_db_connection(host=constants.CNPG_READ_WRITE_HOST):
     return True
 
 
+def verify_tls_in_use(host=constants.CNPG_READ_WRITE_HOST):
+    """
+    Convenience check combining the two assertions used throughout the
+    disruption/rotation tests: the NooBaa core requires PostgreSQL TLS
+    (POSTGRES_SSL_REQUIRED) and the DB connection is actually encrypted
+    (pg_stat_ssl.ssl == 't'). Each underlying helper logs its own diagnostics.
+
+    Args:
+        host (str): The NooBaa DB service to validate the encrypted connection on.
+
+    Returns:
+        bool: True only if TLS is required AND the connection is encrypted.
+
+    """
+    return verify_postgres_ssl_required() and verify_encrypted_db_connection(host)
+
+
 def verify_no_tls_key_material_in_env():
     """
     Check that no TLS key material is exposed via env vars. The certs must be
@@ -481,6 +552,133 @@ def verify_tls_enforced_no_plaintext_fallback(host=constants.CNPG_READ_WRITE_HOS
     encrypted_ok = verify_encrypted_db_connection(host)
     plaintext_refused = verify_db_refuses_plaintext(host)
     return encrypted_ok and plaintext_refused
+
+
+def _load_cnpg_cert(secret_ocp, secret_name, cert_key):
+    """
+    Load an X.509 certificate out of a CNPG-managed secret.
+
+    Args:
+        secret_ocp (OCP): OCP handle for secrets in the cluster namespace.
+        secret_name (str): Secret to read (server or CA secret).
+        cert_key (str): Key under ``data`` holding the PEM cert
+            (``tls.crt`` for the server secret, ``ca.crt`` for the CA secret).
+
+    Returns:
+        cryptography.x509.Certificate: The parsed certificate, or None if the
+            secret/key is missing.
+
+    """
+    # dont_raise: a momentarily-absent secret yields None so pollers keep sampling.
+    secret = secret_ocp.get(resource_name=secret_name, dont_raise=True)
+    cert_b64 = (secret or {}).get("data", {}).get(cert_key)
+    if not cert_b64:
+        logger.warning(f"Cert key '{cert_key}' not available in secret '{secret_name}'")
+        return None
+    # A secret caught mid-rotation may hold partial data; return None so pollers retry.
+    try:
+        return x509.load_pem_x509_certificate(base64.b64decode(cert_b64))
+    except Exception as e:
+        logger.warning(f"Failed to load cert from {secret_name}/{cert_key}: {e}")
+        return None
+
+
+def get_cnpg_cert_serials(secret_ocp):
+    """
+    Collect the current server-leaf and CA certificate serial numbers from the
+    CNPG-managed secrets, using the ``cryptography`` library (no shelling out to
+    openssl, no temp files).
+
+    Args:
+        secret_ocp (OCP): OCP handle for secrets in the cluster namespace.
+
+    Returns:
+        dict: ``{"server": <hex serial or None>, "ca": <hex serial or None>}``.
+
+    """
+    sources = {
+        "server": (constants.NB_DB_CNPG_SERVER_SECRET, "tls.crt"),
+        "ca": (constants.NB_DB_CNPG_CA_SECRET, "ca.crt"),
+    }
+    serials = {}
+    for role, (secret_name, cert_key) in sources.items():
+        cert = _load_cnpg_cert(secret_ocp, secret_name, cert_key)
+        serials[role] = format(cert.serial_number, "x") if cert else None
+        logger.info(f"{role} cert serial ({secret_name}): {serials[role]}")
+    return serials
+
+
+def wait_for_cert_serials_changed(secret_ocp, baseline, roles, timeout=120, sleep=5):
+    """
+    Poll the CNPG cert secrets until the serials for the given roles all differ
+    from the baseline, proving the operator regenerated/rotated them.
+
+    Args:
+        secret_ocp (OCP): OCP handle for secrets.
+        baseline (dict): Serials captured before the trigger (from
+            :func:`get_cnpg_cert_serials`).
+        roles (list): Which roles must change, e.g. ``["server"]`` or
+            ``["server", "ca"]``.
+        timeout (int): Overall timeout in seconds.
+        sleep (int): Seconds between polls.
+
+    Returns:
+        dict: The current serials once all requested roles changed, or None on
+            timeout.
+
+    """
+    try:
+        for current in TimeoutSampler(
+            timeout, sleep, get_cnpg_cert_serials, secret_ocp
+        ):
+            if all(current[role] and current[role] != baseline[role] for role in roles):
+                logger.info(f"Cert serial(s) {roles} changed: {baseline} -> {current}")
+                return current
+    except TimeoutExpiredError:
+        logger.error(f"Cert serial(s) {roles} did not change within {timeout}s")
+        return None
+
+
+def verify_leaf_signed_by_ca(secret_ocp):
+    """
+    Cryptographically verify that the server-leaf certificate was signed by the
+    current CA's private key. Unlike an issuer/subject DN comparison (which is
+    tautological when the CA subject is stable), this validates the actual
+    signature against the CA public key, covering both ECDSA and RSA CA keys.
+
+    Args:
+        secret_ocp (OCP): OCP handle for secrets.
+
+    Returns:
+        bool: True if the leaf's signature verifies against the CA, else False.
+
+    """
+    server_cert = _load_cnpg_cert(
+        secret_ocp, constants.NB_DB_CNPG_SERVER_SECRET, "tls.crt"
+    )
+    ca_cert = _load_cnpg_cert(secret_ocp, constants.NB_DB_CNPG_CA_SECRET, "ca.crt")
+    if not server_cert or not ca_cert:
+        return False
+    ca_pubkey = ca_cert.public_key()
+    try:
+        if isinstance(ca_pubkey, ec.EllipticCurvePublicKey):
+            ca_pubkey.verify(
+                server_cert.signature,
+                server_cert.tbs_certificate_bytes,
+                ec.ECDSA(server_cert.signature_hash_algorithm),
+            )
+        else:
+            ca_pubkey.verify(
+                server_cert.signature,
+                server_cert.tbs_certificate_bytes,
+                padding.PKCS1v15(),
+                server_cert.signature_hash_algorithm,
+            )
+    except InvalidSignature:
+        logger.error("Server leaf signature does not verify against the CA public key")
+        return False
+    logger.info("Server leaf signature verifies against the current CA public key")
+    return True
 
 
 @mcg
@@ -823,3 +1021,355 @@ class TestNoobaaDbTLS:
             f"All {len(pre_upgrade_objects)} pre-upgrade objects match their "
             "checksum baseline after the upgrade"
         )
+
+    @tier2
+    @polarion_id("OCS-8397")
+    def test_noobaa_core_pod_restart_preserves_postgres_ssl_config(self):
+        """
+        Verify that POSTGRES_SSL_REQUIRED env var is preserved across NooBaa core
+        pod restarts and operator pod restart:
+
+        1. Confirm POSTGRES_SSL_REQUIRED=true and encrypted connection (TLS in use).
+        2. Delete both NooBaa core pods sequentially, verify each restarts
+           automatically, and re-check POSTGRES_SSL_REQUIRED and encrypted
+           connection after each restart.
+        3. Delete the NooBaa operator pod; verify it restarts automatically.
+        4. After operator restart, confirm POSTGRES_SSL_REQUIRED is
+           re-applied and connection remains encrypted.
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+        # Step 1: baseline verification
+        logger.info("Step 1: Verifying baseline TLS (SSL required + encrypted)")
+        assert verify_tls_in_use(), "Baseline check failed: TLS not in use"
+
+        # Identify the active (leader) core pod and its passive peer. Deleting
+        # the active pod first forces a leader failover onto the passive peer.
+        core_pods = get_noobaa_core_pods(namespace=namespace)
+        logger.info(f"Found core pod(s): {[p.name for p in core_pods]}")
+        active_core_pod = get_active_core_pod(core_pods=core_pods, namespace=namespace)
+        assert active_core_pod, "Could not resolve the active (leader) core pod"
+        passive_core_pod = get_standby_core_pod(
+            core_pods=core_pods, active_pod=active_core_pod
+        )
+        assert passive_core_pod, "Could not resolve the passive (standby) core pod"
+        logger.info(
+            f"Active (leader): {active_core_pod.name}, "
+            f"passive: {passive_core_pod.name}"
+        )
+
+        # Step 2: delete each leader in turn; wait for the standby peer to be
+        # promoted to 2/2, then re-check TLS (the deleted pod returns as 1/2).
+        deletion_order = [
+            (active_core_pod, passive_core_pod),
+            (passive_core_pod, active_core_pod),
+        ]
+        for idx, (pod_to_delete, peer_to_wait) in enumerate(deletion_order, start=1):
+            logger.info(f"Step 2.{idx}: Deleting core pod {pod_to_delete.name}")
+            pod_to_delete.delete()
+            assert peer_to_wait.ocp.wait(
+                resource_name=peer_to_wait.name, condition=constants.STATUS_READY
+            ), f"Core pod {peer_to_wait.name} was not promoted to fully ready (2/2)"
+            assert (
+                verify_tls_in_use()
+            ), f"After deleting core pod {pod_to_delete.name}: TLS not in use"
+
+        # Step 3: delete the NooBaa operator pod and wait for it to recover.
+        logger.info("Step 3: Deleting NooBaa operator pod")
+        delete_pods([get_noobaa_operator_pod()])
+        wait_for_noobaa_pods_running()
+        assert wait_for_noobaa_ready(), "NooBaa not Ready after operator restart"
+
+        # Step 4: the operator must re-apply the TLS config on its own.
+        logger.info("Step 4: Verifying TLS is re-applied after operator restart")
+        assert verify_tls_in_use(), "After operator restart: TLS not in use"
+
+    @tier4a
+    @polarion_id("OCS-8394")
+    def test_noobaa_tls_with_s3_workload_and_pod_disruptions(
+        self, mcg_obj_session, awscli_pod_session, bucket_factory_session
+    ):
+        """
+        Comprehensive test: Verify TLS stays enforced and S3 I/O survives while
+        the operator and a core pod are disrupted mid-upload:
+
+        1. Create a bucket, upload baseline objects, verify baseline TLS.
+        2. Delete the operator pod while an upload is in flight; verify recovery
+           and that the in-flight upload completes.
+        3. Delete the active core pod while an upload is in flight; verify the
+           standby is promoted and the in-flight upload completes.
+        4. Download and checksum-verify every object (baseline + both in-flight).
+        5. Final verification: TLS still enforced.
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+        baseline_pattern = "baseline-obj-"
+
+        # Create both pod dirs up front so the finally block can always clean up.
+        origin_dir, result_dir = setup_pod_directories(
+            awscli_pod_session, ["origin", "result"]
+        )
+        try:
+            # Step 1: bucket + baseline objects + baseline TLS.
+            logger.info("Step 1: Creating bucket, uploading baseline objects")
+            bucket = bucket_factory_session(1)[0]
+            mcg_bucket_path = f"s3://{bucket.name}"
+            baseline_objects = write_random_objects_in_pod(
+                awscli_pod_session, origin_dir, amount=10, pattern=baseline_pattern
+            )
+            assert baseline_objects, "Failed to create baseline objects"
+            sync_with_retry(
+                awscli_pod_session, origin_dir, mcg_bucket_path, mcg_obj_session
+            )
+            assert verify_tls_in_use(), "Baseline: TLS not in use"
+
+            # Step 2: disrupt the operator while an upload is genuinely in flight.
+            logger.info("Step 2: Deleting operator pod during an in-flight upload")
+
+            def disrupt_operator():
+                delete_pods([get_noobaa_operator_pod()])
+                wait_for_noobaa_pods_running()
+                assert (
+                    wait_for_noobaa_ready()
+                ), "NooBaa not Ready after operator restart"
+
+            operator_obj = disrupt_during_background_upload(
+                mcg_obj_session,
+                awscli_pod_session,
+                bucket.name,
+                origin_dir,
+                disrupt_operator,
+            )
+            assert verify_tls_in_use(), "After operator restart: TLS not in use"
+
+            # Step 3: disrupt the active core pod while an upload is in flight;
+            # the standby peer must be promoted to fully ready (2/2).
+            logger.info("Step 3: Deleting active core pod during an in-flight upload")
+            core_pods = get_noobaa_core_pods(namespace=namespace)
+            active_core_pod = get_active_core_pod(
+                core_pods=core_pods, namespace=namespace
+            )
+            assert active_core_pod, "Could not resolve the active (leader) core pod"
+            passive_core_pod = get_standby_core_pod(
+                core_pods=core_pods, active_pod=active_core_pod
+            )
+            assert passive_core_pod, "Could not resolve the passive (standby) core pod"
+
+            def disrupt_core():
+                active_core_pod.delete()
+                assert passive_core_pod.ocp.wait(
+                    resource_name=passive_core_pod.name,
+                    condition=constants.STATUS_READY,
+                ), f"Core pod {passive_core_pod.name} was not promoted to 2/2"
+
+            core_obj = disrupt_during_background_upload(
+                mcg_obj_session,
+                awscli_pod_session,
+                bucket.name,
+                origin_dir,
+                disrupt_core,
+            )
+
+            # Step 4: download and checksum-verify every object, including the
+            # two uploaded in flight during the disruptions.
+            logger.info("Step 4: Verifying checksums for all objects")
+            sync_with_retry(
+                awscli_pod_session, mcg_bucket_path, result_dir, mcg_obj_session
+            )
+            assert compare_directory(
+                awscli_pod_session,
+                origin_dir,
+                result_dir,
+                amount=len(baseline_objects),
+                pattern=baseline_pattern,
+            ), "Checksum mismatch for baseline objects"
+            for obj in (operator_obj, core_obj):
+                assert verify_s3_object_integrity(
+                    original_object_path=f"{origin_dir}/{obj}",
+                    result_object_path=f"{result_dir}/{obj}",
+                    awscli_pod=awscli_pod_session,
+                ), f"Checksum mismatch for in-flight object '{obj}'"
+
+            # Step 5: TLS must still be enforced end to end.
+            logger.info("Step 5: Final verification - TLS still enforced")
+            assert verify_tls_in_use(), "After core pod switch: TLS not in use"
+        finally:
+            awscli_pod_session.exec_cmd(f"rm -rf {origin_dir} {result_dir}")
+
+    @tier4a
+    @polarion_id("OCS-8395")
+    def test_cnpg_tls_cert_rotation_automatic_regeneration(self, request):
+        """
+        Verify automatic TLS certificate regeneration and CA rotation by CNPG
+        without manual cert creation:
+
+        1. Record baseline serials and verify the leaf is genuinely signed by
+           the CA (real signature check, not a DN comparison).
+        2. Delete the server TLS secret to trigger CNPG regeneration.
+        3. Verify automatic regeneration (new serial, CNPG-owned) and that the
+           regenerated leaf is still signed by the CA.
+        4. Delete the CA secret and verify the CA is rotated to a new serial.
+           CNPG does not reissue the already-running leaf in place, so assert
+           the leaf serial is unchanged (documents the actual guarantee).
+        5. Verify the DB still enforces TLS afterwards (no downtime).
+        """
+        namespace = config.ENV_DATA["cluster_namespace"]
+        secret_ocp = OCP(kind=constants.SECRET, namespace=namespace)
+
+        def finalizer():
+            # This test deletes both CNPG-managed secrets and deliberately leaves
+            # the running leaf signed by a CA that no longer exists. Restore a
+            # consistent state for later tier4a tests: force CNPG to reissue the
+            # leaf under the current CA (delete the server secret), poll until the
+            # leaf verifies against the CA, then wait for NooBaa to be Ready.
+            pre = get_cnpg_cert_serials(secret_ocp)
+            try:
+                secret_ocp.delete(resource_name=constants.NB_DB_CNPG_SERVER_SECRET)
+            except CommandFailed:
+                pass  # already mid-regeneration from the test body
+            try:
+                for signed in TimeoutSampler(
+                    180, 10, verify_leaf_signed_by_ca, secret_ocp
+                ):
+                    if signed and get_cnpg_cert_serials(secret_ocp)["server"] != (
+                        pre["server"]
+                    ):
+                        break
+            except TimeoutExpiredError:
+                raise AssertionError(
+                    "Teardown: leaf was not reissued and signed by the current CA"
+                )
+            assert wait_for_noobaa_ready(), "NooBaa not Ready after cert rotation test"
+
+        request.addfinalizer(finalizer)
+
+        # Step 1: baseline serials + real signature check (leaf signed by CA).
+        logger.info("Step 1: Recording baseline serials and verifying leaf signature")
+        baseline = get_cnpg_cert_serials(secret_ocp)
+        assert (
+            baseline["server"] is not None and baseline["ca"] is not None
+        ), "Failed to read baseline server/CA cert serials"
+        assert verify_leaf_signed_by_ca(
+            secret_ocp
+        ), "Baseline: server leaf is not signed by the CA"
+
+        # Step 2: delete the server secret to trigger regeneration.
+        logger.info(
+            f"Step 2: Deleting server TLS secret '{constants.NB_DB_CNPG_SERVER_SECRET}'"
+        )
+        secret_ocp.delete(resource_name=constants.NB_DB_CNPG_SERVER_SECRET)
+
+        # Step 3: CNPG must regenerate the server cert (new serial), keep it
+        # CNPG-owned, and the new leaf must still verify against the CA.
+        logger.info("Step 3: Verifying automatic server cert regeneration")
+        regenerated = wait_for_cert_serials_changed(
+            secret_ocp, baseline, roles=["server"]
+        )
+        assert regenerated, "Server TLS secret was not regenerated automatically"
+        owner_kinds = [
+            ref.get("kind")
+            for ref in secret_ocp.get(resource_name=constants.NB_DB_CNPG_SERVER_SECRET)[
+                "metadata"
+            ].get("ownerReferences", [])
+        ]
+        assert "Cluster" in owner_kinds, (
+            "Regenerated server secret is not owned by CNPG Cluster "
+            "(manual cert creation detected)"
+        )
+        assert verify_leaf_signed_by_ca(
+            secret_ocp
+        ), "Regenerated server leaf is not signed by the CA"
+
+        # Step 4: trigger a real CA rotation. CNPG regenerates the CA with a new
+        # serial but does not reissue the already-running leaf in place, so the
+        # leaf serial must stay unchanged (the actual CNPG guarantee).
+        logger.info(f"Step 4: Deleting CA secret '{constants.NB_DB_CNPG_CA_SECRET}'")
+        secret_ocp.delete(resource_name=constants.NB_DB_CNPG_CA_SECRET)
+
+        rotated = wait_for_cert_serials_changed(secret_ocp, regenerated, roles=["ca"])
+        assert rotated, "CA cert was not rotated (new serial) within timeout"
+        assert rotated["server"] == regenerated["server"], (
+            "CNPG unexpectedly reissued the running server leaf during CA "
+            "rotation (leaf serial changed)"
+        )
+
+        # Step 5: TLS must still be enforced with the rotated CA (no downtime).
+        logger.info("Step 5: Verifying TLS still enforced after rotation")
+        assert verify_tls_in_use(), "After cert rotation: TLS not in use"
+        logger.info(
+            f"CA rotation verified: CA {regenerated['ca']} -> {rotated['ca']}, "
+            f"server leaf unchanged at {rotated['server']}"
+        )
+
+    @pre_upgrade
+    @polarion_id("OCS-8396")
+    def test_noobaa_backup_before_tls_upgrade(
+        self, request, mcg_obj_session, awscli_pod_session, bucket_factory_session
+    ):
+        """
+        Pre-upgrade (ODF N-1, internal NooBaa without TLS):
+
+        1. Create a bucket and upload objects (the backup payload).
+        2. Persist the bucket/objects/source dir so the post-upgrade test can
+           restore and compare checksums across the TLS activation.
+        """
+        logger.info("Creating bucket and uploading backup objects (pre-upgrade)")
+        bucket = bucket_factory_session(1)[0]
+        origin_dir = setup_pod_directories(awscli_pod_session, ["backup_origin"])[0]
+        backup_objects = write_random_objects_in_pod(
+            awscli_pod_session, origin_dir, amount=10
+        )
+        assert backup_objects, "Failed to create backup baseline objects"
+        sync_with_retry(
+            awscli_pod_session, origin_dir, f"s3://{bucket.name}", mcg_obj_session
+        )
+
+        # Persist the baseline for the post-upgrade test via the pytest cache.
+        request.config.cache.set("noobaa_db_tls/backup_bucket", bucket.name)
+        request.config.cache.set("noobaa_db_tls/backup_objects", backup_objects)
+        request.config.cache.set("noobaa_db_tls/backup_origin_dir", origin_dir)
+        logger.info(
+            f"Recorded backup baseline: bucket={bucket.name}, "
+            f"objects={len(backup_objects)}"
+        )
+
+    @post_upgrade
+    @polarion_id("OCS-8396")
+    def test_noobaa_backup_restore_after_tls_upgrade(
+        self, request, mcg_obj_session, awscli_pod_session
+    ):
+        """
+        Post-upgrade (ODF 5.0, TLS auto-enabled by operator):
+
+        1. Verify TLS is enabled post-upgrade.
+        2. Restore (re-download) the objects backed up pre-upgrade over TLS.
+        3. Compare checksums against the pre-upgrade baseline.
+        """
+        backup_bucket = request.config.cache.get("noobaa_db_tls/backup_bucket", None)
+        backup_objects = request.config.cache.get("noobaa_db_tls/backup_objects", None)
+        backup_origin_dir = request.config.cache.get(
+            "noobaa_db_tls/backup_origin_dir", None
+        )
+        assert (
+            backup_bucket and backup_objects and backup_origin_dir
+        ), "No backup baseline recorded; the pre-upgrade phase did not run"
+
+        # Step 1: TLS must be active after the upgrade.
+        logger.info("Step 1: Verifying TLS is enabled post-upgrade")
+        assert verify_cnpg_tls_secrets(), "CNPG TLS secrets not found after upgrade"
+        assert verify_tls_in_use(), "TLS not in use after upgrade"
+
+        # Steps 2-3: restore the backed-up objects over TLS and compare checksums.
+        logger.info(
+            f"Steps 2-3: Restoring {len(backup_objects)} objects from "
+            f"'{backup_bucket}' over TLS and verifying checksums"
+        )
+        result_dir = setup_pod_directories(awscli_pod_session, ["backup_result"])[0]
+        sync_with_retry(
+            awscli_pod_session, f"s3://{backup_bucket}", result_dir, mcg_obj_session
+        )
+        assert compare_directory(
+            awscli_pod_session,
+            backup_origin_dir,
+            result_dir,
+            amount=len(backup_objects),
+        ), "Checksum mismatch between restored objects and the pre-upgrade baseline"
