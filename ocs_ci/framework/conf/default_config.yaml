@@ -14,6 +14,9 @@ RUN:
   username: "kubeadmin"
   password_location: "auth/kubeadmin-password"
   log_dir: "/tmp"
+  # Log level used for the "Executing command" message in exec_cmd.
+  # Accepts standard logging level names (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+  cmd_log_level: "DEBUG"
   run_id: null # this will be redefined in the execution
   kubeconfig_location: "auth/kubeconfig" # relative from cluster_dir
   # kubeadmin_password: '' # kubeadmin password used as alternative way to
