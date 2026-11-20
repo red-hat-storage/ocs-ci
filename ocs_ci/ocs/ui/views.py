@@ -1137,6 +1137,76 @@ SCALE_DASHBOARD_LOCATORS = {
     ),
 }
 
+# ---------------------------------------------------------------------------
+# Fusion Access HA — Stretch Cluster UI locators  (RHSTOR-8877)
+# ---------------------------------------------------------------------------
+# Node-selection wizard table; the LUN table is shared with FDF_SAN_LOCATORS so
+# both keep using @aria-label='LUNs table'.
+_STRETCH_NODE_TABLE = "//table[@aria-label='Nodes table']"
+_STRETCH_LUN_TABLE = "//table[@aria-label='LUNs table']"
+# A node row, matched on the exact text of its name cell so that e.g.
+# 'compute-1' never matches the 'compute-11' row.
+_STRETCH_NODE_ROW_BY_NAME = (
+    f"{_STRETCH_NODE_TABLE}//tbody//tr"
+    "[normalize-space(td[@data-label='Name'])='{node_name}']"
+)
+_STRETCH_ROLE_DROPDOWN = "//button[@data-test='node-role-dropdown']"
+# XPath 1.0 has no lower-case(); translate() is the portable way to compare text
+# case-insensitively.
+_XPATH_UPPER = "'ABCDEFGHIJKLMNOPQRSTUVWXYZ'"
+_XPATH_LOWER = "'abcdefghijklmnopqrstuvwxyz'"
+# PatternFly renders every <td> with a data-label equal to its column header.
+_STRETCH_LUN_WWID_CELL = (
+    f".//td[contains(translate(@data-label, {_XPATH_UPPER}, {_XPATH_LOWER}), 'wwid')]"
+)
+
+STRETCH_CLUSTER_LOCATORS = {
+    "include_control_plane_toggle": (
+        "//input[@id='include-control-plane-nodes']",
+        By.XPATH,
+    ),
+    "stretch_cluster_toggle": ("//input[@id='stretch-cluster']", By.XPATH),
+    "node_table": (_STRETCH_NODE_TABLE, By.XPATH),
+    "node_table_rows": (f"{_STRETCH_NODE_TABLE}//tbody//tr", By.XPATH),
+    # Cell locators relative to a node row element (use with row.find_element)
+    # so a cell is always read from the row it belongs to, never by position.
+    "node_row_name_cell": (".//td[@data-label='Name']", By.XPATH),
+    "node_row_role_cell": (".//td[@data-label='Role']", By.XPATH),
+    "node_role_cell_by_name": (
+        f"{_STRETCH_NODE_ROW_BY_NAME}//td[@data-label='Role']",
+        By.XPATH,
+    ),
+    "node_role_dropdown_by_name": (
+        f"{_STRETCH_NODE_ROW_BY_NAME}{_STRETCH_ROLE_DROPDOWN}",
+        By.XPATH,
+    ),
+    "node_role_dropdown_options": (
+        "//ul[@role='listbox']//li//button",
+        By.XPATH,
+    ),
+    "arbiter_node_role_dropdown": (
+        _STRETCH_NODE_ROW_BY_NAME.replace("{node_name}", "{arbiter_node}")
+        + _STRETCH_ROLE_DROPDOWN,
+        By.XPATH,
+    ),
+    "no_arbiter_alert": (
+        "//*[@role='alert']"
+        f"[contains(translate(., {_XPATH_UPPER}, {_XPATH_LOWER}), 'arbiter')]",
+        By.XPATH,
+    ),
+    "lun_discovery_table": (_STRETCH_LUN_TABLE, By.XPATH),
+    "lun_discovery_rows": (f"{_STRETCH_LUN_TABLE}//tbody//tr", By.XPATH),
+    # WWID cell relative to a LUN row element, matched on its column label.
+    "lun_row_wwid_cell": (_STRETCH_LUN_WWID_CELL, By.XPATH),
+    # All cells of a LUN row; only used when the WWID cell carries no label.
+    "lun_row_cells": (".//td", By.XPATH),
+    "lun_row_by_wwid": (
+        f"{_STRETCH_LUN_TABLE}//tbody//tr"
+        f"[{_STRETCH_LUN_WWID_CELL}[normalize-space()='{{wwid}}']]",
+        By.XPATH,
+    ),
+}
+
 fusion_access_storage_cluster = {
     "fusion_access_for_san_nav": (
         "//a[normalize-space()='Fusion Access for SAN']",
