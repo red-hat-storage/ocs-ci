@@ -319,6 +319,13 @@ def oc_create_namespacestore(
     nss_data["metadata"]["name"] = nss_name
     nss_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
 
+    if platform.lower() == constants.ARCHIVE_PLATFORM:
+        if not nss_tup or len(nss_tup) < 3 or not nss_tup[2]:
+            raise ValueError(
+                f"Archive namespacestore tuple must be "
+                f"(amount, target_bucket, account_name), got: {nss_tup}"
+            )
+
     NSS_MAPPING = {
         constants.AWS_PLATFORM: lambda: {
             "type": "aws-s3",
@@ -404,6 +411,19 @@ def oc_create_namespacestore(
                 "clientId": get_attr_chain(cld_mgr, "azure_sts_client.client_id"),
                 "secret": {
                     "name": get_attr_chain(cld_mgr, "azure_sts_client.secret.name"),
+                    "namespace": nss_data["metadata"]["namespace"],
+                },
+            },
+        },
+        constants.ARCHIVE_PLATFORM: lambda: {
+            "type": "s3-compatible",
+            "archive": True,
+            "s3Compatible": {
+                "targetBucket": uls_name,
+                "endpoint": mcg_obj.s3_internal_endpoint,
+                "signatureVersion": "v4",
+                "secret": {
+                    "name": f"noobaa-account-{nss_tup[2]}",
                     "namespace": nss_data["metadata"]["namespace"],
                 },
             },
@@ -505,7 +525,9 @@ def namespace_store_factory(
             for platform, nss_lst in nss_dict.items():
                 for nss_tup in nss_lst:
                     for _ in range(nss_tup[0] if isinstance(nss_tup[0], int) else 1):
-                        if platform.lower() == "nsfs":
+                        if platform.lower() == constants.ARCHIVE_PLATFORM:
+                            uls_name = nss_tup[1]
+                        elif platform.lower() == "nsfs":
                             # Use nss_tup[0] as PVC name only if it's a string
                             # If it's an int (amount) or None, generate a unique name
                             if isinstance(nss_tup[0], str) and nss_tup[0].strip():
