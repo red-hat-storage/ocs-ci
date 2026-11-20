@@ -276,6 +276,7 @@ def failover(
     discovered_apps=False,
     old_primary=None,
     skip_odf_cli_validation=False,
+    timeout=360,
 ):
     """
     Initiates Failover action to the specified cluster
@@ -322,7 +323,7 @@ def failover(
         f"Wait for {constants.DRPC}: {drpc_obj.resource_name} to reach {constants.STATUS_FAILEDOVER} phase"
     )
 
-    drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER, timeout=360, sleep=10)
+    drpc_obj.wait_for_phase(constants.STATUS_FAILEDOVER, timeout=timeout, sleep=10)
 
     config.switch_ctx(restore_index)
 
@@ -1093,6 +1094,7 @@ def wait_for_replication_resources_creation(
     vrg_name="",
     skip_vrg_check=False,
     performed_dr_action=False,
+    vr_count=None,
 ):
     """
     Wait for replication resources to be created
@@ -1105,6 +1107,10 @@ def wait_for_replication_resources_creation(
         discovered_apps (bool): If true then deployed workload is discovered_apps
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
+        vr_count (int): Override for the expected VolumeReplication count in the namespace.
+            When multiple DRPCs share a namespace with CG enabled, pass the total number of
+            DRPCs in that namespace so the per-namespace VR count check uses the correct value
+            instead of the hardcoded 1-per-DRPC default.
 
     Raises:
         TimeoutExpiredError: In case replication resources not created
@@ -1163,12 +1169,15 @@ def wait_for_replication_resources_creation(
                     should_exist=True,
                 )
 
+            if vr_count is not None:
+                expected_vr_count = vr_count
+            else:
+                # Only 1 VolumeReplication resource is expected per workload when CG is enabled.
+                expected_vr_count = 1 if cg_enabled else count
             wait_for_resource_count(
                 kind=constants.VOLUME_REPLICATION,
                 namespace=namespace,
-                expected_count=(
-                    1 if cg_enabled else count
-                ),  # Only 1 VolumeReplication resource is expected per workload when CG is enabled.
+                expected_count=expected_vr_count,
                 timeout=timeout,
             )
 
@@ -1315,6 +1324,7 @@ def wait_for_all_resources_creation(
     vrg_name="",
     skip_vrg_check=False,
     performed_dr_action=False,
+    vr_count=None,
 ):
     """
     Wait for workload and replication resources to be created
@@ -1329,7 +1339,8 @@ def wait_for_all_resources_creation(
         vrg_name (str): Name of VRG
         skip_vrg_check (bool): If true vrg check will be skipped
         performed_dr_action(bool): It true, VolumeSnapshot count will be validate for CG-CephFS
-
+        vr_count (int): Override for the expected VolumeReplication count in the namespace.
+            Forwarded to wait_for_replication_resources_creation.
 
     """
     logger.info(f"Waiting for {pvc_count} PVCs to reach {constants.STATUS_BOUND} state")
@@ -1358,6 +1369,7 @@ def wait_for_all_resources_creation(
             vrg_name,
             skip_vrg_check,
             performed_dr_action,
+            vr_count=vr_count,
         )
 
 
