@@ -10,6 +10,7 @@ import time
 
 import boto3
 import botocore.config
+import requests
 from botocore.client import ClientError
 
 from ocs_ci.framework import config
@@ -54,6 +55,9 @@ import subprocess
 
 logger = logging.getLogger(__name__)
 
+# Timeout in seconds for a single RPC call to the noobaa-mgmt endpoint
+MGMT_RPC_TIMEOUT = 120
+
 
 class MCG:
     """
@@ -83,6 +87,7 @@ class MCG:
         """
         with config.RunWithProviderConfigContextIfAvailable():
             self.namespace = config.ENV_DATA["cluster_namespace"]
+            self._noobaa_token = None
             self.operator_pod = Pod(
                 **get_pods_having_label(
                     constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace
@@ -360,9 +365,48 @@ class MCG:
         """
         return bucketname in self.cli_get_all_bucket_names()
 
+    @property
+    def noobaa_token(self):
+        """
+        The NooBaa auth token used for RPC calls, taken from the
+        noobaa-operator secret and cached on first use.
+
+        Returns:
+            str: The NooBaa auth token
+
+        """
+        if self._noobaa_token is None:
+            self._noobaa_token = self.get_noobaa_token_from_secret()
+        return self._noobaa_token
+
+    def get_noobaa_token_from_secret(self):
+        """
+        Read the NooBaa auth token from the noobaa-operator secret
+
+        Returns:
+            str: The NooBaa auth token
+
+        """
+        secret_ocp_obj = OCP(kind="secret", namespace=self.namespace)
+        secret_dict = secret_ocp_obj.get(
+            resource_name=constants.NOOBAA_OPERATOR_SECRET, retry=5
+        )
+        token = base64.b64decode(secret_dict.get("data").get("auth_token")).decode(
+            "utf-8"
+        )
+        self.data_to_mask.append(token)
+        return token
+
     def send_rpc_query(self, api, method, params=None):
         """
         Templates and sends an RPC query to the MCG mgmt endpoint
+
+        The query is sent over the noobaa-mgmt route rather than through the
+        NooBaa CLI. The CLI port-forwards to a core pod chosen by name and not
+        by readiness, so with the active/passive core topology it fails with
+        "connection refused" whenever its target is the standby pod. The route
+        is backed by the noobaa-mgmt service, which only routes to ready
+        endpoints, so it always reaches the active core pod.
 
         Args:
             api: The name of the API to use
@@ -372,24 +416,55 @@ class MCG:
         Returns:
             The server's response
 
+        Raises:
+            CommandFailed: If the RPC call returns an error
+
         """
 
         masked_params = mask_secrets(str(params), self.data_to_mask)
         logger.info(
-            f"Sending MCG RPC query via mcg-cli:\n{api} {method} {masked_params}"
+            f"Sending MCG RPC query to the noobaa-mgmt endpoint:\n"
+            f"{api} {method} {masked_params}"
         )
 
-        cli_output = self.exec_mcg_cmd(
-            f"api {api} {method} '{json.dumps(params)}' -ojson"
-        )
+        def _post_rpc_query():
+            payload = {
+                "api": api,
+                "method": method,
+                "params": params if params is not None else {},
+                "auth_token": self.noobaa_token,
+            }
+            return requests.post(
+                url=self.mgmt_endpoint,
+                data=json.dumps(payload),
+                verify=retrieve_verification_mode(),
+                timeout=MGMT_RPC_TIMEOUT,
+            )
 
-        # This class is needed to add a json method to the response dict
-        # which is needed to support existing usage
-        class CLIResponseDict(dict):
-            def json(self):
-                return self
+        response = _post_rpc_query()
+        error = response.json().get("error") if response.ok else None
 
-        return CLIResponseDict({"reply": json.loads(cli_output.stdout)})
+        # A cached token that the server no longer accepts is the one failure
+        # worth recovering from here, since the token is read once per object
+        if error and error.get("rpc_code") == "UNAUTHORIZED":
+            logger.warning("NooBaa rejected the cached auth token, refreshing it")
+            self._noobaa_token = None
+            response = _post_rpc_query()
+            error = response.json().get("error") if response.ok else None
+
+        if not response.ok:
+            raise CommandFailed(
+                f"RPC call {api}.{method} failed with HTTP status "
+                f"{response.status_code}: "
+                f"{mask_secrets(response.text, self.data_to_mask)}"
+            )
+        if error:
+            raise CommandFailed(
+                f"RPC call {api}.{method} failed with "
+                f"{error.get('rpc_code')}: {error.get('message')}"
+            )
+
+        return response
 
     def check_data_reduction(self, bucketname, expected_reduction_in_bytes):
         """
