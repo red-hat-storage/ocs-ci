@@ -148,12 +148,18 @@ class MustGather(object):
         """
         if self.type_log != "OTHERS":
             return
-        for file, file_path in self.files_path.items():
-            if not os.path.isabs(file_path):
+        expected_names = {os.path.basename(path) for path in self.files_path.values()}
+        expected_names.discard("noobaa-db-pg-0-init.log")
+        for file_path in self.full_paths:
+            if (
+                not os.path.isabs(file_path)
+                or os.path.basename(file_path) not in expected_names
+            ):
                 continue
-            if Path(file_path).stat().st_size == 0:
-                logger.error(f"log file {file} empty!")
-                self.empty_files.append(file)
+            path = Path(file_path)
+            if path.is_file() and path.stat().st_size == 0:
+                logger.error(f"log file {file_path} empty!")
+                self.empty_files.append(file_path)
 
     def validate_expected_files(self):
         """
