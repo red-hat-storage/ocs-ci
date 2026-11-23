@@ -51,12 +51,15 @@ class CephXMetricsHelper:
     @staticmethod
     def _scheme_for_port_name(port_name):
         """
-        Derive the URL scheme from a Service/container port name.
+        Guess a URL scheme from a Service/container port name.
 
-        Exporter port names follow a ``<protocol>-<purpose>`` convention
-        (``https-main``, ``http-metrics``). Only a name that is exactly
-        ``http`` or prefixed with ``http-`` is treated as plaintext;
-        anything else, including an unnamed port, defaults to https.
+        This is only a hint for ordering, never a decision. Some exporter
+        layouts name ports ``<protocol>-<purpose>`` (``https-main``,
+        ``http-metrics``), but ODF 4.16 names them by purpose alone
+        (``metrics`` on 8080, ``exporter`` on 8081) and 8080 there is
+        plaintext. A name that does not start with ``http`` therefore tells
+        us nothing, so the scheme is confirmed by scraping both in
+        :meth:`_metrics_scheme_candidates` order rather than trusted here.
 
         Args:
             port_name (str): Service or containerPort name.
@@ -68,6 +71,26 @@ class CephXMetricsHelper:
         if name == "http" or name.startswith("http-"):
             return "http"
         return "https"
+
+    def _metrics_scheme_candidates(self):
+        """
+        Return both schemes, hinted-first, for the discovered scrape port.
+
+        A port name only hints at the scheme (see
+        :meth:`_scheme_for_port_name`), so forcing the hint onto the port is
+        what produced ``https://<ip>:8080/metrics`` and ``curl`` exit 35
+        against the plaintext ODF 4.16 ``metrics`` port. Trying the other
+        scheme after the hint keeps every layout working without the test
+        needing to know which one it is on.
+
+        Returns:
+            list: ``["https", "http"]`` or ``["http", "https"]``.
+        """
+        confirmed = getattr(self, "_metrics_scrape_scheme_confirmed", None)
+        if confirmed:
+            return [confirmed]
+        hinted = self._discover_metrics_exporter_scrape_scheme()
+        return [hinted, "http" if hinted == "https" else "https"]
 
     def _discover_metrics_exporter_scrape_port(self):
         """
@@ -179,14 +202,28 @@ class CephXMetricsHelper:
         self._discover_metrics_exporter_scrape_port()
         return getattr(self, "_metrics_scrape_scheme", "https")
 
-    def _metrics_exporter_local_url(self):
-        """/metrics URL on the exporter pod loopback interface."""
+    def _metrics_exporter_url(self, host, scheme=None):
+        """
+        Build the /metrics URL for *host* on the discovered scrape port.
+
+        Args:
+            host (str): ``127.0.0.1`` for the exporter pod loopback, or the
+                exporter pod IP when scraping from the toolbox.
+            scheme (str): ``http`` or ``https``. Defaults to the hinted
+                scheme; callers that retry pass each candidate explicitly.
+
+        Returns:
+            str: Full /metrics URL.
+        """
         port = self._discover_metrics_exporter_scrape_port()
-        scheme = self._discover_metrics_exporter_scrape_scheme()
+        scheme = scheme or self._discover_metrics_exporter_scrape_scheme()
         return (
-            f"{scheme}://127.0.0.1:{port}"
-            f"{constants.OCS_METRICS_EXPORTER_METRICS_PATH}"
+            f"{scheme}://{host}:{port}" f"{constants.OCS_METRICS_EXPORTER_METRICS_PATH}"
         )
+
+    def _metrics_exporter_local_url(self, scheme=None):
+        """/metrics URL on the exporter pod loopback interface."""
+        return self._metrics_exporter_url("127.0.0.1", scheme=scheme)
 
     def _metrics_exporter_requires_auth(self):
         """
@@ -267,8 +304,7 @@ class CephXMetricsHelper:
         """
         metrics_pod = metrics_pod or self.assert_metrics_exporter_running()
         pod_name = metrics_pod["metadata"]["name"]
-        scrape_port = self._discover_metrics_exporter_scrape_port()
-        local_url = self._metrics_exporter_local_url()
+        self._discover_metrics_exporter_scrape_port()
 
         bearer_token = None
         if self._metrics_exporter_requires_auth():
@@ -282,21 +318,30 @@ class CephXMetricsHelper:
             except Exception as exc:
                 log.warning(f"Failed to create metrics bearer token: {exc}")
 
-        log.info(f"Fetching ocs-metrics-exporter metrics from {pod_name} ({local_url})")
-        try:
-            local_output = self._curl_metrics_from_pod(
-                get_pod_obj(pod_name, namespace=self.namespace),
-                local_url,
-                container_name=constants.OCS_METRICS_EXPORTER_CONTAINER,
-                bearer_token=bearer_token,
+        for scheme in self._metrics_scheme_candidates():
+            local_url = self._metrics_exporter_local_url(scheme=scheme)
+            log.info(
+                f"Fetching ocs-metrics-exporter metrics from {pod_name} ({local_url})"
             )
-            if self._metrics_output_is_valid(local_output):
-                return local_output
-            log.debug(
-                "ocs-metrics-exporter local /metrics response was empty or invalid"
-            )
-        except Exception as exc:
-            log.debug(f"ocs-metrics-exporter local metrics fetch failed: {exc}")
+            try:
+                local_output = self._curl_metrics_from_pod(
+                    get_pod_obj(pod_name, namespace=self.namespace),
+                    local_url,
+                    container_name=constants.OCS_METRICS_EXPORTER_CONTAINER,
+                    bearer_token=bearer_token,
+                )
+                if self._metrics_output_is_valid(local_output):
+                    self._remember_metrics_scheme(scheme)
+                    return local_output
+                log.debug(
+                    f"ocs-metrics-exporter local /metrics response over {scheme} "
+                    "was empty or invalid"
+                )
+            except Exception as exc:
+                log.debug(
+                    f"ocs-metrics-exporter local metrics fetch over {scheme} "
+                    f"failed: {exc}"
+                )
 
         pod_ip = get_pod_ip(
             OCP(
@@ -308,16 +353,40 @@ class CephXMetricsHelper:
         if not pod_ip:
             raise UnexpectedBehaviour("ocs-metrics-exporter pod IP is not assigned")
 
-        remote_url = (
-            f"{self._discover_metrics_exporter_scrape_scheme()}://"
-            f"{pod_ip}:{scrape_port}"
-            f"{constants.OCS_METRICS_EXPORTER_METRICS_PATH}"
-        )
-        log.info(f"Fetching ocs-metrics-exporter metrics via toolbox ({remote_url})")
         toolbox = get_ceph_tools_pod()
-        return self._curl_metrics_from_pod(
-            toolbox, remote_url, bearer_token=bearer_token
+        last_exc = None
+        for scheme in self._metrics_scheme_candidates():
+            remote_url = self._metrics_exporter_url(pod_ip, scheme=scheme)
+            log.info(
+                f"Fetching ocs-metrics-exporter metrics via toolbox ({remote_url})"
+            )
+            try:
+                remote_output = self._curl_metrics_from_pod(
+                    toolbox, remote_url, bearer_token=bearer_token
+                )
+            except Exception as exc:
+                last_exc = exc
+                log.debug(
+                    f"ocs-metrics-exporter toolbox metrics fetch over {scheme} "
+                    f"failed: {exc}"
+                )
+                continue
+            if self._metrics_output_is_valid(remote_output):
+                self._remember_metrics_scheme(scheme)
+            return remote_output
+
+        raise UnexpectedBehaviour(
+            "ocs-metrics-exporter /metrics could not be scraped over http or "
+            f"https on port {self._discover_metrics_exporter_scrape_port()}: "
+            f"{last_exc}"
         )
+
+    def _remember_metrics_scheme(self, scheme):
+        """Pin the scheme that actually returned metrics, to skip later retries."""
+        if getattr(self, "_metrics_scrape_scheme_confirmed", None) == scheme:
+            return
+        self._metrics_scrape_scheme_confirmed = scheme
+        log.info(f"Confirmed ocs-metrics-exporter /metrics scheme: {scheme}")
 
     def assert_metrics_exporter_metrics(self, metrics_output=None, metrics_pod=None):
         """
