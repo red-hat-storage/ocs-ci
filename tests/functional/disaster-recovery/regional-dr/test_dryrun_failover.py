@@ -130,6 +130,8 @@ class TestDryRunFailover:
             f"{workload_info[4]['drpc_resource_name']}] to {cluster_b}"
         )
         failover_infos = [workload_info[i] for i in [1, 4]]
+        # Ensure main thread is in ACM context before parallel failover to avoid race conditions
+        config.switch_acm_ctx()
         futures = []
         with ThreadPoolExecutor() as executor:
             for info in failover_infos:
@@ -187,30 +189,23 @@ class TestDryRunFailover:
         # Verify data is protected before issuing Relocate (required precondition)
         self._check_sync_times([workload_info[i] for i in [2, 5]], scheduling_interval)
 
-        # Relocate workloads [2] (AppSet) and [5] (DiscoveredApps) to cluster_b in parallel
+        # Relocate workloads [2] (AppSet) and [5] (DiscoveredApps) to cluster_b sequentially
         logger.info(
             f"Relocating workloads [{workload_info[2]['drpc_resource_name']}, "
             f"{workload_info[5]['drpc_resource_name']}] to {cluster_b}"
         )
         relocate_infos = [workload_info[i] for i in [2, 5]]
-        futures = []
-        with ThreadPoolExecutor() as executor:
-            for info in relocate_infos:
-                is_discovered = info["is_discovered"]
-                futures.append(
-                    executor.submit(
-                        dr_helpers.relocate,
-                        preferred_cluster=cluster_b,
-                        namespace=info["workload_namespace"],
-                        workload_type=info["workload"].workload_type,
-                        workload_placement_name=info["placement_name"],
-                        discovered_apps=is_discovered,
-                        old_primary=cluster_a if is_discovered else None,
-                        workload_instance=(info["workload"] if is_discovered else None),
-                    )
-                )
-        for f in futures:
-            f.result()
+        for info in relocate_infos:
+            is_discovered = info["is_discovered"]
+            dr_helpers.relocate(
+                preferred_cluster=cluster_b,
+                namespace=info["workload_namespace"],
+                workload_type=info["workload"].workload_type,
+                workload_placement_name=info["placement_name"],
+                discovered_apps=is_discovered,
+                old_primary=cluster_a if is_discovered else None,
+                workload_instance=(info["workload"] if is_discovered else None),
+            )
 
         config.switch_to_cluster_by_name(cluster_a)
         for info in relocate_infos:
@@ -241,6 +236,7 @@ class TestDryRunFailover:
                 drpc_obj: DRPC = info["drpc_obj"]
                 vrg_namespace = info["vrg_namespace"]
                 vrg_name = info["vrg_name"]
+                is_discovered = info.get("is_discovered", False)
                 # Use .get() so a pre-trigger failure in the finalizer doesn't KeyError.
                 failover_cluster = info.get("failover_cluster")
                 if (
@@ -253,6 +249,25 @@ class TestDryRunFailover:
                     drpc_obj.patch(
                         params=drpc_obj.get_abort_dryrun_patch(), format_type="merge"
                     )
+
+                    # For discovered apps, DRPC waits at STATUS_WAITFORUSERTOCLEANUP
+                    # until user cleanup completes; AppSet goes directly to Completed
+                    if is_discovered:
+                        drpc_obj.wait_for_progression_status(
+                            constants.STATUS_WAITFORUSERTOCLEANUP, timeout=300
+                        )
+                        logger.info(
+                            f"Doing discovered apps cleanup for {info['drpc_resource_name']} "
+                            f"on {failover_cluster}"
+                        )
+                        dr_helpers.do_discovered_apps_cleanup(
+                            drpc_name=info["placement_name"],
+                            old_primary=failover_cluster,
+                            workload_namespace=info["workload_namespace"],
+                            workload_dir=info["workload"].workload_dir,
+                            vrg_name=vrg_name,
+                        )
+
                     drpc_obj.wait_for_progression_status(
                         constants.STATUS_COMPLETED, timeout=900
                     )
