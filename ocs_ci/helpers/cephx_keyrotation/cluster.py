@@ -423,6 +423,49 @@ class CephXClusterHelper:
         self.wait_for_pgs_active_clean(timeout=timeout, sleep=sleep)
         self.wait_for_cluster_ready(timeout=timeout)
 
+    def wait_for_rotation_preconditions(self, timeout=900, sleep=15):
+        """
+        Wait until the cluster can actually absorb a CephX daemon rotation.
+
+        Rotation restarts every mon, mgr and OSD. Before Rook restarts a mon
+        deployment it calls ``ceph mon ok-to-stop``, and before an OSD it calls
+        ``ceph osd ok-to-stop``. Those return EBUSY (``exit status 16``) while
+        quorum is already short a member or PGs are still recovering, and Rook
+        then blocks in a ``retrying after 1m0s`` loop for ten minutes per
+        daemon before logging ``attempting to continue after failing to start
+        mon "x"`` and moving on.
+
+        Back-to-back rotations are what make this bite: the previous rotation's
+        mons are still settling when the next one is requested, so each
+        reconcile pass spends ten minutes in that retry loop and
+        ``status.cephx`` advances roughly one daemon-type per ten minutes.
+        A rotation that takes ~2 minutes on a settled cluster then overruns a
+        25 minute wait, which looks like a stalled rotation but is really the
+        suite outrunning the cluster.
+
+        Gating on full quorum plus clean PGs keeps ``ok-to-stop`` answering
+        yes, so the rotation under test measures rotation and not recovery.
+
+        Args:
+            timeout (int): Max seconds to wait for each precondition.
+            sleep (int): Seconds between polls.
+
+        Raises:
+            TimeoutExpiredError: If mon quorum is not complete in time.
+            UnexpectedBehaviour: If PGs do not reach active+clean in time.
+        """
+        from ocs_ci.helpers.ceph_helpers import wait_for_mons_in_quorum
+
+        expected_mon_count = len(self.get_mon_deployment_names())
+        log.info(
+            "Waiting for CephX rotation preconditions "
+            f"({expected_mon_count} mons in quorum, PGs active+clean; "
+            f"timeout={timeout}s) so 'ok-to-stop' does not defer daemon restarts"
+        )
+        wait_for_mons_in_quorum(expected_mon_count, timeout=timeout, sleep=sleep)
+        self.wait_for_pgs_active_clean(timeout=timeout, sleep=sleep)
+        log.info("CephX rotation preconditions met; cluster can absorb a rotation")
+
     def wait_for_cephcluster_rotation(
         self,
         timeout=1500,

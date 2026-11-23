@@ -39,7 +39,9 @@ class CephXDaemonRotation:
         """
         return self.get_current_rook_daemon_key_generation() + 1
 
-    def rotate_rook_daemon_keys(self, key_generation=None, wait_for_rotation=True):
+    def rotate_rook_daemon_keys(
+        self, key_generation=None, wait_for_rotation=True, wait_for_preconditions=None
+    ):
         """
         Rotate CephX keys for Rook-managed daemons: MON, MGR, OSD, and MDS.
 
@@ -52,6 +54,8 @@ class CephXDaemonRotation:
                 :meth:`get_next_rook_daemon_key_generation`.
             wait_for_rotation (bool): When False, patch only and return without
                 waiting for CephCluster/StorageCluster Ready.
+            wait_for_preconditions (bool): Wait for full mon quorum and clean
+                PGs before patching. Defaults to *wait_for_rotation*.
         """
         if key_generation is None:
             key_generation = self.get_next_rook_daemon_key_generation()
@@ -59,6 +63,7 @@ class CephXDaemonRotation:
             self.COMPONENT_DAEMON,
             key_generation=key_generation,
             wait_for_rotation=wait_for_rotation,
+            wait_for_preconditions=wait_for_preconditions,
         )
 
     def wait_for_filesystem_daemon_rotation(

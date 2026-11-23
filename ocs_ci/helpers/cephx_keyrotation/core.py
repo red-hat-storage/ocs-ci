@@ -445,6 +445,7 @@ class CephXKeyRotationCore:
         key_generation=None,
         keep_prior_key_count_max=None,
         wait_for_rotation=True,
+        wait_for_preconditions=None,
     ):
         """
         Initiate a one-off CephX key rotation for a cephx component.
@@ -470,6 +471,16 @@ class CephXKeyRotationCore:
             wait_for_rotation (bool): When False, patch only and return without
                 waiting for CephCluster status.cephx / StorageCluster Ready.
                 Use for mid-rotation fault injection.
+            wait_for_preconditions (bool): For a ``daemon`` rotation, wait for
+                full mon quorum and clean PGs before patching, so Rook's
+                ``ok-to-stop`` checks do not defer the daemon restarts this
+                rotation depends on (see
+                :meth:`wait_for_rotation_preconditions`). Defaults to the value
+                of *wait_for_rotation*: fault-injection callers pass
+                ``wait_for_rotation=False`` precisely because they have already
+                broken quorum or PGs on purpose, and must not block here.
+                Ignored for ``csi`` and ``rbdMirrorPeer``, which do not restart
+                Ceph daemons.
 
         Returns:
             int: The key generation written to the component spec.
@@ -481,6 +492,18 @@ class CephXKeyRotationCore:
         will_rotate = self.will_storagecluster_key_generation_trigger_rotation(
             component, key_generation
         )
+        if wait_for_preconditions is None:
+            wait_for_preconditions = wait_for_rotation
+        # Only a daemon write that actually rotates restarts MON/MGR/OSD/MDS,
+        # so only that write needs the cluster settled enough for Rook's
+        # ok-to-stop checks to say yes. CSI and rbdMirrorPeer rotations do not
+        # restart Ceph daemons and never reach those checks.
+        if (
+            will_rotate
+            and wait_for_preconditions
+            and component == self.COMPONENT_DAEMON
+        ):
+            self.wait_for_rotation_preconditions()
 
         # Preserve sibling fields (e.g. keyType) already set on StorageCluster.
         component_config = dict(self.get_storagecluster_component_spec(component))
@@ -537,12 +560,15 @@ class CephXKeyRotationCore:
             self.wait_for_storagecluster_reconciliation(timeout=600, sleep=10)
         return key_generation
 
-    def rotate_daemon_keys(self, key_generation=None, wait_for_rotation=True):
+    def rotate_daemon_keys(
+        self, key_generation=None, wait_for_rotation=True, wait_for_preconditions=None
+    ):
         """Rotate internal Ceph daemon CephX keys."""
         return self.rotate_component_keys(
             self.COMPONENT_DAEMON,
             key_generation,
             wait_for_rotation=wait_for_rotation,
+            wait_for_preconditions=wait_for_preconditions,
         )
 
     def rotate_csi_keys(self, key_generation=None, keep_prior_key_count_max=1):
