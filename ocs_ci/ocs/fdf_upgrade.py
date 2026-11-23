@@ -227,10 +227,8 @@ class FDFUpgrade(BaseUpgrade):
         4. Subscription channel updates
         5. Upgrade triggering via FusionServiceInstance
         6. Install plan approval and monitoring
-        7. Health monitoring during upgrade via CephHealthMonitor
-           (skipped on Fusion Access clusters which have no CephCluster)
-        8. Post-upgrade verification
-           (Ceph/ODF image and pod checks skipped on Fusion Access)
+        7. Health monitoring via CephHealthMonitor (skipped on Fusion Access)
+        8. Post-upgrade verification (Ceph/ODF checks skipped on Fusion Access)
 
         On standard FDF clusters the upgrade runs under CephHealthMonitor. If
         Ceph health degrades during the upgrade, that context manager raises
@@ -242,8 +240,7 @@ class FDFUpgrade(BaseUpgrade):
             ConfigurationError: If required configuration is missing or invalid
             ChannelNotFound: If the upgrade subscription channel is not available
             TimeoutExpiredError: If upgrade does not complete within timeout
-            CephHealthException: If Ceph health degrades during upgrade
-                (FDF with CephCluster only)
+            CephHealthException: If Ceph health degrades during upgrade (FDF only)
 
         """
         logger.info("Starting FDF upgrade procedure")
