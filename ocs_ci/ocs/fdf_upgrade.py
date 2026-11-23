@@ -13,7 +13,11 @@ from ocs_ci.deployment.fusion_data_foundation import (
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
+from ocs_ci.ocs.cluster import (
+    CephCluster,
+    CephHealthMonitor,
+    DummyCephHealthMonitor,
+)
 from ocs_ci.ocs.defaults import OCS_OPERATOR_NAME
 from ocs_ci.ocs.exceptions import (
     ChannelNotFound,
@@ -224,11 +228,14 @@ class FDFUpgrade(BaseUpgrade):
         5. Upgrade triggering via FusionServiceInstance
         6. Install plan approval and monitoring
         7. Health monitoring during upgrade via CephHealthMonitor
+           (skipped on Fusion Access clusters which have no CephCluster)
         8. Post-upgrade verification
+           (Ceph/ODF image and pod checks skipped on Fusion Access)
 
-        The upgrade is performed while monitoring Ceph cluster health. If health
-        degrades during the upgrade, the CephHealthMonitor context manager will
-        raise an exception.
+        On standard FDF clusters the upgrade runs under CephHealthMonitor. If
+        Ceph health degrades during the upgrade, that context manager raises
+        CephHealthException. Fusion Access clusters use DummyCephHealthMonitor
+        instead and skip Ceph-based image/pod verification.
 
         Raises:
             AssertionError: If target version is lower than current version
@@ -236,6 +243,7 @@ class FDFUpgrade(BaseUpgrade):
             ChannelNotFound: If the upgrade subscription channel is not available
             TimeoutExpiredError: If upgrade does not complete within timeout
             CephHealthException: If Ceph health degrades during upgrade
+                (FDF with CephCluster only)
 
         """
         logger.info("Starting FDF upgrade procedure")
@@ -251,24 +259,42 @@ class FDFUpgrade(BaseUpgrade):
             self.fdf_deployment.create_image_digest_mirror_set(upgrade=True)
             wait_for_machineconfigpool_status(node_type="all")
             self.fdf_deployment.patch_fusion_service_definition(upgrade=True)
-        ceph_cluster = CephCluster()
+
+        fusion_access = config.DEPLOYMENT.get("fusion_access")
+        if fusion_access:
+            logger.info(
+                "Fusion Access cluster detected — skipping CephCluster health "
+                "monitoring and Ceph-based post-upgrade image/pod verification"
+            )
+            ceph_cluster = None
+            health_monitor = DummyCephHealthMonitor
+        else:
+            ceph_cluster = CephCluster()
+            health_monitor = CephHealthMonitor
+
         self.pre_upgrade_csv_data = self.get_csv_name_pre_upgrade()
         self.pre_upgrade_image_data = self.get_pre_upgrade_image(
             self.pre_upgrade_csv_data
         )
-        with CephHealthMonitor(ceph_cluster):
+        with health_monitor(ceph_cluster):
             self.update_subscription_channel()
             self.trigger_fdf_upgrade()
             self.fdf_deployment.ensure_install_plan_approval()
             self.monitor_fusion_service_instance()
             self.end_time = time.time()
             self.duration = self.end_time - self.start_time
-            old_images = self.get_images_post_upgrade(
-                self.channel, self.pre_upgrade_image_data, self.fdf_upgrade_version
-            )
+            if not fusion_access:
+                old_images = self.get_images_post_upgrade(
+                    self.channel,
+                    self.pre_upgrade_image_data,
+                    self.fdf_upgrade_version,
+                )
         self.verify_required_csvs()
-        parsed_versions = self.get_parsed_versions()
-        self.verify_image_versions(old_images, parsed_versions[1], parsed_versions[0])
+        if not fusion_access:
+            parsed_versions = self.get_parsed_versions()
+            self.verify_image_versions(
+                old_images, parsed_versions[1], parsed_versions[0]
+            )
 
         version = self.fdf_deployment.get_installed_version()
         logger.info(f"FDF upgraded to version {version} successfully")
