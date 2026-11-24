@@ -5447,25 +5447,85 @@ class MultiClusterDROperatorsDeploy(object):
                 return True
             return False
 
+        @staticmethod
+        def _are_aws_credentials_valid(access_key, secret_key):
+            """
+            Check whether the given AWS credentials are accepted by AWS
+
+            Args:
+                access_key (str): AWS access key id
+                secret_key (str): AWS secret access key
+
+            Returns:
+                bool: True if the credentials are valid, False otherwise
+
+            """
+            try:
+                boto3.client(
+                    "sts",
+                    aws_access_key_id=access_key,
+                    aws_secret_access_key=secret_key,
+                ).get_caller_identity()
+                return True
+            except ClientError as e:
+                logger.warning(f"AWS credentials validation failed: {e}")
+                return False
+
         def get_meta_access_secret_keys(self):
             """
             Get aws_access_key_id and aws_secret_access_key
             by default we go with AWS, in case of noobaa it should be
             implemented in mcg_meta_obj_store class
 
+            The credentials are taken from ocs-ci-data, then from local
+            auth.yaml and finally from the default boto3 credentials chain
+            (environment variables, ~/.aws/credentials, ...). The first valid
+            set of credentials is used.
+
             """
+            candidates = []
             try:
                 logger.info("Trying to load AWS credentials")
-                secret_dict = update_config_from_s3().get("AUTH")
+                candidates.append(update_config_from_s3().get("AUTH"))
             except (AttributeError, EndpointConnectionError):
                 logger.warning(
                     "Failed to load credentials from ocs-ci-data.\n"
                     "Your local AWS credentials might be misconfigured.\n"
                     "Trying to load credentials from local auth.yaml instead"
                 )
-                secret_dict = load_auth_config().get("AUTH", {})
-            self.access_key = secret_dict["AWS"]["AWS_ACCESS_KEY_ID"]
-            self.secret_key = secret_dict["AWS"]["AWS_SECRET_ACCESS_KEY"]
+            candidates.append(load_auth_config().get("AUTH", {}))
+
+            for secret_dict in candidates:
+                aws_dict = (secret_dict or {}).get("AWS") or {}
+                access_key = aws_dict.get("AWS_ACCESS_KEY_ID")
+                secret_key = aws_dict.get("AWS_SECRET_ACCESS_KEY")
+                if (
+                    access_key
+                    and secret_key
+                    and self._are_aws_credentials_valid(access_key, secret_key)
+                ):
+                    self.access_key = access_key
+                    self.secret_key = secret_key
+                    return
+
+            logger.warning(
+                "No valid AWS credentials found in ocs-ci-data or local auth.yaml. "
+                "Trying default boto3 credentials chain"
+            )
+            session_creds = boto3.Session().get_credentials()
+            if not session_creds:
+                raise ACMClusterConfigurationException(
+                    "Unable to find valid AWS credentials for S3 bucket creation"
+                )
+            frozen_creds = session_creds.get_frozen_credentials()
+            if not self._are_aws_credentials_valid(
+                frozen_creds.access_key, frozen_creds.secret_key
+            ):
+                raise ACMClusterConfigurationException(
+                    "No valid AWS credentials found for S3 bucket creation"
+                )
+            self.access_key = frozen_creds.access_key
+            self.secret_key = frozen_creds.secret_key
 
     class mcg_meta_obj_store:
         def __init__(self):
