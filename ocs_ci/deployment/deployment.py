@@ -5483,20 +5483,24 @@ class MultiClusterDROperatorsDeploy(object):
             set of credentials is used.
 
             """
-            candidates = []
-            try:
-                logger.info("Trying to load AWS credentials")
-                candidates.append(update_config_from_s3().get("AUTH"))
-            except (AttributeError, EndpointConnectionError):
-                logger.warning(
-                    "Failed to load credentials from ocs-ci-data.\n"
-                    "Your local AWS credentials might be misconfigured.\n"
-                    "Trying to load credentials from local auth.yaml instead"
-                )
-            candidates.append(load_auth_config().get("AUTH", {}))
 
-            for secret_dict in candidates:
-                aws_dict = (secret_dict or {}).get("AWS") or {}
+            def load_remote_auth():
+                try:
+                    logger.info("Trying to load AWS credentials")
+                    return update_config_from_s3().get("AUTH")
+                except (AttributeError, EndpointConnectionError):
+                    logger.warning(
+                        "Failed to load credentials from ocs-ci-data.\n"
+                        "Your local AWS credentials might be misconfigured.\n"
+                        "Trying to load credentials from local auth.yaml instead"
+                    )
+
+            def load_local_auth():
+                return (load_auth_config() or {}).get("AUTH")
+
+            # Loaders are called lazily, local auth.yaml is read only when needed
+            for load_auth in (load_remote_auth, load_local_auth):
+                aws_dict = (load_auth() or {}).get("AWS") or {}
                 access_key = aws_dict.get("AWS_ACCESS_KEY_ID")
                 secret_key = aws_dict.get("AWS_SECRET_ACCESS_KEY")
                 if (
