@@ -93,7 +93,9 @@ from botocore.exceptions import ClientError
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.utility.ssl_certs import (
     create_ocs_ca_bundle,
+    generate_client_mtls_material,
     get_root_ca_cert,
+    get_service_ca_certificate,
 )
 from ocs_ci.utility.version import (
     get_running_odf_version,
@@ -7304,12 +7306,40 @@ class SpokeODF(SpokeOCP, ABC):
             get_autodistributed_volumegroup_snapshot_classes()
         )
 
+        # External-mode client mTLS material (opt-in via ENV_DATA client_mtls).
+        # Generated once here so the same CA/SAN wires both the provider-side
+        # StorageConsumer and the client-side StorageClient.
+        consumer_mtls_kwargs = {}
+        client_mtls_kwargs = None
+        if config.ENV_DATA.get("client_mtls"):
+            logger.test_step("Generating client mTLS material")
+            client_san = f"{storage_consumer_name}.client.ocs.openshift.io"
+            material = generate_client_mtls_material(client_san)
+            with config.RunWithProviderConfigContextIfAvailable():
+                provider_ns = config.ENV_DATA["cluster_namespace"]
+                server_ca_pem = get_service_ca_certificate()
+            server_san = f"ocs-provider-server.{provider_ns}.svc"
+            consumer_mtls_kwargs = {
+                "client_ca_pem": material.ca_pem,
+                "client_san": material.san,
+                "client_ca_configmap_name": f"{storage_consumer_name}-client-ca",
+            }
+            client_mtls_kwargs = {
+                "client_cert_pem": material.cert_pem,
+                "client_key_pem": material.key_pem,
+                "server_ca_pem": server_ca_pem,
+                "server_san": server_san,
+                "client_cert_secret_name": f"{storage_consumer_name}-mtls-client-cert",
+                "server_ca_configmap_name": f"{storage_consumer_name}-provider-ca",
+            }
+
         start_time = time.time()
         storage_consumer_obj = create_storage_consumer_on_default_cluster(
             storage_consumer_name,
             storage_classes=storage_class_names,
             volume_snapshot_classes=volumesnapshot_class_names,
             volume_group_snapshot_classes=volumegroup_snapshot_classes,
+            **consumer_mtls_kwargs,
         )
         secret_name = storage_consumer_obj.get_onboarding_ticket_secret()
 
@@ -7324,7 +7354,7 @@ class SpokeODF(SpokeOCP, ABC):
         log_step("Creating storage client")
         try:
             storage_client_created = self.create_storage_client(
-                onboarding_key_decrypted
+                onboarding_key_decrypted, mtls_kwargs=client_mtls_kwargs
             )
         except TimeoutExpiredError as e:
             logger.error(f"Error during storage client creation: {e}")
@@ -7409,13 +7439,45 @@ class SpokeODF(SpokeOCP, ABC):
         )
 
     @retry((CommandFailed, TimeoutError), tries=3, delay=30, backoff=1)
-    def apply_storage_client_cr(self, onboarding_key_decrypted):
+    def apply_storage_client_cr(
+        self,
+        onboarding_key_decrypted,
+        client_cert_pem=None,
+        client_key_pem=None,
+        server_ca_pem=None,
+        server_san=None,
+        client_cert_secret_name=None,
+        server_ca_configmap_name=None,
+    ):
         """
         Internal function to apply storage client CR
+
+        Args:
+            onboarding_key_decrypted (str): decrypted onboarding key
+            client_cert_pem (str): PEM-encoded client certificate (external-mode
+                mTLS). When set, client_key_pem, server_ca_pem,
+                client_cert_secret_name and server_ca_configmap_name are required.
+            client_key_pem (str): PEM-encoded client private key
+            server_ca_pem (str): PEM-encoded provider server CA
+            server_san (str): expected provider server certificate SAN
+            client_cert_secret_name (str): name of the kubernetes.io/tls secret
+            server_ca_configmap_name (str): name of the provider-CA ConfigMap
 
         Returns:
             bool: True if storage client CR is applied and exists on cluster, False otherwise
         """
+        if client_cert_pem and not (
+            client_key_pem
+            and server_ca_pem
+            and client_cert_secret_name
+            and server_ca_configmap_name
+        ):
+            raise ValueError(
+                "client_key_pem, server_ca_pem, client_cert_secret_name and "
+                "server_ca_configmap_name are required when client_cert_pem is "
+                "provided"
+            )
+
         storage_client_data = templating.load_yaml(
             constants.PROVIDER_MODE_STORAGE_CLIENT
         )
@@ -7429,6 +7491,23 @@ class SpokeODF(SpokeOCP, ABC):
 
         storage_client_data["spec"]["onboardingTicket"] = onboarding_key_decrypted
 
+        if client_cert_pem:
+            self._apply_client_mtls_resources(
+                client_cert_pem=client_cert_pem,
+                client_key_pem=client_key_pem,
+                server_ca_pem=server_ca_pem,
+                client_cert_secret_name=client_cert_secret_name,
+                server_ca_configmap_name=server_ca_configmap_name,
+            )
+            storage_client_data["spec"]["clientCertSecret"] = {
+                "name": client_cert_secret_name
+            }
+            storage_client_data["spec"]["serverCAConfigMap"] = {
+                "name": server_ca_configmap_name,
+                "key": "ca.crt",
+            }
+            storage_client_data["spec"]["serverSAN"] = server_san
+
         self.storage_client_name = storage_client_data["metadata"]["name"]
 
         storage_client_file = tempfile.NamedTemporaryFile(
@@ -7438,6 +7517,47 @@ class SpokeODF(SpokeOCP, ABC):
         self.exec_oc_cmd(f"apply -f {storage_client_file.name}", timeout=120)
 
         return self.storage_client_exists()
+
+    def _apply_client_mtls_resources(
+        self,
+        client_cert_pem,
+        client_key_pem,
+        server_ca_pem,
+        client_cert_secret_name,
+        server_ca_configmap_name,
+    ):
+        """
+        Create the client mTLS tls secret and provider-CA ConfigMap on the
+        spoke (client) cluster using the spoke kubeconfig.
+        """
+        tls_secret = {
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "type": "kubernetes.io/tls",
+            "metadata": {
+                "name": client_cert_secret_name,
+                "namespace": self.namespace_client,
+            },
+            "data": {
+                "tls.crt": base64.b64encode(client_cert_pem.encode()).decode(),
+                "tls.key": base64.b64encode(client_key_pem.encode()).decode(),
+            },
+        }
+        server_ca_cm = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {
+                "name": server_ca_configmap_name,
+                "namespace": self.namespace_client,
+            },
+            "data": {"ca.crt": server_ca_pem},
+        }
+        for resource in (tls_secret, server_ca_cm):
+            resource_file = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="client_mtls", suffix=".yaml", delete=False
+            )
+            templating.dump_data_to_temp_yaml(resource, resource_file.name)
+            self.exec_oc_cmd(f"apply -f {resource_file.name}", timeout=120)
 
     @kubeconfig_exists_decorator
     def get_storage_client_status(self):
@@ -7849,7 +7969,7 @@ class SpokeODF(SpokeOCP, ABC):
         self.create_subscription()
 
     @kubeconfig_exists_decorator
-    def create_storage_client(self, onboarding_key_decrypted=None):
+    def create_storage_client(self, onboarding_key_decrypted=None, mtls_kwargs=None):
         """
         Create storage client
 
@@ -7857,6 +7977,10 @@ class SpokeODF(SpokeOCP, ABC):
             onboarding_key_decrypted (str): Onboarding key for the storage client.
             After version 4.18 onboarding key is generated and stored in secret.
             Get secret name from configmap created with storageconsumer
+            mtls_kwargs (dict): optional external-mode mTLS material forwarded to
+            apply_storage_client_cr (client_cert_pem, client_key_pem,
+            server_ca_pem, server_san, client_cert_secret_name,
+            server_ca_configmap_name)
 
         Returns:
             bool: True if storage client is created, False otherwise
@@ -7868,7 +7992,9 @@ class SpokeODF(SpokeOCP, ABC):
             logger.info("Storage client already exists")
             return True
 
-        if not self.apply_storage_client_cr(onboarding_key_decrypted):
+        if not self.apply_storage_client_cr(
+            onboarding_key_decrypted, **(mtls_kwargs or {})
+        ):
             logger.info("Storage client create Failed")
             return False
 

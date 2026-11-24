@@ -21,6 +21,7 @@ from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.ssl_certs import create_ca_configmap
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler, is_cluster_y_version_upgraded
 from ocs_ci.utility.version import get_semantic_version
@@ -430,6 +431,9 @@ class StorageConsumer:
         volume_group_snapshot_classes=None,
         storage_quota_in_gib=None,
         resource_name_mapping_config_map_name=None,
+        client_ca_pem=None,
+        client_san=None,
+        client_ca_configmap_name=None,
     ):
         """
         Create a storage consumer
@@ -440,17 +444,38 @@ class StorageConsumer:
             volume_group_snapshot_classes (list): List of volume group snapshot classes
             storage_quota_in_gib (int): Storage quota in GiB
             resource_name_mapping_config_map_name (str): Resource name mapping config map
+            client_ca_pem (str): PEM-encoded client CA to share with the provider
+                (external-mode mTLS). When set, client_san and
+                client_ca_configmap_name are required.
+            client_san (str): expected client certificate SAN
+            client_ca_configmap_name (str): name of the ConfigMap holding the
+                client CA (created with key "ca.crt" in self.namespace)
 
         Returns:
             dict: Dictionary with consumer data
 
         """
+        if client_ca_pem and not (client_san and client_ca_configmap_name):
+            raise ValueError(
+                "client_san and client_ca_configmap_name are required when "
+                "client_ca_pem is provided"
+            )
         with config.RunWithConfigContext(self.consumer_context):
             storage_consumer_data = templating.load_yaml(
                 constants.STORAGE_CONSUMER_YAML
             )
             storage_consumer_data["metadata"]["name"] = self.name
             storage_consumer_data["metadata"]["namespace"] = self.namespace
+            if client_ca_pem:
+                create_ca_configmap(
+                    name=client_ca_configmap_name,
+                    namespace=self.namespace,
+                    ca_pem=client_ca_pem,
+                )
+                storage_consumer_data["spec"]["clientCAConfigMap"] = {
+                    "name": client_ca_configmap_name
+                }
+                storage_consumer_data["spec"]["clientSAN"] = client_san
             if storage_classes:
                 storage_consumer_data["spec"].setdefault(
                     "storageClasses", [{"name": sc} for sc in storage_classes]
@@ -504,6 +529,9 @@ def create_storage_consumer_on_default_cluster(
     volume_group_snapshot_classes=None,
     storage_quota_in_gib=None,
     resource_name_mapping_config_map_name=None,
+    client_ca_pem=None,
+    client_san=None,
+    client_ca_configmap_name=None,
 ):
     """
     Create a storage consumer on the storage provider cluster
@@ -531,6 +559,9 @@ def create_storage_consumer_on_default_cluster(
         storage_classes=storage_classes,
         storage_quota_in_gib=storage_quota_in_gib,
         resource_name_mapping_config_map_name=resource_name_mapping_config_map_name,
+        client_ca_pem=client_ca_pem,
+        client_san=client_san,
+        client_ca_configmap_name=client_ca_configmap_name,
     )
     return storage_consumer
 
