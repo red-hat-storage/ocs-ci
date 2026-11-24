@@ -98,6 +98,9 @@ def _setup_full_debug_logging(arguments):
     # Create full debug log file
     full_debug_log = os.path.join(log_dir, f"full_debug_{run_id}.log")
 
+    # Ensure log directory exists
+    os.makedirs(log_dir, exist_ok=True)
+
     # Configure root logger for DEBUG level
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
