@@ -16,7 +16,7 @@ import base64
 import boto3
 import yaml
 
-from botocore.exceptions import BotoCoreError, ClientError, EndpointConnectionError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from ocs_ci.deployment.helpers import storage_class
 from ocs_ci.utility.azure_utils import AZURE as AzureUtil
@@ -179,7 +179,6 @@ from ocs_ci.utility import (
     version,
 )
 from ocs_ci.utility.aws import (
-    update_config_from_s3,
     create_and_attach_sts_role,
 )
 from ocs_ci.utility.multicluster import create_mce_catsrc
@@ -5477,56 +5476,28 @@ class MultiClusterDROperatorsDeploy(object):
             by default we go with AWS, in case of noobaa it should be
             implemented in mcg_meta_obj_store class
 
-            The credentials are taken from ocs-ci-data, then from local
-            auth.yaml and finally from the default boto3 credentials chain
-            (environment variables, ~/.aws/credentials, ...). The first valid
-            set of credentials is used.
+            The credentials are taken only from the default boto3 credentials
+            chain (~/.aws/credentials, or AWS_* environment variables), they
+            are never read from auth.yaml or ocs-ci-data.
+
+            Raises:
+                ACMClusterConfigurationException: if no valid long-lived AWS
+                    credentials are found
 
             """
-
-            def load_remote_auth():
-                try:
-                    logger.info("Trying to load AWS credentials")
-                    return update_config_from_s3().get("AUTH")
-                except (AttributeError, EndpointConnectionError):
-                    logger.warning(
-                        "Failed to load credentials from ocs-ci-data.\n"
-                        "Your local AWS credentials might be misconfigured.\n"
-                        "Trying to load credentials from local auth.yaml instead"
-                    )
-
-            def load_local_auth():
-                return (load_auth_config() or {}).get("AUTH")
-
-            # Loaders are called lazily, local auth.yaml is read only when needed
-            for load_auth in (load_remote_auth, load_local_auth):
-                aws_dict = (load_auth() or {}).get("AWS") or {}
-                access_key = aws_dict.get("AWS_ACCESS_KEY_ID")
-                secret_key = aws_dict.get("AWS_SECRET_ACCESS_KEY")
-                if (
-                    access_key
-                    and secret_key
-                    and self._are_aws_credentials_valid(access_key, secret_key)
-                ):
-                    self.access_key = access_key
-                    self.secret_key = secret_key
-                    return
-
-            logger.warning(
-                "No valid AWS credentials found in ocs-ci-data or local auth.yaml. "
-                "Trying default boto3 credentials chain"
-            )
+            logger.info("Trying to load AWS credentials from ~/.aws/credentials")
             session_creds = boto3.Session().get_credentials()
             if not session_creds:
                 raise ACMClusterConfigurationException(
-                    "Unable to find valid AWS credentials for S3 bucket creation"
+                    "AWS credentials not found, configure them in ~/.aws/credentials"
                 )
             frozen_creds = session_creds.get_frozen_credentials()
             if not self._are_aws_credentials_valid(
                 frozen_creds.access_key, frozen_creds.secret_key
             ):
                 raise ACMClusterConfigurationException(
-                    "No valid AWS credentials found for S3 bucket creation"
+                    "AWS credentials from ~/.aws/credentials are not valid "
+                    "(long-lived IAM user keys are required)"
                 )
             self.access_key = frozen_creds.access_key
             self.secret_key = frozen_creds.secret_key
