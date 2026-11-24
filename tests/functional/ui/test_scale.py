@@ -139,7 +139,7 @@ class TestScaleConnection(object):
     @tier2
     @skipif_ocs_version("<4.23")
     @polarion_id("OCS-7763")
-    def test_enable_data_encryption(self, setup_ui_class, scale_connection_setup):
+    def test_enable_data_encryption(self, setup_ui_class):
         """
         TC4: Enable data encryption backed by an external KMS from the Scale
         dashboard. KMS connection details are sourced from AUTH config.
