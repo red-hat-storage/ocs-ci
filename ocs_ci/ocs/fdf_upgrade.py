@@ -11,6 +11,7 @@ from ocs_ci.deployment.fusion_data_foundation import (
     FusionServiceInstance,
     run_patch_cmd,
 )
+from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.cluster import (
@@ -25,8 +26,12 @@ from ocs_ci.ocs.exceptions import (
     CSVNotFound,
     TimeoutExpiredError,
 )
-from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
-from ocs_ci.ocs.resources.packagemanifest import get_packagemanifest_by_catalog_source
+from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
+from ocs_ci.ocs.resources.packagemanifest import (
+    PackageManifest,
+    get_packagemanifest_by_catalog_source,
+    get_selector_for_ocs_operator,
+)
 from ocs_ci.ocs.upgrade import BaseUpgrade
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -216,6 +221,87 @@ class FDFUpgrade(BaseUpgrade):
                     return csv_name
         raise CSVNotFound(f"No preupgrade CSV found for {resource_name}")
 
+    def get_health_monitor(self):
+        """
+        Return the health monitor context manager for this upgrade.
+
+        Fusion Access clusters have no CephCluster, so a no-op
+        DummyCephHealthMonitor is used. Standard FDF clusters monitor
+        Ceph health during the upgrade.
+
+        Returns:
+            CephHealthMonitor or DummyCephHealthMonitor: Context manager to
+                wrap upgrade steps.
+
+        """
+        if config.DEPLOYMENT.get("fusion_access"):
+            logger.info("Fusion Access cluster detected — using DummyCephHealthMonitor")
+            return DummyCephHealthMonitor()
+        return CephHealthMonitor(CephCluster())
+
+    def post_upgrade_verification(self):
+        """
+        Run post-upgrade verification steps.
+
+        Verifies required CSVs, then on standard FDF clusters also collects
+        post-upgrade images and verifies image/pod versions. Fusion Access
+        clusters skip Ceph-based image and pod verification.
+
+        """
+        self.verify_required_csvs()
+        if config.DEPLOYMENT.get("fusion_access"):
+            logger.info(
+                "Skipping Ceph-based post-upgrade image/pod verification "
+                "for Fusion Access cluster"
+            )
+            return
+
+        old_images = self.get_images_post_upgrade(
+            self.channel,
+            self.pre_upgrade_image_data,
+            self.fdf_upgrade_version,
+        )
+        parsed_versions = self.get_parsed_versions()
+        self.verify_image_versions(old_images, parsed_versions[1], parsed_versions[0])
+
+    def verify_required_csvs(self):
+        """
+        Verify required CSVs after upgrade.
+
+        On Fusion Access clusters, Ceph operators (rook-ceph-operator,
+        cephcsi-operator) are excluded because those clusters have no
+        CephCluster. Standard FDF deployments verify the full required
+        CSV list from the base implementation.
+
+        """
+        if not config.DEPLOYMENT.get("fusion_access"):
+            return super().verify_required_csvs()
+
+        skip_operators = {
+            defaults.CEPHCSI_OPERATOR,
+        }
+        ocs_operator_names = [
+            name for name in get_required_csvs() if name not in skip_operators
+        ]
+        logger.info(
+            "Fusion Access cluster — verifying required CSVs without "
+            f"Ceph operators: {ocs_operator_names}"
+        )
+        channel = config.DEPLOYMENT.get("ocs_csv_channel")
+        operator_selector = get_selector_for_ocs_operator()
+        subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
+
+        for ocs_operator_name in ocs_operator_names:
+            package_manifest = PackageManifest(
+                resource_name=ocs_operator_name,
+                selector=operator_selector,
+                subscription_plan_approval=subscription_plan_approval,
+            )
+            package_manifest.wait_for_resource(timeout=300)
+            csv_name = package_manifest.get_current_csv(channel=channel)
+            csv = CSV(resource_name=csv_name, namespace=self.namespace)
+            csv.wait_for_phase("Succeeded", timeout=720)
+
     def run_upgrade(self):
         """
         Execute the complete FDF upgrade workflow.
@@ -227,13 +313,12 @@ class FDFUpgrade(BaseUpgrade):
         4. Subscription channel updates
         5. Upgrade triggering via FusionServiceInstance
         6. Install plan approval and monitoring
-        7. Health monitoring via CephHealthMonitor (skipped on Fusion Access)
-        8. Post-upgrade verification (Ceph/ODF checks skipped on Fusion Access)
+        7. Health monitoring during upgrade
+        8. Post-upgrade verification
 
-        On standard FDF clusters the upgrade runs under CephHealthMonitor. If
-        Ceph health degrades during the upgrade, that context manager raises
-        CephHealthException. Fusion Access clusters use DummyCephHealthMonitor
-        instead and skip Ceph-based image/pod verification.
+        Health monitoring and post-upgrade verification behavior for Fusion
+        Access vs standard FDF is handled by get_health_monitor and
+        post_upgrade_verification.
 
         Raises:
             AssertionError: If target version is lower than current version
@@ -257,41 +342,19 @@ class FDFUpgrade(BaseUpgrade):
             wait_for_machineconfigpool_status(node_type="all")
             self.fdf_deployment.patch_fusion_service_definition(upgrade=True)
 
-        fusion_access = config.DEPLOYMENT.get("fusion_access")
-        if fusion_access:
-            logger.info(
-                "Fusion Access cluster detected — skipping CephCluster health "
-                "monitoring and Ceph-based post-upgrade image/pod verification"
-            )
-            ceph_cluster = None
-            health_monitor = DummyCephHealthMonitor
-        else:
-            ceph_cluster = CephCluster()
-            health_monitor = CephHealthMonitor
-
         self.pre_upgrade_csv_data = self.get_csv_name_pre_upgrade()
         self.pre_upgrade_image_data = self.get_pre_upgrade_image(
             self.pre_upgrade_csv_data
         )
-        with health_monitor(ceph_cluster):
+        with self.get_health_monitor():
             self.update_subscription_channel()
             self.trigger_fdf_upgrade()
             self.fdf_deployment.ensure_install_plan_approval()
             self.monitor_fusion_service_instance()
             self.end_time = time.time()
             self.duration = self.end_time - self.start_time
-            if not fusion_access:
-                old_images = self.get_images_post_upgrade(
-                    self.channel,
-                    self.pre_upgrade_image_data,
-                    self.fdf_upgrade_version,
-                )
-        self.verify_required_csvs()
-        if not fusion_access:
-            parsed_versions = self.get_parsed_versions()
-            self.verify_image_versions(
-                old_images, parsed_versions[1], parsed_versions[0]
-            )
+
+        self.post_upgrade_verification()
 
         version = self.fdf_deployment.get_installed_version()
         logger.info(f"FDF upgraded to version {version} successfully")

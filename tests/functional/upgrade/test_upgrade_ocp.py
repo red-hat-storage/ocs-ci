@@ -139,7 +139,10 @@ class TestUpgradeOCP(ManageTest):
                 local_zone_odf = get_primary_cluster_config()
             ceph_cluster = CephClusterMultiCluster(local_zone_odf)
             health_monitor = MulticlusterCephHealthMonitor
-        elif config.DEPLOYMENT.get("ocp_only_upgrade"):
+        elif config.DEPLOYMENT.get("ocp_only_upgrade") or config.DEPLOYMENT.get(
+            "fusion_access"
+        ):
+            # No CephCluster on OCP-only or Fusion Access clusters
             ceph_cluster = None
             health_monitor = DummyCephHealthMonitor
         else:
@@ -381,6 +384,7 @@ class TestUpgradeOCP(ManageTest):
             and not acm_cluster
             and not hci_client
             and not config.DEPLOYMENT.get("ocp_only_upgrade")
+            and not config.DEPLOYMENT.get("fusion_access")
         ):
             new_ceph_cluster = CephCluster()
             # Increased timeout because of this bug:
