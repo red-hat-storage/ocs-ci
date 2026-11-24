@@ -190,13 +190,29 @@ class FusionAccessStorage(object):
         logger.info(
             f"Creating docker-registry secret '{secret_name}' in '{self.namespace}'"
         )
-        ocp_obj.exec_oc_cmd(
-            f"create secret docker-registry {secret_name} "
-            f"--docker-server='{quay_server}' "
-            f"--docker-username='{quay_username}' "
-            f"--docker-password='{quay_password}' "
-            f"--docker-email='{quay_email}'",
-            secrets=[quay_password, quay_username],
+        # Built as a manifest rather than 'oc create secret docker-registry',
+        # which would put the Quay password in the argument list for anything
+        # that can read /proc. Also removes the quoting hazard for passwords
+        # containing shell metacharacters.
+        auth_b64 = base64.b64encode(
+            f"{quay_username}:{quay_password}".encode()
+        ).decode()
+        create_custom_secret_for_cnsa_rm(
+            name=secret_name,
+            namespace=self.namespace,
+            data_dict={
+                ".dockerconfigjson": {
+                    "auths": {
+                        quay_server: {
+                            "username": quay_username,
+                            "password": quay_password,  # pragma: allowlist secret
+                            "email": quay_email,
+                            "auth": auth_b64,
+                        }
+                    }
+                }
+            },
+            secret_type="kubernetes.io/dockerconfigjson",
         )
         ocp_obj.wait_for_resource(
             condition="kubernetes.io/dockerconfigjson",
@@ -378,16 +394,23 @@ class FusionAccessStorage(object):
             resource_name=constants.IBM_STORAGE_SCALE_DAEMON_NAME,
         )
         logger.info("Waiting for the Daemon CR to report a GPFS cluster id")
-        for cluster_id in TimeoutSampler(
-            timeout=SCALE_CLUSTER_TIMEOUT,
-            sleep=30,
-            func=self._get_cluster_id,
-            resource=daemon_ocp,
-        ):
-            if cluster_id:
-                logger.info(f"GPFS cluster id is {cluster_id}")
-                return cluster_id
-        raise ResourceWrongStatusException("Daemon CR never reported a GPFS cluster id")
+        # The sampler raises TimeoutExpiredError rather than falling out of the
+        # loop, so the translation has to happen here or it never happens.
+        try:
+            for cluster_id in TimeoutSampler(
+                timeout=SCALE_CLUSTER_TIMEOUT,
+                sleep=30,
+                func=self._get_cluster_id,
+                resource=daemon_ocp,
+            ):
+                if cluster_id:
+                    logger.info(f"GPFS cluster id is {cluster_id}")
+                    return cluster_id
+        except TimeoutExpiredError as ex:
+            raise ResourceWrongStatusException(
+                "Daemon CR never reported a GPFS cluster id within "
+                f"{SCALE_CLUSTER_TIMEOUT}s"
+            ) from ex
 
     def get_filesystem_names(self):
         """
@@ -399,7 +422,9 @@ class FusionAccessStorage(object):
         filesystem_ocp = ocp.OCP(
             kind=constants.IBM_STORAGE_SCALE_FILESYSTEM_KIND, namespace=self.namespace
         )
-        items = filesystem_ocp.get(dont_raise=True).get("items", [])
+        # dont_raise=True returns None, not {}, when the lookup fails, and the
+        # caller needs the empty list so it can raise its own descriptive error.
+        items = (filesystem_ocp.get(dont_raise=True) or {}).get("items", [])
         names = [item["metadata"]["name"] for item in items]
         logger.info(f"Filesystems created by the LUN group: {names}")
         return names

@@ -4,7 +4,12 @@
 MULTICLUSTER:
   multicluster_mode: "metro-dr"
 DEPLOYMENT:
+  # fusion_access selects the DR flow, fusion_access_deployment installs the
+  # operator the flow depends on. They have to move together, and the MDR
+  # deploy asserts that. fusion_access_storage stays optional and is enabled
+  # separately through conf/ocsci/fusion_access_storage_deployment.yaml.
   fusion_access: true
+  fusion_access_deployment: true
 ENV_DATA:
   dr_metadata_store: "awss3"
   skip_submariner_deployment: true

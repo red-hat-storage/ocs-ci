@@ -1035,8 +1035,23 @@ class Deployment(object):
         1. Navigate to Storage → Fusion Access for SAN.
         2. Click "Create storage cluster" and select all worker nodes.
         3. Submit the storage cluster creation form.
+
+        Mutually exclusive with the API driven path. When
+        ``DEPLOYMENT.fusion_access_storage`` is set, do_deploy_fusion_access()
+        has already provisioned the storage cluster on every managed cluster,
+        and running the wizard again would either fail against the existing
+        storage cluster or target whichever context is current, which after
+        do_deploy_fusion_access() restores it may well be the ACM hub.
         """
         if not config.DEPLOYMENT.get("fusion_access_deployment"):
+            return
+
+        if config.DEPLOYMENT.get("fusion_access_storage"):
+            logger.info(
+                "Skipping the Fusion Access storage cluster UI wizard — "
+                "fusion_access_storage=True, the storage cluster was already "
+                "created through the API in do_deploy_fusion_access()"
+            )
             return
 
         if not ui_deployment_conditions():
@@ -5037,7 +5052,31 @@ class MultiClusterDROperatorsDeploy(object):
         # Hub and cluster Ramen both resolve the secret ref, so every cluster needs it.
         self.create_ramen_s3_secrets(profiles, access_key, secret_key)
 
-        logger.info("Adding s3StoreProfiles to the Ramen hub ConfigMap")
+        # Both hubs need the profiles, not just the active one. The secrets are
+        # already created on both, but a passive hub whose Ramen ConfigMap has
+        # no s3StoreProfiles cannot drive DR once it takes over.
+        old_index = config.cur_index
+        try:
+            for index in get_all_acm_indexes():
+                config.switch_ctx(index)
+                self.write_ramen_s3_profiles_to_configmap(profiles)
+        finally:
+            config.switch_ctx(old_index)
+
+    def write_ramen_s3_profiles_to_configmap(self, profiles):
+        """
+        Merge s3StoreProfiles into the Ramen ConfigMap of the current cluster,
+        leaving any profile already present under a different name untouched.
+
+        Args:
+            profiles (list): s3StoreProfiles entries, as built by
+                configure_ramen_s3_store_profiles()
+
+        """
+        logger.info(
+            "Adding s3StoreProfiles to the Ramen ConfigMap on "
+            f"{config.ENV_DATA['cluster_name']}"
+        )
         dr_ramen_hub_configmap_data = self.meta_obj.get_ramen_resource()
         ramen_config = yaml.safe_load(
             dr_ramen_hub_configmap_data.data["data"][
@@ -5097,6 +5136,16 @@ class MultiClusterDROperatorsDeploy(object):
                 for profile in profiles:
                     secret_name = profile["s3SecretRef"]["name"]
                     namespace = profile["s3SecretRef"]["namespace"]
+                    # The Fusion Access path skips deploy_dr_policy()'s namespace
+                    # creation, so on a managed cluster openshift-dr-system may
+                    # not exist yet and the apply would fail with "not found".
+                    ns_obj = ocp.OCP(kind=constants.NAMESPACE)
+                    if not ns_obj.is_exist(resource_name=namespace):
+                        logger.info(
+                            f"Creating namespace {namespace} on "
+                            f"{config.ENV_DATA['cluster_name']}"
+                        )
+                        ns_obj.new_project(namespace)
                     manifest = {
                         "apiVersion": "v1",
                         "kind": "Secret",
@@ -6174,6 +6223,18 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
     def deploy(self):
         fusion_access = config.DEPLOYMENT.get("fusion_access")
+        fusion_access_deployment = config.DEPLOYMENT.get("fusion_access_deployment")
+        # fusion_access picks the DR flow, fusion_access_deployment installs the
+        # operator that flow assumes is there. Enabling one without the other
+        # produces a half configured run that only fails much later, at DRPolicy
+        # validation, so reject it up front.
+        if bool(fusion_access) != bool(fusion_access_deployment):
+            raise ValueError(
+                "Mismatched Fusion Access flags: DEPLOYMENT.fusion_access="
+                f"{bool(fusion_access)} but DEPLOYMENT.fusion_access_deployment="
+                f"{bool(fusion_access_deployment)}. Both must be enabled for a "
+                "Fusion Access MDR deployment, or both left off for a Ceph one."
+            )
 
         # Patches the cluster wide proxy trustedCA, which rolls every node.
         if not config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
@@ -6199,8 +6260,8 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
                 "Fusion Access deployment, skipping MirrorPeer: mirroring is "
                 "handled by the SAN, not by Ceph RBD"
             )
-            # No NooBaa to provision the metadata buckets, so set the store up here.
-            config.switch_ctx(get_active_acm_index())
+            # No NooBaa to provision the metadata buckets, so set the store up
+            # here. The method handles both hubs and restores the context.
             self.configure_ramen_s3_store_profiles()
         else:
             self.configure_mirror_peer()
