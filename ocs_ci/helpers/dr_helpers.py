@@ -88,6 +88,12 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.odf_cli import ODFCliRunner
+from ocs_ci.deployment.helpers.hypershift_base import (
+    is_hosted_cluster,
+    get_host_zone_nodes,
+    get_hosted_cluster_type,
+    get_provider_cluster_name_from_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -2334,6 +2340,12 @@ def get_managed_cluster_node_ips():
                             "address"
                         ):
                             external_ips.append(address["address"])
+                        # If ExternalIP is not present. Example: hosted cluster.
+                        elif address.get("type") == "InternalIP" and address.get(
+                            "address"
+                        ):
+                            external_ips.append(address["address"])
+
             external_ips_with_cidr = [f"{ip}/32" for ip in dict.fromkeys(external_ips)]
             if not external_ips_with_cidr:
                 raise UnexpectedBehaviour(
@@ -2409,8 +2421,48 @@ def configure_drcluster_for_fencing():
     old_ctx = config.cur_index
     cluster_rows = get_managed_cluster_node_ips()
     config.switch_acm_ctx()
+    dr_cluster_relations = config.MULTICLUSTER.get("dr_cluster_relations", [])
     for cluster in cluster_rows:
+        host_ips_with_cidr = []
         drcluster_name = cluster[0]
+        if dr_cluster_relations:
+            if is_hosted_cluster(cluster_name=drcluster_name):
+                drcluster_name = (
+                    f"{constants.HYPERSHIFT_ADDON_DISCOVERYPREFIX}-{drcluster_name}"
+                )
+                # Add additional cidr if the cluster is kubevirt hosted cluster
+                if (
+                    get_hosted_cluster_type(cluster_name=cluster[0])
+                    == constants.HOSTED_CLUSTER_KUBEVIRT
+                ):
+                    ips = []
+                    host_nodes_in_zone = get_host_zone_nodes(
+                        hosted_cluster_name=cluster[0]
+                    )
+                    host_cluster = get_provider_cluster_name_from_config(
+                        client_cluster_name=cluster[0]
+                    )
+                    with config.RunWithConfigContext(
+                        config.get_cluster_index_by_name(host_cluster)
+                    ):
+                        for node_name in host_nodes_in_zone:
+                            node_obj = OCP(kind=constants.NODE, resource_name=node_name)
+                            addresses = (
+                                node_obj.get().get("status", {}).get("addresses", [])
+                            )
+                            for address in addresses:
+                                if address.get("type") == "ExternalIP" and address.get(
+                                    "address"
+                                ):
+                                    ips.append(address["address"])
+                                # If ExternalIP is not present
+                                elif address.get(
+                                    "type"
+                                ) == "InternalIP" and address.get("address"):
+                                    ips.append(address["address"])
+                    host_ips_with_cidr = [f"{ip}/32" for ip in dict.fromkeys(ips)]
+                cluster[0] = drcluster_name
+        cluster[2].extend(host_ips_with_cidr)
         fence_ip_data = json.dumps({"spec": {"cidrs": cluster[2]}})
         fence_ip_cmd = (
             f"oc patch drcluster {drcluster_name} --type merge -p '{fence_ip_data}'"

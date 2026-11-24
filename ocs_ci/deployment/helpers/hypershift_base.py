@@ -20,7 +20,9 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     ClusterNotFoundException,
 )
+from ocs_ci.ocs.node import get_nodes_having_label
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.retry import retry, catch_exceptions
@@ -1849,3 +1851,90 @@ def wait_for_hosted_cluster_available(cluster_name, timeout=600, sleep=30):
             )
 
     return False
+
+
+@switch_to_orig_index_at_last
+def get_provider_cluster_name_from_config(client_cluster_name):
+    """
+    Get provider cluster name from config
+
+    Args:
+        client_cluster_name (str): Name of the client cluster
+
+    Returns:
+        str: Name of the provider cluster if available, None otherwise
+
+    """
+    provider_name = (
+        config.ENV_DATA.get("clusters", {})
+        .get(client_cluster_name, {})
+        .get("provider_cluster_name")
+    )
+    if not provider_name:
+        config.switch_ctx(config.get_cluster_index_by_name(client_cluster_name))
+        provider_name = config.ENV_DATA.get("provider_cluster_name")
+    return provider_name
+
+
+@switch_to_orig_index_at_last
+def get_nodepools_objs(hosted_cluster_name):
+    """
+    Get the nodepools of the hosted cluster
+
+    Args:
+        hosted_cluster_name (str): Name of the hosted cluster
+
+    Returns:
+        list: List of OCS objects of kind nodepool
+
+    """
+    host_name = get_provider_cluster_name_from_config(hosted_cluster_name)
+    if host_name:
+        config.switch_ctx(config.get_cluster_index_by_name(host_name))
+    else:
+        config.switch_ctx(config.get_cluster_index_by_name(hosted_cluster_name))
+        config.switch_to_provider()
+    nodepools = OCP(kind="nodepools").get(all_namespaces=True)
+    nodepools = [
+        OCS(**nodepool_data)
+        for nodepool_data in nodepools.get("items", [])
+        if nodepool_data.get("spec", {}).get("clusterName") == hosted_cluster_name
+    ]
+    return nodepools
+
+
+@switch_to_orig_index_at_last
+def get_host_zone_nodes(hosted_cluster_name):
+    """
+    Get the nodes in the host cluster with the same zone of the hosted cluster
+
+    Args:
+        hosted_cluster_name (str): Name of the hosted cluster
+
+    Returns:
+        list: List of identified node names
+
+    """
+    node_pools_objs = get_nodepools_objs(hosted_cluster_name)
+    host_name = get_provider_cluster_name_from_config(hosted_cluster_name)
+    if host_name:
+        config.switch_ctx(config.get_cluster_index_by_name(host_name))
+    else:
+        config.switch_ctx(config.get_cluster_index_by_name(hosted_cluster_name))
+        config.switch_to_provider()
+
+    nodes_list = []
+    for nodepool_obj in node_pools_objs:
+        nodepool_zone = (
+            nodepool_obj.get()["spec"]
+            .get("nodeLabels", {})
+            .get("topology.kubernetes.io/zone")
+        )
+        if not nodepool_zone:
+            continue
+        nodes_data = get_nodes_having_label(
+            label=f"{constants.ZONE_LABEL}={nodepool_zone}"
+        )
+        for node_data in nodes_data:
+            nodes_list.append(node_data["metadata"]["name"])
+    return nodes_list
