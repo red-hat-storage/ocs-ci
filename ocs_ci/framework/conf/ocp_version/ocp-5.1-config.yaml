@@ -18,7 +18,7 @@ ENV_DATA:
   # Legacy single template (fallback if vm_templates not defined)
   vm_template: "rhcos-10.2.20260922-0-vmware.x86_64"
   rhcos_version: "10"
-  acm_hub_channel: "release-5.1"
+  acm_hub_channel: "stable-5.1"
   acm_version: "5.1"
   mce_version: "5.1"
     # Remove below line for GAed config
