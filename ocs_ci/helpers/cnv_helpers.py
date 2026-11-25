@@ -616,11 +616,26 @@ def create_fio_service(vm_obj, fio_cmd, fio_service_name):
     logger.info("FIO service setup complete.")
 
 
-def check_fio_status(vm_obj, fio_service_name="fio_test"):
+def check_fio_status(vm_obj, fio_service_name="fio_test", username=None):
     """
     Check if FIO is running after restart.
+
+    Args:
+        vm_obj (obj): The virtual machine object.
+        fio_service_name (str): Name of the systemd service running FIO.
+        username (str, optional): The username to use for SSH authentication.
+            When not given, the username is looked up from the VM spec, which
+            queries the cluster the VM object was built against. On a DR setup
+            pass the username explicitly, otherwise the lookup targets the
+            cluster the VM was created on even after it moved to its peer.
+
+    Returns:
+        bool: True if the FIO service is running, False otherwise
+
     """
-    output = vm_obj.run_ssh_cmd(f"systemctl status {fio_service_name}")
+    output = vm_obj.run_ssh_cmd(
+        f"systemctl status {fio_service_name}", username=username
+    )
     return "running" in output
 
 

@@ -295,7 +295,10 @@ def start_continuous_vm_io(apps, runtime=86400, size="1G", rate="1m"):
 
     The IO is run from a systemd unit configured with ``Restart=always`` so it
     survives the VM restarts that happen on every relocation and keeps the
-    cluster under load for the whole duration of the test.
+    cluster under load for the whole duration of the test. That is why this
+    only has to be called once, before the first relocation: ``run_fio`` reads
+    the guest OS from the VM spec, a query bound to the cluster the VM object
+    was built against, so it must run while the VMs are still on that cluster.
 
     Args:
         apps (list): List of FusionAccessDRApp instances
@@ -325,6 +328,10 @@ def verify_continuous_vm_io(apps, stage):
     """
     Verify the continuous FIO workload is still running inside every VM.
 
+    The VM username is passed explicitly. Letting it be looked up from the VM
+    spec would run an ``oc`` query bound to the cluster the VM object was built
+    against, which after a relocation is the cluster the VM no longer runs on.
+
     Args:
         apps (list): List of FusionAccessDRApp instances
         stage (str): Test stage the check runs at, used in log messages
@@ -338,7 +345,9 @@ def verify_continuous_vm_io(apps, stage):
         switch_to_app_primary(app)
         try:
             io_running = check_fio_status(
-                vm_obj=app.vm_obj, fio_service_name=CONTINUOUS_IO_SERVICE_NAME
+                vm_obj=app.vm_obj,
+                fio_service_name=CONTINUOUS_IO_SERVICE_NAME,
+                username=app.vm_username,
             )
         except CommandFailed as ex:
             # systemctl status exits non zero for a unit which is not active
