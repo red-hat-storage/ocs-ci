@@ -345,18 +345,19 @@ class TestNodesMaintenance(ManageTest):
     def test_2_nodes_maintenance_same_type(self, nodes_type, drain_nodes_with_recovery):
         """
         OCS-1273/OCS-1271:
-        - Verify health and NooBaa maintenance readiness for two fixed nodes
+        - Verify health and NooBaa maintenance readiness for two same-role nodes
         - Verify that a disruption budget blocks the drain of the two nodes
         - Uncordon the nodes and verify cluster and Ceph recovery
 
-        NooBaa placement must be prepared before this test. PDBs are not modified.
+        Keep the first node as the maintenance target and select the second
+        based on the current NooBaa pod placement.
         """
-        typed_nodes = get_nodes(node_type=nodes_type, num_of_nodes=2)
-        if len(typed_nodes) != 2:
+        typed_nodes = get_nodes(node_type=nodes_type)
+        if len(typed_nodes) < 2:
             raise UnexpectedDeploymentConfiguration(
                 f"Expected two {nodes_type} nodes, found {len(typed_nodes)}"
             )
-        typed_node_names = [typed_node.name for typed_node in typed_nodes]
+        first_node, *second_nodes = typed_nodes
         self.sanity_helpers.health_check()
 
         namespace = config.ENV_DATA["cluster_namespace"]
@@ -412,13 +413,27 @@ class TestNodesMaintenance(ManageTest):
                             f"NooBaa maintenance prerequisite is not Ready: {item['metadata']['name']}"
                         )
                     ready_nodes.append(item["spec"]["nodeName"])
-                if len(ready_nodes) < required or not set(ready_nodes).difference(
-                    typed_node_names
-                ):
+                if len(ready_nodes) < required:
                     raise UnexpectedDeploymentConfiguration(
-                        f"Expected {required} Ready NooBaa {component} pod(s) with at least one outside "
-                        f"drain targets {typed_node_names}. Ready pod placement: {ready_nodes}"
+                        f"Expected {required} Ready NooBaa {component} pod(s), "
+                        f"found {len(ready_nodes)}. Ready pod placement: {ready_nodes}"
                     )
+                ready_node_names = set(ready_nodes)
+                second_nodes = [
+                    node
+                    for node in second_nodes
+                    if ready_node_names.difference((first_node.name, node.name))
+                ]
+                if not second_nodes:
+                    raise UnexpectedDeploymentConfiguration(
+                        f"No second {nodes_type} node for {first_node.name} leaves a "
+                        f"Ready NooBaa {component} pod outside both drain targets. "
+                        f"Ready pod placement: {ready_nodes}"
+                    )
+
+        typed_nodes = [first_node, second_nodes[0]]
+        typed_node_names = [node.name for node in typed_nodes]
+        log.info("Selected %s drain targets: %s", nodes_type, typed_node_names)
 
         protected_pods = [
             item
