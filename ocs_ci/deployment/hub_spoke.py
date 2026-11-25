@@ -2288,6 +2288,11 @@ class HypershiftHostedOCP(
             .get(self.name)
             .get("hosted_cluster_platform", "kubevirt")
         )
+
+        vm_node_selector = (
+            config.ENV_DATA["clusters"].get(self.name).get("vm_node_selector")
+        )
+
         if hosted_cluster_platform == "agent":
             # make agent machines pull images from quay.io/acm-d instead of registry.redhat.io/multicluster-engine
             log_step(
@@ -2348,6 +2353,7 @@ class HypershiftHostedOCP(
                 data_replication_separation=data_replication_separation_public,
                 auto_repair=auto_repair,
                 hcp_image=hcp_image,
+                vm_node_selector=vm_node_selector,
             )
 
     def deploy_dependencies(
