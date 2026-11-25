@@ -2071,6 +2071,64 @@ def validate_vgrc_count():
     return True
 
 
+def validate_volumegroupsnapshotclass_api_version():
+    """
+    Validate that every VolumeGroupSnapshotClass on each managed cluster is served
+    on apiVersion groupsnapshot.storage.k8s.io/v1.
+
+    Raises:
+        AssertionError: if any VolumeGroupSnapshotClass reports an unexpected
+            apiVersion.
+
+    """
+    expected = constants.VOLUME_GROUP_SNAPSHOT_API_VERSION_V1
+    logger.info(
+        f"Validating VolumeGroupSnapshotClass apiVersion is '{expected}' "
+        "on all managed clusters"
+    )
+    restore_index = config.cur_index
+    mismatches = []
+    try:
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            cluster_name = cluster.ENV_DATA["cluster_name"]
+            vgsc_obj = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS)
+            items = vgsc_obj.get().get("items", [])
+            if not items:
+                logger.warning(
+                    f"No {constants.VOLUMEGROUPSNAPSHOTCLASS} found on {cluster_name}"
+                )
+                continue
+            for item in items:
+                name = item["metadata"]["name"]
+                api_version = item.get("apiVersion")
+                if not api_version:
+                    api_version = vgsc_obj.exec_oc_cmd(
+                        f"get {constants.VOLUMEGROUPSNAPSHOTCLASS} {name} "
+                        "-o jsonpath='{.apiVersion}'",
+                        out_yaml_format=False,
+                    ).strip()
+                    api_version = api_version.strip("'")
+                logger.info(f"{cluster_name}/{name} apiVersion={api_version}")
+                if api_version != expected:
+                    mismatches.append((cluster_name, name, api_version))
+    finally:
+        config.switch_ctx(restore_index)
+
+    if mismatches:
+        msg = (
+            f"VolumeGroupSnapshotClass apiVersion mismatch (expected {expected}): "
+            + ", ".join(f"{c}/{n} -> {v}" for c, n, v in mismatches)
+        )
+        logger.error(msg)
+        raise AssertionError(msg)
+
+    logger.info(
+        "All VolumeGroupSnapshotClasses have the expected apiVersion "
+        f"'{expected}' on all managed clusters"
+    )
+
+
 def verify_last_group_sync_time(
     drpc_obj,
     scheduling_interval,

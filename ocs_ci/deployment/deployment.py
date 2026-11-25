@@ -66,6 +66,7 @@ from ocs_ci.helpers.dr_helpers import (
     create_service_exporter,
     is_cg_enabled,
     validate_storage_cluster_peer_state,
+    validate_volumegroupsnapshotclass_api_version,
     verify_volsync,
     validate_drpolicy_grouping,
     create_ingress_cert_dr,
@@ -5811,6 +5812,12 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             logger.info("Skipping Enabling Managed ServiceAccount")
         else:
             self.enable_managed_serviceaccount()
+
+        if odf_running_version >= version.VERSION_5_0:
+            logger.info(
+                "Validating VolumeGroupSnapshotClass apiVersion on managed clusters"
+            )
+            validate_volumegroupsnapshotclass_api_version()
 
     @retry(ACMObservabilityNotEnabled, tries=10, delay=30)
     def check_observability_status(self):
