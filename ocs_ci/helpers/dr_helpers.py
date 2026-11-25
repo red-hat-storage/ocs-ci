@@ -2340,6 +2340,7 @@ def get_managed_cluster_node_ips():
                             "address"
                         ):
                             external_ips.append(address["address"])
+                            break
                         # If ExternalIP is not present. Example: hosted cluster.
                         elif address.get("type") == "InternalIP" and address.get(
                             "address"
@@ -2455,6 +2456,7 @@ def configure_drcluster_for_fencing():
                                     "address"
                                 ):
                                     ips.append(address["address"])
+                                    break
                                 # If ExternalIP is not present
                                 elif address.get(
                                     "type"

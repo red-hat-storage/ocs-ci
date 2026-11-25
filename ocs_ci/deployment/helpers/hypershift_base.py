@@ -1925,12 +1925,16 @@ def get_host_zone_nodes(hosted_cluster_name):
 
     nodes_list = []
     for nodepool_obj in node_pools_objs:
+        nodepool_data = nodepool_obj.get()
         nodepool_zone = (
-            nodepool_obj.get()["spec"]
+            nodepool_data["spec"]
             .get("nodeLabels", {})
             .get("topology.kubernetes.io/zone")
         )
         if not nodepool_zone:
+            logger.info(
+                f"Nodelabel 'topology.kubernetes.io/zone' not found in the nodepool {nodepool_data['metadata']['name']}"
+            )
             continue
         nodes_data = get_nodes_having_label(
             label=f"{constants.ZONE_LABEL}={nodepool_zone}"
