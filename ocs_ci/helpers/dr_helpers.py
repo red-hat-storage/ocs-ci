@@ -2332,6 +2332,7 @@ def get_managed_cluster_node_ips():
             external_ips = []
             for node in node_obj.get("items", []):
                 # Check if node has worker role
+                external_ips_found = False
                 labels = node.get("metadata", {}).get("labels", {})
                 if "node-role.kubernetes.io/worker" in labels:
                     addresses = node.get("status", {}).get("addresses", [])
@@ -2340,12 +2341,14 @@ def get_managed_cluster_node_ips():
                             "address"
                         ):
                             external_ips.append(address["address"])
-                            break
-                        # If ExternalIP is not present. Example: hosted cluster.
-                        elif address.get("type") == "InternalIP" and address.get(
-                            "address"
-                        ):
-                            external_ips.append(address["address"])
+                            external_ips_found = True
+                    # If ExternalIP is not present. Example: hosted cluster.
+                    if not external_ips_found:
+                        for address in addresses:
+                            if address.get("type") == "InternalIP" and address.get(
+                                "address"
+                            ):
+                                external_ips.append(address["address"])
 
             external_ips_with_cidr = [f"{ip}/32" for ip in dict.fromkeys(external_ips)]
             if not external_ips_with_cidr:
@@ -2447,6 +2450,7 @@ def configure_drcluster_for_fencing():
                         config.get_cluster_index_by_name(host_cluster)
                     ):
                         for node_name in host_nodes_in_zone:
+                            external_ips_found = False
                             node_obj = OCP(kind=constants.NODE, resource_name=node_name)
                             addresses = (
                                 node_obj.get().get("status", {}).get("addresses", [])
@@ -2456,12 +2460,14 @@ def configure_drcluster_for_fencing():
                                     "address"
                                 ):
                                     ips.append(address["address"])
-                                    break
-                                # If ExternalIP is not present
-                                elif address.get(
-                                    "type"
-                                ) == "InternalIP" and address.get("address"):
-                                    ips.append(address["address"])
+                                    external_ips_found = True
+                            # If ExternalIP is not present. Example: HCI
+                            if not external_ips_found:
+                                for address in addresses:
+                                    if address.get(
+                                        "type"
+                                    ) == "InternalIP" and address.get("address"):
+                                        ips.append(address["address"])
                     host_ips_with_cidr = [f"{ip}/32" for ip in dict.fromkeys(ips)]
                 cluster[0] = drcluster_name
         cluster[2].extend(host_ips_with_cidr)
