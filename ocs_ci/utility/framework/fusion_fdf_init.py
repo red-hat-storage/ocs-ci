@@ -114,6 +114,12 @@ class Initializer(BaseInitializer):
         parser.add_argument(
             "--report", default=None, help="Filepath for generated junit report"
         )
+        parser.add_argument(
+            "--color",
+            action="store_true",
+            default=False,
+            help="Enable colored console log output",
+        )
         # Fusion specific args
         if self.deployment_type == "fusion":
             parser.add_argument(
@@ -140,6 +146,7 @@ class Initializer(BaseInitializer):
             )
 
         parsed_args, _ = parser.parse_known_args(args)
+        self.colorize = parsed_args.color
 
         return parsed_args
 

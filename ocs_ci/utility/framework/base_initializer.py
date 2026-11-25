@@ -51,6 +51,7 @@ class BaseInitializer:
         """
         self.log_basename = log_basename
         self.run_id = self.generate_run_id()
+        self.colorize = False
 
     def generate_run_id(self) -> int:
         """
@@ -120,8 +121,11 @@ class BaseInitializer:
         file_handler.setLevel(log_level)
         root_logger.addHandler(file_handler)
 
+        console_formatter = (
+            ColoredFormatter(constants.LOG_FORMAT) if self.colorize else log_formatter
+        )
         console_handler = logging.StreamHandler()
-        console_handler.setFormatter(ColoredFormatter(constants.LOG_FORMAT))
+        console_handler.setFormatter(console_formatter)
         console_handler.setLevel(log_level)
         root_logger.addHandler(console_handler)
 
