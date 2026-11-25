@@ -868,7 +868,8 @@ class HyperShiftBase:
                 then add additional network
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
             hcp_image (str): OCP image url for HCP cluster
-            vm_node_selector (str): Node selector in the host to create the VM for worker hosted cluster nodes
+            vm_node_selector (str): Comma separated list of key=value pairs to use as the node selector for the
+                KubeVirt VirtualMachines to be scheduled onto
 
         Returns:
             str: Name of the hosted cluster
