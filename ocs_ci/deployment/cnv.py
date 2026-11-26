@@ -68,16 +68,15 @@ class CNVInstaller(object):
         Returns:
             str: Name of the catalog source, or None if there is no such catalog source
 
+        Raises:
+            CommandFailed: If the packagemanifests could not be listed
+
         """
-        try:
-            items = (
-                OCP(kind="packagemanifest", namespace=constants.MARKETPLACE_NAMESPACE)
-                .get()
-                .get("items", [])
-            )
-        except CommandFailed as ex:
-            logger.warning(f"Failed to list packagemanifests: {ex}")
-            return None
+        items = (
+            OCP(kind="packagemanifest", namespace=constants.MARKETPLACE_NAMESPACE)
+            .get()
+            .get("items", [])
+        )
         providers = []
         for item in items:
             # exact match, so community-kubevirt-hyperconverged is not considered
@@ -110,18 +109,29 @@ class CNVInstaller(object):
             str: Name of the catalog source, or None if no catalog source provides
                 the stable CNV channel
 
+        Raises:
+            CommandFailed: If the packagemanifests could not be listed until the
+                timeout expired, so the absence of a provider is not known
+
         """
         if self._stable_catsrc_resolved:
             return self._stable_catsrc
 
+        sampler = TimeoutSampler(
+            timeout=timeout, sleep=sleep, func=self._find_stable_cnv_catalog_source
+        )
         try:
-            for catsrc in TimeoutSampler(
-                timeout=timeout, sleep=sleep, func=self._find_stable_cnv_catalog_source
-            ):
+            for catsrc in sampler:
                 if catsrc:
                     self._stable_catsrc = catsrc
                     break
         except TimeoutExpiredError:
+            if sampler.last_exception:
+                logger.error(
+                    "Failed to list packagemanifests while looking for the stable "
+                    f"CNV catalog source: {sampler.last_exception}"
+                )
+                raise sampler.last_exception
             logger.warning(
                 "No catalog source provides the stable CNV channel, "
                 "falling back to nightly CNV catalog source"
@@ -1075,7 +1085,24 @@ class CNVInstaller(object):
 
         # we create catsrc with nightly builds only if stable CNV is not used
         # (cnv_latest_stable unset or no catsrc provides the stable channel)
-        if not self.use_stable_cnv():
+        if self.use_stable_cnv():
+            # make sure the subscription follows the selected stable provider
+            stable_catsrc = self.get_stable_cnv_catalog_source()
+            subs_spec = hyperconverged_subs_obj.get()["spec"]
+            if (
+                subs_spec.get("source") != stable_catsrc
+                or subs_spec.get("channel") != "stable"
+            ):
+                logger.info(
+                    f"Updating CNV subscription from source '{subs_spec.get('source')}' "
+                    f"and channel '{subs_spec.get('channel')}' to source "
+                    f"'{stable_catsrc}' and channel 'stable'"
+                )
+                patch = (
+                    f'{{"spec": {{"channel": "stable", "source": "{stable_catsrc}"}}}}'
+                )
+                hyperconverged_subs_obj.patch(params=patch, format_type="merge")
+        else:
             # Create CNV catalog source
             if not self.catalog_source_created():
                 self.create_cnv_catalog_source()
