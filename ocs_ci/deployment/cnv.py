@@ -80,9 +80,13 @@ class CNVInstaller(object):
             return None
         providers = []
         for item in items:
+            # exact match, so community-kubevirt-hyperconverged is not considered
             if item["metadata"]["name"] != constants.KUBEVIRT_HYPERCONVERGED:
                 continue
             status = item.get("status", {})
+            # the community (upstream) operator must never be used for CNV
+            if status.get("catalogSource") == "community-operators":
+                continue
             if "stable" in [ch.get("name") for ch in status.get("channels", [])]:
                 providers.append(status.get("catalogSource"))
         if constants.OPERATOR_CATALOG_SOURCE_NAME in providers:
