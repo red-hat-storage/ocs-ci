@@ -5716,6 +5716,12 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             validate_storage_cluster_peer_state()
             verify_volsync()
 
+        if odf_running_version >= version.VERSION_5_0:
+            logger.info(
+                "Validating VolumeGroupSnapshotClass apiVersion on managed clusters"
+            )
+            validate_volumegroupsnapshotclass_api_version()
+
         # TODO: Skip backup configuration if the managed clusters under test is client clusters
         #  This configuration is already done for the base clusters and ACM hub while configuring RDR for base clusters.
         #  This should be updated for the client clusters
@@ -5812,12 +5818,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             logger.info("Skipping Enabling Managed ServiceAccount")
         else:
             self.enable_managed_serviceaccount()
-
-        if odf_running_version >= version.VERSION_5_0:
-            logger.info(
-                "Validating VolumeGroupSnapshotClass apiVersion on managed clusters"
-            )
-            validate_volumegroupsnapshotclass_api_version()
 
     @retry(ACMObservabilityNotEnabled, tries=10, delay=30)
     def check_observability_status(self):
