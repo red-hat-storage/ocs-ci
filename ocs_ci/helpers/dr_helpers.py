@@ -2093,7 +2093,22 @@ def validate_volumegroupsnapshotclass_api_version():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             cluster_name = cluster.ENV_DATA["cluster_name"]
             vgsc_obj = ocp.OCP(kind=constants.VOLUMEGROUPSNAPSHOTCLASS)
-            items = vgsc_obj.get().get("items", [])
+            # Clusters that do not serve the VolumeGroupSnapshotClass API
+            # (e.g. HCI client clusters) make `oc get` fail with "the server
+            # doesn't have a resource type". Treat only that specific case as
+            # "no classes to validate" and skip the cluster. Any other failure
+            # is a genuine error and must fail the validation on both HCI and
+            # non-HCI clusters.
+            try:
+                items = vgsc_obj.get().get("items", [])
+            except CommandFailed as exc:
+                if "the server doesn't have a resource type" in str(exc):
+                    logger.warning(
+                        f"{constants.VOLUMEGROUPSNAPSHOTCLASS} API not served on "
+                        f"{cluster_name}; skipping"
+                    )
+                    continue
+                raise
             if not items:
                 logger.warning(
                     f"No {constants.VOLUMEGROUPSNAPSHOTCLASS} found on {cluster_name}"
