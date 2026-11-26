@@ -11038,7 +11038,12 @@ def run_description():
     fixture to create description file for the run
     """
     testrun_name = get_testrun_name()
-    build_id = get_ocs_build_number()
+    # OCP-only deploy: no OCS CSV yet — get_ocs_build_number also self-gates
+    build_id = (
+        ""
+        if ocsci_config.ENV_DATA.get("skip_ocs_deployment")
+        else get_ocs_build_number()
+    )
     build_str = f"BUILD ID: {build_id}" if build_id else ""
     run_name = f"{testrun_name} ({build_str})"
     teardown = ocsci_config.RUN["cli_params"].get("teardown")

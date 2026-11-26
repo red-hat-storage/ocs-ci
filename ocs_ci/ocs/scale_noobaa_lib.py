@@ -12,7 +12,12 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
-from ocs_ci.utility.utils import ceph_health_check, run_cmd, exec_cmd
+from ocs_ci.utility.utils import (
+    ceph_health_check,
+    run_cmd,
+    exec_cmd,
+    should_probe_cluster,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import hsbench
 
@@ -59,6 +64,15 @@ def fetch_noobaa_storage_class_name():
     """
     Function to fetch noobaa storage class name from the Storage Cluster
     """
+    # Fresh OCP deploy: kubeconfig not present yet — use default name, don't call oc.
+    # Live query still runs once kubeconfig exists (e.g. scale/MCG test setup).
+    if not should_probe_cluster():
+        log.info(
+            "Skipping noobaa storageclass query: kubeconfig not available during "
+            "fresh OCP deploy; using default %s",
+            constants.NOOBAA_SC,
+        )
+        return constants.NOOBAA_SC.encode()
     try:
         sc_name_fetched = exec_cmd(
             "oc get storageclass -o json | "

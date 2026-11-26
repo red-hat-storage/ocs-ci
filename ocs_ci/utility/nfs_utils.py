@@ -17,7 +17,12 @@ from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.framework import config
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import convert_device_size, exec_cmd, TimeoutSampler
+from ocs_ci.utility.utils import (
+    convert_device_size,
+    exec_cmd,
+    TimeoutSampler,
+    should_probe_cluster,
+)
 from ocs_ci.deployment.hub_spoke import get_autodistributed_storage_classes
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 
@@ -716,6 +721,13 @@ def check_cluster_resources_for_nfs(min_cpu=12, min_memory=32 * 10**9):
     Returns:
         bool: True if cluster meets NFS resource requirements, False otherwise
     """
+    # Fresh OCP deploy: kubeconfig not present yet — don't block NFS marking
+    if not should_probe_cluster():
+        log.info(
+            "Skipping NFS resource check: kubeconfig not available during "
+            "fresh OCP deploy"
+        )
+        return True
     try:
         from ocs_ci.ocs.node import get_nodes
         from ocs_ci.ocs.cluster import is_hci_client_cluster

@@ -123,6 +123,17 @@ def get_ocp_version(version_dict=None):
       str: full version string of OCP cluster
     """
     if version_dict is None:
+        installer_version = config.DEPLOYMENT.get("installer_version")
+        # Fresh OCP deploy: kubeconfig not present yet — use config, don't call oc
+        if not utils.should_probe_cluster():
+            logger.info(
+                "Skipping cluster OCP version query (fresh OCP deploy); "
+                f"using version from config: {installer_version}."
+            )
+            if installer_version:
+                return installer_version
+            logger.error("installer_version not found in config.DEPLOYMENT")
+            raise ValueError("installer_version not found in config.DEPLOYMENT")
         try:
             version_dict = get_ocp_version_dict()
         except CommandFailed as e:
@@ -130,7 +141,6 @@ def get_ocp_version(version_dict=None):
             # Fall back to the version from config
             # Return the installer version from config
             # This matches the behavior of the deprecated utils.get_ocp_version()
-            installer_version = config.DEPLOYMENT.get("installer_version")
             logger.warning(
                 f"Failed to get OCP version from cluster: {e}. "
                 f"Using version from config instead: {installer_version}."
