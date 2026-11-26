@@ -55,6 +55,112 @@ class CNVInstaller(object):
     def __init__(self):
         self.namespace = constants.CNV_NAMESPACE
         self.cnv_nightly_catsrc = "cnv-nightly-catalog-source"
+        self._stable_catsrc = None
+        self._stable_catsrc_resolved = False
+
+    def _find_stable_cnv_catalog_source(self):
+        """
+        Look up, once, the catalog source providing the stable CNV channel.
+
+        The default 'redhat-operators' catalog source is preferred, any other catalog
+        source providing the package with the stable channel is used otherwise.
+
+        Returns:
+            str: Name of the catalog source, or None if there is no such catalog source
+
+        """
+        try:
+            items = (
+                OCP(kind="packagemanifest", namespace=constants.MARKETPLACE_NAMESPACE)
+                .get()
+                .get("items", [])
+            )
+        except CommandFailed as ex:
+            logger.warning(f"Failed to list packagemanifests: {ex}")
+            return None
+        providers = []
+        for item in items:
+            if item["metadata"]["name"] != constants.KUBEVIRT_HYPERCONVERGED:
+                continue
+            status = item.get("status", {})
+            if "stable" in [ch.get("name") for ch in status.get("channels", [])]:
+                providers.append(status.get("catalogSource"))
+        if constants.OPERATOR_CATALOG_SOURCE_NAME in providers:
+            return constants.OPERATOR_CATALOG_SOURCE_NAME
+        return providers[0] if providers else None
+
+    def get_stable_cnv_catalog_source(self, timeout=300, sleep=30):
+        """
+        Find the catalog source that provides the stable CNV channel.
+
+        Packagemanifests may not be populated right after a catalog source is created
+        or updated, so the lookup is retried until the timeout expires. The result is
+        cached afterwards.
+
+        Args:
+            timeout (int): Time in seconds to wait for a catalog source providing
+                the stable CNV channel
+            sleep (int): Time in seconds between the lookups
+
+        Returns:
+            str: Name of the catalog source, or None if no catalog source provides
+                the stable CNV channel
+
+        """
+        if self._stable_catsrc_resolved:
+            return self._stable_catsrc
+
+        try:
+            for catsrc in TimeoutSampler(
+                timeout=timeout, sleep=sleep, func=self._find_stable_cnv_catalog_source
+            ):
+                if catsrc:
+                    self._stable_catsrc = catsrc
+                    break
+        except TimeoutExpiredError:
+            logger.warning(
+                "No catalog source provides the stable CNV channel, "
+                "falling back to nightly CNV catalog source"
+            )
+        else:
+            logger.info(f"Using catalog source '{self._stable_catsrc}' for stable CNV")
+        self._stable_catsrc_resolved = True
+        return self._stable_catsrc
+
+    @staticmethod
+    def get_nightly_cnv_version():
+        """
+        Get CNV version used for the nightly catalog source and channel.
+
+        Returns:
+            str: CNV version, taken from the last part of the ocs_csv_channel
+
+        Raises:
+            ValueError: If ocs_csv_channel is not set in the deployment config
+
+        """
+        ocs_csv_channel = config.DEPLOYMENT.get("ocs_csv_channel")
+        if not ocs_csv_channel:
+            raise ValueError(
+                "Nightly CNV requires DEPLOYMENT['ocs_csv_channel'] to be set, "
+                "either because cnv_latest_stable is disabled or because no catalog "
+                "source provides the stable CNV channel"
+            )
+        return ocs_csv_channel.split("-")[-1]
+
+    def use_stable_cnv(self):
+        """
+        Check whether stable CNV should be installed.
+
+        Returns:
+            bool: True if cnv_latest_stable is set and a catalog source providing the
+                stable CNV channel is available, False if nightly CNV should be used
+
+        """
+        return bool(
+            config.DEPLOYMENT.get("cnv_latest_stable")
+            and self.get_stable_cnv_catalog_source()
+        )
 
     def create_cnv_catalog_source(self):
         """
@@ -64,7 +170,7 @@ class CNVInstaller(object):
         logger.info("Adding CatalogSource for CNV")
         cnv_catalog_source_data = templating.load_yaml(CNV_CATALOG_SOURCE_YAML)
         cnv_catalog_source_name = cnv_catalog_source_data.get("metadata").get("name")
-        cnv_image_tag = config.DEPLOYMENT.get("ocs_csv_channel").split("-")[-1]
+        cnv_image_tag = self.get_nightly_cnv_version()
         cnv_catalog_source_data["spec"][
             "image"
         ] = f"{constants.CNV_QUAY_NIGHTLY_IMAGE}:{cnv_image_tag}"
@@ -128,16 +234,13 @@ class CNVInstaller(object):
         self.create_cnv_operatorgroup()
         cnv_subscription_yaml_data = templating.load_yaml(CNV_SUBSCRIPTION_YAML)
 
-        if config.DEPLOYMENT.get("cnv_latest_stable"):
+        if self.use_stable_cnv():
             cnv_subscription_yaml_data["spec"][
                 "source"
-            ] = constants.OPERATOR_CATALOG_SOURCE_NAME
+            ] = self.get_stable_cnv_catalog_source()
             cnv_sub_channel = "stable"
         else:
-            cnv_channel_version = config.DEPLOYMENT.get("ocs_csv_channel").split("-")[
-                -1
-            ]
-            cnv_sub_channel = f"nightly-{cnv_channel_version}"
+            cnv_sub_channel = f"nightly-{self.get_nightly_cnv_version()}"
 
         cnv_subscription_yaml_data["spec"]["channel"] = f"{cnv_sub_channel}"
         cnv_subscription_manifest = tempfile.NamedTemporaryFile(
@@ -718,8 +821,9 @@ class CNVInstaller(object):
                 return
 
         logger.info("Installing CNV")
-        # we create catsrc with nightly builds only if config.DEPLOYMENT does not have cnv_latest_stable
-        if not config.DEPLOYMENT.get("cnv_latest_stable"):
+        # we create catsrc with nightly builds only if stable CNV is not used
+        # (cnv_latest_stable unset or no catsrc provides the stable channel)
+        if not self.use_stable_cnv():
             # Create CNV catalog source
             self.create_cnv_catalog_source()
         # Create openshift-cnv namespace
@@ -965,8 +1069,9 @@ class CNVInstaller(object):
             self.upgrade_version = get_running_ocp_version()
         logger.info(f"Upgarde cnv to: {parse_version(self.upgrade_version)}")
 
-        # we create catsrc with nightly builds only if config.DEPLOYMENT does not have cnv_latest_stable
-        if not config.DEPLOYMENT.get("cnv_latest_stable"):
+        # we create catsrc with nightly builds only if stable CNV is not used
+        # (cnv_latest_stable unset or no catsrc provides the stable channel)
+        if not self.use_stable_cnv():
             # Create CNV catalog source
             if not self.catalog_source_created():
                 self.create_cnv_catalog_source()
