@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad, polarion_id
 from ocs_ci.framework.testlib import (
     ManageTest,
     hci_provider_and_client_required,
+    skipif_ocs_version,
     tier1,
     tier2,
 )
@@ -22,7 +23,10 @@ from ocs_ci.helpers.odf_cephfs_snap import (
     get_cephfs_snap_entries,
     wait_and_verify_snapshot_bound,
 )
-from ocs_ci.ocs.resources.storageconsumer import get_consumer_svg_on_provider
+from ocs_ci.ocs.resources.storageconsumer import (
+    find_consumer_for_storage_client,
+    get_consumer_svg_on_provider,
+)
 from ocs_ci.helpers.odf_cli import odf_cli_cephfs_snap_setup_helper
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pvc as pvc_resource
@@ -37,6 +41,7 @@ log = logging.getLogger(__name__)
 
 
 @green_squad
+@skipif_ocs_version("<4.22")
 class TestCephFSOrphanedSnapshotAlert(ManageTest):
     """
     Verify that orphaning CephFS snapshots — by deleting their Kubernetes
@@ -65,6 +70,16 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
                 cluster_context=(config.RunWithProviderConfigContextIfAvailable),
             )
         return self._provider_api
+
+    @property
+    def alert_api(self):
+        """Prometheus API that evaluates CephFSOrphanedSnapshot.
+
+        The alert is produced by ocs-metrics-exporter on the cluster that
+        runs Ceph: the provider in HCI, the only cluster in standalone.
+        HCI consumers do not evaluate this rule.
+        """
+        return self.provider_api or self.api
 
     @pytest.fixture(autouse=True)
     def setup(self, request, pvc_factory, threading_lock):
@@ -298,43 +313,52 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
             snap_list_names, constants.CEPHFS_SNAPSHOT_STATE_BOUND
         )
 
-    def _wait_for_orphaned_alert_firing(self):
+    def _get_alert_labels(self):
+        """Identify the storage consumer whose alert is evaluated on Ceph."""
+        if not config.multicluster:
+            return {"consumer_name": constants.INTERNAL_STORAGE_CONSUMER_NAME}
+
+        storage_client = get_storage_client().resource_name
+        client_cluster_name = config.ENV_DATA.get("cluster_name")
+        with config.RunWithProviderConfigContextIfAvailable():
+            consumer_name, _ = find_consumer_for_storage_client(
+                storage_client, client_cluster_name=client_cluster_name
+            )
+        return {"consumer_name": consumer_name}
+
+    def _wait_for_orphaned_alert_firing(self, labels):
         """
         Wait for the CephFSOrphanedSnapshot alert to fire.
 
-        In multicluster mode both the provider and consumer Prometheus are
-        checked.  In standalone mode the single cluster's Prometheus is used.
+        The alert is emitted on the cluster that runs Ceph (provider in
+        HCI, the only cluster in standalone). Consumer Prometheus is not
+        checked: HCI clients do not evaluate this Ceph-side rule.
         """
-        if self.provider_api:
-            log.info("Waiting for CephFSOrphanedSnapshot alert to fire on provider")
-            wait_for_alert_firing(
-                self.provider_api,
-                constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT,
-                expected_severity="warning",
-                expected_message_substr=constants.CEPHFS_SNAPSHOT_STATE_ORPHANED,
-            )
-        log.info("Waiting for CephFSOrphanedSnapshot alert to fire on consumer")
+        location = "provider" if self.provider_api else "cluster"
+        log.info("Waiting for CephFSOrphanedSnapshot alert to fire on %s", location)
         wait_for_alert_firing(
-            self.api,
+            self.alert_api,
             constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT,
             expected_severity="warning",
             expected_message_substr=constants.CEPHFS_SNAPSHOT_STATE_ORPHANED,
+            labels=labels,
         )
 
-    def _wait_for_orphaned_alert_cleared(self):
+    def _wait_for_orphaned_alert_cleared(self, labels):
         """
         Wait for the CephFSOrphanedSnapshot alert to clear.
 
-        In multicluster mode both the provider and consumer Prometheus are
-        checked.  In standalone mode the single cluster's Prometheus is used.
+        The alert is emitted on the cluster that runs Ceph (provider in
+        HCI, the only cluster in standalone). Consumer Prometheus is not
+        checked: HCI clients do not evaluate this Ceph-side rule.
         """
-        if self.provider_api:
-            log.info("Waiting for CephFSOrphanedSnapshot alerts to clear on provider")
-            wait_for_alert_cleared(
-                self.provider_api, constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT
-            )
-        log.info("Waiting for CephFSOrphanedSnapshot alerts to clear on consumer")
-        wait_for_alert_cleared(self.api, constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT)
+        location = "provider" if self.provider_api else "cluster"
+        log.info("Waiting for CephFSOrphanedSnapshot alerts to clear on %s", location)
+        wait_for_alert_cleared(
+            self.alert_api,
+            constants.ALERT_CEPHFS_ORPHANED_SNAPSHOT,
+            labels=labels,
+        )
 
     def _resolve_svg(self, svg_param):
         """
@@ -404,12 +428,13 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         7. Verify the num_of_orphaned deleted snapshots are orphaned and
            the remaining num_of_bound are still in Bound state.
         8. Wait for the CephFSOrphanedSnapshot Prometheus alert to fire
-           (one alert per storage client, regardless of orphan count)
-           and validate it.
+           on the Ceph cluster Prometheus (provider in HCI) — one alert
+           per storage consumer, regardless of orphan count — and validate
+           it.
         9. Delete the num_of_orphaned orphaned snapshots via odf cephfs-snap
            delete.
         10. Verify only the num_of_bound bound snapshots remain.
-        11. Verify all alerts are cleared.
+        11. Verify the consumer alert is cleared.
         """
         seed = int(time.time())
         random.seed(seed)
@@ -449,7 +474,8 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         self.verify_cephfs_snapshots_bound(bound_snaps)
 
         log.test_step("Wait for CephFSOrphanedSnapshot alert to fire")
-        self._wait_for_orphaned_alert_firing()
+        alert_labels = self._get_alert_labels()
+        self._wait_for_orphaned_alert_firing(alert_labels)
 
         log.test_step(
             "Delete %d orphaned snapshot(s) via odf CLI",
@@ -466,7 +492,7 @@ class TestCephFSOrphanedSnapshotAlert(ManageTest):
         self.verify_cephfs_snapshots_bound(bound_snaps)
 
         log.test_step("Wait for CephFSOrphanedSnapshot alerts to clear")
-        self._wait_for_orphaned_alert_cleared()
+        self._wait_for_orphaned_alert_cleared(alert_labels)
 
     @tier2
     @polarion_id("OCS-8027")

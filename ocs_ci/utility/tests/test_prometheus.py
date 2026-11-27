@@ -205,3 +205,70 @@ def test_check_query_range_result_exp_good_time(query_range_result_bad_last_90s)
         exp_good_time=150,
     )
     assert result2, "taking exp_good_time into account, validation should pass"
+
+
+def test_wait_for_alert_filters_labels_while_polling(monkeypatch):
+    from contextlib import nullcontext
+    from unittest.mock import Mock
+
+    from ocs_ci.utility.prometheus import PrometheusAPI
+
+    other = {
+        "labels": {"alertname": "Example", "consumer_name": "other"},
+        "state": "firing",
+    }
+    target = {
+        "labels": {"alertname": "Example", "consumer_name": "target"},
+        "state": "firing",
+    }
+    responses = []
+    for alerts in ([other], [other, target]):
+        response = Mock(ok=True)
+        response.json.return_value = {"data": {"alerts": alerts}}
+        responses.append(response)
+    api = PrometheusAPI.__new__(PrometheusAPI)
+    api._cluster_context = nullcontext
+    api.get = Mock(side_effect=responses)
+    monkeypatch.setattr("ocs_ci.utility.prometheus.time.sleep", lambda _: None)
+
+    assert api.wait_for_alert(
+        "Example",
+        state="firing",
+        timeout=2,
+        sleep=1,
+        labels={"consumer_name": "target"},
+    ) == [target]
+    assert api.get.call_count == 2
+
+
+def test_wait_for_alert_clear_ignores_other_consumers(monkeypatch):
+    from contextlib import nullcontext
+    from unittest.mock import Mock
+
+    from ocs_ci.utility.prometheus import PrometheusAPI
+
+    other = {
+        "labels": {"alertname": "Example", "consumer_name": "other"},
+        "state": "firing",
+    }
+    target = {
+        "labels": {"alertname": "Example", "consumer_name": "target"},
+        "state": "pending",
+    }
+    responses = []
+    for alerts in ([other, target], [other]):
+        response = Mock(ok=True)
+        response.json.return_value = {"data": {"alerts": alerts}}
+        responses.append(response)
+    api = PrometheusAPI.__new__(PrometheusAPI)
+    api._cluster_context = nullcontext
+    api.get = Mock(side_effect=responses)
+    monkeypatch.setattr("ocs_ci.utility.prometheus.time.sleep", lambda _: None)
+
+    assert (
+        api.wait_for_alert(
+            "Example", timeout=2, sleep=1, labels={"consumer_name": "target"}
+        )
+        == []
+    )
+    assert api.get.call_count == 2
