@@ -7,11 +7,11 @@ curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/latest/download/${
 tar zxvf "${KREW}.tar.gz"
 ./"${KREW}" install krew
 
-host=$(hostname)
-if [[ "$host" == *"jagent"* ]]
-then
+host="$(hostname 2>/dev/null || cat /proc/sys/kernel/hostname 2>/dev/null || echo "${HOSTNAME:-}")"
+case "$host" in
+*jagent*)
   sudo cp ~/.krew/bin/kubectl-krew /usr/local/bin
-fi
+  ;;
+esac
 
 echo 'export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"' >> ~/.bashrc
-exec "$SHELL"

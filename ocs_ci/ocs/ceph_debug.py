@@ -27,6 +27,7 @@ class RookCephPlugin(object):
         namespace=config.ENV_DATA["cluster_namespace"],
         operator_namespace=config.ENV_DATA["cluster_namespace"],
         alternate_image=None,
+        install_plugin=True,
         *args,
         **kwargs,
     ):
@@ -35,6 +36,12 @@ class RookCephPlugin(object):
         self.alternate_image = alternate_image
         self.cmd = f"rook-ceph -n {namespace} --operator-namespace {operator_namespace}"
         self.deployment_in_maintenance = dict()
+
+        # The krew plugin is only needed by maintenance_start/maintenance_stop.
+        # Callers that only run COT/MOT commands inside the maintenance pod can
+        # skip the installation.
+        if not install_plugin:
+            return
 
         if not self.check_krew_installed():
             try:
