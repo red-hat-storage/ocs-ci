@@ -33,6 +33,7 @@ import re
 import threading
 import time
 from functools import lru_cache
+from urllib.parse import urlparse
 
 import pytest
 
@@ -45,6 +46,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     jira,
     polarion_id,
+    post_upgrade,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import (
@@ -147,6 +149,9 @@ UNREACHABLE_STATUSES = ("UNKNOWN_FAILURE", "INVALID_ENDPOINT")
 # A NEW endpoint that resolves nowhere, so pre-validation always aborts.
 UNREACHABLE_ENDPOINT = "https://unreachable.example.invalid:9000"
 
+# Resolves, then fails on connect - the rejection path a DNS failure skips.
+CLOSED_PORT = 9999
+
 # An https OLD endpoint the rollback test never contacts: only a string the
 # stores share, with a scheme the webhook accepts alongside v4.
 ROLLBACK_OLD_ENDPOINT = "https://rollback-old.example.invalid:9000"
@@ -243,6 +248,14 @@ def dotted_bucket_name(description):
         str: The bucket name.
     """
     return create_unique_resource_name(description, "bucket").replace("-", ".")
+
+
+def dead_port_endpoint(endpoint):
+    """Return ``endpoint``'s host on a port nothing listens on."""
+    parsed = urlparse(endpoint)
+    # hostname strips the brackets an IPv6 literal needs back to stay parseable.
+    host = f"[{parsed.hostname}]" if ":" in parsed.hostname else parsed.hostname
+    return f"{parsed.scheme}://{host}:{CLOSED_PORT}"
 
 
 def _search_int(pattern, text):
@@ -351,6 +364,18 @@ def get_store_endpoint(kind, name, namespace):
     """Return the current spec endpoint of a BackingStore/NamespaceStore."""
     obj = OCP(kind=kind, namespace=namespace, resource_name=name).get()
     return obj["spec"]["s3Compatible"]["endpoint"]
+
+
+def store_endpoint_from_spec(spec):
+    """Return the endpoint from the connection block the spec's own type names."""
+    blocks = ("s3Compatible", "ibmCos")
+    if spec.get("type") == constants.BACKINGSTORE_TYPE_IBMCOS:
+        blocks = reversed(blocks)
+    for block in blocks:
+        endpoint = spec.get(block, {}).get("endpoint")
+        if endpoint:
+            return endpoint
+    return None
 
 
 def get_pool_endpoint(mcg_obj, store_name, kind=None):
@@ -539,7 +564,15 @@ def operator_logged_pause_skip(operator_pod, namespace, store_name, since):
 
 
 def run_rejected_update_case(
-    kind, mcg_obj, conf, store_factory, bucketclass, bucket_factory, io_pod, dirs
+    kind,
+    mcg_obj,
+    conf,
+    store_factory,
+    bucketclass,
+    bucket_factory,
+    io_pod,
+    dirs,
+    new_endpoint=UNREACHABLE_ENDPOINT,
 ):
     """Test that a rejected endpoint update is a no-op: store untouched, I/O unaffected."""
     ns = config.ENV_DATA["cluster_namespace"]
@@ -558,7 +591,7 @@ def run_rejected_update_case(
     generation = OCP(kind=kind, namespace=ns, resource_name=store.name).get()[
         "metadata"
     ]["generation"]
-    result = run_connection_update(mcg_obj, old, UNREACHABLE_ENDPOINT)
+    result = run_connection_update(mcg_obj, old, new_endpoint)
     # Verify batch aborted in pre-validation without moving the store
     assert result[
         "aborted"
@@ -810,7 +843,11 @@ def endpoint_conf(endpoint_pair):
             "ENV_DATA['mcg_endpoint_pair'] (old, new, target_bucket, secret) to "
             "run these tests."
         )
-    plain_http = endpoint_pair["old"].startswith("http://")
+    # Either side being non-secure forces v2: the store has to satisfy the
+    # webhook on the endpoint it moves to as well as the one it starts on.
+    plain_http = any(
+        endpoint_pair[side].lower().startswith("http://") for side in ("old", "new")
+    )
     return {
         **endpoint_pair,
         "signature_version_nss": (
@@ -1130,6 +1167,7 @@ class TestBackingStoreEndpointUpdate(MCGTest):
     """
 
     @tier2
+    @post_upgrade
     @polarion_id("OCS-8278")
     def test_switch_and_revert_single_bs(self, mcg_obj, endpoint_conf, store_factory):
         """
@@ -1650,6 +1688,7 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         )
 
     @tier2
+    @post_upgrade
     @polarion_id("OCS-8288")
     def test_default_backingstore_endpoint_update(self, mcg_obj):
         """
@@ -1672,9 +1711,7 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         ).get()
         spec = default.get("spec", {})
         store_type = spec.get("type")
-        endpoint = spec.get("s3Compatible", {}).get("endpoint") or spec.get(
-            "ibmCos", {}
-        ).get("endpoint")
+        endpoint = store_endpoint_from_spec(spec)
         if not endpoint:
             pytest.skip(
                 f"Default backingstore type={store_type} has no endpoint "
@@ -1697,13 +1734,17 @@ class TestBackingStoreEndpointUpdate(MCGTest):
         assert not get_store_pause_annotation(
             constants.BACKINGSTORE, constants.DEFAULT_NOOBAA_BACKINGSTORE, ns
         ), "The default backingstore was left paused by an aborted batch"
-        # Endpoint must be unchanged and the store still Ready.
-        after = (
-            get_store_endpoint(
-                constants.BACKINGSTORE, constants.DEFAULT_NOOBAA_BACKINGSTORE, ns
+        # Endpoint must be unchanged and the store still Ready. Re-read the spec
+        # rather than get_store_endpoint, which only knows the s3Compatible block
+        # and so cannot see an ibm-cos default store move.
+        after = store_endpoint_from_spec(
+            OCP(
+                kind=constants.BACKINGSTORE,
+                namespace=ns,
+                resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
             )
-            if store_type == "s3-compatible"
-            else endpoint
+            .get()
+            .get("spec", {})
         )
         assert after == endpoint
         OCP(
@@ -2109,6 +2150,7 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
     """
 
     @tier2
+    @post_upgrade
     @polarion_id("OCS-8276")
     def test_switch_and_revert_single_nss(self, mcg_obj, endpoint_conf, store_factory):
         """Switch NamespaceStore OLD→NEW→OLD; verify endpoints."""
@@ -2275,6 +2317,7 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
 
     @tier2
     @polarion_id("OCS-8323")
+    @pytest.mark.parametrize("rejection", ["no_such_host", "dead_port"])
     def test_unreachable_endpoint_rejected_single_nss(
         self,
         mcg_obj,
@@ -2284,8 +2327,14 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
         bucket_factory,
         awscli_pod_session,
         test_directory_setup,
+        rejection,
     ):
-        """Rejected endpoint is no-op for NamespaceStore serving bucket."""
+        """Rejected endpoint is no-op for NamespaceStore: host unresolvable, or port dead."""
+        new_endpoint = (
+            UNREACHABLE_ENDPOINT
+            if rejection == "no_such_host"
+            else dead_port_endpoint(endpoint_conf["old"])
+        )
         run_rejected_update_case(
             constants.NAMESPACESTORE,
             mcg_obj,
@@ -2295,6 +2344,7 @@ class TestNamespaceStoreEndpointUpdate(MCGTest):
             bucket_factory,
             awscli_pod_session,
             test_directory_setup,
+            new_endpoint=new_endpoint,
         )
 
 
