@@ -1,0 +1,16 @@
+apiVersion: ocs.openshift.io/v1
+kind: TLSProfile
+metadata:
+  name: ocs-tls-profile
+  namespace: openshift-storage
+spec:
+  rules:
+    - selectors: ["*"]
+      config:
+        version: TLSv1.3
+        ciphers:
+          - TLS_AES_128_GCM_SHA256
+          - TLS_AES_256_GCM_SHA384
+        groups:
+          - X25519
+          - X25519MLKEM768
