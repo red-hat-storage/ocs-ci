@@ -169,10 +169,12 @@ class StorageClusterSetup(object):
                 config.DEPLOYMENT.get("ocs_operator_nodes_to_label", 3)
             )
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
-        elif (
+        elif not self.arbiter_deployment and (
             self.platform.lower() == constants.FYRE_PLATFORM
             or self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         ):
+            # flexibleScaling can't be combined with arbiter, so arbiter
+            # deployments keep replica=4 and the count from the config
             from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 
             nodes_obj = OCP(
