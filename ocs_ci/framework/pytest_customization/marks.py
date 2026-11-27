@@ -110,6 +110,7 @@ jira = pytest.mark.jira
 acm_import = pytest.mark.acm_import
 rdr = pytest.mark.rdr
 mdr = pytest.mark.mdr
+fa_mdr = pytest.mark.fa_mdr
 resiliency = pytest.mark.resiliency
 chaos = pytest.mark.chaos
 ec_allowed = pytest.mark.ec_allowed
