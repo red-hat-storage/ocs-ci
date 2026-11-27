@@ -9,6 +9,7 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
 )
 from ocs_ci.framework import config as ocsci_config
+from ocs_ci.ocs import constants
 from ocs_ci.framework import GlobalVariables as GV
 
 
@@ -157,6 +158,11 @@ def pytest_report_teststatus(report, config):
 
     if report.when == "call":
         call_duration = round(report.duration, 2)
+        # Parallel DR tests: items which only report the result of a run
+        # executed by another item record how long their workload really ran
+        for key, value in getattr(report, "user_properties", []):
+            if key == constants.CALL_DURATION_PROPERTY:
+                call_duration = round(value, 2)
         log.info(
             f"duration reported by {report.nodeid} immediately after test execution: {call_duration}"
         )
