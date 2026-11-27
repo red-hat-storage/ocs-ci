@@ -276,8 +276,15 @@ class TestUpgradeOCP(ManageTest):
                 if get_semantic_ocp_running_version() > VERSION_4_8:
                     pause_machinehealthcheck()
 
+                # Nightly/unreleased builds don't have verified release
+                # signatures and are not resolvable via the upgrade graph,
+                # so --force is required for them. GA'ed versions don't
+                # need it.
+                force_upgrade = "nightly" in target_image
                 logger.info(f"full upgrade path: {image_path}:{target_image}")
-                ocp.upgrade_ocp(image=target_image, image_path=image_path)
+                ocp.upgrade_ocp(
+                    image=target_image, image_path=image_path, force=force_upgrade
+                )
 
                 # On provider clusters, using HCP, automatic MCO drain & reboot fails due to fail evict
                 # kube-apiserver and virt-launcher pods

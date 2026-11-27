@@ -351,10 +351,16 @@ class Deployment(object):
                 logger.warning("OCP cluster is already running, skipping installation")
             else:
                 try:
+                    installer_version = config.DEPLOYMENT.get("installer_version", "")
                     if (
                         version.get_semantic_ocp_version_from_config()
                         >= version.VERSION_4_21
+                        and "nightly" in installer_version.lower()
                     ):
+                        # GA'ed release images are signed with Red Hat
+                        # production keys and pass the installer's
+                        # ClusterImagePolicy signature verification, so this
+                        # is only needed for nightly/unreleased builds.
                         logger.info(
                             "setting environment variable OPENSHIFT_INSTALL_EXPERIMENTAL_DISABLE_IMAGE_POLICY to true"
                         )
