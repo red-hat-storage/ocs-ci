@@ -4622,12 +4622,17 @@ def validate_application_odf_cli(
         str or None: The stdout output from the command,
             or None if any cluster in the multicluster config is a hosted
             cluster, or if gather failed, or if
-            ``skip_odf_cli_validation`` is set in ENV_DATA.
+            ``skip_odf_cli_validation`` is set in ENV_DATA, or if the action
+            is ``gather`` and ``skip_odf_cli_gather`` is set in ENV_DATA.
 
     Note:
         Returns None immediately (without running any command) when any
         cluster in ``config.clusters`` has ``is_hosted=True``, or when
         ``skip_odf_cli_validation`` is ``True`` in ``config.ENV_DATA``.
+        For the ``gather`` action it also returns None when
+        ``skip_odf_cli_gather`` is ``True`` in ``config.ENV_DATA``; this flag
+        defaults to ``False``, so the gather bundle is collected unless a run
+        explicitly sets ``skip_odf_cli_gather: true``.
         Skips the test on validation failure.
 
     """
@@ -4635,6 +4640,13 @@ def validate_application_odf_cli(
         logger.info(
             f"Skipping ODF CLI DR {action} for DRPC '{drpc_name}': "
             f"'skip_odf_cli_validation' is set in ENV_DATA"
+        )
+        return None
+
+    if action == "gather" and config.ENV_DATA.get("skip_odf_cli_gather", False):
+        logger.info(
+            f"Skipping ODF CLI DR gather for DRPC '{drpc_name}': "
+            f"'skip_odf_cli_gather' is set in ENV_DATA"
         )
         return None
 
