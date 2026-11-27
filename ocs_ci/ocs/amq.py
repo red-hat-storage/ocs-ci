@@ -64,12 +64,7 @@ class AMQ(object):
         self.consumer_pod = self.producer_pod = None
         self.kafka_topic = self.kafka_user = None
         self.kafka_connect = self.kafka_bridge = self.kafka_persistent = None
-        # ToDo: Remove skip once the issue is fixed
-        if config.ENV_DATA.get("fips"):
-            pytest.skip(
-                "Skipped due to open bug in AMQ. "
-                "For more info: https://issues.redhat.com/browse/ENTMQST-3422"
-            )
+        self.kafkanodepools = []
         self.dir = tempfile.mkdtemp(prefix="amq_")
         self._clone_amq()
 
@@ -196,9 +191,14 @@ class AMQ(object):
         """
 
         _rc = True
+        get_pods_timeout = 300
+
+        # In FIPS mode the entity-operator pod takes longer to start up
+        if config.ENV_DATA.get("fips"):
+            get_pods_timeout = 900
 
         for pod in TimeoutSampler(
-            300, 10, get_pod_name_by_pattern, pod_pattern, namespace
+            get_pods_timeout, 10, get_pod_name_by_pattern, pod_pattern, namespace
         ):
             try:
                 if pod is not None and len(pod) == expected_pods:
