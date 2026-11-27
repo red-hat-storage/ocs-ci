@@ -15,6 +15,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     hci_provider_and_client_required,
     ec_allowed,
+    skipif_stretch_cluster,
+    stretchcluster_required_skipif,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants
@@ -310,12 +312,14 @@ class TestCompressionDistributedToClient(ManageTest):
     @pytest.mark.parametrize(
         argnames=["replica", "erasure_coded"],
         argvalues=[
-            pytest.param(2, False),
-            pytest.param(3, False),
+            # Stretch/arbiter requires CephBlockPool replica size 4; EC not supported.
+            pytest.param(2, False, marks=skipif_stretch_cluster),
+            pytest.param(3, False, marks=skipif_stretch_cluster),
             pytest.param(
                 3,
                 True,
                 marks=[
+                    skipif_stretch_cluster,
                     ec_allowed,
                     pytest.mark.skipif(
                         not is_ec_pool_supported(),
@@ -323,6 +327,7 @@ class TestCompressionDistributedToClient(ManageTest):
                     ),
                 ],
             ),
+            pytest.param(4, False, marks=stretchcluster_required_skipif),
         ],
     )
     def test_compression_sc_distributed_to_client(
