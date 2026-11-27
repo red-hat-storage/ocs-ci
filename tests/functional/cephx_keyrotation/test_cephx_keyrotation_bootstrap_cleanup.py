@@ -13,7 +13,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_external_mode,
-    skipif_ocs_version,
     tier1,
 )
 from ocs_ci.ocs import constants
@@ -33,7 +32,6 @@ pytestmark = pytest.mark.skip(
 
 
 @skipif_external_mode
-@skipif_ocs_version("<4.21")
 @green_squad
 @pytest.mark.order("last")
 class TestCephXBootstrapKeyCleanup:
