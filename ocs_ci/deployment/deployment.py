@@ -169,6 +169,7 @@ from ocs_ci.utility.deployment import (
 )
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.deployment.fdf_standalone import create_fdf_standalone_catalog_source
+from ocs_ci.deployment.fusion_data_foundation import is_not_arbiter_node
 from ocs_ci.utility.networking import (
     annotate_worker_nodes_with_mon_ip,
 )
@@ -2567,6 +2568,10 @@ class Deployment(object):
                 logger.info("labeling all nodes as storage nodes")
                 nodes = get_all_nodes()
                 node_objs = get_node_objs(nodes)
+                if config.DEPLOYMENT.get("arbiter_deployment"):
+                    # The arbiter node must not be a storage node, otherwise
+                    # OSDs could be placed in the arbiter zone.
+                    node_objs = list(filter(is_not_arbiter_node, node_objs))
                 label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
             else:
                 logger.info("labeling worker nodes as storage nodes")
