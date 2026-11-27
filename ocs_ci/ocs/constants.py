@@ -1028,7 +1028,7 @@ CSI_ADDONS_CEPHFS_CTRLPLUGIN_GRPC_PORT = 9080
 CEPH_CSI_CONTROLLER_MANAGER_LABEL = "control-plane=ceph-csi-op-controller-manager"
 OCS_CLIENT_OPERATOR_LABEL = "app=ocs-client-operator"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
-DEFAULT_DEVICESET_LSO_PVC_NAME = "ocs-deviceset-localblock"
+DEFAULT_DEVICESET_LSO_PVC_NAME = "ocs-deviceset-localblock-extra-long-name"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
 OSD_PVC_GENERIC_LABEL = "ceph.rook.io/DeviceSet"
 CEPH_ROOK_IO_PVC_LABEL = "ceph.rook.io/pvc"
