@@ -2053,6 +2053,53 @@ acm_configuration_5_0 = {
         "//td[@data-label='status'][normalize-space(.)='Validated']",
         By.XPATH,
     ),
+    # Protected Applications page (Data Services → Disaster recovery)
+    "protected-applications-tab": (
+        "//a[@data-test-id='horizontal-link-Protected applications']",
+        By.XPATH,
+    ),
+    # Row kebab on Protected Applications list (PatternFly ActionsColumn)
+    "protected-app-row-kebab": (
+        "//tr[.//a[contains(normalize-space(.),'{0}')]]"
+        "//button[@aria-label='Kebab toggle' or @aria-label='Actions']",
+        By.XPATH,
+    ),
+    "protected-app-test-failover-action": (
+        "//*[(@role='menuitem' or self::button)"
+        " and contains(normalize-space(.),'Test failover')]",
+        By.XPATH,
+    ),
+    "test-failover-modal": (
+        "//div[@role='dialog'][.//*[contains(normalize-space(.),"
+        "'Test Disaster Recovery')]]",
+        By.XPATH,
+    ),
+    "test-failover-modal-start-btn": (
+        "//div[@role='dialog']//button[normalize-space()='Start']",
+        By.XPATH,
+    ),
+    # DR status cell / popover on Protected Applications row
+    "protected-app-dr-status-button": (
+        "//tr[.//a[contains(normalize-space(.),'{0}')]]"
+        "//*[@data-test-id='dr-status-button']",
+        By.XPATH,
+    ),
+    "test-failover-cleanup-btn": (
+        "//button[normalize-space()='Clean up test']",
+        By.XPATH,
+    ),
+    "test-failover-cleanup-confirm-btn": (
+        "//div[@role='dialog']//button[normalize-space()='Clean up test']",
+        By.XPATH,
+    ),
+    "test-failover-convert-btn": (
+        "//button[normalize-space()='Convert to real failover']",
+        By.XPATH,
+    ),
+    "test-failover-convert-confirm-btn": (
+        "//div[@role='dialog']//button[normalize-space()='Convert']",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {
