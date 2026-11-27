@@ -5,10 +5,15 @@ This module contains functions needed to install IBM Fusion Data Foundation.
 import json
 import logging
 import os
+import re
 import tempfile
 
 import yaml
 
+from ocs_ci.deployment.disconnected import (
+    mirror_fdf_catalog_via_oc_mirror,
+    tag_fdf_catalog_adjacent_versions,
+)
 from ocs_ci.deployment.helpers import storage_class
 from ocs_ci.deployment.helpers.lso_helpers import (
     add_disks_lso,
@@ -22,6 +27,7 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     CommandFailed,
     TimeoutExpiredError,
+    UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating, version
@@ -80,6 +86,7 @@ class FusionDataFoundationDeployment:
         """
 
         logger.info("Installing IBM Fusion Data Foundation")
+        self.ensure_disconnected_mirroring()
         if config.ENV_DATA.get("odf_provider_mode_deployment", False):
             from ocs_ci.deployment.deployment import enable_wildcard_routes
 
@@ -125,6 +132,243 @@ class FusionDataFoundationDeployment:
         return config.DEPLOYMENT.get("disconnected") and config.DEPLOYMENT.get(
             "disconnected_mirror_completed"
         )
+
+    @staticmethod
+    def released_catalog_tag(version):
+        """
+        Normalise a configured version or image tag to the released (GA) FDF
+        catalog tag.
+
+        Released catalogs are published as ``vX.Y``, so any channel suffix and
+        any z-stream / build part are dropped and the ``v`` prefix is enforced:
+
+        * ``4.18``       -> ``v4.18``
+        * ``4.18-ga``    -> ``v4.18``
+        * ``v4.18``      -> ``v4.18``
+        * ``4.18.31-1``  -> ``v4.18``
+
+        Args:
+            version (str): Configured version or image tag.
+
+        Returns:
+            str: Released catalog tag, or None when the value can't be parsed
+                into a major.minor version.
+
+        """
+        if not version:
+            return None
+        value = re.sub(r"-(ga|GA)$", "", str(version).strip()).lstrip("vV")
+        parts = value.split(".")
+        if len(parts) < 2 or not (parts[0].isdigit() and parts[1].isdigit()):
+            logger.warning(
+                "Could not derive a released FDF catalog tag from version %s",
+                version,
+            )
+            return None
+        return f"v{parts[0]}.{parts[1]}"
+
+    def get_catalog_image(self, upgrade=False):
+        """
+        Resolve the FDF catalog image to mirror.
+
+        Uses ``DEPLOYMENT.fdf_catalog_image`` when set (equivalent of the
+        ``--catalog-image`` argument of the ``fdf-mirror`` entrypoint),
+        otherwise builds the reference from ``DEPLOYMENT.fdf_pre_release_registry``
+        and ``DEPLOYMENT.fdf_image_tag``.
+
+        Args:
+            upgrade (bool): If True, resolve the catalog image of the version
+                to upgrade to, using the upgrade specific config values
+                (fdf_upgrade_catalog_image, fdf_upgrade_registry and
+                fdf_upgrade_image_tag). Default is False.
+
+        Returns:
+            str: Full FDF catalog image reference.
+
+        Raises:
+            UnexpectedDeploymentConfiguration: If the catalog image can't be resolved.
+
+        """
+        if upgrade:
+            catalog_image = config.DEPLOYMENT.get("fdf_upgrade_catalog_image")
+            registry = config.DEPLOYMENT.get(
+                "fdf_upgrade_registry"
+            ) or config.DEPLOYMENT.get("fdf_pre_release_registry")
+            tag = config.DEPLOYMENT.get(
+                "fdf_upgrade_image_tag"
+            ) or config.DEPLOYMENT.get("fdf_image_tag")
+            config_keys = (
+                "DEPLOYMENT.fdf_upgrade_catalog_image, or both "
+                "DEPLOYMENT.fdf_upgrade_registry and DEPLOYMENT.fdf_upgrade_image_tag"
+            )
+        elif config.DEPLOYMENT.get("live_deployment"):
+            # Released build: the catalog is always the released one, pulled
+            # from the GA registry (DEPLOYMENT.fdf_upgrade_registry). Neither a
+            # pre-release catalog image nor a pre-release image tag configured
+            # for the pipeline is what we want to mirror here, so both are
+            # ignored and the tag is normalised to the released 'vX.Y' form:
+            # '4.18-ga', '4.18.31-1' and 'v4.18' all resolve to 'v4.18'.
+            configured_image = config.DEPLOYMENT.get("fdf_catalog_image")
+            if configured_image:
+                logger.info(
+                    "Live deployment, ignoring the configured catalog image %s "
+                    "and using the released one",
+                    configured_image,
+                )
+            catalog_image = None
+            # No fallback to fdf_pre_release_registry: a live deployment must
+            # never mirror from the pre-release registry.
+            registry = config.DEPLOYMENT.get("fdf_upgrade_registry")
+            configured_tag = config.DEPLOYMENT.get(
+                "fdf_image_tag"
+            ) or config.ENV_DATA.get("fdf_version")
+            tag = self.released_catalog_tag(configured_tag)
+            if configured_tag and tag != configured_tag:
+                logger.info(
+                    "Live deployment, using released catalog tag %s "
+                    "(derived from the configured version %s)",
+                    tag,
+                    configured_tag,
+                )
+            config_keys = "DEPLOYMENT.fdf_upgrade_registry and DEPLOYMENT.fdf_image_tag"
+        else:
+            catalog_image = config.DEPLOYMENT.get("fdf_catalog_image")
+            registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
+            tag = config.DEPLOYMENT.get("fdf_image_tag") or config.ENV_DATA.get(
+                "fdf_version"
+            )
+            config_keys = (
+                "DEPLOYMENT.fdf_catalog_image, or both "
+                "DEPLOYMENT.fdf_pre_release_registry and DEPLOYMENT.fdf_image_tag"
+            )
+
+        if catalog_image:
+            return catalog_image
+        if not registry or not tag:
+            if upgrade:
+                mode = "upgrade"
+            elif config.DEPLOYMENT.get("live_deployment"):
+                mode = "live"
+            else:
+                mode = "pre-release"
+            raise UnexpectedDeploymentConfiguration(
+                f"Unable to resolve the FDF catalog image for mirroring in {mode} "
+                f"mode (resolved registry={registry!r}, tag={tag!r}). Set {config_keys}. "
+                "Note that fdf_pre_release_registry is only set by "
+                "conf/fdf_version/fdf-X.Y.yaml, which is loaded solely when "
+                "--fdf-version is passed to the deploy-fdf entrypoint; a live "
+                "deployment additionally requires --live-deploy."
+            )
+        return f"{registry}/{defaults.FUSION_CATALOG_NAME}:{tag}"
+
+    def get_mirror_registry(self):
+        """
+        Resolve the target mirror registry, including the registry path when
+        it is configured separately.
+
+        The ``fdf-mirror`` entrypoint receives the already joined
+        ``<mirror_registry>/<mirror_registry_path>`` value via
+        ``--mirror-registry``.  When the registry and the path come from the
+        mirror registry credentials file (``DEPLOYMENT.mirror_registry`` and
+        ``DEPLOYMENT.mirror_registry_path``) they are joined here instead.
+
+        Returns:
+            str: Mirror registry to mirror the FDF catalog to.
+
+        Raises:
+            UnexpectedDeploymentConfiguration: If the mirror registry is not configured.
+
+        """
+        mirror_registry = config.DEPLOYMENT.get("mirror_registry")
+        if not mirror_registry:
+            raise UnexpectedDeploymentConfiguration(
+                "Disconnected FDF deployment requires a mirror registry. Please "
+                "provide --mirror-registry or configure it in your config file "
+                "under DEPLOYMENT.mirror_registry."
+            )
+        mirror_registry = mirror_registry.rstrip("/")
+
+        mirror_registry_path = config.DEPLOYMENT.get("mirror_registry_path", "")
+        mirror_registry_path = mirror_registry_path.strip("/")
+        if mirror_registry_path and not mirror_registry.endswith(mirror_registry_path):
+            mirror_registry = f"{mirror_registry}/{mirror_registry_path}"
+
+        return mirror_registry
+
+    def ensure_disconnected_mirroring(self, upgrade=False):
+        """
+        Mirror the FDF catalog to the mirror registry when running disconnected
+        and the mirroring wasn't done beforehand.
+
+        Performs the same steps as the ``fdf-mirror`` entrypoint
+        (:mod:`ocs_ci.framework.fdf_mirror.main`): mirror the catalog via
+        ``oc-mirror`` and create the adjacent (N-1, N, N+1) version tag aliases
+        on the mirror registry.  Once finished,
+        ``DEPLOYMENT.disconnected_mirror_completed`` is set to True so the
+        ITMS/IDMS resources created by ``oc-mirror`` are not overwritten later
+        in the deployment.
+
+        Mirroring of the deployed version and of the version to upgrade to are
+        tracked separately, so that an upgrade on an already mirrored cluster
+        still mirrors the catalog of the new version:
+
+        * deployment: ``DEPLOYMENT.disconnected_mirror_completed``
+        * upgrade: ``DEPLOYMENT.disconnected_upgrade_mirror_completed``
+
+        No-op when the cluster is not disconnected or when the mirroring of the
+        relevant version was already completed externally.
+
+        Args:
+            upgrade (bool): If True, mirror the catalog of the version to
+                upgrade to instead of the deployed one. Default is False.
+
+        Raises:
+            UnexpectedDeploymentConfiguration: If the mirror registry or the
+                catalog image is not configured, or if mirroring failed.
+
+        """
+        if not self.disconnected:
+            return
+
+        mirror_completed_key = (
+            "disconnected_upgrade_mirror_completed"
+            if upgrade
+            else "disconnected_mirror_completed"
+        )
+        if config.DEPLOYMENT.get(mirror_completed_key):
+            logger.info(
+                "Skipping FDF catalog mirroring: %s is already set",
+                mirror_completed_key,
+            )
+            return
+
+        catalog_image = self.get_catalog_image(upgrade=upgrade)
+        mirror_registry = self.get_mirror_registry()
+        configure_registries = config.DEPLOYMENT.get("fdf_configure_registries", False)
+
+        logger.info(f"Starting FDF catalog mirroring for: {catalog_image}")
+        logger.info(f"Target mirror registry: {mirror_registry}")
+        mirrored_image = mirror_fdf_catalog_via_oc_mirror(
+            catalog_image=catalog_image,
+            mirror_registry=mirror_registry,
+            configure_registries=configure_registries,
+        )
+        if not mirrored_image:
+            raise UnexpectedDeploymentConfiguration(
+                f"Mirroring of the FDF catalog {catalog_image} failed"
+            )
+
+        # Create adjacent version tags on mirror registry (N-1, N, N+1)
+        tag_fdf_catalog_adjacent_versions(
+            catalog_image=catalog_image,
+            mirror_registry=mirror_registry,
+        )
+
+        config.DEPLOYMENT[mirror_completed_key] = True
+        # The IDMS created by oc-mirror is the authoritative one from now on,
+        # the static ITMS/IDMS shipped with ocs-ci must not overwrite it
+        config.DEPLOYMENT["disconnected_mirror_completed"] = True
+        logger.info(f"FDF catalog successfully mirrored to: {mirrored_image}")
 
     def create_image_tag_mirror_set(self):
         """
