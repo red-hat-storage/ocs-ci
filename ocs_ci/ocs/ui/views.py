@@ -2053,6 +2053,39 @@ acm_configuration_5_0 = {
         "//td[@data-label='status'][normalize-space(.)='Validated']",
         By.XPATH,
     ),
+    "protected-applications-tab": (
+        "//a[@data-test-id='horizontal-link-Protected applications']",
+        By.XPATH,
+    ),
+    "protected-app-select-all-checkbox": (
+        "//input[@name='bulk-select-checkbox' and @aria-label='Select all']",
+        By.XPATH,
+    ),
+    "protected-app-selected-count": (
+        "//span[@id='bulk-select-checkbox' and contains(normalize-space(.), 'selected')]",
+        By.XPATH,
+    ),
+    "protected-app-failover-relocate-btn": (
+        "//button[normalize-space()='Failover/Relocate']",
+        By.XPATH,
+    ),
+    "batch-failover-relocate-modal": (
+        "//div[@role='dialog'][.//*[contains(normalize-space(.), "
+        "'Failover or relocate selected applications')]]",
+        By.XPATH,
+    ),
+    "batch-failover-option": (
+        "//div[@role='dialog']//label[@for='selectable-action-failover']",
+        By.XPATH,
+    ),
+    "batch-relocate-option": (
+        "//div[@role='dialog']//label[@for='selectable-action-relocate']",
+        By.XPATH,
+    ),
+    "batch-action-initiate-btn": (
+        "button[data-test-id='modal-initiate-action']",
+        By.CSS_SELECTOR,
+    ),
 }
 
 add_capacity = {
