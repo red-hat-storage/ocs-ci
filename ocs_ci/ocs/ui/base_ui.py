@@ -529,6 +529,50 @@ class BaseUI:
                 ).text
             raise
 
+    def get_toast_alert_text(self, expected_text, timeout=8):
+        """
+        Wait for the toast alert whose title contains expected_text and read
+        its title and description from that same toast.
+
+        The title is matched on its own. A toast that only shares the
+        description is not selected.
+
+        Args:
+            expected_text (str): Text expected in the toast title.
+            timeout (int): Seconds to wait for the toast.
+
+        Returns:
+            tuple: Toast title and description. Both are empty when the toast
+                is not found.
+
+        """
+        toast_xpath = self.generic_locators["toast_alert"][0]
+        title_xpath = self.generic_locators["toast_alert_title"][0]
+        description_xpath = self.generic_locators["toast_alert_description"][0]
+        by = self.generic_locators["toast_alert"][1]
+        matching_toast = f"{toast_xpath}[{title_xpath}[contains(., '{expected_text}')]]"
+
+        logger.info(f"Wait for toast containing '{expected_text}'")
+        try:
+            # Read the toast here. The shared visible-wait falls back to a
+            # slow locator search, and Save leaves the page before it ends.
+            element = WebDriverWait(self.driver, timeout, poll_frequency=0.2).until(
+                ec.visibility_of_element_located((by, matching_toast))
+            )
+            title = element.find_element(by, title_xpath).text
+            description = element.find_element(by, description_xpath).text
+        except TimeoutException:
+            screenshot_name = (
+                "toast_not_found_" + expected_text.replace(" ", "_").lower()
+            )
+            self.take_screenshot(screenshot_name)
+            copy_dom(screenshot_name)
+            logger.warning(f"Toast containing '{expected_text}' was not found")
+            return "", ""
+
+        logger.info(f"Toast captured. Title: '{title}', description: '{description}'")
+        return title, description
+
     def get_elements(self, locator):
         """
         Get an elements list. Useful to count number of elements presented on page, etc.

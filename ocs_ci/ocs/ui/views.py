@@ -608,6 +608,19 @@ generic_locators = {
         "[class*='empty-state--danger'], [class*='empty-state'][class*='danger']",
         By.CSS_SELECTOR,
     ),
+    "toast_alert": (
+        "//*[contains(@class, 'c-alert-group') and contains(@class, 'm-toast')]"
+        "//*[contains(@class, 'c-alert') and not(contains(@class, 'c-alert__'))]",
+        By.XPATH,
+    ),
+    "toast_alert_title": (
+        ".//*[contains(@class, 'c-alert__title')]",
+        By.XPATH,
+    ),
+    "toast_alert_description": (
+        ".//*[contains(@class, 'c-alert__description')]",
+        By.XPATH,
+    ),
 }
 
 generic_locators_4_19 = {
@@ -2074,6 +2087,10 @@ add_capacity = {
     ),
     "kebab_storage_cluster": ("//button[@data-test-id='kebab-button']", By.XPATH),
     "add_capacity_button": ('button[data-test-action="Add Capacity"]', By.CSS_SELECTOR),
+    "storage_cluster_add_capacity": (
+        "//button[@id='ADD_CAPACITY'] | //button[normalize-space()='Add Capacity']",
+        By.XPATH,
+    ),
     "select_sc_add_capacity": (
         'button[data-test="add-cap-sc-dropdown"]',
         By.CSS_SELECTOR,

@@ -3,6 +3,7 @@ import time
 
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.views import ODF_OPERATOR
+from ocs_ci.utility import version
 
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,20 @@ class AddReplaceDeviceUI(PageNavigator):
         Add Capacity via UI
 
         """
+        # ODF 5.1 removed the Storage System tab from the operator page.
+        # Add Capacity is on the Storage cluster Actions menu.
+        if self.ocs_version_semantic >= version.VERSION_5_1:
+            logger.info("Add capacity from the Storage cluster page")
+            self.nav_storage_cluster_default_page()
+            self.do_click(self.attach_storage_loc["storage_cluster_actions"])
+            logger.info("Click on Add Capacity")
+            self.do_click(self.add_capacity_ui_loc["storage_cluster_add_capacity"])
+            self.do_click(
+                self.add_capacity_ui_loc["confirm_add_capacity"],
+                enable_screenshot=True,
+            )
+            return
+
         self.navigate_installed_operators_page()
         if self.operator_name is ODF_OPERATOR:
             self.do_click(self.add_capacity_ui_loc["odf_operator"])
