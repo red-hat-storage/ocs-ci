@@ -8284,13 +8284,7 @@ def create_workload_factory():
     def _teardown():
         if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
             for instance in instances:
-                try:
-                    instance.gather_application_odf_cli()
-                except Exception:
-                    log.warning(
-                        "ODF DR gather application failed; continuing teardown",
-                        exc_info=True,
-                    )
+                instance.gather_application_odf_cli()
         failed_to_delete = []
         for instance in instances:
             try:
@@ -8576,13 +8570,7 @@ def cnv_dr_workload(request):
     def teardown():
         if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
             for instance in instances:
-                try:
-                    instance.gather_application_odf_cli()
-                except Exception:
-                    log.warning(
-                        "ODF DR gather application failed; continuing teardown",
-                        exc_info=True,
-                    )
+                instance.gather_application_odf_cli()
         for instance in instances:
             try:
                 instance.delete_workload()
@@ -8797,13 +8785,7 @@ def discovered_apps_dr_workload(request):
                 if drpc_name in gathered_drpcs:
                     continue
                 gathered_drpcs.add(drpc_name)
-                try:
-                    instance.gather_application_odf_cli()
-                except Exception:
-                    log.warning(
-                        "ODF DR gather application failed; continuing teardown",
-                        exc_info=True,
-                    )
+                instance.gather_application_odf_cli()
         for index, instance in enumerate(instances):
             try:
                 log.info(instance.__dict__)
@@ -8929,13 +8911,7 @@ def discovered_apps_dr_workload_cnv(request):
                 if drpc_name in gathered_drpcs:
                     continue
                 gathered_drpcs.add(drpc_name)
-                try:
-                    instance.gather_application_odf_cli()
-                except Exception:
-                    log.warning(
-                        "ODF DR gather application failed; continuing teardown",
-                        exc_info=True,
-                    )
+                instance.gather_application_odf_cli()
         if "shared" in request.node.nodeid:
             instances[0].delete_workload(skip_resource_deletion_verification=True)
             instances[1].delete_workload(shared_drpc_protection=True)
