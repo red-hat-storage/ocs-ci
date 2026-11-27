@@ -13,6 +13,13 @@ operator generate the whole backend chain on its own:
 Driving the UI therefore keeps the deployment on the same path a customer takes, and
 avoids this module having to know how those CRs are shaped.
 
+The wizard lives under "Storage -> Data Foundation -> External systems", which is
+served by the ``odf-console`` plugin. That plugin comes from ``odf-operator``, so
+Fusion Data Foundation has to be on the cluster before this module runs, even
+though FA-MDR takes none of its storage from it. A cluster without it is caught
+up front by :meth:`FusionAccessStorage.verify_console_plugin_enabled` rather than
+in a Selenium timeout.
+
 The UI interaction itself is not reimplemented here — it reuses
 :class:`~ocs_ci.ocs.ui.page_objects.fusion_access_ui.FusionAccessUI`, the same page
 object used by ``tests/cross_functional/ui/fusion_access/test_create_filesystem.py``.
@@ -22,14 +29,17 @@ chain really did get created and is usable for DR.
 
 Deployment flow:
   1. Create the IBM entitlement secret in ``ibm-spectrum-scale``.
-  2. Run iSCSI discovery and login on all worker nodes so LUNs are visible to the UI.
-  3. Create the Quay pull secret used for the GPFS kmod image build.
-  4. Drive the console wizard to connect the SAN and create a LUN group.
-  5. Verify the backend chain from the CLI: Cluster, Daemon, Filesystem, and
+  2. Configure multipath on the workers, via MachineConfig.
+  3. Run iSCSI discovery and login on all worker nodes so LUNs are visible to the UI.
+  4. Verify every LUN came up multipathed, identically on all workers.
+  5. Create the Quay pull secret used for the GPFS kmod image build.
+  6. Drive the console wizard to connect the SAN and create a LUN group.
+  7. Verify the backend chain from the CLI: Cluster, Daemon, Filesystem, and
      FilesystemRecoveryData.
 """
 
 import base64
+import json
 import logging
 import re
 
@@ -43,8 +53,13 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     TimeoutExpiredError,
 )
+from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    load_auth_config,
+    wait_for_machineconfigpool_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +68,8 @@ SCALE_CLUSTER_TIMEOUT = 3600
 FILESYSTEM_TIMEOUT = 2400
 FSRD_PRESENT_TIMEOUT = 600
 FSRD_EXPORT_TIMEOUT = 900
+# One reboot of every worker, serialised by maxUnavailable.
+MULTIPATH_MC_TIMEOUT = 2400
 
 
 class FusionAccessStorage(object):
@@ -64,8 +81,14 @@ class FusionAccessStorage(object):
 
     ENV_DATA keys:
 
-    * ``san_iscsi_ip`` (str): iSCSI target portal IP.
-    * ``san_iscsi_iqn`` (str): iSCSI target IQN.
+    * ``san_iscsi_portals`` (list): iSCSI target portal IPs. Use this for an
+      array pair presenting several portals each.
+    * ``san_iscsi_ip`` (str): single iSCSI target portal IP, the one portal
+      spelling of ``san_iscsi_portals``.
+    * ``san_iscsi_iqn`` (str): iSCSI target IQN. Optional, every discovered
+      target is logged in to when it is not set.
+    * ``san_expected_paths_per_lun`` (int): paths every LUN must have after
+      login. Defaults to the number of configured portals.
     * ``san_image_registry_url`` (str): Registry for the GPFS kmod image.
       Defaults to ``"quay.io"``.
     * ``san_image_repository_name`` (str): Repository for the GPFS kmod image.
@@ -76,8 +99,17 @@ class FusionAccessStorage(object):
     * ``san_lun_group_name`` (str): LUN group to create. Defaults to
       ``"lungroup1"``.
     * ``san_num_luns`` (int): Number of LUNs to put in the group. Defaults to 1.
+    * ``san_create_lun_group`` (bool): Whether this cluster creates the LUN
+      group. Defaults to True. Both sites of a Metro-DR pair see the same
+      volumes, so only one of them may claim them into a LUN group; set this
+      False on the peer, which then gets the SAN plumbing and CNSA but no
+      filesystem of its own.
 
-    AUTH keys:
+    The Quay credentials are secrets, so they belong in an untracked conf passed
+    with ``--ocsci-conf``, not in a conf under version control.
+
+    AUTH keys, read from ``data/auth.yaml`` or from an ``AUTH`` section of a
+    conf passed with ``--ocsci-conf``:
 
     * ``ibm_entitlement_key`` (str): IBM entitlement key for ``cp.icr.io``.
 
@@ -87,6 +119,7 @@ class FusionAccessStorage(object):
         self.namespace = constants.IBM_STORAGE_SCALE_NAMESPACE
         self.lun_group_name = config.ENV_DATA.get("san_lun_group_name", "lungroup1")
         self.num_luns = config.ENV_DATA.get("san_num_luns", 1)
+        self.create_lun_group = config.ENV_DATA.get("san_create_lun_group", True)
 
     # ------------------------------------------------------------------
     # Entry point
@@ -98,9 +131,20 @@ class FusionAccessStorage(object):
         """
         logger.info("Starting Fusion Access SAN storage provisioning")
         self.create_entitlement_secret()
+        # Before discovery, so that multipathd is already running when the LUNs
+        # arrive. Coming late means the first paths are claimed as bare sd
+        # devices and only get folded into a map on the next multipathd scan.
+        self.configure_multipath()
         self.discover_iscsi_luns()
+        self.verify_multipath()
         self.create_quay_secret()
-        self.create_lun_group_via_ui()
+        if self.create_lun_group:
+            self.create_lun_group_via_ui()
+        else:
+            logger.info(
+                "san_create_lun_group is False, leaving the LUN group to the "
+                "peer cluster"
+            )
         self.verify_storage_backend()
         logger.info("Fusion Access SAN storage provisioning completed")
 
@@ -108,42 +152,81 @@ class FusionAccessStorage(object):
     # Prerequisites
     # ------------------------------------------------------------------
 
-    def create_entitlement_secret(self):
+    @staticmethod
+    def get_entitlement_key():
         """
-        Create the IBM entitlement secret used to pull the IBM Storage Scale images.
+        Read the IBM entitlement key.
 
-        Raises:
-            ValueError: If ``ibm_entitlement_key`` is not set in config.AUTH.
+        ``data/auth.yaml`` is where a credential like this belongs, but that file
+        is only read on demand by :func:`load_auth_config` - nothing merges it
+        into ``config.AUTH``, which is populated from ``--ocsci-conf`` files
+        only. So both are consulted, the conf first so that a run can override
+        what is on disk. In auth.yaml the key is accepted at the top level or
+        under ``AUTH``.
+
+        Returns:
+            str: the entitlement key, empty when it is configured nowhere
+
         """
         ent_key = config.AUTH.get("ibm_entitlement_key")
-        if not ent_key:
-            raise ValueError(
-                "ibm_entitlement_key is not set in config.AUTH. "
-                "Cannot create IBM entitlement secret."
-            )
+        if ent_key:
+            return ent_key
+        auth_config = load_auth_config() or {}
+        return auth_config.get("ibm_entitlement_key") or auth_config.get(
+            "AUTH", {}
+        ).get("ibm_entitlement_key", "")
 
-        secret_name = constants.IBM_ENTITLEMENT_SECRET_NAME
+    def apply_dockerconfig_secret(self, secret_name, auths):
+        """
+        Create a pull secret, or replace it when its contents have drifted.
+
+        Skipping an existing secret outright is wrong for a credential. These
+        tokens get rotated, and a secret left over from a previous run then
+        keeps a stale one indefinitely - the deployment logs "already exists,
+        skipping creation" and the failure lands somewhere far away, as
+        ``unauthorized`` from a registry, long after the config was corrected.
+        Comparing against the desired contents keeps the step idempotent while
+        still letting a rotation take effect.
+
+        The secret is deleted and recreated rather than patched, because an
+        ``oc patch`` would merge into the old ``auths`` map and leave entries
+        for registries that are no longer configured.
+
+        Args:
+            secret_name (str): Name of the secret
+            auths (dict): The ``auths`` map for ``.dockerconfigjson``
+
+        """
         ocp_obj = ocp.OCP(kind="Secret", namespace=self.namespace)
+        desired = {"auths": auths}
         if ocp_obj.is_exist(resource_name=secret_name):
-            logger.info(f"Secret '{secret_name}' already exists, skipping creation")
-            return
+            encoded = (
+                ocp_obj.get(resource_name=secret_name)
+                .get("data", {})
+                .get(".dockerconfigjson", "")
+            )
+            try:
+                current = json.loads(base64.b64decode(encoded))
+            except (ValueError, TypeError):
+                current = None
+            if current == desired:
+                logger.info(
+                    f"Secret '{secret_name}' already exists with the configured "
+                    "credentials, leaving it alone"
+                )
+                return
+            # Deliberately no diff in the log - the values are credentials.
+            logger.warning(
+                f"Secret '{secret_name}' exists but does not match the "
+                "configured credentials, replacing it"
+            )
+            ocp_obj.delete(resource_name=secret_name)
 
-        auth_b64 = base64.b64encode(f"cp:{ent_key}".encode()).decode()
         logger.info(f"Creating secret '{secret_name}' in namespace '{self.namespace}'")
         create_custom_secret_for_cnsa_rm(
             name=secret_name,
             namespace=self.namespace,
-            data_dict={
-                ".dockerconfigjson": {
-                    "auths": {
-                        "cp.icr.io": {
-                            "username": "cp",
-                            "password": ent_key,  # pragma: allowlist secret
-                            "auth": auth_b64,
-                        }
-                    }
-                }
-            },
+            data_dict={".dockerconfigjson": desired},
             secret_type="kubernetes.io/dockerconfigjson",
         )
         ocp_obj.wait_for_resource(
@@ -154,20 +237,40 @@ class FusionAccessStorage(object):
         )
         logger.info(f"Secret '{secret_name}' verified in namespace '{self.namespace}'")
 
+    def create_entitlement_secret(self):
+        """
+        Create the IBM entitlement secret used to pull the IBM Storage Scale images.
+
+        Raises:
+            ValueError: If ``ibm_entitlement_key`` is configured nowhere.
+        """
+        ent_key = self.get_entitlement_key()
+        if not ent_key:
+            raise ValueError(
+                "ibm_entitlement_key is not set in data/auth.yaml nor in "
+                "config.AUTH. Cannot create IBM entitlement secret."
+            )
+
+        auth_b64 = base64.b64encode(f"cp:{ent_key}".encode()).decode()
+        self.apply_dockerconfig_secret(
+            constants.IBM_ENTITLEMENT_SECRET_NAME,
+            {
+                "cp.icr.io": {
+                    "username": "cp",
+                    "password": ent_key,  # pragma: allowlist secret
+                    "auth": auth_b64,
+                }
+            },
+        )
+
     def create_quay_secret(self):
         """
         Create the docker-registry secret used by KMM to push the built GPFS kmod
         image.
 
-        Skipped when the secret already exists, so that a re-run of the deployment
-        does not fail on an existing secret.
+        Replaced rather than skipped when it already exists but holds different
+        credentials, so that a rotated robot token takes effect on a re-run.
         """
-        secret_name = constants.IBM_QUAYIO_SECRET_NAME
-        ocp_obj = ocp.OCP(kind="Secret", namespace=self.namespace)
-        if ocp_obj.is_exist(resource_name=secret_name):
-            logger.info(f"Secret '{secret_name}' already exists, skipping creation")
-            return
-
         quay_server = config.ENV_DATA.get("san_quay_server")
         quay_username = config.ENV_DATA.get("san_quay_username")
         quay_password = config.ENV_DATA.get("san_quay_password")
@@ -187,9 +290,6 @@ class FusionAccessStorage(object):
                 f"Missing required ENV_DATA keys for the Quay pull secret: {missing}"
             )
 
-        logger.info(
-            f"Creating docker-registry secret '{secret_name}' in '{self.namespace}'"
-        )
         # Built as a manifest rather than 'oc create secret docker-registry',
         # which would put the Quay password in the argument list for anything
         # that can read /proc. Also removes the quoting hazard for passwords
@@ -197,66 +297,280 @@ class FusionAccessStorage(object):
         auth_b64 = base64.b64encode(
             f"{quay_username}:{quay_password}".encode()
         ).decode()
-        create_custom_secret_for_cnsa_rm(
-            name=secret_name,
-            namespace=self.namespace,
-            data_dict={
-                ".dockerconfigjson": {
-                    "auths": {
-                        quay_server: {
-                            "username": quay_username,
-                            "password": quay_password,  # pragma: allowlist secret
-                            "email": quay_email,
-                            "auth": auth_b64,
-                        }
-                    }
+        self.apply_dockerconfig_secret(
+            constants.IBM_QUAYIO_SECRET_NAME,
+            {
+                quay_server: {
+                    "username": quay_username,
+                    "password": quay_password,  # pragma: allowlist secret
+                    "email": quay_email,
+                    "auth": auth_b64,
                 }
             },
-            secret_type="kubernetes.io/dockerconfigjson",
         )
-        ocp_obj.wait_for_resource(
-            condition="kubernetes.io/dockerconfigjson",
-            resource_name=secret_name,
-            column="TYPE",
-            timeout=60,
+
+    def iscsi_portals(self):
+        """
+        Portal IPs to run discovery against.
+
+        ``san_iscsi_portals`` is the list form, for an array pair presenting
+        several portals each, which is what a Metro-DR site looks like.
+        ``san_iscsi_ip`` stays accepted as the single portal spelling.
+
+        Returns:
+            list: portal IPv4 addresses
+
+        Raises:
+            ValueError: If no portal is configured, or one is not an IPv4
+                address.
+
+        """
+        portals = config.ENV_DATA.get("san_iscsi_portals")
+        if not portals:
+            single = config.ENV_DATA.get("san_iscsi_ip")
+            portals = [single] if single else []
+        if not portals:
+            raise ValueError(
+                "No iSCSI portal configured, set ENV_DATA['san_iscsi_portals'] "
+                "or ENV_DATA['san_iscsi_ip']"
+            )
+        for portal in portals:
+            if not re.fullmatch(r"[\d]{1,3}(\.[\d]{1,3}){3}", portal or ""):
+                raise ValueError(f"iSCSI portal '{portal}' is not a valid IPv4 address")
+        return list(portals)
+
+    def configure_multipath(self):
+        """
+        Put /etc/multipath.conf on every worker and enable multipathd and
+        iscsid, through a MachineConfig.
+
+        A MachineConfig and not an 'oc debug' loop, for two reasons. A worker
+        added after the deployment has to come up configured the same way,
+        otherwise it joins the Scale cluster with single path LUNs under
+        node local mpath names. And RHCOS writes
+        /etc/iscsi/initiatorname.iscsi the first time iscsid starts, so until
+        this has run the node has no IQN at all, and there is nothing for the
+        storage admin to map volumes to.
+
+        Costs one rolling reboot of the worker pool. Skipped when the
+        MachineConfig is already there, so a re-run does not reboot anything.
+
+        """
+        from ocs_ci.ocs.resources.machineconfig import machineconfig_exists
+        from ocs_ci.ocs.resources.ocs import OCS
+
+        if machineconfig_exists(constants.FUSION_ACCESS_MULTIPATH_MC_NAME):
+            logger.info(
+                f"MachineConfig '{constants.FUSION_ACCESS_MULTIPATH_MC_NAME}' "
+                "already exists, leaving the worker pool alone"
+            )
+            return
+
+        with open(constants.FUSION_ACCESS_MULTIPATH_CONF) as conf_file:
+            multipath_conf = conf_file.read()
+        encoded = base64.b64encode(multipath_conf.encode()).decode()
+
+        mc_data = templating.load_yaml(constants.FUSION_ACCESS_MULTIPATH_MC)
+        mc_data["spec"]["config"]["storage"]["files"][0]["contents"][
+            "source"
+        ] = f"data:text/plain;charset=utf-8;base64,{encoded}"
+
+        logger.info(
+            f"Creating MachineConfig '{constants.FUSION_ACCESS_MULTIPATH_MC_NAME}', "
+            "the worker pool will reboot"
         )
-        logger.info(f"Secret '{secret_name}' created successfully")
+        OCS(**mc_data).create()
+        wait_for_machineconfigpool_status(
+            constants.WORKER_MACHINE, timeout=MULTIPATH_MC_TIMEOUT
+        )
+        logger.info("Workers rebooted with multipathd and iscsid enabled")
 
     def discover_iscsi_luns(self):
         """
         Run iSCSI discovery and login on every worker node so the SAN LUNs are
         visible in the console when the wizard runs.
 
-        Raises:
-            ValueError: If the configured portal IP or IQN is malformed.
-        """
-        iscsi_ip = config.ENV_DATA.get("san_iscsi_ip")
-        iscsi_iqn = config.ENV_DATA.get("san_iscsi_iqn")
+        Every configured portal is discovered before anything logs in, then the
+        node logs in to all of them at once. Logging in per portal as it is
+        discovered would bring the first LUNs up single pathed and leave
+        multipathd to merge the rest in later, which it does, but it makes the
+        intermediate state hard to tell apart from a genuinely missing path.
 
-        if not re.fullmatch(r"[\d]{1,3}(\.[\d]{1,3}){3}", iscsi_ip or ""):
-            raise ValueError(f"san_iscsi_ip '{iscsi_ip}' is not a valid IPv4 address")
-        if not re.fullmatch(r"iqn\.\d{4}-\d{2}\.[a-zA-Z0-9.\-:]+", iscsi_iqn or ""):
+        The node records are then set to log in on boot. The discovery itself
+        does not survive a reboot otherwise, and a worker that comes back with
+        no sessions takes its NSDs down with it.
+
+        Raises:
+            ValueError: If a configured portal or the target IQN is malformed.
+
+        """
+        portals = self.iscsi_portals()
+        # Optional. Without it every discovered target is logged in to, which
+        # is what a two array site wants anyway.
+        iscsi_iqn = config.ENV_DATA.get("san_iscsi_iqn")
+        if iscsi_iqn and not re.fullmatch(
+            r"iqn\.\d{4}-\d{2}\.[a-zA-Z0-9.\-:]+", iscsi_iqn
+        ):
             raise ValueError(f"san_iscsi_iqn '{iscsi_iqn}' is not a valid IQN")
 
-        logger.info("Starting iSCSI LUN discovery on all worker nodes")
+        logger.info(
+            f"Starting iSCSI discovery on all worker nodes against {len(portals)} "
+            f"portal(s)"
+        )
+        # '&&' throughout, so a failed discovery is not masked by a later step
+        # reporting success.
+        discovery = " && ".join(
+            f'chroot /host iscsiadm -m discovery -t st -p "{portal}"'
+            for portal in portals
+        )
+        if iscsi_iqn:
+            login = " && ".join(
+                f'chroot /host iscsiadm --mode node --target "{iscsi_iqn}" '
+                f'--portal "{portal}" -l'
+                for portal in portals
+            )
+        else:
+            login = "chroot /host iscsiadm --mode node --loginall=all"
+        persist = (
+            "chroot /host iscsiadm --mode node -o update "
+            "-n node.startup -v automatic"
+        )
+
         ocp_obj = ocp.OCP()
         ocp_obj.exec_oc_cmd(
-            # '&&' so a failed discovery is not masked by a successful login.
             f"get nodes -l node-role.kubernetes.io/worker --no-headers -o name "
             f"| xargs -I {{}} -- oc debug {{}} -- bash -c "
-            f'\'chroot /host iscsiadm -m discovery -t st -p "{iscsi_ip}" && '
-            f'chroot /host iscsiadm --mode node --target "{iscsi_iqn}" '
-            f'--portal "{iscsi_ip}" -l\'',
+            f"'{discovery} && {login} && {persist}'",
             shell=True,
             out_yaml_format=False,
-            secrets=[iscsi_ip, iscsi_iqn],
+            secrets=portals + ([iscsi_iqn] if iscsi_iqn else []),
         )
         logger.info("LUN discovery completed, waiting for LUNs to surface in the UI")
         sleep(120)
 
+    def verify_multipath(self):
+        """
+        Check that the LUNs came up as multipath maps with more than one path,
+        on every worker.
+
+        Worth checking rather than assuming, because a half configured fabric
+        is not visibly broken at this point. Single pathed LUNs build a
+        filesystem perfectly well and only show themselves when a path drops,
+        which on a DR cluster is the one moment that matters. The names are
+        also compared across nodes: WWID naming is the whole reason
+        user_friendly_names is off, so nodes disagreeing on a name means the
+        config did not land.
+
+        Config keys (ENV_DATA):
+
+        * ``san_expected_paths_per_lun`` (int): paths every map must have.
+          Defaults to the number of configured portals.
+
+        Raises:
+            ResourceWrongStatusException: If a worker has no multipath maps,
+              a map has fewer paths than expected, or the workers do not agree
+              on the set of maps.
+
+        """
+        from ocs_ci.ocs.node import get_worker_nodes
+
+        expected_paths = config.ENV_DATA.get(
+            "san_expected_paths_per_lun", len(self.iscsi_portals())
+        )
+        ocp_obj = ocp.OCP()
+        per_node = {}
+        for node_name in get_worker_nodes():
+            output = ocp_obj.exec_oc_cmd(
+                f"debug node/{node_name} -- chroot /host multipath -ll",
+                out_yaml_format=False,
+            )
+            per_node[node_name] = self._parse_multipath_ll(output)
+            logger.info(f"{node_name}: multipath maps {per_node[node_name]}")
+
+        problems = []
+        for node_name, maps in per_node.items():
+            if not maps:
+                problems.append(f"{node_name} has no multipath maps")
+                continue
+            for wwid, paths in maps.items():
+                if paths < expected_paths:
+                    problems.append(
+                        f"{node_name} map {wwid} has {paths} path(s), "
+                        f"expected {expected_paths}"
+                    )
+
+        # Same volumes presented at both sites is what makes the LocalDisk CRs
+        # portable, so a node seeing a different set is a mapping error.
+        name_sets = {node: set(maps) for node, maps in per_node.items()}
+        if len(set(map(frozenset, name_sets.values()))) > 1:
+            problems.append(f"workers disagree on the multipath maps: {name_sets}")
+
+        if problems:
+            raise ResourceWrongStatusException(
+                "Multipath verification failed: " + "; ".join(problems)
+            )
+        logger.info(
+            f"All workers see the same multipath maps, each with at least "
+            f"{expected_paths} paths"
+        )
+
+    @staticmethod
+    def _parse_multipath_ll(output):
+        """
+        Count the usable paths per map in 'multipath -ll' output.
+
+        A map header starts in column 0 and names the dm device, every path
+        below it is indented and ends in its state triplet. Only paths that are
+        both active and ready are counted, a faulty one is a path that exists
+        and cannot be used.
+
+        Args:
+            output (str): raw 'multipath -ll' output
+
+        Returns:
+            dict: map name -> number of active ready paths
+
+        """
+        maps = {}
+        current = None
+        for line in output.splitlines():
+            if line and not line[0].isspace() and "dm-" in line:
+                current = line.split()[0]
+                maps[current] = 0
+            elif current and "active ready" in line:
+                maps[current] += 1
+        return maps
+
     # ------------------------------------------------------------------
     # UI driven LUN group creation
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def verify_console_plugin_enabled():
+        """
+        Check that the console plugin owning the wizard is enabled.
+
+        "Storage -> Data Foundation -> External systems" is served by
+        ``odf-console``, which is registered by ``odf-operator``. On a cluster
+        without it the navigation simply has no such link, and the wizard step
+        below spends its whole timeout looking for an element that can never
+        appear - with the AI locator fallback billing for the privilege. Failing
+        here instead names the missing prerequisite directly.
+
+        Raises:
+            ResourceWrongStatusException: If the plugin is not enabled.
+
+        """
+        console = ocp.OCP(kind="Console.operator.openshift.io", resource_name="cluster")
+        plugins = console.get().get("spec", {}).get("plugins") or []
+        if constants.ODF_CONSOLE_PLUGIN not in plugins:
+            raise ResourceWrongStatusException(
+                f"Console plugin '{constants.ODF_CONSOLE_PLUGIN}' is not enabled "
+                f"(enabled plugins: {plugins}). It is registered by odf-operator, "
+                "so the LUN group wizard is unreachable until Fusion Data "
+                "Foundation is deployed on this cluster."
+            )
+        logger.info(f"Console plugin '{constants.ODF_CONSOLE_PLUGIN}' is enabled")
 
     def create_lun_group_via_ui(self):
         """
@@ -268,6 +582,8 @@ class FusionAccessStorage(object):
         """
         from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
         from ocs_ci.ocs.ui.page_objects.fusion_access_ui import FusionAccessUI
+
+        self.verify_console_plugin_enabled()
 
         image_registry_url = config.ENV_DATA.get("san_image_registry_url", "quay.io")
         image_repository_name = config.ENV_DATA.get("san_image_repository_name")
@@ -332,6 +648,12 @@ class FusionAccessStorage(object):
         logger.info("Verifying IBM Storage Scale backend resources")
         self.wait_for_scale_cluster_ready()
         cluster_id = self.get_gpfs_cluster_id()
+        if not self.create_lun_group:
+            logger.info(
+                "san_create_lun_group is False, stopping after the Scale Cluster "
+                "and GPFS cluster id checks - this cluster owns no filesystem"
+            )
+            return
         filesystems = self.get_filesystem_names()
         if not filesystems:
             raise ResourceWrongStatusException(

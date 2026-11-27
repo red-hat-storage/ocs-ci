@@ -983,6 +983,11 @@ class Deployment(object):
         - the storage step drives the console plugin the operator installs, so
           it can only run once the operator is up.
 
+        Setting ``DEPLOYMENT["ibm_storage_scale_deployment"]`` installs CNSA from
+        the FDF catalog instead of the Fusion Access operator. Fusion Access only
+        ships a console plugin on top of the same scale.spectrum.ibm.com CRDs, so
+        an FA-MDR cluster that drives those CRDs directly has no use for it.
+
         In a multicluster run this only touches the managed clusters, the ACM
         hubs carry no SAN storage.
         """
@@ -994,6 +999,7 @@ class Deployment(object):
 
         from ocs_ci.deployment.fusion_access import FusionAccessOperator
         from ocs_ci.deployment.fusion_access_storage import FusionAccessStorage
+        from ocs_ci.deployment.ibm_storage_scale import deploy_ibm_storage_scale
         from ocs_ci.deployment.kmm import KMMInstaller
 
         if config.multicluster:
@@ -1015,7 +1021,10 @@ class Deployment(object):
                     KMMInstaller().deploy_kmm_operator(
                         check_kmm_deployed=True, check_kmm_ready=True
                     )
-                FusionAccessOperator().deploy()
+                if config.DEPLOYMENT.get("ibm_storage_scale_deployment"):
+                    deploy_ibm_storage_scale()
+                else:
+                    FusionAccessOperator().deploy()
 
                 if config.DEPLOYMENT.get("fusion_access_storage"):
                     FusionAccessStorage().deploy()
@@ -5020,7 +5029,6 @@ class MultiClusterDROperatorsDeploy(object):
 
         """
         region = config.ENV_DATA.get("dr_s3_region", "us-east-1")
-        prefix = config.ENV_DATA.get("dr_s3_bucket_prefix", "dnd")
         self.meta_obj.get_meta_access_secret_keys()
         access_key = self.meta_obj.access_key
         secret_key = self.meta_obj.secret_key
@@ -5028,7 +5036,7 @@ class MultiClusterDROperatorsDeploy(object):
         profiles = []
         for cluster in get_non_acm_cluster_config():
             cluster_name = cluster.ENV_DATA["cluster_name"]
-            bucket_name = f"{prefix}-{cluster_name}"
+            bucket_name = self.ramen_s3_bucket_name(cluster_name)
             self.create_s3_bucket(
                 access_key,
                 secret_key,
@@ -5042,10 +5050,11 @@ class MultiClusterDROperatorsDeploy(object):
                     "s3CompatibleEndpoint": f"https://s3.{region}.amazonaws.com",
                     "s3Region": region,
                     "s3Bucket": bucket_name,
-                    "s3SecretRef": {
-                        "name": f"s3secret-{cluster_name}",
-                        "namespace": constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
-                    },
+                    # No namespace on purpose, so that Ramen resolves the secret
+                    # in its own namespace. The same profile list is read by the
+                    # hub operator in openshift-operators and by the cluster
+                    # operator in openshift-dr-system, so it cannot name one.
+                    "s3SecretRef": {"name": f"s3secret-{cluster_name}"},
                 }
             )
 
@@ -5077,6 +5086,25 @@ class MultiClusterDROperatorsDeploy(object):
             "Adding s3StoreProfiles to the Ramen ConfigMap on "
             f"{config.ENV_DATA['cluster_name']}"
         )
+        # OLM pulls the DR hub operator in as a dependency of the orchestrator,
+        # so its ConfigMap shows up some time after the orchestrator deployment
+        # reports Available, which is all deploy() waits for.
+        ramen_configmap = ocp.OCP(
+            kind="ConfigMap",
+            resource_name=constants.DR_RAMEN_HUB_OPERATOR_CONFIG,
+            namespace=constants.OPENSHIFT_OPERATORS,
+        )
+        if not ramen_configmap.check_resource_existence(
+            should_exist=True,
+            timeout=600,
+            resource_name=constants.DR_RAMEN_HUB_OPERATOR_CONFIG,
+        ):
+            raise TimeoutExpiredError(
+                f"ConfigMap {constants.DR_RAMEN_HUB_OPERATOR_CONFIG} was not "
+                f"created in {constants.OPENSHIFT_OPERATORS} on "
+                f"{config.ENV_DATA['cluster_name']}, the DR hub operator is "
+                "not up"
+            )
         dr_ramen_hub_configmap_data = self.meta_obj.get_ramen_resource()
         ramen_config = yaml.safe_load(
             dr_ramen_hub_configmap_data.data["data"][
@@ -5096,9 +5124,31 @@ class MultiClusterDROperatorsDeploy(object):
         self.update_config_map_commit(dict(config_map_data))
 
     @staticmethod
-    def ramen_s3_profile_name(cluster_name):
+    def ramen_s3_bucket_name(cluster_name):
+        """
+        Name of the Ramen metadata S3 bucket belonging to a managed cluster.
+
+        Args:
+            cluster_name (str): managed cluster name
+
+        Returns:
+            str: the bucket name
+
+        """
+        prefix = config.ENV_DATA.get("dr_s3_bucket_prefix", "dnd")
+        return f"{prefix}-{cluster_name}"
+
+    @classmethod
+    def ramen_s3_profile_name(cls, cluster_name):
         """
         Name of the Ramen s3 store profile belonging to a managed cluster.
+
+        Named after the bucket it points at, the way a hand built Fusion Access
+        MDR hub is. The profile name is only a key: DRCluster.spec.s3ProfileName
+        carries it and nothing else, so naming it after the bucket is what lets
+        a DRCluster be read without dumping s3StoreProfiles out of the Ramen
+        ConfigMap first. The s3profile-<cluster> form the Ceph flow uses comes
+        from the Multicluster Orchestrator, which does not run here.
 
         Args:
             cluster_name (str): managed cluster name
@@ -5107,12 +5157,64 @@ class MultiClusterDROperatorsDeploy(object):
             str: the s3 profile name
 
         """
-        return f"s3profile-{cluster_name}"
+        return cls.ramen_s3_bucket_name(cluster_name)
+
+    def create_dr_clusters(self):
+        """
+        Create the DRCluster resources the DRPolicy refers to, on the active hub.
+
+        On an ODF based DR deployment the Multicluster Orchestrator derives the
+        DRClusters from the MirrorPeer. A Fusion Access deployment has no
+        MirrorPeer, so nothing creates them and the DRPolicy would reference
+        DRClusters that do not exist and never reach Validated.
+
+        """
+        old_index = config.cur_index
+        try:
+            config.switch_ctx(get_active_acm_index())
+            drcluster_obj = ocp.OCP(kind=constants.DRCLUSTER)
+            for cluster in get_non_acm_cluster_config():
+                cluster_name = cluster.ENV_DATA["cluster_name"]
+                if drcluster_obj.is_exist(resource_name=cluster_name):
+                    logger.info(
+                        f"DRCluster '{cluster_name}' already exists, skipping creation"
+                    )
+                    continue
+                drcluster_data = templating.load_yaml(constants.DR_CLUSTER_ACM_HUB)
+                drcluster_data["metadata"]["name"] = cluster_name
+                drcluster_data["spec"]["s3ProfileName"] = self.ramen_s3_profile_name(
+                    cluster_name
+                )
+                drcluster_file = tempfile.NamedTemporaryFile(
+                    mode="w+",
+                    prefix=f"drcluster-{cluster_name}-",
+                    suffix=".yaml",
+                    delete=False,
+                )
+                try:
+                    templating.dump_data_to_temp_yaml(
+                        drcluster_data, drcluster_file.name
+                    )
+                    exec_cmd(f"oc create -f {drcluster_file.name}")
+                finally:
+                    drcluster_file.close()
+                    os.remove(drcluster_file.name)
+                logger.info(f"Created DRCluster '{cluster_name}'")
+        finally:
+            config.switch_ctx(old_index)
 
     def create_ramen_s3_secrets(self, profiles, access_key, secret_key):
         """
         Create the S3 secrets referenced by the Ramen s3StoreProfiles, on the
-        ACM hub(s) and on every managed cluster.
+        ACM hub(s).
+
+        Only the hubs need them created. The profiles leave s3SecretRef.namespace
+        unset, so the hub operator resolves the secret in its own namespace,
+        openshift-operators. Ramen then copies it on to every managed cluster, in
+        drClusterSecretsDeploy(), reading from the hub's namespace and writing to
+        drClusterOperator.namespaceName, openshift-dr-system. That path is gated
+        on deploymentAutomationEnabled and s3SecretDistributionEnabled, both of
+        which the hub config sets.
 
         Args:
             profiles (list): s3StoreProfiles entries, as built by
@@ -5122,30 +5224,16 @@ class MultiClusterDROperatorsDeploy(object):
 
         """
         old_index = config.cur_index
-        indexes = get_all_acm_indexes() + [
-            cluster.MULTICLUSTER["multicluster_index"]
-            for cluster in get_non_acm_cluster_config()
-        ]
+        namespace = constants.OPENSHIFT_OPERATORS
         encoded = {
             "AWS_ACCESS_KEY_ID": base64.b64encode(access_key.encode()).decode(),
             "AWS_SECRET_ACCESS_KEY": base64.b64encode(secret_key.encode()).decode(),
         }
         try:
-            for index in indexes:
+            for index in get_all_acm_indexes():
                 config.switch_ctx(index)
                 for profile in profiles:
                     secret_name = profile["s3SecretRef"]["name"]
-                    namespace = profile["s3SecretRef"]["namespace"]
-                    # The Fusion Access path skips deploy_dr_policy()'s namespace
-                    # creation, so on a managed cluster openshift-dr-system may
-                    # not exist yet and the apply would fail with "not found".
-                    ns_obj = ocp.OCP(kind=constants.NAMESPACE)
-                    if not ns_obj.is_exist(resource_name=namespace):
-                        logger.info(
-                            f"Creating namespace {namespace} on "
-                            f"{config.ENV_DATA['cluster_name']}"
-                        )
-                        ns_obj.new_project(namespace)
                     manifest = {
                         "apiVersion": "v1",
                         "kind": "Secret",
@@ -6222,19 +6310,28 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         super().__init__()
 
     def deploy(self):
+        # Selects the DR flow: no MirrorPeer, no fencing, Ramen metadata in S3.
+        # It says nothing about how the Scale storage got there. A Fusion Access
+        # MDR cluster usually has it already, from IBM Storage Fusion driving the
+        # Scale operator, so fusion_access_deployment is a separate opt in and
+        # the two flags are free to move independently.
         fusion_access = config.DEPLOYMENT.get("fusion_access")
-        fusion_access_deployment = config.DEPLOYMENT.get("fusion_access_deployment")
-        # fusion_access picks the DR flow, fusion_access_deployment installs the
-        # operator that flow assumes is there. Enabling one without the other
-        # produces a half configured run that only fails much later, at DRPolicy
-        # validation, so reject it up front.
-        if bool(fusion_access) != bool(fusion_access_deployment):
-            raise ValueError(
-                "Mismatched Fusion Access flags: DEPLOYMENT.fusion_access="
-                f"{bool(fusion_access)} but DEPLOYMENT.fusion_access_deployment="
-                f"{bool(fusion_access_deployment)}. Both must be enabled for a "
-                "Fusion Access MDR deployment, or both left off for a Ceph one."
-            )
+
+        if fusion_access:
+            # The Ramen metadata buckets are the only object store on this path
+            # and they need AWS credentials. Without them the run dies in
+            # configure_ramen_s3_store_profiles(), by which time
+            # create_ingress_cert_dr() has already rolled every node on all
+            # three clusters. Fail before that happens.
+            try:
+                self.meta_obj.get_meta_access_secret_keys()
+            except KeyError as ex:
+                raise ValueError(
+                    "Fusion Access MDR needs AWS credentials for the Ramen "
+                    f"metadata buckets but {ex} is missing. Add an AUTH section "
+                    "holding AWS.AWS_ACCESS_KEY_ID and AWS.AWS_SECRET_ACCESS_KEY "
+                    "to data/auth.yaml."
+                )
 
         # Patches the cluster wide proxy trustedCA, which rolls every node.
         if not config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
@@ -6263,6 +6360,9 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             # No NooBaa to provision the metadata buckets, so set the store up
             # here. The method handles both hubs and restores the context.
             self.configure_ramen_s3_store_profiles()
+            # No MirrorPeer means no MCO to derive the DRClusters from it, so
+            # create them before the DRPolicy that references them.
+            self.create_dr_clusters()
         else:
             self.configure_mirror_peer()
         self.apply_custom_ramen_image()

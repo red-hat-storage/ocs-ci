@@ -227,8 +227,13 @@ class FusionDeployment:
             if config.ENV_DATA.get("platform", "").lower() == constants.IBM_HCI_PLATFORM
             else self.operator_name
         )
+        # The kind has to be fully qualified. On a cluster imported into ACM the
+        # short name "subscription" resolves to apps.open-cluster-management.io,
+        # not to the OLM one, so this lookup fails with NotFound on every
+        # managed cluster of an MDR setup.
         results = run_cmd(
-            f"oc get subscription {sub_name} -n {self.namespace} --kubeconfig {self.kubeconfig} -o yaml"
+            f"oc get {constants.SUBSCRIPTION_COREOS} {sub_name} -n {self.namespace} "
+            f"--kubeconfig {self.kubeconfig} -o yaml"
         )
         build = yaml.safe_load(results)["status"]["installedCSV"]
         version = ".".join(build.split(".")[1:])

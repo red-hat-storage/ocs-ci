@@ -114,22 +114,43 @@ class FusionAccessUI(PageNavigator, BaseUI):
 
     def select_all_nodes_option(self):
         """
-        Select AllNodes (Default) radio button.
+        Make sure every local cluster node is selected.
+
+        "Connect Storage Area Network" lists the nodes in a table with a
+        "select all rows" checkbox, and it ticks them all by default - so this
+        is normally a no-op that only confirms the default held. It is checked
+        rather than assumed because the form will not submit with fewer than
+        three nodes, and that refusal would otherwise surface much later, at
+        the Connect and create button, with nothing to point at.
+
+        Raises:
+            TimeoutExpiredError: If the node table is not on the page, or fewer
+                than three nodes end up selected.
 
         """
+        select_all = self.get_elements(FDF_SAN_LOCATORS["node_table_select_all"])
+        if not select_all:
+            raise TimeoutExpiredError(
+                "Local cluster nodes table not found on the Connect Storage "
+                "Area Network form"
+            )
 
-        elements = self.get_elements(FDF_SAN_LOCATORS["all_nodes_radio"])
-
-        if not elements:
-            raise TimeoutExpiredError("AllNodes radio button not found")
-
-        san_element = elements[0]
-
-        if not san_element.is_selected():
-            logger.info("Selecting All Nodes option")
-            self.do_click(FDF_SAN_LOCATORS["all_nodes_radio"], enable_screenshot=True)
+        if select_all[0].is_selected():
+            logger.info("All local cluster nodes are already selected")
         else:
-            logger.info("All Nodes (Default) option already selected")
+            logger.info("Selecting all local cluster nodes")
+            self.do_click(
+                FDF_SAN_LOCATORS["node_table_select_all"], enable_screenshot=True
+            )
+
+        rows = self.get_elements(FDF_SAN_LOCATORS["node_table_row_checkboxes"])
+        selected = [row for row in rows if row.is_selected()]
+        if len(selected) < 3:
+            raise TimeoutExpiredError(
+                f"Only {len(selected)} of {len(rows)} local cluster nodes are "
+                "selected, and the form requires at least 3"
+            )
+        logger.info(f"{len(selected)} local cluster nodes selected")
 
     def enter_lun_group_name(self, lun_group_name):
         """

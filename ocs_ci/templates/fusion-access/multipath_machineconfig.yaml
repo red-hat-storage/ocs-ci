@@ -1,0 +1,33 @@
+---
+# Puts the SAN prerequisites on every worker: the multipath config, and the two
+# services that have to be running before any LUN can show up. A MachineConfig
+# rather than a one off 'oc debug', because a worker added later has to come up
+# with the same setup, and because RHCOS generates
+# /etc/iscsi/initiatorname.iscsi the first time iscsid starts, so a node that
+# never ran it has no IQN for the storage admin to map volumes to.
+#
+# contents.source is filled in at runtime from templates/fusion-access/multipath.conf.
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-worker-fusion-access-multipath
+  labels:
+    machineconfiguration.openshift.io/role: worker
+spec:
+  config:
+    ignition:
+      version: 3.2.0
+    storage:
+      files:
+        - path: /etc/multipath.conf
+          mode: 0600
+          overwrite: true
+          contents:
+            source: PLACEHOLDER
+    systemd:
+      units:
+        # Neither is enabled by default on RHCOS.
+        - name: multipathd.service
+          enabled: true
+        - name: iscsid.service
+          enabled: true

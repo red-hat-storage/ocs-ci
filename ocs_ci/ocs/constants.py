@@ -974,6 +974,9 @@ ROOK_CEPHX_KEYROTATION_DAEMON_LABELS = {
 EXPORTER_APP_LABEL = "app=rook-ceph-exporter"
 OPERATOR_LABEL = "app=rook-ceph-operator"
 ODF_CONSOLE = "app=odf-console"
+# Name under console.operator.openshift.io/cluster .spec.plugins, which is what
+# decides whether the Data Foundation pages appear in the console navigation.
+ODF_CONSOLE_PLUGIN = "odf-console"
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
 CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
 CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
@@ -1741,6 +1744,7 @@ OPENSHIFT_DR_SYSTEM_OPERATORGROUP = os.path.join(
 ACM_DPA = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dpa_acm.yaml")
 DR_SERVICE_EXPORTER = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "service_exporter.yaml")
 DR_POLICY_ACM_HUB = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dr_policy_acm_hub.yaml")
+DR_CLUSTER_ACM_HUB = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dr_cluster_acm_hub.yaml")
 ODR_S3_SECRET_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "odr_s3_secret.yaml")
 OPENSHIFT_DR_SYSTEM_NAMESPACE = "openshift-dr-system"
 DR_AWS_S3_PROFILE_YAML = os.path.join(
@@ -3074,6 +3078,14 @@ IBM_STORAGE_SCALE_MCO_URL = (
     "https://raw.githubusercontent.com/IBM/ibm-spectrum-scale-container-native/"
     "502fbcbe968651d2c94bd6b8419958c835383696/generated/scale/mco/mco.yaml"
 )
+# OLM install of CNSA. Both packages are served by the FDF catalog
+# (isf-data-foundation-catalog, see FDF_CATALOG_NAME), which the FDF deployment
+# already puts on the cluster, so nothing new has to be created for them.
+IBM_STORAGE_SCALE_OPERATOR_NAME = "ibm-spectrum-scale-operator"
+IBM_STORAGE_SCALE_CHANNEL = "stable-v60.2"
+# Pulls in the kernel module management operator the GPFS kmod build needs.
+CNSA_DEPENDENCIES_OPERATOR_NAME = "cnsa-dependencies"
+CNSA_DEPENDENCIES_CHANNEL = "stable-5.0"
 IBM_ENTITLEMENT_SECRET_NAME = "ibm-entitlement-key"
 IBM_QUAYIO_SECRET_NAME = "quayio-secret"
 REMOTE_CLUSTER = "RemoteCluster"
@@ -4394,6 +4406,13 @@ FUSION_ACCESS_OPERATOR_NAME = "openshift-fusion-access-operator"
 FUSION_ACCESS_CR_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "fusion-access-san.yaml"
 )
+FUSION_ACCESS_MULTIPATH_CONF = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "multipath.conf"
+)
+FUSION_ACCESS_MULTIPATH_MC = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_FUSION_ACCESS, "multipath_machineconfig.yaml"
+)
+FUSION_ACCESS_MULTIPATH_MC_NAME = "99-worker-fusion-access-multipath"
 
 CONFIRM_DELETION_ANNOTATION = "uninstall.ocs.openshift.io/confirm-deletion"
 
