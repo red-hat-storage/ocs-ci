@@ -16,7 +16,7 @@ import base64
 import boto3
 import yaml
 
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import BotoCoreError, ClientError, EndpointConnectionError
 
 from ocs_ci.deployment.helpers import storage_class
 from ocs_ci.utility.azure_utils import AZURE as AzureUtil
@@ -179,6 +179,7 @@ from ocs_ci.utility import (
     version,
 )
 from ocs_ci.utility.aws import (
+    update_config_from_s3,
     create_and_attach_sts_role,
 )
 from ocs_ci.utility.multicluster import create_mce_catsrc
@@ -5476,28 +5477,64 @@ class MultiClusterDROperatorsDeploy(object):
             by default we go with AWS, in case of noobaa it should be
             implemented in mcg_meta_obj_store class
 
-            The credentials are taken only from the default boto3 credentials
-            chain (~/.aws/credentials, or AWS_* environment variables), they
-            are never read from auth.yaml or ocs-ci-data.
+            The credentials are looked up in the following order and the first
+            pair accepted by AWS is used:
+            1. ocs-ci-data auth.yaml
+            2. local auth.yaml
+            3. default boto3 credentials chain (~/.aws/credentials or
+               AWS_* environment variables)
 
             Raises:
-                ACMClusterConfigurationException: if no valid long-lived AWS
-                    credentials are found
+                ACMClusterConfigurationException: if no valid AWS credentials
+                    are found
 
             """
-            logger.info("Trying to load AWS credentials from ~/.aws/credentials")
+
+            def _from_ocs_ci_data():
+                logger.info("Trying to load AWS credentials from ocs-ci-data")
+                try:
+                    return (update_config_from_s3() or {}).get("AUTH") or {}
+                except (AttributeError, EndpointConnectionError):
+                    logger.warning(
+                        "Failed to load credentials from ocs-ci-data.\n"
+                        "Your local AWS credentials might be misconfigured."
+                    )
+                    return {}
+
+            def _from_local_auth():
+                logger.info("Trying to load AWS credentials from local auth.yaml")
+                return (load_auth_config() or {}).get("AUTH") or {}
+
+            for load_source in (_from_ocs_ci_data, _from_local_auth):
+                aws_auth = load_source().get("AWS") or {}
+                access_key = aws_auth.get("AWS_ACCESS_KEY_ID")
+                secret_key = aws_auth.get("AWS_SECRET_ACCESS_KEY")
+                if (
+                    access_key
+                    and secret_key
+                    and self._are_aws_credentials_valid(access_key, secret_key)
+                ):
+                    self.access_key = access_key
+                    self.secret_key = secret_key
+                    return
+
+            logger.info(
+                "Trying to load AWS credentials from the default boto3 chain "
+                "(~/.aws/credentials or AWS_* environment variables)"
+            )
             session_creds = boto3.Session().get_credentials()
             if not session_creds:
                 raise ACMClusterConfigurationException(
-                    "AWS credentials not found, configure them in ~/.aws/credentials"
+                    "AWS credentials not found in ocs-ci-data, local auth.yaml, "
+                    "~/.aws/credentials or AWS_* environment variables"
                 )
             frozen_creds = session_creds.get_frozen_credentials()
             if not self._are_aws_credentials_valid(
                 frozen_creds.access_key, frozen_creds.secret_key
             ):
                 raise ACMClusterConfigurationException(
-                    "AWS credentials from ~/.aws/credentials are not valid "
-                    "(long-lived IAM user keys are required)"
+                    "AWS credentials from ~/.aws/credentials or AWS_* environment "
+                    "variables are not valid (long-lived IAM user keys are required)"
                 )
             self.access_key = frozen_creds.access_key
             self.secret_key = frozen_creds.secret_key
