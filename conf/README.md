@@ -152,6 +152,21 @@ version.
 * `disconnected_env_skip_image_mirroring` - skip index image prune and mirroring on disconnected environment (this expects that all the required images will be mirrored outside of ocs-ci)
 * `disconnected_dns_server` - DNS server accessible from disconnected cluster (should be on the same network)
 * `disconnected_false_gateway` - false gateway used to make cluster effectively disconnected
+* `disconnected_z_minus_n` - install the ODF build which is N positions behind the latest one
+  available in the catalog for the target minor version (z-N pinning), for example `2` installs
+  the third newest build. `0` pins to the latest build. Applies to fresh disconnected installs
+  and can also be used for disconnected upgrades. Forces `subscription_plan_approval=Manual`
+  to prevent OLM from auto-upgrading beyond the pinned version. If N exceeds the number of available
+  builds, the oldest available build is used and a warning is logged.
+* `upgrade_disconnected_z_minus_n` - target build N positions behind latest for disconnected upgrade
+  (defaults to `0` / latest build in the target minor if not specified).
+* `upgrade_pinned_from_channel`, `upgrade_pinned_from_version` - explicit channel and version for the
+  starting ODF build in a pinned disconnected upgrade (e.g. `stable-4.20`, `4.20.10-rhodf`). If omitted,
+  they are automatically deduced from the live cluster CSVs or `pre_upgrade_ocs_version` / `ENV_DATA.ocs_version`.
+  Ensures the starting version is in the catalog for OLM upgrade graph continuity.
+* `upgrade_pinned_to_channel`, `upgrade_pinned_to_version` - explicit channel and version for the target
+  ODF build in a pinned disconnected upgrade (e.g. `stable-4.21`, `4.21.11-rhodf`). If omitted, they are
+  automatically deduced from `upgrade_ocs_version` and the target catalog index.
 * `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 * `ibmcloud_disable_addon` - Disable OCS addon
 * `sc_encryption` - Enable StorageClass encryption.
