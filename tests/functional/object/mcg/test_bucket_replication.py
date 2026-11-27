@@ -13,7 +13,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     sts_deployment_required,
     aws_platform_required,
     skipif_noobaa_external_pgsql,
-    jira,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import MCGTest
@@ -368,7 +367,6 @@ class TestReplication(MCGTest):
             mcg_obj_session, first_bucket_name, second_bucket_name, timeout=self.TIMEOUT
         ), f"Objects in the buckets {first_bucket_name} and {second_bucket_name} are not same"
 
-    @jira("DFBUGS-2353")
     @skipif_noobaa_external_pgsql
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
