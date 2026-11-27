@@ -20,4 +20,4 @@ EXTERNAL_MODE:
 
 REPORTING:
   polarion:
-    deployment_id: 'OCS-2563'
+    deployment_id: 'OCS-8040'
