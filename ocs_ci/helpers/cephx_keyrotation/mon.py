@@ -4,7 +4,7 @@ import logging
 import re
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import CommandFailed, UnexpectedBehaviour
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     get_deployments_having_label,
@@ -132,12 +132,23 @@ class CephXMONHelper:
 
         Prefer this over ``ceph mon stat`` when quorum may already be broken:
         Ceph CLI against the tools pod hangs without mon majority.
+
+        ``status()`` re-queries each pod by name, so a pod listed a moment
+        earlier can already be gone: this is polled precisely while mon
+        deployments are scaled to zero. A vanished pod is not Running, so
+        NotFound is counted as such rather than aborting the poll.
         """
-        running = [
-            mon_pod
-            for mon_pod in get_mon_pods(namespace=self.namespace)
-            if mon_pod.status() == constants.STATUS_RUNNING
-        ]
+        running = []
+        for mon_pod in get_mon_pods(namespace=self.namespace):
+            try:
+                status = mon_pod.status()
+            except CommandFailed as exc:
+                if "NotFound" not in str(exc):
+                    raise
+                log.debug(f"mon pod {mon_pod.name} disappeared while polling")
+                continue
+            if status == constants.STATUS_RUNNING:
+                running.append(mon_pod)
         log.info(
             f"Running mon pods ({len(running)}): "
             f"{[mon_pod.name for mon_pod in running]}"
