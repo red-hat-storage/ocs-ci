@@ -1662,6 +1662,7 @@ class BusyboxDiscoveredApps(DRWorkload):
                     + "-"
                     + self.preferred_secondary_cluster
                 )
+        self.pvc_interface = kwargs.get("pvc_interface", None)
         self.workload_dir = kwargs.get("workload_dir")
 
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
