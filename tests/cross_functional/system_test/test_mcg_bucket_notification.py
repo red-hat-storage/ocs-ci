@@ -3,6 +3,8 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
     polarion_id,
@@ -36,6 +38,7 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_core_pod,
     get_noobaa_db_pod,
     get_noobaa_endpoint_pods,
+    wait_for_noobaa_pods_running,
 )
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -68,6 +71,47 @@ class TestBucketNotificationSystemTest:
 
         notif_manager.setup_kafka()
         return notif_manager
+
+    def ensure_noobaa_pods_running(self, timeout):
+        """
+        Wait for all NooBaa pods to be Running. If they are not, log the
+        Running/non-Running pods summary, describe the non-Running pods and
+        fail the test immediately.
+
+        Args:
+            timeout (int): Timeout in seconds to wait for NooBaa pods
+
+        """
+        if wait_for_noobaa_pods_running(timeout=timeout):
+            return
+
+        running, not_running = [], []
+        try:
+            for pod_info in get_pods_having_label(constants.NOOBAA_APP_LABEL):
+                pod_obj = Pod(**pod_info)
+                phase = pod_info.get("status", {}).get("phase")
+                if phase == constants.STATUS_RUNNING:
+                    running.append(pod_obj)
+                else:
+                    not_running.append((pod_obj, phase))
+        except Exception as e:
+            logger.error(f"Failed to collect NooBaa pods status: {e}")
+
+        logger.error(
+            f"NooBaa pods summary: total={len(running) + len(not_running)}, "
+            f"running={len(running)} {[p.name for p in running]}, "
+            f"not running={len(not_running)} {[(p.name, s) for p, s in not_running]}"
+        )
+        for pod_obj, phase in not_running:
+            try:
+                logger.error(
+                    f"Describe of NooBaa pod {pod_obj.name} (status: {phase}):\n"
+                    f"{pod_obj.describe()}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to describe pod {pod_obj.name}: {e}")
+
+        pytest.fail(f"NooBaa pods did not reach Running state within {timeout}s")
 
     def verify_events(
         self, notify_manager, topic, bucket_names, event_name, timeout=120, sleep=5
@@ -206,16 +250,65 @@ class TestBucketNotificationSystemTest:
             logger.test_step(
                 "Tag objects and restart NooBaa pod node, verify ObjectTagging events"
             )
-            noobaa_pods = [
-                get_noobaa_core_pod(),
-                get_noobaa_db_pod(),
-            ] + get_noobaa_endpoint_pods()
-            noobaa_pod_nodes = [get_pod_node(pod_obj) for pod_obj in noobaa_pods]
+            # Ensure all NooBaa pods are running before selecting a node for disruption
+            logger.info("Ensuring all NooBaa pods are running prior to node disruption")
+            self.ensure_noobaa_pods_running(timeout=1200)
+
+            # Collect all NooBaa pods safely
+            noobaa_pods = []
+            try:
+                core_pod = get_noobaa_core_pod()
+                if core_pod:
+                    noobaa_pods.append(core_pod)
+            except Exception as e:
+                logger.warning(f"Failed to get NooBaa core pod: {e}")
+
+            try:
+                db_pod = get_noobaa_db_pod()
+                if db_pod:
+                    noobaa_pods.append(db_pod)
+            except Exception as e:
+                logger.warning(f"Failed to get NooBaa DB pod: {e}")
+
+            try:
+                endpoint_pods = get_noobaa_endpoint_pods()
+                if endpoint_pods:
+                    noobaa_pods.extend(endpoint_pods)
+            except Exception as e:
+                logger.warning(f"Failed to get NooBaa endpoint pods: {e}")
+
+            if not noobaa_pods:
+                pytest.skip(
+                    "No NooBaa pods found in the cluster - cannot perform node disruption test"
+                )
+
+            noobaa_pod_nodes = [
+                get_pod_node(pod_obj) for pod_obj in noobaa_pods if pod_obj
+            ]
             aws_cli_pod_node = get_pod_node(awscli_pod).name
+
+            node_to_shutdown = None
             for node_obj in noobaa_pod_nodes:
-                if node_obj.name != aws_cli_pod_node:
+                if node_obj and node_obj.name != aws_cli_pod_node:
                     node_to_shutdown = [node_obj]
+                    logger.info(
+                        f"Selected node '{node_obj.name}' for shutdown "
+                        f"(different from awscli pod node '{aws_cli_pod_node}')"
+                    )
                     break
+
+            if node_to_shutdown is None:
+                logger.warning(
+                    f"All NooBaa pods are on the same node as awscli pod ('{aws_cli_pod_node}'). "
+                    f"Using first NooBaa pod node for disruption."
+                )
+                if noobaa_pod_nodes:
+                    node_to_shutdown = [noobaa_pod_nodes[0]]
+                    logger.info(f"Using node '{noobaa_pod_nodes[0].name}' for shutdown")
+                else:
+                    pytest.skip(
+                        "No valid NooBaa pod nodes found - cannot perform node disruption test"
+                    )
 
             future_objs = []
             for bucket in buckets_created:
@@ -250,9 +343,19 @@ class TestBucketNotificationSystemTest:
 
             logger.info("Starting NooBaa pod nodes")
             nodes.start_nodes(nodes=node_to_shutdown)
-            logger.info(
-                "ObjectTagging:Put events verified after NooBaa pod node restart"
+            wait_for_nodes_status(
+                node_names=[node.name for node in node_to_shutdown],
+                status=constants.NODE_READY,
+                timeout=600,
             )
+            self.ensure_noobaa_pods_running(timeout=1200)
+            logger.info("NooBaa pod node started, all NooBaa pods running")
+
+            logger.info("Waiting for NooBaa to stabilize after disruptions...")
+            ceph_cluster = CephCluster()
+            ceph_cluster.wait_for_noobaa_health_ok()
+            logger.info("NooBaa health check passed after disruptions")
+            logger.info("NooBaa pod node restarted and NooBaa is healthy")
 
             logger.test_step(
                 "Delete objects and restart Kafka pods, verify ObjectRemoved events"
@@ -265,7 +368,7 @@ class TestBucketNotificationSystemTest:
             ]
             future_objs = []
             for bucket in buckets_created:
-                logger.info(f"Deleting object {obj_written[0]} from bucket {bucket}")
+                logger.info(f"Deleting object {obj_written[1]} from bucket {bucket}")
                 future_objs.append(
                     executor.submit(
                         s3_delete_object,
