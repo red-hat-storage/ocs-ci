@@ -4631,8 +4631,8 @@ def validate_application_odf_cli(
         ``skip_odf_cli_validation`` is ``True`` in ``config.ENV_DATA``.
         For the ``gather`` action it also returns None when
         ``skip_odf_cli_gather`` is ``True`` in ``config.ENV_DATA``; this flag
-        defaults to ``True``, so the gather bundle is skipped unless a run
-        explicitly sets ``skip_odf_cli_gather: false``.
+        defaults to ``False``, so the gather bundle is collected unless a run
+        explicitly sets ``skip_odf_cli_gather: true``.
         Skips the test on validation failure.
 
     """
@@ -4643,10 +4643,10 @@ def validate_application_odf_cli(
         )
         return None
 
-    if action == "gather" and config.ENV_DATA.get("skip_odf_cli_gather", True):
+    if action == "gather" and config.ENV_DATA.get("skip_odf_cli_gather", False):
         logger.info(
             f"Skipping ODF CLI DR gather for DRPC '{drpc_name}': "
-            f"'skip_odf_cli_gather' is enabled in ENV_DATA (default)"
+            f"'skip_odf_cli_gather' is set in ENV_DATA"
         )
         return None
 
