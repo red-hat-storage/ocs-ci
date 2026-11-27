@@ -1,0 +1,5 @@
+# Claude backends for mandatory repro_steps generation (stage 2)
+# Install at least one:
+claude-agent-sdk>=0.1.0
+
+# Or use Claude Code CLI: install Claude Code and run `claude login`
