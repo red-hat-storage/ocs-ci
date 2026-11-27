@@ -161,6 +161,8 @@ DEPLOYMENT:
   # Example: cp.stg.icr.io/cp/df/isf-data-foundation-catalog:4.23.0-40
   fdf_standalone_catalog_image: ""
 
+  cnv_latest_stable: true
+
 # Section for reporting configuration
 REPORTING:
   email:
