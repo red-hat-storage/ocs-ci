@@ -1085,6 +1085,151 @@ def wait_for_resource_state(kind, state, namespace, resource_name="", timeout=90
         raise TimeoutExpiredError(error_msg)
 
 
+def _find_key_values(obj, key):
+    """
+    Recursively collect all values stored under ``key`` anywhere inside a nested
+    dict/list structure.
+
+    Args:
+        obj: dict, list or scalar to search
+        key (str): the key to look for
+
+    Returns:
+        list: all values found for ``key`` (may be empty)
+
+    """
+    found = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k == key:
+                found.append(v)
+            found.extend(_find_key_values(v, key))
+    elif isinstance(obj, list):
+        for item in obj:
+            found.extend(_find_key_values(item, key))
+    return found
+
+
+def check_vgrc_destination_volume_handle(namespace, vgr_name=""):
+    """
+    Check that the VolumeGroupReplicationContent (VGRC) resources associated with the
+    VolumeGroupReplication (VGR) in the given namespace have a non-empty
+    ``destinationVolumeHandle``.
+
+    VGRC is a cluster-scoped resource, so it is resolved by matching each VGRC's
+    ``spec.volumeGroupReplicationRef`` against the VGR(s) present in ``namespace``.
+
+    Args:
+        namespace (str): the namespace of the workload (VGR)
+        vgr_name (str): Name of a specific VGR to match. If empty, all VGRs in the
+            namespace are considered.
+
+    Returns:
+        bool: True if at least one VGRC is matched and every matched VGRC has a
+            non-empty ``destinationVolumeHandle``, False otherwise
+
+    """
+    vgr_obj = ocp.OCP(kind=constants.VOLUME_GROUP_REPLICATION, namespace=namespace)
+    if vgr_name:
+        vgr_data = vgr_obj.get(resource_name=vgr_name, dont_raise=True)
+        vgr_items = [vgr_data] if vgr_data else []
+    else:
+        vgr_items = (vgr_obj.get(dont_raise=True) or {}).get("items", [])
+
+    vgr_names = {
+        item.get("metadata", {}).get("name")
+        for item in vgr_items
+        if item.get("metadata", {}).get("name")
+    }
+    if not vgr_names:
+        logger.info(
+            f"No {constants.VOLUME_GROUP_REPLICATION} found in namespace {namespace} yet"
+        )
+        return False
+
+    # VGRC is cluster-scoped; fetch all and filter by the VGR reference
+    vgrc_obj = ocp.OCP(kind=constants.VOLUME_GROUP_REPLICATION_CONTENT)
+    vgrc_items = (vgrc_obj.get(dont_raise=True) or {}).get("items", [])
+
+    matched_vgrc = [
+        item
+        for item in vgrc_items
+        if item.get("spec", {}).get("volumeGroupReplicationRef", {}).get("name")
+        in vgr_names
+        and item.get("spec", {})
+        .get("volumeGroupReplicationRef", {})
+        .get("namespace", namespace)
+        == namespace
+    ]
+
+    if not matched_vgrc:
+        logger.info(
+            f"No {constants.VOLUME_GROUP_REPLICATION_CONTENT} matched VGR(s) "
+            f"{vgr_names} in namespace {namespace} yet"
+        )
+        return False
+
+    for vgrc in matched_vgrc:
+        vgrc_name = vgrc.get("metadata", {}).get("name")
+        handles = [h for h in _find_key_values(vgrc, "destinationVolumeHandle") if h]
+        if not handles:
+            logger.info(
+                f"{constants.VOLUME_GROUP_REPLICATION_CONTENT} {vgrc_name} does not "
+                f"have a non-empty destinationVolumeHandle yet"
+            )
+            return False
+        logger.info(
+            f"{constants.VOLUME_GROUP_REPLICATION_CONTENT} {vgrc_name} has "
+            f"destinationVolumeHandle: {handles}"
+        )
+
+    return True
+
+
+def validate_vgrc_destination_volume_handle(namespace, vgr_name="", timeout=900):
+    """
+    Validate that the VolumeGroupReplicationContent (VGRC) resources of the workload
+    have a non-empty ``destinationVolumeHandle`` after a failover/relocate action.
+
+    This is applicable for RBD Consistency Group (CG) workloads on ODF 5.0+, where the
+    destination volume handle is populated on the new primary cluster once the group
+    replication is established.
+
+    Args:
+        namespace (str): the namespace of the workload (VGR)
+        vgr_name (str): Name of a specific VGR to match. If empty, all VGRs in the
+            namespace are considered.
+        timeout (int): time in seconds to wait for the destinationVolumeHandle to be set
+
+    Raises:
+        TimeoutExpiredError: if the destinationVolumeHandle is not populated in time
+
+    """
+    logger.info(
+        f"Validating destinationVolumeHandle in "
+        f"{constants.VOLUME_GROUP_REPLICATION_CONTENT} for VGR(s) in namespace {namespace}"
+    )
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=10,
+        func=check_vgrc_destination_volume_handle,
+        namespace=namespace,
+        vgr_name=vgr_name,
+    )
+    if not sample.wait_for_func_status(result=True):
+        error_msg = (
+            f"destinationVolumeHandle was not populated in "
+            f"{constants.VOLUME_GROUP_REPLICATION_CONTENT} for VGR(s) in namespace "
+            f"{namespace} within {timeout} seconds."
+        )
+        logger.error(error_msg)
+        raise TimeoutExpiredError(error_msg)
+    logger.info(
+        f"Successfully validated destinationVolumeHandle in "
+        f"{constants.VOLUME_GROUP_REPLICATION_CONTENT} for namespace {namespace}"
+    )
+
+
 def wait_for_replication_resources_creation(
     count,
     namespace,
@@ -1186,6 +1331,21 @@ def wait_for_replication_resources_creation(
                     namespace=namespace,
                     timeout=timeout,
                 )
+
+                # After a failover/relocate action, validate that the
+                # VolumeGroupReplicationContent on the new primary cluster has a
+                # non-empty destinationVolumeHandle (ODF 5.0+ RBD CG feature).
+                if (
+                    performed_dr_action
+                    and version.get_semantic_ocs_version_from_config()
+                    >= version.VERSION_5_0
+                ):
+                    # Match all VGRs in the workload namespace (the VRG name is not
+                    # the VGR name, so we scope by namespace rather than by name).
+                    validate_vgrc_destination_volume_handle(
+                        namespace=namespace,
+                        timeout=timeout,
+                    )
 
     if not skip_vrg_check:
         wait_for_resource_state(
