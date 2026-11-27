@@ -3,6 +3,7 @@ This module provides base class for different deployment
 platforms like AWS, VMWare, Baremetal etc.
 """
 
+import configparser
 import json
 import logging
 import os
@@ -16,7 +17,7 @@ import base64
 import boto3
 import yaml
 
-from botocore.exceptions import BotoCoreError, ClientError, EndpointConnectionError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from ocs_ci.deployment.helpers import storage_class
 from ocs_ci.utility.azure_utils import AZURE as AzureUtil
@@ -178,10 +179,7 @@ from ocs_ci.utility import (
     pgsql,
     version,
 )
-from ocs_ci.utility.aws import (
-    update_config_from_s3,
-    create_and_attach_sts_role,
-)
+from ocs_ci.utility.aws import create_and_attach_sts_role
 from ocs_ci.utility.multicluster import create_mce_catsrc
 from ocs_ci.utility.operators import NMStateOperator, OADPOperator
 from ocs_ci.utility.retry import retry
@@ -5478,67 +5476,43 @@ class MultiClusterDROperatorsDeploy(object):
             implemented in mcg_meta_obj_store class
 
             The credentials are looked up in the following order and the first
-            pair accepted by AWS is used:
+            source found is used (the remaining sources are skipped):
 
-            * ocs-ci-data auth.yaml
-            * local auth.yaml
-            * default boto3 credentials chain (~/.aws/credentials or
-              AWS_* environment variables)
+            1. AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment
+               variables
+            2. [default] profile of ~/.aws/credentials
 
             Raises:
-                ACMClusterConfigurationException: if no valid AWS credentials
-                    are found
+                ACMClusterConfigurationException: if no credentials are found
+                    or the credentials are not accepted by AWS
 
             """
-
-            def _from_ocs_ci_data():
-                logger.info("Trying to load AWS credentials from ocs-ci-data")
-                try:
-                    return (update_config_from_s3() or {}).get("AUTH") or {}
-                except (AttributeError, EndpointConnectionError):
-                    logger.warning(
-                        "Failed to load credentials from ocs-ci-data.\n"
-                        "Your local AWS credentials might be misconfigured."
-                    )
-                    return {}
-
-            def _from_local_auth():
-                logger.info("Trying to load AWS credentials from local auth.yaml")
-                return (load_auth_config() or {}).get("AUTH") or {}
-
-            for load_source in (_from_ocs_ci_data, _from_local_auth):
-                aws_auth = load_source().get("AWS") or {}
-                access_key = aws_auth.get("AWS_ACCESS_KEY_ID")
-                secret_key = aws_auth.get("AWS_SECRET_ACCESS_KEY")
-                if (
-                    access_key
-                    and secret_key
-                    and self._are_aws_credentials_valid(access_key, secret_key)
-                ):
-                    self.access_key = access_key
-                    self.secret_key = secret_key
-                    return
-
-            logger.info(
-                "Trying to load AWS credentials from the default boto3 chain "
-                "(~/.aws/credentials or AWS_* environment variables)"
-            )
-            session_creds = boto3.Session().get_credentials()
-            if not session_creds:
-                raise ACMClusterConfigurationException(
-                    "AWS credentials not found in ocs-ci-data, local auth.yaml, "
-                    "~/.aws/credentials or AWS_* environment variables"
+            access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+            secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+            if access_key and secret_key:
+                source = "AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY environment variables"
+            else:
+                source = "~/.aws/credentials"
+                parser = configparser.ConfigParser()
+                parser.read(os.path.expanduser("~/.aws/credentials"))
+                access_key = parser.get("default", "aws_access_key_id", fallback=None)
+                secret_key = parser.get(
+                    "default", "aws_secret_access_key", fallback=None
                 )
-            frozen_creds = session_creds.get_frozen_credentials()
-            if not self._are_aws_credentials_valid(
-                frozen_creds.access_key, frozen_creds.secret_key
-            ):
+            if not (access_key and secret_key):
                 raise ACMClusterConfigurationException(
-                    "AWS credentials from ~/.aws/credentials or AWS_* environment "
-                    "variables are not valid (long-lived IAM user keys are required)"
+                    "AWS credentials not found. Set AWS_ACCESS_KEY_ID and "
+                    "AWS_SECRET_ACCESS_KEY environment variables or configure "
+                    "the [default] profile in ~/.aws/credentials"
                 )
-            self.access_key = frozen_creds.access_key
-            self.secret_key = frozen_creds.secret_key
+            logger.info(f"Using AWS credentials from {source}")
+            if not self._are_aws_credentials_valid(access_key, secret_key):
+                raise ACMClusterConfigurationException(
+                    f"AWS credentials from {source} are not valid "
+                    "(long-lived IAM user keys are required)"
+                )
+            self.access_key = access_key
+            self.secret_key = secret_key
 
     class mcg_meta_obj_store:
         def __init__(self):
