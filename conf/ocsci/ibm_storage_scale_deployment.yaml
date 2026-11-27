@@ -1,0 +1,25 @@
+---
+# Install IBM Storage Scale (CNSA) instead of the Fusion Access operator.
+#
+# Both cnsa-dependencies and ibm-spectrum-scale-operator are served by the FDF
+# catalog, isf-data-foundation-catalog. A cluster that already has Fusion Data
+# Foundation has that catalog and it is reused untouched; on a cluster that does
+# not, it is created from ocs_ci/templates/fusion-data-foundation, which is all
+# CNSA needs - the operators come from the catalog, not from FDF itself.
+#
+# Fusion Access only adds a console plugin over the same scale.spectrum.ibm.com
+# CRDs, which an FA-MDR run drives directly.
+#
+# Use alongside conf/ocsci/fusion_access_storage_deployment.yaml.
+DEPLOYMENT:
+  ibm_storage_scale_deployment: true
+  # Catalog build to create when the cluster has no FDF catalog yet. These are
+  # the same keys the FDF deployment uses, so both paths land on one catalog.
+  # Point fdf_pre_release_registry at a pre-release registry to pick up a build
+  # that is not published to icr.io yet.
+  fdf_image_tag: "v5.0"
+  # fdf_pre_release: true
+  # fdf_pre_release_registry: preprod.icr.io/cpopen
+  # Override only when the catalog build ships different channels.
+  # cnsa_dependencies_channel: "stable-5.0"
+  # ibm_storage_scale_channel: "stable-v60.2"

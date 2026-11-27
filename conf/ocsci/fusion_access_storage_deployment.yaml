@@ -1,0 +1,7 @@
+---
+# Provision Fusion Access SAN storage by creating a LUN group through the console.
+# Needs AUTH.ibm_entitlement_key in data/auth.yaml, and the ENV_DATA san_* keys from
+# an untracked conf since they carry credentials. See
+# ocs_ci/deployment/fusion_access_storage.py for the full list.
+DEPLOYMENT:
+  fusion_access_storage: true

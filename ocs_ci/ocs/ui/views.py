@@ -1085,8 +1085,18 @@ FDF_SAN_LOCATORS = {
         "//button",
         By.XPATH,
     ),
-    # All nodes radio button
-    "all_nodes_radio": ("//input[@id='use-all-nodes']", By.XPATH),
+    # "Select all rows" checkbox of the Local cluster nodes table. Anchored on
+    # the table's aria-label because the LUNs table further down the same form
+    # carries a checkbox with the very same id="select-all".
+    "node_table_select_all": (
+        "//table[@aria-label='Selectable table']//thead//input[@type='checkbox']",
+        By.XPATH,
+    ),
+    # Per-node checkboxes of that same table, anchored the same way.
+    "node_table_row_checkboxes": (
+        "//table[@aria-label='Selectable table']//tbody//input[@type='checkbox']",
+        By.XPATH,
+    ),
     # LUN table checkbox for row i — use @aria-label to anchor the table,
     "lun_table_checkbox": (
         "//table[@aria-label='LUNs table']//tbody//tr[{i}]//input[@type='checkbox']",

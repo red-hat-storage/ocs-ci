@@ -1,0 +1,15 @@
+---
+apiVersion: ramendr.openshift.io/v1alpha1
+kind: DRCluster
+metadata:
+  name: PLACE_HOLDER_CLUSTER
+  labels:
+    cluster.open-cluster-management.io/backup: ramen
+spec:
+  # No region, matching the DRClusters of a working Fusion Access MDR hub.
+  # Ramen derives sync vs async from the peerClasses the managed clusters
+  # report, not from the region: Scale gives the two clusters different
+  # storageIDs under one shared groupreplicationID, so the DRPolicy ends up in
+  # status.async with status.sync empty even though the SAN mirrors
+  # synchronously.
+  s3ProfileName: PLACE_HOLDER_S3PROFILE

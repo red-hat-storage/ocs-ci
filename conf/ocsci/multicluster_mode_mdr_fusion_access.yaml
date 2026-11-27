@@ -1,0 +1,21 @@
+---
+# Metro DR on top of IBM Storage Scale. Same DR layer as a regular metro-dr
+# deployment, without the Ceph specific steps (MirrorPeer, fencing).
+MULTICLUSTER:
+  multicluster_mode: "metro-dr"
+DEPLOYMENT:
+  # Selects the DR flow only. The DR layer needs the Scale StorageClasses to
+  # exist, it does not care which operator put them there, so this conf does
+  # not install the storage stack. Layer fusion_access_deployment.yaml and
+  # fusion_access_storage_deployment.yaml on top when the run has to build the
+  # Scale side through the Fusion Access for SAN operator.
+  fusion_access: true
+ENV_DATA:
+  dr_metadata_store: "awss3"
+  skip_submariner_deployment: true
+  # Does not perform the import, that is the 'acm_import' stage.
+  import_clusters_to_acm: true
+  # Matches constants.AWS_REGION, which the ACM backup bucket and dpa_acm.yaml
+  # already hardcode, so every bucket this deployment makes lands in one region.
+  dr_s3_region: "eu-central-1"
+  dr_s3_bucket_prefix: "dnd"

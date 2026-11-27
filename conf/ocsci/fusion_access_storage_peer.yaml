@@ -1,0 +1,13 @@
+---
+# Peer site of a Fusion Access Metro-DR pair.
+#
+# Both sites are zoned to the same volumes, so only one of them may claim them
+# into a LUN group - the second would try to format LUNs the first already owns.
+# This cluster still gets multipath, iSCSI discovery, the pull secrets and CNSA,
+# it just stops short of the LUN group and of the filesystem checks that follow
+# from it.
+#
+# Pass this per cluster, alongside the shared
+# conf/ocsci/fusion_access_storage_deployment.yaml.
+ENV_DATA:
+  san_create_lun_group: false
