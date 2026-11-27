@@ -66,6 +66,7 @@ from ocs_ci.helpers.dr_helpers import (
     create_service_exporter,
     is_cg_enabled,
     validate_storage_cluster_peer_state,
+    validate_volumegroupsnapshotclass_api_version,
     verify_volsync,
     validate_drpolicy_grouping,
     create_ingress_cert_dr,
@@ -5714,6 +5715,12 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             # validate storage cluster peer state
             validate_storage_cluster_peer_state()
             verify_volsync()
+
+        if odf_running_version >= version.VERSION_5_0:
+            logger.info(
+                "Validating VolumeGroupSnapshotClass apiVersion on managed clusters"
+            )
+            validate_volumegroupsnapshotclass_api_version()
 
         # TODO: Skip backup configuration if the managed clusters under test is client clusters
         #  This configuration is already done for the base clusters and ACM hub while configuring RDR for base clusters.
