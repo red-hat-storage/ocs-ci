@@ -4,9 +4,16 @@ import random
 from ocs_ci.helpers.helpers import create_lvs_resource
 from ocs_ci.ocs.cluster import check_ceph_osd_tree
 from ocs_ci.ocs.exceptions import CephHealthException, ResourceNotFoundError
-from ocs_ci.ocs.node import add_disk_to_node, get_node_objs, get_osd_running_nodes
+from ocs_ci.ocs.node import (
+    add_disk_to_node,
+    add_new_disk_for_vsphere,
+    get_node_objs,
+    get_osd_running_nodes,
+)
 from ocs_ci.ocs.resources.pv import (
     get_pv_in_status,
+    get_pv_objs_in_sc,
+    wait_for_new_pvs_status,
     wait_for_pvs_in_lvs_to_reach_status,
 )
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
@@ -250,3 +257,57 @@ def verify_available_pvs_for_deviceclass(sc_name=None, wait=True, timeout=180):
         )
 
     return available_nodes_count
+
+
+def add_pvs_for_deviceset(sc_name, deviceset_name, timeout=300):
+    """
+    Add one new disk per OCS node and wait for the new PVs to be Available.
+
+    Takes a snapshot of existing PVs before adding disks so that only the
+    newly created PVs are counted. This is safe when multiple device sets
+    share the same StorageClass, because pre-existing available PVs
+    belonging to other device sets are never miscounted.
+
+    Args:
+        sc_name (str): StorageClass name for the target device set.
+        deviceset_name (str): Device set name, used for log messages.
+        timeout (int): Seconds to wait for new PVs to become Available.
+
+    Returns:
+        int: Number of new PVs added (one per OCS node).
+
+    Raises:
+        AssertionError: If the new PVs do not reach Available status
+            within the timeout.
+
+    """
+    osd_nodes = get_osd_running_nodes()
+    num_of_new_pvs = len(osd_nodes)
+
+    current_pvs = get_pv_objs_in_sc(sc_name)
+    log.info(
+        "Adding %d disk(s) for device set '%s' (SC: %s)",
+        num_of_new_pvs,
+        deviceset_name,
+        sc_name,
+    )
+    for _ in range(num_of_new_pvs):
+        add_new_disk_for_vsphere(sc_name=sc_name, ssd=True)
+
+    log.info(
+        "Waiting for %d new Available PV(s) in SC '%s'",
+        num_of_new_pvs,
+        sc_name,
+    )
+    assert wait_for_new_pvs_status(
+        current_pv_objs=current_pvs,
+        sc_name=sc_name,
+        expected_status=constants.STATUS_AVAILABLE,
+        num_of_new_pvs=num_of_new_pvs,
+        timeout=timeout,
+    ), (
+        f"Timed out waiting for {num_of_new_pvs} new Available"
+        f" PVs in SC '{sc_name}'"
+    )
+
+    return num_of_new_pvs
