@@ -64,6 +64,15 @@ class TestSTSBucket:
                 *[
                     {
                         "interface": "CLI",
+                        "backingstore_dict": {"gcp-sts": [(1, None)]},
+                    },
+                ],
+                marks=[tier1, gcp_platform_required, polarion_id("OCS-8416")],
+            ),
+            pytest.param(
+                *[
+                    {
+                        "interface": "CLI",
                         "namespace_policy_dict": {
                             "type": "Single",
                             "namespacestore_dict": {"azure-sts": [(1, None)]},
@@ -81,6 +90,7 @@ class TestSTSBucket:
             "AWS-STS-BS-CLI",
             "AZURE-STS-BS-CLI",
             "GCP-STS-BS-OC",
+            "GCP-STS-BS-CLI",
             "AZURE-STS-NSS-CLI",
             "STS-DEFAULT",
         ],
