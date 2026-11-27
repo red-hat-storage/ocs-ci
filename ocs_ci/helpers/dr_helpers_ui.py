@@ -1838,3 +1838,181 @@ def navigate_using_fleet_virtualization(acm_obj):
             acm_obj.do_click(acm_loc["modal_dialog_close_button"], timeout=5)
 
     return True
+
+
+def navigate_to_protected_applications_page(acm_obj, timeout=120):
+    """
+    Navigate to Data Services -> Disaster recovery -> Protected applications tab.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        timeout (int): Timeout for UI operations
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    acm_obj.navigate_data_services()
+    log.info("Clicking on 'Protected applications' tab")
+    acm_obj.do_click(
+        acm_loc["protected-applications-tab"],
+        avoid_stale=True,
+        enable_screenshot=True,
+        timeout=timeout,
+    )
+    acm_obj.page_has_loaded(retries=5, sleep_time=3)
+    log.info("Successfully navigated to Protected Applications page")
+
+
+def _open_protected_app_row_kebab(acm_obj, workload_name, timeout=60):
+    """
+    Open the ActionsColumn kebab for a Protected Applications row.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        workload_name (str): Application name shown in the Name column
+        timeout (int): Timeout for UI operations
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    kebab_locator = format_locator(
+        acm_loc["protected-app-row-kebab"], workload_name
+    )
+    log.info(f"Opening kebab menu for protected application '{workload_name}'")
+    for _ in range(10):
+        try:
+            kebab = wait_for_element_to_be_clickable(kebab_locator)
+            acm_obj.driver.execute_script("arguments[0].click();", kebab)
+            kebab_state = kebab.get_attribute("aria-expanded")
+            log.info(f"Protected app kebab aria-expanded={kebab_state}")
+            if kebab_state in (None, "false", False):
+                acm_obj.driver.execute_script("arguments[0].click();", kebab)
+            return
+        except (SeleniumTimeoutException, StaleElementReferenceException) as ex:
+            log.warning(f"Retrying protected app kebab open: {ex}")
+            time.sleep(1)
+    raise UnexpectedBehaviour(
+        f"Could not open kebab for protected application '{workload_name}'"
+    )
+
+
+def test_failover_ui(acm_obj, workload_name, timeout=120):
+    """
+    Start Test failover from the Protected Applications page kebab menu.
+
+    Flow: open row kebab → Test failover → Start on the modal.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        workload_name (str): Application name shown in the Name column
+            (AppSet UI name is the workload namespace)
+        timeout (int): Timeout for UI operations
+
+    Returns:
+        bool: True when Start is clicked successfully
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    navigate_to_protected_applications_page(acm_obj, timeout=timeout)
+    _open_protected_app_row_kebab(acm_obj, workload_name, timeout=timeout)
+
+    log.info(f"Selecting 'Test failover' for '{workload_name}'")
+    for _ in range(10):
+        try:
+            action = wait_for_element_to_be_visible(
+                acm_loc["protected-app-test-failover-action"]
+            )
+            acm_obj.driver.execute_script("arguments[0].click();", action)
+            break
+        except (SeleniumTimeoutException, StaleElementReferenceException):
+            log.warning("Test failover menu item not found, retrying...")
+            time.sleep(1)
+            _open_protected_app_row_kebab(acm_obj, workload_name, timeout=timeout)
+    else:
+        raise UnexpectedBehaviour(
+            f"'Test failover' action not found for '{workload_name}'"
+        )
+
+    acm_obj.wait_for_element_to_be_visible(
+        acm_loc["test-failover-modal"], timeout=timeout
+    )
+    acm_obj.take_screenshot("test_failover_modal")
+    log.info("Clicking Start on Test failover modal")
+    acm_obj.do_click(acm_loc["test-failover-modal-start-btn"], timeout=timeout)
+    acm_obj.take_screenshot("test_failover_started")
+    return True
+
+
+def _open_dr_status_popover_for_app(acm_obj, workload_name, timeout=60):
+    """
+    Open the DR status popover for a Protected Applications row.
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        workload_name (str): Application name shown in the Name column
+        timeout (int): Timeout for UI operations
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    status_btn = format_locator(
+        acm_loc["protected-app-dr-status-button"], workload_name
+    )
+    log.info(f"Opening DR status popover for '{workload_name}'")
+    acm_obj.do_click(status_btn, enable_screenshot=True, timeout=timeout)
+
+
+def clean_up_test_failover_ui(acm_obj, workload_name, timeout=120):
+    """
+    Clean up an in-progress Test failover from the DR status popover.
+
+    Prerequisites: DRPC progression is TestingFailover (Action needed in UI).
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        workload_name (str): Application name shown in the Name column
+        timeout (int): Timeout for UI operations
+
+    Returns:
+        bool: True when Clean up test is confirmed
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    navigate_to_protected_applications_page(acm_obj, timeout=timeout)
+    _open_dr_status_popover_for_app(acm_obj, workload_name, timeout=timeout)
+
+    log.info(f"Clicking 'Clean up test' for '{workload_name}'")
+    acm_obj.do_click(
+        acm_loc["test-failover-cleanup-btn"], enable_screenshot=True, timeout=timeout
+    )
+    acm_obj.do_click(
+        acm_loc["test-failover-cleanup-confirm-btn"],
+        enable_screenshot=True,
+        timeout=timeout,
+    )
+    acm_obj.take_screenshot("test_failover_cleanup_confirmed")
+    return True
+
+
+def convert_test_failover_ui(acm_obj, workload_name, timeout=120):
+    """
+    Convert an in-progress Test failover into a real Failover via the UI.
+
+    Prerequisites: DRPC progression is TestingFailover (Action needed in UI).
+    Recommended when the primary cluster is down (matches console guidance).
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        workload_name (str): Application name shown in the Name column
+        timeout (int): Timeout for UI operations
+
+    Returns:
+        bool: True when Convert is confirmed
+    """
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
+    navigate_to_protected_applications_page(acm_obj, timeout=timeout)
+    _open_dr_status_popover_for_app(acm_obj, workload_name, timeout=timeout)
+
+    log.info(f"Clicking 'Convert to real failover' for '{workload_name}'")
+    acm_obj.do_click(
+        acm_loc["test-failover-convert-btn"], enable_screenshot=True, timeout=timeout
+    )
+    acm_obj.do_click(
+        acm_loc["test-failover-convert-confirm-btn"],
+        enable_screenshot=True,
+        timeout=timeout,
+    )
+    acm_obj.take_screenshot("test_failover_convert_confirmed")
+    return True
