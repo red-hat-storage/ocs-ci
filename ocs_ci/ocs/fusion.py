@@ -13,6 +13,7 @@ from ocs_ci.utility.managedservice import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.templating import Templating, load_yaml
+from ocs_ci.utility.version import get_odf_image_namespace
 from ocs_ci.utility.utils import TimeoutSampler, get_ocp_version, exec_cmd
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -104,8 +105,13 @@ def deploy_odf():
     elif config.ENV_DATA.get("cluster_type") == "consumer":
         if config.DEPLOYMENT.get("not_ga_wa"):
             # To use unreleased version of operators and DFC offering, create ImageContentSourcePolicy
-            icsp_path = os.path.join(FUSION_TEMPLATE_DIR, "icsp.yaml")
-            icsp_data = load_yaml(icsp_path)
+            # The ODF image namespace follows the ODF major version (odf4 for
+            # ODF 4.y.z, odf5 for ODF 5.y.z), so it has to be rendered in.
+            icsp_template = templating.render_template(
+                "icsp.yaml.j2",
+                {"odf_namespace": get_odf_image_namespace()},
+            )
+            icsp_data = yaml.safe_load(icsp_template)
             try:
                 helpers.create_resource(**icsp_data)
             except CommandFailed as exc:
