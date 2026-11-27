@@ -844,6 +844,7 @@ class HyperShiftBase:
         data_replication_separation=False,
         auto_repair=True,
         hcp_image=None,
+        vm_node_selector=None,
     ):
         """
         Create HyperShift hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -867,6 +868,8 @@ class HyperShiftBase:
                 then add additional network
             auto_repair (bool): Enables machine autorepair with machine health checks, default True
             hcp_image (str): OCP image url for HCP cluster
+            vm_node_selector (str): Comma separated list of key=value pairs to use as the node selector for the
+                KubeVirt VirtualMachines to be scheduled onto
 
         Returns:
             str: Name of the hosted cluster
@@ -958,6 +961,9 @@ class HyperShiftBase:
 
         if disable_default_sources:
             create_hcp_cluster_cmd += " --olm-disable-default-sources"
+
+        if vm_node_selector:
+            create_hcp_cluster_cmd += f" --vm-node-selector {vm_node_selector}"
 
         logger.info("Creating HyperShift hosted cluster")
         try:
