@@ -2,6 +2,7 @@ import logging
 from time import sleep
 
 from ocs_ci.ocs.ui.base_ui import BaseUI
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,12 @@ class AttachStorage(BaseUI):
         sleep(wait_time)
         # Confirm the action
         self.do_click(self.confirm_action_btn)
+        self.toast_title = ""
+        self.toast_description = ""
+        if self.ocs_version_semantic >= version.VERSION_5_1:
+            self.toast_title, self.toast_description = self.get_toast_alert_text(
+                "Storage attached"
+            )
         logger.info(
             "Form submitted for attaching storage with default values. "
             "Waiting for the action to complete and return to Storage Cluster details page."

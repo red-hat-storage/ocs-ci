@@ -43,6 +43,7 @@ from ocs_ci.helpers.helpers import (
     create_ceph_block_pool,
     create_rbd_deviceclass_storageclass,
 )
+from ocs_ci.utility import version
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
@@ -389,4 +390,13 @@ class TestMultipleDeviceClassesUI(ManageTest):
         self.available_pvs_count = verify_available_pvs_for_deviceclass()
         attach_storage = PageNavigator().nav_to_attach_storage_page()
         self.new_device_class_name = attach_storage.send_form_with_default_values()
-        self.post_deviceclass_checks()
+        try:
+            if version.get_semantic_ocs_version_from_config() >= version.VERSION_5_1:
+                log.info("Verify toast alert for attach storage")
+                assert "Storage attached" in attach_storage.toast_title
+                assert (
+                    "A new storage device class set is being provisioned."
+                    in attach_storage.toast_description
+                )
+        finally:
+            self.post_deviceclass_checks()
