@@ -122,3 +122,34 @@ class PreMigrationFusionAccessUI(PageNavigator):
         )
         self.take_screenshot("storage_cluster_creation_submitted")
         logger.info("Fusion Access storage cluster creation submitted successfully")
+
+    def create_fusion_access_filesystem(self):
+        """
+        Placeholder: create a filesystem from LUNs on Storage → Fusion Access for SAN.
+
+        Successor of storage-cluster creation (PR #16719). Full UI automation will
+        land in a separate PR (section B).
+
+        Raises:
+            NotImplementedError: Always — implementation tracked for a follow-up PR.
+        """
+        raise NotImplementedError(
+            "Premigration Fusion Access filesystem creation is not implemented yet. "
+            "Tracked as section B (separate PR): create FS from worker LUNs on "
+            "Storage → Fusion Access for SAN."
+        )
+
+    def create_fusion_access_vm(self):
+        """
+        Placeholder: create a VM using the Fusion Access ``*-vm`` StorageClass.
+
+        Depends on filesystem creation above. Full automation will land in a
+        separate PR (section B).
+
+        Raises:
+            NotImplementedError: Always — implementation tracked for a follow-up PR.
+        """
+        raise NotImplementedError(
+            "Premigration Fusion Access VM creation is not implemented yet. "
+            "Tracked as section B (separate PR): create VM on the FS StorageClass."
+        )

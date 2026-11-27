@@ -911,6 +911,29 @@ class Deployment(object):
             "Fusion Access storage cluster creation via UI completed successfully"
         )
 
+        # Section B (separate PR): create FS from LUNs, then VM on *-vm SC.
+        self.do_deploy_fusion_access_filesystem_and_vm()
+
+    def do_deploy_fusion_access_filesystem_and_vm(self):
+        """
+        Placeholder for premigration FS + VM creation after the storage cluster.
+
+        Intended flow (Storage → Fusion Access for SAN):
+          1. Create a filesystem from LUNs attached to worker nodes.
+          2. Create a VM using the resulting ``*-vm`` StorageClass.
+
+        Gated the same way as storage-cluster creation. Implementation is deferred
+        to a separate PR (section B); this method only logs and returns for now.
+        """
+        if not config.DEPLOYMENT.get("fusion_access_deployment"):
+            return
+
+        logger.warning(
+            "do_deploy_fusion_access_filesystem_and_vm is a placeholder (section B). "
+            "Skipping filesystem and VM creation — will be implemented in a "
+            "separate PR via PreMigrationFusionAccessUI."
+        )
+
     def do_deploy_hosted_spoke_clusters(self):
         """
         Deploy Hosted cluster(s)
