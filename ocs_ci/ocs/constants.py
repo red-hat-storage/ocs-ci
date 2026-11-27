@@ -3070,6 +3070,8 @@ IBM_STORAGE_SCALE_MCO_URL = (
     "https://raw.githubusercontent.com/IBM/ibm-spectrum-scale-container-native/"
     "502fbcbe968651d2c94bd6b8419958c835383696/generated/scale/mco/mco.yaml"
 )
+IBM_STORAGE_SCALE_OPERATOR_PACKAGE = "ibm-spectrum-scale-operator"
+IBM_STORAGE_SCALE_OPERATOR_CHANNEL = "stable-v60.2"
 IBM_ENTITLEMENT_SECRET_NAME = "ibm-entitlement-key"
 IBM_QUAYIO_SECRET_NAME = "quayio-secret"
 REMOTE_CLUSTER = "RemoteCluster"
@@ -4167,6 +4169,19 @@ FDF_STANDALONE_CATALOG_SOURCE_NAME = "ibm-operators"
 FDF_STANDALONE_OPERATOR_SELECTOR = f"catalog={FDF_STANDALONE_CATALOG_SOURCE_NAME}"
 FDF_STANDALONE_CATSRC_YAML = os.path.join(
     FDF_TEMPLATE_DIR, "fdf_standalone_catsrc.yaml"
+)
+FDF_STANDALONE_IBM_PROVIDER = "IBM"
+FDF_STANDALONE_REBRANDED_CSV_PREFIXES = (
+    "odf-operator",
+    "ocs-operator",
+    "odf-csi-addons-operator",
+    "ocs-client-operator",
+    "recipe",
+)
+FDF_STANDALONE_EXPECTED_OLM_DEPS = (
+    "rook-ceph-operator",
+    "mcg-operator",
+    "odf-csi-addons-operator",
 )
 
 CREATE = "create"
