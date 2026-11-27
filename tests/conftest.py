@@ -8805,10 +8805,11 @@ def discovered_apps_dr_workload_cnv(request):
         shared_drpc_protection=False,
         vm_type=constants.VM_VOLUME_PVC,
         dr_policy_name=None,
+        multi_ns=False,
     ):
         """
         Args:
-            kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
+            pvc_vm (int): Number of Discovered Apps CNV workloads to create
             custom_sc (bool): False by default, will create and use custom Pool and Storage Class
                             when set to True for CNV workload
             dr_protect (bool): True by default where workload will be DR protected via CLI,
@@ -8817,6 +8818,7 @@ def discovered_apps_dr_workload_cnv(request):
                                         a workload using the existing DRPC in the same namespace
             vm_type (str): VM deployment type
             dr_policy_name (str): Name of the DRPolicy to use. If None, uses the default.
+            multi_ns (bool): True for Multi Namespace (one shared DRPC across namespaces)
         Raises:
             ResourceNotDeletedException: In case workload resources are not deleted
 
@@ -8826,6 +8828,16 @@ def discovered_apps_dr_workload_cnv(request):
         """
         total_pvc_count = 0
         workload_key = "dr_cnv_discovered_apps"
+        multi_ns_list = []
+
+        if multi_ns and pvc_vm <= 1:
+            raise UnsupportedWorkloadError(
+                "pvc_vm count should be more than 1 for multi_ns"
+            )
+        if multi_ns and shared_drpc_protection:
+            raise UnsupportedWorkloadError(
+                "multi_ns and shared_drpc_protection cannot be used together"
+            )
 
         if vm_type == constants.VM_VOLUME_DVT and shared_drpc_protection:
             workload_key = "dr_cnv_discovered_apps_dvt_shared"
@@ -8837,9 +8849,13 @@ def discovered_apps_dr_workload_cnv(request):
         if custom_sc:
             workload_key = "dr_cnv_discovered_apps_using_custom_pool_and_sc"
 
+        workload_details_list = ocsci_config.ENV_DATA[workload_key]
+
         for index in range(pvc_vm):
-            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload_details = workload_details_list[index]
             workload_namespace = create_unique_resource_name("wrkld-vm", "dist")[:20]
+            if multi_ns:
+                workload_namespace = f"{workload_namespace}-multi-ns"
             if shared_drpc_protection and instances:
                 workload_details["workload_namespace"] = instances[0].workload_namespace
                 workload_namespace = instances[0].workload_namespace
@@ -8867,21 +8883,52 @@ def discovered_apps_dr_workload_cnv(request):
                 vm_username=workload_details["vm_username"],
                 workload_name=workload_details["name"],
                 vm_name=workload_details["vm_name"],
+                discovered_apps_multi_ns=multi_ns,
             )
             if dr_policy_name:
                 wl_kwargs["dr_policy_name"] = dr_policy_name
             workload = CnvWorkloadDiscoveredApps(**wl_kwargs)
+
+            if multi_ns:
+                multi_ns_list.append(workload.workload_namespace)
 
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload(
                 dr_protect=dr_protect, shared_drpc_protection=shared_drpc_protection
             )
-            if dr_protect:
+            if dr_protect and not multi_ns:
                 dr_helpers.validate_application_odf_cli(
                     drpc_name=workload.discovered_apps_placement_name,
                     namespace=constants.DR_OPS_NAMESPACE,
                 )
+
+        if multi_ns:
+            random_hash = get_random_str(size=5)
+            drpc_name = f"cnv-mlt-ns-{random_hash}-" + "-".join(
+                map(str, range(1, pvc_vm + 1))
+            )
+            placement_name = drpc_name + "-plmnt-1"
+            for index in range(pvc_vm):
+                instances[index].discovered_apps_placement_name = drpc_name
+            instances[0].create_placement(placement_name=placement_name)
+            instances[0].create_drpc(
+                drpc_name=drpc_name,
+                placement_name=placement_name,
+                protected_namespaces=multi_ns_list,
+                pvc_selector_key=workload_details_list[0][
+                    "multi_ns_dr_workload_app_pvc_selector_key"
+                ],
+                pvc_selector_value=workload_details_list[0][
+                    "multi_ns_dr_workload_app_pvc_selector_value"
+                ],
+            )
+            for index in range(pvc_vm):
+                instances[index].verify_workload_deployment(vrg_name=drpc_name)
+            dr_helpers.validate_application_odf_cli(
+                drpc_name=drpc_name,
+                namespace=constants.DR_OPS_NAMESPACE,
+            )
 
         return instances
 
@@ -8890,9 +8937,15 @@ def discovered_apps_dr_workload_cnv(request):
             instances[0].delete_workload(skip_resource_deletion_verification=True)
             instances[1].delete_workload(shared_drpc_protection=True)
         else:
-            for instance in instances:
+            for index, instance in enumerate(instances):
                 try:
-                    instance.delete_workload()
+                    if instance.discovered_apps_multi_ns:
+                        is_last = index == len(instances) - 1
+                        instance.delete_workload(
+                            skip_resource_deletion_verification=not is_last
+                        )
+                    else:
+                        instance.delete_workload()
                 except ResourceNotDeleted:
                     raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
