@@ -556,7 +556,9 @@ def cephfs_custom_storage_class(request, storageclass_factory):
         callable: factory(replica, compression) that creates the custom SC
     """
 
-    def factory(replica=None, compression=None, erasure_coded=False):
+    def factory(
+        replica=None, compression=None, erasure_coded=False, new_cephfs_pool=False
+    ):
         """
         Create the custom CephFS storage class and data pool on all clusters.
 
@@ -565,6 +567,8 @@ def cephfs_custom_storage_class(request, storageclass_factory):
             compression (str): Compression mode for the pool
                 (e.g. None, 'aggressive', 'passive', 'force')
             erasure_coded (bool): True to create erasure coded pool
+            new_cephfs_pool (bool): True to create a new replicated CephFS
+                data pool (using replica and compression) for the storage class
         """
 
         cephfs_sc_name = constants.CUSTOM_CEPHFS_STORAGECLASS
@@ -585,6 +589,7 @@ def cephfs_custom_storage_class(request, storageclass_factory):
                         replica=replica,
                         compression=compression,
                         erasure_coded=erasure_coded,
+                        new_cephfs_pool=new_cephfs_pool,
                     )
                     if sc_obj is None or sc_obj.name != cephfs_sc_name:
                         log.error(
