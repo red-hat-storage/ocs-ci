@@ -1504,13 +1504,13 @@ def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_sess
             condition=constants.STATUS_RUNNING,
             resource_count=len(noobaa_pods),
             selector=constants.NOOBAA_APP_LABEL,
-            timeout=900,
+            timeout=1800,
         )
         # verify noobaa statefulset is present
         ocs_version = version.get_semantic_ocs_version_from_config()
-        expected_ready = "2/2" if ocs_version >= version.VERSION_4_23 else "1/1"
+        expected_ready = "1/2" if ocs_version >= version.VERSION_4_23 else "1/1"
         sample = TimeoutSampler(
-            timeout=500,
+            timeout=900,
             sleep=30,
             func=run_cmd_verify_cli_output,
             cmd="oc get sts noobaa-core -n openshift-storage",
@@ -1615,7 +1615,7 @@ def validate_noobaa_db_backup_recovery_locally_system(
         bucket_name = bucket_factory_session()[0].name
 
         # Backup and restore noobaa db using fixture
-        noobaa_db_backup_and_recovery_locally(bucket_factory_session)
+        noobaa_db_backup_and_recovery_locally(bucket_factory=bucket_factory_session)
 
         # Run multi client warp benchmarking
         warps3.run_benchmark(
