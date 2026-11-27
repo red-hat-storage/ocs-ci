@@ -93,7 +93,14 @@ def setup_local_storage(storageclass, add_new_disks=True):
         templating.dump_data_to_temp_yaml(lvd_data, lvd_data_yaml.name)
 
         logger.info("Creating LocalVolumeDiscovery CR")
-        run_cmd(f"oc create -f {lvd_data_yaml.name}")
+        run_cmd(f"oc apply -f {lvd_data_yaml.name}")
+
+        # In agnostic DR mode LSO is installed as a prerequisite for the
+        # mock-storage-operator stack.  PVs are created separately via
+        # pre-defined PV manifests, so skip automatic LocalVolumeSet creation.
+        if config.ENV_DATA.get("agnostic_dr", False):
+            logger.info("agnostic_dr is enabled: skipping LocalVolumeSet CR creation")
+            return
 
         # Create LocalVolumeSet
         if config.DEPLOYMENT.get("partitioned_disk_on_workers", False):
@@ -109,6 +116,10 @@ def setup_local_storage(storageclass, add_new_disks=True):
             create_local_volume_set(storage_node_names, storageclass)
 
     else:
+        if config.ENV_DATA.get("agnostic_dr", False):
+            logger.info("agnostic_dr is enabled: skipping LocalVolume CR creation")
+            return
+
         # Retrieve NVME device path ID for each worker node
         device_paths = get_device_paths(worker_names)
 
@@ -238,6 +249,101 @@ def create_local_volume_set(storage_node_names, storageclass, device_types=None)
     templating.dump_data_to_temp_yaml(lvs_data, lvs_data_yaml.name)
     logger.info("Creating LocalVolumeSet CR")
     run_cmd(f"oc create -f {lvs_data_yaml.name}")
+
+
+def create_local_pvs():
+    """
+    Create one local PersistentVolume per disk per worker node for agnostic DR.
+
+    Each PV is named ``local-pv-disk-<hostname>[-<index>]`` and is pinned to
+    its node via nodeAffinity.  The disk paths are discovered from
+    ``/dev/disk/by-id/`` on each worker using the platform-specific pattern
+    (wwn for vSphere non-VMDK, vmdk for vSphere VMDK, nvme for AWS, etc.).
+
+    The storage size is read from ``ENV_DATA.device_size`` (default 250Gi) and
+    the storageClassName is always ``localblock``.
+
+    Raises:
+        CommandFailed: if ``oc apply`` fails for any PV manifest.
+    """
+    sc_name = constants.DEFAULT_STORAGECLASS_LSO
+    sc_obj = ocp.OCP(kind=constants.STORAGECLASS)
+    existing_sc = sc_obj.get(dont_raise=True) or {}
+    sc_names = [s["metadata"]["name"] for s in existing_sc.get("items", [])]
+    if sc_name not in sc_names:
+        logger.info("Creating StorageClass '%s'", sc_name)
+        sc_data = {
+            "apiVersion": "storage.k8s.io/v1",
+            "kind": constants.STORAGECLASS,
+            "metadata": {"name": sc_name},
+            "provisioner": constants.LSO_PROVISIONER,
+            "reclaimPolicy": "Retain",
+            "volumeBindingMode": "WaitForFirstConsumer",
+        }
+        sc_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="localblock_sc_", delete=False
+        )
+        templating.dump_data_to_temp_yaml(sc_data, sc_yaml.name)
+        run_cmd(f"oc apply -f {sc_yaml.name}")
+
+    workers = get_nodes(node_type="worker")
+    worker_names = [w.name for w in workers]
+    storage_size = f"{config.ENV_DATA.get('device_size', 250)}Gi"
+
+    platform = config.ENV_DATA.get("platform", "").lower()
+    if platform == constants.VSPHERE_PLATFORM:
+        pattern = "wwn"
+    elif platform == constants.AWS_PLATFORM:
+        pattern = "nvme-Amazon_EC2_NVMe_Instance_Storage"
+    elif platform == constants.BAREMETAL_PLATFORM:
+        pattern = config.ENV_DATA.get("disk_pattern")
+    else:
+        pattern = config.ENV_DATA.get("disk_pattern", "wwn")
+
+    total_pvs = 0
+    for worker in worker_names:
+        logger.info("Discovering disk paths on node %s", worker)
+        out = _get_disk_by_id(worker)
+        matching = [
+            line
+            for line in out.splitlines()
+            if pattern in line and constants.ROOT_DISK_NAME not in line
+        ]
+        if not matching:
+            raise RuntimeError(
+                f"No disk matching pattern '{pattern}' found on node {worker}"
+            )
+
+        for idx, disk_line in enumerate(matching):
+            disk_id = [part for part in disk_line.split() if pattern in part][0]
+            disk_path = "/dev/disk/by-id/" + disk_id
+            pv_name = f"local-pv-disk-{worker}-{idx}"
+            logger.info(
+                "Node %s disk %d: path=%s pv=%s", worker, idx, disk_path, pv_name
+            )
+
+            pv_data = templating.load_yaml(constants.LOCAL_PV_DISK_YAML)
+            pv_data["metadata"]["name"] = pv_name
+            pv_data["metadata"]["labels"]["kubernetes.io/hostname"] = worker
+            pv_data["spec"]["capacity"]["storage"] = storage_size
+            pv_data["spec"]["local"]["path"] = disk_path
+            pv_data["spec"]["nodeAffinity"]["required"]["nodeSelectorTerms"][0][
+                "matchExpressions"
+            ][0]["values"] = [worker]
+
+            pv_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix=f"local_pv_disk_{worker}_{idx}_", delete=False
+            )
+            templating.dump_data_to_temp_yaml(pv_data, pv_yaml.name)
+            logger.info("Creating PV %s", pv_name)
+            run_cmd(f"oc apply -f {pv_yaml.name}")
+            total_pvs += 1
+
+    verify_pvs_created(
+        expected_pvs=total_pvs,
+        storageclass=constants.DEFAULT_STORAGECLASS_LSO,
+        exact_count_pvs=True,
+    )
 
 
 # TODO: remove this function
