@@ -26,7 +26,7 @@ hsbenchs3 = hsbench.HsBench()
 
 
 def construct_obc_creation_yaml_bulk_for_kube_job(
-    no_of_obc, sc_name, namespace, noobaa_storage_class_name
+    no_of_obc, sc_name, namespace, noobaa_storage_class_name=None
 ):
     """
     Constructing obc.yaml file to create bulk of obc's using kube_job
@@ -35,7 +35,7 @@ def construct_obc_creation_yaml_bulk_for_kube_job(
         no_of_obc(int): Bulk obc count
         sc_name (str): storage class name using for obc creation
         namespace(str): Namespace uses to create bulk of obc
-        noobaa_storage_class_name (str): Noobaa storage class name fetched once per session run via fixture
+        noobaa_storage_class_name (str, optional): Noobaa storage class name fetched once per session run via fixture
 
     Returns:
 
