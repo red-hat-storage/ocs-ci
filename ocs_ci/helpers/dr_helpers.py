@@ -561,7 +561,7 @@ def check_mirroring_status_ok(
                 logger.warning("Counting 'stopped' value due to the bug DFBUGS-1525")
                 return True
             # Fail fast if count exceeds expected range - indicates leftover resources
-            if current_value > max(expected_value):
+            if current_value is not None and current_value > max(expected_value):
                 raise UnexpectedBehaviour(
                     f"Replaying count ({current_value}) exceeds expected ({max(expected_value)}). "
                     f"Clean up leftover DRPCs and namespaces before retrying."
@@ -614,6 +614,14 @@ def wait_for_mirroring_status_ok(
         logger.info(
             f"Validating mirroring status on cluster {cluster.ENV_DATA['cluster_name']}"
         )
+        # Pre-check: Fail fast if replaying count exceeds expected (indicates leftover resources)
+        # This avoids waiting for full timeout when the issue is leftover DRPCs/namespaces
+        try:
+            check_mirroring_status_ok(replaying_images=replaying_images)
+        except UnexpectedBehaviour:
+            config.switch_ctx(restore_index)
+            raise
+
         sample = TimeoutSampler(
             timeout=timeout,
             sleep=5,
@@ -1461,7 +1469,7 @@ def get_backend_volumes_for_pvcs(namespace):
         logger.info(f"Fetching backend volume names for PVCs in namespace: {namespace}")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
         for pvc_obj in all_pvcs:
-            # Skip volsync related PVCs
+            # Skip VolSync-related PVCs (prefixed with "volsync" or "vs-")
             if pvc_obj.name.startswith("volsync") or pvc_obj.name.startswith("vs-"):
                 continue
 
