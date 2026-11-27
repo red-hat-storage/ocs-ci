@@ -11,6 +11,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_provider_and_client,
     skipif_gcp_platform,
     brown_squad,
+    zstream_4_18_1,
+    zstream_4_18_1_ocs_operator,
 )
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4b
 from ocs_ci.ocs import constants, node
@@ -31,6 +33,8 @@ logger = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_hci_provider_and_client
 @ignore_leftovers
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestWorkerNodesFailure(ManageTest):
     """
     Test all worker nodes simultaneous abrupt network failure for ~300 seconds

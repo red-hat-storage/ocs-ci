@@ -1,6 +1,6 @@
 import logging
 import pytest
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, zstream_4_18_1, zstream_4_18_1_ocs_operator
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4c,
@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 @skipif_ocs_version("<4.10")
 @ignore_leftover_label(constants.OSD_APP_LABEL)
 @pytest.mark.polarion_id("OCS-3731")
+@zstream_4_18_1
+@zstream_4_18_1_ocs_operator
 class TestDeleteOSDDeployment(ManageTest):
     """
     This test case deletes all the OSD deployments one after the other.
