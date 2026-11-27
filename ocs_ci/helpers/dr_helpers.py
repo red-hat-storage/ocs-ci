@@ -2770,12 +2770,59 @@ def add_label_to_appsub(workloads, label="test", value="test1"):
     config.switch_ctx(old_ctx)
 
 
-def disable_dr_from_app(secondary_cluster_name):
+def remove_cluster_from_placementdecision(placement_name, namespace, cluster_to_remove):
+    """
+    Remove a cluster from the status decisions of the PlacementDecision(s) that
+    belong to the given Placement.
+
+    Implements step 7 of the "Recovering to a replacement cluster with
+    Regional-DR" documentation: for each managed application, edit the
+    PlacementDecision so the replacement (failed) cluster is deleted from the
+    decisions list.
+
+    Args:
+        placement_name (str): Name of the Placement owning the PlacementDecision.
+        namespace (str): Namespace of the Placement/PlacementDecision.
+        cluster_to_remove (str): Name of the cluster (the replacement/failed
+            cluster) to drop from the PlacementDecision status decisions.
+
+    """
+    placementdecisions = json.loads(
+        exec_cmd(
+            f"oc get {constants.PLACEMENTDECISION} -n {namespace} "
+            f"-l {constants.PLACEMENT_LABEL}={placement_name} -o json"
+        ).stdout.decode()
+    ).get("items", [])
+    for placementdecision in placementdecisions:
+        pd_name = placementdecision["metadata"]["name"]
+        decisions = placementdecision.get("status", {}).get("decisions", [])
+        filtered_decisions = [
+            decision
+            for decision in decisions
+            if decision.get("clusterName") != cluster_to_remove
+        ]
+        if len(filtered_decisions) == len(decisions):
+            continue
+        logger.info(
+            f"Removing cluster {cluster_to_remove} from the decisions of "
+            f"placementdecision {pd_name} in namespace {namespace}"
+        )
+        status_patch = json.dumps({"status": {"decisions": filtered_decisions}})
+        exec_cmd(
+            f"oc patch {constants.PLACEMENTDECISION} {pd_name} -n {namespace} "
+            f"--subresource status --type merge -p '{status_patch}'"
+        )
+
+
+def disable_dr_from_app(secondary_cluster_name, replacement_cluster_name=None):
     """
     Function to disable DR from app
 
     Args:
         secondary_cluster_name(str): cluster where application is running
+        replacement_cluster_name(str): Name of the replacement (failed) cluster.
+            When provided, the cluster is removed from each managed application's
+            PlacementDecision status decisions (documentation step 7).
 
     """
     old_ctx = config.cur_index
@@ -2794,6 +2841,15 @@ def disable_dr_from_app(secondary_cluster_name):
             )
             cmd = f"oc patch placement {name} -n {namespace}  -p '{params}' --type=json"
             run_cmd(cmd)
+
+            # Step 7: ensure the replacement (failed) cluster is deleted from the
+            # PlacementDecision so only the surviving cluster remains.
+            if replacement_cluster_name:
+                remove_cluster_from_placementdecision(
+                    placement_name=name,
+                    namespace=namespace,
+                    cluster_to_remove=replacement_cluster_name,
+                )
 
     # Delete all drpc
     run_cmd("oc delete drpc --all -A")
@@ -2842,62 +2898,486 @@ def apply_drpolicy_to_workload(workload, drcluster_name):
         run_cmd(f"oc create -f {wl.drcp_data_yaml.name}")
 
 
-def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
+def disable_dr_from_discovered_apps(workload):
+    """
+    Disable DR protection for discovered apps by deleting their DRPC and
+    Placement resources from the hub.
+
+    Discovered apps use a Placement in the openshift-dr-ops namespace with the
+    experimental-scheduling-disable annotation, so the placement clusterSelector
+    patching performed by :func:`disable_dr_from_app` does not apply to them.
+
+    Args:
+        workload(List): List of discovered apps workload objects
+
+    """
+    old_ctx = config.cur_index
+    config.switch_acm_ctx()
+    for wl in workload:
+        exec_cmd(
+            cmd=(
+                f"oc delete drpc {wl.discovered_apps_placement_name} "
+                f"-n {constants.DR_OPS_NAMESPACE} --ignore-not-found"
+            )
+        )
+        exec_cmd(
+            cmd=(
+                f"oc delete placement {wl.discovered_apps_placement_name}-plmnt-1 "
+                f"-n {constants.DR_OPS_NAMESPACE} --ignore-not-found"
+            )
+        )
+    logger.info("DR configuration is successfully disabled on each discovered app")
+    config.switch_ctx(old_ctx)
+
+
+def apply_drpolicy_to_discovered_apps(workload, drcluster_name):
+    """
+    Re-protect discovered apps against the rebuilt DR policy, with the surviving
+    cluster set as the preferred (primary) cluster.
+
+    Args:
+        workload(List): List of discovered apps workload objects
+        drcluster_name(str): Name of the DRcluster the workloads currently run on
+                             (the surviving cluster after failover)
+
+    """
+    for wl in workload:
+        wl.preferred_primary_cluster = drcluster_name
+        config.switch_acm_ctx()
+        wl.create_placement()
+        wl.create_drpc()
+
+
+def verify_mirrorpeer_deleted(mirrorpeer_name, timeout=300, sleep=10):
+    """
+    Verify that the given MirrorPeer has been deleted from the hub cluster.
+
+    Args:
+        mirrorpeer_name (str): Name of the MirrorPeer.
+        timeout (int): Time in seconds to wait for the deletion to complete.
+        sleep (int): Polling interval in seconds.
+
+    Raises:
+        Exception: If the MirrorPeer still exists after the timeout.
+
+    """
+
+    def _is_deleted():
+        return (
+            mirrorpeer_name not in exec_cmd("oc get mirrorpeer -o name").stdout.decode()
+        )
+
+    sample = TimeoutSampler(timeout=timeout, sleep=sleep, func=_is_deleted)
+    if not sample.wait_for_func_status(result=True):
+        raise Exception(
+            f"MirrorPeer {mirrorpeer_name} was not deleted after {timeout}s"
+        )
+    logger.info(f"MirrorPeer {mirrorpeer_name} is deleted")
+
+
+def verify_drpolicy_deleted(drpolicy_name, timeout=300, sleep=10):
+    """
+    Verify that the given DRPolicy has been deleted from the hub cluster.
+
+    Args:
+        drpolicy_name (str): Name of the DRPolicy.
+        timeout (int): Time in seconds to wait for the deletion to complete.
+        sleep (int): Polling interval in seconds.
+
+    Raises:
+        Exception: If the DRPolicy still exists after the timeout.
+
+    """
+
+    def _is_deleted():
+        return drpolicy_name not in exec_cmd("oc get drpolicy -o name").stdout.decode()
+
+    sample = TimeoutSampler(timeout=timeout, sleep=sleep, func=_is_deleted)
+    if not sample.wait_for_func_status(result=True):
+        raise Exception(f"DRPolicy {drpolicy_name} was not deleted after {timeout}s")
+    logger.info(f"DRPolicy {drpolicy_name} is deleted")
+
+
+def get_storageclusterpeers(namespace):
+    """
+    Return the set of StorageClusterPeer resource names (``kind/name``) present in
+    the given namespace on the current cluster.
+
+    Args:
+        namespace (str): Namespace (storage namespace) to check.
+
+    Returns:
+        set: StorageClusterPeer resource names.
+
+    """
+    return set(
+        exec_cmd(f"oc get {constants.STORAGECLUSTERPEER} -n {namespace} -o name")
+        .stdout.decode()
+        .split()
+    )
+
+
+def verify_storageclusterpeers_removed(
+    namespace, previous_peers, expected_removed, timeout=300, sleep=10
+):
+    """
+    Verify that the expected number of StorageClusterPeers have been removed from
+    the surviving cluster after the corresponding MirrorPeer(s) were deleted from
+    the hub. This is multi-peer safe: only the StorageClusterPeers tied to the
+    removed MirrorPeer(s) are expected to disappear, while peers for unrelated
+    cluster pairs must remain.
+
+    Args:
+        namespace (str): Namespace (storage namespace) to check.
+        previous_peers (set): StorageClusterPeer names captured before MirrorPeer
+            deletion (see :func:`get_storageclusterpeers`).
+        expected_removed (int): Number of StorageClusterPeers expected to be
+            removed (i.e. the number of MirrorPeers deleted for this cluster pair).
+        timeout (int): Time in seconds to wait for the removal to complete.
+        sleep (int): Polling interval in seconds.
+
+    Raises:
+        Exception: If the expected removal is not observed within the timeout.
+
+    """
+    if expected_removed == 0:
+        logger.info("No StorageClusterPeer removal expected; skipping validation")
+        return
+
+    def _check():
+        current_peers = get_storageclusterpeers(namespace)
+        # No new peers should appear, and exactly the expected number must be gone.
+        if not current_peers.issubset(previous_peers):
+            return False
+        return len(previous_peers - current_peers) == expected_removed
+
+    sample = TimeoutSampler(timeout=timeout, sleep=sleep, func=_check)
+    if not sample.wait_for_func_status(result=True):
+        raise Exception(
+            f"Expected {expected_removed} StorageClusterPeer(s) to be removed from "
+            f"namespace {namespace} within {timeout}s, but it did not happen"
+        )
+    logger.info(
+        f"{expected_removed} StorageClusterPeer(s) removed from namespace {namespace}"
+    )
+
+
+def verify_mirroring_disabled(kind, resource_name, namespace, timeout=300, sleep=10):
+    """
+    Verify that mirroring is disabled on the given resource (CephBlockPool or
+    cephblockpoolradosnamespace).
+
+    Args:
+        kind (str): Resource kind (e.g. 'cephblockpool' or
+            'cephblockpoolradosnamespaces').
+        resource_name (str): Name of the resource.
+        namespace (str): Namespace of the resource.
+        timeout (int): Time in seconds to wait for mirroring to be disabled.
+        sleep (int): Polling interval in seconds.
+
+    Raises:
+        Exception: If mirroring is still enabled after the timeout.
+
+    """
+
+    def _is_disabled():
+        data = json.loads(
+            exec_cmd(
+                f"oc get {kind} {resource_name} -n {namespace} -o json"
+            ).stdout.decode()
+        )
+        mirroring = data.get("spec", {}).get("mirroring")
+        if not mirroring:
+            return True
+        return not mirroring.get("enabled", False)
+
+    sample = TimeoutSampler(timeout=timeout, sleep=sleep, func=_is_disabled)
+    if not sample.wait_for_func_status(result=True):
+        raise Exception(
+            f"Mirroring is still enabled on {kind} {resource_name} "
+            f"in namespace {namespace}"
+        )
+    logger.info(f"Mirroring is disabled on {kind} {resource_name}")
+
+
+def remove_dr_config_for_replacement_cluster(
+    primary_cluster_name, secondary_cluster_name
+):
+    """
+    Surgically remove the DR configuration for a replacement (failed) cluster as
+    described in steps 9-13 of the "Recovering to a replacement cluster with
+    Regional-DR" documentation. This is the ODF 4.19 (and above) procedure and,
+    unlike the legacy flow, it does not delete the openshift-operators project, so
+    the Multicluster Orchestrator does not need to be reinstalled afterwards.
+
+    Steps performed:
+        9.  Delete the DRPolicies from the hub cluster.
+        10. Delete the MirrorPeers from the hub cluster.
+        11. Patch the MirrorPeers to drop the finalizer contributed by the failed
+            (replacement) cluster so deletion can complete while it is unreachable.
+        12. Disable mirroring on the cephblockpoolradosnamespaces of the surviving
+            cluster.
+        13. Disable mirroring on the cephblockpools of the surviving cluster.
+
+    Args:
+        primary_cluster_name (str): Name of the failed (replacement) cluster.
+        secondary_cluster_name (str): Name of the surviving cluster.
+
+    """
+    restore_index = config.cur_index
+
+    # Only the DRPolicy and MirrorPeer that tie the surviving cluster to the failed
+    # (replacement) cluster are removed. Any resources for unrelated cluster pairs
+    # (multi-peer setups) are left intact.
+    cluster_pair = {primary_cluster_name, secondary_cluster_name}
+
+    # Steps 9-11 are performed from the hub cluster
+    config.switch_acm_ctx()
+
+    # Step 9: Delete the DRPolicies associated with the surviving and replacement
+    # cluster pair.
+    drpolicies = json.loads(exec_cmd("oc get drpolicy -o json").stdout.decode()).get(
+        "items", []
+    )
+    for drpolicy in drpolicies:
+        drclusters = set(drpolicy.get("spec", {}).get("drClusters", []))
+        if not cluster_pair.issubset(drclusters):
+            continue
+        drpolicy_name = drpolicy["metadata"]["name"]
+        logger.info(f"Deleting drpolicy {drpolicy_name}")
+        exec_cmd(f"oc delete drpolicy {drpolicy_name} --wait=false")
+        verify_drpolicy_deleted(drpolicy_name)
+
+    # Capture the StorageClusterPeers present on the surviving cluster before the
+    # MirrorPeer(s) are removed, so the correct ones can be validated as gone even
+    # when other cluster pairs keep their own StorageClusterPeers.
+    config.switch_to_cluster_by_name(secondary_cluster_name)
+    storage_namespace = config.ENV_DATA["cluster_namespace"]
+    storageclusterpeers_before = get_storageclusterpeers(storage_namespace)
+
+    # Step 10 & 11: Delete the MirrorPeer(s) for the surviving and replacement
+    # cluster pair and drop only the finalizer contributed by the failed cluster so
+    # the deletion can complete even though that cluster is unreachable and cannot
+    # remove its own finalizer. The surviving cluster removes its own finalizer
+    # normally.
+    config.switch_acm_ctx()
+    mirrorpeers = json.loads(exec_cmd("oc get mirrorpeer -o json").stdout.decode()).get(
+        "items", []
+    )
+    mirrorpeers_removed = 0
+    for mirrorpeer in mirrorpeers:
+        cluster_names = {
+            item.get("clusterName")
+            for item in mirrorpeer.get("spec", {}).get("items", [])
+        }
+        if not cluster_pair.issubset(cluster_names):
+            continue
+        mirrorpeer_name = mirrorpeer["metadata"]["name"]
+        logger.info(f"Deleting mirrorpeer {mirrorpeer_name}")
+        exec_cmd(f"oc delete mirrorpeer {mirrorpeer_name} --wait=false")
+
+        mirrorpeer_data = json.loads(
+            exec_cmd(f"oc get mirrorpeer {mirrorpeer_name} -o json").stdout.decode()
+        )
+        finalizers = mirrorpeer_data.get("metadata", {}).get("finalizers", [])
+        # Keep every finalizer except the ones belonging to the failed cluster
+        # (identified by the replacement cluster name).
+        remaining_finalizers = [
+            finalizer
+            for finalizer in finalizers
+            if primary_cluster_name not in finalizer
+        ]
+        if remaining_finalizers != finalizers:
+            logger.info(
+                f"Removing finalizer(s) of {primary_cluster_name} from mirrorpeer "
+                f"{mirrorpeer_name} so deletion can complete while it is unreachable"
+            )
+            finalizers_patch = json.dumps(
+                {"metadata": {"finalizers": remaining_finalizers}}
+            )
+            exec_cmd(
+                f"oc patch mirrorpeer {mirrorpeer_name} --type=merge "
+                f"-p '{finalizers_patch}'"
+            )
+
+        # Validate the MirrorPeer deletion actually completes, otherwise the
+        # recreation in step 17 would be skipped because a stale MirrorPeer with
+        # the same name still exists.
+        verify_mirrorpeer_deleted(mirrorpeer_name)
+        mirrorpeers_removed += 1
+
+    # Steps 12 & 13 are performed on the surviving cluster
+    config.switch_to_cluster_by_name(secondary_cluster_name)
+
+    # Deleting the MirrorPeer on the hub removes the corresponding StorageClusterPeer
+    # from the surviving cluster. Validate the right one(s) are gone (multi-peer
+    # safe) before disabling mirroring.
+    verify_storageclusterpeers_removed(
+        namespace=storage_namespace,
+        previous_peers=storageclusterpeers_before,
+        expected_removed=mirrorpeers_removed,
+    )
+
+    # Step 12: Disable mirroring on the cephblockpoolradosnamespaces
+    rados_namespaces = (
+        exec_cmd(
+            f"oc get {constants.CEPHBLOCKPOOLRADOSNS} -n {storage_namespace} -o name"
+        )
+        .stdout.decode()
+        .split()
+    )
+    for rados_namespace in rados_namespaces:
+        rados_namespace_name = rados_namespace.split("/")[-1]
+        logger.info(f"Disabling mirroring on {rados_namespace}")
+        exec_cmd(
+            f"oc patch {rados_namespace} --type merge "
+            f"""-p '{{"spec":{{"mirroring": null}}}}' -n {storage_namespace}"""
+        )
+        verify_mirroring_disabled(
+            constants.CEPHBLOCKPOOLRADOSNS, rados_namespace_name, storage_namespace
+        )
+
+    # Step 13: Disable mirroring on the cephblockpools. Only pools that currently
+    # have mirroring enabled are patched; the JSON 'replace' op would otherwise
+    # fail on pools without a /spec/mirroring field.
+    cephblockpools = (
+        exec_cmd(f"oc get cephblockpool -n {storage_namespace} -o name")
+        .stdout.decode()
+        .split()
+    )
+    for cephblockpool in cephblockpools:
+        cephblockpool_name = cephblockpool.split("/")[-1]
+        cephblockpool_data = json.loads(
+            exec_cmd(
+                f"oc get {cephblockpool} -n {storage_namespace} -o json"
+            ).stdout.decode()
+        )
+        mirroring = cephblockpool_data.get("spec", {}).get("mirroring") or {}
+        if not mirroring.get("enabled", False):
+            continue
+        logger.info(f"Disabling mirroring on {cephblockpool}")
+        exec_cmd(
+            f"oc patch {cephblockpool} --type json "
+            f"""-p '[{{"op": "replace", "path": "/spec/mirroring", "value": {{}}}}]' """
+            f"-n {storage_namespace}"
+        )
+        verify_mirroring_disabled(
+            "cephblockpool", cephblockpool_name, storage_namespace
+        )
+
+    config.switch_ctx(restore_index)
+
+
+def replace_cluster(
+    workload,
+    primary_cluster_name,
+    secondary_cluster_name,
+    discovered_apps=False,
+    discovered_apps_workload=None,
+):
     """
     Function to do core replace cluster task
 
+    Both non-discovered (Subscription/ApplicationSet) and discovered apps can be
+    handled in a single replacement pass by passing the non-discovered workloads
+    via ``workload`` and the discovered apps via ``discovered_apps_workload``.
+
     Args:
-        workload(List): List of workload objects
+        workload(List): List of workload objects. Treated as discovered apps when
+                        ``discovered_apps`` is True, otherwise as non-discovered
+                        (Subscription/ApplicationSet) apps.
         primary_cluster_name (str): Name of the primary DRcluster
         secondary_cluster_name(str): Name of the secondary DRcluster
+        discovered_apps (bool): False by default. Set to True when ``workload``
+                                itself is a list of discovered apps so DR is
+                                disabled and re-applied using the discovered apps
+                                flow.
+        discovered_apps_workload (List): Optional additional list of discovered
+                                apps workload objects to handle alongside the
+                                non-discovered apps in ``workload``.
 
     """
-
-    # Delete dr cluster
-    config.switch_acm_ctx()
-    run_cmd(cmd=f"oc delete drcluster {primary_cluster_name} --wait=false")
-
-    # Disable DR on hub for each app
-    disable_dr_from_app(secondary_cluster_name)
-    logger.info("DR configuration is successfully disabled on each app")
-
-    # Remove DR configuration from hub and surviving cluster
-    logger.info("Running Remove DR configuration script..")
-    run_cmd(cmd=f"chmod +x {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
-    run_cmd(cmd=f"sh {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
-
-    sample = TimeoutSampler(
-        timeout=300,
-        sleep=5,
-        func=run_cmd_verify_cli_output,
-        cmd="oc get namespace openshift-operators",
-        expected_output_lst={"openshift-operators", "Active"},
-    )
-    if not sample.wait_for_func_status(result=True):
-        raise Exception("Namespace openshift-operators is not created")
-
-    # add label to openshift-opeartors namespace
-    ocp_obj = ocp.OCP(kind="Namespace")
-    label = "openshift.io/cluster-monitoring='true'"
-    ocp_obj.add_label(resource_name=constants.OPENSHIFT_OPERATORS, label=label)
-
-    # Detach old primary
-    run_cmd(cmd=f"oc delete managedcluster {primary_cluster_name}")
-
-    # Verify old primary cluster is dettached
-    expected_output = primary_cluster_name
-    out = run_cmd(cmd="oc get managedcluster")
-    if expected_output in out:
-        raise Exception("Old primary cluster is not dettached.")
-    else:
-        logger.info("Old primary cluster is dettached")
-
-    # Import Recovery cluster
+    from ocs_ci.deployment.deployment import MultiClusterDROperatorsDeploy
     from ocs_ci.ocs.acm.acm import (
         import_recovery_clusters_with_acm,
         validate_cluster_import,
     )
 
+    odf_version = version.get_semantic_ocs_version_from_config()
+
+    # Separate the workloads into discovered and non-discovered so both types can
+    # be handled in a single replacement pass.
+    if discovered_apps:
+        discovered_workloads = list(workload)
+        regular_workloads = []
+    else:
+        regular_workloads = list(workload)
+        discovered_workloads = []
+    if discovered_apps_workload:
+        discovered_workloads.extend(discovered_apps_workload)
+
+    dr_conf = dict()
+    dep_mco = MultiClusterDROperatorsDeploy(dr_conf)
+
+    # Step 4: Delete the DRCluster for the replacement (failed) cluster
+    config.switch_acm_ctx()
+    exec_cmd(f"oc delete drcluster {primary_cluster_name} --wait=false")
+
+    # Steps 5-8: Remove/disable DR for each protected app on the surviving cluster.
+    # Discovered apps are disabled first so their Placements in the openshift-dr-ops
+    # namespace are removed before the cluster-wide placement patching performed for
+    # non-discovered apps.
+    if discovered_workloads:
+        disable_dr_from_discovered_apps(discovered_workloads)
+    if regular_workloads:
+        disable_dr_from_app(
+            secondary_cluster_name, replacement_cluster_name=primary_cluster_name
+        )
+        logger.info("DR configuration is successfully disabled on each app")
+
+    if odf_version >= version.VERSION_4_19:
+        # Steps 9-13: Surgically remove the DRPolicy and MirrorPeer and disable
+        # mirroring on the surviving cluster, per the documented procedure.
+        remove_dr_config_for_replacement_cluster(
+            primary_cluster_name, secondary_cluster_name
+        )
+    else:
+        # Legacy (ODF < 4.19) behaviour: brute-force removal of the entire DR
+        # configuration (including the openshift-operators project) via the removal
+        # script. This does not match the documented 4.19+ steps and requires the
+        # Multicluster Orchestrator to be reinstalled later.
+        logger.info("Running Remove DR configuration script..")
+        exec_cmd(f"chmod +x {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
+        exec_cmd(f"sh {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
+
+        sample = TimeoutSampler(
+            timeout=300,
+            sleep=5,
+            func=run_cmd_verify_cli_output,
+            cmd="oc get namespace openshift-operators",
+            expected_output_lst={"openshift-operators", "Active"},
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise Exception("Namespace openshift-operators is not created")
+
+        # add label to openshift-opeartors namespace
+        ocp_obj = ocp.OCP(kind="Namespace")
+        label = "openshift.io/cluster-monitoring='true'"
+        ocp_obj.add_label(resource_name=constants.OPENSHIFT_OPERATORS, label=label)
+
+    # Step 14: Detach the replacement (failed) cluster from the hub
+    config.switch_acm_ctx()
+    exec_cmd(f"oc delete managedcluster {primary_cluster_name}")
+
+    # Verify old primary cluster is dettached
+    expected_output = primary_cluster_name
+    out = exec_cmd("oc get managedcluster").stdout.decode()
+    if expected_output in out:
+        raise Exception("Old primary cluster is not dettached.")
+    else:
+        logger.info("Old primary cluster is dettached")
+
+    # Step 15 & 16: Import the recovery (replacement) cluster and install ODF on it
     cluster_name_recoevry = import_recovery_clusters_with_acm()
 
     # Verify recovery cluster is imported
@@ -2908,30 +3388,30 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
     config.switch_acm_ctx()
 
-    # Install MCO on active hub again
-    from ocs_ci.deployment.deployment import MultiClusterDROperatorsDeploy
+    if odf_version < version.VERSION_4_19:
+        # Legacy only: the removal script deleted the openshift-operators project,
+        # so the Multicluster Orchestrator must be reinstalled on the hub.
+        dep_mco.deploy()
+        # Enable MCO console plugin
+        enable_mco_console_plugin()
+        config.switch_acm_ctx()
 
-    dr_conf = dict()
-    dep_mco = MultiClusterDROperatorsDeploy(dr_conf)
-    dep_mco.deploy()
-    # Enable MCO console plugin
-    enable_mco_console_plugin()
-    config.switch_acm_ctx()
-
-    # Configure mirror peer
+    # Step 17: Create MirrorPeer and DRPolicy between the two clusters, as in a
+    # fresh deployment, and proceed only once the DRPolicy is Validated.
     dep_mco.configure_mirror_peer()
-
-    # Create DR policy
     dep_mco.deploy_dr_policy()
-
-    # Validate drpolicy
     verify_drpolicy_cli(switch_ctx=get_active_acm_index())
 
-    # Apply dr policy on all app on secondary cluster
-    apply_drpolicy_to_workload(workload, secondary_cluster_name)
+    # Step 18: Apply the DRPolicy to the apps on the surviving cluster
+    if regular_workloads:
+        apply_drpolicy_to_workload(regular_workloads, secondary_cluster_name)
+    if discovered_workloads:
+        apply_drpolicy_to_discovered_apps(discovered_workloads, secondary_cluster_name)
 
-    # Configure DRClusters for fencing automation
-    configure_drcluster_for_fencing()
+    # Configure DRClusters for fencing automation. Fencing is only used by
+    # Metro-DR; Regional-DR does not fence clusters, so skip it in RDR mode.
+    if config.MULTICLUSTER.get("multicluster_mode") != constants.RDR_MODE:
+        configure_drcluster_for_fencing()
 
 
 def do_discovered_apps_cleanup(
