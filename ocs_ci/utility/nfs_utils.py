@@ -495,6 +495,9 @@ def distribute_nfs_storage_class_to_all_consumers(nfs_sc):
     storage_class_names.append(nfs_sc)
     log.info(f"storage classes: {storage_class_names}")
     for consumer in consumers:
+        storage_class_names = consumer.get_storage_classes()
+        storage_class_names.append(nfs_sc)
+        log.info(f"storage classes: {storage_class_names}")
         log.info(f"Distributing storage classes to consumer {consumer.name}")
         consumer.set_storage_classes(storage_class_names)
 
