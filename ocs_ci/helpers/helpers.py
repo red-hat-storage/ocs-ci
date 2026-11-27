@@ -8061,6 +8061,8 @@ def setup_scale_cluster_infrastructure_for_cnsa_rm(
         namespace (str): Target namespace
         tracked_resources (list): Optional list to record created resources for cleanup
     """
+    from ocs_ci.ocs.resources.csv import verify_scale_operator_subscription_and_csv
+
     logger.info("--- Setup: IBM Storage Scale Infrastructure ---")
 
     # Validate required AUTH parameters early before mutating cluster state
@@ -8074,7 +8076,10 @@ def setup_scale_cluster_infrastructure_for_cnsa_rm(
 
     cluster_name = constants.IBM_STORAGE_SCALE_CLUSTER_NAME
 
-    # 1. Apply MCO (Operator) using pinned commit URL
+    # 1. Verify Scale operator Subscription & CSV are Succeeded
+    verify_scale_operator_subscription_and_csv(namespace=namespace)
+
+    # 2. Apply MCO (Operator) using pinned commit URL
     _apply_mco()
 
     # 2. Check and Create Entitlement Secret

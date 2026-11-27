@@ -212,6 +212,22 @@ class FDFUpgrade(BaseUpgrade):
                     return csv_name
         raise CSVNotFound(f"No preupgrade CSV found for {resource_name}")
 
+    def verify_required_csvs(self):
+        """
+        Verify all required CSVs post upgrade, including Scale operator in FDF.
+        """
+        super().verify_required_csvs()
+        from ocs_ci.ocs.resources.csv import (
+            verify_scale_operator_subscription_and_csv,
+        )
+
+        logger.info(
+            f"Verifying Scale operator Subscription and CSV in '{constants.IBM_STORAGE_SCALE_NAMESPACE}'"
+        )
+        verify_scale_operator_subscription_and_csv(
+            namespace=constants.IBM_STORAGE_SCALE_NAMESPACE
+        )
+
     def run_upgrade(self):
         """
         Execute the complete FDF upgrade workflow.
