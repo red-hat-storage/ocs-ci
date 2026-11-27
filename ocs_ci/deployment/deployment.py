@@ -2472,7 +2472,7 @@ class Deployment(object):
 
         """
         cephcluster = CephClusterExternal()
-        cephcluster.cluster_health_check(timeout=300)
+        cephcluster.cluster_health_check(timeout=600)
 
     def odf_deployments_check(self):
         """
@@ -2674,13 +2674,11 @@ class Deployment(object):
                     (CephHealthException, CommandFailed),
                     tries=5,
                     delay=20,
-                )(
-                    check_cephcluster_status(
-                        desired_phase="Connected",
-                        desired_health="HEALTH_OK",
-                        name=constants.EXTERNAL_CEPHCLUSTER_NAME,
-                        namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE,
-                    )
+                )(check_cephcluster_status)(
+                    desired_phase="Connected",
+                    desired_health="HEALTH_OK",
+                    name=constants.EXTERNAL_CEPHCLUSTER_NAME,
+                    namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE,
                 )
         self.odf_deployments_check()
 
