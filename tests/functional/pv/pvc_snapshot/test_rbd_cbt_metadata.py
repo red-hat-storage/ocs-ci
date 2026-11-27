@@ -1076,6 +1076,309 @@ class TestRbdCBTMetadata(CBTMetadataTestBase):
 
 
 @green_squad
+@consumer_env_check
+@skipif_ocs_version("<4.23")
+class TestRbdCBTMetadataListerOptions(CBTMetadataTestBase):
+    """Test CBT lister range selection and pagination options."""
+
+    @staticmethod
+    def _verify_lister_coverage_from_offset(
+        full_coverage, resumed_entries, starting_offset
+    ):
+        """
+        Verify offset filtering and completeness of an allocated or delta listing.
+
+        Steps:
+        1. Reject original entries ending at or before starting_offset, before
+           merging can hide them. Entries overlapping the offset are allowed.
+        2. Merge adjacent or overlapping returned ranges into byte coverage.
+        3. Clip both the returned and full-listing coverage to starting_offset.
+        4. Assert equality to detect missing or extra coverage from that offset.
+
+        Args:
+            full_coverage (list): Merged (start, end) byte ranges from the full
+                listing without an offset; end positions are exclusive.
+            resumed_entries (list): Original lister entries returned for the
+                requested offset, with ByteOffset and SizeBytes keys.
+            starting_offset (int): Requested starting byte offset.
+        """
+        # CSI v1.12.0 allows ranges overlapping starting_offset, but each
+        # returned range must end strictly after it. Check before merging so
+        # an invalid earlier range cannot be hidden by an adjacent valid one.
+        invalid_entries = [
+            entry
+            for entry in resumed_entries
+            if entry["ByteOffset"] + entry["SizeBytes"] <= starting_offset
+        ]
+        assert not invalid_entries, (
+            f"Returned ranges ending at or before starting_offset "
+            f"{starting_offset}: {invalid_entries}"
+        )
+
+        resumed_coverage = get_merged_lister_entries_byte_ranges(resumed_entries)
+        resumed_from_offset = [
+            (max(start, starting_offset), end)
+            for start, end in resumed_coverage
+            if end > starting_offset
+        ]
+        expected_coverage = [
+            (max(start, starting_offset), end)
+            for start, end in full_coverage
+            if end > starting_offset
+        ]
+        assert resumed_from_offset == expected_coverage, (
+            f"Lister returned coverage {resumed_coverage} from starting offset "
+            f"{starting_offset}; expected {expected_coverage} at and above the offset"
+        )
+
+    @tier2
+    @pytest.mark.parametrize(
+        argnames=["volume_mode"],
+        argvalues=[
+            pytest.param(
+                constants.VOLUME_MODE_BLOCK,
+                marks=pytest.mark.polarion_id("OCS-8381"),
+            ),
+        ],
+    )
+    def test_cbt_delta_starting_offset(self, volume_mode):
+        """
+        Verify that a starting offset resumes delta enumeration.
+
+        Two writes change data at 100 and 120 MiB. Listing from 106 MiB must
+        cover the same bytes as the full listing at and above that offset.
+        A second request at the end of the first full-listing range must
+        exclude that range while preserving later coverage. Returned ranges
+        may start earlier than the requested offset, but must end after it.
+
+        Steps:
+        1. Create a Block PVC, attach a writer pod, and write 10 MiB from
+           offset 0.
+        2. Take snap-1 and wait for it to become ready.
+        3. Write 10 MiB at each of offsets 100 and 120 MiB and take snap-2.
+        4. List the complete delta from snap-1 to snap-2 with no starting
+           offset.
+        5. List the same delta with a starting offset of 106 MiB.
+        6. Reject ranges ending at or before the offset, and compare the
+           full and resumed coverage at and above it.
+        7. Repeat from the end of the first full-listing range, ensuring
+           that the earlier range is excluded and later coverage remains.
+        """
+        starting_offset = 106 * 1024 * 1024
+
+        log.test_step("Create a Block PVC and write initial data")
+        app_pvc = self._create_app_pvc(volume_mode)
+        writer_pod = self._create_writer_pod(app_pvc, volume_mode)
+        write_data_to_pvc(writer_pod, volume_mode, size_mb=10)
+
+        log.test_step("Take the base snapshot")
+        snap_1 = self._take_snapshot(app_pvc, "cbt-offset-delta-1")
+
+        log.test_step(
+            "Write changed data at 100 and 120 MiB and take a second snapshot"
+        )
+        for offset_mb in (100, 120):
+            write_data_to_pvc(writer_pod, volume_mode, size_mb=10, offset_mb=offset_mb)
+        snap_2 = self._take_snapshot(app_pvc, "cbt-offset-delta-2")
+
+        log.test_step("List the complete delta")
+        full_entries = self.cbt_runner.run_lister_delta(
+            target_snap=snap_2.name,
+            base_snap_name=snap_1.name,
+        )
+        full_coverage = get_merged_lister_entries_byte_ranges(full_entries)
+        assert full_coverage, "Delta Lister returned no changed block ranges"
+        # Convert the two 10 MiB writes to byte ranges with exclusive ends.
+        # The full delta must cover every written byte before we use it as
+        # the reference for offset checks. Extra block-aligned coverage is OK.
+        mib = 1024 * 1024
+        written_ranges = [(100 * mib, 110 * mib), (120 * mib, 130 * mib)]
+        uncovered = get_uncovered_byte_ranges(written_ranges, full_coverage)
+        assert not uncovered, f"Full delta missed written byte ranges: {uncovered}"
+
+        log.test_step("Resume delta enumeration from the requested byte offset")
+        resumed_entries = self.cbt_runner.run_lister_delta(
+            target_snap=snap_2.name,
+            base_snap_name=snap_1.name,
+            starting_offset=starting_offset,
+        )
+        self._verify_lister_coverage_from_offset(
+            full_coverage, resumed_entries, starting_offset
+        )
+
+        log.test_step("Resume delta enumeration after the first changed range")
+        assert len(full_coverage) > 1, (
+            "Expected separate changed ranges to verify offset filtering; "
+            f"got {full_coverage}"
+        )
+        # Start at the exclusive end of the first merged changed range.
+        # The response must omit that range and preserve later coverage,
+        # so returning the full listing would fail the offset check.
+        boundary_offset = full_coverage[0][1]
+        boundary_entries = self.cbt_runner.run_lister_delta(
+            target_snap=snap_2.name,
+            base_snap_name=snap_1.name,
+            starting_offset=boundary_offset,
+        )
+        self._verify_lister_coverage_from_offset(
+            full_coverage, boundary_entries, boundary_offset
+        )
+
+    @tier2
+    @pytest.mark.parametrize(
+        argnames=["volume_mode"],
+        argvalues=[
+            pytest.param(
+                constants.VOLUME_MODE_BLOCK,
+                marks=pytest.mark.polarion_id("OCS-8382"),
+            ),
+        ],
+    )
+    def test_cbt_allocated_starting_offset(self, volume_mode):
+        """
+        Verify allocated range listings with starting offsets.
+
+        The test writes data below and above the midpoint of a 1 GiB volume.
+        Offset zero must match the default result, while the midpoint response
+        contains the expected allocated bytes at and above the requested offset.
+        Returned ranges may overlap the offset but must end after it.
+
+        Steps:
+        1. Create a Block PVC and write data at offsets 0 MiB and 768 MiB.
+        2. Take a VolumeSnapshot.
+        3. List allocated ranges without a starting offset and verify that
+           they cover both 10 MiB writes completely.
+        4. List allocated ranges with a starting offset of zero and verify it
+           matches the default result.
+        5. List allocated ranges with a starting offset of 512 MiB.
+        6. Verify that the midpoint response covers the expected allocated
+           bytes at and above the requested offset and excludes ranges
+           ending at or before it.
+        """
+        midpoint = 512 * 1024 * 1024
+
+        log.test_step("Create a Block PVC and write data on both volume halves")
+        app_pvc = self._create_app_pvc(volume_mode)
+        writer_pod = self._create_writer_pod(app_pvc, volume_mode)
+        write_data_to_pvc(writer_pod, volume_mode, size_mb=10, offset_mb=0)
+        write_data_to_pvc(writer_pod, volume_mode, size_mb=10, offset_mb=768)
+
+        log.test_step("Take a snapshot")
+        snap_obj = self._take_snapshot(app_pvc, "cbt-offset-allocated")
+
+        log.test_step("List allocated ranges with the default offset")
+        full_entries = self.cbt_runner.run_lister_allocated(snap_obj.name)
+        full_coverage = get_merged_lister_entries_byte_ranges(full_entries)
+        assert full_coverage, "Allocated Lister returned no block ranges"
+        # Require an earlier range that an unfiltered midpoint response
+        # would incorrectly include. A range that only starts below the
+        # midpoint could overlap it and therefore be valid in the response.
+        # Sorted, merged ranges have increasing ends, so check the first one.
+        assert (
+            full_coverage[0][1] <= midpoint
+        ), f"Expected a range ending at or before {midpoint}; got {full_coverage}"
+        # Verify both 10 MiB writes are fully covered before using the full
+        # listing as the reference for offset checks. Extra coverage is OK.
+        mib = 1024 * 1024
+        written_ranges = [(0, 10 * mib), (768 * mib, 778 * mib)]
+        uncovered = get_uncovered_byte_ranges(written_ranges, full_coverage)
+        assert (
+            not uncovered
+        ), f"Full allocated listing missed written byte ranges: {uncovered}"
+
+        log.test_step("List allocated ranges explicitly from offset zero")
+        zero_entries = self.cbt_runner.run_lister_allocated(
+            snap_obj.name,
+            starting_offset=0,
+        )
+        zero_coverage = get_merged_lister_entries_byte_ranges(zero_entries)
+        assert zero_coverage == full_coverage, (
+            f"Offset zero returned coverage {zero_coverage}; expected "
+            f"{full_coverage}"
+        )
+
+        log.test_step("List allocated ranges from the volume midpoint")
+        upper_entries = self.cbt_runner.run_lister_allocated(
+            snap_obj.name,
+            starting_offset=midpoint,
+        )
+        self._verify_lister_coverage_from_offset(full_coverage, upper_entries, midpoint)
+
+    @tier2
+    @pytest.mark.parametrize(
+        argnames=["volume_mode"],
+        argvalues=[
+            pytest.param(
+                constants.VOLUME_MODE_BLOCK,
+                marks=pytest.mark.polarion_id("OCS-8383"),
+            ),
+        ],
+    )
+    def test_cbt_delta_max_results(self, volume_mode):
+        """
+        Verify that max-results limits delta ranges per stream record.
+
+        The same coverage must be returned with and without a limit.
+        With ``max-results=1``, each record contains at most one block range.
+
+        Steps:
+        1. Create a Block PVC, write initial data, and take snap-1.
+        2. Write four 4 MiB blocks at distinct offsets and take snap-2.
+        3. List the complete delta without a result limit.
+        4. List the same delta with max-results set to one.
+        5. Verify that both calls return the same ranges, but the limited
+           response contains one block range per stream record.
+        """
+        changed_offsets_mb = (0, 100, 200, 300)
+
+        log.test_step("Create a Block PVC and write initial data")
+        app_pvc = self._create_app_pvc(volume_mode)
+        writer_pod = self._create_writer_pod(app_pvc, volume_mode)
+        write_data_to_pvc(writer_pod, volume_mode, size_mb=10)
+
+        log.test_step("Take the base snapshot")
+        snap_1 = self._take_snapshot(app_pvc, "cbt-max-results-1")
+
+        log.test_step("Write changed blocks at distinct offsets and take a snapshot")
+        for offset_mb in changed_offsets_mb:
+            write_data_to_pvc(
+                writer_pod,
+                volume_mode,
+                size_mb=4,
+                offset_mb=offset_mb,
+            )
+        snap_2 = self._take_snapshot(app_pvc, "cbt-max-results-2")
+
+        log.test_step("List the complete delta with the default record limit")
+        full_entries = self.cbt_runner.run_lister_delta(
+            target_snap=snap_2.name,
+            base_snap_name=snap_1.name,
+        )
+        full_coverage = get_merged_lister_entries_byte_ranges(full_entries)
+        assert len(full_entries) >= len(changed_offsets_mb), (
+            f"Expected at least {len(changed_offsets_mb)} changed blocks; "
+            f"got {full_entries}"
+        )
+        log.test_step("List the same delta with one result per stream record")
+        limited_entries = self.cbt_runner.run_lister_delta(
+            target_snap=snap_2.name,
+            base_snap_name=snap_1.name,
+            max_results=1,
+        )
+        limited_coverage = get_merged_lister_entries_byte_ranges(limited_entries)
+
+        assert limited_coverage == full_coverage, (
+            f"max-results=1 returned coverage {limited_coverage}; expected "
+            f"{full_coverage}"
+        )
+        records = {entry["Record"] for entry in limited_entries}
+        assert len(records) == len(limited_entries), (
+            "max-results=1 should return one block range per record: "
+            f"{limited_entries}"
+        )
+
+
+@green_squad
 @tier3
 @consumer_env_check
 @skipif_ocs_version("<4.23")
