@@ -5479,10 +5479,11 @@ class MultiClusterDROperatorsDeploy(object):
 
             The credentials are looked up in the following order and the first
             pair accepted by AWS is used:
-            1. ocs-ci-data auth.yaml
-            2. local auth.yaml
-            3. default boto3 credentials chain (~/.aws/credentials or
-               AWS_* environment variables)
+
+            * ocs-ci-data auth.yaml
+            * local auth.yaml
+            * default boto3 credentials chain (~/.aws/credentials or
+              AWS_* environment variables)
 
             Raises:
                 ACMClusterConfigurationException: if no valid AWS credentials
