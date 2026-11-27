@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     fusion_access_required,
     fa_functional,
     ignore_leftovers,
+    pre_fdf_upgrade,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, constants
@@ -149,6 +150,7 @@ class TestFDFSANConnection(ManageTest):
 
     @pytest.mark.polarion_id("OCS-5500")
     @fa_functional
+    @pre_fdf_upgrade
     def test_connect_san_storage_and_create_filesystem(
         self,
     ):
