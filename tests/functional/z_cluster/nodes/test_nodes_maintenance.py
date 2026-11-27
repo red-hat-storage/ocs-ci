@@ -1,3 +1,4 @@
+import json
 import logging
 import pytest
 
@@ -7,6 +8,7 @@ from subprocess import TimeoutExpired
 
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
+    UnexpectedDeploymentConfiguration,
     CommandFailed,
     ResourceWrongStatusException,
     ResourceNotFoundError,
@@ -16,6 +18,7 @@ from ocs_ci.utility.decorators import (
     enable_high_recovery_during_rebalance_flag,
     switch_to_provider_for_function,
 )
+from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import ceph_health_check_base, TimeoutSampler
 
@@ -35,6 +38,8 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.cluster import (
     get_ec_pool_ec_optimizations,
+    is_hci_client_cluster,
+    is_managed_service_cluster,
     validate_existence_of_blocking_pdb,
     verify_ec_optimizations_unchanged,
 )
@@ -314,6 +319,18 @@ class TestNodesMaintenance(ManageTest):
         )
         self.sanity_helpers.delete_resources()
 
+    @pytest.fixture
+    def drain_nodes_with_recovery(self, request):
+        """Drain the selected nodes and check recovery at teardown."""
+
+        def drain(node_names):
+            # Finalizers run in reverse order. Uncordon before checking health.
+            request.addfinalizer(self.sanity_helpers.health_check)
+            request.addfinalizer(lambda: schedule_nodes(node_names))
+            drain_nodes(node_names)
+
+        return drain
+
     @tier3
     @pytest.mark.parametrize(
         argnames=["nodes_type"],
@@ -325,29 +342,186 @@ class TestNodesMaintenance(ManageTest):
             ),
         ],
     )
-    def test_2_nodes_maintenance_same_type(self, nodes_type):
+    def test_2_nodes_maintenance_same_type(self, nodes_type, drain_nodes_with_recovery):
         """
-        OCS-1273/OCs-1271:
-        - Try draining 2 nodes from the same type - should fail
-        - Check cluster and Ceph health
+        OCS-1273/OCS-1271:
+        - Verify health and NooBaa maintenance readiness for two same-role nodes
+        - Verify that a disruption budget blocks the drain of the two nodes
+        - Uncordon the nodes and verify cluster and Ceph recovery
 
+        Keep the first node as the maintenance target and select the second
+        based on the current NooBaa pod placement.
         """
-        # Get 2 nodes
-        typed_nodes = get_nodes(node_type=nodes_type, num_of_nodes=2)
-        assert typed_nodes, f"Failed to find a {nodes_type} node for the test"
-
-        typed_node_names = [typed_node.name for typed_node in typed_nodes]
-
-        # Try draining 2 nodes - should fail
-        try:
-            drain_nodes(typed_node_names)
-        except TimeoutExpired:
-            log.info(f"Draining of nodes {typed_node_names} failed as expected")
-
-        schedule_nodes(typed_node_names)
-
-        # Perform cluster and Ceph health checks
+        typed_nodes = get_nodes(node_type=nodes_type)
+        if len(typed_nodes) < 2:
+            raise UnexpectedDeploymentConfiguration(
+                f"Expected two {nodes_type} nodes, found {len(typed_nodes)}"
+            )
+        first_node, *second_nodes = typed_nodes
         self.sanity_helpers.health_check()
+
+        namespace = config.ENV_DATA["cluster_namespace"]
+        storage_api = ocp.OCP(namespace=namespace)
+        db_cluster = None
+        if not (
+            config.COMPONENTS["disable_noobaa"]
+            or config.ENV_DATA.get("noobaa_external_pgsql")
+        ):
+            if storage_api.exec_oc_cmd(
+                "get crd clusters.postgresql.cnpg.noobaa.io --ignore-not-found -o name",
+                out_yaml_format=False,
+            ):
+                db_cluster = storage_api.exec_oc_cmd(
+                    f"get {constants.CNPG_CLUSTER_KIND} {constants.NB_DB_CNPG_CLUSTER_NAME} --ignore-not-found -o yaml"
+                )
+            if not db_cluster and not (
+                is_managed_service_cluster() or is_hci_client_cluster()
+            ):
+                odf_version = version.get_ocs_version_from_csv(only_major_minor=True)
+                # Early 4.19 builds can still declare the legacy PostgreSQL StatefulSet.
+                if odf_version >= version.VERSION_4_19 and not (
+                    odf_version == version.VERSION_4_19
+                    and storage_api.exec_oc_cmd(
+                        f"get statefulset {constants.NOOBAA_DB_STATEFULSET} --ignore-not-found -o name",
+                        out_yaml_format=False,
+                    )
+                ):
+                    raise UnexpectedDeploymentConfiguration(
+                        "Missing the internal NooBaa database cluster"
+                    )
+
+        if db_cluster:
+            instances = db_cluster["spec"]["instances"]
+            if instances < 2:
+                raise UnexpectedDeploymentConfiguration(
+                    f"NooBaa maintenance requires two DB instances, configured {instances}"
+                )
+            db_selector = f"{constants.NOOBAA_DB_LABEL_419_AND_ABOVE},{constants.CNPG_POD_ROLE_INSTANCE_LABEL}"
+            for component, selector, required in (
+                ("database", db_selector, instances),
+                ("CNPG operator", constants.NOOBAA_CNPG_POD_LABEL, 1),
+            ):
+                ready_nodes = []
+                for item in get_pods_having_label(selector, namespace=namespace):
+                    if item["metadata"].get("deletionTimestamp"):
+                        continue
+                    if not any(
+                        condition["type"] == "Ready" and condition["status"] == "True"
+                        for condition in item.get("status", {}).get("conditions", [])
+                    ):
+                        raise UnexpectedDeploymentConfiguration(
+                            f"NooBaa maintenance prerequisite is not Ready: {item['metadata']['name']}"
+                        )
+                    ready_nodes.append(item["spec"]["nodeName"])
+                if len(ready_nodes) < required:
+                    raise UnexpectedDeploymentConfiguration(
+                        f"Expected {required} Ready NooBaa {component} pod(s), "
+                        f"found {len(ready_nodes)}. Ready pod placement: {ready_nodes}"
+                    )
+                ready_node_names = set(ready_nodes)
+                second_nodes = [
+                    node
+                    for node in second_nodes
+                    if ready_node_names.difference((first_node.name, node.name))
+                ]
+                if not second_nodes:
+                    raise UnexpectedDeploymentConfiguration(
+                        f"No second {nodes_type} node for {first_node.name} leaves a "
+                        f"Ready NooBaa {component} pod outside both drain targets. "
+                        f"Ready pod placement: {ready_nodes}"
+                    )
+
+        typed_nodes = [first_node, second_nodes[0]]
+        typed_node_names = [node.name for node in typed_nodes]
+        log.info("Selected %s drain targets: %s", nodes_type, typed_node_names)
+
+        protected_pods = [
+            item
+            for selector in (constants.MON_APP_LABEL, constants.OSD_APP_LABEL)
+            for item in get_pods_having_label(selector, namespace=namespace)
+            if item["spec"].get("nodeName") in typed_node_names
+        ]
+        control_plane = any(
+            {constants.MASTER_LABEL, "node-role.kubernetes.io/control-plane"}
+            & node.data["metadata"]["labels"].keys()
+            for node in typed_nodes
+        )
+        if control_plane:
+            protected_pods.extend(
+                item
+                for item in get_pods_having_label(label="", namespace="openshift-etcd")
+                if item["metadata"]["name"].startswith("etcd-guard-")
+                and item["spec"].get("nodeName") in typed_node_names
+            )
+        elif not protected_pods:
+            # Dedicated workers can be protected by an OpenShift platform workload.
+            pods_api = ocp.OCP(kind=constants.POD)
+            for name in typed_node_names:
+                node_pods = pods_api.get(
+                    all_namespaces=True, field_selector=f"spec.nodeName={name}"
+                )["items"]
+                protected_pods.extend(
+                    item
+                    for item in node_pods
+                    if item["metadata"]["namespace"].startswith("openshift-")
+                    and item["metadata"]["namespace"] != namespace
+                )
+
+        drain_error = None
+        try:
+            drain_nodes_with_recovery(typed_node_names)
+        except TimeoutExpired as ex:
+            drain_error = ex
+
+        assert drain_error is not None, "Draining both nodes unexpectedly succeeded"
+        stderr = (drain_error.stderr or b"").decode(errors="replace")
+        pdb_denial = "would violate the pod's disruption budget"
+        denial_lines = {line for line in stderr.splitlines() if pdb_denial in line}
+        candidates = []
+        for item in protected_pods:
+            meta = item["metadata"]
+            identity = 'pods/"{}" -n "{}"'.format(meta["name"], meta["namespace"])
+            if any(identity in line for line in denial_lines):
+                candidates.append(meta)
+        assert (
+            candidates
+        ), f"Drain did not report an expected PDB blocking eviction: {stderr[-4000:]}"
+
+        # Use the eviction API version advertised by the cluster, as oc adm drain does.
+        resources = storage_api.exec_oc_cmd("get --raw /api/v1")["resources"]
+        eviction = next(
+            resource for resource in resources if resource["name"] == "pods/eviction"
+        )
+        for meta in candidates:
+            name = meta["name"]
+            pod_namespace = meta["namespace"]
+            pod_api = ocp.OCP(kind=constants.POD, namespace=pod_namespace)
+            body = {
+                "apiVersion": f"{eviction['group']}/{eviction['version']}",
+                "kind": "Eviction",
+                "metadata": {"name": name, "namespace": pod_namespace},
+            }
+            try:
+                pod_api.exec_oc_cmd(
+                    f"create --raw /api/v1/namespaces/{pod_namespace}/pods/{name}/eviction?dryRun=All -f -",
+                    input=json.dumps(body).encode(),
+                )
+            except CommandFailed as ex:
+                if "(NotFound)" in str(ex):
+                    continue
+                if pdb_denial not in str(ex):
+                    raise
+                # The same UID proves that the denied pod is still on the original target.
+                uid = pod_api.exec_oc_cmd(
+                    f"get pod {name} --ignore-not-found -o jsonpath={{.metadata.uid}}",
+                    out_yaml_format=False,
+                )
+                if uid == meta["uid"]:
+                    log.info("PDB still blocks eviction of %s/%s", pod_namespace, name)
+                    return
+        pytest.fail(
+            f"No previously denied pod on {typed_node_names} is still blocked by its PDB"
+        )
 
     @tier2
     @pytest.mark.polarion_id("OCS-1274")

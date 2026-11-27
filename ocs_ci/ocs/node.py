@@ -446,9 +446,17 @@ def drain_nodes(node_names, timeout=1800, disable_eviction=False):
                 timeout=timeout,
             )
     except TimeoutExpired:
-        ct_pod = pod.get_ceph_tools_pod()
-        ceph_status = ct_pod.exec_cmd_on_pod("ceph status", out_yaml_format=False)
-        log.error(f"Drain command failed to complete. Ceph status: {ceph_status}")
+        try:
+            ct_pod = pod.get_ceph_tools_pod(skip_creating_pod=True)
+            ceph_status = ct_pod.exec_cmd_on_pod("ceph status", out_yaml_format=False)
+            log.error(f"Drain command failed to complete. Ceph status: {ceph_status}")
+        except (
+            exceptions.CephToolBoxNotFoundException,
+            exceptions.NoRunningCephToolBoxException,
+            CommandFailed,
+            TimeoutExpired,
+        ):
+            log.warning("Cannot collect Ceph status after drain timeout", exc_info=True)
         # TODO: Add re-balance status once pull/1679 is merged
         raise
 
