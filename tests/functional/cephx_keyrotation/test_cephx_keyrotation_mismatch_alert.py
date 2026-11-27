@@ -219,6 +219,61 @@ def _metric_value(sample):
     return int(float(sample["value"][1]))
 
 
+def _wait_for_mismatch_metric_series(
+    prometheus, daemons, timeout=MISMATCH_METRIC_TIMEOUT, sleep=10
+):
+    """
+    Wait until a mismatch metric series exists for every daemon in *daemons*.
+
+    Presence only — the value is not checked, so callers that care about
+    labels or emission can poll without asserting a particular state.
+
+    A single instant query is not enough. ocs-metrics-exporter restarts
+    during daemon key rotation and Prometheus scrapes it once a minute, so a
+    query issued in that window legitimately returns nothing and fails a test
+    whose subject is still healthy. Build 75121 hit exactly that: TC1 failed
+    with "No series returned" minutes after the exporter pod had been cycling
+    through rotations, while the metric itself was emitted correctly for all
+    four daemons.
+
+    Args:
+        prometheus (PrometheusAPI): Prometheus client.
+        daemons (iterable): Daemon label values that must be present.
+        timeout (int): Seconds to wait.
+        sleep (int): Poll interval.
+
+    Returns:
+        dict: daemon label -> sample dict.
+
+    Raises:
+        UnexpectedBehaviour: If any daemon series is still missing at timeout.
+    """
+    daemons = list(daemons)
+    log.info(
+        "Waiting for %s series for daemons %s (timeout=%ss)",
+        MISMATCH_METRIC,
+        daemons,
+        timeout,
+    )
+    missing = daemons
+    for result in TimeoutSampler(timeout, sleep, _query_mismatch_metrics, prometheus):
+        by_daemon = _metric_samples_by_daemon(result)
+        missing = [daemon for daemon in daemons if daemon not in by_daemon]
+        if not missing:
+            log.info("All expected %s series present: %s", MISMATCH_METRIC, daemons)
+            return by_daemon
+        log.info(
+            "%s series not yet present for: %s (found=%s)",
+            MISMATCH_METRIC,
+            missing,
+            sorted(by_daemon),
+        )
+
+    raise UnexpectedBehaviour(
+        f"{MISMATCH_METRIC} series missing for daemon(s) {missing} within {timeout}s"
+    )
+
+
 def _wait_for_mismatch_metric_values(
     prometheus, expected_by_daemon, timeout=MISMATCH_METRIC_TIMEOUT, sleep=10
 ):
@@ -494,15 +549,10 @@ class TestCephXKeyRotationMismatchMetric:
         daemon types with labels daemon, ceph_cluster, and namespace.
         """
         prometheus = PrometheusAPI(threading_lock=threading_lock)
-        result = _query_mismatch_metrics(prometheus)
-        assert result, f"No series returned for {MISMATCH_METRIC}"
-
-        by_daemon = _metric_samples_by_daemon(result)
-        missing = [daemon for daemon in DAEMON_TYPES if daemon not in by_daemon]
-        assert not missing, (
-            f"Missing mismatch metric series for daemon(s): {missing}; "
-            f"found={sorted(by_daemon)}"
-        )
+        # Poll rather than query once: the exporter restarts during rotation
+        # and Prometheus scrapes it every 60s, so an immediate query can miss
+        # a metric that is being emitted correctly.
+        by_daemon = _wait_for_mismatch_metric_series(prometheus, DAEMON_TYPES)
 
         for daemon in DAEMON_TYPES:
             labels = by_daemon[daemon]["metric"]
@@ -879,8 +929,7 @@ class TestCephXKeyRotationMismatchNoFilesystem:
             )
 
         prometheus = PrometheusAPI(threading_lock=threading_lock)
-        result = _query_mismatch_metrics(prometheus)
-        by_daemon = _metric_samples_by_daemon(result)
+        by_daemon = _wait_for_mismatch_metric_series(prometheus, ["mds"])
         mds = by_daemon.get("mds")
         assert mds is not None, "Expected mds mismatch metric series even without FS"
         assert _metric_value(mds) == 0, (
@@ -1180,7 +1229,18 @@ class TestCephXCephClientAnnotations:
         """
         namespace = config.ENV_DATA["cluster_namespace"]
         clients = _list_cephclients(namespace)
-        assert clients, "No CephClient resources found"
+        if not clients:
+            # The CRD ships with Rook, but an internal-mode cluster need not
+            # have any CephClient CRs: ODF 4.16 creates none, so asserting
+            # here failed build 75121 with "No CephClient resources found" on
+            # a healthy cluster. TC14 is about the annotation and keyType that
+            # new CephClients are created with, so with none to inspect there
+            # is nothing to assert. TC15 below already skips the same way.
+            pytest.skip(
+                "No CephClient resources exist on this cluster; TC14 needs at "
+                "least one CephClient to check created-with-cephx-features "
+                "and keyType"
+            )
 
         # Prefer metrics-exporter + CSI clients when present
         interesting = []
