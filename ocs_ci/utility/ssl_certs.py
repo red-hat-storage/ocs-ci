@@ -10,6 +10,8 @@ import requests
 import tempfile
 import yaml
 
+from dataclasses import dataclass
+
 from OpenSSL import crypto
 
 from ocs_ci.framework import config
@@ -1175,6 +1177,42 @@ def setup_client_ca_cert_secret(
             os.remove(cert_file)
 
 
+def create_ca_configmap(name, namespace, ca_pem, key="ca.crt"):
+    """
+    Create or update a ConfigMap holding a PEM-encoded CA certificate.
+
+    Used to share the client CA with the provider (StorageConsumer
+    clientCAConfigMap) and the provider server CA with the client
+    (StorageClient serverCAConfigMap). Must be called within the config
+    context of the cluster where the ConfigMap should live.
+
+    Args:
+        name (str): Name of the ConfigMap
+        namespace (str): Namespace where to create/update the ConfigMap
+        ca_pem (str): CA certificate in PEM format
+        key (str): Key name within the ConfigMap data (default "ca.crt")
+
+    """
+    configmap_data = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": name, "namespace": namespace},
+        "data": {key: ca_pem},
+    }
+    configmap_file = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="ca_configmap", suffix=".yaml", delete=False
+    )
+    with open(configmap_file.name, "w") as f:
+        yaml.safe_dump(configmap_data, f)
+    try:
+        ocp.OCP(kind="ConfigMap", namespace=namespace).exec_oc_cmd(
+            f"apply -f {configmap_file.name}"
+        )
+        logger.info("Applied CA ConfigMap '%s' in namespace '%s'", name, namespace)
+    finally:
+        os.remove(configmap_file.name)
+
+
 def setup_object_browser_ca_cert_on_client(ca_cert):
     """
     Setup CA certificate on client cluster for NooBaa object browser.
@@ -1220,6 +1258,135 @@ def setup_object_browser_ca_cert_on_client(ca_cert):
     # Use generic helper to create/update the secret
     setup_client_ca_cert_secret(ca_cert, secret_name, cert_key, client_namespace)
     logger.info("Object browser CA certificate setup completed on client cluster")
+
+
+@dataclass
+class ClientMTLSMaterial:
+    """
+    Container for client mTLS certificate material.
+
+    Attributes:
+        ca_pem (str): PEM-encoded client CA certificate
+        cert_pem (str): PEM-encoded client (leaf) certificate, signed by the CA
+        key_pem (str): PEM-encoded client private key
+        san (str): DNS Subject Alternative Name embedded in the leaf certificate
+
+    """
+
+    ca_pem: str
+    cert_pem: str
+    key_pem: str
+    san: str
+
+
+class SelfSignedCA:
+    """
+    A self-signed certificate authority able to sign leaf certificates.
+
+    Args:
+        cn (str): Common Name of the CA
+
+    """
+
+    def __init__(self, cn):
+        self.cn = cn
+        self._key = Key()
+        self._key.generate_key(crypto.TYPE_RSA, constants.OPENSSL_KEY_SIZE)
+        self._cert = self._build_ca_cert()
+
+    def _build_ca_cert(self):
+        cert = crypto.X509()
+        cert.set_version(2)
+        cert.set_serial_number(int.from_bytes(os.urandom(16), "big"))
+        subj = cert.get_subject()
+        subj.CN = self.cn
+        cert.set_issuer(subj)
+        cert.set_pubkey(self._key)
+        cert.gmtime_adj_notBefore(-300)
+        cert.gmtime_adj_notAfter(10 * 365 * 24 * 60 * 60)
+        cert.add_extensions(
+            [
+                crypto.X509Extension(b"basicConstraints", True, b"CA:TRUE"),
+                crypto.X509Extension(b"keyUsage", True, b"keyCertSign, cRLSign"),
+            ]
+        )
+        cert.sign(self._key, "sha256")
+        return cert
+
+    @property
+    def ca_pem(self):
+        return crypto.dump_certificate(crypto.FILETYPE_PEM, self._cert).decode()
+
+    def sign_csr(self, csr, extensions, valid_days=365):
+        """
+        Sign a Certificate Signing Request with this CA.
+
+        Args:
+            csr (crypto.X509Req): the certificate signing request to sign
+            extensions (list): list of crypto.X509Extension to add to the leaf
+            valid_days (int): validity period of the leaf certificate in days
+
+        Returns:
+            str: PEM-encoded leaf certificate
+
+        """
+        cert = crypto.X509()
+        cert.set_version(2)
+        cert.set_serial_number(int.from_bytes(os.urandom(16), "big"))
+        cert.set_subject(csr.get_subject())
+        cert.set_issuer(self._cert.get_subject())
+        cert.set_pubkey(csr.get_pubkey())
+        cert.gmtime_adj_notBefore(-300)
+        cert.gmtime_adj_notAfter(valid_days * 24 * 60 * 60)
+        cert.add_extensions(extensions)
+        cert.sign(self._key, "sha256")
+        return crypto.dump_certificate(crypto.FILETYPE_PEM, cert).decode()
+
+
+def generate_client_mtls_material(san, common_name="ocs-client", valid_days=365):
+    """
+    Generate self-signed client mTLS material: a client CA and a client leaf
+    certificate (with the given SAN and clientAuth extended key usage) signed
+    by that CA.
+
+    Args:
+        san (str): DNS Subject Alternative Name for the client leaf certificate
+        common_name (str): Common Name for the client leaf certificate
+        valid_days (int): validity period of the leaf certificate in days
+
+    Returns:
+        ClientMTLSMaterial: generated CA, leaf cert, key and SAN (PEM strings)
+
+    Raises:
+        ValueError: if san is empty
+
+    """
+    if not san:
+        raise ValueError("san is required to generate client mTLS material")
+
+    ca = SelfSignedCA(cn=f"{common_name}-ca")
+
+    client_key = Key()
+    client_key.generate_key(crypto.TYPE_RSA, constants.OPENSSL_KEY_SIZE)
+
+    csr = CSR()
+    csr.get_subject().CN = common_name
+    csr.set_pubkey(client_key)
+    csr.sign(client_key, "sha256")
+
+    extensions = [
+        crypto.X509Extension(b"subjectAltName", False, f"DNS:{san}".encode()),
+        crypto.X509Extension(b"extendedKeyUsage", False, b"clientAuth"),
+        crypto.X509Extension(b"keyUsage", True, b"digitalSignature, keyEncipherment"),
+    ]
+    cert_pem = ca.sign_csr(csr, extensions, valid_days=valid_days)
+
+    return ClientMTLSMaterial(
+        ca_pem=ca.ca_pem,
+        cert_pem=cert_pem,
+        key_pem=str(client_key),
+        san=san,
+    )
 
 
 if __name__ == "__main__":
