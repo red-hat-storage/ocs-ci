@@ -2348,7 +2348,7 @@ def is_kms_enabled(dont_raise=False):
     cluster = storage_cluster.get_storage_cluster()
     logger.info("Checking if StorageCluster has configured KMS encryption")
     resource_get = cluster.get(dont_raise=dont_raise)
-    if resource_get:
+    if resource_get and resource_get.get("items"):
         resource = resource_get["items"][0]
         encryption = (
             resource.get("spec").get("encryption", {}).get("kms", {}).get("enable")
