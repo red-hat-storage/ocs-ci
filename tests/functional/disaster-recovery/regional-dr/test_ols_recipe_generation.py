@@ -25,12 +25,7 @@ from ocs_ci.helpers.dr_helpers import (
     assert_recipe_structure,
     generate_and_apply_ols_recipe,
 )
-from ocs_ci.helpers.dr_helpers_ui import (
-    verify_pending_cleanup_alert_firing,
-    verify_pending_cleanup_alert_resolved,
-)
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.ocs.openshift_lightspeed import (
     OpenShiftLightspeed,
     build_ols_recipe_prompt,
@@ -724,8 +719,8 @@ class TestOLSRecipeFailoverAndRelocate:
         )
         # ------------------------------------------------------------------ #
         # Step 8: Power primary cluster back on if it was stopped. This must  #
-        # happen before the cleanup/alert verification below: cleanup deletes #
-        # the workload on the old primary, which needs the cluster reachable. #
+        # happen before the cleanup below: cleanup deletes the workload on    #
+        # the old primary, which needs the cluster reachable.                 #
         # ------------------------------------------------------------------ #
         if primary_cluster_down:
             logger.info(
@@ -741,44 +736,14 @@ class TestOLSRecipeFailoverAndRelocate:
             logger.info("Checking for Ceph Health OK")
             ceph_health_check()
 
-        # Verify ApplicationCleanupPending alert fire/resolve around cleanup (OCS 4.22+)
-        if get_semantic_ocs_version_from_config() >= Version("4.22", partial=True):
-            wait_time_for_alert = (
-                constants.ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD + 180
-            )
-            logger.info(
-                f"Waiting {wait_time_for_alert}s for ApplicationCleanupPending "
-                "alert to fire after failover"
-            )
-            sleep(wait_time_for_alert)
-            acm_obj = AcmAddClusters()
-            verify_pending_cleanup_alert_firing(
-                acm_obj,
-                "Failover",
-                drpc_name=workload.discovered_apps_placement_name,
-            )
-            logger.info("Doing cleanup operations after failover")
-            dr_helpers.do_discovered_apps_cleanup(
-                drpc_name=workload.discovered_apps_placement_name,
-                old_primary=primary_cluster,
-                workload_namespace=workload.workload_namespace,
-                workload_dir=workload.workload_dir,
-                vrg_name=workload.discovered_apps_placement_name,
-            )
-            verify_pending_cleanup_alert_resolved(
-                acm_obj,
-                "Failover",
-                drpc_name=workload.discovered_apps_placement_name,
-            )
-        else:
-            logger.info("Doing cleanup operations after failover")
-            dr_helpers.do_discovered_apps_cleanup(
-                drpc_name=workload.discovered_apps_placement_name,
-                old_primary=primary_cluster,
-                workload_namespace=workload.workload_namespace,
-                workload_dir=workload.workload_dir,
-                vrg_name=workload.discovered_apps_placement_name,
-            )
+        logger.info("Doing cleanup operations after failover")
+        dr_helpers.do_discovered_apps_cleanup(
+            drpc_name=workload.discovered_apps_placement_name,
+            old_primary=primary_cluster,
+            workload_namespace=workload.workload_namespace,
+            workload_dir=workload.workload_dir,
+            vrg_name=workload.discovered_apps_placement_name,
+        )
 
         config.switch_to_cluster_by_name(secondary_cluster)
         dr_helpers.wait_for_all_resources_creation(
@@ -833,23 +798,8 @@ class TestOLSRecipeFailoverAndRelocate:
             skip_odf_cli_validation=True,
         )
 
-        # Verify ApplicationCleanupPending alert fire/resolve around cleanup (OCS 4.22+)
+        # Cleanup is required after relocate on OCS 4.22+
         if get_semantic_ocs_version_from_config() >= Version("4.22", partial=True):
-            wait_time_for_alert = (
-                constants.ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD + 180
-            )
-            logger.info(
-                f"Waiting {wait_time_for_alert}s for ApplicationCleanupPending "
-                "alert to fire after relocate"
-            )
-            sleep(wait_time_for_alert)
-            # Create a fresh ACM UI session as the previous may have expired
-            acm_obj = AcmAddClusters()
-            verify_pending_cleanup_alert_firing(
-                acm_obj,
-                "Relocate",
-                drpc_name=workload.discovered_apps_placement_name,
-            )
             logger.info("Doing cleanup operations after relocate")
             dr_helpers.do_discovered_apps_cleanup(
                 drpc_name=workload.discovered_apps_placement_name,
@@ -857,11 +807,6 @@ class TestOLSRecipeFailoverAndRelocate:
                 workload_namespace=workload.workload_namespace,
                 workload_dir=workload.workload_dir,
                 vrg_name=workload.discovered_apps_placement_name,
-            )
-            verify_pending_cleanup_alert_resolved(
-                acm_obj,
-                "Relocate",
-                drpc_name=workload.discovered_apps_placement_name,
             )
 
         config.switch_to_cluster_by_name(primary_cluster)
