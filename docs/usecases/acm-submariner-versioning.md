@@ -57,8 +57,9 @@ ocp_to_acm_unreleased_mapping = {
     "4.19": False,
     "4.20": False,
     "4.21": False,
-    "4.22": True,
-    "4.23": True,
+    "4.22": False,
+    "4.23": False,
+    "5.0": False,
 }
 
 ocp_to_submariner_unreleased_mapping = {
@@ -71,7 +72,8 @@ ocp_to_submariner_unreleased_mapping = {
     "4.20": False,
     "4.21": False,
     "4.22": False,
-    "4.23": True,
+    "4.23": False,
+    "5.0": False,
 }
 ```
 
@@ -245,10 +247,8 @@ INFO: OCP 4.25 not in mapping → Submariner: UNRELEASED (safe default)
 
 | OCP Version | ACM Status | Submariner Status | Source |
 |---|---|---|---|
-| 4.14 – 4.21 | Released | Released | Auto-configured |
-| 4.22 | Unreleased | Released | Auto-configured |
-| 4.23+ | Unreleased | Unreleased | Auto-configured |
-| Unknown | Unreleased | Unreleased | Default fallback |
+| 4.14 – 4.23, 5.0 | Released | Released | Auto-configured |
+| Unknown / unmapped | Unreleased | Unreleased | Default fallback |
 | Any | User-specified | User-specified | Explicit override |
 
 ---

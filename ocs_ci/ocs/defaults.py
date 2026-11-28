@@ -208,7 +208,8 @@ ocp_to_acm_unreleased_mapping = {
     "4.20": False,
     "4.21": False,
     "4.22": False,
-    "4.23": True,
+    "4.23": False,
+    "5.0": False,
 }
 
 ocp_to_submariner_unreleased_mapping = {
