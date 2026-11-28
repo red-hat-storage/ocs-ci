@@ -14,6 +14,7 @@ from selenium.common.exceptions import (
     StaleElementReferenceException,
     TimeoutException as SeleniumTimeoutException,
 )
+from selenium.webdriver.common.by import By
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
@@ -958,12 +959,19 @@ def verify_pending_cleanup_alert_firing(
         if not alert_found:
             log.warning(
                 f"DRPC-specific alert locator did not find the alert for '{drpc_name}' — "
-                "falling back to generic ApplicationCleanupPending locator"
+                "falling back to a looser locator that still matches the DRPC name "
+                "and namespace"
             )
             acm_obj.take_screenshot()
+            # Looser match (no exact message / quote style), but still scoped to
+            # this DRPC and namespace so another DRPC's alert cannot satisfy it.
+            drpc_fallback_locator = (
+                f'//span[contains(., "{drpc_name}") and contains(., "{namespace}")]',
+                By.XPATH,
+            )
             alert_found = acm_obj.wait_until_expected_text_is_found(
-                locator=acm_loc["pending-cleanup-alert"],
-                expected_text=constants.ALERT_APPLICATION_CLEANUP_PENDING,
+                locator=drpc_fallback_locator,
+                expected_text=drpc_name,
                 timeout=60,
             )
     else:
@@ -1074,6 +1082,21 @@ def verify_pending_cleanup_alert_resolved(
             raise UnexpectedBehaviour(
                 f"Unable to verify DR Dashboard critical-alert section after {operation} cleanup."
             ) from e
+
+        # The alert is only meaningfully "absent" once the dashboard has rendered.
+        # If the dashboard is not ready, report the alert as still present so the
+        # caller reloads and retries instead of treating a half-loaded page as cleared.
+        dashboard_ready = acm_obj.check_element_presence(
+            (acm_loc["cluster-dropdown"][1], acm_loc["cluster-dropdown"][0]),
+            timeout=60,
+            use_fallback=False,
+        )
+        if not dashboard_ready:
+            log.warning(
+                "DR Dashboard did not finish loading; cannot confirm the alert is cleared"
+            )
+            acm_obj.take_screenshot()
+            return True
 
         # use_fallback=False as this is intentional negative check (alert should
         # NOT exist). The text is looked up with a short timeout: the call returns

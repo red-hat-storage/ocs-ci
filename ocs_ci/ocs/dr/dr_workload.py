@@ -1736,8 +1736,7 @@ class BusyboxDiscoveredApps(DRWorkload):
 
         if skip_drpc:
             log.info(
-                "skip_drpc=True — skipping DRPC creation for workload '%s'",
-                self.workload_namespace,
+                f"skip_drpc=True — skipping DRPC creation for workload '{self.workload_namespace}'"
             )
             return
 

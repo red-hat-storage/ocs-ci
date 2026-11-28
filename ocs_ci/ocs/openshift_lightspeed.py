@@ -762,7 +762,9 @@ def extract_yaml_from_ols_response(response_text):
     _SKIP_TAGS = {"python", "json", "bash", "sh", "text", "markdown"}
     _YAML_TAGS = {"yaml", "yml"}
     if "```" in response_text:
-        for block in response_text.split("```"):
+        # Splitting on the fence marker alternates prose / fenced content, so only
+        # odd-indexed chunks are inside a code fence (skips headings and other prose).
+        for block in response_text.split("```")[1::2]:
             block = block.strip()
             if not block:
                 continue

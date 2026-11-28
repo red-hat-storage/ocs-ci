@@ -4967,9 +4967,8 @@ def assert_recipe_structure(recipe_yaml):
     if "volumes" in spec:
         if not isinstance(spec["volumes"], dict):
             logger.error(
-                "Recipe spec.volumes was generated as %s instead of a mapping object: %r",
-                type(spec["volumes"]).__name__,
-                spec["volumes"],
+                f"Recipe spec.volumes was generated as {type(spec['volumes']).__name__} "
+                f"instead of a mapping object: {spec['volumes']!r}"
             )
         assert isinstance(spec["volumes"], dict), (
             "Recipe spec.volumes must be a single mapping object, not a list. "
@@ -4991,10 +4990,8 @@ def assert_recipe_structure(recipe_yaml):
             # check hooks must use 'chks', not 'ops'
             if "ops" in hook:
                 logger.error(
-                    "Check hook '%s' generated with 'ops' instead of 'chks'. "
-                    "Hook keys: %s",
-                    hook.get("name"),
-                    list(hook.keys()),
+                    f"Check hook '{hook.get('name')}' generated with 'ops' instead of 'chks'. "
+                    f"Hook keys: {list(hook.keys())}"
                 )
             assert "ops" not in hook, (
                 f"Recipe spec.hooks[{hi}] (type: check) must not use 'ops'; "
@@ -5002,9 +4999,8 @@ def assert_recipe_structure(recipe_yaml):
             )
             if "chks" not in hook:
                 logger.error(
-                    "Check hook '%s' generated without 'chks'. Hook keys: %s",
-                    hook.get("name"),
-                    list(hook.keys()),
+                    f"Check hook '{hook.get('name')}' generated without 'chks'. "
+                    f"Hook keys: {list(hook.keys())}"
                 )
             assert "chks" in hook, (
                 f"Recipe spec.hooks[{hi}] (type: check) must contain a 'chks' key, "
@@ -5035,12 +5031,9 @@ def assert_recipe_structure(recipe_yaml):
                 if "command" in op:
                     if not isinstance(op["command"], str):
                         logger.error(
-                            "hooks[%d].ops[%d].command generated as %s "
-                            "instead of a string: %r",
-                            hi,
-                            oi,
-                            type(op["command"]).__name__,
-                            op["command"],
+                            f"hooks[{hi}].ops[{oi}].command generated as "
+                            f"{type(op['command']).__name__} "
+                            f"instead of a string: {op['command']!r}"
                         )
                     assert isinstance(op["command"], str), (
                         f"Recipe spec.hooks[{hi}].ops[{oi}].command must be a plain "
@@ -5055,12 +5048,10 @@ def assert_recipe_structure(recipe_yaml):
                 hook_ref = step["hook"]
                 if "/" not in str(hook_ref):
                     logger.error(
-                        "Workflow '%s' generated with bare hook reference '%s' "
-                        "(expected '<hook-name>/<op-or-chk-name>'). "
-                        "Full sequence: %s",
-                        workflow.get("name"),
-                        hook_ref,
-                        workflow.get("sequence"),
+                        f"Workflow '{workflow.get('name')}' generated with bare hook "
+                        f"reference '{hook_ref}' "
+                        f"(expected '<hook-name>/<op-or-chk-name>'). "
+                        f"Full sequence: {workflow.get('sequence')}"
                     )
                 assert "/" in str(hook_ref), (
                     f"Workflow '{workflow.get('name')}' hook reference '{hook_ref}' "
@@ -5189,10 +5180,8 @@ def generate_and_apply_ols_recipe(workload, ols_client):
     volumes = spec["volumes"]
     if not volumes.get("includedNamespaces"):
         logger.error(
-            "OLS omitted volumes.includedNamespaces for namespace '%s'. "
-            "Full volumes section: %r",
-            namespace,
-            volumes,
+            f"OLS omitted volumes.includedNamespaces for namespace '{namespace}'. "
+            f"Full volumes section: {volumes!r}"
         )
     assert volumes.get("includedNamespaces"), (
         "OLS Recipe spec.volumes must include 'includedNamespaces'. "
@@ -5200,9 +5189,8 @@ def generate_and_apply_ols_recipe(workload, ols_client):
     )
     if namespace not in volumes["includedNamespaces"]:
         logger.error(
-            "OLS volumes.includedNamespaces %r does not contain expected namespace '%s'",
-            volumes["includedNamespaces"],
-            namespace,
+            f"OLS volumes.includedNamespaces {volumes['includedNamespaces']!r} "
+            f"does not contain expected namespace '{namespace}'"
         )
     assert namespace in volumes["includedNamespaces"], (
         f"OLS Recipe volumes.includedNamespaces must contain '{namespace}', "
