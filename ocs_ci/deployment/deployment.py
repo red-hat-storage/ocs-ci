@@ -3,6 +3,7 @@ This module provides base class for different deployment
 platforms like AWS, VMWare, Baremetal etc.
 """
 
+import configparser
 import json
 import logging
 import os
@@ -16,7 +17,7 @@ import base64
 import boto3
 import yaml
 
-from botocore.exceptions import BotoCoreError, ClientError, EndpointConnectionError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from ocs_ci.deployment.helpers import storage_class
 from ocs_ci.utility.azure_utils import AZURE as AzureUtil
@@ -178,10 +179,7 @@ from ocs_ci.utility import (
     pgsql,
     version,
 )
-from ocs_ci.utility.aws import (
-    update_config_from_s3,
-    create_and_attach_sts_role,
-)
+from ocs_ci.utility.aws import create_and_attach_sts_role
 from ocs_ci.utility.multicluster import create_mce_catsrc
 from ocs_ci.utility.operators import NMStateOperator, OADPOperator
 from ocs_ci.utility.retry import retry
@@ -5447,25 +5445,74 @@ class MultiClusterDROperatorsDeploy(object):
                 return True
             return False
 
+        @staticmethod
+        def _are_aws_credentials_valid(access_key, secret_key):
+            """
+            Check whether the given AWS credentials are accepted by AWS
+
+            Args:
+                access_key (str): AWS access key id
+                secret_key (str): AWS secret access key
+
+            Returns:
+                bool: True if the credentials are valid, False otherwise
+
+            """
+            try:
+                boto3.client(
+                    "sts",
+                    aws_access_key_id=access_key,
+                    aws_secret_access_key=secret_key,
+                ).get_caller_identity()
+                return True
+            except ClientError as e:
+                logger.warning(f"AWS credentials validation failed: {e}")
+                return False
+
         def get_meta_access_secret_keys(self):
             """
             Get aws_access_key_id and aws_secret_access_key
             by default we go with AWS, in case of noobaa it should be
             implemented in mcg_meta_obj_store class
 
+            The credentials are looked up in the following order and the first
+            source found is used (the remaining sources are skipped):
+
+            1. AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment
+               variables
+            2. [default] profile of ~/.aws/credentials
+
+            Raises:
+                ACMClusterConfigurationException: if no credentials are found
+                    or the credentials are not accepted by AWS
+
             """
-            try:
-                logger.info("Trying to load AWS credentials")
-                secret_dict = update_config_from_s3().get("AUTH")
-            except (AttributeError, EndpointConnectionError):
-                logger.warning(
-                    "Failed to load credentials from ocs-ci-data.\n"
-                    "Your local AWS credentials might be misconfigured.\n"
-                    "Trying to load credentials from local auth.yaml instead"
+            access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+            secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+            if access_key and secret_key:
+                source = "AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY environment variables"
+            else:
+                source = "~/.aws/credentials"
+                parser = configparser.ConfigParser()
+                parser.read(os.path.expanduser("~/.aws/credentials"))
+                access_key = parser.get("default", "aws_access_key_id", fallback=None)
+                secret_key = parser.get(
+                    "default", "aws_secret_access_key", fallback=None
                 )
-                secret_dict = load_auth_config().get("AUTH", {})
-            self.access_key = secret_dict["AWS"]["AWS_ACCESS_KEY_ID"]
-            self.secret_key = secret_dict["AWS"]["AWS_SECRET_ACCESS_KEY"]
+            if not (access_key and secret_key):
+                raise ACMClusterConfigurationException(
+                    "AWS credentials not found. Set AWS_ACCESS_KEY_ID and "
+                    "AWS_SECRET_ACCESS_KEY environment variables or configure "
+                    "the [default] profile in ~/.aws/credentials"
+                )
+            logger.info(f"Using AWS credentials from {source}")
+            if not self._are_aws_credentials_valid(access_key, secret_key):
+                raise ACMClusterConfigurationException(
+                    f"AWS credentials from {source} are not valid "
+                    "(long-lived IAM user keys are required)"
+                )
+            self.access_key = access_key
+            self.secret_key = secret_key
 
     class mcg_meta_obj_store:
         def __init__(self):
@@ -5811,6 +5858,61 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             logger.info("Skipping Enabling Managed ServiceAccount")
         else:
             self.enable_managed_serviceaccount()
+
+        # Deploy OLS on the ACM hub for ODF >= 4.23 (RHSTOR-8222).
+        # Opt-in: set skip_ols_deployment: false in ENV_DATA to enable.
+        #
+        # Provider settings default to the hardcoded constants and are
+        # overridable via ENV_DATA keys of the same name.
+        #
+        # The LLM API token is a secret: it must be supplied in the AUTH
+        # section of a private conf file, e.g.:
+        #   AUTH:
+        #     ols:
+        #       api_token: "<litemaas-or-other-token>"
+        api_token = config.AUTH.get("ols", {}).get("api_token")
+        if not config.ENV_DATA.get("skip_ols_deployment", True) and (
+            version.get_semantic_ocs_version_from_config() >= version.VERSION_4_23
+        ):
+            from ocs_ci.deployment.openshift_lightspeed import OLSInstaller
+
+            config.switch_acm_ctx()
+            installer = OLSInstaller()
+            secret_name = config.ENV_DATA.get(
+                "ols_secret_name", constants.OLS_DEFAULT_SECRET_NAME
+            )
+            if not api_token and not installer._secret_exists(secret_name):
+                logger.warning(
+                    "Skipping OLS deployment: AUTH.ols.api_token is not set and "
+                    f"Secret '{secret_name}' does not exist on the cluster. "
+                    "Provide AUTH.ols.api_token in a private conf file or "
+                    "pre-create the Secret to enable OLS deployment."
+                )
+            else:
+                installer.deploy(
+                    provider_name=config.ENV_DATA.get(
+                        "ols_provider_name", constants.OLS_DEFAULT_PROVIDER_NAME
+                    ),
+                    provider_type=config.ENV_DATA.get(
+                        "ols_provider_type", constants.OLS_DEFAULT_PROVIDER_TYPE
+                    ),
+                    provider_url=config.ENV_DATA.get(
+                        "ols_provider_url", constants.OLS_DEFAULT_PROVIDER_URL
+                    ),
+                    model_name=config.ENV_DATA.get(
+                        "ols_model_name", constants.OLS_DEFAULT_MODEL_NAME
+                    ),
+                    secret_name=secret_name,
+                    api_token=api_token,
+                    rag_images=config.ENV_DATA.get("ols_rag_images"),
+                    fallback_model_name=config.ENV_DATA.get(
+                        "ols_fallback_model_name",
+                        constants.OLS_DEFAULT_FALLBACK_MODEL_NAME,
+                    ),
+                    username=config.ENV_DATA.get("ols_grant_user"),
+                    service_account=config.ENV_DATA.get("ols_grant_sa"),
+                    sa_namespace=config.ENV_DATA.get("ols_grant_sa_namespace"),
+                )
 
     @retry(ACMObservabilityNotEnabled, tries=10, delay=30)
     def check_observability_status(self):
