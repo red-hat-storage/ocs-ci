@@ -117,6 +117,7 @@ class MustGather(object):
                 f"pool name as fallback for must-gather file matching"
             )
 
+        self.files_path.clear()
         self.get_all_paths()
         basenames = {}
         for p in self.full_paths:
@@ -142,20 +143,23 @@ class MustGather(object):
 
     def validate_file_size(self):
         """
-        Validate the file is not empty
+        Validate expected files are not empty
 
         """
         if self.type_log != "OTHERS":
             return
-        for path, subdirs, files in os.walk(self.root):
-            for file in files:
-                file_path = os.path.join(path, file)
-                if (
-                    Path(file_path).stat().st_size == 0
-                    and "noobaa-db-pg-0-init.log" not in file_path
-                ):
-                    logger.error(f"log file {file} empty!")
-                    self.empty_files.append(file)
+        expected_names = {os.path.basename(path) for path in self.files_path.values()}
+        expected_names.discard("noobaa-db-pg-0-init.log")
+        for file_path in self.full_paths:
+            if (
+                not os.path.isabs(file_path)
+                or os.path.basename(file_path) not in expected_names
+            ):
+                continue
+            path = Path(file_path)
+            if path.is_file() and path.stat().st_size == 0:
+                logger.error(f"log file {file_path} empty!")
+                self.empty_files.append(file_path)
 
     def validate_expected_files(self):
         """
@@ -425,8 +429,8 @@ class MustGather(object):
         """
         if config.ENV_DATA["platform"] not in MANAGED_SERVICE_PLATFORMS:
             self.verify_noobaa_diagnostics()
-        self.validate_file_size()
         self.validate_expected_files()
+        self.validate_file_size()
         self.print_invalid_files()
         self.compare_running_pods()
         self.print_must_gather_debug()

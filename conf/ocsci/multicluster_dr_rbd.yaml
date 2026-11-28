@@ -1,3 +1,4 @@
 ENV_DATA:
   rbd_dr_scenario: True
   dr_metadata_store: 'awss3'
+  create_dr_policy_via_ui: true

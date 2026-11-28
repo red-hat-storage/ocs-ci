@@ -8,10 +8,12 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     ignore_resource_not_found_error_label,
+    tier2,
     tier3,
     green_squad,
     skipif_ibm_cloud_managed,
     runs_on_provider,
+    hci_provider_and_client_required,
     ec_allowed,
 )
 from ocs_ci.framework.testlib import ManageTest
@@ -20,8 +22,10 @@ from ocs_ci.ocs.cluster import (
     get_percent_used_capacity,
     CephCluster,
     is_ec_pool_supported,
+    validate_compression,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import delete_pods
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 logger = logging.getLogger(__name__)
@@ -294,3 +298,107 @@ class TestDeleteRbdPool(ManageTest):
             f"UI: {block_pool_present_ui}, "
             f"CLI: {block_pool_present_cli}"
         )
+
+
+@green_squad
+@runs_on_provider
+@hci_provider_and_client_required
+class TestCompressionDistributedToClient(ManageTest):
+    @tier2
+    @skipif_external_mode
+    @pytest.mark.polarion_id("OCS-8354")
+    @pytest.mark.parametrize(
+        argnames=["replica", "erasure_coded"],
+        argvalues=[
+            pytest.param(2, False),
+            pytest.param(3, False),
+            pytest.param(
+                3,
+                True,
+                marks=[
+                    ec_allowed,
+                    pytest.mark.skipif(
+                        not is_ec_pool_supported(),
+                        reason="Erasure coded pools are not supported on this cluster",
+                    ),
+                ],
+            ),
+        ],
+    )
+    def test_compression_sc_distributed_to_client(
+        self,
+        replica,
+        erasure_coded,
+        storageclass_factory,
+        pvc_factory,
+        pod_factory,
+        distribute_storage_classes_to_all_consumers_factory,
+    ):
+        """
+        1. Create an RBD storageclass backed by a new pool with compression
+           enabled, on the provider cluster (same as console UI behavior),
+           using the given data protection policy (replicated or erasure
+           coded).
+        2. Distribute the storageclass to all storage consumers.
+        3. Switch to a client cluster, create a PVC + pod using that
+           storageclass there, and run IO that produces compressible data.
+        4. While the PVC/pod are still present, switch back to the provider
+           and verify the pool actually compressed the written data (the
+           RBD image's data and its compression stats are purged shortly
+           after the PVC is deleted, so this must happen before cleanup).
+        5. Delete the client-side pod/PVC.
+        """
+        interface_type = constants.CEPHBLOCKPOOL
+        compression = "aggressive"
+
+        sc_obj = storageclass_factory(
+            interface=interface_type,
+            new_rbd_pool=True,
+            replica=replica,
+            compression=compression,
+            erasure_coded=erasure_coded,
+        )
+        # For EC, "pool" in the SC is the shared EC metadata pool; the new
+        # pool actually carrying the data (and our compression setting) is
+        # "dataPool".
+        cbp_name = (
+            sc_obj.get().get("parameters").get("dataPool" if erasure_coded else "pool")
+        )
+
+        distr_res = distribute_storage_classes_to_all_consumers_factory()
+        if isinstance(distr_res, bool):
+            assert distr_res, (
+                "After distribution storage classes in clients inventories "
+                "and on provider are not matching"
+            )
+
+        client_index = config.get_consumer_indexes_list()[0]
+        with config.RunWithConfigContext(client_index):
+            pvc_obj = pvc_factory(
+                interface=interface_type,
+                storageclass=sc_obj,
+                size=20,
+                status=constants.STATUS_BOUND,
+            )
+            pod_obj = pod_factory(interface=interface_type, pvc=pvc_obj)
+            try:
+                pod_obj.run_io(
+                    "fs",
+                    size="1G",
+                    rate="1500m",
+                    runtime=60,
+                    buffer_compress_percentage=60,
+                    buffer_pattern="0xdeadface",
+                    bs="8K",
+                    jobs=5,
+                    readwrite="readwrite",
+                )
+                pod_obj.get_fio_results()
+
+                with config.RunWithProviderConfigContextIfAvailable():
+                    assert validate_compression(
+                        cbp_name
+                    ), f"Compression not effective on pool {cbp_name}"
+            finally:
+                delete_pods([pod_obj], wait=True)
+                pvc_obj.delete()

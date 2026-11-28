@@ -406,7 +406,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
 
         """
         average = float("{:.3f}".format(statistics.mean(time_measures)))
-        self.full_results.add_key(f"{action_name.replace('-','_')}_time", average)
+        self.full_results.add_key(f"{action_name.replace('-', '_')}_time", average)
 
         log.info(
             f"{msg_prefix} The average {action_name} time for the sampled  "
@@ -428,7 +428,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 "and is within the accepted range."
             )
         self.full_results.add_key(
-            f"{action_name.replace('-','_')}_deviation_pct", st_deviation_percent
+            f"{action_name.replace('-', '_')}_deviation_pct", st_deviation_percent
         )
 
     @pytest.mark.parametrize(
@@ -557,7 +557,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
                 f"bulk_{op}", bulk_times[op]
             )
 
-            log.info(f"Bulk {op}ion Time is : { bulk_times[op]['time']} seconds")
+            log.info(f"Bulk {op}ion Time is : {bulk_times[op]['time']} seconds")
             self.full_results.add_key(f"multi_{op}", bulk_times[op]["time"])
 
         self.full_results.all_results = self.results_times

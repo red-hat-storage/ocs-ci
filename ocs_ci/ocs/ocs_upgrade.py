@@ -384,6 +384,9 @@ def get_expected_noobaa_pod_count(upgrade_version):
                 expected_noobaa_pods.append(pod.name)
             if "cnpg-controller-manager" in pod.name:
                 expected_noobaa_pods.append(pod.name)
+        if upgrade_version >= parse_version("5.1"):
+            if "noobaa-bg-workers" in pod.name:
+                expected_noobaa_pods.append(pod.name)
         if "noobaa-endpoint" in pod.name:
             endpoint_count += 1
             expected_noobaa_pods.append(pod.name)

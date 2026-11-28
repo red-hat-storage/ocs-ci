@@ -41,9 +41,8 @@ logger = logging.getLogger(__name__)
 # Operators related constants
 UNRELEASED_OPERATORS_FBC_IMAGE = "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc"
 OPERATORS_TEMPLATES_DIR = os.path.join(constants.TEMPLATE_DIR, "operators")
-UNRELEASED_DEFAULT_MIRROR = (
-    "quay.io/redhat-user-workloads/ocp-art-tenant/art-images-share"
-)
+UNRELEASED_DEFAULT_MIRROR = "registry.stage.redhat.io"
+UNRELEASED_DEFAULT_SOURCE = "registry.redhat.io"
 
 
 def get_openshift_registry_namespace(ocp_version):
@@ -61,19 +60,6 @@ class Operator:
     unreleased_catalog_image_tag: str = None
     namespace: str = None
     disconnected_required_packages: list[str] = []
-    """
-    Get the list of related images from the unreleased catalog image
-    Example:
-    ```
-    oras discover --format \
-        json quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc:ocp__4.21__kubernetes-nmstate-rhel9-operator \
-        | jq -r '.referrers[] | select(.artifactType == "application/vnd.konflux-ci.attached-artifact") \
-        | .digest' | xargs -I {} oras pull \
-        quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@{} && cat related-images.json \
-        | jq -r '.[]' | sed 's/@sha256:.*//'
-    ```
-    """
-    unreleased_images: list[str] = []
     unreleased_mirror: str = UNRELEASED_DEFAULT_MIRROR
 
     def __init__(self, create_catalog: bool = False):
@@ -123,22 +109,22 @@ class Operator:
         self.catalog_name = self.unreleased_catalog_name
 
     def get_idms_data(self):
-        if not self.unreleased_images:
-            raise ValueError("Child class must define attribute `unreleased_images`")
+        """
+        Create a simplified IDMS that mirrors registry.redhat.io to registry.stage.redhat.io.
+        This replaces the old complex approach of mirroring individual images.
+        """
         unreleased_catalog_idms_data = templating.load_yaml(
             os.path.join(
                 OPERATORS_TEMPLATES_DIR, "unreleased-operator-catalog-idms.yaml"
             )
         )
         unreleased_catalog_idms_data["metadata"]["name"] = self.catalog_name
-        unreleased_catalog_idms_data["spec"]["imageDigestMirrors"] = []
-        for image in self.unreleased_images:
-            unreleased_catalog_idms_data["spec"]["imageDigestMirrors"].append(
-                {
-                    "mirrors": [self.unreleased_mirror],
-                    "source": image,
-                }
-            )
+        unreleased_catalog_idms_data["spec"]["imageDigestMirrors"] = [
+            {
+                "mirrors": [self.unreleased_mirror],
+                "source": UNRELEASED_DEFAULT_SOURCE,
+            }
+        ]
         return unreleased_catalog_idms_data
 
     def create_idms_for_unreleased_catalog(self):
@@ -449,14 +435,6 @@ class NMStateOperator(Operator):
         self.unreleased_catalog_image_tag: str = (
             f"ocp__{ocp_version}__kubernetes-nmstate-rhel9-operator"
         )
-        ns = get_openshift_registry_namespace(ocp_version)
-        self.unreleased_images = [
-            f"{ns}/kubernetes-nmstate-operator-bundle",
-            f"{ns}/kubernetes-nmstate-rhel9-operator",
-            f"{ns}/nmstate-console-plugin-rhel9",
-            f"{ns}/ose-kube-rbac-proxy-rhel9",
-            f"{ns}/ose-kubernetes-nmstate-handler-rhel9",
-        ]
         self.namespace = constants.NMSTATE_NAMESPACE
         self.disconnected_required_packages = [
             "kubernetes-nmstate-operator",
@@ -593,14 +571,6 @@ class LocalStorageOperator(Operator):
         self.unreleased_catalog_image_tag: str = (
             f"ocp__{ocp_version}__ose-local-storage-rhel9-operator"
         )
-        ns = get_openshift_registry_namespace(ocp_version)
-        self.unreleased_images = [
-            f"{ns}/ose-kube-rbac-proxy-rhel9",
-            f"{ns}/ose-local-storage-diskmaker-rhel9",
-            f"{ns}/ose-local-storage-mustgather-rhel9",
-            f"{ns}/ose-local-storage-operator-bundle",
-            f"{ns}/ose-local-storage-rhel9-operator",
-        ]
         self.disconnected_required_packages = [
             "local-storage-operator",
         ]
@@ -637,14 +607,6 @@ class MetalLBOperator(Operator):
         self.unreleased_catalog_image_tag: str = (
             f"ocp__{ocp_version}__metallb-rhel9-operator"
         )
-        ns = get_openshift_registry_namespace(ocp_version)
-        self.unreleased_images = [
-            f"{ns}/frr-rhel9",
-            f"{ns}/metallb-rhel9-operator",
-            f"{ns}/metallb-rhel9",
-            f"{ns}/ose-kube-rbac-proxy-rhel9",
-            f"{ns}/ose-metallb-operator-bundle",
-        ]
         self.disconnected_required_packages = [
             "metallb-operator",
         ]
@@ -688,28 +650,6 @@ class OADPOperator(Operator):
             self.unreleased_catalog_image_tag = config.ENV_DATA.get(
                 "use_custom_unreleased_catalog_image_tag_oadp"
             )
-        self.unreleased_images = [
-            "registry.redhat.io/oadp/oadp-cli-binaries-rhel9",
-            "registry.redhat.io/oadp/oadp-hypershift-velero-plugin-rhel9",
-            "registry.redhat.io/oadp/oadp-kubevirt-datamover-controller-rhel9",
-            "registry.redhat.io/oadp/oadp-kubevirt-datamover-plugin-rhel9",
-            "registry.redhat.io/oadp/oadp-kubevirt-velero-plugin-rhel9",
-            "registry.redhat.io/oadp/oadp-mustgather-rhel9",
-            "registry.redhat.io/oadp/oadp-non-admin-rhel9",
-            "registry.redhat.io/oadp/oadp-operator-bundle",
-            "registry.redhat.io/oadp/oadp-rhel9-operator",
-            "registry.redhat.io/oadp/oadp-velero-plugin-for-aws-rhel9",
-            "registry.redhat.io/oadp/oadp-velero-plugin-for-gcp-rhel9",
-            "registry.redhat.io/oadp/oadp-velero-plugin-for-legacy-aws-rhel9",
-            "registry.redhat.io/oadp/oadp-velero-plugin-for-microsoft-azure-rhel9",
-            "registry.redhat.io/oadp/oadp-velero-plugin-rhel9",
-            "registry.redhat.io/oadp/oadp-velero-rhel9",
-            "registry.redhat.io/oadp/oadp-vm-file-restore-rhel9",
-            "registry.redhat.io/oadp/oadp-vmdp-binaries-rhel9",
-            "registry.redhat.io/oadp/oadp-vmfr-access-filebrowser-rhel9",
-            "registry.redhat.io/oadp/oadp-vmfr-access-rhel9",
-            "registry.redhat.io/oadp/oadp-vmfr-access-sshd-rhel9",
-        ]
         self.disconnected_required_packages = [
             "redhat-oadp-operator",
         ]
@@ -749,13 +689,6 @@ class IngressNodeFirewallOperator(Operator):
         self.unreleased_catalog_image_tag: str = (
             f"ocp__{ocp_version}__ingress-node-firewall-rhel9-operator"
         )
-        ns = get_openshift_registry_namespace(ocp_version)
-        self.unreleased_images = [
-            f"{ns}/ingress-node-firewall-operator-bundle",
-            f"{ns}/ingress-node-firewall-rhel9-operator",
-            f"{ns}/ingress-node-firewall-rhel9",
-            f"{ns}/ose-kube-rbac-proxy-rhel9",
-        ]
         self.disconnected_required_packages = [
             "ingress-node-firewall",
         ]

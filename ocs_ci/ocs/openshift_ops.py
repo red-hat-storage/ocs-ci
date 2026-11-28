@@ -143,6 +143,16 @@ class OCP(object):
         if not which("oc"):
             get_openshift_client()
         log.info("Testing access to cluster with %s", kubeconfig_path)
+        from ocs_ci.utility.utils import should_probe_cluster
+
+        if not should_probe_cluster(kubeconfig_path):
+            # Fresh OCP deploy: kubeconfig is expected to be missing
+            log.info(
+                "Kubeconfig %s not present yet (fresh OCP deploy); "
+                "skipping access check",
+                kubeconfig_path,
+            )
+            return False
         if not os.path.isfile(kubeconfig_path):
             log.warning("The kubeconfig file %s doesn't exist!", kubeconfig_path)
             return False

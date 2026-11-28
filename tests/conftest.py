@@ -1,3 +1,4 @@
+import ast
 import base64
 import copy
 import logging
@@ -6,6 +7,7 @@ import pandas as pd
 import random
 import secrets
 import string
+import subprocess
 import time
 import tempfile
 import threading
@@ -13,6 +15,7 @@ import json
 import concurrent.futures
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
+from inspect import getsourcefile, unwrap
 from math import floor
 from shutil import copyfile, rmtree
 from copy import deepcopy
@@ -298,15 +301,134 @@ def pytest_logger_config(logger_config):
     logger_config.set_formatter_class(OCSLogFormatter)
 
 
+def get_test_signatures(source: str | bytes) -> dict[str, tuple[str, ...]]:
+    """Compare direct test syntax and module/class markers, ignoring formatting.
+
+    Shared fixtures, helpers, and parameter data are not followed. Changes to
+    those declarations require review when the test definition stays unchanged.
+    """
+
+    def collect_tests(definitions, prefix, context):
+        context += tuple(
+            ast.dump(definition)
+            for definition in definitions
+            if isinstance(definition, (ast.Assign, ast.AnnAssign, ast.AugAssign))
+            and any(
+                isinstance(part, ast.Name)
+                and part.id == "pytestmark"
+                and isinstance(part.ctx, ast.Store)
+                for part in ast.walk(definition)
+            )
+        )
+        signatures = {prefix.removesuffix("::"): context}
+        for definition in definitions:
+            name = f"{prefix}{getattr(definition, 'name', '')}"
+            if isinstance(definition, ast.ClassDef):
+                header = copy.copy(definition)
+                header.body = []
+                signatures.update(
+                    collect_tests(
+                        definition.body, f"{name}::", context + (ast.dump(header),)
+                    )
+                )
+            elif isinstance(
+                definition, (ast.FunctionDef, ast.AsyncFunctionDef)
+            ) and definition.name.startswith("test"):
+                signatures[name] = context + (ast.dump(definition),)
+        return signatures
+
+    return collect_tests(ast.parse(source).body, "", ())
+
+
+def get_changed_test_nodeids(items: list[pytest.Item], base_branch: str) -> set[str]:
+    """Select collected tests with direct definition or marker changes.
+
+    Compare changed files with the target branch's merge base. Pytest provides
+    the original functions and classes, including wrapped and inherited tests.
+    Each selected node ID covers all parameter variants of that definition.
+    """
+    if not base_branch:
+        raise ValueError("A target branch is required for Polarion validation")
+    if not items:
+        return set()
+    collected_tests = {}
+    for item in items:
+        filename, _, name = item.nodeid.partition("::")
+        name = name.split("[", 1)[0]
+        nodeid = f"{filename}::{name}"
+        locations = [(filename, ""), (filename, name)]
+        if isinstance(item, pytest.Function):
+            definitions = [unwrap(item.function)]
+            if item.cls:
+                definitions.extend(
+                    cls for cls in item.cls.__mro__ if cls.__module__ != "builtins"
+                )
+            for definition in definitions:
+                source_file = getsourcefile(definition)
+                if source_file is None:
+                    continue
+                source_file = os.path.relpath(source_file, constants.TOP_DIR)
+                if source_file.startswith(".." + os.sep):
+                    continue
+                locations.append(
+                    (source_file, definition.__qualname__.replace(".", "::"))
+                )
+        for filename, name in locations:
+            collected_tests.setdefault(filename, {}).setdefault(name, set()).add(nodeid)
+    merge_base = subprocess.check_output(
+        ["git", "merge-base", f"refs/remotes/origin/{base_branch}", "HEAD"],
+        cwd=constants.TOP_DIR,
+        text=True,
+    ).strip()
+    changes = subprocess.check_output(
+        [
+            "git",
+            "diff",
+            "--name-status",
+            "--no-renames",
+            "--diff-filter=AM",
+            "-z",
+            merge_base,
+            "--",
+            "*.py",
+        ],
+        cwd=constants.TOP_DIR,
+        text=True,
+    ).split("\0")
+    changed_tests = set()
+    for status, filename in zip(changes[::2], changes[1::2]):
+        if filename not in collected_tests:
+            continue
+        if status == "A":
+            for nodeids in collected_tests[filename].values():
+                changed_tests.update(nodeids)
+            continue
+        with open(os.path.join(constants.TOP_DIR, filename), "rb") as source_file:
+            current = get_test_signatures(source_file.read())
+        previous = get_test_signatures(
+            subprocess.check_output(
+                ["git", "show", f"{merge_base}:{filename}"], cwd=constants.TOP_DIR
+            )
+        )
+        for name, nodeids in collected_tests[filename].items():
+            if name in current and previous.get(name) != current[name]:
+                changed_tests.update(nodeids)
+    return changed_tests
+
+
 def verify_test_decorators_requirements(items):
     """
-    Verify that all tests collected are decorated with a squad marker
+    Validate squad markers and require Polarion markers on changed tests.
 
     Args:
         items: list of collected tests
 
     """
+    changed_tests = get_changed_test_nodeids(
+        items, os.environ.get("GITHUB_BASE_REF") or "master"
+    )
     items_without_squad_marker = {}
+    items_without_polarion_marker = []
     red_no_mcg_or_rgw_items = {}
     for item in items:
         base_dir = os.path.join(constants.TOP_DIR, "tests")
@@ -318,9 +440,10 @@ def verify_test_decorators_requirements(items):
                     "Ignoring test case %s as it has a marker in the ignore list",
                     item.name,
                 )
+                continue
 
             # Verify tests are decorated with the correct squad owner
-            elif not any(["_squad" in marker for marker in item_markers]):
+            if not any(["_squad" in marker for marker in item_markers]):
                 log.debug("%s is missing a squad owner marker", item.name)
                 items_without_squad_marker.update({item.name: item.fspath.strpath})
 
@@ -332,6 +455,13 @@ def verify_test_decorators_requirements(items):
             ):
                 log.debug("%s is a red_squad test without @mcg or @rgw", item.name)
                 red_no_mcg_or_rgw_items.update({item.name: item.fspath.strpath})
+
+            filename, _, name = item.nodeid.partition("::")
+            if (
+                f"{filename}::{name.split('[', 1)[0]}" in changed_tests
+                and "polarion_id" not in item_markers
+            ):
+                items_without_polarion_marker.append(item.nodeid)
 
     err_msg = ""
     if items_without_squad_marker:
@@ -355,6 +485,15 @@ The following tests are missing either the @mcg or @rgw decorators: {json.dumps(
 Red squad tests are required to be decorated with either @mcg or @rgw. Please add either depending on the tests's focus.
 
                 """
+    if items_without_polarion_marker:
+        err_msg += f"""
+Missing polarion_id decorator for the following test items: {json.dumps(items_without_polarion_marker, indent=4)}
+
+Every collected case of a new or modified test must have a polarion_id marker.
+For example: @polarion_id("OCS-4483").
+The marker can be imported from `ocs_ci.framework.pytest_customization.marks`.
+
+            """
     if err_msg:
         raise MissingDecoratorError(err_msg)
 
@@ -10945,7 +11084,12 @@ def run_description():
     fixture to create description file for the run
     """
     testrun_name = get_testrun_name()
-    build_id = get_ocs_build_number()
+    # OCP-only deploy: no OCS CSV yet — get_ocs_build_number also self-gates
+    build_id = (
+        ""
+        if ocsci_config.ENV_DATA.get("skip_ocs_deployment")
+        else get_ocs_build_number()
+    )
     build_str = f"BUILD ID: {build_id}" if build_id else ""
     run_name = f"{testrun_name} ({build_str})"
     teardown = ocsci_config.RUN["cli_params"].get("teardown")
@@ -11312,12 +11456,25 @@ def pytest_sessionstart(session):
 
     if not (
         ocsci_config.multicluster
-        and ocsci_config.UPGRADE.get("upgrade", False)
+        and ocsci_config.UPGRADE.get("deploy_rdr_workload_at_session_start", False)
         and ocsci_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr"
     ):
         return
 
     prev_ctx = ocsci_config.cur_index
+    # Update the ODF CLI DR kubeconfig paths before deploying the DR workloads.
+    # This mirrors the update_odf_cli_dr_kubeconfigs fixture, which cannot be
+    # requested from a session hook, so the underlying helpers are called here.
+    try:
+        from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
+
+        log.info("Setting up ODF CLI binary and updating DR kubeconfigs")
+        odf_cli_setup_helper()
+        dr_helpers.update_odf_cli_dr_config_kubeconfigs()
+    except Exception as e:
+        log.warning(
+            f"Failed to update ODF CLI DR kubeconfigs at session start, not failing the run: {e}"
+        )
     log.info("Setting up dr workloads running along the session")
     factory, teardown = create_workload_factory()
     session._dr_workload_teardown = teardown

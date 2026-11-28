@@ -1748,6 +1748,47 @@ def calculate_compression_ratio(pool_name):
     return None
 
 
+def get_pool_raw_overhead_factor(pool_name):
+    """
+    Get the raw storage overhead multiplier for a pool, i.e. how many times
+    the logical (stored) bytes are actually written to raw storage before
+    compression. For replicated pools this is the replica size. Erasure
+    coded pools report "size" as data_chunks + coding_chunks, which is not
+    the raw overhead factor - that is (data_chunks + coding_chunks) /
+    data_chunks instead.
+
+    Args:
+        pool_name (str): name of the pool
+
+    Returns:
+        float: raw storage overhead factor for the pool
+
+    Raises:
+        PoolNotFound: if the pool does not exist on the cluster
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    pool_details = ct_pod.exec_ceph_cmd(
+        ceph_cmd="ceph osd pool ls detail", format="json"
+    )
+    pool_info = next(
+        (pool for pool in pool_details if pool.get("pool_name") == pool_name), None
+    )
+    if not pool_info:
+        raise PoolNotFound(f"Pool {pool_name} not found on cluster")
+
+    ec_profile_name = pool_info.get("erasure_code_profile")
+    if not ec_profile_name:
+        return pool_info["size"]
+
+    ec_profile = ct_pod.exec_ceph_cmd(
+        ceph_cmd=f"ceph osd erasure-code-profile get {ec_profile_name}"
+    )
+    data_chunks = int(ec_profile["k"])
+    coding_chunks = int(ec_profile["m"])
+    return (data_chunks + coding_chunks) / data_chunks
+
+
 def validate_compression(pool_name):
     """
     Check if data was compressed
@@ -1759,14 +1800,14 @@ def validate_compression(pool_name):
         bool: True if compression works. False if not
 
     """
-    pool_replica = get_ceph_pool_property(pool_name, "size")
+    pool_raw_overhead_factor = get_pool_raw_overhead_factor(pool_name)
     ceph_df_detail_output = get_ceph_df_detail()
     pool_list = ceph_df_detail_output.get("pools")
     for pool in pool_list:
         if pool.get("name") == pool_name:
             logger.info(f"{pool_name}")
             stored = pool["stats"]["stored"]
-            used_without_compression = stored * pool_replica
+            used_without_compression = stored * pool_raw_overhead_factor
             compress_under_bytes = pool["stats"]["compress_under_bytes"]
             compression_ratio = compress_under_bytes / used_without_compression
             logger.info(f"this is the comp_ratio {compression_ratio}")
@@ -3571,11 +3612,40 @@ class LVM(object):
             return False
 
 
+def _set_lvm_flag_from_config():
+    """Set config.RUN['lvm'] from deployment intent when live LVMCluster probe is unavailable."""
+    config.RUN["lvm"] = "install_lvmo" in config.DEPLOYMENT
+
+
+def _set_cephcluster_flag_from_config():
+    """
+    Set config.RUN['cephcluster'] from deployment intent when live CephCluster
+    probe is unavailable (fresh deploy, missing kubeconfig, or known non-Ceph setups).
+    """
+    if config.DEPLOYMENT.get("fusion_access") or config.ENV_DATA.get(
+        "skip_ocs_deployment"
+    ):
+        config.RUN["cephcluster"] = False
+    else:
+        config.RUN["cephcluster"] = True
+
+
 def check_clusters():
     """
     Test if lvm or cephcluster is installed and set config.RUN values for conditions
 
     """
+    from ocs_ci.utility.utils import should_probe_cluster
+
+    # Fresh OCP deploy: kubeconfig not present yet — derive flags from config
+    if not should_probe_cluster():
+        logger.info(
+            "Skipping live cluster checks: kubeconfig not available during "
+            "fresh OCP deploy"
+        )
+        _set_lvm_flag_from_config()
+        _set_cephcluster_flag_from_config()
+        return
 
     try:
         lvmcluster_obj = OCP(
@@ -3590,14 +3660,11 @@ def check_clusters():
     except CommandFailed:
         config.RUN["lvm"] = False
     except FileNotFoundError:
-        if "install_lvmo" in config.DEPLOYMENT:
-            config.RUN["lvm"] = True
-        else:
-            config.RUN["lvm"] = False
+        _set_lvm_flag_from_config()
 
     # Fusion Access clusters have no CephCluster / StorageCluster
     if config.DEPLOYMENT.get("fusion_access"):
-        config.RUN["cephcluster"] = False
+        _set_cephcluster_flag_from_config()
         logger.info(
             "Fusion Access cluster detected — skipping CephCluster check, "
             "setting cephcluster=False"
@@ -3619,10 +3686,7 @@ def check_clusters():
         logger.info(
             "This is deployment, will try to check from ENV_DATA and DEPLOYMENT"
         )
-        if config.ENV_DATA["skip_ocs_deployment"]:
-            config.RUN["cephcluster"] = False
-        else:
-            config.RUN["cephcluster"] = True
+        _set_cephcluster_flag_from_config()
 
 
 def get_lvm_full_version():

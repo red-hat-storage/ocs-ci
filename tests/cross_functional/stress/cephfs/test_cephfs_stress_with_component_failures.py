@@ -3,7 +3,11 @@ import time
 import re
 import random
 
-from ocs_ci.framework.pytest_customization.marks import magenta_squad, ignore_leftovers
+from ocs_ci.framework.pytest_customization.marks import (
+    magenta_squad,
+    ignore_leftovers,
+    polarion_id,
+)
 from ocs_ci.framework.testlib import E2ETest, stress
 from ocs_ci.helpers.cephfs_stress_helpers import (
     CephFSStressTestManager,
@@ -69,6 +73,7 @@ class TestCephfsStressWithFailures(E2ETest):
     CephFS stress test with comprehensive component failures
     """
 
+    @polarion_id("OCS-8415")
     def test_cephfs_stress_with_component_failures(
         self,
         project_factory,
@@ -126,16 +131,19 @@ class TestCephfsStressWithFailures(E2ETest):
                 pvc_size="500Gi", storageclass_factory=storageclass_factory
             )
 
-            stress_mgr.start_background_checks(
-                interval_minutes=CHECKS_RUNNER_INTERVAL_MINUTES
-            )
-
             cephfs_stress_job_obj = stress_mgr.create_cephfs_stress_job(
                 pvc_name=pvc_obj.name,
                 multiplication_factors=MULTIPLICATION_FACTORS,
                 parallelism=4,
                 completions=4,
                 base_file_count=50000,
+            )
+
+            # Start the watchdog only after resource creation so that
+            # fs_monitoring_enabled already reflects the ENABLE_FS_MONITORING
+            # value resolved from the job template.
+            stress_mgr.start_background_checks(
+                interval_minutes=CHECKS_RUNNER_INTERVAL_MINUTES
             )
             logger.info(
                 f"CephFS stress job {cephfs_stress_job_obj.name} has been submitted"

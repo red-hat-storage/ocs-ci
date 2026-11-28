@@ -100,8 +100,8 @@ def get_storageutilization_size(target_percentage, ceph_pool_name):
     to_utilize = target - ceph_total_stored
     pvc_size = round(to_utilize / 2**30)  # GiB
     logger.info(
-        f"to reach {target/2**30} Gi of total cluster utilization, "
-        f"which is {target_percentage*100}% of the total capacity, "
+        f"to reach {target / 2**30} Gi of total cluster utilization, "
+        f"which is {target_percentage * 100}% of the total capacity, "
         f"utilization job should request and fill {pvc_size} Gi volume"
     )
     return pvc_size
@@ -484,7 +484,7 @@ def workload_fio_storageutilization(
     if pvc_size <= 0 and target_percentage is not None:
         skip_msg = (
             "current total storage utilization is too high, "
-            f"the target utilization {target_percentage*100}% is already met"
+            f"the target utilization {target_percentage * 100}% is already met"
         )
         logger.warning(skip_msg)
         if throw_skip:

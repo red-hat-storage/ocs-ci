@@ -24,6 +24,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     encryption_at_rest_required,
     green_squad,
     ignore_leftovers,
+    jira,
     skipif_external_mode,
     skipif_ocs_version,
     tier2,
@@ -93,6 +94,7 @@ class TestCephXKeyRotationNegative:
             "daemon keys rotated"
         )
 
+    @jira("DFBUGS-12434")
     @pytest.mark.polarion_id("OCS-8150")
     @tier2
     def test_cephx_mon_rotation_without_quorum(self, cephx_keyrotation_setup):

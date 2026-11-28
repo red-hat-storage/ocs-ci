@@ -43,6 +43,7 @@ from ocs_ci.ocs.bucket_utils import (
     s3_put_object,
     wait_for_bucket_count_stability,
 )
+from ocs_ci.utility.utils import should_probe_cluster
 from ocs_ci.ocs.resources.objectbucket import (
     get_s3_credentials_from_obc,
     wait_for_obc_phase,
@@ -358,11 +359,11 @@ def generate_test_params():
     """
     Generate test parameters for the test_obc_creation_and_deletion - helper function to reuse fixture in parametrize
     """
-    # During collect-only mode, use a placeholder to avoid cluster connections
-    # Check sys.argv since config.RUN['cli_params'] is not populated at module import time
+    # During collect-only / fresh OCP deploy, use a placeholder to avoid cluster connections.
+    # Check sys.argv since config.RUN['cli_params'] is not populated at module import time.
     is_collect_only = "--collect-only" in sys.argv or "--co" in sys.argv
-    if is_collect_only:
-        noobaa_sc = "noobaa"
+    if is_collect_only or not should_probe_cluster():
+        noobaa_sc = constants.NOOBAA_SC
     else:
         saved_index = config.cur_index
         try:

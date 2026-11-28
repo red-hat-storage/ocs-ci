@@ -14,6 +14,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     ignore_leftovers,
+    jira,
     skipif_external_mode,
     skipif_ocs_version,
     tier2,
@@ -52,6 +53,7 @@ class TestCephXKeyRotationNodeCordon:
 
         request.addfinalizer(finalizer)
 
+    @jira("DFBUGS-12434")
     @pytest.mark.polarion_id("OCS-8160")
     @tier2
     def test_cephx_key_rotation_with_node_cordon_and_uncordon(

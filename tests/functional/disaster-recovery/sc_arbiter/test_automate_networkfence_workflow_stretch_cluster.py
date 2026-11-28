@@ -39,7 +39,7 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
-    magenta_squad,
+    turquoise_squad,
     stretchcluster_required,
 )
 from ocs_ci.framework.testlib import ManageTest, tier4b
@@ -415,7 +415,7 @@ def _redeploy_and_verify(
 
 @tier4b
 @stretchcluster_required
-@magenta_squad
+@turquoise_squad
 @ignore_leftovers
 class TestStretchClusterZoneBNodeShutdown(ManageTest):
     """
@@ -681,7 +681,7 @@ class TestStretchClusterZoneBNodeShutdown(ManageTest):
 
 @tier4b
 @stretchcluster_required
-@magenta_squad
+@turquoise_squad
 @ignore_leftovers
 class TestStretchClusterZoneBShutdownZoneUnaware(ManageTest):
     """
@@ -826,7 +826,7 @@ class TestStretchClusterZoneBShutdownZoneUnaware(ManageTest):
 
 @tier4b
 @stretchcluster_required
-@magenta_squad
+@turquoise_squad
 @ignore_leftovers
 class TestStretchClusterZoneBKubeletDown(ManageTest):
     """

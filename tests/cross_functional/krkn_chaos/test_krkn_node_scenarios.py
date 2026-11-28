@@ -182,11 +182,11 @@ class TestKrknNodeScenarios:
                     raise
 
             # Summary log for all iterations
-            log.info(f"\n{'='*80}")
+            log.info(f"\n{'=' * 80}")
             log.info(
                 f"SUMMARY: {cloud_type} node scenarios completed for all instance counts"
             )
-            log.info(f"{'='*80}")
+            log.info(f"{'=' * 80}")
             for result in all_results:
                 log.info(
                     f"Instance Count {result['instance_count']}: "
@@ -194,7 +194,7 @@ class TestKrknNodeScenarios:
                     f"Successful={result['successful_executed']}, "
                     f"Failed={result['failing_executed']}"
                 )
-            log.info(f"{'='*80}")
+            log.info(f"{'=' * 80}")
 
             log.info(
                 f"{cloud_type} node scenarios completed successfully on {platform} for all instance counts"

@@ -214,7 +214,7 @@ class TestPodStartTime(PASTest):
         time_measures = [t["performance"] for t in self.start_time_dict_list]
         for index, start_time in enumerate(time_measures):
             log.info(
-                f"{self.msg_prefix} pod number {index+1} start time: {start_time} seconds, "
+                f"{self.msg_prefix} pod number {index + 1} start time: {start_time} seconds, "
                 f"csi start time is {self.csi_time_dict_list[index]}"
             )
             if start_time > self.acceptable_time:

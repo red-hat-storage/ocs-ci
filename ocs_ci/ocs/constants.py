@@ -325,6 +325,26 @@ L2_ADVERTISEMENT = "L2Advertisement"
 METALLB_INSTANCE = "MetalLB"
 NETWORK_ATTACHMENT_DEFINITION = "NetworkAttachmentDefinition"
 NETWORK_POLICY = "NetworkPolicy"
+
+ODF_CSV_PREFIXES_FOR_NETWORK_POLICY_RBAC = [
+    "odf-operator",
+    "ocs-operator",
+    "mcg-operator",
+    "rook-ceph-operator",
+    "cephcsi-operator",
+]
+
+ODF_OPERATOR_SA_FOR_NETWORK_POLICY = {
+    "rook-ceph-operator": "rook-ceph-system",
+    "cephcsi-operator": "ceph-csi-controller-manager",
+    "mcg-operator": "noobaa",
+    "ocs-operator": "ocs-operator",
+    "odf-operator": "odf-operator-controller-manager",
+}
+
+NETWORK_POLICY_REQUIRED_VERBS = {"create"}
+NETWORK_POLICY_REQUIRED_UPDATE_VERBS = {"update", "patch"}
+
 DAEMONSET = "DaemonSet"
 INGRESSCONTROLLER = "ingresscontroller"
 PROVISIONING = "Provisioning"
@@ -1051,6 +1071,7 @@ NOOBAA_ENDPOINT_DEPLOYMENT = "noobaa-endpoint"
 NOOBAA_DB_STATEFULSET = "noobaa-db-pg"
 NOOBAA_DB_POD = "noobaa-db-pg-0"
 NOOBAA_CORE_STATEFULSET = "noobaa-core"
+NOOBAA_BG_WORKERS_STATEFULSET = "noobaa-bg-workers"
 NOOBAA_CORE_POD = "noobaa-core-0"
 
 # Noobaa db secret
@@ -1927,6 +1948,7 @@ ALERT_APPLICATION_CLEANUP_PENDING_THRESHOLD = 15 * 60  # 15 minutes in seconds
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
 INFRA_NODE_LABEL = "node-role.kubernetes.io/infra=''"
+GPU_NODE_LABEL = "gpu.isf.ibm.com=''"
 NODE_SELECTOR_ANNOTATION = "openshift.io/node-selector="
 TOPOLOGY_ROOK_LABEL = "topology.rook.io/rack"
 OPERATOR_NODE_TAINT = "node.ocs.openshift.io/storage=true:NoSchedule"
@@ -2770,6 +2792,9 @@ MCG_CLI_OFFICIAL_IMAGE = "registry.redhat.io/odf4/mcg-cli-rhel9"
 # odf5 for ODF 5.y.z), see ocs_ci.utility.version.get_odf_image_namespace()
 ODF_CLI_DEV_IMAGE_TEMPLATE = "quay.io/rhceph-dev/{namespace}-odf-cli-rhel9"
 ODF_CLI_OFFICIAL_IMAGE_TEMPLATE = "registry.redhat.io/{namespace}/odf-cli-rhel9"
+# The ODF CLI image also ships the standalone noobaa CLI, as one tarball per
+# platform under this directory.
+CLI_IMAGE_RELEASES_DIR = "/releases"
 ACM_CATSRC_IMAGE = "quay.io:443/acm-d/acm-dev-catalog"
 MCE_CATSRC_IMAGE = "quay.io:443/acm-d/mce-dev-catalog"
 
@@ -2817,6 +2842,9 @@ FLEXY_ENV_FILE_UPDATED_PATH = os.path.join(
 )
 REGISTRY_SVC = "registry.ci.openshift.org/ocp/release"
 REGISTRY_SVC_V5 = "registry.ci.openshift.org/ocp/release-5"
+# GA release repo on quay. Unlike the CI registry (which splits 4.x -> release
+# and 5.x -> release-5), quay hosts both 4.x and 5.x GA payloads in this single
+# repo, tagged with the version + arch suffix (e.g. 4.18.56-x86_64, 5.0.1-x86_64).
 QUAY_REGISTRY_SVC = "quay.io/openshift-release-dev/ocp-release"
 FLEXY_USER_LOCAL_UID = 101000
 
@@ -2993,6 +3021,7 @@ NOOBAA_POD_NAMES = [
     NOOBAA_ENDPOINT_DEPLOYMENT,
     NOOBAA_DB_STATEFULSET,
     NOOBAA_CORE_STATEFULSET,
+    NOOBAA_BG_WORKERS_STATEFULSET,
 ]
 MON_POD_NAMES = "rook-ceph-mon"
 OSD_POD_NAMES = "rook-ceph-osd"
@@ -3035,6 +3064,12 @@ IBM_STORAGE_SCALE_CLUSTER_NAME = "ibm-spectrum-scale"
 IBM_STORAGE_SCALE_CLUSTER_KIND = "Cluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_REMOTECLUSTER_KIND = "RemoteCluster.scale.spectrum.ibm.com"
 IBM_STORAGE_SCALE_FILESYSTEM_KIND = "Filesystem.scale.spectrum.ibm.com"
+# Pinned commit URL for the IBM Storage Scale MCO (Machine Config Operator)
+# manifest. The URL is not stable and is expected to change over time.
+IBM_STORAGE_SCALE_MCO_URL = (
+    "https://raw.githubusercontent.com/IBM/ibm-spectrum-scale-container-native/"
+    "502fbcbe968651d2c94bd6b8419958c835383696/generated/scale/mco/mco.yaml"
+)
 IBM_ENTITLEMENT_SECRET_NAME = "ibm-entitlement-key"
 IBM_QUAYIO_SECRET_NAME = "quayio-secret"
 REMOTE_CLUSTER = "RemoteCluster"

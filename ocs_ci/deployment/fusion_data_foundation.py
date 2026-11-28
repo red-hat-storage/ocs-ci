@@ -26,6 +26,8 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.resource_debug import describe_on_failure
+from ocs_ci.utility.status_logger import log_status_change
 from ocs_ci.utility.utils import ceph_health_check, run_cmd
 
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
@@ -87,6 +89,9 @@ class FusionDataFoundationDeployment:
             self.create_image_tag_mirror_set()
             self.create_image_digest_mirror_set()
             self.setup_fdf_pre_release_deployment()
+
+        if self.live_deployment:
+            self.align_fsd_image_tag_with_fdf_version()
 
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
@@ -219,6 +224,72 @@ class FusionDataFoundationDeployment:
             f"oc --kubeconfig {self.kubeconfig} apply -f {fdf_service_cr_yaml.name}",
             silent=True,
         )
+
+    def align_fsd_image_tag_with_fdf_version(self):
+        """
+        Align the FusionServiceDefinition image tag with the FDF version for
+        live (GA) deployments.
+
+        By default the FusionServiceDefinition ``data-foundation-service`` points
+        at an image tag matching the running OCP version. When a lower FDF version
+        is being installed on a higher OCP version (e.g. FDF 4.20 on OCP 4.21),
+        the ``imageTag`` under the running OCP version key in
+        ``multiVersionCatSrcDetails`` is patched to the FDF version tag
+        (e.g. ``v4.20``). If the FDF version is not lower than the OCP version, no
+        change is made.
+        """
+        fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
+        if not fdf_image_tag:
+            logger.warning(
+                "fdf_image_tag is not set, skipping FusionServiceDefinition "
+                "image tag alignment"
+            )
+            return
+
+        fdf_version_str = fdf_image_tag.lstrip("v")
+        ocp_version_str = get_running_ocp_version()
+        fdf_version = version.get_semantic_version(
+            fdf_version_str, only_major_minor=True
+        )
+        ocp_version = version.get_semantic_version(
+            ocp_version_str, only_major_minor=True
+        )
+        logger.info(f"FDF version: {fdf_version}, OCP version: {ocp_version}")
+
+        if fdf_version >= ocp_version:
+            logger.info(
+                "FDF version is not lower than OCP version, no "
+                "FusionServiceDefinition image tag change needed"
+            )
+            return
+
+        ocp_version_key = f"ocp{ocp_version_str.replace('.', '')}-t"
+        new_image_tag = f"v{fdf_version_str}"
+        logger.info(
+            f"FDF version {fdf_version} is lower than OCP version {ocp_version}. "
+            f"Patching FusionServiceDefinition data-foundation-service imageTag to "
+            f"{new_image_tag} for key {ocp_version_key}"
+        )
+        params_dict = {
+            "spec": {
+                "onboarding": {
+                    "serviceOperatorSubscription": {
+                        "multiVersionCatSrcDetails": {
+                            ocp_version_key: {
+                                "imageTag": new_image_tag,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        params = json.dumps(params_dict)
+        cmd = (
+            f"oc --kubeconfig {self.kubeconfig} -n {constants.FDF_NAMESPACE} patch "
+            f"FusionServiceDefinition data-foundation-service -p '{params}' "
+            f"--type merge"
+        )
+        run_patch_cmd(cmd)
 
     def setup_fdf_pre_release_deployment(self):
         """
@@ -506,6 +577,12 @@ class FusionDataFoundationDeployment:
         run_cmd(f"oc create -f {odfcluster_data_yaml.name}")
 
 
+@describe_on_failure(
+    kind="FusionServiceInstance",
+    resource_name=constants.FDF_SERVICE_NAME,
+    namespace=constants.FDF_NAMESPACE,
+    logger=logger,
+)
 @retry((AssertionError, KeyError), 20, 60, backoff=1)
 def fusion_service_instance_health_check():
     """
@@ -523,10 +600,25 @@ def fusion_service_instance_health_check():
     instance_status = instance.data["status"]
     service_health = instance_status["health"]
     install_percent = instance_status["installStatus"]["progressPercentage"]
+    log_status_change(
+        key=f"FusionServiceInstance/{constants.FDF_SERVICE_NAME}",
+        status=(service_health, install_percent),
+        logger=logger,
+        message=(
+            f"FusionServiceInstance health: {service_health}, "
+            f"install progress: {install_percent}%"
+        ),
+    )
     assert service_health == "Healthy"
     assert install_percent == 100
 
 
+@describe_on_failure(
+    kind="OdfCluster",
+    resource_name="odfcluster",
+    namespace="ibm-spectrum-fusion-ns",
+    logger=logger,
+)
 @retry((AssertionError, KeyError), 20, 60, backoff=1)
 def odfcluster_status_check():
     """
@@ -542,8 +634,17 @@ def odfcluster_status_check():
     )
     odfcluster_status = odfcluster.data["status"]
     odfcluster_phase = odfcluster_status["phase"]
-    assert odfcluster_phase == "Ready"
     ceph_cluster_health = odfcluster_status["cephClusterHealth"]
+    log_status_change(
+        key="OdfCluster/odfcluster",
+        status=(odfcluster_phase, ceph_cluster_health),
+        logger=logger,
+        message=(
+            f"OdfCluster phase: {odfcluster_phase}, "
+            f"Ceph cluster health: {ceph_cluster_health}"
+        ),
+    )
+    assert odfcluster_phase == "Ready"
     assert ceph_cluster_health == "HEALTH_OK"
     logger.info("OdfCluster created successfully")
 
@@ -630,6 +731,12 @@ def run_patch_cmd(cmd):
     assert "patched" in out
 
 
+@describe_on_failure(
+    kind="StorageCluster",
+    resource_name="ocs-storagecluster",
+    namespace="openshift-storage",
+    logger=logger,
+)
 @retry((AssertionError, KeyError), 20, 60, backoff=1)
 def storagecluster_health_check():
     """
@@ -649,7 +756,12 @@ def storagecluster_health_check():
     status = storagecluster.data.get("status", {})
     phase = status.get("phase")
 
-    logger.info(f"StorageCluster phase: {phase}")
+    log_status_change(
+        key="StorageCluster/ocs-storagecluster",
+        status=phase,
+        logger=logger,
+        message=f"StorageCluster phase: {phase}",
+    )
 
     assert phase == "Ready", f"StorageCluster phase is not Ready (found: {phase})"
 
@@ -670,6 +782,11 @@ def wait_for_storageclusters_crd():
         return
     logger.info("Waiting for the StorageClusters CRD to exist")
 
+    @describe_on_failure(
+        kind="CustomResourceDefinition",
+        resource_name="storageclusters.ocs.openshift.io",
+        logger=logger,
+    )
     @retry((CommandFailed, AssertionError, KeyError), 30, 30, backoff=1)
     def _wait_for_storageclusters_crd():
         storageclusters_crd = CustomResourceDefinition(

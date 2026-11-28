@@ -464,7 +464,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
         except Exception as ex:
             logger.exception(
                 f"Failover phase failed at workload "
-                f"{len(completed_failovers)+1}/{len(all_workloads)}: "
+                f"{len(completed_failovers) + 1}/{len(all_workloads)}: "
                 f"completed={completed_failovers}, batch={failover_batch}"
             )
             raise type(ex)(
@@ -664,7 +664,7 @@ class Test2AZFailoverAndRelocateZoneFailure:
         except Exception as ex:
             logger.exception(
                 f"Relocate phase failed at workload "
-                f"{len(completed_relocates)+1}/{len(all_workloads)}: "
+                f"{len(completed_relocates) + 1}/{len(all_workloads)}: "
                 f"completed_relocates={completed_relocates}, "
                 f"completed_failovers={completed_failovers}, "
                 f"batch={relocate_batch}"

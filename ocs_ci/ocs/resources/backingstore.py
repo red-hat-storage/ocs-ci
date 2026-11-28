@@ -97,6 +97,12 @@ class BackingStore:
             sc_name = backingstore_pvc["spec"]["storageClassName"]
 
         def _oc_deletion_flow():
+            """
+            Delete backingstore using OC command.
+
+            Returns:
+                bool: True if deletion succeeded or resource already deleted, False if retryable error
+            """
             try:
                 OCP(
                     kind=constants.BACKINGSTORE,
@@ -139,6 +145,15 @@ class BackingStore:
                     raise
 
         def _cli_deletion_flow():
+            """
+            Delete backingstore using MCG CLI command.
+
+            Handles retryable errors: buckets still using the backingstore, or accounts
+            with this backingstore as their default resource.
+
+            Returns:
+                bool: True if deletion succeeded, False if retryable error
+            """
             try:
                 self.mcg_obj.exec_mcg_cmd(f"backingstore delete {self.name}")
                 return True
@@ -148,6 +163,25 @@ class BackingStore:
                         f"Deletion of {self.name} failed because it's being used by a bucket. "
                         "Retrying..."
                     )
+                    return False
+                elif "default resource of one or more accounts" in str(e).lower():
+                    log.warning(
+                        f"Deletion of {self.name} failed because it is the default resource "
+                        "of one or more accounts. Reassigning those accounts to the system "
+                        "default backingstore and retrying..."
+                    )
+                    accounts = self.mcg_obj.read_system().get("accounts", [])
+                    for account in accounts:
+                        if account.get("default_resource") == self.name:
+                            acc_email = account["email"]
+                            log.info(
+                                f"Updating default resource for account {acc_email} "
+                                f"from {self.name} to {constants.DEFAULT_NOOBAA_BACKINGSTORE}"
+                            )
+                            self.mcg_obj.exec_mcg_cmd(
+                                f"account update {acc_email} "
+                                f"--new_default_resource={constants.DEFAULT_NOOBAA_BACKINGSTORE}"
+                            )
                     return False
 
         cmdMap = {

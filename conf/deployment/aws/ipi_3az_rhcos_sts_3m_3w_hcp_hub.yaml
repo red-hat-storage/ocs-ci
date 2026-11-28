@@ -1,0 +1,24 @@
+---
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  sts_enabled: true
+  host_network: true
+
+ENV_DATA:
+  platform: 'aws'
+  deployment_type: 'ipi'
+  cluster_type: provider
+  odf_provider_mode_deployment: true
+  region: 'us-east-2'
+  worker_availability_zones:
+    - 'us-east-2a'
+  master_availability_zones:
+    - 'us-east-2a'
+  worker_replicas: 3
+  master_replicas: 3
+  worker_instance_type: 'm5.4xlarge'
+  master_instance_type: 'm5.4xlarge'
+  mark_masters_schedulable: false
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-5468'

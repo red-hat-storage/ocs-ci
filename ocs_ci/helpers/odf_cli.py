@@ -1,17 +1,20 @@
+import json
 import os
 import platform
 import xattr
 from stat import S_IEXEC
 from logging import getLogger
+from subprocess import CompletedProcess
 from typing import Union
 
-from ocs_ci.ocs.exceptions import NotSupportedException
+from ocs_ci.ocs.exceptions import NotSupportedException, UnexpectedBehaviour
 from ocs_ci.utility.version import (
     get_odf_image_namespace,
     get_semantic_ocs_version_from_config,
     VERSION_4_15,
 )
 from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.ocs.constants import (
@@ -77,6 +80,7 @@ class ODFCLIRetriever:
             image = self._get_odf_cli_image()
             self._extract_cli_binary(image)
             self._set_executable_permissions()
+            self._create_fdf_alias()
             self.add_cli_to_path()
 
             # Tag the CLI binary with its version for post-upgrade verification
@@ -173,6 +177,32 @@ class ODFCLIRetriever:
         os.chmod(self.local_cli_path, current_permissions | S_IEXEC)
         log.info(f"Set executable permissions for {self.local_cli_path}")
 
+    def _create_fdf_alias(self):
+        """
+        Create an 'fdf' symlink pointing to the 'odf' binary for FDF clusters.
+
+        On non-FDF clusters this is a no-op.
+
+        """
+        if not config.DEPLOYMENT.get("fdf_cluster"):
+            return
+
+        fdf_path = os.path.join(os.path.dirname(self.local_cli_path), "fdf")
+        try:
+            os.symlink("odf", fdf_path)
+        except FileExistsError:
+            if not os.path.islink(fdf_path) or os.path.realpath(
+                fdf_path
+            ) != os.path.realpath(self.local_cli_path):
+                raise FileExistsError(
+                    f"FDF alias path {fdf_path} exists but is not a symlink "
+                    f"to {self.local_cli_path}"
+                )
+            log.info(f"FDF alias already exists at {fdf_path}")
+            return
+
+        log.info(f"Created FDF alias: {fdf_path} -> odf")
+
     def _verify_cli_binary(self):
         if not self.check_odf_cli_binary():
             raise AssertionError(
@@ -192,10 +222,12 @@ class ODFCLIRetriever:
 
 
 class ODFCliRunner:
-    def __init__(self) -> None:
-        self.binary_name = os.path.join(config.RUN["bin_dir"], "odf")
+    def __init__(self, binary_name: str = "odf") -> None:
+        self.binary_name = os.path.join(config.RUN["bin_dir"], binary_name)
 
-    def run_command(self, command_args: Union[str, list], timeout=600) -> str:
+    def run_command(
+        self, command_args: Union[str, list], timeout=600
+    ) -> CompletedProcess:
         # by default Operator namespace is set to 'openshift-storage' in ODF CLI,
         # when -n <storage_ns> is not passed the command will fail if the namespace is not 'openshift-storage'
         args_str = (
@@ -252,6 +284,155 @@ class ODFCliRunner:
         return self.run_command(
             f" set ceph log-level {service} {subsystem} {log_level}"
         )
+
+    def run_ceph_config(self, args: str) -> CompletedProcess:
+        """
+        Run a `ceph config` subcommand through the ODF CLI passthrough.
+
+        Args:
+            args (str): `ceph config` arguments, e.g.
+                "set global osd_mclock_max_capacity_iops_hdd 80000".
+
+        Returns:
+            CompletedProcess: result from exec_cmd.
+
+        """
+        return self.run_command(f" ceph config {args}")
+
+    def get_ceph_config_value(
+        self, who: str, option: str, subcommand: str = "get"
+    ) -> str:
+        """
+        Read the value of a Ceph config option via the ODF CLI.
+
+        Args:
+            who (str): Ceph entity. With "get" it can be any section, e.g.
+                "osd", "global", "osd.0". With "show" it must name a running
+                daemon, e.g. "osd.0".
+            option (str): Ceph config option name.
+            subcommand (str): "get" resolves the value from the mon config DB,
+                "show" asks the running daemon what it is actually using.
+
+        Returns:
+            str: The value reported by the CLI.
+
+        Raises:
+            UnexpectedBehaviour: If the CLI returns no value.
+
+        """
+        output = (
+            self.run_ceph_config(f"{subcommand} {who} {option}").stdout.decode().strip()
+        )
+        if not output:
+            raise UnexpectedBehaviour(
+                f"ODF CLI returned no value for `ceph config {subcommand} {who} {option}`"
+            )
+        return output
+
+    def get_osd_running_iops(self, osd_id: Union[str, int], key: str) -> float:
+        """
+        Read the mClock max-capacity-IOPS value an OSD daemon is actually running
+        with, as opposed to what the mon config DB would resolve to.
+
+        Args:
+            osd_id (Union[str, int]): OSD id.
+            key (str): mClock max-capacity-IOPS config key.
+
+        Returns:
+            float: The value reported by `ceph config show osd.<id>`.
+
+        """
+        return float(
+            self.get_ceph_config_value(f"osd.{osd_id}", key, subcommand="show")
+        )
+
+    @retry(AssertionError, tries=6, delay=5, backoff=1)
+    def get_settled_osd_iops(self, osd_ids: list, key: str) -> float:
+        """
+        Return the mClock max-capacity-IOPS value every OSD daemon is running with,
+        once they all agree on it.
+
+        Retried because the mon pushes config changes to the daemons
+        asynchronously, so the OSDs converge a moment after the overrides are
+        cleared rather than instantly.
+
+        Args:
+            osd_ids (list): OSD ids to check.
+            key (str): mClock max-capacity-IOPS config key.
+
+        Returns:
+            float: The value shared by every OSD.
+
+        Raises:
+            ValueError: If no OSD ids are provided.
+
+        """
+        if not osd_ids:
+            raise ValueError("No OSD ids provided for mClock IOPS convergence")
+        values = {self.get_osd_running_iops(osd_id, key) for osd_id in osd_ids}
+        assert (
+            len(values) == 1
+        ), f"OSDs have not settled on a single {key} value: {values}"
+        return values.pop()
+
+    def get_osd_bdev_type(self, osd_id: Union[str, int]) -> str:
+        """
+        Get the bluestore device type of an OSD via the ODF CLI.
+
+        Ceph mClock selects `osd_mclock_max_capacity_iops_{ssd,hdd}` by this
+        value, which can differ from the OSD's CRUSH device class.
+
+        Args:
+            osd_id (Union[str, int]): OSD id, e.g. 0 or "0".
+
+        Returns:
+            str: The bluestore device type, "ssd" or "hdd".
+
+        Raises:
+            UnexpectedBehaviour: If the CLI returns invalid JSON.
+
+        """
+        output = self.run_command(f" ceph osd metadata {osd_id}").stdout.decode()
+        try:
+            return json.loads(output)["bluestore_bdev_type"]
+        except json.JSONDecodeError as ex:
+            raise UnexpectedBehaviour(
+                f"ODF CLI returned invalid JSON for `ceph osd metadata {osd_id}`: {output!r}"
+            ) from ex
+
+    def get_ceph_config_dump_entries(self, option: str) -> list:
+        """
+        List the `ceph config dump` entries for a Ceph config option.
+
+        Args:
+            option (str): Ceph config option name.
+
+        Returns:
+            list: (who, value) tuples, e.g. [("global", "80000.000000")].
+                `who` carries the entry's mask when it has one, e.g.
+                "osd/class:hdd", so it can be passed straight back to
+                `ceph config set`/`rm`. Empty when the option has no entry set.
+
+        Raises:
+            UnexpectedBehaviour: If the CLI returns invalid JSON.
+
+        """
+        output = self.run_ceph_config("dump -f json").stdout.decode()
+        try:
+            dump = json.loads(output)
+        except json.JSONDecodeError as ex:
+            raise UnexpectedBehaviour(
+                f"ODF CLI returned invalid JSON for `ceph config dump -f json`: {output!r}"
+            ) from ex
+        entries = []
+        for entry in dump:
+            if entry["name"] != option:
+                continue
+            who = entry["section"]
+            if entry["mask"]:
+                who = f"{who}/{entry['mask']}"
+            entries.append((who, entry["value"]))
+        return entries
 
     def get_recovery_profile(self):
         """
@@ -440,8 +621,9 @@ class ODFCLICephfsSnapRunner(ODFCliRunner):
         rados_namespace=None,
         svg=None,
         filesystem=None,
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         from ocs_ci.ocs.constants import STORAGE_CLIENT_NAME
 
         self.storage_client = storage_client or config.ENV_DATA.get(
@@ -558,6 +740,12 @@ def odf_cli_setup_helper(odf_cli_class=ODFCliRunner, **kwargs):
         odf_cli_retriever.retrieve_odf_cli_binary()
         if not odf_cli_retriever.check_odf_cli_binary():
             raise RuntimeError("Failed to download ODF CLI binary")
+
+    if config.DEPLOYMENT.get("fdf_cluster") and "binary_name" not in kwargs:
+        kwargs["binary_name"] = "fdf"
+
+    if kwargs.get("binary_name") == "fdf":
+        odf_cli_retriever._create_fdf_alias()
 
     # Check and initialize ODFCliRunner
     odf_cli_runner = odf_cli_class(**kwargs)

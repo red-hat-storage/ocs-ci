@@ -19,6 +19,7 @@ import stat
 import platform
 import ipaddress
 import pytest
+import requests
 
 from urllib.parse import urlparse, urlunparse
 from concurrent.futures import ThreadPoolExecutor
@@ -66,6 +67,7 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
     exec_cmd,
     get_ocs_build_number,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.utility.utils import convert_device_size
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
@@ -5344,12 +5346,17 @@ def _extract_cli_image(pull_secret_path, image, remote_path, local_cli_dir):
     )
 
 
-def retrieve_cli_binary(cli_type="mcg"):
+def retrieve_cli_binary(cli_type="mcg", force_mcg=False):
     """
     Download the MCG-CLI/ODF-CLI binary and store it locally.
 
     Args:
-        cli_type (str): choose which bin file you want to download ["odf" -> odf-cli , "mcg" -> mcg-cli]
+        cli_type (str): choose which bin file you want to download
+            ["odf" -> odf-cli , "mcg" -> mcg-cli]
+        force_mcg (bool): If True, bypass the >= 4.20 redirect to odf-cli (see DFBUGS-11485).
+
+    Returns:
+        str: Local path of the downloaded CLI binary.
 
     Raises:
         AssertionError: In the case the CLI binary is not executable.
@@ -5360,7 +5367,7 @@ def retrieve_cli_binary(cli_type="mcg"):
     original_cli_type = cli_type
 
     # For OCS >= 4.20, mcg-cli is no longer available, redirect to odf-cli
-    if semantic_version >= version.VERSION_4_20 and cli_type == "mcg":
+    if semantic_version >= version.VERSION_4_20 and cli_type == "mcg" and not force_mcg:
         logger.info(
             f"OCS {semantic_version} >= 4.20 detected. MCG CLI is now part of ODF CLI. "
             "Redirecting to download odf-cli instead."
@@ -5384,9 +5391,10 @@ def retrieve_cli_binary(cli_type="mcg"):
             logger.info(
                 f"Created symlink from {mcg_cli_path} to {odf_cli_path} for backward compatibility"
             )
-        return
+            return mcg_cli_path
+        return odf_retriever.local_cli_path
 
-    # Continue with original mcg-cli download logic for OCS < 4.20
+    # mcg-cli download (OCS < 4.20, or force_mcg=True)
     remote_path = get_architecture_path(cli_type)
     remote_cli_basename = os.path.basename(remote_path)
 
@@ -5404,7 +5412,7 @@ def retrieve_cli_binary(cli_type="mcg"):
         namespace=odf_namespace
     )
     if live_deployment and semantic_version >= version.VERSION_4_13:
-        if semantic_version >= version.VERSION_4_15:
+        if semantic_version >= version.VERSION_4_15 and not force_mcg:
             odf_cli_official_image = constants.ODF_CLI_OFFICIAL_IMAGE_TEMPLATE.format(
                 namespace=odf_namespace
             )
@@ -5413,14 +5421,14 @@ def retrieve_cli_binary(cli_type="mcg"):
             image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
     else:
         # Development builds
-        if semantic_version >= version.VERSION_4_20:
+        if semantic_version >= version.VERSION_4_20 and not force_mcg:
             # For 4.20+ dev builds, always use ODF CLI
             image = f"{odf_cli_dev_image}:{ocs_build}"
         elif cli_type == "odf" and semantic_version >= version.VERSION_4_15:
             # For 4.15+ dev builds requesting odf-cli
             image = f"{odf_cli_dev_image}:{ocs_build}"
         else:
-            # For older versions or mcg-cli requests in dev
+            # For older versions, odf-cli requests, or force_mcg
             image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
     pull_secret_path = download_pull_secret()
@@ -5444,6 +5452,7 @@ def retrieve_cli_binary(cli_type="mcg"):
     assert os.access(
         local_cli_path, os.X_OK
     ), f"The {cli_type} CLI binary does not have execution permissions"
+    return local_cli_path
 
 
 def get_architecture_path(cli_type):
@@ -7973,23 +7982,72 @@ def create_custom_secret_for_cnsa_rm(name, namespace, data_dict, secret_type="Op
             os.remove(temp_path)
 
 
-def _apply_mco():
+def apply_scale_mco(node_role=constants.WORKER_MACHINE, wait_for_rollout=False):
     """
-    Apply the IBM Storage Scale MCO (Meta Cluster Operator) manifest using a
-    pinned commit URL. Isolated in its own function because the URL is not
-    stable and is expected to change over time.
+    Apply the IBM Storage Scale MCO (Machine Config Operator) manifest for the
+    given node role and optionally wait for the MachineConfigPool rollout.
+
+    The upstream manifest targets the worker pool, which installs the
+    kernel-devel packages on worker nodes. For control plane (master) nodes the
+    manifest is rewritten (``worker`` -> ``master``, equivalent to
+    ``sed 's/worker/master/g'``) before applying so the kernel-devel packages
+    are installed on master nodes as well. This is what lets the Scale
+    "Add nodes to local cluster" wizard pass the kernel-devel check when
+    "Include control plane nodes" is selected.
+
+    Args:
+        node_role (str): ``constants.WORKER_MACHINE`` or
+            ``constants.MASTER_MACHINE``.
+        wait_for_rollout (bool): if True, wait for the MachineConfigPool
+            rollout of ``node_role`` nodes to finish (nodes reboot to install
+            the packages).
 
     Raises:
-        CommandFailed: if applying the MCO manifest fails
+        ValueError: if ``node_role`` is not worker or master.
+        CommandFailed: if fetching or applying the MCO manifest fails.
     """
-    mco_url = (
-        "https://raw.githubusercontent.com/IBM/ibm-spectrum-scale-container-native/"
-        "502fbcbe968651d2c94bd6b8419958c835383696/generated/scale/mco/mco.yaml"
-    )
+    if node_role not in (constants.WORKER_MACHINE, constants.MASTER_MACHINE):
+        raise ValueError(
+            f"Unsupported node_role '{node_role}'; expected "
+            f"'{constants.WORKER_MACHINE}' or '{constants.MASTER_MACHINE}'"
+        )
+
+    logger.info(f"Applying IBM Storage Scale MCO for {node_role} nodes")
     try:
-        exec_cmd(f"oc apply -f {mco_url}")
-    except CommandFailed as e:
-        raise CommandFailed(f"Scale operator deployment failed: {e}") from e
+        if node_role == constants.MASTER_MACHINE:
+            resp = requests.get(constants.IBM_STORAGE_SCALE_MCO_URL, timeout=60)
+            resp.raise_for_status()
+            manifest = resp.text.replace(
+                constants.WORKER_MACHINE, constants.MASTER_MACHINE
+            )
+            fd, temp_path = tempfile.mkstemp(suffix=".yaml")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    f.write(manifest)
+                exec_cmd(f"oc apply -f {temp_path}")
+            finally:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+        else:
+            exec_cmd(f"oc apply -f {constants.IBM_STORAGE_SCALE_MCO_URL}")
+    except (CommandFailed, requests.RequestException) as e:
+        raise CommandFailed(
+            f"Scale operator (MCO) deployment for {node_role} nodes failed: {e}"
+        ) from e
+
+    if wait_for_rollout:
+        logger.info(f"Waiting for the {node_role} MachineConfigPool rollout to finish")
+        wait_for_machineconfigpool_status(node_type=node_role)
+
+
+def _apply_mco():
+    """
+    Apply the IBM Storage Scale MCO manifest for worker nodes.
+
+    Thin backwards-compatible wrapper around :func:`apply_scale_mco` used by the
+    coexistence infrastructure setup.
+    """
+    apply_scale_mco(node_role=constants.WORKER_MACHINE)
 
 
 def setup_scale_cluster_infrastructure_for_cnsa_rm(

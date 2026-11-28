@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import os
+import sys
 import platform
 import random
 import re
@@ -752,6 +753,7 @@ def run_cmd_multicluster(
         "proxyconnect tcp",
         "i/o timeout",
         "websocket: close 1006",
+        "Service Unavailable",
     ),
 )
 def exec_cmd(
@@ -764,7 +766,7 @@ def exec_cmd(
     cluster_config=None,
     lock_timeout=7200,
     output_file=None,
-    cmd_log_level=logging.DEBUG,
+    cmd_log_level=None,
     **kwargs,
 ):
     """
@@ -788,8 +790,10 @@ def exec_cmd(
                 will be non-null
         lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
         output_file (str): path where to write output of stderr from command - apply only when silent mode is True
-        cmd_log_level (int): Log level for the "Executing command" message.
-            Defaults to logging.DEBUG. Use logging.INFO, logging.WARNING, etc. to override.
+        cmd_log_level (int or str): Log level for the "Executing command" message.
+            Accepts a logging level int (logging.INFO) or a level name (``"INFO"``).
+            When None (default), the level is read from the ``RUN["cmd_log_level"]``
+            config value, which can be overridden via ``--ocsci-conf`` yaml files.
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -803,6 +807,14 @@ def exec_cmd(
         stderr     (str): The standard error (None if not captured).
 
     """
+    if cmd_log_level is None:
+        cmd_log_level = config.RUN.get("cmd_log_level", "DEBUG")
+    if isinstance(cmd_log_level, str):
+        resolved_level = logging.getLevelName(cmd_log_level.upper())
+        # getLevelName returns a "Level X" string for unknown names
+        cmd_log_level = (
+            resolved_level if isinstance(resolved_level, int) else logging.DEBUG
+        )
     _env = kwargs.pop("env", os.environ.copy())
     kubeconfig_path = config.RUN.get("kubeconfig")
     if kubeconfig_path:
@@ -1327,24 +1339,64 @@ def download_ga_oc_client_as_bootstrap(bin_dir, target_version):
         os.chdir(previous_dir)
 
 
-def get_registry_svc(version):
+def get_registry_svc(version, ga=False):
     """
-    Get the CI registry image path for the given OCP version.
+    Get the release registry image path for the given OCP version.
+
+    By default the CI registry (registry.ci.openshift.org) is used, which hosts
+    nightly/CI payloads. When ``ga`` is True the officially published GA release
+    registry (quay.io/openshift-release-dev/ocp-release) is used instead, so that
+    a GA deployment records the GA pullspec in clusterversion rather than the CI
+    registry (which only mirrors the same content).
 
     OCP 5.x uses a different image stream name (release-5) than
     OCP 4.x (release).
 
     Args:
         version (str): OCP version string (e.g. "5.0.0-0.nightly-2026-06-18-000016")
+        ga (bool): When True, return the GA release registry
+            (quay.io/openshift-release-dev/ocp-release) instead of the CI registry.
+            quay hosts both 4.x and 5.x GA payloads in the same repo, so unlike
+            the CI registry there is no separate release-5 path for GA.
 
     Returns:
         str: Registry image path (e.g. "registry.ci.openshift.org/ocp/release-5")
 
     """
+    if ga:
+        return constants.QUAY_REGISTRY_SVC
     major = version.split(".")[0]
     if int(major) == 5:
         return constants.REGISTRY_SVC_V5
     return constants.REGISTRY_SVC
+
+
+def get_ocp_release_image_ref(version, ga=False):
+    """
+    Build the full OCP release image pullspec for the given resolved version.
+
+    For CI/nightly (ga=False) the CI registry is used with a plain version tag
+    (e.g. registry.ci.openshift.org/ocp/release:4.22.0-0.nightly-...). For GA
+    (ga=True) the quay GA registry is used and the architecture suffix required
+    by quay GA tags is appended (e.g.
+    quay.io/openshift-release-dev/ocp-release:4.22.22-x86_64). The arch defaults
+    to the host architecture (x86_64/aarch64/ppc64le/s390x, which match quay's
+    suffixes) and can be overridden via ENV_DATA['release_image_arch']
+    (e.g. "multi" for heterogeneous clusters).
+
+    Args:
+        version (str): Resolved OCP version (e.g. "4.22.22", not "4.22-ga").
+        ga (bool): When True, target the quay GA registry with an arch suffix.
+
+    Returns:
+        str: Full release image reference (registry:tag).
+
+    """
+    registry = get_registry_svc(version, ga=ga)
+    if ga:
+        arch = config.ENV_DATA.get("release_image_arch") or get_architecture_host()
+        return f"{registry}:{version}-{arch}"
+    return f"{registry}:{version}"
 
 
 def get_ocp_release_mirror_path(version):
@@ -1387,6 +1439,8 @@ def get_openshift_installer(
 
     """
     version = version or config.DEPLOYMENT["installer_version"]
+    # capture GA intent before expose_ocp_version_safe() resolves "-ga" away
+    is_ga = str(version).endswith("-ga")
     bin_dir_rel_path = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     bin_dir = os.path.abspath(bin_dir_rel_path)
     if (
@@ -1425,7 +1479,7 @@ def get_openshift_installer(
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         cmd = (
             f"oc adm release extract --registry-config {pull_secret_path} --command={installer_filename} "
-            f"--to ./ {get_registry_svc(version)}:{version}"
+            f"--to ./ {get_ocp_release_image_ref(version, ga=is_ga)}"
         )
         exec_cmd(cmd)
         # return to the previous working directory
@@ -2644,6 +2698,67 @@ def is_cluster_running(cluster_path):
     )
 
 
+def is_fresh_ocp_deployment():
+    """
+    True when this run is deploying OCP from scratch.
+    In that case kubeconfig is not expected to exist yet.
+
+    OCS-only deploy uses skip_ocp_deployment=True -> returns False
+    (kubeconfig must already exist).
+
+    Returns:
+        bool: True if fresh OCP deploy is in progress
+    """
+    deploy = config.RUN.get("cli_params", {}).get("deploy")
+    if deploy is None:
+        # marks import happens before cli_params is fully ready
+        deploy = "--deploy" in sys.argv
+    return bool(deploy) and not config.ENV_DATA.get("skip_ocp_deployment")
+
+
+def get_kubeconfig_path(kubeconfig_path=None):
+    """
+    Resolve kubeconfig path for current (or provided) cluster context.
+
+    Args:
+        kubeconfig_path (str): Optional explicit kubeconfig path
+
+    Returns:
+        str | None: Resolved kubeconfig path, or None if unavailable
+    """
+    if kubeconfig_path:
+        return kubeconfig_path
+    path = config.RUN.get("kubeconfig")
+    if path:
+        return path
+    cluster_path = config.ENV_DATA.get("cluster_path")
+    if not cluster_path:
+        return None
+    return os.path.join(
+        cluster_path,
+        config.RUN.get("kubeconfig_location", defaults.KUBECONFIG_LOCATION),
+    )
+
+
+def should_probe_cluster(kubeconfig_path=None):
+    """
+    Whether live oc/cluster probes are valid right now.
+
+    Returns False only for fresh OCP deploy while kubeconfig is missing.
+    Teardown, OCS-only deploy, and normal runs return True.
+
+    Args:
+        kubeconfig_path (str): Optional explicit kubeconfig path (e.g. provider)
+
+    Returns:
+        bool: True if cluster probes should run
+    """
+    if not is_fresh_ocp_deployment():
+        return True
+    path = get_kubeconfig_path(kubeconfig_path)
+    return bool(path and os.path.isfile(path))
+
+
 def decompose_html_attributes(soup, attributes):
     """
     Decomposes the given html attributes
@@ -3074,6 +3189,21 @@ def get_ocs_build_number():
         str: build number for ocs operator version
 
     """
+    # OCP-only deploy (skip_ocs_deployment): openshift-storage / OCS CSV are not
+    # expected yet — skip live lookup. OCS-only deploy and normal test runs still probe.
+    if config.ENV_DATA.get("skip_ocs_deployment"):
+        log.info(
+            "Skipping OCS build number query: OCS deployment is skipped "
+            "(OCP-only / no openshift-storage yet)"
+        )
+        return ""
+    if not should_probe_cluster():
+        log.info(
+            "Skipping OCS build number query: kubeconfig not available during "
+            "fresh OCP deploy"
+        )
+        return ""
+
     # Importing here to avoid circular dependency
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
     from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -7625,7 +7755,7 @@ def apply_oadp_workaround(namespace):
         oadp_wa_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="oadp_wa", delete=False
         )
-        templating.dump_data_to_temp_yaml(oadp_csv_dict, oadp_wa_yaml.name)
+        templating.dump_data_to_temp_yaml(oadp_csv_dict, oadp_wa_yaml.name, log=False)
         run_cmd(f"oc apply -f {oadp_wa_yaml.name}")
     except IndexError:
         log.error(f"OADP not found in given Namespace {namespace}")
@@ -7677,15 +7807,21 @@ def create_kubeconfig(kubeconfig_path):
         log.info(f"Kubeconfig file was created: {kubeconfig_path}.")
 
         # Try to upgrade the token-based kubeconfig to a permanent
-        # (certificate-based) one that never expires. Capture the output in
-        # Python instead of shell-redirecting it (`> {kubeconfig_path}`)
-        # directly to kubeconfig_path: the shell truncates the redirection
-        # target before `oc` starts, and since KUBECONFIG also points at
-        # kubeconfig_path, `oc` would read an already-emptied file and
-        # silently fall back to the in-cluster service account instead of
-        # the intended cluster.
-        cmd = "oc config new-admin-kubeconfig"
-        result = exec_cmd(cmd, ignore_error=True)
+        # (certificate-based) one that never expires. `oc config
+        # new-admin-kubeconfig` doesn't actually honor its own --kubeconfig
+        # flag, only the KUBECONFIG env var, and exec_cmd always overwrites
+        # KUBECONFIG from the global config.RUN["kubeconfig"], which in a
+        # multicluster run may not be the cluster this function was called
+        # for. Prefix KUBECONFIG inline in the shell command instead, which
+        # overrides the inherited env var for this one invocation only.
+        # Capture the output in Python instead of shell-redirecting it
+        # (`> {kubeconfig_path}`) directly to kubeconfig_path: the shell
+        # truncates the redirection target before `oc` starts, and since
+        # KUBECONFIG also points at kubeconfig_path, `oc` would read an
+        # already-emptied file and silently fall back to the in-cluster
+        # service account instead of the intended cluster.
+        cmd = f"KUBECONFIG={kubeconfig_path} oc config new-admin-kubeconfig"
+        result = exec_cmd(cmd, shell=True, ignore_error=True)
         if result.returncode:
             log.warning(f"executed command: {cmd}")
             log.warning(f"returncode: {result.returncode}")
