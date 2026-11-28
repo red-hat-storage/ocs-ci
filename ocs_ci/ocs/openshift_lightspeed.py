@@ -13,6 +13,7 @@ Reference:
 
 import base64
 import logging
+import re
 import time
 
 import requests
@@ -739,6 +740,55 @@ def build_ols_recipe_prompt(user_request):
     return f"{OLS_RECIPE_SCHEMA_STUB}\n\n{user_request}"
 
 
+def _iter_fenced_blocks(text):
+    """
+    Yield ``(info_string, body)`` for each markdown code fence in ``text``.
+
+    Lines are scanned one by one: a fence opens with a line of at least three
+    backticks (or tildes), and closes only with a line made of the same
+    character, at least as long as the opening marker, with nothing else on
+    it.  Any other backticks (e.g. inline or inside the body) are content.
+    An unterminated fence runs to the end of the text.  Prose outside of
+    fences is never yielded.
+
+    Args:
+        text (str): Markdown text to scan.
+
+    Yields:
+        tuple: (info_string (str), body (str)) for each fenced block.
+    """
+    fence_re = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+    marker = None
+    info = ""
+    body = []
+    for line in text.splitlines():
+        if marker is None:
+            match = fence_re.match(line)
+            if not match:
+                continue
+            opening, info = match.group(1), match.group(2).strip()
+            # An info string of a backtick fence cannot contain backticks.
+            if opening[0] == "`" and "`" in info:
+                continue
+            marker = opening
+            body = []
+            continue
+        stripped = line.strip()
+        if (
+            stripped
+            and stripped[0] == marker[0]
+            and len(stripped) >= len(marker)
+            and set(stripped) == {marker[0]}
+            and len(line) - len(line.lstrip()) <= 3
+        ):
+            yield info, "\n".join(body)
+            marker = None
+        else:
+            body.append(line)
+    if marker is not None:
+        yield info, "\n".join(body)
+
+
 def extract_yaml_from_ols_response(response_text):
     """
     Extract the first YAML block from an OLS response string.
@@ -761,36 +811,27 @@ def extract_yaml_from_ols_response(response_text):
     # Skip blocks whose first token is a known non-yaml language tag.
     _SKIP_TAGS = {"python", "json", "bash", "sh", "text", "markdown"}
     _YAML_TAGS = {"yaml", "yml"}
-    if "```" in response_text:
-        # Splitting on the fence marker alternates prose / fenced content, so only
-        # odd-indexed chunks are inside a code fence (skips headings and other prose).
-        for block in response_text.split("```")[1::2]:
-            block = block.strip()
-            if not block:
-                continue
-            first_line, _, rest = block.partition("\n")
-            tag = first_line.strip().lower()
-            if tag and " " not in tag:
-                # Known non-YAML language tag — skip this fence entirely.
-                if tag in _SKIP_TAGS:
-                    continue
-                # Recognised YAML tag — strip the tag line, use the rest.
-                if tag in _YAML_TAGS:
-                    content = rest.strip()
-                else:
-                    # Unknown first line (could be YAML content like
-                    # "apiVersion:" or "metadata:") — keep the full block.
-                    content = block
-            else:
-                content = block
-            if not content:
-                continue
-            try:
-                parsed = yaml.safe_load(content)
-                if isinstance(parsed, dict):
-                    return parsed
-            except yaml.YAMLError:
-                continue
+    # Only the content of fenced blocks is considered here (prose is skipped).
+    for info, body in _iter_fenced_blocks(response_text):
+        tag = info.split()[0].lower() if info else ""
+        # Known non-YAML language tag — skip this fence entirely.
+        if tag in _SKIP_TAGS:
+            continue
+        if not info or tag in _YAML_TAGS:
+            # Untagged or YAML-tagged fence — the body is the YAML document.
+            content = body.strip()
+        else:
+            # Unknown text after the fence marker (could be YAML content such
+            # as "apiVersion:") — keep it as part of the block.
+            content = f"{info}\n{body}".strip()
+        if not content:
+            continue
+        try:
+            parsed = yaml.safe_load(content)
+            if isinstance(parsed, dict):
+                return parsed
+        except yaml.YAMLError:
+            continue
 
     # Fall back to parsing the whole response (only accept dicts, not bare strings)
     try:
